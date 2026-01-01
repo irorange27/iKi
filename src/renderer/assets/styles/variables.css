@@ -1,0 +1,63 @@
+:root {
+  color-scheme: dark;
+  --font-size: 15px;
+
+  /* 暗色主题（默认） - 保持原有高级感 */
+  --bg-primary: #2a2d35;
+  /* 聊天主背景 */
+  --bg-secondary: #22272c;
+  /* 侧边栏背景 */
+  --bg-tertiary: #2e3036;
+  /* 输入框/卡片背景 */
+  --bg-hover: #3a3d45;
+  /* 悬停状态 */
+  --bg-active: #4e5256;
+  /* 选中状态 */
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --border-color: #4e5256;
+  --accent-color: #60a5fa;
+  --accent-hover: #3b82f6;
+  --success-color: #10b981;
+  --danger-color: #ef4444;
+}
+
+[data-density='comfortable'] {
+  --spacing-unit: 8px;
+  --border-radius: 12px;
+}
+
+[data-density='compact'] {
+  --spacing-unit: 4px;
+  --border-radius: 4px;
+}
+
+[data-density='spacious'] {
+  --spacing-unit: 16px;
+  --border-radius: 8px;
+}
+
+/* 亮色主题 */
+[data-theme='light'] {
+  color-scheme: light;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f4f6;
+  --bg-tertiary: #ffffff;
+  --bg-hover: #e5e7eb;
+  --bg-active: #dbeafe;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --border-color: #e5e7eb;
+  --accent-color: #3b82f6;
+  --accent-hover: #2563eb;
+}
+
+[data-theme='dark'] {
+  /* Dark theme is the default in :root. 
+     This selector is preserved for explicit overrides if needed. */
+  color-scheme: dark;
+}
+
+/* 系统主题跟随（由 electron 或 JS 在运行时设置） */

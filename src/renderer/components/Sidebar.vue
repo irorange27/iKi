@@ -1,0 +1,304 @@
+<template>
+  <!-- class="fixed left-0 top-0 bottom-0 w-48 m-1 pt-12 h-full 
+  min-w-48 z-50 border-2 rounded-lg border-[#fff]" -->
+  <div
+    class="sidebar relative flex flex-col top-1 bottom-1 transition-all rounded-lg duration-300 ease-in-out"
+    :class="{
+      'm-1 border-2': !sidebar.isCollapsed.value,
+      'm-0 border-0': sidebar.isCollapsed.value,
+    }"
+    :style="{
+      width: sidebar.isCollapsed.value ? '0px' : sidebar.width.value + 'px',
+      minWidth: sidebar.isCollapsed.value ? '0px' : '200px',
+      backgroundColor: sidebar.isCollapsed.value ? 'transparent' : 'var(--bg-secondary)',
+      color: 'var(--text-primary)',
+      borderColor: 'var(--border-color)',
+      overflow: sidebar.isCollapsed.value ? 'visible' : 'hidden',
+    }"
+  >
+    <!-- Toggle Button Container -->
+    <!-- When collapsed, we use fixed positioning to keep it in the top-left area -->
+    <div
+      class="toolbar-container transition-all duration-300"
+      :class="{
+        'fixed top-4 left-20 z-[100] flex items-center gap-1': sidebar.isCollapsed.value,
+        'flex pl-20 p-2 max-h-12 flex-shrink-0': !sidebar.isCollapsed.value,
+      }"
+    >
+      <button class="tool-btn" @click="sidebar.toggle" aria-label="Toggle sidebar">
+        <PanelLeftDashed :size="18" />
+      </button>
+
+      <button class="tool-btn" aria-label="Search">
+        <Search :size="18" />
+      </button>
+
+      <button class="tool-btn" aria-label="New chat" @click="handleNewChat">
+        <SquarePen :size="18" />
+      </button>
+    </div>
+
+    <div v-if="sidebar.isExpanded.value" class="flex flex-1 min-h-0 pr-2">
+      <!-- Chat History -->
+      <div class="flex-1 px-3 py-2 min-w-48 overflow-y-scroll custom-scrollbar overscroll-contain">
+        <button
+          v-for="chat in chatThreads"
+          :key="chat.id"
+          class="chat-item mb-1 w-full truncate rounded-lg px-3 py-2.5 text-left text-sm focus:outline-none"
+          :class="{ 'chat-item-active': currentThreadId === chat.id }"
+          @click="selectThread(chat.id)"
+        >
+          {{ chat.title }}
+        </button>
+      </div>
+      <!-- draggable handle -->
+      <div
+        class="resize-handle absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-blue-400/50 transition-colors z-10 group"
+        @mousedown="startResize"
+        @touchstart="startResize"
+      >
+        <!-- Visual Indicator -->
+        <div
+          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-gray-400/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+        ></div>
+      </div>
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div v-if="sidebar.isExpanded.value" class="relative p-3 mt-auto flex">
+      <button
+        class="h-8 w-8 rounded-lg text-gray-400 hover:text-white flex items-center justify-center settings-btn"
+        @click="openSettings"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue';
+import { PanelLeftDashed, Search, Square, SquarePen } from 'lucide-vue-next';
+import { useSidebar } from '../composables/useSidebar';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const window: any;
+
+const sidebar = useSidebar();
+
+interface ChatThread {
+  id: string;
+  title: string;
+  model?: string;
+  updated_at: string;
+}
+
+const chatThreads = ref<ChatThread[]>([]);
+const currentThreadId = ref<string | null>(null);
+
+// Emit events to parent
+const emit = defineEmits<{
+  'thread-selected': [threadId: string];
+  'new-chat': [];
+}>();
+
+// Load chat threads from database
+const loadChatThreads = async () => {
+  try {
+    const threads = await window.electronAPI.chat.threads.list();
+    chatThreads.value = threads;
+  } catch (error) {
+    console.error('Failed to load chat threads:', error);
+  }
+};
+
+// Select a thread
+const selectThread = (threadId: string) => {
+  currentThreadId.value = threadId;
+  emit('thread-selected', threadId);
+};
+
+// Handle new chat button
+const handleNewChat = () => {
+  currentThreadId.value = null;
+  emit('new-chat');
+};
+
+// Watch for thread updates
+watch(
+  () => chatThreads.value,
+  () => {
+    // Threads updated
+  },
+  { deep: true }
+);
+
+// Expose refresh function for parent
+defineExpose({
+  refresh: loadChatThreads,
+  setCurrentThread: (id: string | null) => {
+    currentThreadId.value = id;
+  },
+});
+
+onMounted(() => {
+  loadChatThreads();
+  // Refresh threads periodically or when needed
+  // You can also listen to events from ChatView
+});
+
+const MIN_WIDTH = 210; // 最小宽度 (Tailwind w-64)
+const MAX_WIDTH = 500; // 最大宽度
+
+interface StartResizeEvent extends Partial<MouseEvent>, Partial<TouchEvent> {
+  type: string;
+  touches?: TouchList;
+  clientX?: number;
+  preventDefault: () => void;
+}
+
+const startResize = (e: StartResizeEvent) => {
+  e.preventDefault?.();
+
+  // 类型守卫：区分鼠标和触摸事件
+  const isTouch = e.type.startsWith('touch');
+  const startX = isTouch ? (e.touches?.[0].clientX ?? 0) : (e.clientX ?? 0);
+  const startWidth = sidebar.width.value;
+
+  const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+    const moveIsTouch = moveEvent.type.startsWith('touch');
+    const clientX = moveIsTouch
+      ? ((moveEvent as TouchEvent).touches[0]?.clientX ?? 0)
+      : (moveEvent as MouseEvent).clientX;
+
+    const deltaX = clientX - startX;
+    const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + deltaX));
+
+    sidebar.setWidth(newWidth);
+  };
+
+  const handleEnd = () => {
+    document.removeEventListener('mousemove', handleMove as EventListener);
+    document.removeEventListener('mouseup', handleEnd);
+    document.removeEventListener('touchmove', handleMove as EventListener);
+    document.removeEventListener('touchend', handleEnd);
+  };
+
+  // 统一监听鼠标和触摸事件
+  document.addEventListener('mousemove', handleMove as EventListener);
+  document.addEventListener('mouseup', handleEnd);
+  document.addEventListener('touchmove', handleMove as EventListener, {
+    passive: false,
+  });
+  document.addEventListener('touchend', handleEnd);
+};
+
+const openSettings = () => {
+  // @ts-ignore
+  window.electronAPI?.openSettings();
+};
+</script>
+
+<style scoped>
+.toolbar {
+  display: flex;
+  gap: 3px;
+}
+
+.tool-btn {
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 0px;
+  padding-top: 0px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  -webkit-app-region: no-drag;
+}
+
+.settings-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tool-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+  border-radius: 6px;
+}
+
+.resize-handle {
+  -webkit-app-region: no-drag;
+}
+
+.resize-handle:hover {
+  background-color: var(--accent-color);
+  opacity: 0.5;
+}
+
+/* Chat Item Styles */
+.chat-item {
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.chat-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.chat-item:focus {
+  background-color: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.chat-item-active {
+  background-color: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.bg-secondary-with-opacity {
+  background-color: var(--bg-secondary);
+  opacity: 0.9;
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--border-color);
+}
+
+.toolbar-container.fixed {
+  z-index: 100;
+  pointer-events: auto;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+  /* 增加上下间距，视觉上变短 */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+</style>

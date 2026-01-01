@@ -1,0 +1,103 @@
+import db from './database';
+import { Provider } from '../../shared/types/provider';
+
+export const getProviders = (): Provider[] => {
+  const rows = db.prepare('SELECT * FROM providers').all() as any[];
+  return rows.map(row => ({
+    ...row,
+    enabled: Boolean(row.enabled),
+    is_response_api: Boolean(row.is_response_api),
+  }));
+};
+
+export const getProvider = (id: string): Provider | null => {
+  const row = db.prepare('SELECT * FROM providers WHERE id = ?').get(id) as any;
+  if (!row) return null;
+  return {
+    ...row,
+    enabled: Boolean(row.enabled),
+    is_response_api: Boolean(row.is_response_api),
+  };
+};
+
+export const getProviderIsEnabled = (id: string): Provider => {
+  const Provider = db.prepare('SELECT enabled FROM providers WHERE id = ?').get(id) as any;
+  if (!Provider) return null;
+  return {
+    ...Provider,
+    enabled: Boolean(Provider.enabled),
+  };
+};
+
+export const addProvider = (
+  provider: Partial<Provider> & {
+    id: string;
+    name: string;
+    type: string;
+    api_key: string;
+    models: string;
+  }
+) => {
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO providers (
+      id, name, type, api_key, models, base_url, enabled, created_at, updated_at,
+      available_models, api_version, is_response_api, acp_command, acp_args,
+      acp_mcp_server_ids, acp_auth_method_id, acp_api_provider_id, acp_model_mapping
+    ) VALUES (
+      @id, @name, @type, @api_key, @models, @base_url, @enabled, @created_at, @updated_at,
+      @available_models, @api_version, @is_response_api, @acp_command, @acp_args,
+      @acp_mcp_server_ids, @acp_auth_method_id, @acp_api_provider_id, @acp_model_mapping
+    )
+  `);
+
+  // Provide default values for all optional fields
+  const data = {
+    id: provider.id,
+    name: provider.name,
+    type: provider.type,
+    api_key: provider.api_key,
+    models: provider.models,
+    base_url: provider.base_url || '',
+    enabled: provider.enabled ? 1 : 0,
+    created_at: now,
+    updated_at: now,
+    available_models: provider.available_models || '[]',
+    api_version: provider.api_version || null,
+    is_response_api: provider.is_response_api ? 1 : 0,
+    acp_command: provider.acp_command || null,
+    acp_args: provider.acp_args || null,
+    acp_mcp_server_ids: provider.acp_mcp_server_ids || null,
+    acp_auth_method_id: provider.acp_auth_method_id || null,
+    acp_api_provider_id: provider.acp_api_provider_id || null,
+    acp_model_mapping: provider.acp_model_mapping || null,
+  };
+
+  return stmt.run(data);
+};
+
+export const updateProvider = (id: string, provider: Partial<Provider>) => {
+  const now = new Date().toISOString();
+  const fields = Object.keys(provider)
+    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
+    .map(key => `${key} = @${key}`)
+    .join(', ');
+
+  if (!fields) return null;
+
+  const stmt = db.prepare(`
+    UPDATE providers 
+    SET ${fields}, updated_at = @updated_at 
+    WHERE id = @id
+  `);
+
+  const params: any = { ...provider, id, updated_at: now };
+  if (params.enabled !== undefined) params.enabled = params.enabled ? 1 : 0;
+  if (params.is_response_api !== undefined) params.is_response_api = params.is_response_api ? 1 : 0;
+
+  return stmt.run(params);
+};
+
+export const deleteProvider = (id: string) => {
+  return db.prepare('DELETE FROM providers WHERE id = ?').run(id);
+};

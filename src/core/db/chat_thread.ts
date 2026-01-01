@@ -1,0 +1,125 @@
+import db from './database';
+import { ChatThread } from '../../shared/types/chat';
+
+export const getChatThreads = (): ChatThread[] => {
+  const rows = db.prepare('SELECT * FROM chat_threads ORDER BY updated_at DESC').all() as any[];
+  return rows.map(row => ({
+    ...row,
+    is_generating: Boolean(row.is_generating),
+    is_favorited: row.is_favorited || 0,
+    is_incognito: row.is_incognito || 0,
+    enable_artifacts: row.enable_artifacts || 0,
+  }));
+};
+
+export const getChatThread = (id: string): ChatThread | null => {
+  const row = db.prepare('SELECT * FROM chat_threads WHERE id = ?').get(id) as any;
+  if (!row) return null;
+  return {
+    ...row,
+    is_generating: Boolean(row.is_generating),
+    is_favorited: row.is_favorited || 0,
+    is_incognito: row.is_incognito || 0,
+    enable_artifacts: row.enable_artifacts || 0,
+  };
+};
+
+export const getChatThreadsByWorkspace = (workspaceId: string): ChatThread[] => {
+  const rows = db
+    .prepare('SELECT * FROM chat_threads WHERE workspace_id = ? ORDER BY updated_at DESC')
+    .all(workspaceId) as any[];
+  return rows.map(row => ({
+    ...row,
+    is_generating: Boolean(row.is_generating),
+    is_favorited: row.is_favorited || 0,
+    is_incognito: row.is_incognito || 0,
+    enable_artifacts: row.enable_artifacts || 0,
+  }));
+};
+
+export const getFavoritedChatThreads = (): ChatThread[] => {
+  const rows = db
+    .prepare('SELECT * FROM chat_threads WHERE is_favorited = 1 ORDER BY updated_at DESC')
+    .all() as any[];
+  return rows.map(row => ({
+    ...row,
+    is_generating: Boolean(row.is_generating),
+    is_favorited: row.is_favorited || 0,
+    is_incognito: row.is_incognito || 0,
+    enable_artifacts: row.enable_artifacts || 0,
+  }));
+};
+
+export const addChatThread = (
+  thread: Partial<ChatThread> & { id: string; title: string; metadata: string }
+) => {
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+        INSERT INTO chat_threads (
+            id, title, model, is_generating, reasoning_effort, metadata, created_at, updated_at,
+            prompt_app_id, tools, is_favorited, is_incognito, workspace_id, enable_artifacts,
+            artifact_workspace_id, skill_ids
+        ) VALUES (
+            @id, @title, @model, @is_generating, @reasoning_effort, @metadata, @created_at, @updated_at,
+            @prompt_app_id, @tools, @is_favorited, @is_incognito, @workspace_id, @enable_artifacts,
+            @artifact_workspace_id, @skill_ids
+        )
+    `);
+
+  const data = {
+    id: thread.id,
+    title: thread.title,
+    model: thread.model || null,
+    is_generating: thread.is_generating ? 1 : 0,
+    reasoning_effort: thread.reasoning_effort || 'medium',
+    metadata: thread.metadata,
+    created_at: now,
+    updated_at: now,
+    prompt_app_id: thread.prompt_app_id || null,
+    tools: thread.tools || null,
+    is_favorited: thread.is_favorited || 0,
+    is_incognito: thread.is_incognito || 0,
+    workspace_id: thread.workspace_id || null,
+    enable_artifacts: thread.enable_artifacts || 0,
+    artifact_workspace_id: thread.artifact_workspace_id || null,
+    skill_ids: thread.skill_ids || null,
+  };
+
+  return stmt.run(data);
+};
+
+export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
+  const now = new Date().toISOString();
+  const fields = Object.keys(thread)
+    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
+    .map(key => `${key} = @${key}`)
+    .join(', ');
+
+  if (!fields) return null;
+
+  const stmt = db.prepare(`
+        UPDATE chat_threads 
+        SET ${fields}, updated_at = @updated_at 
+        WHERE id = @id
+    `);
+
+  const params: any = { ...thread, id, updated_at: now };
+  if (params.is_generating !== undefined) params.is_generating = params.is_generating ? 1 : 0;
+  if (params.is_favorited !== undefined) params.is_favorited = params.is_favorited ? 1 : 0;
+  if (params.is_incognito !== undefined) params.is_incognito = params.is_incognito ? 1 : 0;
+  if (params.enable_artifacts !== undefined)
+    params.enable_artifacts = params.enable_artifacts ? 1 : 0;
+
+  return stmt.run(params);
+};
+
+export const deleteChatThread = (id: string) => {
+  // Messages will be deleted automatically due to CASCADE
+  return db.prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
+};
+
+export const toggleFavoriteChatThread = (id: string) => {
+  const thread = getChatThread(id);
+  if (!thread) return null;
+  return updateChatThread(id, { is_favorited: thread.is_favorited === 1 ? 0 : 1 });
+};
