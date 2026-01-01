@@ -1,0 +1,8 @@
+node_modules
+.vite
+.vscode
+.VSCodeCounter
+dist
+build
+*.min.js
+*.lock
