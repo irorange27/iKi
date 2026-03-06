@@ -382,11 +382,20 @@ export abstract class BaseAgent {
           logger.warn('Failed to parse tool message content', { error: e });
         }
       } else if (msg.role === 'assistant') {
-        const toolCalls = msg.metadata?.toolCalls;
-        if (toolCalls && Array.isArray(toolCalls)) {
+        const toolCalls = Array.isArray(msg.metadata?.toolCalls) ? msg.metadata.toolCalls : [];
+        const toolApprovalRequests = Array.isArray(msg.metadata?.toolApprovalRequests)
+          ? msg.metadata.toolApprovalRequests
+          : [];
+
+        if (toolCalls.length > 0 || toolApprovalRequests.length > 0) {
+          const contentParts: Array<Record<string, unknown>> = [];
+          if (msg.content.trim()) {
+            contentParts.push({ type: 'text', text: msg.content });
+          }
+
           messages.push({
             role: 'assistant',
-            content: [{ type: 'text', text: msg.content }, ...toolCalls],
+            content: [...contentParts, ...toolCalls, ...toolApprovalRequests],
           });
         } else {
           messages.push({ role: 'assistant', content: msg.content });

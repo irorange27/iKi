@@ -158,6 +158,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Chat } from '@ai-sdk/vue';
+import { convertToModelMessages, type UIMessage } from 'ai';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -180,6 +181,34 @@ const showModelSelector = ref(false);
 const showToolSelector = ref(false);
 const availableTools = ref<any[]>([]);
 const selectedTools = ref<string[]>([]);
+
+const toUiMessages = (messages: any[]): UIMessage[] =>
+  messages
+    .filter(
+      (message: any) =>
+        message &&
+        typeof message === 'object' &&
+        (message.role === 'system' || message.role === 'user' || message.role === 'assistant')
+    )
+    .map((message: any) => {
+      const parts = Array.isArray(message.parts)
+        ? message.parts.filter((part: any) => part && typeof part === 'object' && typeof part.type === 'string')
+        : [
+          {
+            type: 'text',
+            text: typeof message.content === 'string' ? message.content : '',
+          },
+        ];
+
+      return {
+        id:
+          typeof message.id === 'string' && message.id.length > 0
+            ? message.id
+            : `ui_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        role: message.role,
+        parts,
+      } as UIMessage;
+    });
 
 const loadAvailableProviders = async () => {
   try {
@@ -281,8 +310,6 @@ const setupStreamListeners = () => {
     console.error('Chat error:', error);
     currentResponse.value = '';
     isLoading.value = false;
-    // Emit error event to parent if needed
-    emit('response-received', ''); // Clear any pending state
   });
 
   // Tool approval requests are handled in ChatView
@@ -318,7 +345,7 @@ const sendMessage = async () => {
     window.electronAPI.chat.removeAllListeners();
     setupStreamListeners();
 
-    // Convert chat.messages to plain format for IPC
+    // Convert chat.messages to AI SDK model messages for IPC
     // Note: The user message may not be in chat.messages yet (it's added in ChatView.handleMessageSent)
     // So we need to include it manually if it's not there
     const rawMessages = props.chat?.messages || [];
@@ -331,7 +358,7 @@ const sendMessage = async () => {
       Array.isArray(lastMessage.parts) &&
       lastMessage.parts.find((p: any) => p && p.type === 'text' && p.text === userMessage);
 
-    // If user message is not in chat.messages yet, we need to include it manually
+    // If user message is not in chat.messages yet, include it manually
     const messagesToConvert = userMessageInChat
       ? rawMessages
       : [
@@ -342,45 +369,25 @@ const sendMessage = async () => {
         },
       ];
 
-    const plainMessages = messagesToConvert
-      .filter((m: any) => {
-        // Filter out undefined, null, or invalid messages
-        if (!m || typeof m !== 'object') return false;
-        if (!m.role || (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'system'))
-          return false;
-        return true;
-      })
-      .map((m: any) => {
-        try {
-          const textPart = Array.isArray(m.parts)
-            ? m.parts.find((p: any) => p && p.type === 'text')
-            : null;
-          const content =
-            textPart && 'text' in textPart && typeof textPart.text === 'string'
-              ? textPart.text
-              : '';
-          return {
-            role: m.role,
-            content: content || '',
-          };
-        } catch (e) {
-          console.warn('Error processing message:', e, m);
-          return null;
-        }
-      })
-      .filter((msg: any) => msg !== null && (msg.content || msg.role === 'system')); // Filter out null and empty messages except system
+    const uiMessages = toUiMessages(messagesToConvert);
 
-    if (plainMessages.length === 0) {
+    if (uiMessages.length === 0) {
       console.warn('No valid messages to send');
       isLoading.value = false;
       return;
     }
 
+    const modelMessages = await convertToModelMessages(
+      uiMessages.map(({ id, ...message }) => message),
+      { ignoreIncompleteToolCalls: true }
+    );
+    const transportMessages = JSON.parse(JSON.stringify(modelMessages));
+
     // Start streaming via IPC
     await window.electronAPI.chat.stream({
       providerType: selectedProvider.value.type,
       model: selectedModel.value,
-      messages: plainMessages,
+      messages: transportMessages,
       tools:
         selectedTools.value.length > 0
           ? JSON.parse(JSON.stringify(selectedTools.value))

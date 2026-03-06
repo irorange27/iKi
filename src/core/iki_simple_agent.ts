@@ -109,11 +109,11 @@ export class SimpleAgent extends BaseAgent {
       .join('');
   }
 
-  private syncMessagesFromResponse(responseMessages: unknown, baseMessageCount: number): void {
-    if (!Array.isArray(responseMessages) || responseMessages.length <= baseMessageCount) return;
+  private syncMessagesFromResponse(responseMessages: unknown): void {
+    if (!Array.isArray(responseMessages) || responseMessages.length === 0) return;
 
-    const newMessages = responseMessages.slice(baseMessageCount);
-    for (const rawMessage of newMessages) {
+    // AI SDK response.messages are incremental messages to append.
+    for (const rawMessage of responseMessages) {
       if (!rawMessage || typeof rawMessage !== 'object') continue;
 
       const message = rawMessage as { role?: string; content?: unknown };
@@ -127,13 +127,29 @@ export class SimpleAgent extends BaseAgent {
                 (part as { type?: string }).type === 'tool-call'
             )
           : [];
+        const toolApprovalRequests = Array.isArray(message.content)
+          ? message.content.filter(
+              part =>
+                part &&
+                typeof part === 'object' &&
+                (part as { type?: string }).type === 'tool-approval-request'
+            )
+          : [];
 
-        if (!content && toolCalls.length === 0) continue;
+        if (!content && toolCalls.length === 0 && toolApprovalRequests.length === 0) continue;
 
         this.addMessage({
           role: 'assistant',
           content,
-          metadata: toolCalls.length > 0 ? { toolCalls } : undefined,
+          metadata:
+            toolCalls.length > 0 || toolApprovalRequests.length > 0
+              ? {
+                  ...(toolCalls.length > 0 ? { toolCalls } : {}),
+                  ...(toolApprovalRequests.length > 0
+                    ? { toolApprovalRequests }
+                    : {}),
+                }
+              : undefined,
         });
       } else if (message.role === 'tool') {
         if (!Array.isArray(message.content)) {
@@ -243,7 +259,7 @@ export class SimpleAgent extends BaseAgent {
         }
       }
 
-      this.syncMessagesFromResponse(result.response.messages, messages.length);
+      this.syncMessagesFromResponse(result.response.messages);
 
       // If there are tool approval requests, return them for user approval
       if (toolApprovalRequests.length > 0) {
@@ -371,12 +387,6 @@ export class SimpleAgent extends BaseAgent {
 
       const responseObj = await result.response;
       const contentParts = await result.content;
-      const fullResponse = finalResponse || (await result.text);
-
-      if (!finalResponse && fullResponse) {
-        yield fullResponse;
-        finalResponse = fullResponse;
-      }
 
       const approvalRequests: AgentToolApprovalRequest[] = [];
       for (const part of contentParts) {
@@ -385,7 +395,7 @@ export class SimpleAgent extends BaseAgent {
         }
       }
 
-      this.syncMessagesFromResponse(responseObj.messages, messages.length);
+      this.syncMessagesFromResponse(responseObj.messages);
 
       if (approvalRequests.length > 0) {
         this.pendingApprovalRequests = approvalRequests;
@@ -396,6 +406,19 @@ export class SimpleAgent extends BaseAgent {
           toolApprovalRequests: approvalRequests,
           iterations: (await result.steps).length || 1,
         };
+      }
+
+      if (!finalResponse) {
+        try {
+          const streamedText = await Promise.resolve(result.text);
+          if (streamedText) {
+            yield streamedText;
+            finalResponse = streamedText;
+          }
+        } catch {
+          // Some tool-only steps can legitimately produce no text output.
+          finalResponse = '';
+        }
       }
 
       const agentResult: AgentResult = {

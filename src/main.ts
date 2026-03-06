@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import type { ToolApprovalResponse } from 'ai';
+import type { ModelMessage, ToolApprovalResponse } from 'ai';
 import { getConfig, setConfig, migrateFromJson } from './core/db/database';
 import * as providerDb from './core/db/providers';
 import * as chatThreadDb from './core/db/chat_thread';
@@ -11,7 +11,7 @@ import * as promptAppDb from './core/db/prompt_apps';
 import { getToolModel, generateTitleWithAgent } from './core/provider/tool_model';
 import { registerStandardTools, defaultToolRegistry } from './core/tools';
 import { SimpleAgent } from './core/agent';
-import type { AgentResult } from './core/agent';
+import type { AgentMessage, AgentResult } from './core/agent';
 
 const getRendererDevServerUrl = () => process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL || 'http://localhost:5173';
 
@@ -26,21 +26,159 @@ type ChatWebContents = {
   send: (channel: string, ...args: unknown[]) => void;
 };
 
-type ChatInputMessage = {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-};
+type ChatInputMessage = ModelMessage;
 
 type LlmChatMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 };
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const extractTextFromContent = (content: unknown): string => {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .filter(
+      part =>
+        isObjectRecord(part) &&
+        part.type === 'text' &&
+        typeof part.text === 'string' &&
+        part.text.length > 0
+    )
+    .map(part => String((part as { text: string }).text))
+    .join('');
+};
+
 const toLlmChatMessages = (messages: ChatInputMessage[]): LlmChatMessage[] =>
-  messages.filter(
-    (message): message is LlmChatMessage =>
-      message.role === 'system' || message.role === 'user' || message.role === 'assistant'
-  );
+  messages
+    .filter(
+      (message): message is Extract<ChatInputMessage, { role: 'system' | 'user' | 'assistant' }> =>
+        message.role === 'system' || message.role === 'user' || message.role === 'assistant'
+    )
+    .map(message => ({
+      role: message.role,
+      content: extractTextFromContent(message.content),
+    }))
+    .filter(message => message.role === 'system' || message.content.length > 0);
+
+const toAgentMessages = (messages: ChatInputMessage[]): AgentMessage[] => {
+  const agentMessages: AgentMessage[] = [];
+
+  for (const message of messages) {
+    const timestamp = new Date().toISOString();
+
+    if (message.role === 'system' || message.role === 'user') {
+      agentMessages.push({
+        role: message.role,
+        content: extractTextFromContent(message.content),
+        timestamp,
+      });
+      continue;
+    }
+
+    if (message.role === 'assistant') {
+      const textContent = extractTextFromContent(message.content);
+      const metadata: Record<string, unknown> = {};
+
+      if (Array.isArray(message.content)) {
+        const assistantParts = message.content as unknown[];
+        const toolCalls = assistantParts.filter(
+          part => isObjectRecord(part) && part.type === 'tool-call'
+        );
+        const toolApprovalRequests = assistantParts.filter(
+          part => isObjectRecord(part) && part.type === 'tool-approval-request'
+        );
+
+        if (toolCalls.length > 0) {
+          metadata.toolCalls = toolCalls;
+        }
+        if (toolApprovalRequests.length > 0) {
+          metadata.toolApprovalRequests = toolApprovalRequests;
+        }
+      }
+
+      if (!textContent && Object.keys(metadata).length === 0) {
+        continue;
+      }
+
+      agentMessages.push({
+        role: 'assistant',
+        content: textContent,
+        timestamp,
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      });
+      continue;
+    }
+
+    if (message.role === 'tool') {
+      if (!Array.isArray(message.content)) {
+        agentMessages.push({
+          role: 'tool',
+          content:
+            typeof message.content === 'string'
+              ? message.content
+              : JSON.stringify(message.content ?? {}),
+          timestamp,
+        });
+        continue;
+      }
+
+      const toolParts = message.content as unknown[];
+      for (const part of toolParts) {
+        if (!isObjectRecord(part) || typeof part.type !== 'string') continue;
+        const partType = part.type;
+
+        if (partType === 'tool-result') {
+          const resultPart = part as {
+            output?: unknown;
+            toolCallId?: unknown;
+            toolName?: unknown;
+          };
+          agentMessages.push({
+            role: 'tool',
+            content: JSON.stringify(resultPart.output ?? {}),
+            timestamp,
+            metadata: {
+              toolCallId: resultPart.toolCallId,
+              toolName: resultPart.toolName,
+            },
+          });
+          continue;
+        }
+
+        if (partType === 'tool-approval-response') {
+          const approvalPart = part as {
+            approvalId?: unknown;
+            approved?: unknown;
+            reason?: unknown;
+          };
+          agentMessages.push({
+            role: 'tool',
+            content: JSON.stringify({
+              approvalId: approvalPart.approvalId,
+              approved: approvalPart.approved,
+              reason: approvalPart.reason,
+            }),
+            timestamp,
+            metadata: {
+              approvalId: approvalPart.approvalId,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  return agentMessages;
+};
+
+const getPromptFromMessage = (message: ChatInputMessage | undefined): string => {
+  if (!message || message.role !== 'user') return '';
+  return extractTextFromContent(message.content);
+};
 
 const pendingApprovalSessions = new Map<
   string,
@@ -355,9 +493,14 @@ ipcMain.handle(
         // Separate user prompt from history
         const history = options.messages.slice(0, -1);
         const lastMessage = options.messages[options.messages.length - 1];
+        const prompt = getPromptFromMessage(lastMessage);
 
-        agent.setMessages(history);
-        const result = await agent.generate(lastMessage.content);
+        if (!prompt.trim()) {
+          throw new Error('No user prompt provided for tool-enabled chat');
+        }
+
+        agent.setMessages(toAgentMessages(history));
+        const result = await agent.generate(prompt);
         return { success: true, text: result.response };
       } else {
         // Fallback to simple LLM call
@@ -418,9 +561,14 @@ ipcMain.handle(
 
         const history = options.messages.slice(0, -1);
         const lastMessage = options.messages[options.messages.length - 1];
+        const prompt = getPromptFromMessage(lastMessage);
 
-        agent.setMessages(history);
-        const streamResult = await streamAgentResponse(agent, webContents, lastMessage.content);
+        if (!prompt.trim()) {
+          throw new Error('No user prompt provided for tool-enabled stream');
+        }
+
+        agent.setMessages(toAgentMessages(history));
+        const streamResult = await streamAgentResponse(agent, webContents, prompt);
         return { success: true, awaitingApproval: streamResult.awaitingApproval };
       } else {
         const result = await llmFactory.streamChat(
@@ -454,7 +602,7 @@ ipcMain.handle('chat:approve-tool', async (_, approvalId: string, approved: bool
       error: 'Approval request not found or already processed.',
     };
   }
-
+  // Make approval single-use before async continuation to avoid re-entrancy.
   pendingApprovalSessions.delete(approvalId);
 
   const approvalResponse: ToolApprovalResponse = {

@@ -39,13 +39,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     send: (options: {
       providerType: string;
       model: string;
-      messages: Array<{ role: string; content: string }>;
+      messages: Array<{ role: string; content: unknown }>;
       tools?: string[];
     }) => ipcRenderer.invoke('chat:send', options),
     stream: (options: {
       providerType: string;
       model: string;
-      messages: Array<{ role: string; content: string }>;
+      messages: Array<{ role: string; content: unknown }>;
       tools?: string[];
     }) => ipcRenderer.invoke('chat:stream', options),
     onChunk: (callback: (chunk: string) => void) => {
