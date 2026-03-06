@@ -67,6 +67,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-squirrel-startup": "^1.0.1",
+    "highlight.js": "^11.11.1",
     "pinia": "^3.0.4",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",

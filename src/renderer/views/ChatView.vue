@@ -20,12 +20,13 @@
 
         <!-- Messages List -->
         <div v-else class="messages-area w-full h-full">
-          <div class="messages-container">
+          <div class="messages-container" @click="handleMarkdownClick">
             <div v-for="(m, index) in chat.messages" :key="m.id ? m.id : index" class="message-wrapper" :class="m.role">
               <div class="message-content">
-                <div v-for="(part, partIndex) in m.parts" :key="`${m.id}-${part.type}-${partIndex}`">
-                  <div v-if="part.type === 'text'" class="message-text markdown-content">
-                    <VueMarkdown :source="(part as any).text" />
+                <div v-for="(part, partIndex) in m.parts" :key="`${m.id}-${getPartType(part)}-${partIndex}`"
+                  class="message-part">
+                  <div v-if="isTextPart(part)" class="message-text markdown-content">
+                    <VueMarkdown :source="getTextPartContent(part)" :plugins="markdownPlugins" />
                   </div>
                   <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
                     <div class="tool-approval-header">
@@ -42,7 +43,7 @@
                         {{ getToolName(part) }}
                       </div>
                       <div class="tool-args">
-                        <pre>{{ JSON.stringify(getToolInput(part), null, 2) }}</pre>
+                        <pre>{{ formatJson(getToolInput(part)) }}</pre>
                       </div>
                     </div>
                     <div class="tool-approval-actions">
@@ -56,8 +57,34 @@
                       </button>
                     </div>
                   </div>
-                  <div v-else-if="isToolPart(part)" class="message-text">
-                    <pre>{{ JSON.stringify(part, null, 2) }}</pre>
+                  <div v-else-if="isToolResultPart(part)" class="tool-result-content">
+                    <div class="tool-card-header">
+                      <span class="tool-card-tag tag-result">Tool Result</span>
+                      <span class="tool-card-name">{{ getToolName(part) }}</span>
+                      <span v-if="getToolStateLabel(part)" class="tool-card-state">{{ getToolStateLabel(part) }}</span>
+                    </div>
+                    <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
+                      <div class="tool-card-section-title">Output</div>
+                      <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
+                    </div>
+                    <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+                      <div class="tool-card-section-title">Input</div>
+                      <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                    </div>
+                  </div>
+                  <div v-else-if="isToolCallPart(part)" class="tool-call-content">
+                    <div class="tool-card-header">
+                      <span class="tool-card-tag tag-call">Tool Call</span>
+                      <span class="tool-card-name">{{ getToolName(part) }}</span>
+                      <span v-if="getToolStateLabel(part)" class="tool-card-state">{{ getToolStateLabel(part) }}</span>
+                    </div>
+                    <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+                      <div class="tool-card-section-title">Arguments</div>
+                      <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                    </div>
+                  </div>
+                  <div v-else class="tool-fallback-content">
+                    <pre class="tool-json-output">{{ formatJson(part) }}</pre>
                   </div>
                 </div>
               </div>
@@ -84,6 +111,8 @@ import ChatInput from '../components/ChatInput.vue';
 import { FolderOpen } from 'lucide-vue-next';
 import { useConfigStore } from '../store/config';
 import VueMarkdown from 'vue-markdown-render';
+import hljs from 'highlight.js/lib/common';
+import 'highlight.js/styles/atom-one-dark.css';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -112,8 +141,101 @@ const persistedMessageIds = new Set<string>();
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
+type MessagePartRecord = Record<string, any> & { type: string };
+type MarkdownToken = { info?: string; content?: string };
+type MarkdownFenceRenderer = (
+  tokens: MarkdownToken[],
+  idx: number,
+  options: unknown,
+  env: unknown,
+  self: unknown
+) => string;
+type MarkdownPlugin = (md: {
+  renderer: {
+    rules: {
+      fence?: MarkdownFenceRenderer;
+      [key: string]: MarkdownFenceRenderer | undefined;
+    };
+  };
+  utils: {
+    escapeHtml: (value: string) => string;
+  };
+}) => void;
+
+type MarkdownHighlightResult = {
+  html: string;
+  displayLanguage: string;
+  languageClass: string;
+};
+
 const isObjectRecord = (value: unknown): value is Record<string, any> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const normalizeLanguage = (value: string): string => value.trim().toLowerCase();
+
+const sanitizeLanguageClass = (value: string): string =>
+  value.replace(/[^a-z0-9_-]/gi, '');
+
+const highlightCode = (
+  source: string,
+  languageHint: string,
+  escapeHtml: (value: string) => string
+): MarkdownHighlightResult => {
+  const code = source || '';
+  const hint = normalizeLanguage(languageHint);
+  const safeHintClass = sanitizeLanguageClass(hint);
+  const fallback: MarkdownHighlightResult = {
+    html: escapeHtml(code),
+    displayLanguage: hint || 'code',
+    languageClass: safeHintClass || 'text',
+  };
+
+  if (!code.trim()) return fallback;
+
+  try {
+    if (hint && hljs.getLanguage(hint)) {
+      return {
+        html: hljs.highlight(code, { language: hint, ignoreIllegals: true }).value,
+        displayLanguage: hint,
+        languageClass: sanitizeLanguageClass(hint) || 'text',
+      };
+    }
+
+    const autoResult = hljs.highlightAuto(code);
+    const detected = normalizeLanguage(autoResult.language || '');
+    const safeDetected = sanitizeLanguageClass(detected);
+
+    return {
+      html: autoResult.value || fallback.html,
+      displayLanguage: hint || safeDetected || 'code',
+      languageClass: safeDetected || safeHintClass || 'text',
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+const markdownCodeBlockPlugin: MarkdownPlugin = md => {
+  md.renderer.rules.fence = (tokens, idx) => {
+    const token = tokens[idx];
+    const rawInfo = typeof token?.info === 'string' ? token.info.trim() : '';
+    const languageHint = rawInfo.split(/\s+/).filter(Boolean)[0] || '';
+    const sourceRaw = typeof token?.content === 'string' ? token.content : '';
+    const source = sourceRaw.replace(/^\n+/, '').replace(/\n+$/, '');
+    const { html, displayLanguage, languageClass } = highlightCode(
+      source,
+      languageHint,
+      md.utils.escapeHtml
+    );
+    const escapedLanguage = md.utils.escapeHtml(displayLanguage || 'code');
+    const codeClass = md.utils.escapeHtml(languageClass || 'text');
+    const renderedFence = `<pre><code class="hljs language-${codeClass}">${html}</code></pre>`;
+
+    return `<div class="md-code-block"><div class="md-code-header"><span class="md-code-lang">${escapedLanguage}</span><button type="button" class="md-code-copy-btn" aria-label="Copy code" title="Copy code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div>${renderedFence}</div>`;
+  };
+};
+
+const markdownPlugins = [markdownCodeBlockPlugin];
 
 const normalizeRole = (role: unknown): 'system' | 'user' | 'assistant' => {
   if (role === 'system' || role === 'assistant' || role === 'user') {
@@ -224,36 +346,197 @@ const getOrCreateAssistantMessage = (): UIMessage => {
   return assistantMessage;
 };
 
+const TOOL_STATE_LABELS: Record<string, string> = {
+  'input-streaming': 'Running',
+  'input-available': 'Queued',
+  'approval-requested': 'Awaiting approval',
+  'approval-responded': 'Approved',
+  'output-available': 'Completed',
+  'output-error': 'Failed',
+  'output-denied': 'Denied',
+  done: 'Done',
+};
+
+const getPartType = (part: unknown): string =>
+  isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
+
+const isTextPart = (part: unknown): part is { type: 'text'; text: string } =>
+  isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
+
+const getTextPartContent = (part: unknown): string => (isTextPart(part) ? part.text : '');
+
 const getApprovalId = (part: unknown): string | null => {
-  if (!isObjectRecord(part) || !isObjectRecord(part.approval)) return null;
+  if (!isObjectRecord(part)) return null;
+  if (typeof part.approvalId === 'string') return part.approvalId;
+  if (!isObjectRecord(part.approval)) return null;
   return typeof part.approval.id === 'string' ? part.approval.id : null;
 };
 
-const isToolPart = (part: unknown): boolean =>
+const isToolPart = (part: unknown): part is MessagePartRecord =>
   isObjectRecord(part) &&
   typeof part.type === 'string' &&
   (part.type === 'dynamic-tool' || part.type.startsWith('tool-'));
 
-const isApprovalRequestedPart = (part: unknown): boolean =>
-  isToolPart(part) &&
-  isObjectRecord(part) &&
-  part.state === 'approval-requested' &&
-  getApprovalId(part) !== null;
+const isApprovalRequestedPart = (part: unknown): boolean => {
+  if (!isToolPart(part)) return false;
+  if (!getApprovalId(part)) return false;
+  return part.type === 'tool-approval-request' || part.state === 'approval-requested';
+};
+
+const isToolResultPart = (part: unknown): boolean => {
+  if (!isToolPart(part) || !isObjectRecord(part) || isApprovalRequestedPart(part)) return false;
+
+  if (part.type === 'tool-result' || part.type === 'tool-approval-response') return true;
+  if (part.output !== undefined || part.result !== undefined) return true;
+
+  if (typeof part.state === 'string') {
+    return (
+      part.state === 'approval-responded' ||
+      part.state === 'done' ||
+      part.state.startsWith('output-')
+    );
+  }
+
+  return false;
+};
+
+const isToolCallPart = (part: unknown): boolean =>
+  isToolPart(part) && !isApprovalRequestedPart(part) && !isToolResultPart(part);
 
 const getToolName = (part: unknown): string => {
   if (!isObjectRecord(part)) return 'tool';
+
+  if (typeof part.toolName === 'string' && part.toolName.trim()) {
+    return part.toolName;
+  }
+
+  if (isObjectRecord(part.toolCall) && typeof part.toolCall.toolName === 'string') {
+    return part.toolCall.toolName;
+  }
+
   if (part.type === 'dynamic-tool' && typeof part.toolName === 'string') {
     return part.toolName;
   }
+
   if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-    return part.type.replace(/^tool-/, '');
+    const typeName = part.type.replace(/^tool-/, '');
+    if (
+      typeName === 'call' ||
+      typeName === 'result' ||
+      typeName === 'approval-request' ||
+      typeName === 'approval-response'
+    ) {
+      return 'tool';
+    }
+    return typeName || 'tool';
   }
+
   return 'tool';
 };
 
 const getToolInput = (part: unknown): unknown => {
-  if (!isObjectRecord(part)) return {};
-  return part.input ?? {};
+  if (!isObjectRecord(part)) return undefined;
+  if (part.input !== undefined) return part.input;
+  if (part.args !== undefined) return part.args;
+  if (isObjectRecord(part.toolCall)) {
+    if (part.toolCall.args !== undefined) return part.toolCall.args;
+    if (part.toolCall.input !== undefined) return part.toolCall.input;
+  }
+  return undefined;
+};
+
+const getToolOutput = (part: unknown): unknown => {
+  if (!isObjectRecord(part)) return undefined;
+
+  if (part.output !== undefined) return part.output;
+  if (part.result !== undefined) return part.result;
+
+  if (part.type === 'tool-approval-response') {
+    return {
+      approvalId: part.approvalId,
+      approved: part.approved,
+      reason: part.reason,
+    };
+  }
+
+  if (isObjectRecord(part.approval) && Object.keys(part.approval).length > 0) {
+    return part.approval;
+  }
+
+  return undefined;
+};
+
+const getToolStateLabel = (part: unknown): string => {
+  if (!isObjectRecord(part) || typeof part.state !== 'string') return '';
+  return TOOL_STATE_LABELS[part.state] ?? part.state;
+};
+
+const hasDisplayValue = (value: unknown): boolean => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (isObjectRecord(value)) return Object.keys(value).length > 0;
+  return true;
+};
+
+const formatJson = (value: unknown): string => {
+  if (value === undefined) return '';
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+  if (!text) return false;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return copied;
+    } catch {
+      return false;
+    }
+  }
+};
+
+const handleMarkdownClick = async (event: MouseEvent) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const copyButton = target.closest('.md-code-copy-btn') as HTMLButtonElement | null;
+  if (!copyButton) return;
+
+  const codeElement = copyButton.closest('.md-code-block')?.querySelector('pre code');
+  const codeText = codeElement?.textContent ?? '';
+  if (!codeText.trim()) return;
+
+  const copied = await copyTextToClipboard(codeText);
+  if (!copied) return;
+
+  copyButton.dataset.copied = 'true';
+  window.setTimeout(() => {
+    delete copyButton.dataset.copied;
+  }, 1200);
 };
 
 const isApprovalProcessing = (part: unknown): boolean => {
@@ -636,6 +919,126 @@ onMounted(async () => {
   white-space: pre-wrap;
 }
 
+.message-part + .message-part {
+  margin-top: 12px;
+}
+
+.message-text.markdown-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.message-text.markdown-content :deep(pre) {
+  margin: 10px 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.message-text.markdown-content :deep(code) {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.message-text.markdown-content :deep(pre code) {
+  display: block;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.message-text.markdown-content :deep(.md-code-block) {
+  margin: 12px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.message-text.markdown-content :deep(.md-code-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.message-text.markdown-content :deep(.md-code-lang) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  text-transform: lowercase;
+}
+
+.message-text.markdown-content :deep(.md-code-lang::before) {
+  content: '⌘';
+  font-size: 12px;
+  color: var(--accent-color);
+}
+
+.message-text.markdown-content :deep(.md-code-copy-btn) {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.message-text.markdown-content :deep(.md-code-copy-btn:hover) {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.message-text.markdown-content :deep(.md-code-copy-btn[data-copied='true']) {
+  color: var(--success-color, var(--accent-color));
+}
+
+.message-text.markdown-content :deep(.md-code-copy-btn svg) {
+  width: 15px;
+  height: 15px;
+}
+
+.message-text.markdown-content :deep(.md-code-block pre) {
+  margin: 0;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 0;
+  background: var(--bg-primary);
+}
+
+.message-text.markdown-content :deep(.md-code-block pre code) {
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+  color: var(--text-primary);
+}
+
+.message-text.markdown-content :deep(.md-code-block pre code.hljs) {
+  background: transparent;
+  margin: 0;
+  padding: 0 !important;
+}
+
 .typing-cursor {
   display: inline-block;
   color: var(--accent-color);
@@ -655,17 +1058,94 @@ onMounted(async () => {
   }
 }
 
-/* Tool Approval Styles */
-.message-wrapper.tool-approval {
-  margin-bottom: 16px;
-}
-
-.tool-approval-content {
+.tool-approval-content,
+.tool-call-content,
+.tool-result-content,
+.tool-fallback-content {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 16px;
-  max-width: 600px;
+  padding: 14px;
+  max-width: 680px;
+}
+
+.tool-approval-content,
+.tool-call-content {
+  border-left: 3px solid var(--accent-color);
+}
+
+.tool-result-content {
+  border-left: 3px solid var(--success-color, var(--accent-color));
+}
+
+.tool-fallback-content {
+  border-left: 3px solid var(--text-muted);
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.tool-card-tag {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.tag-call {
+  color: var(--accent-color);
+  background: var(--bg-tertiary);
+}
+
+.tag-result {
+  color: var(--success-color, var(--accent-color));
+  background: var(--bg-tertiary);
+}
+
+.tool-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-card-state {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tool-card-section + .tool-card-section {
+  margin-top: 10px;
+}
+
+.tool-card-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tool-json-output {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-secondary);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
 
 .tool-approval-header {
@@ -692,24 +1172,28 @@ onMounted(async () => {
 }
 
 .tool-name {
-  font-weight: 600;
-  color: var(--accent-color);
-  margin-bottom: 8px;
   font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
 }
 
 .tool-args {
-  background: var(--bg-tertiary);
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 12px;
-  overflow-x: auto;
+  margin: 0;
 }
 
 .tool-args pre {
   margin: 0;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--text-secondary);
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  overflow-x: auto;
+  white-space: pre;
 }
 
 .tool-approval-actions {
