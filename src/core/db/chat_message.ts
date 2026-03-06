@@ -4,12 +4,14 @@ import { ChatMessage } from '../../shared/types/chat';
 export const getChatMessages = (threadId: string): ChatMessage[] => {
   const rows = db
     .prepare('SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY timestamp ASC')
-    .all(threadId) as any[];
+    .all(threadId) as ChatMessage[];
   return rows;
 };
 
 export const getChatMessage = (id: string): ChatMessage | null => {
-  const row = db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(id) as any;
+  const row = db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(id) as
+    | ChatMessage
+    | undefined;
   if (!row) return null;
   return row;
 };
@@ -17,21 +19,21 @@ export const getChatMessage = (id: string): ChatMessage | null => {
 export const getChatMessagesByParent = (parentId: string): ChatMessage[] => {
   const rows = db
     .prepare('SELECT * FROM chat_messages WHERE parent_id = ? ORDER BY timestamp ASC')
-    .all(parentId) as any[];
+    .all(parentId) as ChatMessage[];
   return rows;
 };
 
 export const getChatMessagesBySlot = (slotId: string): ChatMessage[] => {
   const rows = db
     .prepare('SELECT * FROM chat_messages WHERE slot_id = ? ORDER BY timestamp ASC')
-    .all(slotId) as any[];
+    .all(slotId) as ChatMessage[];
   return rows;
 };
 
 export const getChatMessagesByDepth = (threadId: string, depth: number): ChatMessage[] => {
   const rows = db
     .prepare('SELECT * FROM chat_messages WHERE thread_id = ? AND depth = ? ORDER BY timestamp ASC')
-    .all(threadId, depth) as any[];
+    .all(threadId, depth) as ChatMessage[];
   return rows;
 };
 
@@ -84,7 +86,11 @@ export const updateChatMessage = (id: string, message: Partial<ChatMessage>) => 
         WHERE id = @id
     `);
 
-  const params: any = { ...message, id, updated_at: now };
+  const params: Partial<ChatMessage> & { id: string; updated_at: string } = {
+    ...message,
+    id,
+    updated_at: now,
+  };
 
   return stmt.run(params);
 };

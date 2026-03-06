@@ -147,8 +147,13 @@ export const useConfigStore = defineStore('config', {
     },
 
     resetSection(section: keyof AppConfig) {
-      // @ts-ignore
-      this.config[section] = JSON.parse(JSON.stringify(DEFAULT_CONFIG[section]));
+      const defaultSection = JSON.parse(
+        JSON.stringify(DEFAULT_CONFIG[section])
+      ) as AppConfig[typeof section];
+      this.config = {
+        ...this.config,
+        [section]: defaultSection,
+      } as AppConfig;
       if (section === 'ui' || section === 'general') {
         this.applyCssVariables();
       }

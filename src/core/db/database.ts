@@ -41,7 +41,7 @@ db.exec(`
 // Run migrations to create/update other tables
 initializeMigrations();
 
-export const getConfig = (key: string): any => {
+export const getConfig = (key: string): unknown => {
   const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key) as
     | { value: string }
     | undefined;
@@ -56,7 +56,7 @@ export const getConfig = (key: string): any => {
   return null;
 };
 
-export const setConfig = (key: string, value: any) => {
+export const setConfig = (key: string, value: unknown) => {
   const statement = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
   statement.run(key, JSON.stringify(value));
 };

@@ -1,6 +1,7 @@
 import { getProviders } from '../db/providers';
 import { getConfig } from '../db/database';
 import type { AppConfig } from '../../shared/types/config';
+import { SimpleAgent } from '../agent';
 
 export interface ToolModelConfig {
   providerType: string;
@@ -92,6 +93,60 @@ export const getToolModel = (): ToolModelConfig | null => {
     return null;
   } catch (error) {
     console.error('Failed to get tool model:', error);
+    return null;
+  }
+};
+
+/**
+ * Generate a conversation title using Agent framework
+ * @param conversationContent - The conversation content to generate title for
+ * @returns Generated title or null if failed
+ */
+export const generateTitleWithAgent = async (
+  conversationContent: string
+): Promise<string | null> => {
+  try {
+    const toolModel = getToolModel();
+    if (!toolModel) {
+      console.warn('No tool model available for title generation');
+      return null;
+    }
+
+    // Create agent with toolModel configuration
+    const agent = new SimpleAgent({
+      enabled: true,
+      providerType: toolModel.providerType,
+      model: toolModel.model,
+      systemPrompt:
+        'You are a helpful assistant that generates concise, descriptive titles for chat conversations.\nGenerate a short title (3-8 words) that captures the main topic or purpose of the conversation.\nThe title should be clear and informative, not generic.\nDo NOT use quotes around the title.\nDo NOT include any explanation, just output the title directly.',
+      temperature: 0.1,
+      maxTokens: 50,
+      maxIterations: 1,
+      enableTools: false,
+      enableMemory: false,
+    });
+
+    // Generate title using the conversation content
+    const result = await agent.generate(conversationContent);
+
+    if (result.response) {
+      // Clean up the title: remove quotes, extra whitespace, etc.
+      let title = result.response.trim();
+      title = title.replace(/^["']|["']$/g, ''); // Remove surrounding quotes
+      title = title.replace(/\n+/g, ' '); // Replace newlines with spaces
+      title = title.trim();
+
+      // Limit title length
+      if (title.length > 60) {
+        title = title.slice(0, 57) + '...';
+      }
+
+      return title || null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Failed to generate title with agent:', error);
     return null;
   }
 };

@@ -1,29 +1,25 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import type { ToolApprovalResponse } from 'ai';
-import { getConfig, setConfig, migrateFromJson } from './core/db/database';
-import * as providerDb from './core/db/providers';
-import * as chatThreadDb from './core/db/chat_thread';
-import * as chatMessageDb from './core/db/chat_message';
-import * as workspaceDb from './core/db/workspaces';
-import * as promptAppDb from './core/db/prompt_apps';
-import { getToolModel, generateTitleWithAgent } from './core/provider/tool_model';
-import { registerStandardTools, defaultToolRegistry } from './core/tools';
-import { SimpleAgent } from './core/agent';
-import type { AgentResult } from './core/agent';
+import { getConfig, setConfig, migrateFromJson } from '../core/db/database';
+import * as providerDb from '../core/db/providers';
+import * as chatThreadDb from '../core/db/chat_thread';
+import * as chatMessageDb from '../core/db/chat_message';
+import * as workspaceDb from '../core/db/workspaces';
+import * as promptAppDb from '../core/db/prompt_apps';
+import { getToolModel, generateTitleWithAgent } from '../core/provider/tool_model';
+import { registerStandardTools, defaultToolRegistry } from '../core/tools';
+import { SimpleAgent } from '../core/agent';
+import type { AgentResult } from '../core/agent';
 
-const getRendererDevServerUrl = () => process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL || 'http://localhost:5173';
+const getRendererDevServerUrl = () =>
+  process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL || 'http://localhost:5173';
 
 const getRendererProdHtmlPath = () => path.join(__dirname, '../renderer/main_window/index.html');
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
   return String(error);
-};
-
-type ChatWebContents = {
-  send: (channel: string, ...args: unknown[]) => void;
 };
 
 type ChatInputMessage = {
@@ -41,55 +37,6 @@ const toLlmChatMessages = (messages: ChatInputMessage[]): LlmChatMessage[] =>
     (message): message is LlmChatMessage =>
       message.role === 'system' || message.role === 'user' || message.role === 'assistant'
   );
-
-const pendingApprovalSessions = new Map<
-  string,
-  {
-    agent: SimpleAgent;
-    webContents: ChatWebContents;
-  }
->();
-
-const streamAgentResponse = async (
-  agent: SimpleAgent,
-  webContents: ChatWebContents,
-  prompt: string,
-  approvalResponses?: ToolApprovalResponse[]
-) => {
-  const generator = agent.stream(prompt, approvalResponses);
-  let fullResponse = '';
-
-  let next = await generator.next();
-  while (!next.done) {
-    const chunk = next.value;
-    if (typeof chunk === 'string' && chunk) {
-      fullResponse += chunk;
-      webContents.send('chat:chunk', chunk);
-    }
-    next = await generator.next();
-  }
-
-  const agentResult = (next.value ?? null) as AgentResult | null;
-  let finalText = fullResponse;
-  if (agentResult?.response && agentResult.response.trim()) {
-    finalText = agentResult.response;
-  }
-
-  if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
-    for (const approvalRequest of agentResult.toolApprovalRequests) {
-      pendingApprovalSessions.set(approvalRequest.approvalId, { agent, webContents });
-      webContents.send('chat:tool-approval-request', approvalRequest);
-    }
-    return { awaitingApproval: true };
-  }
-
-  if (!finalText.trim() && fullResponse.trim()) {
-    finalText = fullResponse;
-  }
-
-  webContents.send('chat:done', finalText || '');
-  return { awaitingApproval: false };
-};
 
 // Register standard tools on startup
 registerStandardTools();
@@ -291,10 +238,10 @@ ipcMain.handle('toolModel:generateTitle', async (_, conversationContent: string)
 });
 
 // Chat/LLM Integration
-import * as llmFactory from './core/provider/llm/factory';
-import * as deepseekProvider from './core/provider/llm/deepseek';
-import * as openaiProvider from './core/provider/llm/openai';
-import * as kimiProvider from './core/provider/llm/kimi';
+import * as llmFactory from '../core/provider/llm/factory';
+import * as deepseekProvider from '../core/provider/llm/deepseek';
+import * as openaiProvider from '../core/provider/llm/openai';
+import * as kimiProvider from '../core/provider/llm/kimi';
 
 // Get available models for a provider type
 ipcMain.handle('chat:getModels', async (_, providerType: string) => {
@@ -386,7 +333,7 @@ ipcMain.handle(
       tools?: string[];
     }
   ) => {
-    const webContents = event.sender as ChatWebContents;
+    const webContents = event.sender;
     try {
       if (options.tools && options.tools.length > 0) {
         const agent = new SimpleAgent({
@@ -397,8 +344,6 @@ ipcMain.handle(
           enableTools: true,
           maxIterations: 5,
         });
-
-        console.log('[Main] Streaming chat with tools:', options.tools);
 
         for (const toolName of options.tools) {
           const tool = defaultToolRegistry.get(toolName);
@@ -412,16 +357,63 @@ ipcMain.handle(
 
         console.log('[Main] Registered tools count:', agent.getTools().length);
 
-        if (!options.messages || options.messages.length === 0) {
-          throw new Error('No messages provided for streaming');
-        }
-
         const history = options.messages.slice(0, -1);
         const lastMessage = options.messages[options.messages.length - 1];
 
         agent.setMessages(history);
-        const streamResult = await streamAgentResponse(agent, webContents, lastMessage.content);
-        return { success: true, awaitingApproval: streamResult.awaitingApproval };
+
+        const gen = agent.stream(lastMessage.content);
+        let fullResponse = '';
+
+        // Collect all chunks from the stream
+        for await (const chunk of gen) {
+          if (typeof chunk === 'string' && chunk) {
+            fullResponse += chunk;
+            webContents.send('chat:chunk', chunk);
+          }
+        }
+
+        // After the generator completes, try to get the return value
+        // Async generators return their value when they're done
+        let finalText = fullResponse;
+        let agentResult: AgentResult | null = null;
+        try {
+          // The generator's return value is the AgentResult
+          // We need to manually get it since for-await-of doesn't capture return values
+          const result = await gen.next();
+          if (result.done && result.value && typeof result.value === 'object') {
+            agentResult = result.value;
+            // Use the response from agent result if available and different
+            if (agentResult?.response && agentResult.response.trim()) {
+              finalText = agentResult.response;
+            }
+          }
+        } catch (e) {
+          // If we can't get the return value, use the collected chunks
+          console.log('[Main] Could not get generator return value, using collected chunks:', e);
+        }
+
+        // Check for tool approval requests
+        // Note: In AI SDK v6, tools execute automatically unless approval is required
+        // If there are approval requests, send them to frontend but don't block execution
+        if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
+          console.log('[Main] Tool approval requests found:', agentResult.toolApprovalRequests);
+          // Send tool approval requests to frontend for user approval
+          for (const approvalRequest of agentResult.toolApprovalRequests) {
+            webContents.send('chat:tool-approval-request', approvalRequest);
+          }
+          // Note: We still send done because tools may have executed automatically
+          // The approval requests are for future tool calls
+        }
+
+        // Ensure we send a non-empty response
+        if (!finalText.trim() && fullResponse.trim()) {
+          finalText = fullResponse;
+        }
+
+        // Send the final response
+        webContents.send('chat:done', finalText || '');
+        return { success: true };
       } else {
         const result = await llmFactory.streamChat(
           {
@@ -447,36 +439,10 @@ ipcMain.handle(
 // Handle tool approval
 ipcMain.handle('chat:approve-tool', async (_, approvalId: string, approved: boolean) => {
   console.log(`[Main] Tool approval: ${approvalId}, approved: ${approved}`);
-  const session = pendingApprovalSessions.get(approvalId);
-  if (!session) {
-    return {
-      success: false,
-      error: 'Approval request not found or already processed.',
-    };
-  }
-
-  pendingApprovalSessions.delete(approvalId);
-
-  const approvalResponse: ToolApprovalResponse = {
-    type: 'tool-approval-response',
-    approvalId,
-    approved,
-    reason: approved ? 'User approved tool execution.' : 'User rejected tool execution.',
+  return {
+    success: false,
+    error: 'Tool approval flow is not implemented yet in current agent pipeline.',
   };
-
-  try {
-    const streamResult = await streamAgentResponse(
-      session.agent,
-      session.webContents,
-      '',
-      [approvalResponse]
-    );
-    return { success: true, awaitingApproval: streamResult.awaitingApproval };
-  } catch (error: unknown) {
-    const message = getErrorMessage(error);
-    session.webContents.send('chat:error', message);
-    return { success: false, error: message };
-  }
 });
 
 ipcMain.on('open-settings', () => {
@@ -514,6 +480,8 @@ ipcMain.on('close-window', event => {
 
 const createWindow = () => {
   // Create the browser window.
+  console.log('[Main] Creating main window in ', __dirname);
+
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,

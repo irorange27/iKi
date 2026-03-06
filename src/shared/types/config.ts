@@ -50,4 +50,15 @@ export interface AppConfig {
   toolModel: {
     model: string;
   };
+  agent: {
+    enabled: boolean;
+    systemPrompt: string;
+    providerType: string;
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    maxIterations: number;
+    enableTools: boolean;
+    enableMemory: boolean;
+  };
 }

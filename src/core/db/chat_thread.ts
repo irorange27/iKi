@@ -1,8 +1,15 @@
 import db from './database';
 import { ChatThread } from '../../shared/types/chat';
 
+type ChatThreadRow = ChatThread & {
+  is_generating: number | boolean;
+  is_favorited?: number;
+  is_incognito?: number;
+  enable_artifacts?: number;
+};
+
 export const getChatThreads = (): ChatThread[] => {
-  const rows = db.prepare('SELECT * FROM chat_threads ORDER BY updated_at DESC').all() as any[];
+  const rows = db.prepare('SELECT * FROM chat_threads ORDER BY updated_at DESC').all() as ChatThreadRow[];
   return rows.map(row => ({
     ...row,
     is_generating: Boolean(row.is_generating),
@@ -13,7 +20,9 @@ export const getChatThreads = (): ChatThread[] => {
 };
 
 export const getChatThread = (id: string): ChatThread | null => {
-  const row = db.prepare('SELECT * FROM chat_threads WHERE id = ?').get(id) as any;
+  const row = db.prepare('SELECT * FROM chat_threads WHERE id = ?').get(id) as
+    | ChatThreadRow
+    | undefined;
   if (!row) return null;
   return {
     ...row,
@@ -27,7 +36,7 @@ export const getChatThread = (id: string): ChatThread | null => {
 export const getChatThreadsByWorkspace = (workspaceId: string): ChatThread[] => {
   const rows = db
     .prepare('SELECT * FROM chat_threads WHERE workspace_id = ? ORDER BY updated_at DESC')
-    .all(workspaceId) as any[];
+    .all(workspaceId) as ChatThreadRow[];
   return rows.map(row => ({
     ...row,
     is_generating: Boolean(row.is_generating),
@@ -40,7 +49,7 @@ export const getChatThreadsByWorkspace = (workspaceId: string): ChatThread[] => 
 export const getFavoritedChatThreads = (): ChatThread[] => {
   const rows = db
     .prepare('SELECT * FROM chat_threads WHERE is_favorited = 1 ORDER BY updated_at DESC')
-    .all() as any[];
+    .all() as ChatThreadRow[];
   return rows.map(row => ({
     ...row,
     is_generating: Boolean(row.is_generating),
@@ -103,12 +112,17 @@ export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
         WHERE id = @id
     `);
 
-  const params: any = { ...thread, id, updated_at: now };
-  if (params.is_generating !== undefined) params.is_generating = params.is_generating ? 1 : 0;
-  if (params.is_favorited !== undefined) params.is_favorited = params.is_favorited ? 1 : 0;
-  if (params.is_incognito !== undefined) params.is_incognito = params.is_incognito ? 1 : 0;
-  if (params.enable_artifacts !== undefined)
+  const params: Record<string, unknown> & { id: string; updated_at: string } = {
+    ...thread,
+    id,
+    updated_at: now,
+  };
+  if (typeof params.is_generating === 'boolean') params.is_generating = params.is_generating ? 1 : 0;
+  if (typeof params.is_favorited === 'boolean') params.is_favorited = params.is_favorited ? 1 : 0;
+  if (typeof params.is_incognito === 'boolean') params.is_incognito = params.is_incognito ? 1 : 0;
+  if (typeof params.enable_artifacts === 'boolean') {
     params.enable_artifacts = params.enable_artifacts ? 1 : 0;
+  }
 
   return stmt.run(params);
 };

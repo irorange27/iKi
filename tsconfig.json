@@ -10,7 +10,6 @@
     "outDir": "dist",
     "moduleResolution": "nodenext",
     "resolveJsonModule": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
@@ -19,7 +18,8 @@
     "typeRoots": [
       "./node_modules/@types",
       "./src/renderer/types"
-    ]
+    ],
+   
   },
   "include": [
     "src/**/*",

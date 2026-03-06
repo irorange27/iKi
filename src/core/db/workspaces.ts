@@ -1,8 +1,10 @@
 import db from './database';
 import { Workspace } from '../../shared/types/chat';
 
+type WorkspaceRow = Workspace & { is_temporary?: number; show_in_list?: number };
+
 export const getWorkspaces = (): Workspace[] => {
-  const rows = db.prepare('SELECT * FROM workspaces ORDER BY updated_at DESC').all() as any[];
+  const rows = db.prepare('SELECT * FROM workspaces ORDER BY updated_at DESC').all() as WorkspaceRow[];
   return rows.map(row => ({
     ...row,
     is_temporary: row.is_temporary || 0,
@@ -11,7 +13,9 @@ export const getWorkspaces = (): Workspace[] => {
 };
 
 export const getWorkspace = (id: string): Workspace | null => {
-  const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as any;
+  const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as
+    | WorkspaceRow
+    | undefined;
   if (!row) return null;
   return {
     ...row,
@@ -21,7 +25,9 @@ export const getWorkspace = (id: string): Workspace | null => {
 };
 
 export const getWorkspaceByPath = (path: string): Workspace | null => {
-  const row = db.prepare('SELECT * FROM workspaces WHERE path = ?').get(path) as any;
+  const row = db.prepare('SELECT * FROM workspaces WHERE path = ?').get(path) as
+    | WorkspaceRow
+    | undefined;
   if (!row) return null;
   return {
     ...row,
@@ -33,7 +39,7 @@ export const getWorkspaceByPath = (path: string): Workspace | null => {
 export const getVisibleWorkspaces = (): Workspace[] => {
   const rows = db
     .prepare('SELECT * FROM workspaces WHERE show_in_list = 1 ORDER BY updated_at DESC')
-    .all() as any[];
+    .all() as WorkspaceRow[];
   return rows.map(row => ({
     ...row,
     is_temporary: row.is_temporary || 0,
@@ -81,7 +87,11 @@ export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
         WHERE id = @id
     `);
 
-  const params: any = { ...workspace, id, updated_at: now };
+  const params: Partial<Workspace> & { id: string; updated_at: string } = {
+    ...workspace,
+    id,
+    updated_at: now,
+  };
   if (params.is_temporary !== undefined) params.is_temporary = params.is_temporary ? 1 : 0;
   if (params.show_in_list !== undefined) params.show_in_list = params.show_in_list ? 1 : 0;
 

@@ -1,8 +1,10 @@
 import db from './database';
 import { Provider } from '../../shared/types/provider';
 
+type ProviderRow = Provider & { enabled: number | boolean; is_response_api?: number | boolean };
+
 export const getProviders = (): Provider[] => {
-  const rows = db.prepare('SELECT * FROM providers').all() as any[];
+  const rows = db.prepare('SELECT * FROM providers').all() as ProviderRow[];
   return rows.map(row => ({
     ...row,
     enabled: Boolean(row.enabled),
@@ -11,7 +13,7 @@ export const getProviders = (): Provider[] => {
 };
 
 export const getProvider = (id: string): Provider | null => {
-  const row = db.prepare('SELECT * FROM providers WHERE id = ?').get(id) as any;
+  const row = db.prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow | undefined;
   if (!row) return null;
   return {
     ...row,
@@ -20,12 +22,13 @@ export const getProvider = (id: string): Provider | null => {
   };
 };
 
-export const getProviderIsEnabled = (id: string): Provider => {
-  const Provider = db.prepare('SELECT enabled FROM providers WHERE id = ?').get(id) as any;
-  if (!Provider) return null;
+export const getProviderIsEnabled = (id: string): { enabled: boolean } | null => {
+  const provider = db.prepare('SELECT enabled FROM providers WHERE id = ?').get(id) as
+    | { enabled: number | boolean }
+    | undefined;
+  if (!provider) return null;
   return {
-    ...Provider,
-    enabled: Boolean(Provider.enabled),
+    enabled: Boolean(provider.enabled),
   };
 };
 
@@ -91,9 +94,15 @@ export const updateProvider = (id: string, provider: Partial<Provider>) => {
     WHERE id = @id
   `);
 
-  const params: any = { ...provider, id, updated_at: now };
-  if (params.enabled !== undefined) params.enabled = params.enabled ? 1 : 0;
-  if (params.is_response_api !== undefined) params.is_response_api = params.is_response_api ? 1 : 0;
+  const params: Record<string, unknown> & { id: string; updated_at: string } = {
+    ...provider,
+    id,
+    updated_at: now,
+  };
+  if (typeof params.enabled === 'boolean') params.enabled = params.enabled ? 1 : 0;
+  if (typeof params.is_response_api === 'boolean') {
+    params.is_response_api = params.is_response_api ? 1 : 0;
+  }
 
   return stmt.run(params);
 };

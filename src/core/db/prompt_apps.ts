@@ -1,10 +1,18 @@
 import db from './database';
 import { PromptApp } from '../../shared/types/chat';
 
+type PromptAppRow = PromptApp & {
+  enabled?: number;
+  sort_order?: number;
+  expects_image_result?: number;
+  is_incognito?: number;
+  placeholders?: string;
+};
+
 export const getPromptApps = (): PromptApp[] => {
   const rows = db
     .prepare('SELECT * FROM prompt_apps ORDER BY sort_order ASC, created_at DESC')
-    .all() as any[];
+    .all() as PromptAppRow[];
   return rows.map(row => ({
     ...row,
     enabled: row.enabled !== undefined ? row.enabled : 1,
@@ -16,7 +24,9 @@ export const getPromptApps = (): PromptApp[] => {
 };
 
 export const getPromptApp = (id: string): PromptApp | null => {
-  const row = db.prepare('SELECT * FROM prompt_apps WHERE id = ?').get(id) as any;
+  const row = db.prepare('SELECT * FROM prompt_apps WHERE id = ?').get(id) as
+    | PromptAppRow
+    | undefined;
   if (!row) return null;
   return {
     ...row,
@@ -31,7 +41,7 @@ export const getPromptApp = (id: string): PromptApp | null => {
 export const getEnabledPromptApps = (): PromptApp[] => {
   const rows = db
     .prepare('SELECT * FROM prompt_apps WHERE enabled = 1 ORDER BY sort_order ASC, created_at DESC')
-    .all() as any[];
+    .all() as PromptAppRow[];
   return rows.map(row => ({
     ...row,
     enabled: 1,
@@ -98,7 +108,11 @@ export const updatePromptApp = (id: string, app: Partial<PromptApp>) => {
         WHERE id = @id
     `);
 
-  const params: any = { ...app, id, updated_at: now };
+  const params: Partial<PromptApp> & { id: string; updated_at: string } = {
+    ...app,
+    id,
+    updated_at: now,
+  };
   if (params.enabled !== undefined) params.enabled = params.enabled ? 1 : 0;
   if (params.expects_image_result !== undefined)
     params.expects_image_result = params.expects_image_result ? 1 : 0;

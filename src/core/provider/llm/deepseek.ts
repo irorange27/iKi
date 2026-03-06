@@ -1,10 +1,10 @@
-import { getProviderConfig, fetchModelsFromDev, generateChat, streamChat } from './factory';
-
-// Message type for chat
-interface Message {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+import {
+  getProviderConfig,
+  fetchModelsFromDev,
+  generateChat,
+  streamChat,
+  type ChatTextMessage,
+} from './factory';
 
 export const getDeepSeekConfig = () => getProviderConfig('deepseek');
 
@@ -31,13 +31,13 @@ export const getDeepSeekModels = async () => {
   }
 };
 
-export const generateDeepSeekChat = async (modelId: string, messages: Message[]) => {
+export const generateDeepSeekChat = async (modelId: string, messages: ChatTextMessage[]) => {
   return generateChat({ providerType: 'deepseek', modelId, messages });
 };
 
 export const streamDeepSeekText = async (
   modelId: string,
-  messages: Message[],
+  messages: ChatTextMessage[],
   onChunk: (chunk: string) => void
 ) => {
   return streamChat({ providerType: 'deepseek', modelId, messages }, onChunk);

@@ -1,10 +1,10 @@
-import { getProviderConfig, fetchModelsFromDev, generateChat, streamChat } from './factory';
-
-// Message type for chat
-interface Message {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+import {
+  getProviderConfig,
+  fetchModelsFromDev,
+  generateChat,
+  streamChat,
+  type ChatTextMessage,
+} from './factory';
 
 export const getOpenAIConfig = () => getProviderConfig('openai');
 
@@ -31,13 +31,13 @@ export const getOpenAIModels = async () => {
   }
 };
 
-export const generateOpenAIChat = async (modelId: string, messages: Message[]) => {
+export const generateOpenAIChat = async (modelId: string, messages: ChatTextMessage[]) => {
   return generateChat({ providerType: 'openai', modelId, messages });
 };
 
 export const streamOpenAIText = async (
   modelId: string,
-  messages: Message[],
+  messages: ChatTextMessage[],
   onChunk: (chunk: string) => void
 ) => {
   return streamChat({ providerType: 'openai', modelId, messages }, onChunk);

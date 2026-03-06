@@ -2,12 +2,14 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: http: ws: wss:;"
+    />
     <title>iKi</title>
-
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="/src/renderer/main.ts"></script>
+    <script type="module" src="/src/renderer/index.ts"></script>
   </body>
 </html>

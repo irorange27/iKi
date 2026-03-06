@@ -38,12 +38,8 @@ const config: ForgeConfig = {
       renderer: [
         {
           name: 'main_window',
-          config: 'vite.renderer.config.ts',
-          entry: [
-            {
-              js: 'src/renderer/main.ts'
-            }
-          ],
+          config: 'vite.renderer.config.mjs',
+          entry: 'src/renderer/index.ts',
         },
       ],
     }),

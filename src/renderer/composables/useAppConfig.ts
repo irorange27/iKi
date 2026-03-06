@@ -114,7 +114,10 @@ export const useAppConfig = () => {
    * @example updateNetwork('timeout', 10000)
    * @example updateNetwork('proxy.enable', true)
    */
-  const updateNetwork = (path: string, value: any) => {
+  const updateNetwork = (
+    path: string,
+    value: AppConfig['network'][keyof AppConfig['network']] | string | number | boolean | null
+  ) => {
     if (!config.value) return;
     updateNested(config.value.network, path, value);
     debouncedSave();
@@ -181,16 +184,27 @@ export const useAppConfig = () => {
    * 嵌套对象更新（内部使用）
    * @example updateNested(obj, 'proxy.host', '127.0.0.1')
    */
-  const updateNested = (target: any, path: string, value: any) => {
+  const updateNested = (
+    target: Record<string, unknown>,
+    path: string,
+    value: unknown
+  ) => {
     const keys = path.split('.');
-    for (let i = 0; i < keys.length - 1; i++) {
-      if (!(keys[i] in target)) {
+    let current: Record<string, unknown> = target;
+    for (let index = 0; index < keys.length - 1; index++) {
+      const key = keys[index];
+      if (!(key in current)) {
         console.warn(`Path ${path} does not exist in target`);
         return;
       }
-      target = target[keys[i]];
+      const next = current[key];
+      if (!next || typeof next !== 'object') {
+        console.warn(`Path ${path} is not an object path`);
+        return;
+      }
+      current = next as Record<string, unknown>;
     }
-    target[keys[keys.length - 1]] = value;
+    current[keys[keys.length - 1]] = value;
   };
 
   // ==================== 重置方法 ====================

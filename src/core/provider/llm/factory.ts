@@ -1,8 +1,9 @@
-import { generateText, streamText, LanguageModel } from 'ai';
+import { generateText, streamText, type LanguageModel, type ModelMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { getProviders } from '../../db/providers';
+import { getPersonaPrompt } from '../../persona';
 
 export interface ProviderConfig {
   id: string;
@@ -11,6 +12,18 @@ export interface ProviderConfig {
   baseURL: string;
   models: string[];
 }
+
+export type ChatTextMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+const toModelMessages = (messages: ChatTextMessage[]): ModelMessage[] => {
+  return messages.map(message => ({
+    role: message.role,
+    content: message.content,
+  }));
+};
 
 export const getProviderConfig = (providerType: string): ProviderConfig => {
   const providers = getProviders();
@@ -74,19 +87,27 @@ export const createModel = (providerType: string, modelId: string): LanguageMode
   return client(modelId);
 };
 
+export const getFullSystemPrompt = (providerType: string) => {
+  getProviderConfig(providerType);
+  const personaPrompt = getPersonaPrompt();
+  return personaPrompt;
+};
+
 export const streamChat = async (
   options: {
     providerType: string;
     modelId: string;
-    messages: any[];
+    messages: ChatTextMessage[];
   },
   onChunk: (chunk: string) => void
 ) => {
   const model = createModel(options.providerType, options.modelId);
+  const systemPrompt = getFullSystemPrompt(options.providerType);
 
   const result = streamText({
     model,
-    messages: options.messages,
+    system: systemPrompt,
+    messages: toModelMessages(options.messages),
   });
 
   let fullText = '';
@@ -100,13 +121,15 @@ export const streamChat = async (
 export const generateChat = async (options: {
   providerType: string;
   modelId: string;
-  messages: any[];
+  messages: ChatTextMessage[];
 }) => {
   const model = createModel(options.providerType, options.modelId);
+  const systemPrompt = getFullSystemPrompt(options.providerType);
 
   const { text } = await generateText({
     model,
-    messages: options.messages,
+    system: systemPrompt,
+    messages: toModelMessages(options.messages),
   });
 
   return text;
@@ -118,7 +141,7 @@ export const fetchModelsFromDev = async (providerType: string) => {
     const response = await fetch('https://models.dev/api.json');
     if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
 
-    const data: any = await response.json();
+    const data = (await response.json()) as Record<string, { models?: Record<string, unknown> }>;
 
     const mapping: Record<string, string> = {
       kimi: 'moonshotai',

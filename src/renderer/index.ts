@@ -26,7 +26,8 @@
  * ```
  */
 
-// import './assets/styles/index.css';
+import './assets/styles/globals.css';
+import './assets/styles/index.css';
 
 // If you are encountering issues with type declarations for CSS imports,
 // you can create a `declaration.d.ts` file in your project with the following content:
