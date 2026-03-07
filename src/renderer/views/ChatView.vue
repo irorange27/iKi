@@ -1,6 +1,11 @@
 <template>
   <div class="flex h-screen app-background app-text">
-    <Sidebar ref="sidebarRef" @thread-selected="selectThread" @new-chat="handleNewChat" />
+    <Sidebar
+      ref="sidebarRef"
+      @thread-selected="selectThread"
+      @new-chat="handleNewChat"
+      @thread-deleted="handleThreadDeleted"
+    />
 
     <!-- Main Content -->
     <div class="flex flex-1 flex-col">
@@ -148,6 +153,7 @@ const streamRenderTraceId = ref('');
 const streamRenderChunkCount = ref(0);
 const streamRenderChars = ref(0);
 const shouldLogStreamChunk = (count: number) => count <= 3 || count % 20 === 0;
+const TITLE_REGEN_INTERVAL = 2;
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -762,6 +768,22 @@ const selectThread = async (threadId: string) => {
   }
 };
 
+const handleThreadDeleted = async (threadId: string) => {
+  if (currentThread.value?.id !== threadId) return;
+
+  await stopActiveStreamIfNeeded('delete-thread');
+  currentThread.value = null;
+  currentModel.value = '';
+  chat.messages.splice(0, chat.messages.length);
+  persistedMessageIds.clear();
+  resetTransientState();
+  showWelcome.value = true;
+
+  if (sidebarRef.value?.setCurrentThread) {
+    sidebarRef.value.setCurrentThread(null);
+  }
+};
+
 // Refresh threads list
 const refreshThreads = async () => {
   if (sidebarRef.value?.refresh) {
@@ -771,6 +793,7 @@ const refreshThreads = async () => {
 
 const updateThreadTitle = async (title: string) => {
   if (!currentThread.value) return;
+  if (currentThread.value.title === title) return;
 
   try {
     await window.electronAPI.chat.threads.update(currentThread.value.id, { title });
@@ -784,30 +807,52 @@ const updateThreadTitle = async (title: string) => {
   }
 };
 
-// Generate thread title using Agent framework
-const generateThreadTitle = async (
-  userMessage: string,
-  assistantMessage?: string
-): Promise<string | null> => {
+const getConversationContentForTitle = (messages: UIMessage[]): string => {
+  const lines: string[] = [];
+
+  for (const message of messages) {
+    const text = extractTextFromMessage(message).trim();
+    if (!text) continue;
+
+    const role =
+      message.role === 'assistant' ? 'Assistant' : message.role === 'system' ? 'System' : 'User';
+    lines.push(`${role}: ${text}`);
+  }
+
+  return lines.join('\n');
+};
+
+const getFallbackThreadTitle = (messages: UIMessage[]): string | null => {
+  const latestUserText = [...messages]
+    .reverse()
+    .filter(message => message.role === 'user')
+    .map(message => extractTextFromMessage(message).trim())
+    .find(text => text.length > 0);
+  const fallbackText = latestUserText || extractTextFromMessage(messages[0]).trim();
+  if (!fallbackText) return null;
+  return fallbackText.slice(0, 50) + (fallbackText.length > 50 ? '...' : '');
+};
+
+const shouldRegenerateThreadTitle = (messages: UIMessage[], currentTitle: string): boolean => {
+  const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
+  if (assistantMessageCount === 0) return false;
+  if (currentTitle === 'New Chat') return true;
+  return assistantMessageCount % TITLE_REGEN_INTERVAL === 0;
+};
+
+// Generate thread title using full conversation context
+const generateThreadTitle = async (messages: UIMessage[]): Promise<string | null> => {
   try {
-    // Build conversation content for title generation
-    const conversationContent = assistantMessage
-      ? `User: ${userMessage}\nAssistant: ${assistantMessage}`
-      : `User: ${userMessage}`;
-
-    // Use agent to generate title
-    const title = await window.electronAPI.toolModel.generateTitle(conversationContent);
-
-    if (title) {
-      return title;
+    const conversationContent = getConversationContentForTitle(messages);
+    if (!conversationContent.trim()) {
+      return getFallbackThreadTitle(messages);
     }
 
-    // Fallback to simple truncation if agent generation fails
-    return userMessage.slice(0, 50) + (userMessage.length > 50 ? '...' : '');
+    const title = await window.electronAPI.toolModel.generateTitle(conversationContent);
+    return title || getFallbackThreadTitle(messages);
   } catch (error) {
     console.error('Failed to generate thread title with agent:', error);
-    // Fallback to simple truncation
-    return userMessage.slice(0, 50) + (userMessage.length > 50 ? '...' : '');
+    return getFallbackThreadTitle(messages);
   }
 };
 
@@ -1032,16 +1077,12 @@ const handleResponseReceived = async (fullText: string) => {
     'assistant-response'
   );
 
-  const parentUserMessage = activeAssistantParentId.value
-    ? (chat.messages.find((message: any) => message.id === activeAssistantParentId.value) as
-        | UIMessage
-        | undefined)
-    : (chat.messages.filter((message: any) => message.role === 'user').pop() as UIMessage | undefined);
-
-  // Generate thread title using Tool Model if it's still "New Chat" and this is the first exchange
-  if (currentThread.value.title === 'New Chat' && chat.messages.length === 2 && fullText.trim()) {
-    const userMessageText = extractTextFromMessage(parentUserMessage);
-    const generatedTitle = await generateThreadTitle(userMessageText, fullText);
+  // Regenerate title from full conversation context on interval
+  if (
+    chat.messages.length > 0 &&
+    shouldRegenerateThreadTitle(chat.messages as UIMessage[], currentThread.value.title)
+  ) {
+    const generatedTitle = await generateThreadTitle(chat.messages as UIMessage[]);
     if (generatedTitle) {
       await updateThreadTitle(generatedTitle);
     }
