@@ -310,8 +310,14 @@ const extractTextFromMessage = (message: UIMessage | undefined): string => {
     .join('');
 };
 
-const upsertUiMessage = async (message: UIMessage, parentId?: string, source = 'unknown') => {
-  if (!currentThread.value) return;
+const upsertUiMessage = async (
+  message: UIMessage,
+  parentId?: string,
+  source = 'unknown',
+  threadIdOverride?: string
+) => {
+  const threadId = threadIdOverride || currentThread.value?.id;
+  if (!threadId) return;
 
   const persistKey = message.id;
   const inFlightPersist = messagePersistInFlight.get(persistKey);
@@ -323,14 +329,12 @@ const upsertUiMessage = async (message: UIMessage, parentId?: string, source = '
   }
 
   const persistTask = (async () => {
-    if (!currentThread.value) return;
-
     const serializedMessage = JSON.stringify(message);
     const metadata = JSON.stringify({ format: 'ai-ui-message-v1' });
 
     if (persistedMessageIds.has(message.id)) {
       console.log(
-        `[ChatPersist][Renderer] update id=${message.id} source=${source} thread=${currentThread.value.id}`
+        `[ChatPersist][Renderer] update id=${message.id} source=${source} thread=${threadId}`
       );
       await window.electronAPI.chat.messages.update(message.id, {
         message: serializedMessage,
@@ -340,13 +344,13 @@ const upsertUiMessage = async (message: UIMessage, parentId?: string, source = '
     }
 
     console.log(
-      `[ChatPersist][Renderer] create id=${message.id} source=${source} thread=${currentThread.value.id} parent=${parentId || 'null'}`
+      `[ChatPersist][Renderer] create id=${message.id} source=${source} thread=${threadId} parent=${parentId || 'null'}`
     );
 
     try {
       const savedMessage = await window.electronAPI.chat.messages.create({
         id: message.id,
-        thread_id: currentThread.value.id,
+        thread_id: threadId,
         parent_id: parentId || null,
         depth: 0,
         message: serializedMessage,
@@ -747,6 +751,10 @@ const loadThreadMessages = async (threadId: string) => {
 // Select a thread
 const selectThread = async (threadId: string) => {
   try {
+    if (currentThread.value?.id === threadId) {
+      return;
+    }
+
     await stopActiveStreamIfNeeded('switch-thread', threadId);
 
     const thread = await window.electronAPI.chat.threads.get(threadId);
@@ -804,6 +812,22 @@ const updateThreadTitle = async (title: string) => {
     await refreshThreads();
   } catch (error) {
     console.error('Failed to update thread title:', error);
+  }
+};
+
+const updateThreadTitleById = async (threadId: string, title: string) => {
+  if (!threadId || !title.trim()) return;
+
+  if (currentThread.value?.id === threadId) {
+    await updateThreadTitle(title);
+    return;
+  }
+
+  try {
+    await window.electronAPI.chat.threads.update(threadId, { title });
+    await refreshThreads();
+  } catch (error) {
+    console.error('Failed to update thread title by id:', error);
   }
 };
 
@@ -914,11 +938,12 @@ const handleMessageSent = async (
     activeAssistantParentId.value = userMessage.id;
     activeAssistantMessageId.value = null;
     activeStreamThreadId.value = currentThread.value.id;
+    const threadId = currentThread.value.id;
     streamingAssistantText.value = '';
     streamRenderTraceId.value = `view-${Date.now()}`;
     streamRenderChunkCount.value = 0;
     streamRenderChars.value = 0;
-    await upsertUiMessage(userMessage, undefined, 'user-message');
+    await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
 
     scrollToBottom();
   } finally {
@@ -985,6 +1010,7 @@ const handleResponseReceived = async (fullText: string) => {
 
   streamRenderTick.value += 1;
   if (!currentThread.value) return;
+  const responseThreadId = activeStreamThreadId.value || currentThread.value.id;
 
   const assistantMessageId = activeAssistantMessageId.value;
   const existingAssistantMessage = getAssistantMessageById(assistantMessageId);
@@ -1067,6 +1093,7 @@ const handleResponseReceived = async (fullText: string) => {
   }
 
   chat.messages.splice(messageIndex, 1, assistantMessage as any);
+  const messagesSnapshotForTitle = [...(chat.messages as UIMessage[])];
   console.log(
     `[StreamDebug][Renderer][ChatView][${streamRenderTraceId.value || 'unknown'}] handleResponseReceived fullTextLen=${(fullText || '').length} chunkCount=${streamRenderChunkCount.value} chunkChars=${streamRenderChars.value}`
   );
@@ -1074,17 +1101,22 @@ const handleResponseReceived = async (fullText: string) => {
   await upsertUiMessage(
     assistantMessage,
     activeAssistantParentId.value || undefined,
-    'assistant-response'
+    'assistant-response',
+    responseThreadId
   );
+
+  if (currentThread.value?.id !== responseThreadId) {
+    return;
+  }
 
   // Regenerate title from full conversation context on interval
   if (
-    chat.messages.length > 0 &&
-    shouldRegenerateThreadTitle(chat.messages as UIMessage[], currentThread.value.title)
+    messagesSnapshotForTitle.length > 0 &&
+    shouldRegenerateThreadTitle(messagesSnapshotForTitle, currentThread.value.title)
   ) {
-    const generatedTitle = await generateThreadTitle(chat.messages as UIMessage[]);
+    const generatedTitle = await generateThreadTitle(messagesSnapshotForTitle);
     if (generatedTitle) {
-      await updateThreadTitle(generatedTitle);
+      await updateThreadTitleById(responseThreadId, generatedTitle);
     }
   }
 
@@ -1237,10 +1269,12 @@ const handleToolUiChunk = async (chunk: UIMessageChunk) => {
     chunk.type === 'tool-output-error' ||
     chunk.type === 'tool-output-denied'
   ) {
+    const streamThreadId = activeStreamThreadId.value || currentThread.value?.id;
     await upsertUiMessage(
       updatedMessage,
       activeAssistantParentId.value || undefined,
-      `tool-ui-chunk:${chunk.type}`
+      `tool-ui-chunk:${chunk.type}`,
+      streamThreadId
     );
   }
 
@@ -1282,6 +1316,7 @@ const handleUiChunk = async (chunk: unknown) => {
 
 const handleToolApprovalRequest = async (request: any) => {
   if (!isStreamBoundToCurrentThread()) return;
+  const streamThreadId = activeStreamThreadId.value || currentThread.value?.id;
   const assistantMessage = getOrCreateAssistantMessage();
   const requestedToolCallId = request.toolCallId || request.toolCall?.toolCallId;
   const existingPartIndex = assistantMessage.parts.findIndex(part => {
@@ -1323,7 +1358,8 @@ const handleToolApprovalRequest = async (request: any) => {
   await upsertUiMessage(
     assistantMessageToPersist,
     activeAssistantParentId.value || undefined,
-    'tool-approval-request'
+    'tool-approval-request',
+    streamThreadId
   );
   scrollToBottom();
 };
