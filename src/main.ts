@@ -1,7 +1,14 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import type { ModelMessage, ToolApprovalResponse } from 'ai';
+import {
+  convertToModelMessages,
+  validateUIMessages,
+  type ModelMessage,
+  type ToolApprovalResponse,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai';
 import { getConfig, setConfig, migrateFromJson } from './core/db/database';
 import * as providerDb from './core/db/providers';
 import * as chatThreadDb from './core/db/chat_thread';
@@ -22,19 +29,451 @@ const getErrorMessage = (error: unknown) => {
   return String(error);
 };
 
+const shouldLogChunk = (count: number) => count <= 3 || count % 20 === 0;
+
 type ChatWebContents = {
+  id: number;
   send: (channel: string, ...args: unknown[]) => void;
 };
 
 type ChatInputMessage = ModelMessage;
+type ChatUiMessage = UIMessage;
+type ChatTransportMessage = ChatInputMessage | ChatUiMessage;
 
 type LlmChatMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 };
 
+type ActiveStreamState = {
+  cancelled: boolean;
+  stoppedByUser: boolean;
+  abortController: AbortController;
+};
+
+type ToolStreamEvent = {
+  type: string;
+  [key: string]: unknown;
+};
+
+type UiChunkEmitter = {
+  messageId: string;
+  emitTextDelta: (delta: string) => void;
+  emitToolEvent: (event: ToolStreamEvent) => void;
+  finish: () => void;
+  abort: () => void;
+  error: (errorText: string) => void;
+};
+
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const createRuntimeId = (prefix: string) =>
+  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+const DYNAMIC_TOOL_STATES = new Set([
+  'input-streaming',
+  'input-available',
+  'approval-requested',
+  'approval-responded',
+  'output-available',
+  'output-error',
+  'output-denied',
+]);
+
+const getNestedToolEventField = (event: ToolStreamEvent, field: 'toolCallId' | 'toolName'): unknown => {
+  if (field in event) return event[field];
+  const nestedToolCall = event.toolCall;
+  if (!isObjectRecord(nestedToolCall)) return undefined;
+  return nestedToolCall[field];
+};
+
+const getToolCallIdFromEvent = (event: ToolStreamEvent): string => {
+  const candidate =
+    typeof getNestedToolEventField(event, 'toolCallId') === 'string'
+      ? (getNestedToolEventField(event, 'toolCallId') as string)
+      : typeof event.id === 'string'
+        ? event.id
+        : '';
+
+  if (candidate.length > 0) return candidate;
+  return createRuntimeId('tool_call');
+};
+
+const getToolNameFromEvent = (event: ToolStreamEvent): string =>
+  typeof getNestedToolEventField(event, 'toolName') === 'string' &&
+  (getNestedToolEventField(event, 'toolName') as string).length > 0
+    ? (getNestedToolEventField(event, 'toolName') as string)
+    : 'tool';
+
+const getApprovalIdFromPart = (part: Record<string, unknown>, fallbackId: string): string => {
+  if (typeof part.approvalId === 'string' && part.approvalId.length > 0) return part.approvalId;
+  if (isObjectRecord(part.approval) && typeof part.approval.id === 'string' && part.approval.id) {
+    return part.approval.id;
+  }
+  return fallbackId;
+};
+
+const getErrorTextFromToolPart = (part: Record<string, unknown>): string => {
+  if (typeof part.errorText === 'string' && part.errorText.trim()) return part.errorText;
+  if (typeof part.output === 'string' && part.output.trim()) return part.output;
+  if (isObjectRecord(part.output)) {
+    if (typeof part.output.error === 'string' && part.output.error.trim()) return part.output.error;
+    if (typeof part.output.message === 'string' && part.output.message.trim()) {
+      return part.output.message;
+    }
+  }
+  return 'Tool execution failed';
+};
+
+const getDeniedReasonFromToolPart = (part: Record<string, unknown>): string | undefined => {
+  if (isObjectRecord(part.approval) && typeof part.approval.reason === 'string') {
+    return part.approval.reason;
+  }
+  if (typeof part.output === 'string' && part.output.trim()) return part.output;
+  if (isObjectRecord(part.output) && typeof part.output.message === 'string') {
+    return part.output.message;
+  }
+  return undefined;
+};
+
+const normalizeDynamicToolPart = (
+  part: Record<string, unknown>,
+  fallbackToolCallId: string
+): Record<string, unknown> => {
+  const toolCallId =
+    typeof part.toolCallId === 'string' && part.toolCallId.length > 0
+      ? part.toolCallId
+      : fallbackToolCallId;
+  const toolName =
+    typeof part.toolName === 'string' && part.toolName.length > 0 ? part.toolName : 'tool';
+
+  const rawState = typeof part.state === 'string' ? part.state : 'input-available';
+  const state = DYNAMIC_TOOL_STATES.has(rawState) ? rawState : 'input-available';
+  const input = part.input ?? {};
+
+  const normalizedBase: Record<string, unknown> = {
+    type: 'dynamic-tool',
+    toolCallId,
+    toolName,
+  };
+
+  if (typeof part.title === 'string' && part.title.trim()) {
+    normalizedBase.title = part.title;
+  }
+  if (typeof part.providerExecuted === 'boolean') {
+    normalizedBase.providerExecuted = part.providerExecuted;
+  }
+  if (isObjectRecord(part.callProviderMetadata)) {
+    normalizedBase.callProviderMetadata = part.callProviderMetadata;
+  }
+
+  if (state === 'input-streaming') {
+    return { ...normalizedBase, state, input };
+  }
+  if (state === 'input-available') {
+    return { ...normalizedBase, state, input };
+  }
+  if (state === 'approval-requested') {
+    return {
+      ...normalizedBase,
+      state,
+      input,
+      approval: {
+        id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
+      },
+    };
+  }
+  if (state === 'approval-responded') {
+    const approved =
+      isObjectRecord(part.approval) && typeof part.approval.approved === 'boolean'
+        ? part.approval.approved
+        : false;
+    const reason =
+      isObjectRecord(part.approval) && typeof part.approval.reason === 'string'
+        ? part.approval.reason
+        : undefined;
+
+    return {
+      ...normalizedBase,
+      state,
+      input,
+      approval: {
+        id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
+        approved,
+        ...(typeof reason === 'string' && reason.length > 0 ? { reason } : {}),
+      },
+    };
+  }
+  if (state === 'output-available') {
+    const approval =
+      isObjectRecord(part.approval) &&
+      typeof part.approval.id === 'string' &&
+      part.approval.approved === true
+        ? {
+            id: part.approval.id,
+            approved: true as const,
+            ...(typeof part.approval.reason === 'string' && part.approval.reason.length > 0
+              ? { reason: part.approval.reason }
+              : {}),
+          }
+        : undefined;
+
+    return {
+      ...normalizedBase,
+      state,
+      input,
+      output: part.output ?? null,
+      ...(typeof part.preliminary === 'boolean' ? { preliminary: part.preliminary } : {}),
+      ...(approval ? { approval } : {}),
+    };
+  }
+  if (state === 'output-error') {
+    return {
+      ...normalizedBase,
+      state,
+      input,
+      errorText: getErrorTextFromToolPart(part),
+    };
+  }
+
+  const deniedReason = getDeniedReasonFromToolPart(part);
+  return {
+    ...normalizedBase,
+    state: 'output-denied',
+    input,
+    approval: {
+      id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
+      approved: false,
+      ...(typeof deniedReason === 'string' && deniedReason.length > 0
+        ? { reason: deniedReason }
+        : {}),
+    },
+  };
+};
+
+const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMessage[] =>
+  messages.map((message, messageIndex) => {
+    const messageId =
+      typeof message.id === 'string' && message.id.length > 0
+        ? message.id
+        : createRuntimeId(`ui_msg_${messageIndex}`);
+
+    const role =
+      message.role === 'system' || message.role === 'user' || message.role === 'assistant'
+        ? message.role
+        : 'user';
+
+    const parts = Array.isArray(message.parts)
+      ? message.parts
+          .map((part, partIndex) => {
+            if (!isObjectRecord(part) || typeof part.type !== 'string') return null;
+            if (part.type === 'dynamic-tool') {
+              return normalizeDynamicToolPart(part, `${messageId}_tool_${partIndex}`);
+            }
+            return part;
+          })
+          .filter((part): part is Exclude<typeof part, null> => part !== null)
+      : [];
+
+    return {
+      id: messageId,
+      role,
+      ...(message.metadata !== undefined ? { metadata: message.metadata } : {}),
+      parts: parts as ChatUiMessage['parts'],
+    };
+  });
+
+const toUiChunkFromToolEvent = (event: ToolStreamEvent): UIMessageChunk | null => {
+  const toolCallId = getToolCallIdFromEvent(event);
+  const toolName = getToolNameFromEvent(event);
+
+  if (event.type === 'tool-input-start') {
+    return {
+      type: 'tool-input-start',
+      toolCallId,
+      toolName,
+      dynamic: true,
+    };
+  }
+  if (event.type === 'tool-input-delta') {
+    return {
+      type: 'tool-input-delta',
+      toolCallId,
+      inputTextDelta: typeof event.delta === 'string' ? event.delta : '',
+    };
+  }
+  if (event.type === 'tool-input-end') {
+    return null;
+  }
+  if (event.type === 'tool-call') {
+    if (event.invalid) {
+      return {
+        type: 'tool-input-error',
+        toolCallId,
+        toolName,
+        input: event.input ?? {},
+        errorText:
+          typeof event.error === 'string'
+            ? event.error
+            : event.error instanceof Error
+              ? event.error.message
+              : 'Invalid tool call',
+        dynamic: true,
+      };
+    }
+    return {
+      type: 'tool-input-available',
+      toolCallId,
+      toolName,
+      input: event.input ?? {},
+      dynamic: true,
+    };
+  }
+  if (event.type === 'tool-result') {
+    return {
+      type: 'tool-output-available',
+      toolCallId,
+      output: event.output,
+      dynamic: true,
+      ...(typeof event.preliminary === 'boolean' ? { preliminary: event.preliminary } : {}),
+    };
+  }
+  if (event.type === 'tool-error') {
+    return {
+      type: 'tool-output-error',
+      toolCallId,
+      errorText:
+        typeof event.error === 'string'
+          ? event.error
+          : event.error instanceof Error
+            ? event.error.message
+            : 'Tool execution failed',
+      dynamic: true,
+    };
+  }
+  if (event.type === 'tool-output-denied') {
+    return {
+      type: 'tool-output-denied',
+      toolCallId,
+    };
+  }
+  if (event.type === 'tool-approval-request') {
+    return {
+      type: 'tool-approval-request',
+      approvalId:
+        typeof event.approvalId === 'string' && event.approvalId.length > 0
+          ? event.approvalId
+          : createRuntimeId('approval'),
+      toolCallId,
+    };
+  }
+
+  return null;
+};
+
+const createUiChunkEmitter = (
+  webContents: ChatWebContents,
+  messageId: string = createRuntimeId('assistant')
+): UiChunkEmitter => {
+  let started = false;
+  let textStarted = false;
+  let terminated = false;
+
+  const emitChunk = (chunk: UIMessageChunk) => {
+    webContents.send('chat:ui-chunk', chunk);
+  };
+
+  const ensureStarted = () => {
+    if (started || terminated) return;
+    emitChunk({ type: 'start', messageId });
+    started = true;
+  };
+
+  const ensureTextStarted = () => {
+    ensureStarted();
+    if (textStarted || terminated) return;
+    emitChunk({ type: 'text-start', id: messageId });
+    textStarted = true;
+  };
+
+  const closeText = () => {
+    if (!textStarted || terminated) return;
+    emitChunk({ type: 'text-end', id: messageId });
+    textStarted = false;
+  };
+
+  return {
+    messageId,
+    emitTextDelta: delta => {
+      if (!delta || terminated) return;
+      ensureTextStarted();
+      emitChunk({ type: 'text-delta', id: messageId, delta });
+    },
+    emitToolEvent: event => {
+      if (terminated) return;
+      ensureStarted();
+      const uiChunk = toUiChunkFromToolEvent(event);
+      if (uiChunk) emitChunk(uiChunk);
+    },
+    finish: () => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      emitChunk({ type: 'finish' });
+      terminated = true;
+    },
+    abort: () => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      emitChunk({ type: 'abort' });
+      terminated = true;
+    },
+    error: errorText => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      emitChunk({ type: 'error', errorText });
+    },
+  };
+};
+
+const isUiMessage = (value: unknown): value is ChatUiMessage =>
+  isObjectRecord(value) &&
+  typeof value.role === 'string' &&
+  Array.isArray((value as { parts?: unknown }).parts);
+
+const toModelInputMessages = async (
+  messages: ChatTransportMessage[] | unknown[]
+): Promise<ChatInputMessage[]> => {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+
+  if (messages.every(isUiMessage)) {
+    const normalizedUiMessages = normalizeUiMessagesForValidation(messages as ChatUiMessage[]);
+
+    try {
+      await validateUIMessages({
+        messages: normalizedUiMessages,
+      });
+    } catch (error: unknown) {
+      throw new Error(`Invalid UI messages: ${getErrorMessage(error)}`);
+    }
+
+    try {
+      return await convertToModelMessages(
+        normalizedUiMessages.map(({ id, ...message }) => message),
+        {
+          ignoreIncompleteToolCalls: true,
+        }
+      );
+    } catch (error: unknown) {
+      throw new Error(`Failed to convert UI messages: ${getErrorMessage(error)}`);
+    }
+  }
+
+  return messages as ChatInputMessage[];
+};
 
 const extractTextFromContent = (content: unknown): string => {
   if (typeof content === 'string') return content;
@@ -182,29 +621,131 @@ const getPromptFromMessage = (message: ChatInputMessage | undefined): string => 
 
 const pendingApprovalSessions = new Map<
   string,
-  {
+  PendingApprovalSession
+>();
+
+type PendingApprovalSession = {
+  agent: SimpleAgent;
+  webContents: ChatWebContents;
+  pendingApprovalIds: Set<string>;
+  collectedApprovalResponses: Map<string, ToolApprovalResponse>;
+};
+
+const ensurePendingApprovalSession = (
+  approvalId: string,
+  session: {
     agent: SimpleAgent;
     webContents: ChatWebContents;
   }
->();
+) => {
+  const existing = pendingApprovalSessions.get(approvalId);
+  if (existing) return existing;
+
+  const created: PendingApprovalSession = {
+    agent: session.agent,
+    webContents: session.webContents,
+    pendingApprovalIds: new Set([approvalId]),
+    collectedApprovalResponses: new Map(),
+  };
+  pendingApprovalSessions.set(approvalId, created);
+  return created;
+};
+
+const registerApprovalBatch = (
+  approvalRequests: Array<{ approvalId: string }>,
+  session: {
+    agent: SimpleAgent;
+    webContents: ChatWebContents;
+  }
+) => {
+  const approvalIds = approvalRequests
+    .map(request => request.approvalId)
+    .filter(id => typeof id === 'string' && id.length > 0);
+
+  if (approvalIds.length === 0) return;
+
+  const pendingSession: PendingApprovalSession = {
+    agent: session.agent,
+    webContents: session.webContents,
+    pendingApprovalIds: new Set(approvalIds),
+    collectedApprovalResponses: new Map(),
+  };
+
+  for (const approvalId of approvalIds) {
+    pendingApprovalSessions.set(approvalId, pendingSession);
+  }
+};
+
+const activeStreams = new Map<number, ActiveStreamState>();
 
 const streamAgentResponse = async (
   agent: SimpleAgent,
   webContents: ChatWebContents,
   prompt: string,
-  approvalResponses?: ToolApprovalResponse[]
+  approvalResponses?: ToolApprovalResponse[],
+  shouldCancel?: () => boolean,
+  debugLabel?: string,
+  onToolEvent?: (event: ToolStreamEvent) => void,
+  abortSignal?: AbortSignal,
+  uiChunkEmitter?: UiChunkEmitter
 ) => {
-  const generator = agent.stream(prompt, approvalResponses);
+  const generator = agent.stream(prompt, approvalResponses, onToolEvent, abortSignal);
   let fullResponse = '';
+  let chunkCount = 0;
+  let chunkChars = 0;
+  const startedAt = Date.now();
+  let cancelled = false;
+  let next: IteratorResult<string, AgentResult> | null = null;
 
-  let next = await generator.next();
-  while (!next.done) {
-    const chunk = next.value;
-    if (typeof chunk === 'string' && chunk) {
-      fullResponse += chunk;
-      webContents.send('chat:chunk', chunk);
-    }
+  try {
     next = await generator.next();
+    while (!next.done) {
+      if (shouldCancel?.()) {
+        cancelled = true;
+        try {
+          await generator.return(undefined);
+        } catch (error) {
+          console.warn('[Main] Failed to close cancelled tool stream:', error);
+        }
+        break;
+      }
+
+      const chunk = next.value;
+      if (typeof chunk === 'string' && chunk) {
+        chunkCount += 1;
+        chunkChars += chunk.length;
+        if (debugLabel && shouldLogChunk(chunkCount)) {
+          console.log(
+            `[StreamDebug][Main][Agent][${debugLabel}] chunk#${chunkCount} len=${chunk.length} totalChars=${chunkChars}`
+          );
+        }
+        fullResponse += chunk;
+        uiChunkEmitter?.emitTextDelta(chunk);
+      }
+      next = await generator.next();
+    }
+  } catch (error) {
+    if (shouldCancel?.() || (error instanceof Error && error.name === 'AbortError')) {
+      cancelled = true;
+      try {
+        await generator.return(undefined);
+      } catch (returnError) {
+        console.warn('[Main] Failed to close aborted tool stream:', returnError);
+      }
+    } else {
+      uiChunkEmitter?.error(getErrorMessage(error));
+      throw error;
+    }
+  }
+
+  if (cancelled || !next) {
+    if (debugLabel) {
+      console.log(
+        `[StreamDebug][Main][Agent][${debugLabel}] cancelled chunkCount=${chunkCount} totalChars=${chunkChars} durationMs=${Date.now() - startedAt}`
+      );
+    }
+    uiChunkEmitter?.abort();
+    return { awaitingApproval: false, cancelled: true };
   }
 
   const agentResult = (next.value ?? null) as AgentResult | null;
@@ -214,10 +755,7 @@ const streamAgentResponse = async (
   }
 
   if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
-    for (const approvalRequest of agentResult.toolApprovalRequests) {
-      pendingApprovalSessions.set(approvalRequest.approvalId, { agent, webContents });
-      webContents.send('chat:tool-approval-request', approvalRequest);
-    }
+    registerApprovalBatch(agentResult.toolApprovalRequests, { agent, webContents });
     return { awaitingApproval: true };
   }
 
@@ -225,7 +763,12 @@ const streamAgentResponse = async (
     finalText = fullResponse;
   }
 
-  webContents.send('chat:done', finalText || '');
+  if (debugLabel) {
+    console.log(
+      `[StreamDebug][Main][Agent][${debugLabel}] done chunkCount=${chunkCount} totalChars=${chunkChars} finalTextLen=${(finalText || '').length} durationMs=${Date.now() - startedAt}`
+    );
+  }
+  uiChunkEmitter?.finish();
   return { awaitingApproval: false };
 };
 
@@ -323,18 +866,50 @@ ipcMain.handle('chat:messages:get', (_, id) => chatMessageDb.getChatMessage(id))
 ipcMain.handle('chat:messages:create', (_, message) => {
   const messageId = message.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const timestamp = message.timestamp || new Date().toISOString();
-  chatMessageDb.addChatMessage({
-    id: messageId,
-    thread_id: message.thread_id,
-    parent_id: message.parent_id || null,
-    slot_id: message.slot_id || null,
-    depth: message.depth || 0,
-    message: message.message,
-    timestamp,
-    metadata: message.metadata || '{}',
-  });
-  // Return the created message
-  return chatMessageDb.getChatMessage(messageId);
+  console.log(
+    `[ChatPersist][Main] create-request id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'} depth=${message.depth || 0}`
+  );
+
+  try {
+    chatMessageDb.addChatMessage({
+      id: messageId,
+      thread_id: message.thread_id,
+      parent_id: message.parent_id || null,
+      slot_id: message.slot_id || null,
+      depth: message.depth || 0,
+      message: message.message,
+      timestamp,
+      metadata: message.metadata || '{}',
+    });
+  } catch (error: unknown) {
+    const errorCode =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: unknown }).code)
+        : '';
+    const errorMessage = getErrorMessage(error);
+
+    if (
+      errorCode === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
+      errorMessage.includes('UNIQUE constraint failed: chat_messages.id')
+    ) {
+      console.warn(
+        `[ChatPersist][Main] duplicate-create id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'}`
+      );
+      const existing = chatMessageDb.getChatMessage(messageId);
+      if (existing) return existing;
+    }
+
+    console.error(
+      `[ChatPersist][Main] create-failed id=${messageId} thread=${message.thread_id} code=${errorCode || 'unknown'} error=${errorMessage}`
+    );
+    throw error;
+  }
+
+  const created = chatMessageDb.getChatMessage(messageId);
+  console.log(
+    `[ChatPersist][Main] create-success id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'}`
+  );
+  return created;
 });
 ipcMain.handle('chat:messages:update', (_, id, message) =>
   chatMessageDb.updateChatMessage(id, message)
@@ -460,6 +1035,20 @@ ipcMain.handle('chat:isProviderConfigured', (_, providerType: string) => {
   }
 });
 
+ipcMain.handle('chat:stop-stream', event => {
+  const streamState = activeStreams.get(event.sender.id);
+  if (!streamState) {
+    console.log(`[StreamDebug][Main][${event.sender.id}] stop-stream ignored: no active stream`);
+    return { success: false, error: 'No active stream' };
+  }
+
+  streamState.cancelled = true;
+  streamState.stoppedByUser = true;
+  streamState.abortController.abort('user-stop-request');
+  console.log(`[StreamDebug][Main][${event.sender.id}] stop-stream acknowledged`);
+  return { success: true };
+});
+
 // Send a chat message (non-streaming)
 ipcMain.handle(
   'chat:send',
@@ -468,11 +1057,13 @@ ipcMain.handle(
     options: {
       providerType: string;
       model: string;
-      messages: ChatInputMessage[];
+      messages: ChatTransportMessage[];
       tools?: string[]; // Optional specific tools to enable
     }
   ) => {
     try {
+      const inputMessages = await toModelInputMessages(options.messages);
+
       if (options.tools && options.tools.length > 0) {
         // Use Agent if tools are specified
         const agent = new SimpleAgent({
@@ -491,8 +1082,8 @@ ipcMain.handle(
         }
 
         // Separate user prompt from history
-        const history = options.messages.slice(0, -1);
-        const lastMessage = options.messages[options.messages.length - 1];
+        const history = inputMessages.slice(0, -1);
+        const lastMessage = inputMessages[inputMessages.length - 1];
         const prompt = getPromptFromMessage(lastMessage);
 
         if (!prompt.trim()) {
@@ -507,7 +1098,7 @@ ipcMain.handle(
         const text = await llmFactory.generateChat({
           providerType: options.providerType,
           modelId: options.model,
-          messages: toLlmChatMessages(options.messages),
+          messages: toLlmChatMessages(inputMessages),
         });
         return { success: true, text };
       }
@@ -525,12 +1116,36 @@ ipcMain.handle(
     options: {
       providerType: string;
       model: string;
-      messages: ChatInputMessage[];
+      messages: ChatTransportMessage[];
       tools?: string[];
     }
   ) => {
     const webContents = event.sender as ChatWebContents;
+    const senderId = webContents.id;
+    const streamDebugId = `${senderId}-${Date.now()}`;
+    const existingStream = activeStreams.get(senderId);
+    if (existingStream) {
+      existingStream.cancelled = true;
+      existingStream.abortController.abort('superseded-by-new-request');
+    }
+
+    const streamState: ActiveStreamState = {
+      cancelled: false,
+      stoppedByUser: false,
+      abortController: new AbortController(),
+    };
+    const uiChunkEmitter = createUiChunkEmitter(webContents);
+    activeStreams.set(senderId, streamState);
+    let partialResponse = '';
+    let llmChunkCount = 0;
+    const streamStartedAt = Date.now();
+    console.log(
+      `[StreamDebug][Main][${streamDebugId}] start provider=${options.providerType} model=${options.model} messageCount=${options.messages?.length ?? 0} toolCount=${options.tools?.length ?? 0}`
+    );
+
     try {
+      const inputMessages = await toModelInputMessages(options.messages);
+
       if (options.tools && options.tools.length > 0) {
         const agent = new SimpleAgent({
           enabled: true,
@@ -555,12 +1170,12 @@ ipcMain.handle(
 
         console.log('[Main] Registered tools count:', agent.getTools().length);
 
-        if (!options.messages || options.messages.length === 0) {
+        if (!inputMessages || inputMessages.length === 0) {
           throw new Error('No messages provided for streaming');
         }
 
-        const history = options.messages.slice(0, -1);
-        const lastMessage = options.messages[options.messages.length - 1];
+        const history = inputMessages.slice(0, -1);
+        const lastMessage = inputMessages[inputMessages.length - 1];
         const prompt = getPromptFromMessage(lastMessage);
 
         if (!prompt.trim()) {
@@ -568,26 +1183,84 @@ ipcMain.handle(
         }
 
         agent.setMessages(toAgentMessages(history));
-        const streamResult = await streamAgentResponse(agent, webContents, prompt);
-        return { success: true, awaitingApproval: streamResult.awaitingApproval };
+        const streamResult = await streamAgentResponse(
+          agent,
+          webContents,
+          prompt,
+          undefined,
+          () => streamState.cancelled,
+          streamDebugId,
+          eventPart => {
+            if (
+              eventPart.type === 'tool-approval-request' &&
+              typeof eventPart.approvalId === 'string' &&
+              eventPart.approvalId.length > 0
+            ) {
+              ensurePendingApprovalSession(eventPart.approvalId, { agent, webContents });
+            }
+            uiChunkEmitter.emitToolEvent(eventPart);
+          },
+          streamState.abortController.signal,
+          uiChunkEmitter
+        );
+        console.log(
+          `[StreamDebug][Main][${streamDebugId}] complete mode=agent stopped=${streamState.stoppedByUser} awaitingApproval=${streamResult.awaitingApproval ?? false} durationMs=${Date.now() - streamStartedAt}`
+        );
+        return {
+          success: true,
+          awaitingApproval: streamResult.awaitingApproval,
+          stopped: streamState.stoppedByUser,
+        };
       } else {
         const result = await llmFactory.streamChat(
           {
             providerType: options.providerType,
             modelId: options.model,
-            messages: toLlmChatMessages(options.messages),
+            messages: toLlmChatMessages(inputMessages),
           },
           chunk => {
-            webContents.send('chat:chunk', chunk);
-          }
+            if (streamState.cancelled) return;
+            partialResponse += chunk;
+            llmChunkCount += 1;
+            if (shouldLogChunk(llmChunkCount)) {
+              console.log(
+                `[StreamDebug][Main][${streamDebugId}] chunk#${llmChunkCount} len=${chunk.length} totalChars=${partialResponse.length}`
+              );
+            }
+            uiChunkEmitter.emitTextDelta(chunk);
+          },
+          () => streamState.cancelled,
+          streamState.abortController.signal
         );
-        webContents.send('chat:done', result);
-        return { success: true };
+        const finalText = streamState.cancelled ? partialResponse : result;
+        console.log(
+          `[StreamDebug][Main][${streamDebugId}] complete mode=llm stopped=${streamState.stoppedByUser} chunkCount=${llmChunkCount} partialLen=${partialResponse.length} finalLen=${(finalText || '').length} durationMs=${Date.now() - streamStartedAt}`
+        );
+        if (streamState.cancelled) {
+          uiChunkEmitter.abort();
+        } else {
+          uiChunkEmitter.finish();
+        }
+        return { success: true, stopped: streamState.stoppedByUser };
       }
     } catch (error: unknown) {
+      if (streamState.cancelled) {
+        console.log(
+          `[StreamDebug][Main][${streamDebugId}] cancelled-in-catch chunkCount=${llmChunkCount} partialLen=${partialResponse.length} durationMs=${Date.now() - streamStartedAt}`
+        );
+        uiChunkEmitter.abort();
+        return { success: true, stopped: streamState.stoppedByUser };
+      }
       const message = getErrorMessage(error);
-      webContents.send('chat:error', message);
+      console.error(
+        `[StreamDebug][Main][${streamDebugId}] error=${message} durationMs=${Date.now() - streamStartedAt}`
+      );
+      uiChunkEmitter.error(message);
       return { success: false, error: message };
+    } finally {
+      if (activeStreams.get(senderId) === streamState) {
+        activeStreams.delete(senderId);
+      }
     }
   }
 );
@@ -602,8 +1275,6 @@ ipcMain.handle('chat:approve-tool', async (_, approvalId: string, approved: bool
       error: 'Approval request not found or already processed.',
     };
   }
-  // Make approval single-use before async continuation to avoid re-entrancy.
-  pendingApprovalSessions.delete(approvalId);
 
   const approvalResponse: ToolApprovalResponse = {
     type: 'tool-approval-response',
@@ -612,18 +1283,90 @@ ipcMain.handle('chat:approve-tool', async (_, approvalId: string, approved: bool
     reason: approved ? 'User approved tool execution.' : 'User rejected tool execution.',
   };
 
+  if (session.collectedApprovalResponses.has(approvalId)) {
+    return {
+      success: false,
+      error: 'Approval request already processed.',
+    };
+  }
+
+  session.collectedApprovalResponses.set(approvalId, approvalResponse);
+
+  const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
+    id => !session.collectedApprovalResponses.has(id)
+  );
+
+  if (waitingForApprovals.length > 0) {
+    console.log(
+      `[Main] Tool approval pending batch completion: resolved=${session.collectedApprovalResponses.size} total=${session.pendingApprovalIds.size} waiting=${waitingForApprovals.join(',')}`
+    );
+    return {
+      success: true,
+      awaitingApproval: true,
+      waitingForApprovals,
+    };
+  }
+
+  for (const pendingId of session.pendingApprovalIds) {
+    pendingApprovalSessions.delete(pendingId);
+  }
+
+  const senderId = session.webContents.id;
+  const existingStream = activeStreams.get(senderId);
+  if (existingStream) {
+    existingStream.cancelled = true;
+    existingStream.abortController.abort('resume-after-tool-approval');
+  }
+
+  const streamState: ActiveStreamState = {
+    cancelled: false,
+    stoppedByUser: false,
+    abortController: new AbortController(),
+  };
+  const uiChunkEmitter = createUiChunkEmitter(session.webContents);
+  activeStreams.set(senderId, streamState);
+
   try {
     const streamResult = await streamAgentResponse(
       session.agent,
       session.webContents,
       '',
-      [approvalResponse]
+      Array.from(session.collectedApprovalResponses.values()),
+      () => streamState.cancelled,
+      undefined,
+      eventPart => {
+        if (
+          eventPart.type === 'tool-approval-request' &&
+          typeof eventPart.approvalId === 'string' &&
+          eventPart.approvalId.length > 0
+        ) {
+          ensurePendingApprovalSession(eventPart.approvalId, {
+            agent: session.agent,
+            webContents: session.webContents,
+          });
+        }
+        uiChunkEmitter.emitToolEvent(eventPart);
+      },
+      streamState.abortController.signal,
+      uiChunkEmitter
     );
-    return { success: true, awaitingApproval: streamResult.awaitingApproval };
+    return {
+      success: true,
+      awaitingApproval: streamResult.awaitingApproval,
+      stopped: streamState.stoppedByUser,
+    };
   } catch (error: unknown) {
     const message = getErrorMessage(error);
-    session.webContents.send('chat:error', message);
+    if (streamState.cancelled) {
+      uiChunkEmitter.abort();
+      return { success: true, stopped: streamState.stoppedByUser };
+    }
+    uiChunkEmitter.error(message);
     return { success: false, error: message };
+  } finally {
+    if (activeStreams.get(senderId) === streamState) {
+      activeStreams.delete(senderId);
+    }
   }
 });
 

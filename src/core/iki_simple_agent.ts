@@ -317,7 +317,9 @@ export class SimpleAgent extends BaseAgent {
    */
   async *stream(
     prompt: string,
-    approvalResponses?: ToolApprovalResponse[]
+    approvalResponses?: ToolApprovalResponse[],
+    onStreamPart?: (part: { type: string; [key: string]: unknown }) => void,
+    abortSignal?: AbortSignal
   ): AsyncGenerator<string, AgentResult, unknown> {
     this.validateConfig();
 
@@ -354,7 +356,7 @@ export class SimpleAgent extends BaseAgent {
           execute?: unknown;
           inputSchema?: unknown;
           description?: unknown;
-          needsApproval?: boolean;
+          needsApproval?: unknown;
         };
         logger.debug(`Tool ${toolName} structure:`, {
           hasExecute: typeof typedToolDef.execute === 'function',
@@ -374,14 +376,29 @@ export class SimpleAgent extends BaseAgent {
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxTokens,
         stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
+        abortSignal,
       });
 
       let finalResponse = '';
 
-      for await (const chunk of result.textStream) {
-        if (chunk) {
-          finalResponse += chunk;
-          yield chunk;
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta' && part.text) {
+          finalResponse += part.text;
+          yield part.text;
+          continue;
+        }
+
+        if (
+          part.type === 'tool-input-start' ||
+          part.type === 'tool-input-delta' ||
+          part.type === 'tool-input-end' ||
+          part.type === 'tool-call' ||
+          part.type === 'tool-result' ||
+          part.type === 'tool-error' ||
+          part.type === 'tool-output-denied' ||
+          part.type === 'tool-approval-request'
+        ) {
+          onStreamPart?.(part as { type: string; [key: string]: unknown });
         }
       }
 

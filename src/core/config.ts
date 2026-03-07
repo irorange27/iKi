@@ -54,6 +54,10 @@ function getSystemConfig(): AppConfig {
       similarThreshold: 0.1,
     },
     toolModel: { model: '' },
+    toolExecution: {
+      shellApprovalMode: 'high-risk',
+      shellHighRiskPatterns: [],
+    },
     agent: {
       enabled: false,
       systemPrompt: 'You are a helpful AI assistant. You are capable, autonomous, and helpful.',

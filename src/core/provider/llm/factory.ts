@@ -99,8 +99,11 @@ export const streamChat = async (
     modelId: string;
     messages: ChatTextMessage[];
   },
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  shouldCancel?: () => boolean,
+  abortSignal?: AbortSignal
 ) => {
+  const debugId = `${options.providerType}:${options.modelId}:${Date.now()}`;
   const model = createModel(options.providerType, options.modelId);
   const systemPrompt = getFullSystemPrompt(options.providerType);
 
@@ -108,13 +111,43 @@ export const streamChat = async (
     model,
     system: systemPrompt,
     messages: toModelMessages(options.messages),
+    abortSignal,
   });
 
   let fullText = '';
-  for await (const textPart of result.textStream) {
-    fullText += textPart;
-    onChunk(textPart);
+  let partCount = 0;
+  let textDeltaCount = 0;
+  const startedAt = Date.now();
+  console.log(
+    `[StreamDebug][Factory][${debugId}] start messageCount=${options.messages.length}`
+  );
+  for await (const part of result.fullStream) {
+    partCount += 1;
+    if (part.type !== 'text-delta' || !part.text) {
+      if (partCount <= 5) {
+        console.log(`[StreamDebug][Factory][${debugId}] part#${partCount} type=${part.type}`);
+      }
+      continue;
+    }
+
+    if (shouldCancel?.()) {
+      console.log(
+        `[StreamDebug][Factory][${debugId}] cancel-before-onChunk partCount=${partCount} textDeltaCount=${textDeltaCount} fullTextLen=${fullText.length}`
+      );
+      break;
+    }
+    textDeltaCount += 1;
+    if (textDeltaCount <= 3 || textDeltaCount % 20 === 0) {
+      console.log(
+        `[StreamDebug][Factory][${debugId}] text-delta#${textDeltaCount} len=${part.text.length} fullTextLen=${fullText.length + part.text.length}`
+      );
+    }
+    fullText += part.text;
+    onChunk(part.text);
   }
+  console.log(
+    `[StreamDebug][Factory][${debugId}] done partCount=${partCount} textDeltaCount=${textDeltaCount} fullTextLen=${fullText.length} durationMs=${Date.now() - startedAt}`
+  );
   return fullText;
 };
 

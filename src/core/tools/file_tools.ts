@@ -40,7 +40,7 @@ export const readFileTool: Tool = tool({
 export class ReadFileTool extends BaseTool {
   name = 'read_file';
   type = 'function';
-  needsApproval = true;
+  needsApproval = false;
   description = 'Read the content of a file from the local filesystem.';
 
   paramSchema = z.object({
@@ -111,7 +111,7 @@ export class ListDirTool extends BaseTool {
   name = 'list_dir';
   type = 'function';
   description = 'List the contents of a directory on the local filesystem.';
-  needsApproval = true;
+  needsApproval = false;
   paramSchema = z.object({
     path: z.string().describe('The absolute path to the directory to list'),
     recursive: z

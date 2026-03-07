@@ -54,7 +54,25 @@ export const DEFAULT_CONFIG: AppConfig = {
   toolModel: {
     model: '',
   },
+  toolExecution: {
+    shellApprovalMode: 'high-risk',
+    shellHighRiskPatterns: [],
+  },
 } as AppConfig;
+
+const mergeConfigWithDefaults = (rawConfig: Partial<AppConfig> | null | undefined): AppConfig => {
+  const merged = {
+    ...DEFAULT_CONFIG,
+    ...(rawConfig || {}),
+  } as AppConfig;
+
+  merged.toolExecution = {
+    ...DEFAULT_CONFIG.toolExecution,
+    ...(rawConfig?.toolExecution || {}),
+  };
+
+  return merged;
+};
 
 export const useConfigStore = defineStore('config', {
   state: (): { config: AppConfig; initialized: boolean } => ({
@@ -76,7 +94,7 @@ export const useConfigStore = defineStore('config', {
       try {
         const saved = await window.electronAPI.config.get();
         // 合并配置，防止字段缺失
-        this.config = { ...DEFAULT_CONFIG, ...saved };
+        this.config = mergeConfigWithDefaults(saved as Partial<AppConfig>);
         this.applyCssVariables();
       } catch (error) {
         console.warn('Failed to load config, using defaults:', error);
@@ -86,7 +104,7 @@ export const useConfigStore = defineStore('config', {
       if (!this.initialized) {
         // Listen for config updates from main process
         window.electronAPI.config.onUpdated((newConfig: AppConfig) => {
-          this.config = newConfig;
+          this.config = mergeConfigWithDefaults(newConfig);
           this.applyCssVariables();
         });
 
