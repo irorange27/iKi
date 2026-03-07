@@ -4,7 +4,9 @@
       <div class="relative rounded-xl border chat-input-container">
         <input v-model="message" type="text" placeholder="Type a message..."
           class="w-full border-0 bg-transparent px-4 py-6 text-primary placeholder-muted focus:outline-none"
-          @keydown.enter="sendMessage" />
+          @keydown.enter="handleEnter"
+          @compositionstart="handleCompositionStart"
+          @compositionend="handleCompositionEnd" />
 
         <!-- Bottom toolbar -->
         <div class="flex items-center justify-between border-t border-color px-3 py-2">
@@ -183,6 +185,8 @@ const selectedModel = ref('');
 const availableProviders = ref<any[]>([]);
 const availableModels = ref<string[]>([]);
 const isProviderConfigured = ref(false);
+const isComposing = ref(false);
+const justEndedComposition = ref(false);
 const showModelSelector = ref(false);
 const showToolSelector = ref(false);
 const availableTools = ref<any[]>([]);
@@ -322,6 +326,32 @@ const stopStreaming = async () => {
     isLoading.value = false;
     isStopping.value = false;
   }
+};
+
+const handleCompositionStart = () => {
+  isComposing.value = true;
+};
+
+const handleCompositionEnd = () => {
+  isComposing.value = false;
+  justEndedComposition.value = true;
+  window.setTimeout(() => {
+    justEndedComposition.value = false;
+  }, 0);
+};
+
+const handleEnter = (event: KeyboardEvent) => {
+  if (
+    event.isComposing ||
+    event.keyCode === 229 ||
+    event.which === 229 ||
+    isComposing.value ||
+    justEndedComposition.value
+  ) {
+    return;
+  }
+
+  sendMessage();
 };
 
 const sendMessage = async () => {
