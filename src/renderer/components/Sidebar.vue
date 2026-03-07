@@ -41,15 +41,24 @@
     <div v-if="sidebar.isExpanded.value" class="flex flex-1 min-h-0 pr-2">
       <!-- Chat History -->
       <div class="flex-1 px-3 py-2 min-w-48 overflow-y-scroll custom-scrollbar overscroll-contain">
-        <button
-          v-for="chat in chatThreads"
-          :key="chat.id"
-          class="chat-item mb-1 w-full truncate rounded-lg px-3 py-2.5 text-left text-sm focus:outline-none"
-          :class="{ 'chat-item-active': currentThreadId === chat.id }"
-          @click="selectThread(chat.id)"
-        >
-          {{ chat.title }}
-        </button>
+        <div v-for="chat in chatThreads" :key="chat.id" class="chat-item-row group relative mb-1">
+          <button
+            class="chat-item w-full truncate rounded-lg px-3 py-2.5 pr-10 text-left text-sm focus:outline-none"
+            :class="{ 'chat-item-active': currentThreadId === chat.id }"
+            @click="selectThread(chat.id)"
+          >
+            {{ chat.title }}
+          </button>
+          <button
+            class="chat-delete-btn"
+            :class="{ 'chat-delete-btn-visible': deletingThreadIds[chat.id] }"
+            :disabled="!!deletingThreadIds[chat.id]"
+            aria-label="Delete chat"
+            @click="handleDeleteThread(chat, $event)"
+          >
+            <Trash2 :size="14" />
+          </button>
+        </div>
       </div>
       <!-- draggable handle -->
       <div
@@ -85,7 +94,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { PanelLeftDashed, Search, Square, SquarePen } from 'lucide-vue-next';
+import { PanelLeftDashed, Search, SquarePen, Trash2 } from 'lucide-vue-next';
 import { useSidebar } from '../composables/useSidebar';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,11 +111,13 @@ interface ChatThread {
 
 const chatThreads = ref<ChatThread[]>([]);
 const currentThreadId = ref<string | null>(null);
+const deletingThreadIds = ref<Record<string, boolean>>({});
 
 // Emit events to parent
 const emit = defineEmits<{
   'thread-selected': [threadId: string];
   'new-chat': [];
+  'thread-deleted': [threadId: string];
 }>();
 
 // Load chat threads from database
@@ -129,6 +140,33 @@ const selectThread = (threadId: string) => {
 const handleNewChat = () => {
   currentThreadId.value = null;
   emit('new-chat');
+};
+
+const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (deletingThreadIds.value[thread.id]) return;
+
+  const confirmed = window.confirm(`Delete "${thread.title}"?\nThis cannot be undone.`);
+  if (!confirmed) return;
+
+  deletingThreadIds.value[thread.id] = true;
+  try {
+    await window.electronAPI.chat.threads.delete(thread.id);
+    chatThreads.value = chatThreads.value.filter(chat => chat.id !== thread.id);
+    if (currentThreadId.value === thread.id) {
+      currentThreadId.value = null;
+    }
+    emit('thread-deleted', thread.id);
+  } catch (error) {
+    console.error('Failed to delete thread:', error);
+  } finally {
+    deletingThreadIds.value = {
+      ...deletingThreadIds.value,
+      [thread.id]: false,
+    };
+  }
 };
 
 // Watch for thread updates
@@ -254,6 +292,11 @@ const openSettings = () => {
   transition: all 0.2s;
 }
 
+.chat-item-row:hover .chat-delete-btn,
+.chat-delete-btn-visible {
+  opacity: 1;
+}
+
 .chat-item:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
@@ -268,6 +311,39 @@ const openSettings = () => {
   background-color: var(--bg-active);
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.chat-delete-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity 0.2s,
+    background-color 0.2s,
+    color 0.2s;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.chat-delete-btn:hover:not(:disabled) {
+  color: #f87171;
+  background-color: var(--bg-hover);
+}
+
+.chat-delete-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .bg-secondary-with-opacity {

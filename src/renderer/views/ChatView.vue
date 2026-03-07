@@ -1,6 +1,11 @@
 <template>
   <div class="flex h-screen app-background app-text">
-    <Sidebar ref="sidebarRef" @thread-selected="selectThread" @new-chat="handleNewChat" />
+    <Sidebar
+      ref="sidebarRef"
+      @thread-selected="selectThread"
+      @new-chat="handleNewChat"
+      @thread-deleted="handleThreadDeleted"
+    />
 
     <!-- Main Content -->
     <div class="flex flex-1 flex-col">
@@ -23,9 +28,12 @@
           <div class="messages-container" @click="handleMarkdownClick">
             <div v-for="(m, index) in chat.messages" :key="m.id ? m.id : index" class="message-wrapper" :class="m.role">
               <div class="message-content">
-                <div v-for="(part, partIndex) in m.parts" :key="`${m.id}-${getPartType(part)}-${partIndex}`"
+                <div v-for="(part, partIndex) in m.parts" :key="getPartRenderKey(m.id || String(index), part, partIndex)"
                   class="message-part">
-                  <div v-if="isTextPart(part)" class="message-text markdown-content">
+                  <div v-if="isStreamingTextPart(m as any, part)" class="message-text">
+                    {{ getTextPartContent(part) }}
+                  </div>
+                  <div v-else-if="isTextPart(part)" class="message-text markdown-content">
                     <VueMarkdown :source="getTextPartContent(part)" :plugins="markdownPlugins" />
                   </div>
                   <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
@@ -94,16 +102,15 @@
       </div>
 
       <!-- Input Area -->
-      <ChatInput :chat="chat" @message-sent="handleMessageSent" @response-received="handleResponseReceived"
-        @stream-chunk="handleStreamChunk" @model-selected="handleModelSelected" />
+      <ChatInput :chat="chat" @message-sent="handleMessageSent" @model-selected="handleModelSelected" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue';
-import type { UIMessage } from 'ai';
-import { ref, nextTick, onMounted } from 'vue';
+import type { UIMessage, UIMessageChunk } from 'ai';
+import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
@@ -136,8 +143,17 @@ const selectedTools = ref<string[]>([]);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const activeAssistantMessageId = ref<string | null>(null);
 const activeAssistantParentId = ref<string | null>(null);
+const activeStreamThreadId = ref<string | null>(null);
+const streamingAssistantText = ref('');
 const approvalProcessing = ref<Record<string, boolean>>({});
 const persistedMessageIds = new Set<string>();
+const messagePersistInFlight = new Map<string, Promise<void>>();
+const streamRenderTick = ref(0);
+const streamRenderTraceId = ref('');
+const streamRenderChunkCount = ref(0);
+const streamRenderChars = ref(0);
+const shouldLogStreamChunk = (count: number) => count <= 3 || count % 20 === 0;
+const TITLE_REGEN_INTERVAL = 2;
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -294,35 +310,93 @@ const extractTextFromMessage = (message: UIMessage | undefined): string => {
     .join('');
 };
 
-const upsertUiMessage = async (message: UIMessage, parentId?: string) => {
+const upsertUiMessage = async (message: UIMessage, parentId?: string, source = 'unknown') => {
   if (!currentThread.value) return;
 
-  const serializedMessage = JSON.stringify(message);
-  const metadata = JSON.stringify({ format: 'ai-ui-message-v1' });
-
-  if (persistedMessageIds.has(message.id)) {
-    await window.electronAPI.chat.messages.update(message.id, {
-      message: serializedMessage,
-      metadata,
-    });
-    return;
+  const persistKey = message.id;
+  const inFlightPersist = messagePersistInFlight.get(persistKey);
+  if (inFlightPersist) {
+    console.log(
+      `[ChatPersist][Renderer] waiting id=${persistKey} source=${source} parent=${parentId || 'null'}`
+    );
+    await inFlightPersist;
   }
 
-  const savedMessage = await window.electronAPI.chat.messages.create({
-    id: message.id,
-    thread_id: currentThread.value.id,
-    parent_id: parentId || null,
-    depth: 0,
-    message: serializedMessage,
-    timestamp: new Date().toISOString(),
-    metadata,
-  });
+  const persistTask = (async () => {
+    if (!currentThread.value) return;
 
-  if (savedMessage?.id) {
-    message.id = savedMessage.id;
-    persistedMessageIds.add(savedMessage.id);
-  } else {
-    persistedMessageIds.add(message.id);
+    const serializedMessage = JSON.stringify(message);
+    const metadata = JSON.stringify({ format: 'ai-ui-message-v1' });
+
+    if (persistedMessageIds.has(message.id)) {
+      console.log(
+        `[ChatPersist][Renderer] update id=${message.id} source=${source} thread=${currentThread.value.id}`
+      );
+      await window.electronAPI.chat.messages.update(message.id, {
+        message: serializedMessage,
+        metadata,
+      });
+      return;
+    }
+
+    console.log(
+      `[ChatPersist][Renderer] create id=${message.id} source=${source} thread=${currentThread.value.id} parent=${parentId || 'null'}`
+    );
+
+    try {
+      const savedMessage = await window.electronAPI.chat.messages.create({
+        id: message.id,
+        thread_id: currentThread.value.id,
+        parent_id: parentId || null,
+        depth: 0,
+        message: serializedMessage,
+        timestamp: new Date().toISOString(),
+        metadata,
+      });
+
+      if (savedMessage?.id) {
+        message.id = savedMessage.id;
+        persistedMessageIds.add(savedMessage.id);
+      } else {
+        persistedMessageIds.add(message.id);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorCode =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code?: unknown }).code)
+          : '';
+      console.warn(
+        `[ChatPersist][Renderer] create-failed id=${message.id} source=${source} code=${errorCode || 'unknown'} error=${errorMessage}`
+      );
+
+      if (
+        errorCode === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
+        errorMessage.includes('UNIQUE constraint failed: chat_messages.id')
+      ) {
+        persistedMessageIds.add(message.id);
+        await window.electronAPI.chat.messages.update(message.id, {
+          message: serializedMessage,
+          metadata,
+        });
+        console.warn(
+          `[ChatPersist][Renderer] duplicate-resolved-via-update id=${message.id} source=${source}`
+        );
+        return;
+      }
+
+      throw error;
+    }
+  })();
+
+  messagePersistInFlight.set(persistKey, persistTask);
+
+  try {
+    await persistTask;
+  } finally {
+    if (messagePersistInFlight.get(persistKey) === persistTask) {
+      messagePersistInFlight.delete(persistKey);
+    }
   }
 };
 
@@ -360,16 +434,55 @@ const TOOL_STATE_LABELS: Record<string, string> = {
 const getPartType = (part: unknown): string =>
   isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
 
+const getPartRenderKey = (messageId: string, part: unknown, partIndex: number): string => {
+  const partType = getPartType(part);
+  if (isTextPart(part)) {
+    return `${messageId}-${partType}-${partIndex}-${part.text.length}-${streamRenderTick.value}`;
+  }
+  return `${messageId}-${partType}-${partIndex}`;
+};
+
 const isTextPart = (part: unknown): part is { type: 'text'; text: string } =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
 
-const getTextPartContent = (part: unknown): string => (isTextPart(part) ? part.text : '');
+const isStreamingTextPart = (message: UIMessage, part: unknown): boolean => {
+  if (!isTextPart(part)) return false;
+  if (!activeAssistantMessageId.value) return false;
+  if (message.id !== activeAssistantMessageId.value) return false;
+  return isObjectRecord(part) && part.state === 'streaming';
+};
+
+const getTextPartContent = (part: unknown): string => {
+  void streamRenderTick.value;
+  return isTextPart(part) ? part.text : '';
+};
 
 const getApprovalId = (part: unknown): string | null => {
   if (!isObjectRecord(part)) return null;
   if (typeof part.approvalId === 'string') return part.approvalId;
   if (!isObjectRecord(part.approval)) return null;
   return typeof part.approval.id === 'string' ? part.approval.id : null;
+};
+
+const getToolCallIdFromPart = (part: unknown): string | null => {
+  if (!isObjectRecord(part)) return null;
+  if (typeof part.toolCallId === 'string' && part.toolCallId.length > 0) return part.toolCallId;
+  if (typeof part.id === 'string' && part.id.length > 0) return part.id;
+  if (isObjectRecord(part.toolCall) && typeof part.toolCall.toolCallId === 'string') {
+    return part.toolCall.toolCallId;
+  }
+  return null;
+};
+
+const parseToolInputFromText = (inputText: string): unknown => {
+  const trimmedInput = inputText.trim();
+  if (!trimmedInput) return {};
+
+  try {
+    return JSON.parse(trimmedInput);
+  } catch {
+    return inputText;
+  }
 };
 
 const isToolPart = (part: unknown): part is MessagePartRecord =>
@@ -547,7 +660,34 @@ const isApprovalProcessing = (part: unknown): boolean => {
 const resetTransientState = () => {
   activeAssistantMessageId.value = null;
   activeAssistantParentId.value = null;
+  activeStreamThreadId.value = null;
+  streamingAssistantText.value = '';
   approvalProcessing.value = {};
+  streamRenderTraceId.value = '';
+  streamRenderChunkCount.value = 0;
+  streamRenderChars.value = 0;
+};
+
+const isStreamBoundToCurrentThread = (): boolean => {
+  if (!activeStreamThreadId.value) return false;
+  return currentThread.value?.id === activeStreamThreadId.value;
+};
+
+const stopActiveStreamIfNeeded = async (reason: string, targetThreadId?: string) => {
+  if (!activeStreamThreadId.value) return;
+  if (targetThreadId && activeStreamThreadId.value === targetThreadId) return;
+
+  console.log(
+    `[StreamDebug][Renderer][ChatView] stop-stream reason=${reason} streamThread=${activeStreamThreadId.value} currentThread=${currentThread.value?.id || 'null'} targetThread=${targetThreadId || 'null'}`
+  );
+
+  try {
+    await window.electronAPI.chat.stopStream();
+  } catch (error) {
+    console.warn('[StreamDebug][Renderer][ChatView] stop-stream failed:', error);
+  } finally {
+    resetTransientState();
+  }
 };
 
 const scrollToBottom = () => {
@@ -607,6 +747,8 @@ const loadThreadMessages = async (threadId: string) => {
 // Select a thread
 const selectThread = async (threadId: string) => {
   try {
+    await stopActiveStreamIfNeeded('switch-thread', threadId);
+
     const thread = await window.electronAPI.chat.threads.get(threadId);
     if (!thread) {
       console.error('Thread not found:', threadId);
@@ -626,6 +768,22 @@ const selectThread = async (threadId: string) => {
   }
 };
 
+const handleThreadDeleted = async (threadId: string) => {
+  if (currentThread.value?.id !== threadId) return;
+
+  await stopActiveStreamIfNeeded('delete-thread');
+  currentThread.value = null;
+  currentModel.value = '';
+  chat.messages.splice(0, chat.messages.length);
+  persistedMessageIds.clear();
+  resetTransientState();
+  showWelcome.value = true;
+
+  if (sidebarRef.value?.setCurrentThread) {
+    sidebarRef.value.setCurrentThread(null);
+  }
+};
+
 // Refresh threads list
 const refreshThreads = async () => {
   if (sidebarRef.value?.refresh) {
@@ -635,6 +793,7 @@ const refreshThreads = async () => {
 
 const updateThreadTitle = async (title: string) => {
   if (!currentThread.value) return;
+  if (currentThread.value.title === title) return;
 
   try {
     await window.electronAPI.chat.threads.update(currentThread.value.id, { title });
@@ -648,34 +807,57 @@ const updateThreadTitle = async (title: string) => {
   }
 };
 
-// Generate thread title using Agent framework
-const generateThreadTitle = async (
-  userMessage: string,
-  assistantMessage?: string
-): Promise<string | null> => {
+const getConversationContentForTitle = (messages: UIMessage[]): string => {
+  const lines: string[] = [];
+
+  for (const message of messages) {
+    const text = extractTextFromMessage(message).trim();
+    if (!text) continue;
+
+    const role =
+      message.role === 'assistant' ? 'Assistant' : message.role === 'system' ? 'System' : 'User';
+    lines.push(`${role}: ${text}`);
+  }
+
+  return lines.join('\n');
+};
+
+const getFallbackThreadTitle = (messages: UIMessage[]): string | null => {
+  const latestUserText = [...messages]
+    .reverse()
+    .filter(message => message.role === 'user')
+    .map(message => extractTextFromMessage(message).trim())
+    .find(text => text.length > 0);
+  const fallbackText = latestUserText || extractTextFromMessage(messages[0]).trim();
+  if (!fallbackText) return null;
+  return fallbackText.slice(0, 50) + (fallbackText.length > 50 ? '...' : '');
+};
+
+const shouldRegenerateThreadTitle = (messages: UIMessage[], currentTitle: string): boolean => {
+  const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
+  if (assistantMessageCount === 0) return false;
+  if (currentTitle === 'New Chat') return true;
+  return assistantMessageCount % TITLE_REGEN_INTERVAL === 0;
+};
+
+// Generate thread title using full conversation context
+const generateThreadTitle = async (messages: UIMessage[]): Promise<string | null> => {
   try {
-    // Build conversation content for title generation
-    const conversationContent = assistantMessage
-      ? `User: ${userMessage}\nAssistant: ${assistantMessage}`
-      : `User: ${userMessage}`;
-
-    // Use agent to generate title
-    const title = await window.electronAPI.toolModel.generateTitle(conversationContent);
-
-    if (title) {
-      return title;
+    const conversationContent = getConversationContentForTitle(messages);
+    if (!conversationContent.trim()) {
+      return getFallbackThreadTitle(messages);
     }
 
-    // Fallback to simple truncation if agent generation fails
-    return userMessage.slice(0, 50) + (userMessage.length > 50 ? '...' : '');
+    const title = await window.electronAPI.toolModel.generateTitle(conversationContent);
+    return title || getFallbackThreadTitle(messages);
   } catch (error) {
     console.error('Failed to generate thread title with agent:', error);
-    // Fallback to simple truncation
-    return userMessage.slice(0, 50) + (userMessage.length > 50 ? '...' : '');
+    return getFallbackThreadTitle(messages);
   }
 };
 
 const handleNewChat = async () => {
+  await stopActiveStreamIfNeeded('new-chat');
   await createNewThread(currentModel.value);
 };
 
@@ -687,128 +869,462 @@ const handleModelSelected = (data: { provider: any; model: string }) => {
   }
 };
 
-const handleMessageSent = async (content: string, model?: string, tools?: string[]) => {
-  // Create thread if it doesn't exist
-  if (!currentThread.value) {
-    const thread = await createNewThread(model || currentModel.value);
-    if (!thread) {
-      console.error('Failed to create thread');
+const handleMessageSent = async (
+  content: string,
+  model?: string,
+  tools?: string[],
+  onReady?: () => void
+) => {
+  try {
+    // Create thread if it doesn't exist
+    if (!currentThread.value) {
+      const thread = await createNewThread(model || currentModel.value);
+      if (!thread) {
+        console.error('Failed to create thread');
+        return;
+      }
+    }
+
+    if (!currentThread.value) {
+      console.error('No thread available');
       return;
     }
+
+    // Update thread model if provided
+    if (model && currentThread.value.model !== model) {
+      await window.electronAPI.chat.threads.update(currentThread.value.id, { model });
+      currentThread.value.model = model;
+      currentModel.value = model;
+    }
+
+    // Store selected tools
+    if (tools) {
+      selectedTools.value = tools;
+    }
+
+    showWelcome.value = false;
+
+    const userMessage: UIMessage = {
+      id: createMessageId(),
+      role: 'user',
+      parts: [{ type: 'text', text: content, state: 'done' }],
+    };
+
+    chat.messages.push(userMessage as any);
+    activeAssistantParentId.value = userMessage.id;
+    activeAssistantMessageId.value = null;
+    activeStreamThreadId.value = currentThread.value.id;
+    streamingAssistantText.value = '';
+    streamRenderTraceId.value = `view-${Date.now()}`;
+    streamRenderChunkCount.value = 0;
+    streamRenderChars.value = 0;
+    await upsertUiMessage(userMessage, undefined, 'user-message');
+
+    scrollToBottom();
+  } finally {
+    onReady?.();
   }
-
-  if (!currentThread.value) {
-    console.error('No thread available');
-    return;
-  }
-
-  // Update thread model if provided
-  if (model && currentThread.value.model !== model) {
-    await window.electronAPI.chat.threads.update(currentThread.value.id, { model });
-    currentThread.value.model = model;
-    currentModel.value = model;
-  }
-
-  // Store selected tools
-  if (tools) {
-    selectedTools.value = tools;
-  }
-
-  showWelcome.value = false;
-
-  const userMessage: UIMessage = {
-    id: createMessageId(),
-    role: 'user',
-    parts: [{ type: 'text', text: content, state: 'done' }],
-  };
-
-  chat.messages.push(userMessage as any);
-  activeAssistantParentId.value = userMessage.id;
-  activeAssistantMessageId.value = null;
-  await upsertUiMessage(userMessage);
-
-  scrollToBottom();
 };
 
 const handleStreamChunk = (chunk: string) => {
-  const assistantMessage = getOrCreateAssistantMessage();
-  const textPart = assistantMessage.parts.find(
-    part => isObjectRecord(part) && part.type === 'text'
-  ) as Record<string, unknown> | undefined;
+  if (!isStreamBoundToCurrentThread()) return;
 
-  if (textPart && typeof textPart.text === 'string') {
-    textPart.text += chunk;
-    textPart.state = 'streaming';
+  streamRenderTick.value += 1;
+  streamingAssistantText.value += chunk;
+  if (!streamRenderTraceId.value) {
+    streamRenderTraceId.value = `view-${Date.now()}`;
+  }
+  streamRenderChunkCount.value += 1;
+  streamRenderChars.value += chunk.length;
+  if (shouldLogStreamChunk(streamRenderChunkCount.value)) {
+    console.log(
+      `[StreamDebug][Renderer][ChatView][${streamRenderTraceId.value}] handleStreamChunk#${streamRenderChunkCount.value} len=${chunk.length} totalChars=${streamRenderChars.value}`
+    );
+  }
+  const assistantMessage = getOrCreateAssistantMessage();
+  const messageIndex = chat.messages.findIndex((message: any) => message.id === assistantMessage.id);
+  if (messageIndex < 0) return;
+
+  const currentMessage = chat.messages[messageIndex] as UIMessage;
+  const nextParts = [...currentMessage.parts];
+  const lastPart = nextParts[nextParts.length - 1];
+  const shouldAppendToLastStreamingText =
+    isObjectRecord(lastPart) && lastPart.type === 'text' && lastPart.state === 'streaming';
+
+  if (shouldAppendToLastStreamingText) {
+    const textPartIndex = nextParts.length - 1;
+    const textPart = nextParts[textPartIndex] as Record<string, unknown>;
+    const previousText = typeof textPart.text === 'string' ? textPart.text : '';
+    nextParts[textPartIndex] = {
+      ...textPart,
+      text: `${previousText}${chunk}`,
+      state: 'streaming',
+    } as any;
   } else {
-    assistantMessage.parts.push({
+    nextParts.push({
       type: 'text',
       text: chunk,
       state: 'streaming',
     } as any);
   }
 
+  chat.messages.splice(
+    messageIndex,
+    1,
+    {
+      ...currentMessage,
+      parts: nextParts,
+    } as any
+  );
+
   scrollToBottom();
 };
 
 const handleResponseReceived = async (fullText: string) => {
+  if (!isStreamBoundToCurrentThread()) return;
+
+  streamRenderTick.value += 1;
   if (!currentThread.value) return;
 
-  const assistantMessage = getOrCreateAssistantMessage();
-  const textPart = assistantMessage.parts.find(
-    part => isObjectRecord(part) && part.type === 'text'
-  ) as Record<string, unknown> | undefined;
+  const assistantMessageId = activeAssistantMessageId.value;
+  const existingAssistantMessage = getAssistantMessageById(assistantMessageId);
+  if (!existingAssistantMessage && !fullText.trim()) {
+    resetTransientState();
+    return;
+  }
 
-  if (textPart) {
-    textPart.text = fullText;
-    textPart.state = 'done';
-  } else if (fullText) {
-    assistantMessage.parts.push({
+  const baseAssistantMessage = existingAssistantMessage || getOrCreateAssistantMessage();
+  const messageIndex = chat.messages.findIndex((message: any) => message.id === baseAssistantMessage.id);
+  if (messageIndex < 0) {
+    resetTransientState();
+    return;
+  }
+
+  const currentAssistantMessage = chat.messages[messageIndex] as UIMessage;
+  const nextParts = [...currentAssistantMessage.parts];
+  const textPartIndices = nextParts
+    .map((part, index) => ({ part, index }))
+    .filter(({ part }) => isObjectRecord(part) && part.type === 'text')
+    .map(({ index }) => index);
+  const existingTextPart =
+    textPartIndices.length > 0
+      ? (nextParts[textPartIndices[textPartIndices.length - 1]] as Record<string, unknown>)
+      : undefined;
+  const streamedText =
+    existingTextPart && typeof existingTextPart.text === 'string' ? existingTextPart.text : '';
+  const finalText =
+    fullText.length > 0
+      ? fullText
+      : streamingAssistantText.value || streamedText;
+  let hasStreamingTextPart = false;
+
+  for (const index of textPartIndices) {
+    const part = nextParts[index] as Record<string, unknown>;
+    if (part.state === 'streaming') {
+      hasStreamingTextPart = true;
+      nextParts[index] = {
+        ...part,
+        type: 'text',
+        state: 'done',
+      } as any;
+    }
+  }
+
+  if (textPartIndices.length === 0 && finalText) {
+    nextParts.push({
       type: 'text',
-      text: fullText,
+      text: finalText,
+      state: 'done',
+    } as any);
+  } else if (!hasStreamingTextPart && finalText && !streamedText) {
+    nextParts.push({
+      type: 'text',
+      text: finalText,
       state: 'done',
     } as any);
   }
 
-  await upsertUiMessage(assistantMessage, activeAssistantParentId.value || undefined);
+  const assistantMessage: UIMessage = {
+    ...currentAssistantMessage,
+    parts: nextParts,
+  };
 
-  const parentUserMessage = activeAssistantParentId.value
-    ? (chat.messages.find((message: any) => message.id === activeAssistantParentId.value) as
-        | UIMessage
-        | undefined)
-    : (chat.messages.filter((message: any) => message.role === 'user').pop() as UIMessage | undefined);
+  const hasRenderableContent = assistantMessage.parts.some(part => {
+    if (isObjectRecord(part) && part.type === 'text') {
+      return typeof part.text === 'string' && part.text.trim().length > 0;
+    }
+    return true;
+  });
 
-  // Generate thread title using Tool Model if it's still "New Chat" and this is the first exchange
-  if (currentThread.value.title === 'New Chat' && chat.messages.length === 2) {
-    const userMessageText = extractTextFromMessage(parentUserMessage);
-    const generatedTitle = await generateThreadTitle(userMessageText, fullText);
+  if (!hasRenderableContent) {
+    const messageIndex = chat.messages.findIndex((message: any) => message.id === assistantMessage.id);
+    if (messageIndex >= 0) {
+      chat.messages.splice(messageIndex, 1);
+    }
+    resetTransientState();
+    scrollToBottom();
+    return;
+  }
+
+  chat.messages.splice(messageIndex, 1, assistantMessage as any);
+  console.log(
+    `[StreamDebug][Renderer][ChatView][${streamRenderTraceId.value || 'unknown'}] handleResponseReceived fullTextLen=${(fullText || '').length} chunkCount=${streamRenderChunkCount.value} chunkChars=${streamRenderChars.value}`
+  );
+
+  await upsertUiMessage(
+    assistantMessage,
+    activeAssistantParentId.value || undefined,
+    'assistant-response'
+  );
+
+  // Regenerate title from full conversation context on interval
+  if (
+    chat.messages.length > 0 &&
+    shouldRegenerateThreadTitle(chat.messages as UIMessage[], currentThread.value.title)
+  ) {
+    const generatedTitle = await generateThreadTitle(chat.messages as UIMessage[]);
     if (generatedTitle) {
       await updateThreadTitle(generatedTitle);
     }
   }
 
   resetTransientState();
+  streamRenderTraceId.value = '';
+  streamRenderChunkCount.value = 0;
+  streamRenderChars.value = 0;
   scrollToBottom();
 };
 
-const handleToolApprovalRequest = async (request: any) => {
-  const assistantMessage = getOrCreateAssistantMessage();
-  const existing = assistantMessage.parts.find(
-    part => getApprovalId(part) === request.approvalId
-  );
-  if (existing) return;
+const handleToolUiChunk = async (chunk: UIMessageChunk) => {
+  if (
+    chunk.type !== 'tool-input-start' &&
+    chunk.type !== 'tool-input-delta' &&
+    chunk.type !== 'tool-input-available' &&
+    chunk.type !== 'tool-input-error' &&
+    chunk.type !== 'tool-output-available' &&
+    chunk.type !== 'tool-output-error' &&
+    chunk.type !== 'tool-output-denied' &&
+    chunk.type !== 'tool-approval-request'
+  ) {
+    return;
+  }
 
-  assistantMessage.parts.push({
+  if (chunk.type === 'tool-approval-request') {
+    const existingAssistantMessage = getAssistantMessageById(activeAssistantMessageId.value);
+    const existingPart = existingAssistantMessage?.parts.find(
+      part => getToolCallIdFromPart(part) === chunk.toolCallId
+    );
+    const existingToolName =
+      isObjectRecord(existingPart) && typeof existingPart.toolName === 'string'
+        ? existingPart.toolName
+        : 'tool';
+    const existingInput =
+      isObjectRecord(existingPart) && existingPart.input !== undefined ? existingPart.input : {};
+
+    await handleToolApprovalRequest({
+      approvalId: chunk.approvalId,
+      toolCallId: chunk.toolCallId,
+      toolCall: {
+        toolName: existingToolName,
+        toolCallId: chunk.toolCallId,
+        args: existingInput,
+      },
+    });
+    return;
+  }
+
+  const assistantMessage = getOrCreateAssistantMessage();
+  const messageIndex = chat.messages.findIndex((message: any) => message.id === assistantMessage.id);
+  if (messageIndex < 0) return;
+
+  const currentAssistantMessage = chat.messages[messageIndex] as UIMessage;
+  const nextParts = [...currentAssistantMessage.parts];
+  for (let i = 0; i < nextParts.length; i += 1) {
+    const part = nextParts[i];
+    if (!isObjectRecord(part) || part.type !== 'text' || part.state !== 'streaming') continue;
+    nextParts[i] = {
+      ...part,
+      state: 'done',
+    } as any;
+  }
+
+  const toolCallId = chunk.toolCallId;
+  const existingPartIndex = nextParts.findIndex(part => getToolCallIdFromPart(part) === toolCallId);
+  const existingPart =
+    existingPartIndex >= 0 && isObjectRecord(nextParts[existingPartIndex])
+      ? (nextParts[existingPartIndex] as MessagePartRecord)
+      : undefined;
+  const chunkToolName =
+    'toolName' in chunk && typeof chunk.toolName === 'string' && chunk.toolName.trim()
+      ? chunk.toolName
+      : undefined;
+
+  const nextPart: MessagePartRecord = {
+    ...(existingPart || {}),
     type: 'dynamic-tool',
-    toolName: request.toolCall?.toolName || 'tool',
-    toolCallId: request.toolCallId || request.toolCall?.toolCallId || createMessageId(),
-    input: request.toolCall?.args ?? {},
+    toolCallId,
+    toolName:
+      chunkToolName ||
+      (existingPart && typeof existingPart.toolName === 'string' ? existingPart.toolName : 'tool'),
+  };
+
+  if ('providerExecuted' in chunk && typeof chunk.providerExecuted === 'boolean') {
+    nextPart.providerExecuted = chunk.providerExecuted;
+  }
+  if ('title' in chunk && typeof chunk.title === 'string') {
+    nextPart.title = chunk.title;
+  }
+
+  if (chunk.type === 'tool-input-start') {
+    nextPart.state = 'input-streaming';
+    if (nextPart.input === undefined) {
+      nextPart.input = {};
+    }
+  } else if (chunk.type === 'tool-input-delta') {
+    const delta = typeof chunk.inputTextDelta === 'string' ? chunk.inputTextDelta : '';
+    const previousInputText = typeof nextPart.inputText === 'string' ? nextPart.inputText : '';
+    const inputText = `${previousInputText}${delta}`;
+    nextPart.inputText = inputText;
+    nextPart.input = parseToolInputFromText(inputText);
+    nextPart.state = 'input-streaming';
+  } else if (chunk.type === 'tool-input-available') {
+    nextPart.input = chunk.input ?? nextPart.input ?? {};
+    nextPart.state = 'input-available';
+    delete nextPart.inputText;
+  } else if (chunk.type === 'tool-input-error') {
+    nextPart.input = chunk.input ?? nextPart.input ?? {};
+    nextPart.output = {
+      error: chunk.errorText || 'Invalid tool input',
+    };
+    nextPart.state = 'output-error';
+    delete nextPart.inputText;
+  } else if (chunk.type === 'tool-output-available') {
+    nextPart.output = chunk.output;
+    nextPart.state = chunk.preliminary ? 'input-streaming' : 'output-available';
+    delete nextPart.inputText;
+  } else if (chunk.type === 'tool-output-error') {
+    nextPart.output = {
+      error: chunk.errorText || 'Tool execution failed',
+    };
+    nextPart.state = 'output-error';
+    delete nextPart.inputText;
+  } else if (chunk.type === 'tool-output-denied') {
+    nextPart.state = 'output-denied';
+    nextPart.output = {
+      message: 'Tool execution denied',
+      toolCallId,
+    };
+    delete nextPart.inputText;
+  }
+
+  if (existingPartIndex >= 0) {
+    nextParts[existingPartIndex] = nextPart as any;
+  } else {
+    nextParts.push(nextPart as any);
+  }
+
+  const updatedMessage: UIMessage = {
+    ...currentAssistantMessage,
+    parts: nextParts,
+  };
+
+  chat.messages.splice(messageIndex, 1, updatedMessage as any);
+
+  if (
+    chunk.type === 'tool-input-available' ||
+    chunk.type === 'tool-input-error' ||
+    chunk.type === 'tool-output-available' ||
+    chunk.type === 'tool-output-error' ||
+    chunk.type === 'tool-output-denied'
+  ) {
+    await upsertUiMessage(
+      updatedMessage,
+      activeAssistantParentId.value || undefined,
+      `tool-ui-chunk:${chunk.type}`
+    );
+  }
+
+  scrollToBottom();
+};
+
+const handleUiChunk = async (chunk: unknown) => {
+  if (!isStreamBoundToCurrentThread()) return;
+  if (!isObjectRecord(chunk) || typeof chunk.type !== 'string') return;
+
+  if (chunk.type === 'text-delta') {
+    const delta = typeof chunk.delta === 'string' ? chunk.delta : '';
+    if (!delta) return;
+    handleStreamChunk(delta);
+    return;
+  }
+
+  if (chunk.type === 'finish' || chunk.type === 'abort') {
+    await handleResponseReceived(streamingAssistantText.value);
+    return;
+  }
+
+  if (chunk.type === 'error') {
+    const errorText =
+      typeof chunk.errorText === 'string' && chunk.errorText.trim().length > 0
+        ? chunk.errorText
+        : 'Unknown chat stream error';
+    console.error('[ChatView] UI stream error:', errorText);
+    if (streamingAssistantText.value.trim().length > 0) {
+      await handleResponseReceived(streamingAssistantText.value);
+    } else {
+      resetTransientState();
+    }
+    return;
+  }
+
+  await handleToolUiChunk(chunk as UIMessageChunk);
+};
+
+const handleToolApprovalRequest = async (request: any) => {
+  if (!isStreamBoundToCurrentThread()) return;
+  const assistantMessage = getOrCreateAssistantMessage();
+  const requestedToolCallId = request.toolCallId || request.toolCall?.toolCallId;
+  const existingPartIndex = assistantMessage.parts.findIndex(part => {
+    if (getApprovalId(part) === request.approvalId) return true;
+    if (!requestedToolCallId) return false;
+    return getToolCallIdFromPart(part) === requestedToolCallId;
+  });
+
+  const existingPart =
+    existingPartIndex >= 0 && isObjectRecord(assistantMessage.parts[existingPartIndex])
+      ? (assistantMessage.parts[existingPartIndex] as MessagePartRecord)
+      : undefined;
+
+  const approvalPart: MessagePartRecord = {
+    ...(existingPart || {}),
+    type: 'dynamic-tool',
+    toolName: request.toolCall?.toolName || existingPart?.toolName || 'tool',
+    toolCallId: requestedToolCallId || getToolCallIdFromPart(existingPart) || createMessageId(),
+    input: request.toolCall?.args ?? existingPart?.input ?? {},
     state: 'approval-requested',
     approval: {
       id: request.approvalId,
     },
-  } as any);
+  };
 
-  await upsertUiMessage(assistantMessage, activeAssistantParentId.value || undefined);
+  if (existingPartIndex >= 0) {
+    assistantMessage.parts.splice(existingPartIndex, 1, approvalPart as any);
+  } else {
+    assistantMessage.parts.push(approvalPart as any);
+  }
+
+  const assistantMessageToPersist =
+    existingPartIndex >= 0
+      ? ({
+          ...assistantMessage,
+          parts: [...assistantMessage.parts],
+        } as UIMessage)
+      : assistantMessage;
+  await upsertUiMessage(
+    assistantMessageToPersist,
+    activeAssistantParentId.value || undefined,
+    'tool-approval-request'
+  );
   scrollToBottom();
 };
 
@@ -840,7 +1356,11 @@ const handleToolApproval = async (message: UIMessage, part: any, approved: boole
       };
     }
 
-    await upsertUiMessage(message, activeAssistantParentId.value || undefined);
+    await upsertUiMessage(
+      message,
+      activeAssistantParentId.value || undefined,
+      approved ? 'tool-approval:approve' : 'tool-approval:reject'
+    );
   } catch (error) {
     console.error('Failed to approve tool:', error);
   } finally {
@@ -857,10 +1377,14 @@ onMounted(async () => {
   // Load threads on mount
   await refreshThreads();
 
-  // Setup tool approval request listener
-  window.electronAPI.chat.onToolApprovalRequest((request: any) => {
-    void handleToolApprovalRequest(request);
+  window.electronAPI.chat.removeAllListeners();
+  window.electronAPI.chat.onUiChunk((chunk: unknown) => {
+    void handleUiChunk(chunk);
   });
+});
+
+onUnmounted(() => {
+  window.electronAPI.chat.removeAllListeners();
 });
 </script>
 

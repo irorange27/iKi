@@ -4,7 +4,9 @@
       <div class="relative rounded-xl border chat-input-container">
         <input v-model="message" type="text" placeholder="Type a message..."
           class="w-full border-0 bg-transparent px-4 py-6 text-primary placeholder-muted focus:outline-none"
-          @keydown.enter="sendMessage" />
+          @keydown.enter="handleEnter"
+          @compositionstart="handleCompositionStart"
+          @compositionend="handleCompositionEnd" />
 
         <!-- Bottom toolbar -->
         <div class="flex items-center justify-between border-t border-color px-3 py-2">
@@ -141,9 +143,15 @@
                   d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             </button>
-            <button class="h-8 w-8 rounded-lg text-accent flex items-center justify-center icon-btn"
-              @click="sendMessage">
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn" :class="[
+              isLoading ? 'text-danger stop-btn' : 'text-accent',
+              isStopping ? 'is-stopping' : '',
+            ]" :aria-label="isLoading ? 'Stop generation' : 'Send message'" @click="isLoading ? stopStreaming() : sendMessage"
+              :disabled="isStopping">
+              <svg v-if="isLoading" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
@@ -156,9 +164,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { Chat } from '@ai-sdk/vue';
-import { convertToModelMessages, type UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -170,13 +178,15 @@ const props = defineProps<{
 
 const message = ref('');
 const isLoading = ref(false);
-
-const currentResponse = ref('');
+const isStopping = ref(false);
+const streamDebugRequestId = ref('');
 const selectedProvider = ref<any>(null);
 const selectedModel = ref('');
 const availableProviders = ref<any[]>([]);
 const availableModels = ref<string[]>([]);
 const isProviderConfigured = ref(false);
+const isComposing = ref(false);
+const justEndedComposition = ref(false);
 const showModelSelector = ref(false);
 const showToolSelector = ref(false);
 const availableTools = ref<any[]>([]);
@@ -275,7 +285,10 @@ watch(selectedProvider, () => {
 });
 
 // Emit events to parent
-const emit = defineEmits(['message-sent', 'response-received', 'stream-chunk', 'model-selected']);
+const emit = defineEmits([
+  'message-sent',
+  'model-selected',
+]);
 
 // Check if current provider is configured
 const checkProviderStatus = async () => {
@@ -293,26 +306,52 @@ const checkProviderStatus = async () => {
   }
 };
 
-// Setup streaming listeners
-const setupStreamListeners = () => {
-  window.electronAPI.chat.onChunk((chunk: string) => {
-    currentResponse.value += chunk;
-    emit('stream-chunk', chunk);
-  });
+const stopStreaming = async () => {
+  if (!isLoading.value || isStopping.value) return;
 
-  window.electronAPI.chat.onDone((fullText: string) => {
-    currentResponse.value = '';
+  isStopping.value = true;
+  console.log(
+    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value || 'unknown'}] stopStreaming requested`
+  );
+
+  try {
+    const result = await window.electronAPI.chat.stopStream();
+    if (!result?.success) {
+      console.warn('Stop stream request failed:', result?.error || 'Unknown error');
+      isLoading.value = false;
+      isStopping.value = false;
+    }
+  } catch (error) {
+    console.error('Failed to stop stream:', error);
     isLoading.value = false;
-    emit('response-received', fullText);
-  });
+    isStopping.value = false;
+  }
+};
 
-  window.electronAPI.chat.onError((error: string) => {
-    console.error('Chat error:', error);
-    currentResponse.value = '';
-    isLoading.value = false;
-  });
+const handleCompositionStart = () => {
+  isComposing.value = true;
+};
 
-  // Tool approval requests are handled in ChatView
+const handleCompositionEnd = () => {
+  isComposing.value = false;
+  justEndedComposition.value = true;
+  window.setTimeout(() => {
+    justEndedComposition.value = false;
+  }, 0);
+};
+
+const handleEnter = (event: KeyboardEvent) => {
+  if (
+    event.isComposing ||
+    event.keyCode === 229 ||
+    event.which === 229 ||
+    isComposing.value ||
+    justEndedComposition.value
+  ) {
+    return;
+  }
+
+  sendMessage();
 };
 
 const sendMessage = async () => {
@@ -335,16 +374,26 @@ const sendMessage = async () => {
   const userMessage = message.value.trim();
   message.value = '';
   isLoading.value = true;
-  currentResponse.value = '';
+  isStopping.value = false;
+  streamDebugRequestId.value = `req-${Date.now()}`;
+  console.log(
+    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] sendMessage provider=${selectedProvider.value.type} model=${selectedModel.value} toolCount=${selectedTools.value.length} promptLen=${userMessage.length}`
+  );
 
-  // Emit message-sent event with tools (this will add the message to chat.messages in ChatView)
-  emit('message-sent', userMessage, selectedModel.value, selectedTools.value);
+  // Emit message-sent and wait for ChatView to finish thread/message setup.
+  await new Promise<void>(resolve => {
+    let resolved = false;
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
+
+    emit('message-sent', userMessage, selectedModel.value, selectedTools.value, done);
+    window.setTimeout(done, 1500);
+  });
 
   try {
-    // Clear previous listeners and set up new ones
-    window.electronAPI.chat.removeAllListeners();
-    setupStreamListeners();
-
     // Convert chat.messages to AI SDK model messages for IPC
     // Note: The user message may not be in chat.messages yet (it's added in ChatView.handleMessageSent)
     // So we need to include it manually if it's not there
@@ -377,14 +426,10 @@ const sendMessage = async () => {
       return;
     }
 
-    const modelMessages = await convertToModelMessages(
-      uiMessages.map(({ id, ...message }) => message),
-      { ignoreIncompleteToolCalls: true }
-    );
-    const transportMessages = JSON.parse(JSON.stringify(modelMessages));
+    const transportMessages = JSON.parse(JSON.stringify(uiMessages));
 
     // Start streaming via IPC
-    await window.electronAPI.chat.stream({
+    const streamResult = await window.electronAPI.chat.stream({
       providerType: selectedProvider.value.type,
       model: selectedModel.value,
       messages: transportMessages,
@@ -393,9 +438,28 @@ const sendMessage = async () => {
           ? JSON.parse(JSON.stringify(selectedTools.value))
           : undefined,
     });
+
+    if (streamResult?.success === false) {
+      throw new Error(streamResult?.error || 'Stream failed');
+    }
+
+    if (streamResult?.awaitingApproval) {
+      console.log(
+        `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] awaitingApproval=true pause-for-user-approval`
+      );
+      isLoading.value = false;
+      isStopping.value = false;
+    } else {
+      isLoading.value = false;
+      isStopping.value = false;
+    }
+    console.log(
+      `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] chat.stream resolved`
+    );
   } catch (error: any) {
     console.error('Failed to send message:', error);
     isLoading.value = false;
+    isStopping.value = false;
     // Remove the user message if failed (it was already added to chat.messages in ChatView)
     // The error handler will clean up the state
   }
@@ -404,11 +468,6 @@ const sendMessage = async () => {
 onMounted(async () => {
   await loadAvailableProviders();
   await loadAvailableTools();
-  setupStreamListeners();
-});
-
-onUnmounted(() => {
-  window.electronAPI.chat.removeAllListeners();
 });
 </script>
 <style scoped>
@@ -439,6 +498,23 @@ button {
 
 .text-accent {
   color: var(--accent-color);
+}
+
+.text-danger {
+  color: var(--danger-color);
+}
+
+.stop-btn {
+  background-color: rgba(239, 68, 68, 0.18);
+}
+
+.stop-btn:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.28);
+  color: #ffffff;
+}
+
+.is-stopping {
+  opacity: 0.75;
 }
 
 .icon-btn:hover {

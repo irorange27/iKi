@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { tool } from 'ai';
+import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 import type { AgentTool, AgentMessage } from '../agent/types';
 
 /**
@@ -14,13 +15,15 @@ export interface ToolResult {
   error?: string;
 }
 
+type ApprovalPolicy = boolean | ToolNeedsApprovalFunction<unknown>;
+
 /**
  * Base class for all tools with built-in validation
  */
 export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   abstract name: string;
   abstract type: string;
-  abstract needsApproval?: boolean;
+  abstract needsApproval?: ApprovalPolicy;
   abstract description: string;
   abstract paramSchema: P;
 
@@ -177,7 +180,7 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   description: string;
   parameters: Record<string, unknown>;
   paramSchema?: P;
-  needsApproval?: boolean;
+  needsApproval?: ApprovalPolicy;
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
   return {

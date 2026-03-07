@@ -50,6 +50,10 @@ export interface AppConfig {
   toolModel: {
     model: string;
   };
+  toolExecution: {
+    shellApprovalMode: 'high-risk' | 'always' | 'never';
+    shellHighRiskPatterns: string[];
+  };
   agent: {
     enabled: boolean;
     systemPrompt: string;

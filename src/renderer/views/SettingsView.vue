@@ -90,6 +90,41 @@
         </div>
 
         <div class="config-group">
+          <h3>Shell Tool Approval</h3>
+          <p class="group-description">
+            Configure when shell commands require manual approval before execution.
+          </p>
+          <label class="input-label">
+            <span>Approval Mode</span>
+            <select
+              :value="config.toolExecution.shellApprovalMode"
+              @change="
+                updateToolExecution(
+                  'shellApprovalMode',
+                  ($event.target as HTMLSelectElement).value as AppConfig['toolExecution']['shellApprovalMode']
+                )
+              "
+            >
+              <option value="high-risk">Only High-risk Commands (Recommended)</option>
+              <option value="always">Always Require Approval</option>
+              <option value="never">Never Require Approval</option>
+            </select>
+          </label>
+          <label class="input-label">
+            <span>Custom High-risk Regex (one per line)</span>
+            <textarea
+              rows="5"
+              :value="shellHighRiskPatternText"
+              placeholder="Example: \\bgit\\s+push\\s+--force\\b"
+              @input="updateShellHighRiskPatterns(($event.target as HTMLTextAreaElement).value)"
+            />
+          </label>
+          <p class="group-description">
+            Patterns here are matched in high-risk mode and force approval when matched.
+          </p>
+        </div>
+
+        <div class="config-group">
           <h3>Language</h3>
           <label class="input-label">
             <select
@@ -652,6 +687,27 @@ const updateToolModel = (key: 'model', value: string) => {
   autoSave();
 };
 
+const updateToolExecution = <K extends keyof AppConfig['toolExecution']>(
+  key: K,
+  value: AppConfig['toolExecution'][K]
+) => {
+  config.value.toolExecution[key] = value;
+  autoSave();
+};
+
+const shellHighRiskPatternText = computed(() =>
+  (config.value.toolExecution.shellHighRiskPatterns || []).join('\n')
+);
+
+const updateShellHighRiskPatterns = (value: string) => {
+  const patterns = value
+    .split(/\r?\n/)
+    .map(pattern => pattern.trim())
+    .filter(Boolean)
+    .slice(0, 100);
+  updateToolExecution('shellHighRiskPatterns', patterns);
+};
+
 const resetSection = (section: keyof AppConfig) => {
   configStore.resetSection(section);
   saved.value = true;
@@ -688,7 +744,8 @@ onMounted(async () => {
 }
 
 .input-label input,
-.input-label select {
+.input-label select,
+.input-label textarea {
   width: 100%;
   padding: 8px 12px;
   margin-top: 6px;
@@ -697,6 +754,13 @@ onMounted(async () => {
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: var(--font-size);
+}
+
+.input-label textarea {
+  resize: vertical;
+  min-height: 96px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
 }
 
 .checkbox-label {

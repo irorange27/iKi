@@ -39,34 +39,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     send: (options: {
       providerType: string;
       model: string;
-      messages: Array<{ role: string; content: unknown }>;
+      messages: Array<Record<string, unknown>>;
       tools?: string[];
     }) => ipcRenderer.invoke('chat:send', options),
     stream: (options: {
       providerType: string;
       model: string;
-      messages: Array<{ role: string; content: unknown }>;
+      messages: Array<Record<string, unknown>>;
       tools?: string[];
     }) => ipcRenderer.invoke('chat:stream', options),
-    onChunk: (callback: (chunk: string) => void) => {
-      ipcRenderer.on('chat:chunk', (_event, chunk) => callback(chunk));
-    },
-    onDone: (callback: (fullText: string) => void) => {
-      ipcRenderer.on('chat:done', (_event, fullText) => callback(fullText));
-    },
-    onError: (callback: (error: string) => void) => {
-      ipcRenderer.on('chat:error', (_event, error) => callback(error));
-    },
-    onToolApprovalRequest: (callback: (request: unknown) => void) => {
-      ipcRenderer.on('chat:tool-approval-request', (_event, request) => callback(request));
+    stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
+    onUiChunk: (callback: (chunk: unknown) => void) => {
+      ipcRenderer.on('chat:ui-chunk', (_event, chunk) => callback(chunk));
     },
     approveTool: (approvalId: string, approved: boolean) => {
       return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);
     },
     removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('chat:chunk');
-      ipcRenderer.removeAllListeners('chat:done');
-      ipcRenderer.removeAllListeners('chat:error');
+      ipcRenderer.removeAllListeners('chat:ui-chunk');
     },
     threads: {
       list: () => ipcRenderer.invoke('chat:threads:list'),

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 
 /**
  * Agent framework type definitions using Zod schemas
@@ -38,11 +39,12 @@ export const AgentToolSchema = z.object({
   description: z.string(),
   parameters: z.record(z.string(), z.any()), // JSON Schema format for LLM
   paramSchema: z.any().optional(), // Optional Zod schema (z.ZodTypeAny) for parameter validation
-  needsApproval: z.boolean().default(false),
+  needsApproval: z.any().optional().default(false),
   handler: z.any(), // Function type: (args: Record<string, any>) => Promise<any>
 });
 
-export type AgentTool = z.infer<typeof AgentToolSchema> & {
+export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> & {
+  needsApproval?: boolean | ToolNeedsApprovalFunction<unknown>;
   handler: (args: unknown) => Promise<unknown>;
   paramSchema?: z.ZodTypeAny;
 };
