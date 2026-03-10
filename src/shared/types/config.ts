@@ -11,6 +11,11 @@ export interface AppConfig {
   ui: {
     fontSize: number; // 10-32px
     density: 'compact' | 'comfortable' | 'spacious';
+    chatContentPadding: number; // 8-40px
+    composerPadding: number; // 4-24px
+    messageBubblePaddingX: number; // 8-28px
+    messageBubblePaddingY: number; // 6-20px
+    messageGap: number; // 8-32px
   };
   network: {
     proxy: {

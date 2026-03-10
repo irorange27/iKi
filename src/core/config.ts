@@ -14,6 +14,11 @@ function getSystemConfig(): AppConfig {
       fontSize: scale > 1.5 ? 16 : 14,
       // Use spacious layout for high-resolution displays
       density: scale > 1.25 ? 'spacious' : scale < 1 ? 'compact' : 'comfortable',
+      chatContentPadding: 24,
+      composerPadding: 10,
+      messageBubblePaddingX: 16,
+      messageBubblePaddingY: 12,
+      messageGap: 18,
     },
     general: {
       language: locale || 'en',

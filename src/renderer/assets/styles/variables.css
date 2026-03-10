@@ -1,6 +1,11 @@
 :root {
   color-scheme: dark;
   --font-size: 15px;
+  --chat-content-padding: 24px;
+  --chat-composer-padding: 10px;
+  --chat-bubble-padding-x: 16px;
+  --chat-bubble-padding-y: 12px;
+  --chat-message-gap: 18px;
 
   /* 暗色主题（默认） - 保持原有高级感 */
   --bg-primary: #2a2d35;

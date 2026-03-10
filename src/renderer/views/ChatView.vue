@@ -20,7 +20,7 @@
       </div>
 
       <!-- Main Area -->
-      <div class="flex flex-1 items-center justify-center p-8 overflow-y-auto" ref="messagesContainer">
+      <div class="chat-main-area flex flex-1 items-center justify-center overflow-y-auto" ref="messagesContainer">
         <WelcomeScreen v-if="showWelcome && chat.messages.length === 0" @new-chat="handleNewChat" />
 
         <!-- Messages List -->
@@ -1448,39 +1448,132 @@ onUnmounted(() => {
   align-items: flex-start;
 }
 
+.chat-main-area {
+  padding: var(--chat-content-padding, 24px);
+}
+
 .messages-container {
   width: 100%;
-  max-width: 800px;
+  max-width: 860px;
   margin: 0 auto;
 }
 
 .message-wrapper {
-  margin-bottom: 16px;
+  margin-bottom: var(--chat-message-gap, 18px);
 }
 
 .message-wrapper.user .message-content {
   background: var(--bg-tertiary);
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
   margin-left: auto;
   width: fit-content;
-  max-width: 85%;
+  max-width: min(85%, 760px);
 }
 
 .message-wrapper.assistant .message-content {
   background: var(--bg-primary);
   border-radius: 12px;
-  padding: 12px 16px;
-  margin-right: 60px;
+  padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
+  max-width: min(100%, 760px);
+  margin-right: clamp(0px, 4vw, 56px);
 }
 
 .message-text {
-  line-height: 1.5;
+  color: var(--text-primary);
+  font-size: var(--font-size);
+  line-height: 1.72;
+  letter-spacing: 0.01em;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message-part + .message-part {
   margin-top: 12px;
+}
+
+.message-text.markdown-content :deep(p) {
+  margin: 0 0 0.9em;
+}
+
+.message-text.markdown-content :deep(h1),
+.message-text.markdown-content :deep(h2),
+.message-text.markdown-content :deep(h3) {
+  margin: 1.2em 0 0.6em;
+  line-height: 1.4;
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.message-text.markdown-content :deep(h1) {
+  font-size: 1.3em;
+}
+
+.message-text.markdown-content :deep(h2) {
+  font-size: 1.18em;
+}
+
+.message-text.markdown-content :deep(h3) {
+  font-size: 1.05em;
+}
+
+.message-text.markdown-content :deep(ul),
+.message-text.markdown-content :deep(ol) {
+  margin: 0.7em 0 0.95em 1.25em;
+  padding: 0;
+}
+
+.message-text.markdown-content :deep(li + li) {
+  margin-top: 0.28em;
+}
+
+.message-text.markdown-content :deep(blockquote) {
+  margin: 0.95em 0;
+  padding: 0.5em 0.9em;
+  border-left: 3px solid var(--accent-color);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.message-text.markdown-content :deep(a) {
+  color: var(--accent-color);
+  text-decoration: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent-color) 55%, transparent);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.message-text.markdown-content :deep(a:hover) {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
+.message-text.markdown-content :deep(hr) {
+  margin: 1.1em 0;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.message-text.markdown-content :deep(table) {
+  width: 100%;
+  margin: 0.9em 0;
+  border-collapse: collapse;
+  font-size: 0.93em;
+}
+
+.message-text.markdown-content :deep(th),
+.message-text.markdown-content :deep(td) {
+  padding: 0.45em 0.65em;
+  border: 1px solid var(--border-color);
+  text-align: left;
+  vertical-align: top;
+}
+
+.message-text.markdown-content :deep(th) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .message-text.markdown-content :deep(p:last-child) {
@@ -1597,6 +1690,30 @@ onUnmounted(() => {
   background: transparent;
   margin: 0;
   padding: 0 !important;
+}
+
+@media (max-width: 768px) {
+  .chat-main-area {
+    padding: max(10px, calc(var(--chat-content-padding, 24px) - 8px));
+  }
+
+  .messages-container {
+    max-width: 100%;
+  }
+
+  .message-wrapper.user .message-content,
+  .message-wrapper.assistant .message-content {
+    max-width: 100%;
+  }
+
+  .message-wrapper.assistant .message-content {
+    margin-right: 0;
+  }
+
+  .message-text {
+    font-size: calc(var(--font-size) - 1px);
+    line-height: 1.68;
+  }
 }
 
 .typing-cursor {

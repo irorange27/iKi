@@ -194,6 +194,82 @@
         </div>
 
         <div class="config-group">
+          <h3>
+            Chat Content Padding
+            <span class="value-badge">{{ config.ui.chatContentPadding }}px</span>
+          </h3>
+          <input
+            type="range"
+            min="8"
+            max="40"
+            :value="config.ui.chatContentPadding"
+            @input="
+              setUiMetric('chatContentPadding', parseInt(($event.target as HTMLInputElement).value))
+            "
+          />
+        </div>
+
+        <div class="config-group">
+          <h3>
+            Composer Padding
+            <span class="value-badge">{{ config.ui.composerPadding }}px</span>
+          </h3>
+          <input
+            type="range"
+            min="4"
+            max="24"
+            :value="config.ui.composerPadding"
+            @input="setUiMetric('composerPadding', parseInt(($event.target as HTMLInputElement).value))"
+          />
+        </div>
+
+        <div class="config-group">
+          <h3>
+            Bubble Horizontal Padding
+            <span class="value-badge">{{ config.ui.messageBubblePaddingX }}px</span>
+          </h3>
+          <input
+            type="range"
+            min="8"
+            max="28"
+            :value="config.ui.messageBubblePaddingX"
+            @input="
+              setUiMetric('messageBubblePaddingX', parseInt(($event.target as HTMLInputElement).value))
+            "
+          />
+        </div>
+
+        <div class="config-group">
+          <h3>
+            Bubble Vertical Padding
+            <span class="value-badge">{{ config.ui.messageBubblePaddingY }}px</span>
+          </h3>
+          <input
+            type="range"
+            min="6"
+            max="20"
+            :value="config.ui.messageBubblePaddingY"
+            @input="
+              setUiMetric('messageBubblePaddingY', parseInt(($event.target as HTMLInputElement).value))
+            "
+          />
+        </div>
+
+        <div class="config-group">
+          <h3>
+            Message Gap
+            <span class="value-badge">{{ config.ui.messageGap }}px</span>
+          </h3>
+          <input
+            type="range"
+            min="8"
+            max="32"
+            :value="config.ui.messageGap"
+            @input="setUiMetric('messageGap', parseInt(($event.target as HTMLInputElement).value))"
+          />
+        </div>
+
+        <div class="config-group">
           <h3>Interface Density</h3>
           <div class="density-options">
             <div
@@ -596,9 +672,9 @@ const getProviderTypeForModel = (model: string): string => {
 
 const menuItems = [
   { key: 'general', label: 'General', icon: Cog },
+  { key: 'ui', label: 'Appearance', icon: Palette },
   { key: 'provider', label: 'Providers', icon: Bot },
   // { key: "chat", label: "Chat", icon: MessageCircleMore },
-  // { key: "ui", label: "Appearance", icon: Palette },
   // { key: "network", label: "Network", icon: Globe },
   // { key: "security", label: "Security", icon: Lock },
   // { key: "advanced", label: "Advanced", icon: Zap },
@@ -632,6 +708,19 @@ const setFontSize = (size: number) => {
 
 const setDensity = (density: AppConfig['ui']['density']) => {
   configStore.updateUi('density', density);
+  autoSave();
+};
+
+const setUiMetric = (
+  key:
+    | 'chatContentPadding'
+    | 'composerPadding'
+    | 'messageBubblePaddingX'
+    | 'messageBubblePaddingY'
+    | 'messageGap',
+  value: number
+) => {
+  configStore.updateUi(key, value);
   autoSave();
 };
 

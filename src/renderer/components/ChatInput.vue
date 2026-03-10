@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4">
+  <div class="chat-input-outer">
     <div class="mx-auto max-w-3xl">
       <div class="relative rounded-xl border chat-input-container">
         <input v-model="message" type="text" placeholder="Type a message..."
@@ -471,6 +471,10 @@ onMounted(async () => {
 });
 </script>
 <style scoped>
+.chat-input-outer {
+  padding: var(--chat-composer-padding, 10px);
+}
+
 .chat-input-container {
   border-color: var(--border-color);
   background-color: var(--bg-tertiary);

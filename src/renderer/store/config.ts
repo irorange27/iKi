@@ -17,6 +17,11 @@ export const DEFAULT_CONFIG: AppConfig = {
   ui: {
     fontSize: 15,
     density: 'comfortable',
+    chatContentPadding: 24,
+    composerPadding: 10,
+    messageBubblePaddingX: 16,
+    messageBubblePaddingY: 12,
+    messageGap: 18,
   },
   network: {
     proxy: {
@@ -65,6 +70,16 @@ const mergeConfigWithDefaults = (rawConfig: Partial<AppConfig> | null | undefine
     ...DEFAULT_CONFIG,
     ...(rawConfig || {}),
   } as AppConfig;
+
+  merged.ui = {
+    ...DEFAULT_CONFIG.ui,
+    ...(rawConfig?.ui || {}),
+  };
+
+  merged.general = {
+    ...DEFAULT_CONFIG.general,
+    ...(rawConfig?.general || {}),
+  };
 
   merged.toolExecution = {
     ...DEFAULT_CONFIG.toolExecution,
@@ -139,7 +154,15 @@ export const useConfigStore = defineStore('config', {
       }
     },
     applyCssVariables() {
-      const { fontSize, density } = this.config.ui;
+      const {
+        fontSize,
+        density,
+        chatContentPadding,
+        composerPadding,
+        messageBubblePaddingX,
+        messageBubblePaddingY,
+        messageGap,
+      } = this.config.ui;
       const { theme: configTheme } = this.config.general;
 
       // Resolve 'system' theme
@@ -152,6 +175,11 @@ export const useConfigStore = defineStore('config', {
 
       const root = document.documentElement;
       root.style.setProperty('--font-size', `${fontSize}px`);
+      root.style.setProperty('--chat-content-padding', `${chatContentPadding}px`);
+      root.style.setProperty('--chat-composer-padding', `${composerPadding}px`);
+      root.style.setProperty('--chat-bubble-padding-x', `${messageBubblePaddingX}px`);
+      root.style.setProperty('--chat-bubble-padding-y', `${messageBubblePaddingY}px`);
+      root.style.setProperty('--chat-message-gap', `${messageGap}px`);
       root.setAttribute('data-density', density);
       root.setAttribute('data-theme', resolvedTheme);
     },
