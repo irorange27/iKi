@@ -13,6 +13,7 @@ import { getConfig, setConfig, migrateFromJson } from './core/db/database';
 import * as providerDb from './core/db/providers';
 import * as chatThreadDb from './core/db/chat_thread';
 import * as chatMessageDb from './core/db/chat_message';
+import * as memoryDb from './core/db/memory';
 import * as workspaceDb from './core/db/workspaces';
 import * as promptAppDb from './core/db/prompt_apps';
 import { getToolModel, generateTitleWithAgent } from './core/provider/tool_model';
@@ -905,16 +906,55 @@ ipcMain.handle('chat:messages:create', (_, message) => {
     throw error;
   }
 
+  try {
+    if (typeof message.message === 'string') {
+      memoryDb.addShortMemoryFromChatMessage({
+        thread_id: message.thread_id,
+        message_id: messageId,
+        message_json: message.message,
+      });
+      memoryDb.pruneShortMemory(message.thread_id);
+    }
+  } catch (error) {
+    console.warn('[Memory][Main] short memory insert failed:', getErrorMessage(error));
+  }
+
   const created = chatMessageDb.getChatMessage(messageId);
   console.log(
     `[ChatPersist][Main] create-success id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'}`
   );
   return created;
 });
-ipcMain.handle('chat:messages:update', (_, id, message) =>
-  chatMessageDb.updateChatMessage(id, message)
-);
+ipcMain.handle('chat:messages:update', (_, id, message) => {
+  const result = chatMessageDb.updateChatMessage(id, message);
+  try {
+    const existing = chatMessageDb.getChatMessage(id);
+    const threadId = message.thread_id || existing?.thread_id;
+    const messageJson = typeof message.message === 'string' ? message.message : existing?.message;
+    if (threadId && messageJson) {
+      memoryDb.addShortMemoryFromChatMessage({
+        thread_id: threadId,
+        message_id: id,
+        message_json: messageJson,
+      });
+      memoryDb.pruneShortMemory(threadId);
+    }
+  } catch (error) {
+    console.warn('[Memory][Main] short memory update failed:', getErrorMessage(error));
+  }
+  return result;
+});
 ipcMain.handle('chat:messages:delete', (_, id) => chatMessageDb.deleteChatMessage(id));
+
+// Memory Management
+ipcMain.handle('memory:short:list', (_, threadId, limit) =>
+  memoryDb.listShortMemory(threadId, limit)
+);
+ipcMain.handle('memory:short:add', (_, entry) => memoryDb.addShortMemory(entry));
+ipcMain.handle('memory:long:add', (_, entry) => memoryDb.addLongMemory(entry));
+ipcMain.handle('memory:long:search', (_, threadId, query, options) =>
+  memoryDb.searchLongMemory(threadId, query, options)
+);
 
 // Workspace Management
 ipcMain.handle('workspaces:list', () => workspaceDb.getWorkspaces());

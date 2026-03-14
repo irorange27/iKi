@@ -679,7 +679,7 @@ const menuItems = [
   // { key: "security", label: "Security", icon: Lock },
   // { key: "advanced", label: "Advanced", icon: Zap },
   // { key: "keybindings", label: "Keybindings", icon: Keyboard },
-  // { key: "memory", label: "Memory", icon: Brain },
+  { key: 'memory', label: 'Memory', icon: Brain },
 ];
 
 const themeOptions = ['light', 'dark', 'system'] as const;

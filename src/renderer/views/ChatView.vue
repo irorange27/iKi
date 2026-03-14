@@ -1489,6 +1489,10 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
+.message-text.markdown-content {
+  white-space: normal;
+}
+
 .message-part + .message-part {
   margin-top: 12px;
 }

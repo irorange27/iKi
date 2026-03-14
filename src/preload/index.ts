@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { AppConfig } from '../shared/types/config';
 import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
+import type { LongMemorySearchResult } from '../shared/types/memory';
 
 console.log('👋 This message is being logged by "preload.ts", included via Vite');
 
@@ -13,6 +14,22 @@ type ChatThreadInput = Partial<ChatThread>;
 type ChatMessageInput = Partial<ChatMessage>;
 type WorkspaceInput = Partial<Workspace>;
 type PromptAppInput = Partial<PromptApp>;
+type ShortMemoryInput = {
+  thread_id: string;
+  message_id: string;
+  role: string;
+  content: string;
+  emotion?: unknown;
+  importance?: number;
+};
+type LongMemoryInput = {
+  thread_id: string;
+  summary: string;
+  source_message_ids?: string[];
+  emotion?: unknown;
+  tags?: string[];
+  metadata?: unknown;
+};
 
 contextBridge.exposeInMainWorld('electronAPI', {
   config: {
@@ -104,6 +121,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   tools: {
     list: () => ipcRenderer.invoke('tools:list'),
+  },
+  memory: {
+    short: {
+      list: (threadId: string, limit?: number) =>
+        ipcRenderer.invoke('memory:short:list', threadId, limit),
+      add: (entry: ShortMemoryInput) => ipcRenderer.invoke('memory:short:add', entry),
+    },
+    long: {
+      add: (entry: LongMemoryInput) => ipcRenderer.invoke('memory:long:add', entry),
+      search: (
+        threadId: string,
+        query: string,
+        options?: { limit?: number; threshold?: number }
+      ): Promise<LongMemorySearchResult[]> =>
+        ipcRenderer.invoke('memory:long:search', threadId, query, options),
+    },
   },
   openSettings: () => ipcRenderer.send('open-settings'),
   closeWindow: () => ipcRenderer.send('close-window'),
