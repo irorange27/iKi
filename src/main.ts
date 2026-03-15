@@ -19,6 +19,7 @@ import * as promptAppDb from './core/db/prompt_apps';
 import { getToolModel, generateTitleWithAgent } from './core/provider/tool_model';
 import { registerStandardTools, defaultToolRegistry } from './core/tools';
 import { SimpleAgent } from './core/agent';
+import type { AppConfig } from './shared/types/config';
 import type { AgentMessage, AgentResult } from './core/agent';
 
 const getRendererDevServerUrl = () => process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL || 'http://localhost:5173';
@@ -620,6 +621,64 @@ const getPromptFromMessage = (message: ChatInputMessage | undefined): string => 
   return extractTextFromContent(message.content);
 };
 
+const getMemoryConfig = () => {
+  const appConfig = getConfig('app_config') as AppConfig | null;
+  return appConfig?.memory || null;
+};
+
+const formatMemoryLine = (entry: { summary: string; score: number; updated_at?: string }) => {
+  const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
+  const dateText = entry.updated_at ? new Date(entry.updated_at).toLocaleDateString() : '';
+  const summary = entry.summary.trim().replace(/\s+/g, ' ');
+  return dateText ? `- (${score}, ${dateText}) ${summary}` : `- (${score}) ${summary}`;
+};
+
+const buildMemorySystemMessage = (
+  entries: Array<{ summary: string; score: number; updated_at?: string }>
+): string => {
+  if (!entries.length) return '';
+  const lines = entries.map(formatMemoryLine);
+  return [
+    'Long-term memory (use only if relevant; ignore if unrelated):',
+    ...lines,
+  ].join('\n');
+};
+
+const injectMemoryIntoMessages = (
+  messages: ChatInputMessage[],
+  threadId?: string
+): ChatInputMessage[] => {
+  if (!threadId) return messages;
+  const memoryConfig = getMemoryConfig();
+  if (!memoryConfig?.enabled || !memoryConfig.autoRetrieve) return messages;
+
+  const lastMessage = messages[messages.length - 1];
+  const query = getPromptFromMessage(lastMessage);
+  if (!query.trim()) return messages;
+
+  const results = memoryDb.searchLongMemory(threadId, query, {
+    limit: memoryConfig.maxRetrievalCount,
+    threshold: memoryConfig.similarThreshold,
+  });
+
+  if (!results.length) return messages;
+  const systemContent = buildMemorySystemMessage(results);
+  if (!systemContent.trim()) return messages;
+
+  const insertIndex = messages.findIndex(message => message.role !== 'system');
+  const headIndex = insertIndex === -1 ? messages.length : insertIndex;
+  const memoryMessage: ChatInputMessage = {
+    role: 'system',
+    content: systemContent,
+  };
+
+  return [
+    ...messages.slice(0, headIndex),
+    memoryMessage,
+    ...messages.slice(headIndex),
+  ];
+};
+
 const pendingApprovalSessions = new Map<
   string,
   PendingApprovalSession
@@ -952,6 +1011,9 @@ ipcMain.handle('memory:short:list', (_, threadId, limit) =>
 );
 ipcMain.handle('memory:short:add', (_, entry) => memoryDb.addShortMemory(entry));
 ipcMain.handle('memory:long:add', (_, entry) => memoryDb.addLongMemory(entry));
+ipcMain.handle('memory:long:list', (_, threadId, limit) =>
+  memoryDb.listLongMemory(threadId, limit)
+);
 ipcMain.handle('memory:long:search', (_, threadId, query, options) =>
   memoryDb.searchLongMemory(threadId, query, options)
 );
@@ -1099,10 +1161,14 @@ ipcMain.handle(
       model: string;
       messages: ChatTransportMessage[];
       tools?: string[]; // Optional specific tools to enable
+      threadId?: string;
     }
   ) => {
     try {
-      const inputMessages = await toModelInputMessages(options.messages);
+      const inputMessages = injectMemoryIntoMessages(
+        await toModelInputMessages(options.messages),
+        options.threadId
+      );
 
       if (options.tools && options.tools.length > 0) {
         // Use Agent if tools are specified
@@ -1158,6 +1224,7 @@ ipcMain.handle(
       model: string;
       messages: ChatTransportMessage[];
       tools?: string[];
+      threadId?: string;
     }
   ) => {
     const webContents = event.sender as ChatWebContents;
@@ -1184,7 +1251,10 @@ ipcMain.handle(
     );
 
     try {
-      const inputMessages = await toModelInputMessages(options.messages);
+      const inputMessages = injectMemoryIntoMessages(
+        await toModelInputMessages(options.messages),
+        options.threadId
+      );
 
       if (options.tools && options.tools.length > 0) {
         const agent = new SimpleAgent({

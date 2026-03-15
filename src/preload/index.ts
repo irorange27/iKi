@@ -58,12 +58,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model: string;
       messages: Array<Record<string, unknown>>;
       tools?: string[];
+      threadId?: string;
     }) => ipcRenderer.invoke('chat:send', options),
     stream: (options: {
       providerType: string;
       model: string;
       messages: Array<Record<string, unknown>>;
       tools?: string[];
+      threadId?: string;
     }) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
     onUiChunk: (callback: (chunk: unknown) => void) => {
@@ -130,10 +132,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     long: {
       add: (entry: LongMemoryInput) => ipcRenderer.invoke('memory:long:add', entry),
+      list: (threadId: string, limit?: number) =>
+        ipcRenderer.invoke('memory:long:list', threadId, limit),
       search: (
         threadId: string,
         query: string,
-        options?: { limit?: number; threshold?: number }
+        options?: { limit?: number; threshold?: number; force?: boolean }
       ): Promise<LongMemorySearchResult[]> =>
         ipcRenderer.invoke('memory:long:search', threadId, query, options),
     },

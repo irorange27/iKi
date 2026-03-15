@@ -265,6 +265,16 @@ export const addLongMemory = (
   return stmt.run(data);
 };
 
+export const listLongMemory = (threadId: string, limit?: number): LongMemoryEntry[] => {
+  const safeLimit = typeof limit === 'number' ? limit : 50;
+  const rows = db
+    .prepare(
+      'SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?'
+    )
+    .all(threadId, safeLimit) as LongMemoryEntry[];
+  return rows;
+};
+
 export const updateLongMemory = (id: string, updates: Partial<LongMemoryEntry>) => {
   if (!id) return null;
   const now = nowIso();

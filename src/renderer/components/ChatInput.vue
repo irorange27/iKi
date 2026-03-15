@@ -174,6 +174,7 @@ declare const window: any;
 const props = defineProps<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   chat?: Chat<any>;
+  threadId?: string;
 }>();
 
 const message = ref('');
@@ -437,6 +438,7 @@ const sendMessage = async () => {
         selectedTools.value.length > 0
           ? JSON.parse(JSON.stringify(selectedTools.value))
           : undefined,
+      threadId: props.threadId,
     });
 
     if (streamResult?.success === false) {

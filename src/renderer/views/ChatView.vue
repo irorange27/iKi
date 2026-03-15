@@ -102,7 +102,12 @@
       </div>
 
       <!-- Input Area -->
-      <ChatInput :chat="chat" @message-sent="handleMessageSent" @model-selected="handleModelSelected" />
+      <ChatInput
+        :chat="chat"
+        :thread-id="currentThread?.id || ''"
+        @message-sent="handleMessageSent"
+        @model-selected="handleModelSelected"
+      />
     </div>
   </div>
 </template>

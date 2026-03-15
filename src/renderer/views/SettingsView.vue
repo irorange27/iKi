@@ -514,6 +514,131 @@
           </div>
         </template>
 
+        <div class="config-group memory-viewer">
+          <h3>Memory Viewer</h3>
+          <p class="group-description">
+            View short-term and long-term memory entries by chat thread, plus long-memory search
+            results.
+          </p>
+          <div class="memory-controls">
+            <label class="input-label">
+              <span>Thread</span>
+              <select
+                :value="selectedMemoryThreadId"
+                @change="selectMemoryThread(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="" disabled>Select a thread</option>
+                <option v-for="thread in memoryThreads" :key="thread.id" :value="thread.id">
+                  {{ thread.title || thread.id }}
+                </option>
+              </select>
+            </label>
+            <button
+              class="secondary-btn memory-refresh"
+              @click="refreshMemory"
+              :disabled="memoryLoading || !selectedMemoryThreadId"
+            >
+              {{ memoryLoading ? 'Loading...' : 'Refresh' }}
+            </button>
+          </div>
+          <p v-if="!memoryThreads.length" class="memory-empty">
+            No chat threads yet. Start a chat to generate memory entries.
+          </p>
+          <p v-if="memoryError" class="memory-error">{{ memoryError }}</p>
+
+          <div class="memory-panels">
+            <div class="memory-panel">
+              <div class="memory-panel-header">
+                <span>Short Memory</span>
+                <span class="memory-count">{{ shortMemoryEntries.length }}</span>
+              </div>
+              <div v-if="memoryLoading" class="memory-empty">Loading short memory...</div>
+              <div v-else-if="shortMemoryEntries.length === 0" class="memory-empty">
+                No short-term memory entries.
+              </div>
+              <ul v-else class="memory-list">
+                <li v-for="entry in shortMemoryEntries" :key="entry.id" class="memory-item">
+                  <div class="memory-item-meta">
+                    <span class="memory-role">{{ formatRole(entry.role) }}</span>
+                    <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
+                  </div>
+                  <div class="memory-item-content">{{ entry.content }}</div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="memory-panel">
+              <div class="memory-panel-header">
+                <span>Long Memory</span>
+                <span class="memory-count">{{ longMemoryEntries.length }}</span>
+              </div>
+              <div v-if="memoryLoading" class="memory-empty">Loading long memory...</div>
+              <div v-else-if="longMemoryEntries.length === 0" class="memory-empty">
+                No long-term memory entries.
+              </div>
+              <ul v-else class="memory-list">
+                <li v-for="entry in longMemoryEntries" :key="entry.id" class="memory-item">
+                  <div class="memory-item-meta">
+                    <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
+                  </div>
+                  <div class="memory-item-content">{{ entry.summary }}</div>
+                  <div v-if="formatJsonList(entry.tags)" class="memory-item-sub">
+                    Tags: {{ formatJsonList(entry.tags) }}
+                  </div>
+                  <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
+                    Emotion: {{ formatJson(entry.emotion) }}
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="memory-panel">
+            <div class="memory-panel-header">
+              <span>Search Long Memory</span>
+              <span v-if="memorySearchResults.length" class="memory-count">{{
+                memorySearchResults.length
+              }}</span>
+            </div>
+            <div class="memory-search">
+              <input
+                type="text"
+                :value="memorySearchQuery"
+                placeholder="Search long memory..."
+                @input="memorySearchQuery = ($event.target as HTMLInputElement).value"
+              />
+              <button
+                class="secondary-btn"
+                @click="runMemorySearch"
+                :disabled="memorySearchLoading || !selectedMemoryThreadId"
+              >
+                {{ memorySearchLoading ? 'Searching...' : 'Search' }}
+              </button>
+            </div>
+            <p v-if="memorySearchError" class="memory-error">{{ memorySearchError }}</p>
+            <div v-if="memorySearchLoading" class="memory-empty">Searching...</div>
+            <div v-else-if="!hasMemoryQuery" class="memory-empty">Enter a query to search.</div>
+            <div v-else-if="memorySearchResults.length === 0" class="memory-empty">
+              No search results.
+            </div>
+            <ul v-else class="memory-list">
+              <li v-for="entry in memorySearchResults" :key="entry.id" class="memory-item">
+                <div class="memory-item-meta">
+                  <span class="memory-score">Score {{ entry.score.toFixed(3) }}</span>
+                  <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
+                </div>
+                <div class="memory-item-content">{{ entry.summary }}</div>
+                <div v-if="formatJsonList(entry.tags)" class="memory-item-sub">
+                  Tags: {{ formatJsonList(entry.tags) }}
+                </div>
+                <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
+                  Emotion: {{ formatJson(entry.emotion) }}
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
         <button class="reset-btn" @click="resetSection('memory')">Reset Memory</button>
       </section>
     </main>
@@ -530,7 +655,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   Cog,
@@ -550,6 +675,12 @@ import {
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
 import { useConfigStore } from '../store/config';
 import type { AppConfig } from '../../shared/types/config';
+import type { ChatThread } from '../../shared/types/chat';
+import type {
+  ShortMemoryEntry,
+  LongMemoryEntry,
+  LongMemorySearchResult,
+} from '../../shared/types/memory';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -566,6 +697,17 @@ const toolModelTestResult = ref<{
   status: 'success' | 'warning' | 'error';
   message: string;
 } | null>(null);
+const memoryThreads = ref<ChatThread[]>([]);
+const selectedMemoryThreadId = ref('');
+const shortMemoryEntries = ref<ShortMemoryEntry[]>([]);
+const longMemoryEntries = ref<LongMemoryEntry[]>([]);
+const memorySearchQuery = ref('');
+const memorySearchResults = ref<LongMemorySearchResult[]>([]);
+const memoryLoading = ref(false);
+const memorySearchLoading = ref(false);
+const memoryError = ref('');
+const memorySearchError = ref('');
+const memoryThreadsLoaded = ref(false);
 
 // Load providers
 const loadProviders = async () => {
@@ -787,6 +929,7 @@ const updateToolExecution = <K extends keyof AppConfig['toolExecution']>(
 const shellHighRiskPatternText = computed(() =>
   (config.value.toolExecution.shellHighRiskPatterns || []).join('\n')
 );
+const hasMemoryQuery = computed(() => memorySearchQuery.value.trim().length > 0);
 
 const updateShellHighRiskPatterns = (value: string) => {
   const patterns = value
@@ -813,11 +956,118 @@ const formatLabel = (key: string) => {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
 };
 
+const formatTimestamp = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
+
+const formatRole = (role: string) => {
+  if (!role) return 'Unknown';
+  return role.charAt(0).toUpperCase() + role.slice(1);
+};
+
+const formatJsonList = (raw: string | null | undefined) => {
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.join(', ');
+    if (typeof parsed === 'string') return parsed;
+    return JSON.stringify(parsed);
+  } catch {
+    return raw;
+  }
+};
+
+const formatJson = (raw: string | null | undefined) => {
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'string') return parsed;
+    return JSON.stringify(parsed);
+  } catch {
+    return raw;
+  }
+};
+
+const loadMemoryThreads = async () => {
+  if (memoryThreadsLoaded.value) return;
+  try {
+    const threads = await window.electronAPI.chat.threads.list();
+    memoryThreads.value = Array.isArray(threads) ? threads : [];
+    memoryThreadsLoaded.value = true;
+    if (!selectedMemoryThreadId.value && memoryThreads.value.length > 0) {
+      selectedMemoryThreadId.value = memoryThreads.value[0].id;
+      await refreshMemory();
+    }
+  } catch (error: any) {
+    memoryError.value = `Failed to load threads: ${error?.message || 'Unknown error'}`;
+  }
+};
+
+const selectMemoryThread = async (threadId: string) => {
+  selectedMemoryThreadId.value = threadId;
+  memorySearchResults.value = [];
+  memorySearchError.value = '';
+  await refreshMemory();
+};
+
+const refreshMemory = async () => {
+  if (!selectedMemoryThreadId.value) return;
+  memoryLoading.value = true;
+  memoryError.value = '';
+  try {
+    const [shortEntries, longEntries] = await Promise.all([
+      window.electronAPI.memory.short.list(selectedMemoryThreadId.value, 50),
+      window.electronAPI.memory.long.list(selectedMemoryThreadId.value, 25),
+    ]);
+    shortMemoryEntries.value = Array.isArray(shortEntries) ? shortEntries : [];
+    longMemoryEntries.value = Array.isArray(longEntries) ? longEntries : [];
+  } catch (error: any) {
+    memoryError.value = `Failed to load memory: ${error?.message || 'Unknown error'}`;
+  } finally {
+    memoryLoading.value = false;
+  }
+};
+
+const runMemorySearch = async () => {
+  if (!selectedMemoryThreadId.value) return;
+  if (!memorySearchQuery.value.trim()) {
+    memorySearchResults.value = [];
+    return;
+  }
+  memorySearchLoading.value = true;
+  memorySearchError.value = '';
+  try {
+    const results = await window.electronAPI.memory.long.search(
+      selectedMemoryThreadId.value,
+      memorySearchQuery.value.trim(),
+      {
+        limit: config.value.memory.maxRetrievalCount,
+        threshold: config.value.memory.similarThreshold,
+        force: true,
+      }
+    );
+    memorySearchResults.value = Array.isArray(results) ? results : [];
+  } catch (error: any) {
+    memorySearchError.value = `Search failed: ${error?.message || 'Unknown error'}`;
+  } finally {
+    memorySearchLoading.value = false;
+  }
+};
+
 onMounted(async () => {
   if (!configStore.initialized) {
     configStore.initialize();
   }
   await loadProviders();
+  await loadMemoryThreads();
+});
+
+watch(activeSection, section => {
+  if (section === 'memory') {
+    void loadMemoryThreads();
+  }
 });
 </script>
 
@@ -1091,6 +1341,126 @@ input:checked + .slider::before {
   color: var(--text-secondary);
   font-size: 0.95em;
   margin-bottom: 16px;
+}
+
+.memory-viewer .group-description {
+  margin-bottom: 12px;
+}
+
+.memory-controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.memory-controls .input-label {
+  flex: 1;
+  min-width: 220px;
+  margin-bottom: 0;
+}
+
+.memory-refresh {
+  height: 38px;
+}
+
+.memory-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.memory-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  padding: 12px;
+}
+
+.memory-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.memory-count {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.memory-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.memory-item {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+}
+
+.memory-item-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.memory-item-content {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memory-item-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.memory-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.memory-search input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.memory-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 6px 0;
+}
+
+.memory-error {
+  font-size: 12px;
+  color: var(--danger-color);
+  margin-bottom: 8px;
 }
 
 /* 主题按钮组 */
