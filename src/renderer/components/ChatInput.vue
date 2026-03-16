@@ -37,7 +37,7 @@
             >
               <button
                 class="relative h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
-                :class="{ 'text-accent': selectedSkillIds.length > 0 }"
+                :class="{ 'text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
                 @click="showSkillSelector = !showSkillSelector"
                 @mouseenter="openSkillSelector"
                 @mouseleave="scheduleCloseSkillSelector"
@@ -51,10 +51,10 @@
                   />
                 </svg>
                 <span
-                  v-if="selectedSkillIds.length > 0"
+                  v-if="isAutoSkillMode || selectedSkillIds.length > 0"
                   class="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#4a9eff] text-[9px] text-white"
                 >
-                  {{ selectedSkillIds.length }}
+                  {{ isAutoSkillMode ? 'A' : selectedSkillIds.length }}
                 </span>
               </button>
 
@@ -75,8 +75,31 @@
                   </div>
 
                   <div class="mt-2 flex items-center gap-2">
-                    <button class="tool-action-btn" @click="selectAllSkills">Select all</button>
-                    <button class="tool-action-btn" @click="clearAllSkills">Clear</button>
+                    <button
+                      class="tool-mode-btn"
+                      :class="{ active: isAutoSkillMode }"
+                      @click="toggleAutoSkillMode"
+                    >
+                      Auto
+                    </button>
+                    <div class="flex-1" />
+                    <button
+                      class="tool-action-btn"
+                      :disabled="isAutoSkillMode"
+                      @click="selectAllSkills"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      class="tool-action-btn"
+                      :disabled="isAutoSkillMode"
+                      @click="clearAllSkills"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div v-if="isAutoSkillMode" class="mt-2 text-xs text-accent leading-snug">
+                    iKi will automatically pick relevant skills based on your message.
                   </div>
                 </div>
                 <div class="max-h-72 overflow-y-auto p-2">
@@ -90,7 +113,11 @@
                     v-for="skill in availableSkills"
                     :key="skill.id"
                     class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-hover flex items-center justify-between group"
-                    :class="{ 'text-accent bg-hover/50': isSkillSelected(skill.id) }"
+                    :disabled="isAutoSkillMode"
+                    :class="{
+                      'text-accent bg-hover/50': isSkillSelected(skill.id) && !isAutoSkillMode,
+                      'opacity-60 cursor-not-allowed': isAutoSkillMode,
+                    }"
                     @click="toggleSkill(skill.id)"
                   >
                     <div class="flex flex-col">
@@ -330,8 +357,10 @@ const availableTools = ref<any[]>([]);
 const availableSkills = ref<any[]>([]);
 const selectedTools = ref<string[]>([]);
 const selectedSkillIds = ref<string[]>([]);
+const skillMode = ref<'manual' | 'auto'>('auto');
 const toolMode = ref<'manual' | 'auto'>('manual');
 const isAutoToolMode = computed(() => toolMode.value === 'auto');
+const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 const toolSelectorCloseTimer = ref<number | null>(null);
 const skillSelectorCloseTimer = ref<number | null>(null);
 
@@ -419,7 +448,12 @@ const loadAvailableSkills = async () => {
   }
 };
 
+const toggleAutoSkillMode = () => {
+  skillMode.value = isAutoSkillMode.value ? 'manual' : 'auto';
+};
+
 const toggleSkill = (skillId: string) => {
+  if (isAutoSkillMode.value) return;
   const index = selectedSkillIds.value.indexOf(skillId);
   if (index === -1) {
     selectedSkillIds.value.push(skillId);
@@ -433,12 +467,14 @@ const isSkillSelected = (skillId: string) => {
 };
 
 const selectAllSkills = () => {
+  if (isAutoSkillMode.value) return;
   selectedSkillIds.value = availableSkills.value
     .map((skill: any) => (skill && typeof skill.id === 'string' ? skill.id : ''))
     .filter((id: string) => typeof id === 'string' && id.trim().length > 0);
 };
 
 const clearAllSkills = () => {
+  if (isAutoSkillMode.value) return;
   selectedSkillIds.value = [];
 };
 
@@ -623,7 +659,7 @@ const sendMessage = async () => {
   isStopping.value = false;
   streamDebugRequestId.value = `req-${Date.now()}`;
   console.log(
-    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] sendMessage provider=${selectedProvider.value.type} model=${selectedModel.value} toolMode=${isAutoToolMode.value ? 'auto' : 'manual'} toolCount=${isAutoToolMode.value ? 0 : selectedTools.value.length} skillCount=${selectedSkillIds.value.length} promptLen=${userMessage.length}`
+    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] sendMessage provider=${selectedProvider.value.type} model=${selectedModel.value} toolMode=${isAutoToolMode.value ? 'auto' : 'manual'} toolCount=${isAutoToolMode.value ? 0 : selectedTools.value.length} skillMode=${isAutoSkillMode.value ? 'auto' : 'manual'} skillCount=${isAutoSkillMode.value ? 0 : selectedSkillIds.value.length} promptLen=${userMessage.length}`
   );
 
   // Emit message-sent and wait for ChatView to finish thread/message setup.
@@ -685,10 +721,8 @@ const sendMessage = async () => {
           : selectedTools.value.length > 0
           ? JSON.parse(JSON.stringify(selectedTools.value))
           : undefined,
-      skillIds:
-        selectedSkillIds.value.length > 0
-          ? JSON.parse(JSON.stringify(selectedSkillIds.value))
-          : undefined,
+      skillMode: isAutoSkillMode.value ? 'auto' : 'manual',
+      skillIds: isAutoSkillMode.value ? undefined : JSON.parse(JSON.stringify(selectedSkillIds.value)),
       threadId: props.threadId,
     });
 

@@ -1668,30 +1668,62 @@ ipcMain.handle(
         options.threadId
       );
 
-      let normalizedSkillIds = normalizeSkillIds(options.skillIds);
-      if (
-        normalizedSkillIds.length === 0 &&
-        !Array.isArray(options.skillIds) &&
-        typeof options.threadId === 'string' &&
-        options.threadId.trim().length > 0
-      ) {
+      const skillMode = options.skillMode === 'auto' ? 'auto' : 'manual';
+      const normalizedThreadId =
+        typeof options.threadId === 'string' ? options.threadId.trim() : '';
+
+      let pinnedSkillIds: string[] = [];
+      if (normalizedThreadId) {
         try {
-          const thread = chatThreadDb.getChatThread(options.threadId);
+          const thread = chatThreadDb.getChatThread(normalizedThreadId);
           if (thread?.skill_ids) {
-            normalizedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
+            pinnedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
           }
         } catch (error) {
           console.warn('[Main] Failed to resolve skill_ids from thread:', error);
         }
       }
-      if (options.threadId && Array.isArray(options.skillIds)) {
-        try {
-          chatThreadDb.updateChatThread(options.threadId, {
-            skill_ids: JSON.stringify(normalizedSkillIds),
-          });
-        } catch (error) {
-          console.warn('[Main] Failed to persist skill_ids for thread:', error);
+
+      let normalizedSkillIds = normalizeSkillIds(options.skillIds);
+
+      if (skillMode === 'manual') {
+        // Manual mode: use explicit skills if provided, otherwise fall back to pinned thread skills.
+        if (normalizedSkillIds.length === 0 && !Array.isArray(options.skillIds)) {
+          normalizedSkillIds = pinnedSkillIds;
         }
+
+        // Persist explicit selection (including empty array to clear pinned skills).
+        if (normalizedThreadId && Array.isArray(options.skillIds)) {
+          try {
+            chatThreadDb.updateChatThread(normalizedThreadId, {
+              skill_ids: JSON.stringify(normalizedSkillIds),
+            });
+          } catch (error) {
+            console.warn('[Main] Failed to persist skill_ids for thread:', error);
+          }
+        }
+      } else {
+        // Auto mode: pick relevant skills per message using tool model, plus pinned thread skills.
+        const availableSkillCatalog = (await listSkills()).map(skill => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          source: skill.source,
+        }));
+
+        const autoSelectedSkillIds = await selectSkillsWithAgent({
+          messages: toLlmChatMessages(inputMessages),
+          availableSkills: availableSkillCatalog,
+        });
+
+        if (autoSelectedSkillIds.length > 0) {
+          console.log('[Main] Auto-selected skills:', autoSelectedSkillIds);
+        }
+
+        const union = new Set<string>();
+        for (const id of pinnedSkillIds) union.add(id);
+        for (const id of autoSelectedSkillIds) union.add(id);
+        normalizedSkillIds = Array.from(union);
       }
 
       const skillsSystemPrompt =
@@ -1787,30 +1819,59 @@ ipcMain.handle(
         options.threadId
       );
 
-      let normalizedSkillIds = normalizeSkillIds(options.skillIds);
-      if (
-        normalizedSkillIds.length === 0 &&
-        !Array.isArray(options.skillIds) &&
-        typeof options.threadId === 'string' &&
-        options.threadId.trim().length > 0
-      ) {
+      const skillMode = options.skillMode === 'auto' ? 'auto' : 'manual';
+      const normalizedThreadId =
+        typeof options.threadId === 'string' ? options.threadId.trim() : '';
+
+      let pinnedSkillIds: string[] = [];
+      if (normalizedThreadId) {
         try {
-          const thread = chatThreadDb.getChatThread(options.threadId);
+          const thread = chatThreadDb.getChatThread(normalizedThreadId);
           if (thread?.skill_ids) {
-            normalizedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
+            pinnedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
           }
         } catch (error) {
           console.warn('[Main] Failed to resolve skill_ids from thread:', error);
         }
       }
-      if (options.threadId && Array.isArray(options.skillIds)) {
-        try {
-          chatThreadDb.updateChatThread(options.threadId, {
-            skill_ids: JSON.stringify(normalizedSkillIds),
-          });
-        } catch (error) {
-          console.warn('[Main] Failed to persist skill_ids for thread:', error);
+
+      let normalizedSkillIds = normalizeSkillIds(options.skillIds);
+
+      if (skillMode === 'manual') {
+        if (normalizedSkillIds.length === 0 && !Array.isArray(options.skillIds)) {
+          normalizedSkillIds = pinnedSkillIds;
         }
+
+        if (normalizedThreadId && Array.isArray(options.skillIds)) {
+          try {
+            chatThreadDb.updateChatThread(normalizedThreadId, {
+              skill_ids: JSON.stringify(normalizedSkillIds),
+            });
+          } catch (error) {
+            console.warn('[Main] Failed to persist skill_ids for thread:', error);
+          }
+        }
+      } else {
+        const availableSkillCatalog = (await listSkills()).map(skill => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          source: skill.source,
+        }));
+
+        const autoSelectedSkillIds = await selectSkillsWithAgent({
+          messages: toLlmChatMessages(inputMessages),
+          availableSkills: availableSkillCatalog,
+        });
+
+        if (autoSelectedSkillIds.length > 0) {
+          console.log('[Main] Auto-selected skills:', autoSelectedSkillIds);
+        }
+
+        const union = new Set<string>();
+        for (const id of pinnedSkillIds) union.add(id);
+        for (const id of autoSelectedSkillIds) union.add(id);
+        normalizedSkillIds = Array.from(union);
       }
 
       const skillsSystemPrompt =
@@ -1838,8 +1899,6 @@ ipcMain.handle(
         }
       }
 
-      const normalizedThreadId =
-        typeof options.threadId === 'string' ? options.threadId.trim() : '';
       if (normalizedThreadId) {
         try {
           const thread = chatThreadDb.getChatThread(normalizedThreadId);

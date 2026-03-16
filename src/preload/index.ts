@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       messages: Array<Record<string, unknown>>;
       tools?: string[];
       skillIds?: string[];
+      skillMode?: 'manual' | 'auto';
       threadId?: string;
     }) => ipcRenderer.invoke('chat:send', options),
     stream: (options: {
@@ -67,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       messages: Array<Record<string, unknown>>;
       tools?: string[];
       skillIds?: string[];
+      skillMode?: 'manual' | 'auto';
       threadId?: string;
     }) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),

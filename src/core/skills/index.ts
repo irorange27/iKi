@@ -252,15 +252,36 @@ export const buildSkillsSystemPrompt = async (skillIds: string[]): Promise<strin
   const ids = normalizeSkillIds(skillIds);
   if (ids.length === 0) return '';
 
+  const MAX_SKILL_CHARS = 12000;
+  const MAX_TOTAL_CHARS = 40000;
+
   const parts: string[] = [];
+  let totalChars = 0;
+  let totalTruncated = false;
   for (const id of ids) {
     const record = await getSkillRecordById(id);
     if (!record) continue;
     const content = await safeReadTextFile(record.filePath);
-    if (!content.trim()) continue;
+    const trimmed = content.trim();
+    if (!trimmed) continue;
 
-    parts.push(`SKILL: ${record.name}\n${content.trim()}`);
+    const clipped = truncateText(trimmed, MAX_SKILL_CHARS);
+    let chunk = `SKILL: ${record.name} (${id})\n${clipped.text.trim()}`;
+    if (clipped.truncated) {
+      chunk += '\n\n[Skill content truncated]';
+    }
+
+    const nextLen = chunk.length + (parts.length > 0 ? 2 : 0);
+    if (totalChars + nextLen > MAX_TOTAL_CHARS) {
+      totalTruncated = true;
+      break;
+    }
+
+    parts.push(chunk);
+    totalChars += nextLen;
   }
 
-  return parts.join('\n\n');
+  if (parts.length === 0) return '';
+  const built = parts.join('\n\n');
+  return totalTruncated ? `${built}\n\n[Additional skills omitted due to size limits]` : built;
 };
