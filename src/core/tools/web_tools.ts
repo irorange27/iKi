@@ -6,8 +6,13 @@ import type { AppConfig } from '../../shared/types/config';
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
 const MIN_NETWORK_TIMEOUT_MS = 1000;
 const MAX_NETWORK_TIMEOUT_MS = 60000;
+const DEFAULT_NETWORK_RETRY_ATTEMPTS = 0;
+const MIN_NETWORK_RETRY_ATTEMPTS = 0;
+const MAX_NETWORK_RETRY_ATTEMPTS = 10;
 const DEFAULT_SEARCH_RESULT_LIMIT = 5;
 const MAX_SEARCH_RESULT_LIMIT = 10;
+// Give search a bit more time than the global default, but keep it interactive.
+const MIN_WEB_SEARCH_TIMEOUT_MS = 12000;
 const DEFAULT_FETCH_MAX_CHARS = 12000;
 const MIN_FETCH_MAX_CHARS = 500;
 const MAX_FETCH_MAX_CHARS = 80000;
@@ -26,19 +31,86 @@ const getNetworkTimeoutMs = (): number => {
   );
 };
 
-const fetchWithTimeout = async (url: string, init?: RequestInit): Promise<Response> => {
-  const controller = new AbortController();
-  const timeout = getNetworkTimeoutMs();
-  const timer = setTimeout(() => controller.abort(), timeout);
+const getNetworkRetryAttempts = (): number => {
+  const rawConfig = getConfig('app_config') as Partial<AppConfig> | null;
+  const retries = rawConfig?.network?.retryAttempts;
 
-  try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+  if (typeof retries !== 'number' || !Number.isFinite(retries)) {
+    return DEFAULT_NETWORK_RETRY_ATTEMPTS;
   }
+
+  return Math.min(
+    MAX_NETWORK_RETRY_ATTEMPTS,
+    Math.max(MIN_NETWORK_RETRY_ATTEMPTS, Math.trunc(retries))
+  );
+};
+
+const getWebSearchTimeoutMs = (): number => Math.max(getNetworkTimeoutMs(), MIN_WEB_SEARCH_TIMEOUT_MS);
+
+const sleep = async (ms: number): Promise<void> => {
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  await new Promise<void>(resolve => setTimeout(resolve, ms));
+};
+
+const isAbortError = (err: unknown): boolean =>
+  err instanceof Error ? err.name === 'AbortError' : false;
+
+const isRetryableStatus = (status: number): boolean =>
+  status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+
+const normalizeTimeoutError = (timeout: number) =>
+  new Error(`Network request timed out after ${timeout} ms`);
+
+const fetchWithTimeout = async (
+  url: string,
+  init?: RequestInit,
+  options?: { timeoutMs?: number; retries?: number }
+): Promise<Response> => {
+  const timeout = typeof options?.timeoutMs === 'number' ? Math.trunc(options.timeoutMs) : getNetworkTimeoutMs();
+  const retries =
+    typeof options?.retries === 'number' ? Math.trunc(options.retries) : getNetworkRetryAttempts();
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+
+      if (response.ok) return response;
+
+      if (attempt >= retries || !isRetryableStatus(response.status)) {
+        return response;
+      }
+
+      // Drain body to avoid leaking resources before retrying.
+      try {
+        await response.arrayBuffer();
+      } catch {
+        // ignore
+      }
+    } catch (err) {
+      lastError = err;
+      if (isAbortError(err)) {
+        lastError = normalizeTimeoutError(timeout);
+      }
+
+      if (attempt >= retries) {
+        throw lastError;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Basic backoff: 250ms, 500ms, 1000ms, 2000ms...
+    await sleep(Math.min(2000, 250 * Math.pow(2, attempt)));
+  }
+
+  throw lastError ?? new Error('Network request failed');
 };
 
 const entityMap: Record<string, string> = {
@@ -111,22 +183,57 @@ const normalizeSearchHref = (href: string): string | null => {
   const trimmed = href.trim();
   if (!trimmed) return null;
 
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
+  const tryDecodeUddg = (raw: string): string => {
+    // DuckDuckGo occasionally double-encodes the `uddg` value; decode at most twice.
+    let decoded = raw;
+    for (let i = 0; i < 2; i += 1) {
+      try {
+        const next = decodeURIComponent(decoded);
+        if (next === decoded) break;
+        decoded = next;
+      } catch {
+        break;
+      }
+    }
+    return decoded;
+  };
 
-  if (trimmed.startsWith('//')) {
-    return `https:${trimmed}`;
-  }
-
-  if (trimmed.startsWith('/l/?')) {
+  const unwrapDuckDuckGoRedirect = (urlValue: string): string | null => {
     try {
-      const url = new URL(`https://duckduckgo.com${trimmed}`);
-      const target = url.searchParams.get('uddg');
-      if (target) return decodeURIComponent(target);
+      const parsed = new URL(urlValue);
+      const host = parsed.hostname.toLowerCase();
+      if (!host.endsWith('duckduckgo.com')) return null;
+      if (!parsed.pathname.startsWith('/l/')) return null;
+
+      const uddg = parsed.searchParams.get('uddg');
+      if (!uddg) return null;
+      let target = tryDecodeUddg(uddg).trim();
+      if (!target) return null;
+
+      if (target.startsWith('//')) target = `https:${target}`;
+      if (!target.startsWith('http://') && !target.startsWith('https://')) return null;
+
+      try {
+        const normalized = new URL(target);
+        if (normalized.protocol !== 'http:' && normalized.protocol !== 'https:') return null;
+        return normalized.toString();
+      } catch {
+        return target;
+      }
     } catch {
       return null;
     }
+  };
+
+  const candidate = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
+
+  if (candidate.startsWith('/l/')) {
+    const wrapper = `https://duckduckgo.com${candidate}`;
+    return unwrapDuckDuckGoRedirect(wrapper) ?? wrapper;
+  }
+
+  if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+    return unwrapDuckDuckGoRedirect(candidate) ?? candidate;
   }
 
   return null;
@@ -138,19 +245,86 @@ const parseDuckDuckGoResults = (
 ): Array<{ title: string; url: string }> => {
   const results: Array<{ title: string; url: string }> = [];
   const seen = new Set<string>();
-  const resultLinkRegex =
-    /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
 
-  let match: RegExpExecArray | null = resultLinkRegex.exec(html);
+  const extractAttribute = (attrs: string, name: string): string | null => {
+    // Support double-quoted, single-quoted, and unquoted attribute values.
+    const regex = new RegExp(
+      `${name}\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))`,
+      'i'
+    );
+    const match = attrs.match(regex);
+    const value = (match?.[1] ?? match?.[2] ?? match?.[3] ?? '').trim();
+    return value ? value : null;
+  };
+
+  const stripTags = (value: string): string => value.replace(/<[^>]*>/g, ' ');
+
+  // DuckDuckGo's HTML is not stable about attribute ordering. Parse anchors and
+  // extract `class`/`href` explicitly instead of relying on a single regex.
+  const anchorRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null = anchorRegex.exec(html);
   while (match && results.length < limit) {
-    const normalizedUrl = normalizeSearchHref(decodeHtmlEntities(match[1] || ''));
-    const title = decodeHtmlEntities(match[2] || '').replace(/\s+/g, ' ').trim();
+    const attrs = match[1] || '';
+    if (!/result__a/i.test(attrs)) {
+      match = anchorRegex.exec(html);
+      continue;
+    }
+
+    const classAttr = extractAttribute(attrs, 'class');
+    const classTokens = (classAttr || '').split(/\s+/).filter(Boolean);
+    if (!classTokens.includes('result__a')) {
+      match = anchorRegex.exec(html);
+      continue;
+    }
+
+    const hrefAttr = extractAttribute(attrs, 'href');
+    const normalizedUrl = hrefAttr ? normalizeSearchHref(decodeHtmlEntities(hrefAttr)) : null;
+    const rawTitle = match[2] || '';
+    const title = decodeHtmlEntities(stripTags(rawTitle)).replace(/\s+/g, ' ').trim();
 
     if (normalizedUrl && title && !seen.has(normalizedUrl)) {
       seen.add(normalizedUrl);
       results.push({ title, url: normalizedUrl });
     }
-    match = resultLinkRegex.exec(html);
+    match = anchorRegex.exec(html);
+  }
+
+  return results;
+};
+
+const stripCdata = (value: string): string => {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('<![CDATA[') && trimmed.endsWith(']]>')) {
+    return trimmed.slice(9, -3);
+  }
+  return trimmed;
+};
+
+const extractXmlTag = (xml: string, tag: string): string => {
+  const match = xml.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+  return match && match[1] ? match[1] : '';
+};
+
+const parseBingRssResults = (xml: string, limit: number): Array<{ title: string; url: string }> => {
+  const results: Array<{ title: string; url: string }> = [];
+  const seen = new Set<string>();
+
+  const itemRegex = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
+  let match: RegExpExecArray | null = itemRegex.exec(xml);
+  while (match && results.length < limit) {
+    const item = match[1] || '';
+    const rawTitle = extractXmlTag(item, 'title');
+    const rawLink = extractXmlTag(item, 'link');
+
+    const title = decodeHtmlEntities(stripCdata(rawTitle)).replace(/\s+/g, ' ').trim();
+    const url = decodeHtmlEntities(stripCdata(rawLink)).trim();
+
+    if (title && url && (url.startsWith('http://') || url.startsWith('https://')) && !seen.has(url)) {
+      seen.add(url);
+      results.push({ title, url });
+    }
+
+    match = itemRegex.exec(xml);
   }
 
   return results;
@@ -198,28 +372,97 @@ export class WebSearchTool extends BaseTool {
       throw new Error('Query cannot be empty');
     }
 
-    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-    const response = await fetchWithTimeout(searchUrl, {
-      method: 'GET',
-      headers: {
-        'user-agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
-        accept: 'text/html,application/xhtml+xml',
-      },
-    });
+    const timeoutMs = getWebSearchTimeoutMs();
+    const retries = 0;
+    const warnings: string[] = [];
+    const sourcesTried: string[] = [];
 
-    if (!response.ok) {
-      throw new Error(`Search request failed with status ${response.status}`);
+    const tryDuckDuckGo = async (): Promise<Array<{ title: string; url: string }> | null> => {
+      sourcesTried.push('duckduckgo');
+      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const response = await fetchWithTimeout(
+        searchUrl,
+        {
+          method: 'GET',
+          headers: {
+            'user-agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
+            accept: 'text/html,application/xhtml+xml',
+          },
+        },
+        { timeoutMs, retries }
+      );
+
+      if (!response.ok) {
+        throw new Error(`DuckDuckGo search failed with status ${response.status}`);
+      }
+
+      const html = await response.text();
+      const results = parseDuckDuckGoResults(html, limit);
+      return results.length > 0 ? results : null;
+    };
+
+    const tryBingRss = async (): Promise<Array<{ title: string; url: string }> > => {
+      sourcesTried.push('bing');
+      const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&format=rss`;
+      const response = await fetchWithTimeout(
+        searchUrl,
+        {
+          method: 'GET',
+          headers: {
+            'user-agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
+            accept: 'application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
+          },
+        },
+        { timeoutMs, retries }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Bing RSS search failed with status ${response.status}`);
+      }
+
+      const xml = await response.text();
+      return parseBingRssResults(xml, limit);
+    };
+
+    let source: 'duckduckgo' | 'bing' = 'duckduckgo';
+    let results: Array<{ title: string; url: string }> = [];
+
+    try {
+      const duckResults = await tryDuckDuckGo();
+      if (duckResults) {
+        source = 'duckduckgo';
+        results = duckResults;
+      } else {
+        const bingResults = await tryBingRss();
+        source = 'bing';
+        results = bingResults;
+      }
+    } catch (err) {
+      const firstError = err instanceof Error ? err.message : String(err);
+      warnings.push(`duckduckgo: ${firstError}`);
+      try {
+        const bingResults = await tryBingRss();
+        source = 'bing';
+        results = bingResults;
+      } catch (bingErr) {
+        const secondError = bingErr instanceof Error ? bingErr.message : String(bingErr);
+        const hint =
+          'Hint: increase Settings > Network > Timeout, or enable Proxy if your network blocks certain sites.';
+        throw new Error(
+          `Web search failed (tried: ${sourcesTried.join(', ')}). duckduckgo: ${firstError}; bing: ${secondError}. ${hint}`
+        );
+      }
     }
-
-    const html = await response.text();
-    const results = parseDuckDuckGoResults(html, limit);
 
     return {
       query,
-      source: 'duckduckgo',
+      source,
       results,
       resultCount: results.length,
+      ...(warnings.length > 0 ? { warnings } : {}),
+      ...(sourcesTried.length > 0 ? { sourcesTried } : {}),
     };
   }
 }
