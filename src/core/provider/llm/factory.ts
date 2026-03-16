@@ -98,6 +98,7 @@ export const streamChat = async (
     providerType: string;
     modelId: string;
     messages: ChatTextMessage[];
+    extraSystemPrompt?: string;
   },
   onChunk: (chunk: string) => void,
   shouldCancel?: () => boolean,
@@ -105,7 +106,9 @@ export const streamChat = async (
 ) => {
   const debugId = `${options.providerType}:${options.modelId}:${Date.now()}`;
   const model = createModel(options.providerType, options.modelId);
-  const systemPrompt = getFullSystemPrompt(options.providerType);
+  const systemPrompt = [getFullSystemPrompt(options.providerType), options.extraSystemPrompt]
+    .filter(value => typeof value === 'string' && value.trim().length > 0)
+    .join('\n\n');
 
   const result = streamText({
     model,
@@ -155,9 +158,12 @@ export const generateChat = async (options: {
   providerType: string;
   modelId: string;
   messages: ChatTextMessage[];
+  extraSystemPrompt?: string;
 }) => {
   const model = createModel(options.providerType, options.modelId);
-  const systemPrompt = getFullSystemPrompt(options.providerType);
+  const systemPrompt = [getFullSystemPrompt(options.providerType), options.extraSystemPrompt]
+    .filter(value => typeof value === 'string' && value.trim().length > 0)
+    .join('\n\n');
 
   const { text } = await generateText({
     model,

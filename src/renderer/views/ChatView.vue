@@ -160,8 +160,11 @@
                         </ol>
                       </div>
                       <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-                        <div class="tool-card-section-title">Command</div>
-                        <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                        <div class="tool-card-section-title">{{ getToolInputDisplayTitle(part) }}</div>
+                        <pre class="tool-json-output">{{ formatJson(getToolInputDisplayValue(part)) }}</pre>
+                        <div v-if="getToolInputDisplayMetaText(part)" class="tool-input-meta">
+                          {{ getToolInputDisplayMetaText(part) }}
+                        </div>
                       </div>
                       <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
                         <div class="tool-card-section-title">Output</div>
@@ -1027,15 +1030,111 @@ const getToolTitle = (part: unknown): string => {
   return 'tool';
 };
 
+type ToolInputDisplay = {
+  title: string;
+  value: unknown;
+  metaText?: string;
+  isPrimary: boolean;
+};
+
+const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
+  const input = getToolInput(part);
+  const stateKind = getToolStateKind(part);
+
+  if (stateKind === 'success' && isObjectRecord(input)) {
+    const toolKey = normalizeToolNameKey(getToolName(part));
+
+    if (toolKey === 'shell' && typeof input.command === 'string' && input.command.trim()) {
+      const meta: string[] = [];
+      if (typeof input.cwd === 'string' && input.cwd.trim()) {
+        meta.push(`cwd: ${normalizeSingleLineText(input.cwd)}`);
+      }
+      if (typeof input.timeout === 'number' && Number.isFinite(input.timeout)) {
+        meta.push(`timeout: ${Math.trunc(input.timeout)} ms`);
+      }
+
+      return {
+        title: 'Command',
+        value: input.command.trim(),
+        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
+        isPrimary: true,
+      };
+    }
+
+    if ((toolKey === 'web' || toolKey === 'web_search') && typeof input.query === 'string' && input.query.trim()) {
+      const meta: string[] = [];
+      if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
+        meta.push(`limit: ${Math.trunc(input.limit)}`);
+      }
+
+      return {
+        title: 'Query',
+        value: input.query.trim(),
+        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
+        isPrimary: true,
+      };
+    }
+
+    if (toolKey === 'fetch' && typeof input.url === 'string' && input.url.trim()) {
+      const meta: string[] = [];
+      if (typeof input.maxChars === 'number' && Number.isFinite(input.maxChars)) {
+        meta.push(`maxChars: ${Math.trunc(input.maxChars)}`);
+      }
+
+      return {
+        title: 'URL',
+        value: input.url.trim(),
+        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
+        isPrimary: true,
+      };
+    }
+
+    if (
+      (toolKey === 'read_file' ||
+        toolKey === 'write_file' ||
+        toolKey === 'list_dir' ||
+        toolKey === 'delete_file') &&
+      typeof input.path === 'string' &&
+      input.path.trim()
+    ) {
+      const meta: string[] = [];
+      if (toolKey === 'list_dir' && typeof input.recursive === 'boolean') {
+        meta.push(`recursive: ${input.recursive ? 'true' : 'false'}`);
+      }
+      if (typeof input.encoding === 'string' && input.encoding.trim()) {
+        meta.push(`encoding: ${normalizeSingleLineText(input.encoding)}`);
+      }
+
+      return {
+        title: 'Path',
+        value: input.path.trim(),
+        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
+        isPrimary: true,
+      };
+    }
+  }
+
+  return {
+    title: 'Input',
+    value: input,
+    isPrimary: false,
+  };
+};
+
+const getToolInputDisplayTitle = (part: unknown): string => getToolInputDisplay(part).title;
+const getToolInputDisplayValue = (part: unknown): unknown => getToolInputDisplay(part).value;
+const getToolInputDisplayMetaText = (part: unknown): string => getToolInputDisplay(part).metaText ?? '';
+
 const isToolCollapsed = (part: unknown): boolean => isObjectRecord(part) && part.collapsed === true;
 
 const canToggleToolCollapse = (part: unknown): boolean =>
   isToolCallPart(part) || isToolResultPart(part);
 
-const toggleToolCollapse = async (message: UIMessage, part: unknown) => {
+const toggleToolCollapse = (message: UIMessage, part: unknown) => {
+  // Collapse state is a purely UI concern; do not persist it.
+  void message;
   if (!isObjectRecord(part)) return;
   part.collapsed = !isToolCollapsed(part);
-  await upsertUiMessage(message, activeAssistantParentId.value || undefined, 'tool-card:toggle-collapse');
 };
 
 const getUsedToolNames = (message: any): string[] => {
@@ -1962,6 +2061,30 @@ const handleToolApproval = async (message: UIMessage, part: any, approved: boole
   const approvalId = getApprovalId(part);
   if (!approvalId) return;
 
+  // After a reload, transient streaming state is empty, so UI chunks from a resumed approval would be ignored.
+  // Re-bind the stream to the current thread + assistant message so resume works reliably.
+  if (currentThread.value?.id) {
+    activeStreamThreadId.value = currentThread.value.id;
+  }
+  if (message?.id) {
+    activeAssistantMessageId.value = message.id;
+  }
+  if (!activeAssistantParentId.value && message?.id) {
+    const messageIndex = chat.messages.findIndex((m: any) => m && m.id === message.id);
+    if (messageIndex >= 0) {
+      const parent = [...chat.messages.slice(0, messageIndex)]
+        .reverse()
+        .find((m: any) => m && m.role === 'user' && typeof m.id === 'string');
+      if (parent?.id) {
+        activeAssistantParentId.value = parent.id;
+      }
+    }
+  }
+  streamingAssistantText.value = '';
+  streamRenderTraceId.value = `approval-${Date.now()}`;
+  streamRenderChunkCount.value = 0;
+  streamRenderChars.value = 0;
+
   approvalProcessing.value[approvalId] = true;
 
   try {
@@ -2511,19 +2634,6 @@ onUnmounted(() => {
   max-width: 680px;
 }
 
-.tool-approval-content,
-.tool-call-content {
-  border-left: 3px solid var(--accent-color);
-}
-
-.tool-result-content {
-  border-left: 3px solid var(--success-color, var(--accent-color));
-}
-
-.tool-fallback-content {
-  border-left: 3px solid var(--text-muted);
-}
-
 .tool-card-header {
   display: flex;
   align-items: center;
@@ -2669,6 +2779,13 @@ onUnmounted(() => {
 
 .tool-duration-icon {
   opacity: 0.85;
+}
+
+.tool-input-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
 }
 
 .tool-collapse-btn {

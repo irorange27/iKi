@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model: string;
       messages: Array<Record<string, unknown>>;
       tools?: string[];
+      skillIds?: string[];
       threadId?: string;
     }) => ipcRenderer.invoke('chat:send', options),
     stream: (options: {
@@ -65,6 +66,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model: string;
       messages: Array<Record<string, unknown>>;
       tools?: string[];
+      skillIds?: string[];
       threadId?: string;
     }) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
@@ -123,6 +125,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   tools: {
     list: () => ipcRenderer.invoke('tools:list'),
+  },
+  skills: {
+    list: () => ipcRenderer.invoke('skills:list'),
+    roots: () => ipcRenderer.invoke('skills:roots'),
+    openRoot: (source?: 'user' | 'codex') => ipcRenderer.invoke('skills:open-root', source),
+    openSkill: (id: string) => ipcRenderer.invoke('skills:open-skill', id),
+    read: (id: string, options?: { maxChars?: number }) =>
+      ipcRenderer.invoke('skills:read', id, options),
   },
   memory: {
     short: {

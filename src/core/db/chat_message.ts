@@ -1,12 +1,32 @@
 import db from './database';
 import { ChatMessage } from '../../shared/types/chat';
 
+const escapeLike = (value: string): string =>
+  value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+
 export const getChatMessages = (threadId: string): ChatMessage[] => {
   const rows = db
     .prepare(
       'SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
     )
     .all(threadId) as ChatMessage[];
+  return rows;
+};
+
+export const findChatMessagesByMessageSubstring = (
+  substring: string,
+  limit = 25
+): ChatMessage[] => {
+  if (!substring || typeof substring !== 'string') return [];
+  const safeNeedle = substring.trim();
+  if (!safeNeedle) return [];
+
+  const pattern = `%${escapeLike(safeNeedle)}%`;
+  const rows = db
+    .prepare(
+      "SELECT * FROM chat_messages WHERE message LIKE ? ESCAPE '\\' ORDER BY updated_at DESC, timestamp DESC LIMIT ?"
+    )
+    .all(pattern, limit) as ChatMessage[];
   return rows;
 };
 

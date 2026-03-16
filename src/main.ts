@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import started from 'electron-squirrel-startup';
 import {
   convertToModelMessages,
@@ -19,8 +20,17 @@ import * as promptAppDb from './core/db/prompt_apps';
 import { getToolModel, generateTitleWithAgent } from './core/provider/tool_model';
 import { analyzeEmotionWithAgent } from './core/provider/emotion_model';
 import { selectToolsWithAgent } from './core/provider/tool_selection';
+import { selectSkillsWithAgent } from './core/provider/skill_selection';
 import { generateLongMemorySummary } from './core/memory/auto_summarize';
 import { registerStandardTools, defaultToolRegistry } from './core/tools';
+import {
+  buildSkillsSystemPrompt,
+  getSkillFolderPath,
+  getSkillRootsForUi,
+  listSkills,
+  normalizeSkillIds,
+  readSkillContent,
+} from './core/skills';
 import { SimpleAgent } from './core/agent';
 import type { AppConfig } from './shared/types/config';
 import type { AgentMessage, AgentResult } from './core/agent';
@@ -297,6 +307,100 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
       parts: parts as ChatUiMessage['parts'],
     };
   });
+
+const sanitizeUiMessageJsonForStorage = (raw: string): string => {
+  if (typeof raw !== 'string') return String(raw);
+  const trimmed = raw.trim();
+  if (!trimmed) return raw;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!isObjectRecord(parsed)) return raw;
+
+    const role =
+      parsed.role === 'system' || parsed.role === 'assistant' || parsed.role === 'user'
+        ? parsed.role
+        : 'user';
+
+    const sanitized: Record<string, unknown> = { role };
+    const parts = Array.isArray(parsed.parts) ? parsed.parts : null;
+
+    if (parts) {
+      const nextParts: Array<Record<string, unknown>> = [];
+      for (const part of parts) {
+        if (!isObjectRecord(part) || typeof part.type !== 'string') continue;
+
+        if (part.type === 'text') {
+          if (typeof part.text !== 'string') continue;
+          nextParts.push({ type: 'text', text: part.text });
+          continue;
+        }
+
+        if (part.type === 'dynamic-tool') {
+          const normalized = normalizeDynamicToolPart(part, createRuntimeId('tool_call'));
+
+          // Keep only semantically meaningful fields; drop renderer-only UI state.
+          delete normalized.startedAt;
+          delete normalized.endedAt;
+          delete normalized.durationMs;
+          delete normalized.inputText;
+          delete normalized.collapsed;
+          delete normalized.callProviderMetadata;
+
+          nextParts.push(normalized);
+          continue;
+        }
+      }
+
+      sanitized.parts = nextParts;
+    } else if (typeof parsed.content === 'string') {
+      sanitized.parts = [{ type: 'text', text: parsed.content }];
+    }
+
+    return JSON.stringify(sanitized);
+  } catch {
+    return raw;
+  }
+};
+
+const normalizeUiRole = (value: unknown): 'system' | 'user' | 'assistant' => {
+  if (value === 'system' || value === 'user' || value === 'assistant') return value;
+  return 'user';
+};
+
+const parseStoredUiMessageRow = (row: { id: string; message: string }): ChatUiMessage => {
+  try {
+    const parsed = JSON.parse(row.message);
+    if (isObjectRecord(parsed)) {
+      if (Array.isArray(parsed.parts)) {
+        const parts = parsed.parts.filter(
+          part => isObjectRecord(part) && typeof part.type === 'string'
+        ) as ChatUiMessage['parts'];
+        return {
+          id: row.id,
+          role: normalizeUiRole(parsed.role),
+          parts: parts.length > 0 ? parts : ([{ type: 'text', text: '' }] as any),
+        };
+      }
+
+      if (typeof parsed.content === 'string') {
+        return {
+          id: row.id,
+          role: normalizeUiRole(parsed.role),
+          parts: [{ type: 'text', text: parsed.content }] as any,
+        };
+      }
+    }
+  } catch {
+    // fall through
+  }
+
+  return {
+    id: row.id,
+    role: 'user',
+    parts: [{ type: 'text', text: row.message }] as any,
+  };
+};
 
 const toUiChunkFromToolEvent = (event: ToolStreamEvent): UIMessageChunk | null => {
   const toolCallId = getToolCallIdFromEvent(event);
@@ -858,6 +962,179 @@ const registerApprovalBatch = (
   }
 };
 
+const getPendingApprovalIdsFromUiMessage = (message: ChatUiMessage): string[] => {
+  const parts = Array.isArray(message.parts) ? (message.parts as unknown[]) : [];
+  const ids: string[] = [];
+
+  for (const part of parts) {
+    if (!isObjectRecord(part)) continue;
+    if (part.type !== 'dynamic-tool') continue;
+    if (part.state !== 'approval-requested') continue;
+
+    const approvalId =
+      typeof part.approvalId === 'string'
+        ? part.approvalId
+        : isObjectRecord(part.approval) && typeof part.approval.id === 'string'
+          ? part.approval.id
+          : '';
+
+    if (approvalId) ids.push(approvalId);
+  }
+
+  return ids;
+};
+
+const getToolNameForApproval = (message: ChatUiMessage, approvalId: string): string | null => {
+  const parts = Array.isArray(message.parts) ? (message.parts as unknown[]) : [];
+  for (const part of parts) {
+    if (!isObjectRecord(part)) continue;
+    if (part.type !== 'dynamic-tool') continue;
+    if (part.state !== 'approval-requested') continue;
+
+    const partApprovalId =
+      typeof part.approvalId === 'string'
+        ? part.approvalId
+        : isObjectRecord(part.approval) && typeof part.approval.id === 'string'
+          ? part.approval.id
+          : '';
+
+    if (partApprovalId !== approvalId) continue;
+    if (typeof part.toolName === 'string' && part.toolName.trim()) {
+      return part.toolName.trim();
+    }
+  }
+  return null;
+};
+
+const tryRecoverApprovalSession = async (
+  approvalId: string,
+  webContents: ChatWebContents
+): Promise<PendingApprovalSession | null> => {
+  if (!approvalId || typeof approvalId !== 'string') return null;
+  const needle = approvalId.trim();
+  if (!needle) return null;
+
+  // 1) Find a message that contains this approval id and is still pending.
+  const candidates = chatMessageDb.findChatMessagesByMessageSubstring(needle, 50);
+  const match = candidates.find(row => {
+    const ui = parseStoredUiMessageRow({ id: row.id, message: row.message });
+    return getPendingApprovalIdsFromUiMessage(ui).includes(needle);
+  });
+
+  if (!match) return null;
+
+  const threadId = typeof match.thread_id === 'string' ? match.thread_id : '';
+  if (!threadId) return null;
+
+  // 2) Load thread context (provider/model/tools/skills)
+  const thread = chatThreadDb.getChatThread(threadId);
+  if (!thread) return null;
+
+  let providerType = '';
+  let model = '';
+  try {
+    const meta = thread.metadata ? JSON.parse(thread.metadata) : {};
+    if (isObjectRecord(meta) && isObjectRecord(meta.llm)) {
+      if (typeof meta.llm.providerType === 'string') providerType = meta.llm.providerType;
+      if (typeof meta.llm.model === 'string') model = meta.llm.model;
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!model && typeof thread.model === 'string') {
+    model = thread.model;
+  }
+
+  // providerType is mandatory for rebuilding the agent; without it we cannot reliably resume.
+  if (!providerType || !model) {
+    console.warn('[Main] Cannot recover approval session: missing providerType/model', {
+      threadId,
+      providerType,
+      model,
+    });
+    return null;
+  }
+
+  let toolNames: string[] = [];
+  if (thread.tools) {
+    try {
+      const parsed = JSON.parse(thread.tools);
+      if (Array.isArray(parsed)) {
+        toolNames = parsed.filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+      }
+    } catch {
+      toolNames = [];
+    }
+  }
+
+  // 3) Rebuild tool list if thread.tools was not persisted (older threads).
+  if (toolNames.length === 0) {
+    const toolName = getToolNameForApproval(
+      parseStoredUiMessageRow({ id: match.id, message: match.message }),
+      needle
+    );
+    if (toolName) toolNames = [toolName];
+  }
+
+  // 4) Load UI messages from DB and convert them back to model messages (AI SDK boundary).
+  const rows = chatMessageDb.getChatMessages(threadId);
+  const uiMessages = rows.map(row => parseStoredUiMessageRow({ id: row.id, message: row.message }));
+  const inputMessages = injectMemoryIntoMessages(await toModelInputMessages(uiMessages), threadId);
+
+  // 5) Rebuild agent + pending approval batch.
+  let normalizedSkillIds: string[] = [];
+  try {
+    if (thread.skill_ids) {
+      normalizedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
+    }
+  } catch {
+    normalizedSkillIds = [];
+  }
+  const skillsSystemPrompt =
+    normalizedSkillIds.length > 0 ? await buildSkillsSystemPrompt(normalizedSkillIds) : '';
+
+  const agent = new SimpleAgent({
+    enabled: true,
+    providerType,
+    model,
+    systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'),
+    enableTools: true,
+    maxIterations: 5,
+  });
+
+  for (const name of toolNames) {
+    const tool = defaultToolRegistry.get(name);
+    if (tool) agent.registerTool(tool);
+  }
+
+  agent.setMessages(toAgentMessages(inputMessages));
+
+  const pendingApprovalIds = new Set<string>();
+  for (const ui of uiMessages) {
+    for (const id of getPendingApprovalIdsFromUiMessage(ui)) {
+      pendingApprovalIds.add(id);
+    }
+  }
+
+  if (pendingApprovalIds.size === 0) {
+    return null;
+  }
+
+  const session: PendingApprovalSession = {
+    agent,
+    webContents,
+    pendingApprovalIds,
+    collectedApprovalResponses: new Map(),
+  };
+
+  for (const id of pendingApprovalIds) {
+    pendingApprovalSessions.set(id, session);
+  }
+
+  return session;
+};
+
 const activeStreams = new Map<number, ActiveStreamState>();
 
 const streamAgentResponse = async (
@@ -1048,6 +1325,10 @@ ipcMain.handle('chat:messages:get', (_, id) => chatMessageDb.getChatMessage(id))
 ipcMain.handle('chat:messages:create', (_, message) => {
   const messageId = message.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const timestamp = message.timestamp || new Date().toISOString();
+  const sanitizedMessageJson =
+    typeof message.message === 'string'
+      ? sanitizeUiMessageJsonForStorage(message.message)
+      : JSON.stringify(message.message ?? {});
   console.log(
     `[ChatPersist][Main] create-request id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'} depth=${message.depth || 0}`
   );
@@ -1059,7 +1340,7 @@ ipcMain.handle('chat:messages:create', (_, message) => {
       parent_id: message.parent_id || null,
       slot_id: message.slot_id || null,
       depth: message.depth || 0,
-      message: message.message,
+      message: sanitizedMessageJson,
       timestamp,
       metadata: message.metadata || '{}',
     });
@@ -1088,21 +1369,21 @@ ipcMain.handle('chat:messages:create', (_, message) => {
   }
 
   try {
-    if (typeof message.message === 'string') {
+    if (typeof sanitizedMessageJson === 'string') {
       const memoryConfig = getMemoryConfig();
       const forceShortMemory = Boolean(memoryConfig?.autoSummarize);
       memoryDb.addShortMemoryFromChatMessage({
         thread_id: message.thread_id,
         message_id: messageId,
-        message_json: message.message,
+        message_json: sanitizedMessageJson,
       }, forceShortMemory ? { force: true } : undefined);
       memoryDb.pruneShortMemory(message.thread_id);
       queueEmotionAnalysis({
         threadId: message.thread_id,
         messageId,
-        messageJson: message.message,
+        messageJson: sanitizedMessageJson,
       });
-      void maybeAutoSummarizeLongMemory(message.thread_id, messageId, message.message);
+      void maybeAutoSummarizeLongMemory(message.thread_id, messageId, sanitizedMessageJson);
     }
   } catch (error) {
     console.warn('[Memory][Main] short memory insert failed:', getErrorMessage(error));
@@ -1115,11 +1396,22 @@ ipcMain.handle('chat:messages:create', (_, message) => {
   return created;
 });
 ipcMain.handle('chat:messages:update', (_, id, message) => {
-  const result = chatMessageDb.updateChatMessage(id, message);
+  const sanitizedUpdate =
+    message && typeof message === 'object' && message !== null
+      ? {
+          ...message,
+          ...(typeof (message as { message?: unknown }).message === 'string'
+            ? { message: sanitizeUiMessageJsonForStorage((message as { message: string }).message) }
+            : {}),
+        }
+      : message;
+
+  const result = chatMessageDb.updateChatMessage(id, sanitizedUpdate);
   try {
     const existing = chatMessageDb.getChatMessage(id);
-    const threadId = message.thread_id || existing?.thread_id;
-    const messageJson = typeof message.message === 'string' ? message.message : existing?.message;
+    const threadId = sanitizedUpdate.thread_id || existing?.thread_id;
+    const messageJson =
+      typeof sanitizedUpdate.message === 'string' ? sanitizedUpdate.message : existing?.message;
     if (threadId && messageJson) {
       const memoryConfig = getMemoryConfig();
       const forceShortMemory = Boolean(memoryConfig?.autoSummarize);
@@ -1234,6 +1526,72 @@ ipcMain.handle('tools:list', () => {
   }
 });
 
+ipcMain.handle('skills:list', async () => {
+  try {
+    return await listSkills({ forceRefresh: true });
+  } catch (error: unknown) {
+    console.error('Failed to list skills:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('skills:roots', () => {
+  try {
+    return getSkillRootsForUi();
+  } catch (error: unknown) {
+    console.error('Failed to get skill roots:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('skills:open-root', async (_, source?: string) => {
+  try {
+    const roots = getSkillRootsForUi();
+    const normalizedSource = source === 'codex' ? 'codex' : 'user';
+    const target = roots.find(r => r.source === normalizedSource) || roots[0];
+    if (!target?.path) {
+      return { success: false, error: 'No skills folder configured' };
+    }
+
+    await fs.mkdir(target.path, { recursive: true });
+    const errorText = await shell.openPath(target.path);
+    if (errorText) {
+      return { success: false, error: errorText, path: target.path };
+    }
+    return { success: true, path: target.path };
+  } catch (error: unknown) {
+    return { success: false, error: getErrorMessage(error) };
+  }
+});
+
+ipcMain.handle('skills:open-skill', async (_, id: string) => {
+  try {
+    const folderPath = await getSkillFolderPath(id);
+    if (!folderPath) {
+      return { success: false, error: 'Skill not found' };
+    }
+    const errorText = await shell.openPath(folderPath);
+    if (errorText) {
+      return { success: false, error: errorText, path: folderPath };
+    }
+    return { success: true, path: folderPath };
+  } catch (error: unknown) {
+    return { success: false, error: getErrorMessage(error) };
+  }
+});
+
+ipcMain.handle('skills:read', async (_, id: string, options?: { maxChars?: number }) => {
+  try {
+    const content = await readSkillContent(id, { maxChars: options?.maxChars });
+    if (!content) {
+      return { success: false, error: 'Skill not found' };
+    }
+    return { success: true, ...content };
+  } catch (error: unknown) {
+    return { success: false, error: getErrorMessage(error) };
+  }
+});
+
 ipcMain.handle('toolModel:generateTitle', async (_, conversationContent: string) => {
   try {
     return await generateTitleWithAgent(conversationContent);
@@ -1299,6 +1657,8 @@ ipcMain.handle(
       model: string;
       messages: ChatTransportMessage[];
       tools?: string[]; // Optional specific tools to enable
+      skillIds?: string[]; // Optional skill ids to inject into system prompt
+      skillMode?: 'manual' | 'auto';
       threadId?: string;
     }
   ) => {
@@ -1308,13 +1668,43 @@ ipcMain.handle(
         options.threadId
       );
 
+      let normalizedSkillIds = normalizeSkillIds(options.skillIds);
+      if (
+        normalizedSkillIds.length === 0 &&
+        !Array.isArray(options.skillIds) &&
+        typeof options.threadId === 'string' &&
+        options.threadId.trim().length > 0
+      ) {
+        try {
+          const thread = chatThreadDb.getChatThread(options.threadId);
+          if (thread?.skill_ids) {
+            normalizedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
+          }
+        } catch (error) {
+          console.warn('[Main] Failed to resolve skill_ids from thread:', error);
+        }
+      }
+      if (options.threadId && Array.isArray(options.skillIds)) {
+        try {
+          chatThreadDb.updateChatThread(options.threadId, {
+            skill_ids: JSON.stringify(normalizedSkillIds),
+          });
+        } catch (error) {
+          console.warn('[Main] Failed to persist skill_ids for thread:', error);
+        }
+      }
+
+      const skillsSystemPrompt =
+        normalizedSkillIds.length > 0 ? await buildSkillsSystemPrompt(normalizedSkillIds) : '';
+
       if (options.tools && options.tools.length > 0) {
         // Use Agent if tools are specified
         const agent = new SimpleAgent({
           enabled: true,
           providerType: options.providerType,
           model: options.model,
-          systemPrompt: TOOL_AGENT_SYSTEM_PROMPT, // Persona is already integrated in SimpleAgent
+          systemPrompt:
+            [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'), // Persona is already integrated in SimpleAgent
           enableTools: true,
           maxIterations: 5,
         });
@@ -1343,6 +1733,7 @@ ipcMain.handle(
           providerType: options.providerType,
           modelId: options.model,
           messages: toLlmChatMessages(inputMessages),
+          extraSystemPrompt: skillsSystemPrompt,
         });
         return { success: true, text };
       }
@@ -1362,6 +1753,8 @@ ipcMain.handle(
       model: string;
       messages: ChatTransportMessage[];
       tools?: string[];
+      skillIds?: string[];
+      skillMode?: 'manual' | 'auto';
       threadId?: string;
     }
   ) => {
@@ -1394,6 +1787,35 @@ ipcMain.handle(
         options.threadId
       );
 
+      let normalizedSkillIds = normalizeSkillIds(options.skillIds);
+      if (
+        normalizedSkillIds.length === 0 &&
+        !Array.isArray(options.skillIds) &&
+        typeof options.threadId === 'string' &&
+        options.threadId.trim().length > 0
+      ) {
+        try {
+          const thread = chatThreadDb.getChatThread(options.threadId);
+          if (thread?.skill_ids) {
+            normalizedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
+          }
+        } catch (error) {
+          console.warn('[Main] Failed to resolve skill_ids from thread:', error);
+        }
+      }
+      if (options.threadId && Array.isArray(options.skillIds)) {
+        try {
+          chatThreadDb.updateChatThread(options.threadId, {
+            skill_ids: JSON.stringify(normalizedSkillIds),
+          });
+        } catch (error) {
+          console.warn('[Main] Failed to persist skill_ids for thread:', error);
+        }
+      }
+
+      const skillsSystemPrompt =
+        normalizedSkillIds.length > 0 ? await buildSkillsSystemPrompt(normalizedSkillIds) : '';
+
       const explicitTools = Array.isArray(options.tools)
         ? options.tools.filter(
             (toolName): toolName is string =>
@@ -1416,12 +1838,48 @@ ipcMain.handle(
         }
       }
 
+      const normalizedThreadId =
+        typeof options.threadId === 'string' ? options.threadId.trim() : '';
+      if (normalizedThreadId) {
+        try {
+          const thread = chatThreadDb.getChatThread(normalizedThreadId);
+          let parsedMetadata: unknown = {};
+          try {
+            parsedMetadata =
+              thread?.metadata && thread.metadata.trim().length > 0
+                ? JSON.parse(thread.metadata)
+                : {};
+          } catch {
+            parsedMetadata = {};
+          }
+
+          const metadataRecord = isObjectRecord(parsedMetadata) ? parsedMetadata : {};
+          const nextLlm = isObjectRecord(metadataRecord.llm) ? metadataRecord.llm : {};
+
+          chatThreadDb.updateChatThread(normalizedThreadId, {
+            model: options.model || thread?.model || null,
+            tools: resolvedTools.length > 0 ? JSON.stringify(resolvedTools) : null,
+            metadata: JSON.stringify({
+              ...metadataRecord,
+              llm: {
+                ...(nextLlm as Record<string, unknown>),
+                providerType: options.providerType,
+                model: options.model,
+                updatedAt: new Date().toISOString(),
+              },
+            }),
+          } as any);
+        } catch (error) {
+          console.warn('[Main] Failed to persist thread runtime hints:', error);
+        }
+      }
+
       if (resolvedTools.length > 0) {
         const agent = new SimpleAgent({
           enabled: true,
           providerType: options.providerType,
           model: options.model,
-          systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
+          systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'),
           enableTools: true,
           maxIterations: 5,
         });
@@ -1491,6 +1949,7 @@ ipcMain.handle(
             providerType: options.providerType,
             modelId: options.model,
             messages: toLlmChatMessages(inputMessages),
+            extraSystemPrompt: skillsSystemPrompt,
           },
           chunk => {
             if (streamState.cancelled) return;
@@ -1540,15 +1999,23 @@ ipcMain.handle(
 );
 
 // Handle tool approval
-ipcMain.handle('chat:approve-tool', async (_, approvalId: string, approved: boolean) => {
+ipcMain.handle('chat:approve-tool', async (event, approvalId: string, approved: boolean) => {
   console.log(`[Main] Tool approval: ${approvalId}, approved: ${approved}`);
-  const session = pendingApprovalSessions.get(approvalId);
+  const webContents = event.sender as ChatWebContents;
+
+  let session = pendingApprovalSessions.get(approvalId);
+  if (!session) {
+    session = await tryRecoverApprovalSession(approvalId, webContents);
+  }
   if (!session) {
     return {
       success: false,
       error: 'Approval request not found or already processed.',
     };
   }
+
+  // Ensure the resumed stream emits UI chunks to the window that initiated the approval.
+  session.webContents = webContents;
 
   const approvalResponse: ToolApprovalResponse = {
     type: 'tool-approval-response',
