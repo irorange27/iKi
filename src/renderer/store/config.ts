@@ -52,7 +52,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   memory: {
     enabled: false,
     autoSummarize: false,
-    autoRetrieve: false,
     maxRetrievalCount: 5,
     similarThreshold: 0.1,
   },

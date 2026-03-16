@@ -90,7 +90,7 @@ const cosineSimilarity = (a: number[], b: number[]): number => {
   return dot;
 };
 
-const extractTextFromMessageJson = (
+export const extractTextFromMessageJson = (
   messageJson: string
 ): { role: string; content: string } | null => {
   try {

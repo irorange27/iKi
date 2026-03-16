@@ -71,6 +71,17 @@
                       <span class="tool-card-name">{{ getToolName(part) }}</span>
                       <span v-if="getToolStateLabel(part)" class="tool-card-state">{{ getToolStateLabel(part) }}</span>
                     </div>
+                    <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
+                      <div class="tool-card-section-title">References</div>
+                      <ol class="tool-citations">
+                        <li v-for="citation in getWebSearchCitations(part)" :key="citation.url" class="tool-citation">
+                          <a :href="citation.url" target="_blank" rel="noopener noreferrer">
+                            {{ citation.title }}
+                          </a>
+                          <span v-if="citation.domain" class="tool-citation-domain">{{ citation.domain }}</span>
+                        </li>
+                      </ol>
+                    </div>
                     <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
                       <div class="tool-card-section-title">Output</div>
                       <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
@@ -187,6 +198,12 @@ type MarkdownHighlightResult = {
   html: string;
   displayLanguage: string;
   languageClass: string;
+};
+
+type WebSearchCitation = {
+  title: string;
+  url: string;
+  domain: string;
 };
 
 const isObjectRecord = (value: unknown): value is Record<string, any> =>
@@ -592,6 +609,60 @@ const getToolStateLabel = (part: unknown): string => {
   if (!isObjectRecord(part) || typeof part.state !== 'string') return '';
   return TOOL_STATE_LABELS[part.state] ?? part.state;
 };
+
+const getUrlDomain = (value: string): string => {
+  try {
+    return new URL(value).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+};
+
+const parseJsonIfPossible = (value: unknown): unknown => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const getWebSearchCitations = (part: unknown): WebSearchCitation[] => {
+  if (!isToolResultPart(part)) return [];
+  const toolName = getToolName(part).toLowerCase();
+  if (toolName !== 'web' && toolName !== 'web_search' && toolName !== 'web-search') {
+    return [];
+  }
+
+  const outputRaw = parseJsonIfPossible(getToolOutput(part));
+  if (!isObjectRecord(outputRaw)) return [];
+
+  const results = outputRaw.results;
+  if (!Array.isArray(results)) return [];
+
+  const seen = new Set<string>();
+  const citations: WebSearchCitation[] = [];
+
+  for (const item of results) {
+    if (!isObjectRecord(item)) continue;
+    const url = typeof item.url === 'string' ? item.url.trim() : '';
+    if (!url || seen.has(url)) continue;
+    const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : url;
+    citations.push({
+      title,
+      url,
+      domain: getUrlDomain(url),
+    });
+    seen.add(url);
+  }
+
+  return citations;
+};
+
+const hasWebSearchCitations = (part: unknown): boolean =>
+  getWebSearchCitations(part).length > 0;
 
 const hasDisplayValue = (value: unknown): boolean => {
   if (value === null || value === undefined) return false;
@@ -1818,6 +1889,38 @@ onUnmounted(() => {
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.tool-citations {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-primary);
+  display: grid;
+  gap: 6px;
+}
+
+.tool-citation {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.tool-citation a {
+  color: var(--accent-color);
+  text-decoration: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent-color) 55%, transparent);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.tool-citation a:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
+.tool-citation-domain {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .tool-json-output {

@@ -54,7 +54,6 @@ function getSystemConfig(): AppConfig {
     memory: {
       enabled: false,
       autoSummarize: false,
-      autoRetrieve: false,
       maxRetrievalCount: 5,
       similarThreshold: 0.1,
     },

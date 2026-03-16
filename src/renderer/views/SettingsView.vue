@@ -20,14 +20,18 @@
 
     <!-- Right Side Config Panel -->
     <main class="settings-content">
+      <div class="settings-header">
+        <div class="settings-header-left">
+          <span class="icon"><component :is="activeSectionIcon" :size="22" /></span>
+          <span class="title">{{ activeSectionLabel }}</span>
+        </div>
+        <div class="settings-header-right" :class="{ 'is-unsaved': !saved }">
+          <span class="unsaved-dot" />
+          <span>{{ saved ? 'All changes saved' : 'Unsaved changes' }}</span>
+        </div>
+      </div>
       <!-- General -->
       <section v-show="activeSection === 'general'" class="config-section">
-        <div class="section-header">
-          <div class="section-header-title">
-            <span class="icon"><Cog :size="20" /></span><span class="title">General</span>
-          </div>
-        </div>
-
         <div class="config-group">
           <h3>Tool Model</h3>
           <p class="group-description">
@@ -170,11 +174,6 @@
         <button class="reset-btn" @click="resetSection('general')">Reset General</button>
       </section>
 
-      <div v-show="activeSection === 'provider'" class="section-header">
-        <div class="section-header-title">
-          <span class="icon"><BotIcon :size="20" /></span><span class="title">Providers</span>
-        </div>
-      </div>
       <ProvidersSettings v-show="activeSection === 'provider'" />
 
       <!-- UI -->
@@ -290,8 +289,6 @@
 
       <!-- Network -->
       <section v-show="activeSection === 'network'" class="config-section">
-        <h2>Network Settings</h2>
-
         <div class="config-group">
           <h3>Proxy</h3>
           <label class="checkbox-label">
@@ -343,22 +340,33 @@
 
         <div class="config-group">
           <h3>Timeout & Retry</h3>
-          <label class="input-label"
-            >Timeout (ms):
-            <input
-              type="number"
-              :value="config.network.timeout"
-              @input="updateNetwork('timeout', parseInt($event.target.value))"
-            />
-          </label>
-          <label class="input-label"
-            >Retry Attempts:
-            <input
-              type="number"
-              :value="config.network.retryAttempts"
-              @input="updateNetwork('retryAttempts', parseInt($event.target.value))"
-            />
-          </label>
+          <div class="slider-field">
+            <span>Timeout (ms)</span>
+            <span class="value-badge">{{ config.network.timeout }}</span>
+          </div>
+          <input
+            type="range"
+            min="1000"
+            max="20000"
+            step="500"
+            :value="config.network.timeout"
+            @input="updateNetwork('timeout', parseInt($event.target.value))"
+          />
+          <p class="slider-hint">Controls how long the app waits before timing out.</p>
+
+          <div class="slider-field">
+            <span>Retry Attempts</span>
+            <span class="value-badge">{{ config.network.retryAttempts }}</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="10"
+            step="1"
+            :value="config.network.retryAttempts"
+            @input="updateNetwork('retryAttempts', parseInt($event.target.value))"
+          />
+          <p class="slider-hint">Number of retries before a request fails.</p>
         </div>
 
         <button class="reset-btn" @click="resetSection('network')">Reset Network</button>
@@ -366,8 +374,6 @@
 
       <!-- Security -->
       <section v-show="activeSection === 'security'" class="config-section">
-        <h2>Security Settings</h2>
-
         <div class="config-group">
           <h3>Data Protection</h3>
           <label
@@ -386,14 +392,19 @@
 
         <div class="config-group">
           <h3>Session Timeout</h3>
-          <label class="input-label"
-            >Minutes:
-            <input
-              type="number"
-              :value="config.security.sessionTimeout"
-              @input="updateSecurity('sessionTimeout', parseInt($event.target.value))"
-            />
-          </label>
+          <div class="slider-field">
+            <span>Minutes</span>
+            <span class="value-badge">{{ config.security.sessionTimeout }}</span>
+          </div>
+          <input
+            type="range"
+            min="5"
+            max="240"
+            step="5"
+            :value="config.security.sessionTimeout"
+            @input="updateSecurity('sessionTimeout', parseInt($event.target.value))"
+          />
+          <p class="slider-hint">Shorter timeouts increase security.</p>
         </div>
 
         <div class="config-group">
@@ -425,8 +436,6 @@
 
       <!-- Advanced -->
       <section v-show="activeSection === 'advanced'" class="config-section">
-        <h2>Advanced Settings</h2>
-
         <div class="config-group">
           <h3>Development Mode</h3>
           <label
@@ -448,8 +457,6 @@
 
       <!-- Keybindings -->
       <section v-show="activeSection === 'keybindings'" class="config-section">
-        <h2>Keyboard Shortcuts</h2>
-
         <div class="config-group">
           <label v-for="(value, key) in config.keybindings" :key="key" class="input-label">
             {{ formatLabel(key) }}:
@@ -462,9 +469,8 @@
 
       <!-- Memory -->
       <section v-show="activeSection === 'memory'" class="config-section">
-        <h2>Memory Settings</h2>
-
-        <div class="config-group">
+        <div class="settings-card">
+          <div class="card-title">Memory Retrieval</div>
           <label class="checkbox-label">
             <input
               type="checkbox"
@@ -473,50 +479,68 @@
             />
             Enable Memory
           </label>
+          <p class="card-help">
+            Long-term memory is injected automatically when Memory is enabled.
+          </p>
+
+          <template v-if="config.memory.enabled">
+            <div class="slider-field">
+              <span>Max Retrieved Memories</span>
+              <span class="value-badge">{{ config.memory.maxRetrievalCount }}</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="20"
+              :value="config.memory.maxRetrievalCount"
+              @input="updateMemory('maxRetrievalCount', parseInt($event.target.value))"
+            />
+            <p class="slider-hint">
+              Maximum number of relevant memories injected into the conversation context (1-20).
+            </p>
+
+            <div class="slider-field">
+              <span>Similarity Threshold</span>
+              <span class="value-badge">{{ Math.round(config.memory.similarThreshold * 100) }}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="Math.round(config.memory.similarThreshold * 100)"
+              @input="updateMemory('similarThreshold', parseInt($event.target.value) / 100)"
+            />
+            <div class="slider-legend">
+              <span>Loose (0%)</span>
+              <span>Strict (100%)</span>
+            </div>
+            <p class="slider-hint">
+              Minimum similarity score required for a memory to be retrieved. Higher values mean
+              stricter matching.
+            </p>
+          </template>
         </div>
 
-        <template v-if="config.memory.enabled">
-          <div class="config-group">
-            <h3>Auto Actions</h3>
-            <label
-              v-for="key in ['autoSummarize', 'autoRetrieve'] as const"
-              :key="key"
-              class="checkbox-label"
-            >
-              <input
-                type="checkbox"
-                :checked="config.memory[key]"
-                @change="updateMemory(key, ($event.target as HTMLInputElement).checked)"
-              />
-              {{ formatLabel(key) }}
-            </label>
-          </div>
+        <div class="settings-card">
+          <div class="card-title">Memory Summarization</div>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="config.memory.autoSummarize"
+              @change="updateMemory('autoSummarize', ($event.target as HTMLInputElement).checked)"
+            />
+            Auto Summarize Conversations
+          </label>
+          <p class="card-help">
+            Automatically extract and store important information from conversations as new
+            memories.
+          </p>
+        </div>
 
-          <div class="config-group">
-            <h3>Retrieval Settings</h3>
-            <label class="input-label"
-              >Max Count:
-              <input
-                type="number"
-                :value="config.memory.maxRetrievalCount"
-                @input="updateMemory('maxRetrievalCount', parseInt($event.target.value))"
-              />
-            </label>
-            <label class="input-label"
-              >Similarity Threshold:
-              <input
-                type="number"
-                step="0.1"
-                :value="config.memory.similarThreshold"
-                @input="updateMemory('similarThreshold', parseFloat($event.target.value))"
-              />
-            </label>
-          </div>
-        </template>
-
-        <div class="config-group memory-viewer">
-          <h3>Memory Viewer</h3>
-          <p class="group-description">
+        <div class="settings-card memory-viewer">
+          <div class="card-title">Memory Viewer</div>
+          <p class="card-help">
             View short-term and long-term memory entries by chat thread, plus long-memory search
             results.
           </p>
@@ -563,6 +587,9 @@
                     <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
                   </div>
                   <div class="memory-item-content">{{ entry.content }}</div>
+                  <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
+                    Emotion: {{ formatJson(entry.emotion) }}
+                  </div>
                 </li>
               </ul>
             </div>
@@ -641,16 +668,16 @@
 
         <button class="reset-btn" @click="resetSection('memory')">Reset Memory</button>
       </section>
-    </main>
 
-    <!-- Footer operabar -->
-    <div class="settings-footer">
-      <span v-if="saved" class="save-status">All changes saved</span>
-      <div class="footer-actions">
-        <button class="secondary" @click="$emit('close')">Close</button>
-        <button class="primary" @click="saveAndClose">Save</button>
+      <!-- Footer operabar -->
+      <div class="settings-footer">
+        <span v-if="saved" class="save-status">All changes saved</span>
+        <div class="footer-actions">
+          <button class="secondary" @click="$emit('close')">Close</button>
+          <button class="primary" @click="saveAndClose">Save</button>
+        </div>
       </div>
-    </div>
+    </main>
   </div>
 </template>
 
@@ -660,16 +687,9 @@ import { storeToRefs } from 'pinia';
 import {
   Cog,
   Palette,
-  Globe,
-  Lock,
-  Zap,
-  Keyboard,
   Brain,
-  Toolbox,
   Bot,
-  MessageCircleMore,
   RefreshCw,
-  BotIcon,
 } from 'lucide-vue-next';
 
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
@@ -823,6 +843,19 @@ const menuItems = [
   // { key: "keybindings", label: "Keybindings", icon: Keyboard },
   { key: 'memory', label: 'Memory', icon: Brain },
 ];
+
+const activeSectionMeta = computed(() => {
+  return (
+    menuItems.find(item => item.key === activeSection.value) || {
+      key: activeSection.value,
+      label: 'Settings',
+      icon: Cog,
+    }
+  );
+});
+
+const activeSectionLabel = computed(() => activeSectionMeta.value.label);
+const activeSectionIcon = computed(() => activeSectionMeta.value.icon);
 
 const themeOptions = ['light', 'dark', 'system'] as const;
 const densityOptions = [
@@ -1072,11 +1105,6 @@ watch(activeSection, section => {
 </script>
 
 <style scoped>
-/* 新增样式 */
-.config-section {
-  max-width: 700px;
-}
-
 .input-label {
   display: block;
   margin-bottom: 16px;
@@ -1114,28 +1142,7 @@ watch(activeSection, section => {
 }
 
 /* 密度面板样式 */
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.section-header-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-header-title .icon {
-  display: flex;
-  align-items: center;
-}
-
-.section-header-title .title {
-  font-size: 1.5em;
-  font-weight: 600;
-}
+/* section header styles replaced by settings-header */
 
 .add-btn {
   background: var(--accent-color);
@@ -1235,16 +1242,19 @@ input:checked + .slider::before {
   display: flex;
   height: 100vh;
   font-size: var(--font-size);
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   color: var(--text-primary);
+  padding: 4px 4px 0;
+  gap: 6px;
+  box-sizing: border-box;
 }
 
 /* Titlebar Drag Region */
 .titlebar-drag-region {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 4px;
+  left: 4px;
+  right: 4px;
   height: 20px;
   -webkit-app-region: drag;
   z-index: 9999;
@@ -1272,11 +1282,43 @@ input:checked + .slider::before {
 /* 左侧导航 */
 .settings-nav {
   width: 220px;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
   padding: 24px 16px;
   padding-top: 40px;
   /* Space for drag region */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  height: calc(100vh - 4px);
+  position: relative;
+}
+
+.mac-controls {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.mac-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-red {
+  background: #ff5f57;
+}
+
+.dot-yellow {
+  background: #febc2e;
+}
+
+.dot-green {
+  background: #28c840;
 }
 
 .nav-header h1 {
@@ -1291,14 +1333,14 @@ input:checked + .slider::before {
 }
 
 .nav-menu {
-  margin-top: 32px;
+  margin-top: 22px;
   list-style: none;
   border-color: var(--border-color);
 }
 
 .nav-menu li {
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1311,29 +1353,61 @@ input:checked + .slider::before {
 }
 
 .nav-menu li.active {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-primary));
   color: var(--accent-color);
+  box-shadow: inset 3px 0 0 var(--accent-color);
 }
 
 /* 右侧内容 */
 .settings-content {
   flex: 1;
-  padding: 32px;
-  padding-bottom: 80px;
+  padding: 0 22px;
   /* Space for fixed footer */
   overflow-y: auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  height: calc(100vh - 4px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .config-section {
-  max-width: 600px;
+  max-width: 860px;
+  padding-top: 8px;
+  flex: 1 0 auto;
 }
 
+.settings-card,
 .config-group {
-  margin-bottom: 32px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 20px 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+.config-section > .settings-card:first-of-type,
+.config-section > .config-group:first-of-type {
+  margin-top: 6px;
+}
+
+.config-group input[type='range'] {
+  width: 100%;
+  margin-top: 10px;
+  accent-color: var(--accent-color);
+}
+
+.config-group .value-badge {
+  font-size: 0.85em;
 }
 
 .config-group h3 {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  font-size: 1.02em;
   font-weight: 600;
 }
 
@@ -1343,7 +1417,113 @@ input:checked + .slider::before {
   margin-bottom: 16px;
 }
 
-.memory-viewer .group-description {
+.card-title {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.card-help {
+  color: var(--text-secondary);
+  font-size: 0.93em;
+  margin: 8px 0 16px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 22px;
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 5;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.settings-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.2em;
+  font-weight: 600;
+  position: relative;
+  padding-left: 10px;
+}
+
+.settings-header-left::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent-color);
+}
+
+.settings-header-left .icon {
+  color: var(--accent-color);
+}
+
+.settings-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+
+.settings-header-right.is-unsaved {
+  color: #ff6b2d;
+}
+
+.settings-header-right .unsaved-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+}
+
+.settings-header-right.is-unsaved .unsaved-dot {
+  opacity: 1;
+}
+
+.slider-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.slider-hint {
+  color: var(--text-secondary);
+  font-size: 0.88em;
+  margin-top: 8px;
+}
+
+.slider-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+input[type='range'] {
+  width: 100%;
+  margin-top: 8px;
+  accent-color: var(--accent-color);
+}
+
+.memory-viewer .card-help {
   margin-bottom: 12px;
 }
 
@@ -1609,18 +1789,17 @@ input:checked + .slider::before {
 
 /* 底部操作栏 */
 .settings-footer {
-  position: fixed;
+  position: sticky;
+  margin-top: auto;
   bottom: 0;
-  right: 0;
-  left: 220px;
-  padding: 16px 32px;
+  padding: 16px 0 12px;
   border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   display: flex;
   justify-content: flex-end;
   /* Always keep buttons on the right */
   align-items: center;
-  z-index: 100;
+  z-index: 10;
 }
 
 .save-status {

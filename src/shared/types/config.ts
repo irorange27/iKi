@@ -48,7 +48,6 @@ export interface AppConfig {
   memory: {
     enabled: boolean;
     autoSummarize: boolean;
-    autoRetrieve: boolean;
     maxRetrievalCount: number;
     similarThreshold: number;
   };

@@ -17,6 +17,8 @@ import * as memoryDb from './core/db/memory';
 import * as workspaceDb from './core/db/workspaces';
 import * as promptAppDb from './core/db/prompt_apps';
 import { getToolModel, generateTitleWithAgent } from './core/provider/tool_model';
+import { analyzeEmotionWithAgent } from './core/provider/emotion_model';
+import { generateLongMemorySummary } from './core/memory/auto_summarize';
 import { registerStandardTools, defaultToolRegistry } from './core/tools';
 import { SimpleAgent } from './core/agent';
 import type { AppConfig } from './shared/types/config';
@@ -626,6 +628,116 @@ const getMemoryConfig = () => {
   return appConfig?.memory || null;
 };
 
+const memorySummarizeInFlight = new Set<string>();
+
+const shouldAutoSummarizeThread = (threadId: string): boolean => {
+  const memoryConfig = getMemoryConfig();
+  if (!memoryConfig?.autoSummarize) return false;
+  const thread = chatThreadDb.getChatThread(threadId);
+  if (thread?.is_incognito) return false;
+  return true;
+};
+
+const wasMessageSummarized = (threadId: string, messageId: string): boolean => {
+  if (!threadId || !messageId) return false;
+  const recent = memoryDb.listLongMemory(threadId, 25);
+  for (const entry of recent) {
+    if (!entry.source_message_ids) continue;
+    try {
+      const parsed = JSON.parse(entry.source_message_ids);
+      if (Array.isArray(parsed) && parsed.includes(messageId)) {
+        return true;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return false;
+};
+
+const maybeAutoSummarizeLongMemory = async (
+  threadId: string,
+  messageId: string,
+  messageJson?: string
+): Promise<void> => {
+  if (!threadId || !messageId || typeof messageJson !== 'string') return;
+  if (!shouldAutoSummarizeThread(threadId)) return;
+
+  const extracted = memoryDb.extractTextFromMessageJson(messageJson);
+  if (!extracted || extracted.role !== 'assistant') return;
+  if (!extracted.content || !extracted.content.trim()) return;
+
+  if (wasMessageSummarized(threadId, messageId)) return;
+  if (memorySummarizeInFlight.has(threadId)) return;
+  memorySummarizeInFlight.add(threadId);
+
+  try {
+    const shortEntries = memoryDb.listShortMemory(threadId, 50);
+    const summary = await generateLongMemorySummary(shortEntries);
+    if (!summary) return;
+
+    const normalizedSummary = summary.summary.trim().toLowerCase();
+    const recentLong = memoryDb.listLongMemory(threadId, 10);
+    if (
+      recentLong.some(
+        entry => entry.summary && entry.summary.trim().toLowerCase() === normalizedSummary
+      )
+    ) {
+      return;
+    }
+
+    memoryDb.addLongMemory(
+      {
+        thread_id: threadId,
+        summary: summary.summary,
+        source_message_ids: summary.sourceMessageIds,
+        metadata: {
+          source: 'auto',
+          model: summary.model,
+          messageIds: summary.sourceMessageIds,
+        },
+      },
+      { force: true }
+    );
+  } finally {
+    memorySummarizeInFlight.delete(threadId);
+  }
+};
+
+const queueEmotionAnalysis = (params: {
+  threadId: string;
+  messageId: string;
+  messageJson: string;
+}) => {
+  const memoryConfig = getMemoryConfig();
+  if (!memoryConfig?.enabled) return;
+
+  const extracted = memoryDb.extractTextFromMessageJson(params.messageJson);
+  if (!extracted || extracted.role !== 'user') return;
+
+  const content = extracted.content.trim();
+  if (!content) return;
+
+  void (async () => {
+    try {
+      const emotion = await analyzeEmotionWithAgent(content);
+      if (!emotion) return;
+      memoryDb.addShortMemory({
+        thread_id: params.threadId,
+        message_id: params.messageId,
+        role: extracted.role,
+        content: extracted.content,
+        emotion,
+      });
+    } catch (error) {
+      console.warn(
+        `[Emotion][Main] analysis failed message=${params.messageId}:`,
+        getErrorMessage(error)
+      );
+    }
+  })();
+};
+
 const formatMemoryLine = (entry: { summary: string; score: number; updated_at?: string }) => {
   const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
   const dateText = entry.updated_at ? new Date(entry.updated_at).toLocaleDateString() : '';
@@ -967,12 +1079,20 @@ ipcMain.handle('chat:messages:create', (_, message) => {
 
   try {
     if (typeof message.message === 'string') {
+      const memoryConfig = getMemoryConfig();
+      const forceShortMemory = Boolean(memoryConfig?.autoSummarize);
       memoryDb.addShortMemoryFromChatMessage({
         thread_id: message.thread_id,
         message_id: messageId,
         message_json: message.message,
-      });
+      }, forceShortMemory ? { force: true } : undefined);
       memoryDb.pruneShortMemory(message.thread_id);
+      queueEmotionAnalysis({
+        threadId: message.thread_id,
+        messageId,
+        messageJson: message.message,
+      });
+      void maybeAutoSummarizeLongMemory(message.thread_id, messageId, message.message);
     }
   } catch (error) {
     console.warn('[Memory][Main] short memory insert failed:', getErrorMessage(error));
@@ -991,12 +1111,20 @@ ipcMain.handle('chat:messages:update', (_, id, message) => {
     const threadId = message.thread_id || existing?.thread_id;
     const messageJson = typeof message.message === 'string' ? message.message : existing?.message;
     if (threadId && messageJson) {
+      const memoryConfig = getMemoryConfig();
+      const forceShortMemory = Boolean(memoryConfig?.autoSummarize);
       memoryDb.addShortMemoryFromChatMessage({
         thread_id: threadId,
         message_id: id,
         message_json: messageJson,
-      });
+      }, forceShortMemory ? { force: true } : undefined);
       memoryDb.pruneShortMemory(threadId);
+      queueEmotionAnalysis({
+        threadId,
+        messageId: id,
+        messageJson,
+      });
+      void maybeAutoSummarizeLongMemory(threadId, id, messageJson);
     }
   } catch (error) {
     console.warn('[Memory][Main] short memory update failed:', getErrorMessage(error));
@@ -1506,6 +1634,8 @@ ipcMain.on('open-settings', () => {
       hash: 'settings',
     });
   }
+
+  settingsWindow.webContents.openDevTools({ mode: 'detach' });
 });
 
 ipcMain.on('close-window', event => {
