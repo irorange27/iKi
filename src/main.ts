@@ -650,7 +650,7 @@ const injectMemoryIntoMessages = (
 ): ChatInputMessage[] => {
   if (!threadId) return messages;
   const memoryConfig = getMemoryConfig();
-  if (!memoryConfig?.enabled || !memoryConfig.autoRetrieve) return messages;
+  if (!memoryConfig?.enabled) return messages;
 
   const lastMessage = messages[messages.length - 1];
   const query = getPromptFromMessage(lastMessage);
