@@ -18,6 +18,7 @@ import * as workspaceDb from './core/db/workspaces';
 import * as promptAppDb from './core/db/prompt_apps';
 import { getToolModel, generateTitleWithAgent } from './core/provider/tool_model';
 import { analyzeEmotionWithAgent } from './core/provider/emotion_model';
+import { selectToolsWithAgent } from './core/provider/tool_selection';
 import { generateLongMemorySummary } from './core/memory/auto_summarize';
 import { registerStandardTools, defaultToolRegistry } from './core/tools';
 import { SimpleAgent } from './core/agent';
@@ -34,6 +35,15 @@ const getErrorMessage = (error: unknown) => {
 };
 
 const shouldLogChunk = (count: number) => count <= 3 || count % 20 === 0;
+
+const TOOL_AGENT_SYSTEM_PROMPT =
+  'You can use tools (filesystem, shell, web) when they are necessary to solve the task.\n' +
+  'Rules:\n' +
+  '- Prefer answering directly when tools are not needed.\n' +
+  '- Use the minimal number of tool calls needed for correctness.\n' +
+  '- For each tool call, include a `description` field in the tool arguments: one short sentence explaining why you are calling the tool.\n' +
+  '- Be conservative with destructive actions (writing/deleting files, risky shell commands).\n' +
+  '- When using file paths, stay within the workspace.\n';
 
 type ChatWebContents = {
   id: number;
@@ -1304,7 +1314,7 @@ ipcMain.handle(
           enabled: true,
           providerType: options.providerType,
           model: options.model,
-          systemPrompt: '', // Persona is already integrated in SimpleAgent
+          systemPrompt: TOOL_AGENT_SYSTEM_PROMPT, // Persona is already integrated in SimpleAgent
           enableTools: true,
           maxIterations: 5,
         });
@@ -1384,19 +1394,45 @@ ipcMain.handle(
         options.threadId
       );
 
-      if (options.tools && options.tools.length > 0) {
+      const explicitTools = Array.isArray(options.tools)
+        ? options.tools.filter(
+            (toolName): toolName is string =>
+              typeof toolName === 'string' && toolName.trim().length > 0
+          )
+        : [];
+
+      let resolvedTools = explicitTools;
+
+      if (resolvedTools.length === 0) {
+        const availableTools = defaultToolRegistry
+          .getToolMetadata()
+          .map(t => ({ name: t.name, description: t.description }));
+        resolvedTools = await selectToolsWithAgent({
+          messages: toLlmChatMessages(inputMessages),
+          availableTools,
+        });
+        if (resolvedTools.length > 0) {
+          console.log('[Main] Auto-selected tools:', resolvedTools);
+        }
+      }
+
+      if (resolvedTools.length > 0) {
         const agent = new SimpleAgent({
           enabled: true,
           providerType: options.providerType,
           model: options.model,
-          systemPrompt: '',
+          systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
           enableTools: true,
           maxIterations: 5,
         });
 
-        console.log('[Main] Streaming chat with tools:', options.tools);
+        console.log(
+          '[Main] Streaming chat with tools:',
+          resolvedTools,
+          explicitTools.length > 0 ? '(manual)' : '(auto)'
+        );
 
-        for (const toolName of options.tools) {
+        for (const toolName of resolvedTools) {
           const tool = defaultToolRegistry.get(toolName);
           console.log(`[Main] Registering tool: ${toolName}`, tool ? 'found' : 'not found');
           if (tool) {

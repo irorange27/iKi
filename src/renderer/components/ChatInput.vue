@@ -2,7 +2,7 @@
   <div class="chat-input-outer">
     <div class="mx-auto max-w-3xl">
       <div class="relative rounded-xl border chat-input-container">
-        <input v-model="message" type="text" placeholder="Type a message..."
+        <input ref="inputRef" v-model="message" type="text" placeholder="Type a message..."
           class="w-full border-0 bg-transparent px-4 py-6 text-primary placeholder-muted focus:outline-none"
           @keydown.enter="handleEnter"
           @compositionstart="handleCompositionStart"
@@ -30,37 +30,80 @@
               </span>
             </button>
             <!-- tool choose -->
-            <div class="relative">
+            <div
+              class="relative"
+              @mouseenter="openToolSelector"
+              @mouseleave="scheduleCloseToolSelector"
+            >
               <button class="relative h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
-                :class="{ 'text-accent': selectedTools.length > 0 }" @click="showToolSelector = !showToolSelector">
+                :class="{ 'text-accent': isAutoToolMode || selectedTools.length > 0 }"
+                @click="showToolSelector = !showToolSelector"
+                @mouseenter="openToolSelector"
+                @mouseleave="scheduleCloseToolSelector">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
-                <span v-if="selectedTools.length > 0"
+                <span v-if="isAutoToolMode || selectedTools.length > 0"
                   class="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#4a9eff] text-[9px] text-white">
-                  {{ selectedTools.length }}
+                  {{ isAutoToolMode ? 'A' : selectedTools.length }}
                 </span>
               </button>
 
               <!-- Tool Selector Menu -->
               <div v-if="showToolSelector"
-                class="absolute bottom-full left-0 mb-2 w-64 rounded-xl border border-color bg-secondary shadow-xl z-50 overflow-hidden">
-                <div class="p-2 border-b border-color bg-tertiary flex items-center justify-between">
-                  <span class="text-xs font-semibold text-muted uppercase tracking-wider">Select Tools</span>
-                  <button class="text-[10px] text-accent hover:underline" @click="toggleAllTools">
-                    {{
-                      selectedTools.length === availableTools.length ? 'Deselect All' : 'Select All'
-                    }}
-                  </button>
+                class="absolute bottom-full left-0 mb-2 w-80 rounded-xl border border-color bg-secondary shadow-xl z-50 overflow-hidden"
+                @mouseenter="openToolSelector"
+                @mouseleave="scheduleCloseToolSelector">
+                <div class="p-3 border-b border-color bg-tertiary">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold text-primary">Tools</span>
+                  </div>
+                  <div class="mt-1 text-xs text-muted leading-snug">
+                    Allow iKi to use tools (web, files, shell) for the next response. Choose Auto
+                    or select manually.
+                  </div>
+
+                  <div class="mt-2 flex items-center gap-2">
+                    <button
+                      class="tool-mode-btn"
+                      :class="{ active: isAutoToolMode }"
+                      @click="toggleAutoToolMode"
+                    >
+                      Auto
+                    </button>
+                    <div class="flex-1" />
+                    <button
+                      class="tool-action-btn"
+                      :disabled="isAutoToolMode"
+                      @click="selectAllTools"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      class="tool-action-btn"
+                      :disabled="isAutoToolMode"
+                      @click="clearAllTools"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div v-if="isAutoToolMode" class="mt-2 text-xs text-accent leading-snug">
+                    iKi will automatically pick the most relevant tools based on your message.
+                  </div>
                 </div>
-                <div class="max-h-64 overflow-y-auto p-1">
+                <div class="max-h-72 overflow-y-auto p-2">
                   <div v-if="availableTools.length === 0" class="p-4 text-center text-sm text-muted">
                     No tools available.
                   </div>
                   <button v-for="tool in availableTools" :key="tool.name"
                     class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-hover flex items-center justify-between group"
-                    :class="{ 'text-accent bg-hover/50': isToolSelected(tool.name) }" @click="toggleTool(tool.name)">
+                    :disabled="isAutoToolMode"
+                    :class="{
+                      'text-accent bg-hover/50': isToolSelected(tool.name) && !isAutoToolMode,
+                      'opacity-60 cursor-not-allowed': isAutoToolMode,
+                    }" @click="toggleTool(tool.name)">
                     <div class="flex flex-col">
                       <span class="font-medium">{{ tool.name }}</span>
                       <span class="text-[10px] text-muted truncate max-w-[180px]">{{
@@ -68,8 +111,8 @@
                         }}</span>
                     </div>
                     <div class="flex h-4 w-4 items-center justify-center rounded border border-color"
-                      :class="{ 'bg-accent border-accent': isToolSelected(tool.name) }">
-                      <svg v-if="isToolSelected(tool.name)" class="h-3 w-3 text-white" viewBox="0 0 20 20"
+                      :class="{ 'bg-accent border-accent': isToolSelected(tool.name) && !isAutoToolMode }">
+                      <svg v-if="isToolSelected(tool.name) && !isAutoToolMode" class="h-3 w-3 text-white" viewBox="0 0 20 20"
                         fill="currentColor">
                         <path fill-rule="evenodd"
                           d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -146,7 +189,7 @@
             <button class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn" :class="[
               isLoading ? 'text-danger stop-btn' : 'text-accent',
               isStopping ? 'is-stopping' : '',
-            ]" :aria-label="isLoading ? 'Stop generation' : 'Send message'" @click="isLoading ? stopStreaming() : sendMessage"
+            ]" :aria-label="isLoading ? 'Stop generation' : 'Send message'" @click="isLoading ? stopStreaming() : sendMessage()"
               :disabled="isStopping">
               <svg v-if="isLoading" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -164,7 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, nextTick, computed, onUnmounted } from 'vue';
 import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
 
@@ -177,6 +220,7 @@ const props = defineProps<{
   threadId?: string;
 }>();
 
+const inputRef = ref<HTMLInputElement | null>(null);
 const message = ref('');
 const isLoading = ref(false);
 const isStopping = ref(false);
@@ -192,6 +236,9 @@ const showModelSelector = ref(false);
 const showToolSelector = ref(false);
 const availableTools = ref<any[]>([]);
 const selectedTools = ref<string[]>([]);
+const toolMode = ref<'manual' | 'auto'>('manual');
+const isAutoToolMode = computed(() => toolMode.value === 'auto');
+const toolSelectorCloseTimer = ref<number | null>(null);
 
 const toUiMessages = (messages: any[]): UIMessage[] =>
   messages
@@ -255,12 +302,20 @@ const loadAvailableTools = async () => {
   try {
     const tools = await window.electronAPI.tools.list();
     availableTools.value = tools;
+    // Default: enable all tools so the agent can decide whether to call them.
+    // Only apply if the user hasn't made a selection yet.
+    if (selectedTools.value.length === 0 && Array.isArray(tools) && tools.length > 0) {
+      selectedTools.value = tools
+        .map((tool: any) => (tool && typeof tool.name === 'string' ? tool.name : ''))
+        .filter((name: string) => typeof name === 'string' && name.trim().length > 0);
+    }
   } catch (e) {
     console.error('Failed to load tools:', e);
   }
 };
 
 const toggleTool = (toolName: string) => {
+  if (isAutoToolMode.value) return;
   const index = selectedTools.value.indexOf(toolName);
   if (index === -1) {
     selectedTools.value.push(toolName);
@@ -273,12 +328,38 @@ const isToolSelected = (toolName: string) => {
   return selectedTools.value.includes(toolName);
 };
 
-const toggleAllTools = () => {
-  if (selectedTools.value.length === availableTools.value.length) {
-    selectedTools.value = [];
-  } else {
-    selectedTools.value = availableTools.value.map(t => t.name);
+const selectAllTools = () => {
+  if (isAutoToolMode.value) return;
+  selectedTools.value = availableTools.value
+    .map((t: any) => (t && typeof t.name === 'string' ? t.name : ''))
+    .filter((name: string) => typeof name === 'string' && name.trim().length > 0);
+};
+
+const clearAllTools = () => {
+  if (isAutoToolMode.value) return;
+  selectedTools.value = [];
+};
+
+const toggleAutoToolMode = () => {
+  toolMode.value = isAutoToolMode.value ? 'manual' : 'auto';
+};
+
+const openToolSelector = () => {
+  if (toolSelectorCloseTimer.value !== null) {
+    window.clearTimeout(toolSelectorCloseTimer.value);
+    toolSelectorCloseTimer.value = null;
   }
+  showToolSelector.value = true;
+};
+
+const scheduleCloseToolSelector = () => {
+  if (toolSelectorCloseTimer.value !== null) {
+    window.clearTimeout(toolSelectorCloseTimer.value);
+  }
+  toolSelectorCloseTimer.value = window.setTimeout(() => {
+    showToolSelector.value = false;
+    toolSelectorCloseTimer.value = null;
+  }, 180);
 };
 
 watch(selectedProvider, () => {
@@ -290,6 +371,24 @@ const emit = defineEmits([
   'message-sent',
   'model-selected',
 ]);
+
+const setDraftMessage = async (
+  nextValue: string,
+  options?: { focus?: boolean; select?: boolean }
+) => {
+  message.value = nextValue;
+  await nextTick();
+  if (options?.focus) {
+    inputRef.value?.focus();
+  }
+  if (options?.select) {
+    inputRef.value?.select();
+  }
+};
+
+defineExpose({
+  setDraftMessage,
+});
 
 // Check if current provider is configured
 const checkProviderStatus = async () => {
@@ -378,7 +477,7 @@ const sendMessage = async () => {
   isStopping.value = false;
   streamDebugRequestId.value = `req-${Date.now()}`;
   console.log(
-    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] sendMessage provider=${selectedProvider.value.type} model=${selectedModel.value} toolCount=${selectedTools.value.length} promptLen=${userMessage.length}`
+    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] sendMessage provider=${selectedProvider.value.type} model=${selectedModel.value} toolMode=${isAutoToolMode.value ? 'auto' : 'manual'} toolCount=${isAutoToolMode.value ? 0 : selectedTools.value.length} promptLen=${userMessage.length}`
   );
 
   // Emit message-sent and wait for ChatView to finish thread/message setup.
@@ -435,7 +534,9 @@ const sendMessage = async () => {
       model: selectedModel.value,
       messages: transportMessages,
       tools:
-        selectedTools.value.length > 0
+        isAutoToolMode.value
+          ? undefined
+          : selectedTools.value.length > 0
           ? JSON.parse(JSON.stringify(selectedTools.value))
           : undefined,
       threadId: props.threadId,
@@ -470,6 +571,13 @@ const sendMessage = async () => {
 onMounted(async () => {
   await loadAvailableProviders();
   await loadAvailableTools();
+});
+
+onUnmounted(() => {
+  if (toolSelectorCloseTimer.value !== null) {
+    window.clearTimeout(toolSelectorCloseTimer.value);
+    toolSelectorCloseTimer.value = null;
+  }
 });
 </script>
 <style scoped>
@@ -562,5 +670,34 @@ button {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.tool-mode-btn {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+}
+
+.tool-mode-btn.active {
+  background: rgba(var(--accent-rgb, 74, 158, 255), 0.18);
+  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.35);
+  color: var(--text-primary);
+}
+
+.tool-action-btn {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.tool-action-btn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 </style>

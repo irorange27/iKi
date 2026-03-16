@@ -24,12 +24,26 @@
         <WelcomeScreen v-if="showWelcome && chat.messages.length === 0" @new-chat="handleNewChat" />
 
         <!-- Messages List -->
-        <div v-else class="messages-area w-full h-full">
+          <div v-else class="messages-area w-full h-full">
           <div class="messages-container" @click="handleMarkdownClick">
             <div v-for="(m, index) in chat.messages" :key="m.id ? m.id : index" class="message-wrapper" :class="m.role">
-              <div class="message-content">
-                <div v-for="(part, partIndex) in m.parts" :key="getPartRenderKey(m.id || String(index), part, partIndex)"
-                  class="message-part">
+              <div class="message-shell">
+                <div
+                  v-if="m.role === 'assistant' && getUsedToolNames(m).length > 0"
+                  class="tool-usage-summary"
+                >
+                  <span class="tool-usage-label">Tools used</span>
+                  <span
+                    v-for="toolName in getUsedToolNames(m)"
+                    :key="toolName"
+                    class="tool-usage-pill"
+                  >
+                    {{ toolName }}
+                  </span>
+                </div>
+                <div class="message-content">
+                  <div v-for="(part, partIndex) in m.parts" :key="getPartRenderKey(m.id || String(index), part, partIndex)"
+                    class="message-part">
                   <div v-if="isStreamingTextPart(m as any, part)" class="message-text">
                     {{ getTextPartContent(part) }}
                   </div>
@@ -65,46 +79,186 @@
                       </button>
                     </div>
                   </div>
-                  <div v-else-if="isToolResultPart(part)" class="tool-result-content">
+                  <div
+                    v-else-if="isToolResultPart(part)"
+                    class="tool-result-content"
+                    :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
+                  >
                     <div class="tool-card-header">
                       <span class="tool-card-tag tag-result">Tool Result</span>
-                      <span class="tool-card-name">{{ getToolName(part) }}</span>
-                      <span v-if="getToolStateLabel(part)" class="tool-card-state">{{ getToolStateLabel(part) }}</span>
+                      <div class="tool-card-lead">
+                        <component
+                          :is="getToolIconComponent(part)"
+                          :size="16"
+                          class="tool-card-lead-icon"
+                        />
+                        <span class="tool-card-title">{{ getToolTitle(part) }}</span>
+                        <span class="tool-card-tool">{{ getToolName(part) }}</span>
+                      </div>
+                      <div class="tool-card-meta">
+                        <span
+                          v-if="getToolStateLabel(part)"
+                          class="tool-state-pill"
+                          :class="getToolStatePillClass(part)"
+                        >
+                          <CheckCircle
+                            v-if="getToolStateKind(part) === 'success'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <XCircle
+                            v-else-if="getToolStateKind(part) === 'error'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <ShieldBan
+                            v-else-if="getToolStateKind(part) === 'denied'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <CircleHelp
+                            v-else-if="getToolStateKind(part) === 'pending'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <Loader2
+                            v-else-if="getToolStateKind(part) === 'running'"
+                            :size="14"
+                            class="tool-state-icon tool-icon-spin"
+                          />
+                          <span>{{ getToolStateLabel(part) }}</span>
+                        </span>
+                        <span v-if="getToolDurationLabel(part)" class="tool-duration">
+                          <Clock :size="14" class="tool-duration-icon" />
+                          <span>{{ getToolDurationLabel(part) }}</span>
+                        </span>
+                        <button
+                          v-if="canToggleToolCollapse(part)"
+                          type="button"
+                          class="tool-collapse-btn"
+                          :aria-label="isToolCollapsed(part) ? 'Expand tool details' : 'Collapse tool details'"
+                          @click.stop="toggleToolCollapse(m as any, part as any)"
+                        >
+                          <ChevronDown
+                            :size="16"
+                            class="tool-collapse-icon"
+                            :class="{ 'is-expanded': !isToolCollapsed(part) }"
+                          />
+                        </button>
+                      </div>
                     </div>
-                    <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
-                      <div class="tool-card-section-title">References</div>
-                      <ol class="tool-citations">
-                        <li v-for="citation in getWebSearchCitations(part)" :key="citation.url" class="tool-citation">
-                          <a :href="citation.url" target="_blank" rel="noopener noreferrer">
-                            {{ citation.title }}
-                          </a>
-                          <span v-if="citation.domain" class="tool-citation-domain">{{ citation.domain }}</span>
-                        </li>
-                      </ol>
-                    </div>
-                    <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
-                      <div class="tool-card-section-title">Output</div>
-                      <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
-                    </div>
-                    <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-                      <div class="tool-card-section-title">Input</div>
-                      <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                    <div v-if="!isToolCollapsed(part)">
+                      <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
+                        <div class="tool-card-section-title">References</div>
+                        <ol class="tool-citations">
+                          <li v-for="citation in getWebSearchCitations(part)" :key="citation.url" class="tool-citation">
+                            <a :href="citation.url" target="_blank" rel="noopener noreferrer">
+                              {{ citation.title }}
+                            </a>
+                            <span v-if="citation.domain" class="tool-citation-domain">{{ citation.domain }}</span>
+                          </li>
+                        </ol>
+                      </div>
+                      <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+                        <div class="tool-card-section-title">Command</div>
+                        <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                      </div>
+                      <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
+                        <div class="tool-card-section-title">Output</div>
+                        <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
+                      </div>
                     </div>
                   </div>
-                  <div v-else-if="isToolCallPart(part)" class="tool-call-content">
+                  <div
+                    v-else-if="isToolCallPart(part)"
+                    class="tool-call-content"
+                    :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
+                  >
                     <div class="tool-card-header">
                       <span class="tool-card-tag tag-call">Tool Call</span>
-                      <span class="tool-card-name">{{ getToolName(part) }}</span>
-                      <span v-if="getToolStateLabel(part)" class="tool-card-state">{{ getToolStateLabel(part) }}</span>
+                      <div class="tool-card-lead">
+                        <component
+                          :is="getToolIconComponent(part)"
+                          :size="16"
+                          class="tool-card-lead-icon"
+                        />
+                        <span class="tool-card-title">{{ getToolTitle(part) }}</span>
+                        <span class="tool-card-tool">{{ getToolName(part) }}</span>
+                      </div>
+                      <div class="tool-card-meta">
+                        <span
+                          v-if="getToolStateLabel(part)"
+                          class="tool-state-pill"
+                          :class="getToolStatePillClass(part)"
+                        >
+                          <CheckCircle
+                            v-if="getToolStateKind(part) === 'success'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <XCircle
+                            v-else-if="getToolStateKind(part) === 'error'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <ShieldBan
+                            v-else-if="getToolStateKind(part) === 'denied'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <CircleHelp
+                            v-else-if="getToolStateKind(part) === 'pending'"
+                            :size="14"
+                            class="tool-state-icon"
+                          />
+                          <Loader2
+                            v-else-if="getToolStateKind(part) === 'running'"
+                            :size="14"
+                            class="tool-state-icon tool-icon-spin"
+                          />
+                          <span>{{ getToolStateLabel(part) }}</span>
+                        </span>
+                        <span v-if="getToolDurationLabel(part)" class="tool-duration">
+                          <Clock :size="14" class="tool-duration-icon" />
+                          <span>{{ getToolDurationLabel(part) }}</span>
+                        </span>
+                        <button
+                          v-if="canToggleToolCollapse(part)"
+                          type="button"
+                          class="tool-collapse-btn"
+                          :aria-label="isToolCollapsed(part) ? 'Expand tool details' : 'Collapse tool details'"
+                          @click.stop="toggleToolCollapse(m as any, part as any)"
+                        >
+                          <ChevronDown
+                            :size="16"
+                            class="tool-collapse-icon"
+                            :class="{ 'is-expanded': !isToolCollapsed(part) }"
+                          />
+                        </button>
+                      </div>
                     </div>
-                    <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-                      <div class="tool-card-section-title">Arguments</div>
-                      <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                    <div v-if="!isToolCollapsed(part)">
+                      <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+                        <div class="tool-card-section-title">Arguments</div>
+                        <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                      </div>
                     </div>
                   </div>
                   <div v-else class="tool-fallback-content">
                     <pre class="tool-json-output">{{ formatJson(part) }}</pre>
                   </div>
+                </div>
+                </div>
+                <div v-if="m.role === 'user'" class="message-actions">
+                  <button
+                    class="message-action-btn"
+                    type="button"
+                    data-tooltip="Edit"
+                    aria-label="Edit"
+                    @click.stop="beginEditMessage(m as any)"
+                  >
+                    <Pencil class="message-action-icon" :size="14" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -113,12 +267,23 @@
       </div>
 
       <!-- Input Area -->
-      <ChatInput
-        :chat="chat"
-        :thread-id="currentThread?.id || ''"
-        @message-sent="handleMessageSent"
-        @model-selected="handleModelSelected"
-      />
+      <div class="composer-area">
+        <div v-if="editingUserMessageId" class="edit-banner">
+          <div class="edit-banner-text">
+            <strong>Editing a previous message.</strong> Resending will remove later messages in this thread.
+          </div>
+          <button class="edit-banner-cancel" type="button" @click="cancelEditing">
+            Cancel
+          </button>
+        </div>
+        <ChatInput
+          ref="chatInputRef"
+          :chat="chat"
+          :thread-id="currentThread?.id || ''"
+          @message-sent="handleMessageSent"
+          @model-selected="handleModelSelected"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -131,7 +296,25 @@ import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
-import { FolderOpen } from 'lucide-vue-next';
+import {
+  CheckCircle,
+  ChevronDown,
+  CircleHelp,
+  Clock,
+  Download,
+  FilePenLine,
+  FileText,
+  Folder,
+  FolderOpen,
+  Loader2,
+  Pencil,
+  Search,
+  ShieldBan,
+  Terminal,
+  Trash2,
+  Wrench,
+  XCircle,
+} from 'lucide-vue-next';
 import { useConfigStore } from '../store/config';
 import VueMarkdown from 'vue-markdown-render';
 import hljs from 'highlight.js/lib/common';
@@ -157,6 +340,7 @@ const currentThread = ref<ChatThread | null>(null);
 const currentModel = ref<string>('');
 const selectedTools = ref<string[]>([]);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
+const chatInputRef = ref<any>(null);
 const activeAssistantMessageId = ref<string | null>(null);
 const activeAssistantParentId = ref<string | null>(null);
 const activeStreamThreadId = ref<string | null>(null);
@@ -170,6 +354,7 @@ const streamRenderChunkCount = ref(0);
 const streamRenderChars = ref(0);
 const shouldLogStreamChunk = (count: number) => count <= 3 || count % 20 === 0;
 const TITLE_REGEN_INTERVAL = 2;
+const editingUserMessageId = ref<string | null>(null);
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -330,6 +515,76 @@ const extractTextFromMessage = (message: UIMessage | undefined): string => {
     .filter(part => isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string')
     .map(part => String(part.text))
     .join('');
+};
+
+const upsertTextIntoMessageParts = (parts: UIMessage['parts'], nextText: string): UIMessage['parts'] => {
+  const nextParts: UIMessage['parts'] = [];
+  let replaced = false;
+
+  for (const part of parts) {
+    if (isObjectRecord(part) && part.type === 'text') {
+      if (replaced) continue;
+      nextParts.push({
+        ...(part as any),
+        type: 'text',
+        text: nextText,
+        state: 'done',
+      } as any);
+      replaced = true;
+      continue;
+    }
+    nextParts.push(part);
+  }
+
+  if (!replaced) {
+    nextParts.unshift({ type: 'text', text: nextText, state: 'done' } as any);
+  }
+
+  return nextParts;
+};
+
+const truncateConversationAfterIndex = async (messageIndex: number) => {
+  const messagesToDelete = chat.messages.slice(messageIndex + 1) as unknown as UIMessage[];
+  if (!messagesToDelete.length) return;
+
+  const idsToDelete = messagesToDelete
+    .map(message => (message && typeof message.id === 'string' ? message.id : ''))
+    .filter(id => id.length > 0);
+
+  if (idsToDelete.length === 0) {
+    chat.messages.splice(messageIndex + 1, chat.messages.length);
+    return;
+  }
+
+  const inFlight = idsToDelete
+    .map(id => messagePersistInFlight.get(id))
+    .filter((promise): promise is Promise<void> => Boolean(promise));
+  if (inFlight.length) {
+    await Promise.allSettled(inFlight);
+  }
+
+  chat.messages.splice(messageIndex + 1, chat.messages.length);
+
+  for (const id of idsToDelete) {
+    persistedMessageIds.delete(id);
+    messagePersistInFlight.delete(id);
+  }
+
+  await Promise.allSettled(idsToDelete.map(id => window.electronAPI.chat.messages.delete(id)));
+};
+
+const beginEditMessage = async (message: UIMessage) => {
+  if (!message || message.role !== 'user' || typeof message.id !== 'string') return;
+  await stopActiveStreamIfNeeded('edit-message');
+  editingUserMessageId.value = message.id;
+  const text = extractTextFromMessage(message);
+  await chatInputRef.value?.setDraftMessage(text, { focus: true, select: true });
+  scrollToBottom();
+};
+
+const cancelEditing = async () => {
+  editingUserMessageId.value = null;
+  await chatInputRef.value?.setDraftMessage('', { focus: true });
 };
 
 const upsertUiMessage = async (
@@ -610,6 +865,197 @@ const getToolStateLabel = (part: unknown): string => {
   return TOOL_STATE_LABELS[part.state] ?? part.state;
 };
 
+type ToolStateKind = 'success' | 'error' | 'denied' | 'pending' | 'running' | 'neutral';
+
+const getToolStateKind = (part: unknown): ToolStateKind => {
+  if (!isObjectRecord(part) || typeof part.state !== 'string') return 'neutral';
+
+  const state = part.state;
+  if (state === 'output-available' || state === 'done') return 'success';
+  if (state === 'output-error') return 'error';
+  if (state === 'output-denied') return 'denied';
+  if (state === 'approval-requested') return 'pending';
+  if (state === 'input-streaming' || state === 'input-available' || state === 'approval-responded') {
+    return 'running';
+  }
+
+  return 'neutral';
+};
+
+const getToolStatePillClass = (part: unknown): string => `tool-state-${getToolStateKind(part)}`;
+
+const coerceToTimestampMs = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+  if (typeof value === 'string' && value.trim()) {
+    const trimmed = value.trim();
+
+    const asNumber = Number(trimmed);
+    if (Number.isFinite(asNumber)) return asNumber;
+
+    const parsedIso = Date.parse(trimmed);
+    if (!Number.isNaN(parsedIso)) return parsedIso;
+  }
+
+  return null;
+};
+
+const getToolDurationMs = (part: unknown): number | null => {
+  if (!isObjectRecord(part)) return null;
+
+  const explicitDuration = coerceToTimestampMs(part.durationMs);
+  if (explicitDuration !== null && explicitDuration >= 0) return explicitDuration;
+
+  const startedAt = coerceToTimestampMs(part.startedAt);
+  const endedAt = coerceToTimestampMs(part.endedAt);
+  if (startedAt !== null && endedAt !== null) return Math.max(0, endedAt - startedAt);
+
+  return null;
+};
+
+const formatDurationMs = (ms: number): string => {
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const secondsTotal = ms / 1000;
+
+  const formatSeconds = (seconds: number) => {
+    const fixed = seconds.toFixed(1);
+    return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
+  };
+
+  if (secondsTotal < 60) {
+    return `${formatSeconds(secondsTotal)} s`;
+  }
+
+  const minutes = Math.floor(secondsTotal / 60);
+  const seconds = Math.round(secondsTotal % 60);
+  return `${minutes}m ${seconds}s`;
+};
+
+const getToolDurationLabel = (part: unknown): string => {
+  const ms = getToolDurationMs(part);
+  if (ms === null) return '';
+  return formatDurationMs(ms);
+};
+
+const normalizeToolNameKey = (value: string): string =>
+  value.trim().toLowerCase().replace(/[-\s]+/g, '_');
+
+const TOOL_ICON_COMPONENTS: Record<string, any> = {
+  web: Search,
+  web_search: Search,
+  fetch: Download,
+  shell: Terminal,
+  read_file: FileText,
+  write_file: FilePenLine,
+  list_dir: Folder,
+  delete_file: Trash2,
+};
+
+const getToolIconComponent = (part: unknown): any => {
+  const rawName = getToolName(part);
+  const toolKey = typeof rawName === 'string' ? normalizeToolNameKey(rawName) : 'tool';
+  return TOOL_ICON_COMPONENTS[toolKey] || Wrench;
+};
+
+const normalizeSingleLineText = (value: string): string => value.replace(/\s+/g, ' ').trim();
+
+const getPathBasename = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const segments = trimmed.split(/[\\/]/).filter(Boolean);
+  return segments.length > 0 ? segments[segments.length - 1] : trimmed;
+};
+
+const getToolTitle = (part: unknown): string => {
+  if (isObjectRecord(part) && typeof part.title === 'string' && part.title.trim()) {
+    return normalizeSingleLineText(part.title);
+  }
+
+  const input = getToolInput(part);
+  if (isObjectRecord(input)) {
+    const descriptionCandidate =
+      typeof input.description === 'string'
+        ? input.description
+        : typeof input.reason === 'string'
+          ? input.reason
+          : typeof input.rationale === 'string'
+            ? input.rationale
+            : '';
+    if (descriptionCandidate.trim()) {
+      return normalizeSingleLineText(descriptionCandidate);
+    }
+  }
+
+  const rawName = getToolName(part);
+  const toolKey = typeof rawName === 'string' ? normalizeToolNameKey(rawName) : 'tool';
+
+  if (isObjectRecord(input)) {
+    if (toolKey === 'web' || toolKey === 'web_search') {
+      if (typeof input.query === 'string' && input.query.trim()) {
+        return normalizeSingleLineText(input.query);
+      }
+    }
+
+    if (toolKey === 'fetch') {
+      if (typeof input.url === 'string' && input.url.trim()) {
+        return normalizeSingleLineText(input.url);
+      }
+    }
+
+    if (toolKey === 'shell') {
+      if (typeof input.command === 'string' && input.command.trim()) {
+        return normalizeSingleLineText(input.command);
+      }
+    }
+
+    if (
+      toolKey === 'read_file' ||
+      toolKey === 'write_file' ||
+      toolKey === 'list_dir' ||
+      toolKey === 'delete_file'
+    ) {
+      if (typeof input.path === 'string' && input.path.trim()) {
+        return getPathBasename(input.path);
+      }
+    }
+  }
+
+  if (typeof rawName === 'string' && rawName.trim()) {
+    return normalizeSingleLineText(rawName);
+  }
+
+  return 'tool';
+};
+
+const isToolCollapsed = (part: unknown): boolean => isObjectRecord(part) && part.collapsed === true;
+
+const canToggleToolCollapse = (part: unknown): boolean =>
+  isToolCallPart(part) || isToolResultPart(part);
+
+const toggleToolCollapse = async (message: UIMessage, part: unknown) => {
+  if (!isObjectRecord(part)) return;
+  part.collapsed = !isToolCollapsed(part);
+  await upsertUiMessage(message, activeAssistantParentId.value || undefined, 'tool-card:toggle-collapse');
+};
+
+const getUsedToolNames = (message: any): string[] => {
+  const parts = Array.isArray(message?.parts) ? message.parts : [];
+  const names: string[] = [];
+  const seen = new Set<string>();
+
+  for (const part of parts) {
+    if (!isToolPart(part)) continue;
+    const rawName = getToolName(part);
+    const name = typeof rawName === 'string' ? rawName.trim() : '';
+    if (!name || name === 'tool') continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+
+  return names;
+};
+
 const getUrlDomain = (value: string): string => {
   try {
     return new URL(value).hostname.replace(/^www\./, '');
@@ -788,6 +1234,7 @@ const createNewThread = async (model?: string) => {
     currentThread.value = thread;
     chat.messages.splice(0, chat.messages.length);
     persistedMessageIds.clear();
+    editingUserMessageId.value = null;
     resetTransientState();
     showWelcome.value = false;
 
@@ -817,6 +1264,7 @@ const loadThreadMessages = async (threadId: string) => {
 
     const chatMessages = dbMessages.map((message: any) => parseStoredUiMessage(message));
     chat.messages.splice(0, chat.messages.length, ...(chatMessages as any[]));
+    editingUserMessageId.value = null;
     resetTransientState();
     scrollToBottom();
   } catch (error) {
@@ -860,6 +1308,7 @@ const handleThreadDeleted = async (threadId: string) => {
   currentModel.value = '';
   chat.messages.splice(0, chat.messages.length);
   persistedMessageIds.clear();
+  editingUserMessageId.value = null;
   resetTransientState();
   showWelcome.value = true;
 
@@ -976,6 +1425,8 @@ const handleMessageSent = async (
   onReady?: () => void
 ) => {
   try {
+    const pendingEditMessageId = editingUserMessageId.value;
+
     // Create thread if it doesn't exist
     if (!currentThread.value) {
       const thread = await createNewThread(model || currentModel.value);
@@ -1004,6 +1455,40 @@ const handleMessageSent = async (
 
     showWelcome.value = false;
 
+    if (pendingEditMessageId && currentThread.value) {
+      await stopActiveStreamIfNeeded('edit-resend');
+
+      const messageIndex = chat.messages.findIndex(
+        (message: any) => message && message.id === pendingEditMessageId
+      );
+
+      if (messageIndex >= 0) {
+        const currentUserMessage = chat.messages[messageIndex] as UIMessage;
+        const updatedUserMessage: UIMessage = {
+          ...currentUserMessage,
+          parts: upsertTextIntoMessageParts(currentUserMessage.parts, content),
+        };
+
+        chat.messages.splice(messageIndex, 1, updatedUserMessage as any);
+        await upsertUiMessage(updatedUserMessage, undefined, 'user-message-edit', currentThread.value.id);
+        await truncateConversationAfterIndex(messageIndex);
+
+        activeAssistantParentId.value = updatedUserMessage.id;
+        activeAssistantMessageId.value = null;
+        activeStreamThreadId.value = currentThread.value.id;
+        streamingAssistantText.value = '';
+        streamRenderTraceId.value = `view-${Date.now()}`;
+        streamRenderChunkCount.value = 0;
+        streamRenderChars.value = 0;
+
+        editingUserMessageId.value = null;
+        scrollToBottom();
+        return;
+      }
+
+      editingUserMessageId.value = null;
+    }
+
     const userMessage: UIMessage = {
       id: createMessageId(),
       role: 'user',
@@ -1019,9 +1504,9 @@ const handleMessageSent = async (
     streamRenderTraceId.value = `view-${Date.now()}`;
     streamRenderChunkCount.value = 0;
     streamRenderChars.value = 0;
-    await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
+      await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
 
-    scrollToBottom();
+      scrollToBottom();
   } finally {
     onReady?.();
   }
@@ -1276,6 +1761,11 @@ const handleToolUiChunk = async (chunk: UIMessageChunk) => {
       (existingPart && typeof existingPart.toolName === 'string' ? existingPart.toolName : 'tool'),
   };
 
+  const nowMs = Date.now();
+  if (typeof nextPart.startedAt !== 'number' || !Number.isFinite(nextPart.startedAt)) {
+    nextPart.startedAt = nowMs;
+  }
+
   if ('providerExecuted' in chunk && typeof chunk.providerExecuted === 'boolean') {
     nextPart.providerExecuted = chunk.providerExecuted;
   }
@@ -1296,25 +1786,45 @@ const handleToolUiChunk = async (chunk: UIMessageChunk) => {
     nextPart.input = parseToolInputFromText(inputText);
     nextPart.state = 'input-streaming';
   } else if (chunk.type === 'tool-input-available') {
-    nextPart.input = chunk.input ?? nextPart.input ?? {};
+    if (isObjectRecord(nextPart.input) && isObjectRecord(chunk.input)) {
+      // Preserve any fields that may have been present in streamed JSON but stripped by tool schema validation.
+      nextPart.input = { ...nextPart.input, ...chunk.input };
+    } else {
+      nextPart.input = chunk.input ?? nextPart.input ?? {};
+    }
     nextPart.state = 'input-available';
     delete nextPart.inputText;
   } else if (chunk.type === 'tool-input-error') {
-    nextPart.input = chunk.input ?? nextPart.input ?? {};
+    if (isObjectRecord(nextPart.input) && isObjectRecord(chunk.input)) {
+      nextPart.input = { ...nextPart.input, ...chunk.input };
+    } else {
+      nextPart.input = chunk.input ?? nextPart.input ?? {};
+    }
     nextPart.output = {
       error: chunk.errorText || 'Invalid tool input',
     };
     nextPart.state = 'output-error';
+    nextPart.endedAt = nowMs;
+    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
     delete nextPart.inputText;
   } else if (chunk.type === 'tool-output-available') {
     nextPart.output = chunk.output;
     nextPart.state = chunk.preliminary ? 'input-streaming' : 'output-available';
+    if (!chunk.preliminary) {
+      nextPart.endedAt = nowMs;
+      nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
+      if (typeof nextPart.collapsed !== 'boolean') {
+        nextPart.collapsed = true;
+      }
+    }
     delete nextPart.inputText;
   } else if (chunk.type === 'tool-output-error') {
     nextPart.output = {
       error: chunk.errorText || 'Tool execution failed',
     };
     nextPart.state = 'output-error';
+    nextPart.endedAt = nowMs;
+    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
     delete nextPart.inputText;
   } else if (chunk.type === 'tool-output-denied') {
     nextPart.state = 'output-denied';
@@ -1322,6 +1832,8 @@ const handleToolUiChunk = async (chunk: UIMessageChunk) => {
       message: 'Tool execution denied',
       toolCallId,
     };
+    nextPart.endedAt = nowMs;
+    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
     delete nextPart.inputText;
   }
 
@@ -1418,6 +1930,12 @@ const handleToolApprovalRequest = async (request: any) => {
     },
   };
 
+  if (typeof approvalPart.startedAt !== 'number' || !Number.isFinite(approvalPart.startedAt)) {
+    approvalPart.startedAt = Date.now();
+  }
+  delete approvalPart.endedAt;
+  delete approvalPart.durationMs;
+
   if (existingPartIndex >= 0) {
     assistantMessage.parts.splice(existingPartIndex, 1, approvalPart as any);
   } else {
@@ -1460,6 +1978,12 @@ const handleToolApproval = async (message: UIMessage, part: any, approved: boole
         reason: 'User approved tool execution.',
       };
     } else {
+      const nowMs = Date.now();
+      if (typeof part.startedAt !== 'number' || !Number.isFinite(part.startedAt)) {
+        part.startedAt = nowMs;
+      }
+      part.endedAt = nowMs;
+      part.durationMs = Math.max(0, nowMs - (part.startedAt as number));
       part.state = 'output-denied';
       part.approval = {
         id: approvalId,
@@ -1538,21 +2062,166 @@ onUnmounted(() => {
   margin-bottom: var(--chat-message-gap, 18px);
 }
 
-.message-wrapper.user .message-content {
+.message-shell {
+  position: relative;
+}
+
+.tool-usage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tool-usage-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.tool-usage-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
-  border-radius: 12px;
-  padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
+  color: var(--text-secondary);
+}
+
+.message-wrapper.user .message-shell {
   margin-left: auto;
   width: fit-content;
   max-width: min(85%, 760px);
+}
+
+.message-wrapper.assistant .message-shell {
+  max-width: min(100%, 760px);
+  margin-right: clamp(0px, 4vw, 56px);
+}
+
+.message-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  position: absolute;
+  left: 10px;
+  bottom: -18px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 10;
+}
+
+.message-wrapper.user .message-content:hover + .message-actions,
+.message-wrapper.user .message-actions:hover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.message-action-btn {
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-tertiary) 82%, transparent);
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.message-action-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.message-action-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  white-space: nowrap;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+  color: var(--text-primary);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.message-action-btn:hover::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.message-action-icon {
+  display: block;
+}
+
+.composer-area {
+  width: 100%;
+}
+
+.edit-banner {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.edit-banner strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.edit-banner-cancel {
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.edit-banner-cancel:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.message-wrapper.user .message-content {
+  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-tertiary));
+  border: 1px solid color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
+  border-radius: 12px;
+  padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
 }
 
 .message-wrapper.assistant .message-content {
   background: var(--bg-primary);
   border-radius: 12px;
   padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
-  max-width: min(100%, 760px);
-  margin-right: clamp(0px, 4vw, 56px);
 }
 
 .message-text {
@@ -1602,6 +2271,16 @@ onUnmounted(() => {
 .message-text.markdown-content :deep(ol) {
   margin: 0.7em 0 0.95em 1.25em;
   padding: 0;
+}
+
+.message-text.markdown-content :deep(ul) {
+  list-style: disc;
+  list-style-position: outside;
+}
+
+.message-text.markdown-content :deep(ol) {
+  list-style: decimal;
+  list-style-position: outside;
 }
 
 .message-text.markdown-content :deep(li + li) {
@@ -1781,18 +2460,24 @@ onUnmounted(() => {
     max-width: 100%;
   }
 
-  .message-wrapper.user .message-content,
-  .message-wrapper.assistant .message-content {
+  .message-wrapper.user .message-shell,
+  .message-wrapper.assistant .message-shell {
     max-width: 100%;
   }
 
-  .message-wrapper.assistant .message-content {
+  .message-wrapper.assistant .message-shell {
     margin-right: 0;
   }
 
   .message-text {
     font-size: calc(var(--font-size) - 1px);
     line-height: 1.68;
+  }
+
+  .message-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 }
 
@@ -1866,16 +2551,156 @@ onUnmounted(() => {
   background: var(--bg-tertiary);
 }
 
-.tool-card-name {
+.tool-card-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tool-card-lead-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.tool-card-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tool-card-state {
+.tool-card-tool {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+}
+
+.tool-card-meta {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tool-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.tool-state-pill.tool-state-success {
+  color: var(--success-color, var(--accent-color));
+  border-color: color-mix(
+    in srgb,
+    var(--success-color, var(--accent-color)) 55%,
+    var(--border-color)
+  );
+  background: color-mix(in srgb, var(--success-color, var(--accent-color)) 12%, var(--bg-tertiary));
+}
+
+.tool-state-pill.tool-state-error {
+  color: var(--danger-color);
+  border-color: color-mix(in srgb, var(--danger-color) 55%, var(--border-color));
+  background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-tertiary));
+}
+
+.tool-state-pill.tool-state-denied {
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--text-muted) 55%, var(--border-color));
+  background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-tertiary));
+}
+
+.tool-state-pill.tool-state-pending,
+.tool-state-pill.tool-state-running {
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-tertiary));
+}
+
+.tool-state-icon {
+  opacity: 0.95;
+}
+
+.tool-icon-spin {
+  animation: tool-spin 0.9s linear infinite;
+}
+
+@keyframes tool-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tool-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--text-secondary);
+  opacity: 0.9;
+}
+
+.tool-duration-icon {
+  opacity: 0.85;
+}
+
+.tool-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tool-collapse-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.tool-collapse-icon {
+  transition: transform 0.18s ease;
+}
+
+.tool-collapse-icon.is-expanded {
+  transform: rotate(180deg);
+}
+
+.tool-card-collapsed .tool-card-header {
+  margin-bottom: 0;
 }
 
 .tool-card-section + .tool-card-section {
