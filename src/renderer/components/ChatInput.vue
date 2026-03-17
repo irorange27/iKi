@@ -298,10 +298,26 @@
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
             </button>
+
+            <div v-if="showWaveform" class="speech-waveform" aria-hidden="true">
+              <span
+                v-for="(bar, idx) in waveformBars"
+                :key="idx"
+                class="speech-waveform-bar"
+                :style="{ height: `${Math.max(18, Math.round(bar * 100))}%` }"
+              />
+            </div>
+            
             <button
               class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
               :class="[
-                isRecording ? 'text-danger' : speechEngineAvailable ? 'text-secondary' : 'text-muted',
+                isRecording
+                  ? 'text-danger'
+                  : isTranscribing
+                    ? 'text-accent'
+                    : speechEngineAvailable
+                      ? 'text-secondary'
+                      : 'text-muted',
                 isTranscribing ? 'is-transcribing' : '',
               ]"
               :disabled="!speechEngineAvailable || isLoading || isStopping || isTranscribing"
@@ -310,6 +326,20 @@
             >
               <svg v-if="isRecording" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <svg
+                v-else-if="isTranscribing"
+                class="h-4 w-4 animate-spin"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 12a8 8 0 018-8m0 16a8 8 0 008-8"
+                />
               </svg>
               <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -389,35 +419,27 @@ const isTranscribing = ref(false);
 const speechError = ref('');
 const speechErrorTimer = ref<number | null>(null);
 const speechDraftBase = ref('');
-const speechFinal = ref('');
-const speechInterim = ref('');
 const mediaRecorder = ref<MediaRecorder | null>(null);
 const mediaStream = ref<MediaStream | null>(null);
-const recognitionRef = ref<any>(null);
 const recordingTimeout = ref<number | null>(null);
+const WAVEFORM_BAR_COUNT = 5;
+const waveformBars = ref<number[]>(Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.2));
+const showWaveform = computed(() => isRecording.value && Boolean(mediaStream.value));
 const isNodeSpeechAvailable = computed(() => Boolean(speechStatus.value?.available));
 const isSpeechEnabled = computed(() => speechStatus.value?.enabled === true);
-const isBrowserSpeechAvailable = computed(
-  () => Boolean(window?.SpeechRecognition || window?.webkitSpeechRecognition)
-);
+const requestedSpeechProvider = computed(() => speechStatus.value?.providerType);
 const canRecordAudio = computed(
   () => Boolean(navigator?.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined'
 );
-const speechEngine = computed<'node' | 'browser' | 'none'>(() => {
+const speechEngine = computed<'node' | 'none'>(() => {
   if (!isSpeechEnabled.value) return 'none';
-  if (isNodeSpeechAvailable.value && canRecordAudio.value) return 'node';
-  if (isBrowserSpeechAvailable.value) return 'browser';
-  return 'none';
+  if (requestedSpeechProvider.value) {
+    return isNodeSpeechAvailable.value && canRecordAudio.value ? 'node' : 'none';
+  }
+  return isNodeSpeechAvailable.value && canRecordAudio.value ? 'node' : 'none';
 });
 const speechEngineAvailable = computed(() => speechEngine.value !== 'none');
-const speechStatusLabel = computed(() => {
-  if (isRecording.value) {
-    return speechEngine.value === 'node' ? 'Recording…' : 'Listening…';
-  }
-  if (isTranscribing.value) return 'Transcribing…';
-  if (speechError.value) return speechError.value;
-  return '';
-});
+const speechStatusLabel = computed(() => speechError.value);
 const speechStatusToneClass = computed(() => (speechError.value ? 'text-danger' : 'text-muted'));
 
 const toUiMessages = (messages: any[]): UIMessage[] =>
@@ -631,27 +653,35 @@ const setSpeechError = (message: string) => {
   }, 4000);
 };
 
-const joinDraft = (...parts: string[]) =>
-  parts
-    .map(part => (typeof part === 'string' ? part.trim() : ''))
-    .filter(part => part.length > 0)
-    .join(' ')
-    .trim();
-
-const updateSpeechDraftMessage = () => {
-  message.value = joinDraft(speechDraftBase.value, speechFinal.value, speechInterim.value);
+const applySpeechText = async (text: string) => {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const input = inputRef.value;
+  if (!input) {
+    message.value = `${speechDraftBase.value} ${trimmed}`.trim();
+    return;
+  }
+  const current = message.value || '';
+  const start = typeof input.selectionStart === 'number' ? input.selectionStart : current.length;
+  const end = typeof input.selectionEnd === 'number' ? input.selectionEnd : current.length;
+  const prefix = current.slice(0, start);
+  const suffix = current.slice(end);
+  let insert = trimmed;
+  if (prefix && !/\s$/.test(prefix)) {
+    insert = ` ${insert}`;
+  }
+  if (suffix && !/^\s/.test(suffix)) {
+    insert = `${insert} `;
+  }
+  message.value = `${prefix}${insert}${suffix}`.trim();
+  await nextTick();
+  const cursor = (prefix + insert).length;
+  input.setSelectionRange(cursor, cursor);
+  input.focus();
 };
 
 const resetSpeechDraft = () => {
   speechDraftBase.value = message.value;
-  speechFinal.value = '';
-  speechInterim.value = '';
-};
-
-const getBrowserSpeechLanguage = () => {
-  const locale = navigator?.language || 'en-US';
-  if (locale.toLowerCase().startsWith('zh')) return 'zh-CN';
-  return locale;
 };
 
 const getTranscriptionLanguage = () => {
@@ -670,6 +700,85 @@ const pickRecordingMimeType = () => {
   return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
 };
 
+let waveformAudioContext: AudioContext | null = null;
+let waveformAnalyser: AnalyserNode | null = null;
+let waveformSource: MediaStreamAudioSourceNode | null = null;
+let waveformRafId: number | null = null;
+
+const resetWaveformBars = () => {
+  waveformBars.value = Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.2);
+};
+
+const updateWaveform = () => {
+  if (!waveformAnalyser) return;
+  const data = new Uint8Array(waveformAnalyser.frequencyBinCount);
+  waveformAnalyser.getByteFrequencyData(data);
+  const step = Math.max(1, Math.floor(data.length / WAVEFORM_BAR_COUNT));
+  const nextBars = new Array(WAVEFORM_BAR_COUNT).fill(0).map((_, index) => {
+    const start = index * step;
+    let sum = 0;
+    for (let i = 0; i < step; i += 1) {
+      sum += data[start + i] || 0;
+    }
+    const avg = sum / step / 255;
+    return Math.min(1, Math.pow(avg * 1.4, 0.8));
+  });
+  waveformBars.value = nextBars;
+  waveformRafId = window.requestAnimationFrame(updateWaveform);
+};
+
+const startWaveform = (stream?: MediaStream | null) => {
+  stopWaveform();
+  resetWaveformBars();
+  const AudioContextCtor = window?.AudioContext || window?.webkitAudioContext;
+  if (!stream || !AudioContextCtor) return;
+  try {
+    waveformAudioContext = new AudioContextCtor();
+    waveformAnalyser = waveformAudioContext.createAnalyser();
+    waveformAnalyser.fftSize = 256;
+    waveformAnalyser.smoothingTimeConstant = 0.75;
+    waveformSource = waveformAudioContext.createMediaStreamSource(stream);
+    waveformSource.connect(waveformAnalyser);
+    if (typeof waveformAudioContext.resume === 'function') {
+      waveformAudioContext.resume().catch(() => {});
+    }
+    waveformRafId = window.requestAnimationFrame(updateWaveform);
+  } catch (error) {
+    console.warn('Failed to start audio waveform:', error);
+  }
+};
+
+const stopWaveform = () => {
+  if (waveformRafId !== null) {
+    window.cancelAnimationFrame(waveformRafId);
+    waveformRafId = null;
+  }
+  if (waveformSource) {
+    try {
+      waveformSource.disconnect();
+    } catch {
+      // Ignore disconnect errors
+    }
+    waveformSource = null;
+  }
+  if (waveformAnalyser) {
+    try {
+      waveformAnalyser.disconnect();
+    } catch {
+      // Ignore disconnect errors
+    }
+    waveformAnalyser = null;
+  }
+  if (waveformAudioContext) {
+    const context = waveformAudioContext;
+    waveformAudioContext = null;
+    if (typeof context.close === 'function') {
+      context.close().catch(() => {});
+    }
+  }
+  resetWaveformBars();
+};
+
 const clearRecordingTimeout = () => {
   if (recordingTimeout.value !== null) {
     window.clearTimeout(recordingTimeout.value);
@@ -678,6 +787,7 @@ const clearRecordingTimeout = () => {
 };
 
 const stopMediaTracks = () => {
+  stopWaveform();
   if (mediaStream.value) {
     mediaStream.value.getTracks().forEach(track => track.stop());
     mediaStream.value = null;
@@ -725,7 +835,9 @@ const transcribeRecording = async (blob: Blob) => {
     });
     const text = typeof result?.text === 'string' ? result.text : '';
     if (text.trim()) {
-      message.value = joinDraft(speechDraftBase.value, text);
+      await applySpeechText(text);
+    } else {
+      setSpeechError('No speech detected');
     }
   } catch (error) {
     console.error('Speech transcription failed:', error);
@@ -744,6 +856,7 @@ const startNodeRecording = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaStream.value = stream;
+    startWaveform(stream);
 
     const mimeType = pickRecordingMimeType();
     const recorder = mimeType
@@ -798,74 +911,9 @@ const stopNodeRecording = () => {
   stopMediaTracks();
 };
 
-const startBrowserRecognition = () => {
-  const SpeechRecognitionCtor = window?.SpeechRecognition || window?.webkitSpeechRecognition;
-  if (!SpeechRecognitionCtor) {
-    setSpeechError('Speech recognition not supported');
-    return;
-  }
-  clearSpeechError();
-  resetSpeechDraft();
-  updateSpeechDraftMessage();
-
-  const recognition = new SpeechRecognitionCtor();
-  recognition.lang = getBrowserSpeechLanguage();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event: any) => {
-    let finalText = '';
-    let interimText = '';
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const result = event.results[i];
-      const transcript = result?.[0]?.transcript || '';
-      if (result.isFinal) {
-        finalText += transcript;
-      } else {
-        interimText += transcript;
-      }
-    }
-    if (finalText.trim()) {
-      speechFinal.value = joinDraft(speechFinal.value, finalText);
-    }
-    speechInterim.value = interimText.trim();
-    updateSpeechDraftMessage();
-  };
-
-  recognition.onerror = (event: any) => {
-    console.error('Speech recognition error:', event);
-    setSpeechError('Speech recognition error');
-    stopBrowserRecognition();
-  };
-
-  recognition.onend = () => {
-    isRecording.value = false;
-    speechInterim.value = '';
-    updateSpeechDraftMessage();
-    recognitionRef.value = null;
-  };
-
-  recognitionRef.value = recognition;
-  isRecording.value = true;
-  recognition.start();
-};
-
-const stopBrowserRecognition = () => {
-  if (recognitionRef.value) {
-    try {
-      recognitionRef.value.stop();
-    } catch (error) {
-      console.error('Failed to stop speech recognition:', error);
-    }
-  }
-};
-
 const stopVoiceInput = () => {
   if (mediaRecorder.value || isRecording.value) {
     stopNodeRecording();
-  }
-  if (recognitionRef.value) {
-    stopBrowserRecognition();
   }
 };
 
@@ -882,11 +930,11 @@ const toggleVoiceInput = async () => {
       return;
     }
   }
-  if (speechEngine.value === 'node') {
-    await startNodeRecording();
+  if (speechEngine.value !== 'node') {
+    setSpeechError(speechStatus.value?.reason || 'Voice input unavailable');
     return;
   }
-  startBrowserRecognition();
+  await startNodeRecording();
 };
 
 watch(selectedProvider, () => {
@@ -1127,6 +1175,7 @@ onUnmounted(() => {
   }
   clearRecordingTimeout();
   stopVoiceInput();
+  stopWaveform();
 });
 </script>
 <style scoped>
@@ -1187,6 +1236,29 @@ button {
 .icon-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.speech-waveform {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 32px;
+  width: 32px;
+  padding: 6px 5px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--accent-rgb, 74, 158, 255), 0.35);
+  background: rgba(var(--accent-rgb, 74, 158, 255), 0.18);
+  color: var(--accent-color);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.08);
+}
+
+.speech-waveform-bar {
+  width: 3px;
+  min-height: 6px;
+  border-radius: 999px;
+  background-color: currentColor;
+  transition: height 0.08s ease;
 }
 
 /* Specific overrides for badges */
