@@ -253,7 +253,7 @@ const parseDuckDuckGoResults = (
   const extractAttribute = (attrs: string, name: string): string | null => {
     // Support double-quoted, single-quoted, and unquoted attribute values.
     const regex = new RegExp(
-      `${name}\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))`,
+      `${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
       'i'
     );
     const match = attrs.match(regex);

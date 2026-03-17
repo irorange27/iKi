@@ -62,6 +62,7 @@ function getSystemConfig(): AppConfig {
       providerType: 'openai',
       apiKey: '',
       baseUrl: '',
+      downloadBaseUrl: '',
       model: 'whisper-1',
       modelPath: '',
       language: '',

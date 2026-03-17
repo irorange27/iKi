@@ -20,7 +20,7 @@ const highRiskShellPatterns: RegExp[] = [
   /\b(useradd|userdel|usermod|passwd)\b/i,
   /\b(chown|chmod)\b[^\n]*\b(777|000)\b/i,
   /\b(curl|wget)\b[^|\n]*\|\s*(bash|sh|zsh)\b/i,
-  /(^|[;&|]\s*)\:\(\)\s*\{\s*\:\|\:\&\s*\};\s*\:/,
+  /(^|[;&|]\s*):\(\)\s*\{\s*:\|\s*:\s*&\s*\};\s*:/,
 ];
 
 const criticalPathWritePattern = /(?:^|[;&|]\s*)(?:echo|cat|tee|printf|sed)\b[^\n]*(?:>|>>|\|\s*tee(?:\s+-a)?)\s*\/(?:etc|bin|sbin|usr|var|private|System|Library)\b/i;
