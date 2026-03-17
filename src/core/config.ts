@@ -57,6 +57,16 @@ function getSystemConfig(): AppConfig {
       maxRetrievalCount: 5,
       similarThreshold: 0.1,
     },
+    speech: {
+      enabled: false,
+      providerType: 'openai',
+      apiKey: '',
+      baseUrl: '',
+      model: 'whisper-1',
+      modelPath: '',
+      language: '',
+      prompt: '',
+    },
     toolModel: { model: '' },
     toolExecution: {
       shellApprovalMode: 'high-risk',

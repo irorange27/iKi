@@ -1,10 +1,11 @@
-import { SimpleAgent } from '../agent';
-import { getToolModel } from './tool_model';
+import {
+  normalizeWhitespace,
+  selectCatalogWithAgent,
+  tryParseJson,
+  type SelectionMessage,
+} from './catalog_selection';
 
-export type SkillSelectionMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-};
+export type SkillSelectionMessage = SelectionMessage;
 
 export type SkillCatalogItem = {
   id: string;
@@ -29,77 +30,6 @@ const SYSTEM_PROMPT =
   '- If no skill is needed, return [].\n' +
   '- Never invent ids not present in the catalog.\n' +
   `- Choose at most ${MAX_SKILLS_SELECTED} skills.\n`;
-
-const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
-
-const formatRole = (role: SkillSelectionMessage['role']) =>
-  role === 'assistant' ? 'Assistant' : role === 'system' ? 'System' : 'User';
-
-const buildTranscript = (messages: SkillSelectionMessage[]) => {
-  const recent = messages.slice(-MAX_MESSAGES);
-  const lines: string[] = [];
-  let totalChars = 0;
-
-  for (let i = recent.length - 1; i >= 0; i -= 1) {
-    const msg = recent[i];
-    const content = normalizeWhitespace(msg.content || '');
-    if (!content) continue;
-
-    const line = `${formatRole(msg.role)}: ${content}`;
-    const nextLen = line.length + (lines.length > 0 ? 1 : 0);
-    if (totalChars + nextLen > MAX_INPUT_CHARS) break;
-    lines.push(line);
-    totalChars += nextLen;
-  }
-
-  return lines.reverse().join('\n');
-};
-
-const extractJsonCandidate = (raw: string): string => {
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  return (fencedMatch && fencedMatch[1] ? fencedMatch[1].trim() : trimmed).trim();
-};
-
-const tryParseJson = (raw: string): unknown => {
-  const candidate = extractJsonCandidate(raw);
-  if (!candidate) return null;
-
-  // 1) Try direct JSON parse (best case)
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    // continue
-  }
-
-  // 2) Try extracting a JSON array substring
-  const arrayStart = candidate.indexOf('[');
-  const arrayEnd = candidate.lastIndexOf(']');
-  if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
-    const slice = candidate.slice(arrayStart, arrayEnd + 1);
-    try {
-      return JSON.parse(slice);
-    } catch {
-      // continue
-    }
-  }
-
-  // 3) Try extracting a JSON object substring
-  const objStart = candidate.indexOf('{');
-  const objEnd = candidate.lastIndexOf('}');
-  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
-    const slice = candidate.slice(objStart, objEnd + 1);
-    try {
-      return JSON.parse(slice);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-};
 
 const normalizeSkillId = (
   value: string,
@@ -187,42 +117,21 @@ export const selectSkillsWithAgent = async (params: {
   messages: SkillSelectionMessage[];
   availableSkills: SkillCatalogItem[];
 }): Promise<string[]> => {
-  const toolModel = getToolModel();
-  if (!toolModel) {
-    return [];
-  }
-
-  const transcript = buildTranscript(params.messages);
-  if (!transcript.trim() || params.availableSkills.length === 0) {
-    return [];
-  }
-
-  const skillCatalogText = buildSkillCatalogText(params.availableSkills);
-  const prompt =
-    'Skill catalog (choose only from these exact ids):\n' +
-    `${skillCatalogText}\n\n` +
-    'Conversation (most recent last):\n' +
-    `${transcript}\n\n` +
-    'Return ONLY a JSON array of skill ids.\n';
-
-  const agent = new SimpleAgent({
-    enabled: true,
-    providerType: toolModel.providerType,
-    model: toolModel.model,
+  return selectCatalogWithAgent({
+    messages: params.messages,
+    availableCatalog: params.availableSkills,
+    buildCatalogText: buildSkillCatalogText,
+    buildPrompt: (catalogText, transcript) =>
+      'Skill catalog (choose only from these exact ids):\n' +
+      `${catalogText}\n\n` +
+      'Conversation (most recent last):\n' +
+      `${transcript}\n\n` +
+      'Return ONLY a JSON array of skill ids.\n',
+    parseSelection: (raw, catalog) => parseSkillIds(raw, catalog),
     systemPrompt: SYSTEM_PROMPT,
-    temperature: 0,
-    maxTokens: MAX_OUTPUT_TOKENS,
-    maxIterations: 1,
-    enableTools: false,
-    enableMemory: false,
+    maxMessages: MAX_MESSAGES,
+    maxInputChars: MAX_INPUT_CHARS,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    logLabel: 'SkillSelection',
   });
-
-  try {
-    const result = await agent.generate(prompt);
-    return parseSkillIds(result.response || '', params.availableSkills);
-  } catch (error) {
-    console.warn('[SkillSelection] selection failed:', error);
-    return [];
-  }
 };
-
