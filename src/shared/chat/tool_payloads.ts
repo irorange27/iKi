@@ -17,6 +17,7 @@ import {
   WriteFileOutputSchema,
 } from '../../core/tools/schemas';
 import { normalizeToolNameKey } from './tool_parts';
+import { parseMaybeJson } from './tool_parts/parse';
 
 export type WebToolInput = z.infer<typeof WebToolInputSchemaUi>;
 export type FetchToolInput = z.infer<typeof FetchToolInputSchemaUi>;
@@ -33,6 +34,15 @@ export type ReadFileToolOutput = z.infer<typeof ReadFileOutputSchema>;
 export type WriteFileToolOutput = z.infer<typeof WriteFileOutputSchema>;
 export type ListDirToolOutput = z.infer<typeof ListDirOutputSchema>;
 export type DeleteFileToolOutput = z.infer<typeof DeleteFileOutputSchema>;
+
+type ToolKind =
+  | 'web'
+  | 'fetch'
+  | 'shell'
+  | 'read_file'
+  | 'write_file'
+  | 'list_dir'
+  | 'delete_file';
 
 export type ParsedToolInput =
   | { kind: 'web'; input: WebToolInput }
@@ -54,15 +64,30 @@ export type ParsedToolOutput =
   | { kind: 'delete_file'; output: DeleteFileToolOutput }
   | { kind: 'unknown'; output: unknown };
 
-const parseJsonValue = (value: unknown): unknown => {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  if (!trimmed) return value;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return value;
+const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny }> = {
+  web: { input: WebToolInputSchemaUi, output: WebToolOutputSchema },
+  fetch: { input: FetchToolInputSchemaUi, output: FetchToolOutputSchema },
+  shell: { input: ShellToolInputSchemaUi, output: ShellToolOutputSchema },
+  read_file: { input: ReadFileInputSchemaUi, output: ReadFileOutputSchema },
+  write_file: { input: WriteFileInputSchemaUi, output: WriteFileOutputSchema },
+  list_dir: { input: ListDirInputSchemaUi, output: ListDirOutputSchema },
+  delete_file: { input: DeleteFileInputSchemaUi, output: DeleteFileOutputSchema },
+};
+
+const TOOL_ALIASES: Record<string, ToolKind> = {
+  web_search: 'web',
+};
+
+type ToolSchemaMap = typeof TOOL_SCHEMAS;
+type ToolInputByKind = { [K in ToolKind]: z.infer<ToolSchemaMap[K]['input']> };
+type ToolOutputByKind = { [K in ToolKind]: z.infer<ToolSchemaMap[K]['output']> };
+
+const resolveToolKind = (toolName: string): ToolKind | null => {
+  const toolKey = normalizeToolNameKey(toolName);
+  if (Object.prototype.hasOwnProperty.call(TOOL_SCHEMAS, toolKey)) {
+    return toolKey as ToolKind;
   }
+  return TOOL_ALIASES[toolKey] ?? null;
 };
 
 const parseWithSchema = <T extends z.ZodTypeAny>(
@@ -73,83 +98,37 @@ const parseWithSchema = <T extends z.ZodTypeAny>(
   return parsed.success ? parsed.data : null;
 };
 
-export const parseToolInput = (toolName: string, value: unknown): ParsedToolInput => {
-  const toolKey = normalizeToolNameKey(toolName);
-  const normalizedValue =
-    typeof value === 'object' && value !== null ? value : parseJsonValue(value);
+const normalizeInputValue = (value: unknown): unknown => {
+  if (typeof value === 'object' && value !== null) return value;
+  return parseMaybeJson(value);
+};
 
-  switch (toolKey) {
-    case 'web':
-    case 'web_search': {
-      const parsed = parseWithSchema(WebToolInputSchemaUi, normalizedValue);
-      return parsed ? { kind: 'web', input: parsed } : { kind: 'unknown', input: value };
-    }
-    case 'fetch': {
-      const parsed = parseWithSchema(FetchToolInputSchemaUi, normalizedValue);
-      return parsed ? { kind: 'fetch', input: parsed } : { kind: 'unknown', input: value };
-    }
-    case 'shell': {
-      const parsed = parseWithSchema(ShellToolInputSchemaUi, normalizedValue);
-      return parsed ? { kind: 'shell', input: parsed } : { kind: 'unknown', input: value };
-    }
-    case 'read_file': {
-      const parsed = parseWithSchema(ReadFileInputSchemaUi, normalizedValue);
-      return parsed ? { kind: 'read_file', input: parsed } : { kind: 'unknown', input: value };
-    }
-    case 'write_file': {
-      const parsed = parseWithSchema(WriteFileInputSchemaUi, normalizedValue);
-      return parsed ? { kind: 'write_file', input: parsed } : { kind: 'unknown', input: value };
-    }
-    case 'list_dir': {
-      const parsed = parseWithSchema(ListDirInputSchemaUi, normalizedValue);
-      return parsed ? { kind: 'list_dir', input: parsed } : { kind: 'unknown', input: value };
-    }
-    case 'delete_file': {
-      const parsed = parseWithSchema(DeleteFileInputSchemaUi, normalizedValue);
-      return parsed ? { kind: 'delete_file', input: parsed } : { kind: 'unknown', input: value };
-    }
-    default:
-      return { kind: 'unknown', input: value };
-  }
+const normalizeOutputValue = (value: unknown): unknown => parseMaybeJson(value);
+
+export const parseToolInput = (toolName: string, value: unknown): ParsedToolInput => {
+  const toolKind = resolveToolKind(toolName);
+  if (!toolKind) return { kind: 'unknown', input: value };
+
+  const normalizedValue = normalizeInputValue(value);
+  const parsed = parseWithSchema(
+    TOOL_SCHEMAS[toolKind].input,
+    normalizedValue
+  ) as ToolInputByKind[typeof toolKind] | null;
+
+  return parsed ? { kind: toolKind, input: parsed } : { kind: 'unknown', input: value };
 };
 
 export const parseToolOutput = (toolName: string, value: unknown): ParsedToolOutput => {
-  const toolKey = normalizeToolNameKey(toolName);
-  const normalizedValue = parseJsonValue(value);
+  const toolKind = resolveToolKind(toolName);
+  if (!toolKind) return { kind: 'unknown', output: value };
 
-  switch (toolKey) {
-    case 'web':
-    case 'web_search': {
-      const parsed = parseWithSchema(WebToolOutputSchema, normalizedValue);
-      return parsed ? { kind: 'web', output: parsed } : { kind: 'unknown', output: value };
-    }
-    case 'fetch': {
-      const parsed = parseWithSchema(FetchToolOutputSchema, normalizedValue);
-      return parsed ? { kind: 'fetch', output: parsed } : { kind: 'unknown', output: value };
-    }
-    case 'shell': {
-      const parsed = parseWithSchema(ShellToolOutputSchema, normalizedValue);
-      return parsed ? { kind: 'shell', output: parsed } : { kind: 'unknown', output: value };
-    }
-    case 'read_file': {
-      const parsed = parseWithSchema(ReadFileOutputSchema, normalizedValue);
-      return parsed ? { kind: 'read_file', output: parsed } : { kind: 'unknown', output: value };
-    }
-    case 'write_file': {
-      const parsed = parseWithSchema(WriteFileOutputSchema, normalizedValue);
-      return parsed ? { kind: 'write_file', output: parsed } : { kind: 'unknown', output: value };
-    }
-    case 'list_dir': {
-      const parsed = parseWithSchema(ListDirOutputSchema, normalizedValue);
-      return parsed ? { kind: 'list_dir', output: parsed } : { kind: 'unknown', output: value };
-    }
-    case 'delete_file': {
-      const parsed = parseWithSchema(DeleteFileOutputSchema, normalizedValue);
-      return parsed ? { kind: 'delete_file', output: parsed } : { kind: 'unknown', output: value };
-    }
-    default:
-      return { kind: 'unknown', output: value };
-  }
+  const normalizedValue = normalizeOutputValue(value);
+  const parsed = parseWithSchema(
+    TOOL_SCHEMAS[toolKind].output,
+    normalizedValue
+  ) as ToolOutputByKind[typeof toolKind] | null;
+
+  return parsed ? { kind: toolKind, output: parsed } : { kind: 'unknown', output: value };
 };
 
 export const parseToolPayload = (toolName: string, input: unknown, output: unknown) => ({

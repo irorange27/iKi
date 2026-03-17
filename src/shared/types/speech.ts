@@ -23,3 +23,28 @@ export type SpeechTranscriptionResult = {
   providerType: SpeechProviderType;
   model: string;
 };
+
+export type WhisperNodeModelInfo = {
+  name: string;
+  fileName: string;
+  sizeMB: number;
+  ramGB: number;
+  downloaded: boolean;
+  status?: 'missing' | 'ready' | 'invalid';
+  error?: string;
+};
+
+export type WhisperNodeDownloadResult = {
+  model: string;
+  success: boolean;
+  error?: string;
+};
+
+export type WhisperNodeDownloadProgress = {
+  model: string;
+  stage: 'downloading' | 'compiling' | 'done' | 'error';
+  message?: string;
+  progress?: number;
+  downloadedBytes?: number;
+  totalBytes?: number;
+};

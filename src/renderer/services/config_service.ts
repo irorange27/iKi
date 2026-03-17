@@ -25,6 +25,8 @@ const getElectronConfigApi = (): ElectronConfigApi | null => {
   return api as ElectronConfigApi;
 };
 
+const noop = () => undefined;
+
 export const configService = {
   async get(): Promise<AppConfig> {
     const api = getElectronConfigApi();
@@ -44,9 +46,9 @@ export const configService = {
     const api = getElectronConfigApi();
     if (!api) {
       console.warn('window.electronAPI.config is missing; config updates are disabled.');
-      return () => {};
+      return noop;
     }
     api.onUpdated(callback);
-    return () => {};
+    return noop;
   },
 };

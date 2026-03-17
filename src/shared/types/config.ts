@@ -56,6 +56,7 @@ export interface AppConfig {
     providerType: 'openai' | 'whisper-node' | '';
     apiKey: string;
     baseUrl: string;
+    downloadBaseUrl: string;
     model: string;
     modelPath: string;
     language: string;

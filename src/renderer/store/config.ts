@@ -58,6 +58,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     providerType: 'openai',
     apiKey: '',
     baseUrl: '',
+    downloadBaseUrl: '',
     model: 'whisper-1',
     modelPath: '',
     language: '',
