@@ -176,6 +176,117 @@
 
       <ProvidersSettings v-show="activeSection === 'provider'" />
 
+      <!-- Speech -->
+      <section v-show="activeSection === 'speech'" class="config-section">
+        <div class="config-group">
+          <h3>Speech Input</h3>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="config.speech.enabled"
+              @change="updateSpeech('enabled', ($event.target as HTMLInputElement).checked)"
+            />
+            Enable Speech Input
+          </label>
+          <p class="group-description">
+            Speech input uses a dedicated speech provider configuration and does not affect your
+            chat model providers.
+          </p>
+        </div>
+
+        <div class="config-group" v-if="config.speech.enabled">
+          <h3>Speech Provider</h3>
+          <label class="input-label">
+            <span>Provider</span>
+            <select
+              :value="config.speech.providerType"
+              @change="
+                updateSpeech(
+                  'providerType',
+                  ($event.target as HTMLSelectElement).value as AppConfig['speech']['providerType']
+                )
+              "
+            >
+              <option value="openai">OpenAI (Speech)</option>
+              <option value="whisper-node">whisper-node (Local)</option>
+            </select>
+          </label>
+          <template v-if="config.speech.providerType === 'openai'">
+            <label class="input-label">
+              <span>API Key</span>
+              <input
+                type="password"
+                :value="config.speech.apiKey"
+                placeholder="sk-..."
+                @input="updateSpeech('apiKey', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label class="input-label">
+              <span>Base URL (optional)</span>
+              <input
+                type="text"
+                :value="config.speech.baseUrl"
+                placeholder="https://api.openai.com/v1"
+                @input="updateSpeech('baseUrl', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label class="input-label">
+              <span>Model</span>
+              <input
+                type="text"
+                :value="config.speech.model"
+                placeholder="whisper-1"
+                @input="updateSpeech('model', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+          </template>
+          <template v-else-if="config.speech.providerType === 'whisper-node'">
+            <label class="input-label">
+              <span>Model Name</span>
+              <input
+                type="text"
+                :value="config.speech.model"
+                placeholder="base.en"
+                @input="updateSpeech('model', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <label class="input-label">
+              <span>Model Path (optional)</span>
+              <input
+                type="text"
+                :value="config.speech.modelPath"
+                placeholder="/path/to/ggml-base.en.bin"
+                @input="updateSpeech('modelPath', ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <p class="group-description">
+              whisper-node requires local model files. Download with
+              <code>npx whisper-node download</code> and use the model name or path above.
+            </p>
+          </template>
+          <label class="input-label">
+            <span>Language (optional)</span>
+            <input
+              type="text"
+              :value="config.speech.language"
+              placeholder="auto or en"
+              @input="updateSpeech('language', ($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <label v-if="config.speech.providerType === 'openai'" class="input-label">
+            <span>Prompt (optional)</span>
+            <textarea
+              rows="3"
+              :value="config.speech.prompt"
+              placeholder="Optional hints to improve transcription accuracy"
+              @input="updateSpeech('prompt', ($event.target as HTMLTextAreaElement).value)"
+            />
+          </label>
+        </div>
+
+        <button class="reset-btn" @click="resetSection('speech')">Reset Speech</button>
+      </section>
+
       <!-- UI -->
       <section v-show="activeSection === 'ui'" class="config-section">
         <div class="config-group">
@@ -1001,6 +1112,7 @@ import { storeToRefs } from 'pinia';
 import {
   Cog,
   Palette,
+  Mic,
   Brain,
   Bot,
   RefreshCw,
@@ -1245,6 +1357,7 @@ const menuItems = [
   { key: 'general', label: 'General', icon: Cog },
   { key: 'ui', label: 'Appearance', icon: Palette },
   { key: 'provider', label: 'Providers', icon: Bot },
+  { key: 'speech', label: 'Speech', icon: Mic },
   // { key: "chat", label: "Chat", icon: MessageCircleMore },
   // { key: "network", label: "Network", icon: Globe },
   // { key: "security", label: "Security", icon: Lock },
@@ -1359,6 +1472,14 @@ const updateMemory = <K extends keyof AppConfig['memory']>(
 };
 const updateToolModel = (key: 'model', value: string) => {
   config.value.toolModel[key] = value;
+  autoSave();
+};
+
+const updateSpeech = <K extends keyof AppConfig['speech']>(
+  key: K,
+  value: AppConfig['speech'][K]
+) => {
+  config.value.speech[key] = value;
   autoSave();
 };
 

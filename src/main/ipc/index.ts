@@ -3,6 +3,7 @@ import { registerConfigIpc } from './config';
 import { registerMemoryIpc } from './memory';
 import { registerPromptAppsIpc } from './prompt_apps';
 import { registerProvidersIpc } from './providers';
+import { registerSpeechIpc } from './speech';
 import { registerSkillsIpc } from './skills';
 import { registerTasksIpc } from './tasks';
 import { registerToolModelIpc } from './tool_model';
@@ -25,6 +26,7 @@ export const registerMainIpc = (): void => {
   registerToolModelIpc();
   registerToolsIpc();
   registerSkillsIpc();
+  registerSpeechIpc();
   registerTasksIpc();
   registerChatIpc();
 };

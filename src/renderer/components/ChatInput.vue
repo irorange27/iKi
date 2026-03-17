@@ -298,17 +298,36 @@
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
             </button>
-            <button class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn">
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button
+              class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
+              :class="[
+                isRecording ? 'text-danger' : speechEngineAvailable ? 'text-secondary' : 'text-muted',
+                isTranscribing ? 'is-transcribing' : '',
+              ]"
+              :disabled="!speechEngineAvailable || isLoading || isStopping || isTranscribing"
+              :aria-label="isRecording ? 'Stop voice input' : 'Start voice input'"
+              @click="toggleVoiceInput"
+            >
+              <svg v-if="isRecording" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             </button>
+            <span
+              v-if="speechStatusLabel"
+              class="text-[10px] whitespace-nowrap"
+              :class="speechStatusToneClass"
+            >
+              {{ speechStatusLabel }}
+            </span>
             <button class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn" :class="[
               isLoading ? 'text-danger stop-btn' : 'text-accent',
               isStopping ? 'is-stopping' : '',
             ]" :aria-label="isLoading ? 'Stop generation' : 'Send message'" @click="isLoading ? stopStreaming() : sendMessage()"
-              :disabled="isStopping">
+              :disabled="isStopping || isRecording || isTranscribing">
               <svg v-if="isLoading" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
@@ -328,6 +347,7 @@
 import { ref, onMounted, watch, nextTick, computed, onUnmounted } from 'vue';
 import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
+import type { SpeechStatus } from '../../shared/types/speech';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -363,6 +383,42 @@ const isAutoToolMode = computed(() => toolMode.value === 'auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 const toolSelectorCloseTimer = ref<number | null>(null);
 const skillSelectorCloseTimer = ref<number | null>(null);
+const speechStatus = ref<SpeechStatus | null>(null);
+const isRecording = ref(false);
+const isTranscribing = ref(false);
+const speechError = ref('');
+const speechErrorTimer = ref<number | null>(null);
+const speechDraftBase = ref('');
+const speechFinal = ref('');
+const speechInterim = ref('');
+const mediaRecorder = ref<MediaRecorder | null>(null);
+const mediaStream = ref<MediaStream | null>(null);
+const recognitionRef = ref<any>(null);
+const recordingTimeout = ref<number | null>(null);
+const isNodeSpeechAvailable = computed(() => Boolean(speechStatus.value?.available));
+const isSpeechEnabled = computed(() => speechStatus.value?.enabled === true);
+const isBrowserSpeechAvailable = computed(
+  () => Boolean(window?.SpeechRecognition || window?.webkitSpeechRecognition)
+);
+const canRecordAudio = computed(
+  () => Boolean(navigator?.mediaDevices?.getUserMedia) && typeof MediaRecorder !== 'undefined'
+);
+const speechEngine = computed<'node' | 'browser' | 'none'>(() => {
+  if (!isSpeechEnabled.value) return 'none';
+  if (isNodeSpeechAvailable.value && canRecordAudio.value) return 'node';
+  if (isBrowserSpeechAvailable.value) return 'browser';
+  return 'none';
+});
+const speechEngineAvailable = computed(() => speechEngine.value !== 'none');
+const speechStatusLabel = computed(() => {
+  if (isRecording.value) {
+    return speechEngine.value === 'node' ? 'Recording…' : 'Listening…';
+  }
+  if (isTranscribing.value) return 'Transcribing…';
+  if (speechError.value) return speechError.value;
+  return '';
+});
+const speechStatusToneClass = computed(() => (speechError.value ? 'text-danger' : 'text-muted'));
 
 const toUiMessages = (messages: any[]): UIMessage[] =>
   messages
@@ -544,6 +600,295 @@ const scheduleCloseToolSelector = () => {
   }, 180);
 };
 
+const loadSpeechStatus = async () => {
+  if (!window?.electronAPI?.speech?.getStatus) {
+    speechStatus.value = { available: false, reason: 'Speech service unavailable' };
+    return;
+  }
+  try {
+    speechStatus.value = await window.electronAPI.speech.getStatus();
+  } catch (error) {
+    console.error('Failed to load speech status:', error);
+    speechStatus.value = { available: false, reason: 'Speech service unavailable' };
+  }
+};
+
+const clearSpeechError = () => {
+  speechError.value = '';
+  if (speechErrorTimer.value !== null) {
+    window.clearTimeout(speechErrorTimer.value);
+    speechErrorTimer.value = null;
+  }
+};
+
+const setSpeechError = (message: string) => {
+  speechError.value = message;
+  if (speechErrorTimer.value !== null) {
+    window.clearTimeout(speechErrorTimer.value);
+  }
+  speechErrorTimer.value = window.setTimeout(() => {
+    clearSpeechError();
+  }, 4000);
+};
+
+const joinDraft = (...parts: string[]) =>
+  parts
+    .map(part => (typeof part === 'string' ? part.trim() : ''))
+    .filter(part => part.length > 0)
+    .join(' ')
+    .trim();
+
+const updateSpeechDraftMessage = () => {
+  message.value = joinDraft(speechDraftBase.value, speechFinal.value, speechInterim.value);
+};
+
+const resetSpeechDraft = () => {
+  speechDraftBase.value = message.value;
+  speechFinal.value = '';
+  speechInterim.value = '';
+};
+
+const getBrowserSpeechLanguage = () => {
+  const locale = navigator?.language || 'en-US';
+  if (locale.toLowerCase().startsWith('zh')) return 'zh-CN';
+  return locale;
+};
+
+const getTranscriptionLanguage = () => {
+  const locale = navigator?.language || 'en';
+  return locale.split('-')[0];
+};
+
+const pickRecordingMimeType = () => {
+  if (typeof MediaRecorder === 'undefined') return '';
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+  ];
+  return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+};
+
+const clearRecordingTimeout = () => {
+  if (recordingTimeout.value !== null) {
+    window.clearTimeout(recordingTimeout.value);
+    recordingTimeout.value = null;
+  }
+};
+
+const stopMediaTracks = () => {
+  if (mediaStream.value) {
+    mediaStream.value.getTracks().forEach(track => track.stop());
+    mediaStream.value = null;
+  }
+  mediaRecorder.value = null;
+};
+
+const blobToBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Failed to read audio data'));
+        return;
+      }
+      const base64 = reader.result.split(',')[1];
+      resolve(base64 || '');
+    };
+    reader.onerror = () => {
+      reject(reader.error || new Error('Failed to read audio data'));
+    };
+    reader.readAsDataURL(blob);
+  });
+
+const transcribeRecording = async (blob: Blob) => {
+  if (!blob || blob.size === 0) return;
+  if (!window?.electronAPI?.speech?.transcribe) {
+    setSpeechError('Speech service unavailable');
+    return;
+  }
+  isTranscribing.value = true;
+  try {
+    const audioBase64 = await blobToBase64(blob);
+    const providerType = speechStatus.value?.providerType;
+    const languageHint =
+      providerType === 'openai'
+        ? speechStatus.value?.language || getTranscriptionLanguage()
+        : speechStatus.value?.language;
+    const result = await window.electronAPI.speech.transcribe({
+      audioBase64,
+      mimeType: blob.type || 'audio/webm',
+      language: languageHint,
+      prompt: providerType === 'openai' ? speechStatus.value?.prompt : undefined,
+      model: speechStatus.value?.model,
+    });
+    const text = typeof result?.text === 'string' ? result.text : '';
+    if (text.trim()) {
+      message.value = joinDraft(speechDraftBase.value, text);
+    }
+  } catch (error) {
+    console.error('Speech transcription failed:', error);
+    setSpeechError('Transcription failed');
+  } finally {
+    isTranscribing.value = false;
+  }
+};
+
+const startNodeRecording = async () => {
+  if (!canRecordAudio.value) {
+    setSpeechError('Microphone not available');
+    return;
+  }
+  clearSpeechError();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaStream.value = stream;
+
+    const mimeType = pickRecordingMimeType();
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+
+    const chunks: BlobPart[] = [];
+    recorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+    recorder.onerror = event => {
+      console.error('Recording error:', event);
+      setSpeechError('Recording failed');
+      isRecording.value = false;
+      stopMediaTracks();
+    };
+    recorder.onstop = async () => {
+      clearRecordingTimeout();
+      isRecording.value = false;
+      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+      stopMediaTracks();
+      await transcribeRecording(blob);
+    };
+
+    mediaRecorder.value = recorder;
+    resetSpeechDraft();
+    recorder.start();
+    isRecording.value = true;
+
+    clearRecordingTimeout();
+    recordingTimeout.value = window.setTimeout(() => {
+      if (isRecording.value) {
+        stopNodeRecording();
+      }
+    }, 60000);
+  } catch (error) {
+    console.error('Failed to start recording:', error);
+    setSpeechError('Microphone permission denied');
+    stopMediaTracks();
+  }
+};
+
+const stopNodeRecording = () => {
+  clearRecordingTimeout();
+  if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
+    mediaRecorder.value.stop();
+    return;
+  }
+  isRecording.value = false;
+  stopMediaTracks();
+};
+
+const startBrowserRecognition = () => {
+  const SpeechRecognitionCtor = window?.SpeechRecognition || window?.webkitSpeechRecognition;
+  if (!SpeechRecognitionCtor) {
+    setSpeechError('Speech recognition not supported');
+    return;
+  }
+  clearSpeechError();
+  resetSpeechDraft();
+  updateSpeechDraftMessage();
+
+  const recognition = new SpeechRecognitionCtor();
+  recognition.lang = getBrowserSpeechLanguage();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event: any) => {
+    let finalText = '';
+    let interimText = '';
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      const transcript = result?.[0]?.transcript || '';
+      if (result.isFinal) {
+        finalText += transcript;
+      } else {
+        interimText += transcript;
+      }
+    }
+    if (finalText.trim()) {
+      speechFinal.value = joinDraft(speechFinal.value, finalText);
+    }
+    speechInterim.value = interimText.trim();
+    updateSpeechDraftMessage();
+  };
+
+  recognition.onerror = (event: any) => {
+    console.error('Speech recognition error:', event);
+    setSpeechError('Speech recognition error');
+    stopBrowserRecognition();
+  };
+
+  recognition.onend = () => {
+    isRecording.value = false;
+    speechInterim.value = '';
+    updateSpeechDraftMessage();
+    recognitionRef.value = null;
+  };
+
+  recognitionRef.value = recognition;
+  isRecording.value = true;
+  recognition.start();
+};
+
+const stopBrowserRecognition = () => {
+  if (recognitionRef.value) {
+    try {
+      recognitionRef.value.stop();
+    } catch (error) {
+      console.error('Failed to stop speech recognition:', error);
+    }
+  }
+};
+
+const stopVoiceInput = () => {
+  if (mediaRecorder.value || isRecording.value) {
+    stopNodeRecording();
+  }
+  if (recognitionRef.value) {
+    stopBrowserRecognition();
+  }
+};
+
+const toggleVoiceInput = async () => {
+  if (isTranscribing.value) return;
+  if (isRecording.value) {
+    stopVoiceInput();
+    return;
+  }
+  if (!speechEngineAvailable.value) {
+    await loadSpeechStatus();
+    if (!speechEngineAvailable.value) {
+      setSpeechError(speechStatus.value?.reason || 'Voice input unavailable');
+      return;
+    }
+  }
+  if (speechEngine.value === 'node') {
+    await startNodeRecording();
+    return;
+  }
+  startBrowserRecognition();
+};
+
 watch(selectedProvider, () => {
   checkProviderStatus();
 });
@@ -633,10 +978,18 @@ const handleEnter = (event: KeyboardEvent) => {
     return;
   }
 
+  if (isRecording.value || isTranscribing.value) {
+    return;
+  }
+
   sendMessage();
 };
 
 const sendMessage = async () => {
+  if (isRecording.value || isTranscribing.value) {
+    stopVoiceInput();
+    return;
+  }
   if (!message.value.trim() || isLoading.value) return;
 
   if (!selectedProvider.value) {
@@ -754,6 +1107,7 @@ const sendMessage = async () => {
 
 onMounted(async () => {
   await loadAvailableProviders();
+  await loadSpeechStatus();
   await loadAvailableTools();
   await loadAvailableSkills();
 });
@@ -767,6 +1121,12 @@ onUnmounted(() => {
     window.clearTimeout(skillSelectorCloseTimer.value);
     skillSelectorCloseTimer.value = null;
   }
+  if (speechErrorTimer.value !== null) {
+    window.clearTimeout(speechErrorTimer.value);
+    speechErrorTimer.value = null;
+  }
+  clearRecordingTimeout();
+  stopVoiceInput();
 });
 </script>
 <style scoped>
@@ -820,6 +1180,10 @@ button {
   opacity: 0.75;
 }
 
+.is-transcribing {
+  animation: micPulse 1.2s ease-in-out infinite;
+}
+
 .icon-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
@@ -844,6 +1208,16 @@ button {
 
 .rotate-180 {
   transform: rotate(180deg);
+}
+
+@keyframes micPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .max-h-64 {

@@ -206,8 +206,17 @@ export const createChatStreaming = (deps: {
         skillMode: options.skillMode,
       });
 
-      if (options.tools && options.tools.length > 0) {
-        // Use Agent if tools are specified
+      const { resolvedTools, mode } = await resolveToolNames({ tools: options.tools });
+
+      persistThreadRuntimeHints({
+        threadId: options.threadId ?? '',
+        providerType: options.providerType,
+        model: options.model,
+        tools: resolvedTools,
+      });
+
+      if (resolvedTools.length > 0) {
+        // Use Agent when tools are enabled for this request
         const agent = new SimpleAgent({
           enabled: true,
           providerType: options.providerType,
@@ -218,9 +227,13 @@ export const createChatStreaming = (deps: {
         });
 
         // Register selected tools
-        for (const toolName of options.tools) {
+        for (const toolName of resolvedTools) {
           const tool = defaultToolRegistry.get(toolName);
           if (tool) agent.registerTool(tool);
+        }
+
+        if (mode === 'auto') {
+          console.log('[Main] send(): auto-enabled tools:', resolvedTools);
         }
 
         // Separate user prompt from history
