@@ -209,6 +209,14 @@
                         <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
                       </div>
                     </div>
+                    <div
+                      v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)"
+                      class="tool-card-footer"
+                    >
+                      <span class="tool-call-id">
+                        Call ID: <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
+                      </span>
+                    </div>
                   </div>
                   <div
                     v-else-if="isToolCallPart(part)"
@@ -284,6 +292,14 @@
                         <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
                       </div>
                     </div>
+                    <div
+                      v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)"
+                      class="tool-card-footer"
+                    >
+                      <span class="tool-call-id">
+                        Call ID: <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
+                      </span>
+                    </div>
                   </div>
                   <div v-else class="tool-fallback-content">
                     <pre class="tool-json-output">{{ formatJson(part) }}</pre>
@@ -350,6 +366,7 @@ import {
 import {
   canToggleToolCollapse,
   formatJson,
+  getToolCallIdFromPart,
   getToolDurationLabel,
   getToolIconComponent,
   getToolInput,
@@ -1391,6 +1408,31 @@ onUnmounted(() => {
 
 .tool-card-section + .tool-card-section {
   margin-top: 10px;
+}
+
+.tool-card-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tool-call-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-call-id-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .tool-card-section-title {
