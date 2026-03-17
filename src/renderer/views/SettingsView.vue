@@ -541,8 +541,8 @@
         <div class="settings-card memory-viewer">
           <div class="card-title">Memory Viewer</div>
           <p class="card-help">
-            View short-term and long-term memory entries by chat thread, plus long-memory search
-            results.
+            View short-term and long-term memory entries by chat thread or across all threads, plus
+            long-memory search results.
           </p>
           <div class="memory-controls">
             <label class="input-label">
@@ -552,6 +552,7 @@
                 @change="selectMemoryThread(($event.target as HTMLSelectElement).value)"
               >
                 <option value="" disabled>Select a thread</option>
+                <option :value="ALL_THREADS">All threads</option>
                 <option v-for="thread in memoryThreads" :key="thread.id" :value="thread.id">
                   {{ thread.title || thread.id }}
                 </option>
@@ -587,6 +588,9 @@
                     <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
                   </div>
                   <div class="memory-item-content">{{ entry.content }}</div>
+                  <div v-if="isAllThreadsSelected" class="memory-item-sub">
+                    Thread: {{ getThreadLabel(entry.thread_id) }}
+                  </div>
                   <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
                     Emotion: {{ formatJson(entry.emotion) }}
                   </div>
@@ -609,6 +613,9 @@
                     <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
                   </div>
                   <div class="memory-item-content">{{ entry.summary }}</div>
+                  <div v-if="isAllThreadsSelected" class="memory-item-sub">
+                    Thread: {{ getThreadLabel(entry.thread_id) }}
+                  </div>
                   <div v-if="formatJsonList(entry.tags)" class="memory-item-sub">
                     Tags: {{ formatJsonList(entry.tags) }}
                   </div>
@@ -655,6 +662,9 @@
                   <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
                 </div>
                 <div class="memory-item-content">{{ entry.summary }}</div>
+                <div v-if="isAllThreadsSelected" class="memory-item-sub">
+                  Thread: {{ getThreadLabel(entry.thread_id) }}
+                </div>
                 <div v-if="formatJsonList(entry.tags)" class="memory-item-sub">
                   Tags: {{ formatJsonList(entry.tags) }}
                 </div>
@@ -1025,6 +1035,7 @@ const toolModelTestResult = ref<{
   status: 'success' | 'warning' | 'error';
   message: string;
 } | null>(null);
+const ALL_THREADS = '__all__';
 const memoryThreads = ref<ChatThread[]>([]);
 const selectedMemoryThreadId = ref('');
 const shortMemoryEntries = ref<ShortMemoryEntry[]>([]);
@@ -1363,6 +1374,19 @@ const shellHighRiskPatternText = computed(() =>
   (config.value.toolExecution.shellHighRiskPatterns || []).join('\n')
 );
 const hasMemoryQuery = computed(() => memorySearchQuery.value.trim().length > 0);
+const isAllThreadsSelected = computed(() => selectedMemoryThreadId.value === ALL_THREADS);
+const threadLabelMap = computed(() => {
+  const map = new Map<string, string>();
+  for (const thread of memoryThreads.value) {
+    map.set(thread.id, thread.title || thread.id);
+  }
+  return map;
+});
+
+const getThreadLabel = (threadId?: string): string => {
+  if (!threadId) return 'Unknown thread';
+  return threadLabelMap.value.get(threadId) || threadId;
+};
 
 const updateShellHighRiskPatterns = (value: string) => {
   const patterns = value
@@ -1432,6 +1456,8 @@ const loadMemoryThreads = async () => {
     if (!selectedMemoryThreadId.value && memoryThreads.value.length > 0) {
       selectedMemoryThreadId.value = memoryThreads.value[0].id;
       await refreshMemory();
+    } else if (selectedMemoryThreadId.value === ALL_THREADS) {
+      await refreshMemory();
     }
   } catch (error: any) {
     memoryError.value = `Failed to load threads: ${error?.message || 'Unknown error'}`;
@@ -1450,10 +1476,15 @@ const refreshMemory = async () => {
   memoryLoading.value = true;
   memoryError.value = '';
   try {
-    const [shortEntries, longEntries] = await Promise.all([
-      window.electronAPI.memory.short.list(selectedMemoryThreadId.value, 50),
-      window.electronAPI.memory.long.list(selectedMemoryThreadId.value, 25),
-    ]);
+    const [shortEntries, longEntries] = isAllThreadsSelected.value
+      ? await Promise.all([
+          window.electronAPI.memory.short.listAll(50),
+          window.electronAPI.memory.long.listAll(25),
+        ])
+      : await Promise.all([
+          window.electronAPI.memory.short.list(selectedMemoryThreadId.value, 50),
+          window.electronAPI.memory.long.list(selectedMemoryThreadId.value, 25),
+        ]);
     shortMemoryEntries.value = Array.isArray(shortEntries) ? shortEntries : [];
     longMemoryEntries.value = Array.isArray(longEntries) ? longEntries : [];
   } catch (error: any) {
@@ -1472,15 +1503,21 @@ const runMemorySearch = async () => {
   memorySearchLoading.value = true;
   memorySearchError.value = '';
   try {
-    const results = await window.electronAPI.memory.long.search(
-      selectedMemoryThreadId.value,
-      memorySearchQuery.value.trim(),
-      {
-        limit: config.value.memory.maxRetrievalCount,
-        threshold: config.value.memory.similarThreshold,
-        force: true,
-      }
-    );
+    const results = isAllThreadsSelected.value
+      ? await window.electronAPI.memory.long.searchAll(memorySearchQuery.value.trim(), {
+          limit: config.value.memory.maxRetrievalCount,
+          threshold: config.value.memory.similarThreshold,
+          force: true,
+        })
+      : await window.electronAPI.memory.long.search(
+          selectedMemoryThreadId.value,
+          memorySearchQuery.value.trim(),
+          {
+            limit: config.value.memory.maxRetrievalCount,
+            threshold: config.value.memory.similarThreshold,
+            force: true,
+          }
+        );
     memorySearchResults.value = Array.isArray(results) ? results : [];
   } catch (error: any) {
     memorySearchError.value = `Search failed: ${error?.message || 'Unknown error'}`;
