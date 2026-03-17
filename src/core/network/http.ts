@@ -1,5 +1,5 @@
 import type { AppConfig } from '../../shared/types/config';
-import { getConfig } from '../db/database';
+import { getAppConfig } from '../config';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
 const MIN_NETWORK_TIMEOUT_MS = 1000;
@@ -9,8 +9,7 @@ const MIN_NETWORK_RETRY_ATTEMPTS = 0;
 const MAX_NETWORK_RETRY_ATTEMPTS = 10;
 
 const getNetworkConfig = (): AppConfig['network'] | null => {
-  const rawConfig = getConfig('app_config') as Partial<AppConfig> | null;
-  return rawConfig?.network ?? null;
+  return getAppConfig()?.network ?? null;
 };
 
 export const getNetworkTimeoutMs = (): number => {

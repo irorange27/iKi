@@ -1,4 +1,5 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import type { ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
 export const persistThreadRuntimeHints = (params: {
@@ -23,7 +24,7 @@ export const persistThreadRuntimeHints = (params: {
     const metadataRecord = isObjectRecord(parsedMetadata) ? parsedMetadata : {};
     const nextLlm = isObjectRecord(metadataRecord.llm) ? metadataRecord.llm : {};
 
-    chatThreadDb.updateChatThread(normalizedThreadId, {
+    const update: Partial<ChatThread> = {
       model: params.model || thread?.model || null,
       tools: params.tools.length > 0 ? JSON.stringify(params.tools) : null,
       metadata: JSON.stringify({
@@ -35,7 +36,8 @@ export const persistThreadRuntimeHints = (params: {
           updatedAt: new Date().toISOString(),
         },
       }),
-    } as any);
+    };
+    chatThreadDb.updateChatThread(normalizedThreadId, update);
   } catch (error) {
     console.warn('[Main] Failed to persist thread runtime hints:', error);
   }

@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import type { Component } from 'vue';
 import {
   Download,
   FilePenLine,
@@ -207,7 +208,7 @@ export const getToolDurationLabel = (part: unknown): string => {
   return formatDurationMs(ms);
 };
 
-const TOOL_ICON_COMPONENTS: Record<string, any> = {
+const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   web: Search,
   web_search: Search,
   fetch: Download,
@@ -218,7 +219,7 @@ const TOOL_ICON_COMPONENTS: Record<string, any> = {
   delete_file: Trash2,
 };
 
-export const getToolIconComponent = (part: unknown): any => {
+export const getToolIconComponent = (part: unknown): Component => {
   const rawName = getToolName(part);
   const toolKey = typeof rawName === 'string' ? normalizeToolNameKey(rawName) : 'tool';
   return TOOL_ICON_COMPONENTS[toolKey] || Wrench;
@@ -414,8 +415,8 @@ export const toggleToolCollapse = (_message: UIMessage, part: unknown) => {
   updateToolUiState(toolCallId, { collapsed: !isToolCollapsed(part) });
 };
 
-export const getUsedToolNames = (message: any): string[] => {
-  const parts = Array.isArray(message?.parts) ? message.parts : [];
+export const getUsedToolNames = (message: unknown): string[] => {
+  const parts = isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
   const names: string[] = [];
   const seen = new Set<string>();
 

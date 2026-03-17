@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { BaseTool } from './base';
-import { getConfig } from '../db/database';
 import type { AppConfig } from '../../shared/types/config';
+import { getAppConfig } from '../config';
 import { ShellToolInputSchema } from './schemas';
 
 const execAsync = promisify(exec);
@@ -35,7 +35,7 @@ const normalizeShellApprovalMode = (
 };
 
 const getShellApprovalConfig = (): AppConfig['toolExecution'] => {
-  const rawConfig = getConfig('app_config');
+  const rawConfig = getAppConfig();
   if (!rawConfig || typeof rawConfig !== 'object') {
     return {
       shellApprovalMode: 'high-risk',

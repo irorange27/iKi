@@ -352,7 +352,11 @@ export const toModelInputMessages = async (
 
     try {
       return await convertToModelMessages(
-        normalizedUiMessages.map(({ id, ...message }) => message),
+        normalizedUiMessages.map(message => {
+          const { id, ...rest } = message;
+          void id;
+          return rest;
+        }),
         {
           ignoreIncompleteToolCalls: true,
         }

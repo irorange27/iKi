@@ -1,8 +1,5 @@
 import type { AppConfig } from '../../shared/types/config';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 type ConfigUpdatedHandler = (config: AppConfig) => void;
 
 type ElectronConfigApi = {
@@ -11,9 +8,15 @@ type ElectronConfigApi = {
   onUpdated: (callback: ConfigUpdatedHandler) => void;
 };
 
-const getWindow = (): any | undefined => {
+type WindowWithElectronApi = Window & {
+  electronAPI?: {
+    config?: ElectronConfigApi;
+  };
+};
+
+const getWindow = (): WindowWithElectronApi | undefined => {
   if (typeof window === 'undefined') return undefined;
-  return window;
+  return window as WindowWithElectronApi;
 };
 
 const getElectronConfigApi = (): ElectronConfigApi | null => {

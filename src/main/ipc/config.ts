@@ -1,7 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 
-import { getConfig, setConfig, migrateFromJson } from '../../core/db/database';
+import { setConfig, migrateFromJson } from '../../core/db/database';
+import { getAppConfig } from '../../core/config';
+import { normalizeAppConfig } from '../../shared/config/normalize';
 
 let configIpcRegistered = false;
 let configMigrationRun = false;
@@ -15,8 +17,8 @@ export const migrateLegacyConfig = (): void => {
   migrateFromJson(configPath, 'app_config');
 };
 
-const loadConfig = () => getConfig('app_config') || {};
-const saveConfig = (config: unknown) => setConfig('app_config', config);
+const loadConfig = () => getAppConfig();
+const saveConfig = (config: unknown) => setConfig('app_config', normalizeAppConfig(config));
 
 export const registerConfigIpc = (): void => {
   if (configIpcRegistered) return;
@@ -38,4 +40,3 @@ export const registerConfigIpc = (): void => {
     return true;
   });
 };
-

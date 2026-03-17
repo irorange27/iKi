@@ -25,8 +25,7 @@ export { SimpleAgent } from '../iki_simple_agent';
 import { SimpleAgent } from '../iki_simple_agent';
 export { SimpleAgent as Agent };
 
-import { getConfig } from '../db/database';
-import type { AppConfig } from '../../shared/types/config';
+import { getAppConfig } from '../config';
 import type { AgentConfig, PartialAgentConfig } from './types';
 
 /**
@@ -43,7 +42,7 @@ export function createAgent(config?: PartialAgentConfig) {
  */
 export function getAgentConfig(): AgentConfig | null {
   try {
-    const appConfig = getConfig('app_config') as AppConfig | null;
+    const appConfig = getAppConfig();
     return appConfig?.agent || null;
   } catch (error) {
     console.error('Failed to get agent config:', error);

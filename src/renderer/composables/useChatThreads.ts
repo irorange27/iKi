@@ -14,6 +14,25 @@ export type ChatThread = {
   model?: string;
 };
 
+type ElectronApi = {
+  chat: {
+    threads: {
+      create: (thread: { title: string; model?: string | null; metadata: string }) => Promise<ChatThread>;
+      get: (id: string) => Promise<ChatThread | null>;
+      update: (id: string, thread: Partial<ChatThread>) => Promise<unknown>;
+    };
+    messages: {
+      list: (threadId: string) => Promise<Array<{ id: string; message: string }>>;
+    };
+  };
+  toolModel: {
+    generateTitle: (conversationContent: string) => Promise<string>;
+  };
+  tasks?: {
+    onPush?: (callback: (payload: unknown) => void) => void;
+  };
+};
+
 type SidebarController = {
   refresh?: () => Promise<void> | void;
   setCurrentThread?: (id: string | null) => void;
@@ -22,7 +41,7 @@ type SidebarController = {
 const TITLE_REGEN_INTERVAL = 2;
 
 export const useChatThreads = (deps: {
-  electronAPI: any;
+  electronAPI: ElectronApi;
   messageStore: ChatMessageStore;
   persistence: UiMessagePersistence;
   sidebarRef: Ref<SidebarController | null>;
@@ -167,15 +186,17 @@ export const useChatThreads = (deps: {
   const loadThreadMessages = async (threadId: string) => {
     try {
       const dbMessages = await deps.electronAPI.chat.messages.list(threadId);
-      deps.persistence.resetPersistedMessageIds(
-        Array.isArray(dbMessages)
-          ? dbMessages
-              .map((message: any) => (message && typeof message.id === 'string' ? message.id : ''))
-              .filter((id: string) => id.length > 0)
-          : []
-      );
+      const rows = Array.isArray(dbMessages)
+        ? dbMessages.filter(
+            (message): message is { id: string; message: string } =>
+              isObjectRecord(message) &&
+              typeof message.id === 'string' &&
+              typeof message.message === 'string'
+          )
+        : [];
+      deps.persistence.resetPersistedMessageIds(rows.map(row => row.id));
 
-      const chatMessages = dbMessages.map((message: any) => parseStoredUiMessage(message));
+      const chatMessages = rows.map(row => parseStoredUiMessage(row));
       deps.messageStore.setAll(chatMessages as UIMessage[]);
       resetToolUiStateMap();
       deps.scrollToBottom();
@@ -227,7 +248,7 @@ export const useChatThreads = (deps: {
     await createNewThread(currentModel.value);
   };
 
-  const handleModelSelected = (data: { provider: any; model: string }) => {
+  const handleModelSelected = (data: { model: string }) => {
     currentModel.value = data.model;
     if (currentThread.value) {
       deps.electronAPI.chat.threads.update(currentThread.value.id, { model: data.model });

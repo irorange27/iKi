@@ -281,7 +281,8 @@ const downloadWhisperModelFromUrl = async (
   const fileStream = createWriteStream(tempPath);
   let downloadedBytes = 0;
   try {
-    const reader = (response.body as any)?.getReader?.();
+    const body = response.body as ReadableStream<Uint8Array> | null;
+    const reader = body?.getReader?.();
     if (!reader) {
       throw new Error('Download stream not available');
     }

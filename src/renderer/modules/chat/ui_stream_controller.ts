@@ -1,5 +1,5 @@
 import type { UIMessage, UIMessageChunk } from 'ai';
-import { ref, type Ref } from 'vue';
+import { ref } from 'vue';
 
 import { isObjectRecord } from '../../../shared/utils/guards';
 import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
@@ -302,7 +302,7 @@ export const createChatUiStreamController = (deps: {
 
   const handleToolApproval = async (
     message: UIMessage,
-    part: any,
+    part: unknown,
     approved: boolean
   ): Promise<void> => {
     const approvalId = getApprovalId(part);

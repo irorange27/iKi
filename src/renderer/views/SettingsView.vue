@@ -1252,6 +1252,7 @@ import type {
   WhisperNodeDownloadProgress,
   WhisperNodeModelInfo,
 } from '../../shared/types/speech';
+import { parseModelList } from '../../shared/utils/provider_models';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -1647,12 +1648,7 @@ const availableProvidersWithModels = computed(() => {
   return providers.value
     .filter((p: any) => p.enabled)
     .map((p: any) => {
-      let models: string[] = [];
-      try {
-        models = JSON.parse(p.models || '[]');
-      } catch {
-        models = [];
-      }
+      const models = parseModelList(p.models);
       return {
         id: p.id,
         name: p.name,

@@ -85,8 +85,10 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
 export const createDefaultAppConfig = (): AppConfig =>
   JSON.parse(JSON.stringify(DEFAULT_APP_CONFIG)) as AppConfig;
 
-export const mergeAppConfig = (rawConfig?: Partial<AppConfig> | null): AppConfig => {
-  const base = createDefaultAppConfig();
+export const mergeAppConfigWithBase = (
+  base: AppConfig,
+  rawConfig?: Partial<AppConfig> | null
+): AppConfig => {
   if (!rawConfig) return base;
 
   return {
@@ -142,3 +144,6 @@ export const mergeAppConfig = (rawConfig?: Partial<AppConfig> | null): AppConfig
     },
   };
 };
+
+export const mergeAppConfig = (rawConfig?: Partial<AppConfig> | null): AppConfig =>
+  mergeAppConfigWithBase(createDefaultAppConfig(), rawConfig);

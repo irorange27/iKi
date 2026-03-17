@@ -1,5 +1,6 @@
 import type { AppConfig } from '../shared/types/config';
-import { mergeAppConfig } from '../shared/config/defaults';
+import { createDefaultAppConfig } from '../shared/config/defaults';
+import { normalizeAppConfig } from '../shared/config/normalize';
 import { getConfig, setConfig } from './db/database';
 import { getDisplayScale, getLocale, getTheme } from './platform';
 
@@ -8,7 +9,7 @@ function getSystemConfig(): AppConfig {
   const locale = getLocale();
   const scale = getDisplayScale();
 
-  const config = mergeAppConfig();
+  const config = createDefaultAppConfig();
 
   // Use larger font for high-scale displays
   config.ui.fontSize = scale > 1.5 ? 16 : 14;
@@ -22,14 +23,11 @@ function getSystemConfig(): AppConfig {
   return config;
 }
 
-// Simplified configuration manager (SQLite-backed)
-export class ConfigManager {
-  async read() {
-    const config = getConfig('app_config') as AppConfig | null;
-    return config ?? getSystemConfig();
-  }
+export const getAppConfig = (): AppConfig => {
+  const stored = getConfig('app_config') as Partial<AppConfig> | null;
+  return normalizeAppConfig(stored, getSystemConfig());
+};
 
-  async write(config: AppConfig) {
-    setConfig('app_config', config);
-  }
-}
+export const setAppConfig = (config: AppConfig): void => {
+  setConfig('app_config', normalizeAppConfig(config));
+};

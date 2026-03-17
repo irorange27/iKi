@@ -256,6 +256,7 @@ import LobeIcon from '../../components/Icon/LobeIcon.vue';
 import { BookOpen, Cog, RefreshCw, Save } from 'lucide-vue-next';
 import { BuiltInProvider } from '../../../shared/types/settings';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
+import { parseModelList } from '../../../shared/utils/provider_models';
 
 const providers = ref<any[]>([]);
 const editingProvider = ref<any>(null);
@@ -316,11 +317,7 @@ const getSelectedModelsForProvider = (): string[] => {
   if (!selectedProviderId.value) return [];
   const config = selectedProviderConfig.value;
   if (config?.models) {
-    try {
-      return JSON.parse(config.models);
-    } catch {
-      return [];
-    }
+    return parseModelList(config.models);
   }
   return [];
 };
@@ -335,18 +332,14 @@ const availableModelsList = computed(() => {
 
   const config = selectedProviderConfig.value;
   if (config?.available_models) {
-    try {
-      const available = JSON.parse(config.available_models);
-      if (available && available.length > 0) return available;
-    } catch {}
+    const available = parseModelList(config.available_models);
+    if (available.length > 0) return available;
   }
 
   // Fallback to built-in provider's default models if configured
   if (config?.models) {
-    try {
-      const models = JSON.parse(config.models);
-      if (models && models.length > 0) return models;
-    } catch {}
+    const models = parseModelList(config.models);
+    if (models.length > 0) return models;
   }
 
   // Last fallback: built-in provider's default models
@@ -467,7 +460,7 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
   // Check custom providers
   const custom = providers.value.find(p => p.id === selectedProviderId.value);
   if (custom) {
-    const selected = selectedModels.value[custom.id] || JSON.parse(custom.models || '[]');
+    const selected = selectedModels.value[custom.id] || parseModelList(custom.models);
     return {
       id: custom.id,
       name: custom.name,
@@ -519,20 +512,14 @@ const selectProvider = (providerId: string) => {
     };
     // Load selected models from config
     if (existing.models) {
-      try {
-        selectedModels.value[providerId] = JSON.parse(existing.models);
-      } catch {
-        selectedModels.value[providerId] = [];
-      }
+      selectedModels.value[providerId] = parseModelList(existing.models);
     }
     // Load available models if they exist
     if (existing.available_models) {
-      try {
-        const available = JSON.parse(existing.available_models);
-        if (available && available.length > 0) {
-          dynamicModels.value[providerId] = available;
-        }
-      } catch {}
+      const available = parseModelList(existing.available_models);
+      if (available.length > 0) {
+        dynamicModels.value[providerId] = available;
+      }
     }
   } else {
     const builtIn = BUILTIN_PROVIDERS.find(p => p.id === providerId);
@@ -567,7 +554,7 @@ const saveProviderConfig = async () => {
         selectedModels.value[selectedProviderId.value!] || getSelectedModelsForProvider();
       const availableToSave =
         dynamicModels.value[selectedProviderId.value!] ||
-        (existingConfig.available_models ? JSON.parse(existingConfig.available_models) : []);
+        parseModelList(existingConfig.available_models);
       const result = await (window as any).electronAPI.providers.update(existingConfig.id, {
         api_key: providerFormData.value.api_key,
         base_url: providerFormData.value.base_url,

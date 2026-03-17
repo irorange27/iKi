@@ -269,7 +269,7 @@
                     <div class="px-3 py-1 text-[10px] font-bold text-accent uppercase">
                       {{ provider.name }}
                     </div>
-                    <button v-for="model in JSON.parse(provider.models || '[]')" :key="model"
+                    <button v-for="model in parseModelList(provider.models)" :key="model"
                       class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-hover flex items-center justify-between"
                       :class="{
                         'text-accent bg-hover/50':
@@ -378,6 +378,7 @@ import { ref, onMounted, watch, nextTick, computed, onUnmounted } from 'vue';
 import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
 import type { SpeechStatus } from '../../shared/types/speech';
+import { parseModelList } from '../../shared/utils/provider_models';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -479,7 +480,7 @@ const loadAvailableProviders = async () => {
       // Set default provider if none selected
       if (!selectedProvider.value) {
         selectedProvider.value = availableProviders.value[0];
-        const models = JSON.parse(selectedProvider.value.models || '[]');
+        const models = parseModelList(selectedProvider.value.models);
         availableModels.value = models;
         selectedModel.value = models[0] || '';
       }
@@ -494,7 +495,7 @@ const loadAvailableProviders = async () => {
 
 const selectProviderAndModel = (provider: any, model: string) => {
   selectedProvider.value = provider;
-  availableModels.value = JSON.parse(provider.models || '[]');
+  availableModels.value = parseModelList(provider.models);
   selectedModel.value = model;
   showModelSelector.value = false;
   emit('model-selected', { provider, model });

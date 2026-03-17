@@ -5,6 +5,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { getProviders } from '../../db/providers';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
+import { parseModelList } from '../../../shared/utils/provider_models';
 
 export interface ProviderConfig {
   id: string;
@@ -34,12 +35,7 @@ export const getProviderConfig = (providerType: string): ProviderConfig => {
     throw new Error(`Provider ${providerType} not configured or not enabled`);
   }
 
-  let models: string[] = [];
-  try {
-    models = JSON.parse(provider.models || '[]');
-  } catch (e) {
-    console.error(`Failed to parse models for ${providerType}:`, e);
-  }
+  const models = parseModelList(provider.models);
 
   return {
     id: provider.id,

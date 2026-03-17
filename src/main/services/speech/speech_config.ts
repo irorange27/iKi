@@ -1,4 +1,4 @@
-import { getConfig } from '../../../core/db/database';
+import { getAppConfig } from '../../../core/config';
 import type { AppConfig } from '../../../shared/types/config';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
 
@@ -16,7 +16,7 @@ export const DEFAULT_SPEECH_CONFIG: AppConfig['speech'] = {
 };
 
 export const getSpeechConfig = (): AppConfig['speech'] => {
-  const rawConfig = getConfig('app_config') as Partial<AppConfig> | null;
+  const rawConfig = getAppConfig();
   return {
     ...DEFAULT_SPEECH_CONFIG,
     ...(rawConfig?.speech || {}),

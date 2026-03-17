@@ -1,9 +1,8 @@
-import { getConfig } from '../../../core/db/database';
+import { getAppConfig } from '../../../core/config';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import * as memoryDb from '../../../core/db/memory';
 import { generateLongMemorySummary } from '../../../core/memory/auto_summarize';
 import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
-import type { AppConfig } from '../../../shared/types/config';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage } from './chat_types';
 
@@ -40,7 +39,7 @@ export const createChatMemory = () => {
   const memorySummarizeInFlight = new Set<string>();
 
   const getMemoryConfig = () => {
-    const appConfig = getConfig('app_config') as AppConfig | null;
+    const appConfig = getAppConfig();
     return appConfig?.memory || null;
   };
 

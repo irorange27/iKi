@@ -1,8 +1,6 @@
 import { tool, jsonSchema } from 'ai';
 
-import { ConfigManager } from '../config';
-import type { AppConfig } from '../../shared/types/config';
-import { getConfig } from '../db/database';
+import { getAppConfig, setAppConfig } from '../config';
 import {
   AgentConfigSchema,
   AgentMessageSchema,
@@ -28,11 +26,9 @@ export abstract class BaseAgent {
   protected config: AgentConfig;
   protected toolRegistry: ToolRegistry = new ToolRegistry();
   protected state: AgentState;
-  protected configManager: ConfigManager;
   protected hooks: Map<string, AgentHook[]> = new Map();
 
   constructor(config?: PartialAgentConfig) {
-    this.configManager = new ConfigManager();
     this.config = this.loadConfig(config);
     this.state = {
       messages: [],
@@ -47,7 +43,7 @@ export abstract class BaseAgent {
    */
   protected loadConfig(overrideConfig?: PartialAgentConfig): AgentConfig {
     try {
-      const appConfig = getConfig('app_config') as AppConfig | null;
+      const appConfig = getAppConfig();
       const agentConfig = appConfig?.agent || this.getDefaultConfig();
 
       // Merge configs
@@ -107,11 +103,9 @@ export abstract class BaseAgent {
 
       // Persist to app config if needed
       try {
-        const appConfig = (await this.configManager.read()) as AppConfig;
-        if (appConfig) {
-          appConfig.agent = this.config;
-          await this.configManager.write(appConfig);
-        }
+        const appConfig = getAppConfig();
+        appConfig.agent = this.config;
+        setAppConfig(appConfig);
       } catch (error) {
         logger.error('Failed to save agent config:', error);
       }

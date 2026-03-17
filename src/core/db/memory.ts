@@ -1,5 +1,5 @@
-import { getDb, getConfig } from './database';
-import type { AppConfig } from '../../shared/types/config';
+import { getDb } from './database';
+import { getAppConfig } from '../config';
 
 export type ShortMemoryEntry = {
   id: string;
@@ -34,7 +34,7 @@ const SHORT_MEMORY_LIMIT = 200;
 const nowIso = () => new Date().toISOString();
 
 const isMemoryEnabled = (): boolean => {
-  const appConfig = getConfig('app_config') as AppConfig | null;
+  const appConfig = getAppConfig();
   return Boolean(appConfig?.memory?.enabled);
 };
 

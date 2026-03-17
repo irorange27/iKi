@@ -1,7 +1,7 @@
 import { getProviders } from '../db/providers';
-import { getConfig } from '../db/database';
-import type { AppConfig } from '../../shared/types/config';
+import { getAppConfig } from '../config';
 import { SimpleAgent } from '../agent';
+import { parseModelList } from '../../shared/utils/provider_models';
 
 export interface ToolModelConfig {
   providerType: string;
@@ -15,7 +15,7 @@ export interface ToolModelConfig {
 export const getToolModel = (): ToolModelConfig | null => {
   try {
     // Get user config
-    const config = getConfig('app_config') as AppConfig | null;
+    const config = getAppConfig();
     const configuredModel = config?.toolModel?.model;
 
     const providers = getProviders();
@@ -25,7 +25,7 @@ export const getToolModel = (): ToolModelConfig | null => {
     if (configuredModel) {
       for (const provider of enabledProviders) {
         try {
-          const models = JSON.parse(provider.models || '[]');
+          const models = parseModelList(provider.models);
           if (models.includes(configuredModel)) {
             return { providerType: provider.type, model: configuredModel };
           }
@@ -53,7 +53,7 @@ export const getToolModel = (): ToolModelConfig | null => {
       const provider = enabledProviders.find(p => p.type === providerType);
       if (provider) {
         try {
-          const models = JSON.parse(provider.models || '[]');
+          const models = parseModelList(provider.models);
           // Filter out reasoning models
           const validModels = models.filter((m: string) => {
             const lower = m.toLowerCase();
@@ -81,7 +81,7 @@ export const getToolModel = (): ToolModelConfig | null => {
     if (enabledProviders.length > 0) {
       const provider = enabledProviders[0];
       try {
-        const models = JSON.parse(provider.models || '[]');
+        const models = parseModelList(provider.models);
         if (models.length > 0) {
           return { providerType: provider.type, model: models[0] };
         }

@@ -13,8 +13,21 @@ import {
 import { isObjectRecord } from '../../shared/utils/guards';
 import type { ChatThread } from './useChatThreads';
 
+type ElectronApi = {
+  chat: {
+    stopStream: () => Promise<unknown>;
+    approveTool: (
+      approvalId: string,
+      approved: boolean
+    ) => Promise<{ success?: boolean; error?: string }>;
+    threads: {
+      update: (id: string, thread: Partial<ChatThread>) => Promise<unknown>;
+    };
+  };
+};
+
 export const useChatStreaming = (deps: {
-  electronAPI: any;
+  electronAPI: ElectronApi;
   messageStore: ChatMessageStore;
   persistence: UiMessagePersistence;
   createMessageId: () => string;

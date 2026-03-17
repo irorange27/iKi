@@ -1,5 +1,7 @@
 import * as chatMessageDb from '../../../core/db/chat_message';
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import type { ChatMessage, ChatThread } from '../../../shared/types/chat';
+import { isObjectRecord } from '../../../shared/utils/guards';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatMemory } from './chat_memory';
 import { sanitizeUiMessageJsonForStorage } from './chat_ui';
@@ -7,26 +9,40 @@ import { sanitizeUiMessageJsonForStorage } from './chat_ui';
 export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => chatThreadDb.getChatThread(id);
-  const createThread = (thread: any) => {
-    const threadId = thread.id || `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const title = thread.title || 'New Chat';
+  const createThread = (input: unknown) => {
+    const thread = (isObjectRecord(input) ? (input as Partial<ChatThread>) : {});
+    const threadId =
+      typeof thread.id === 'string' && thread.id.trim()
+        ? thread.id.trim()
+        : `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const title = typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat';
     chatThreadDb.addChatThread({
       id: threadId,
       title,
       model: thread.model || null,
-      metadata: thread.metadata || '{}',
+      metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
       is_generating: false,
     });
     return chatThreadDb.getChatThread(threadId);
   };
-  const updateThread = (id: string, thread: any) => chatThreadDb.updateChatThread(id, thread);
+  const updateThread = (id: string, input: unknown) => {
+    const thread = (isObjectRecord(input) ? (input as Partial<ChatThread>) : {});
+    return chatThreadDb.updateChatThread(id, thread);
+  };
   const deleteThread = (id: string) => chatThreadDb.deleteChatThread(id);
 
   const listMessages = (threadId: string) => chatMessageDb.getChatMessages(threadId);
   const getMessage = (id: string) => chatMessageDb.getChatMessage(id);
-  const createMessage = (message: any) => {
-    const messageId = message.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const timestamp = message.timestamp || new Date().toISOString();
+  const createMessage = (input: unknown) => {
+    const message = (isObjectRecord(input) ? (input as Partial<ChatMessage>) : {});
+    const messageId =
+      typeof message.id === 'string' && message.id.trim()
+        ? message.id.trim()
+        : `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const timestamp =
+      typeof message.timestamp === 'string' && message.timestamp.trim()
+        ? message.timestamp
+        : new Date().toISOString();
     const sanitizedMessageJson =
       typeof message.message === 'string'
         ? sanitizeUiMessageJsonForStorage(message.message)
@@ -87,16 +103,20 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     return created;
   };
 
-    const updateMessage = (id: string, message: any) => {
+  const updateMessage = (id: string, input: unknown) => {
     const sanitizedUpdate =
-      message && typeof message === 'object' && message !== null
+      isObjectRecord(input)
         ? {
-            ...message,
-            ...(typeof (message as { message?: unknown }).message === 'string'
-              ? { message: sanitizeUiMessageJsonForStorage((message as { message: string }).message) }
+            ...(input as Partial<ChatMessage>),
+            ...(typeof (input as { message?: unknown }).message === 'string'
+              ? {
+                  message: sanitizeUiMessageJsonForStorage(
+                    (input as { message: string }).message
+                  ),
+                }
               : {}),
           }
-        : message;
+        : input;
 
     const result = chatMessageDb.updateChatMessage(id, sanitizedUpdate);
 

@@ -7,25 +7,25 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
 
   const findIndexById = (id: string | null | undefined): number => {
     if (!id) return -1;
-    return messages.findIndex(message => (message as any)?.id === id);
+    return messages.findIndex(message => message.id === id);
   };
 
   const getById = (id: string | null | undefined): UIMessage | undefined => {
     if (!id) return undefined;
-    return messages.find(message => (message as any)?.id === id) as UIMessage | undefined;
+    return messages.find(message => message.id === id);
   };
 
   const getAt = (index: number): UIMessage | undefined => messages[index] as UIMessage | undefined;
 
   const append = (message: UIMessage) => {
-    messages.push(message as any);
+    messages.push(message);
   };
 
   const replaceAt = (index: number, message: UIMessage) => {
     if (index >= 0) {
-      messages.splice(index, 1, message as any);
+      messages.splice(index, 1, message);
     } else {
-      messages.push(message as any);
+      messages.push(message);
     }
   };
 
@@ -52,7 +52,7 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
   };
 
   const setAll = (next: UIMessage[]) => {
-    messages.splice(0, messages.length, ...(next as any[]));
+    messages.splice(0, messages.length, ...next);
   };
 
   const truncateAfterIndex = (index: number): UIMessage[] => {

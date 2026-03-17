@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron';
 
 import * as tasksDb from '../../core/db/tasks';
+import type { ProactiveTask } from '../../shared/types/tasks';
+import { isObjectRecord } from '../../shared/utils/guards';
 import { getErrorMessage } from '../utils/errors';
 import { runProactiveTask } from '../services/tasks/proactive_tasks';
 
@@ -40,6 +42,9 @@ const normalizeToolsJson = (raw: unknown): string | null => {
   return null;
 };
 
+const normalizeTaskInput = (input: unknown): Partial<ProactiveTask> =>
+  (isObjectRecord(input) ? (input as Partial<ProactiveTask>) : {});
+
 export const registerTasksIpc = (): void => {
   if (tasksIpcRegistered) return;
   tasksIpcRegistered = true;
@@ -47,21 +52,28 @@ export const registerTasksIpc = (): void => {
   ipcMain.handle('tasks:list', () => tasksDb.getProactiveTasks());
   ipcMain.handle('tasks:get', (_, id: string) => tasksDb.getProactiveTask(id));
 
-  ipcMain.handle('tasks:create', async (_event, input: any) => {
+  ipcMain.handle('tasks:create', async (_event, input: unknown) => {
     try {
+      const taskInput = normalizeTaskInput(input);
       const now = new Date();
-      const id = typeof input?.id === 'string' && input.id.trim() ? input.id.trim() : createRuntimeId('task');
-      const name = typeof input?.name === 'string' ? input.name.trim() : '';
-      const prompt = typeof input?.prompt === 'string' ? input.prompt.trim() : '';
-      const provider_type = typeof input?.provider_type === 'string' ? input.provider_type.trim() : '';
-      const model = typeof input?.model === 'string' ? input.model.trim() : '';
-      const enabled = input?.enabled !== false;
-      const notify = input?.notify !== false;
-      const interval_minutes = clampIntervalMinutes(input?.interval_minutes);
+      const id =
+        typeof taskInput.id === 'string' && taskInput.id.trim()
+          ? taskInput.id.trim()
+          : createRuntimeId('task');
+      const name = typeof taskInput.name === 'string' ? taskInput.name.trim() : '';
+      const prompt = typeof taskInput.prompt === 'string' ? taskInput.prompt.trim() : '';
+      const provider_type =
+        typeof taskInput.provider_type === 'string' ? taskInput.provider_type.trim() : '';
+      const model = typeof taskInput.model === 'string' ? taskInput.model.trim() : '';
+      const enabled = taskInput.enabled !== false;
+      const notify = taskInput.notify !== false;
+      const interval_minutes = clampIntervalMinutes(taskInput.interval_minutes);
       const schedule_type = 'interval' as const;
-      const tools = normalizeToolsJson(input?.tools);
+      const tools = normalizeToolsJson(taskInput.tools);
       const thread_id =
-        typeof input?.thread_id === 'string' && input.thread_id.trim() ? input.thread_id.trim() : null;
+        typeof taskInput.thread_id === 'string' && taskInput.thread_id.trim()
+          ? taskInput.thread_id.trim()
+          : null;
 
       if (!name) throw new Error('Task name is required');
       if (!prompt) throw new Error('Task prompt is required');
@@ -90,43 +102,44 @@ export const registerTasksIpc = (): void => {
     }
   });
 
-  ipcMain.handle('tasks:update', async (_event, id: string, updates: any) => {
+  ipcMain.handle('tasks:update', async (_event, id: string, updates: unknown) => {
     try {
       const existing = tasksDb.getProactiveTask(id);
       if (!existing) throw new Error('Task not found');
 
+      const taskUpdates = normalizeTaskInput(updates);
       const now = new Date();
-      const nextUpdates: Record<string, unknown> = { ...updates };
+      const nextUpdates: Partial<ProactiveTask> = { ...taskUpdates };
 
-      if (typeof updates?.tools !== 'undefined') {
-        nextUpdates.tools = normalizeToolsJson(updates.tools);
+      if (typeof taskUpdates.tools !== 'undefined') {
+        nextUpdates.tools = normalizeToolsJson(taskUpdates.tools);
       }
 
-      if (typeof updates?.interval_minutes !== 'undefined') {
-        const interval = clampIntervalMinutes(updates.interval_minutes);
+      if (typeof taskUpdates.interval_minutes !== 'undefined') {
+        const interval = clampIntervalMinutes(taskUpdates.interval_minutes);
         nextUpdates.interval_minutes = interval;
 
         // When schedule changes, reset next run from "now" (if enabled).
         const enabledAfter =
-          typeof updates?.enabled === 'boolean' ? updates.enabled : existing.enabled;
+          typeof taskUpdates.enabled === 'boolean' ? taskUpdates.enabled : existing.enabled;
         if (enabledAfter) {
           nextUpdates.next_run_at = addMinutes(now, interval);
         }
       }
 
-      if (typeof updates?.enabled === 'boolean') {
+      if (typeof taskUpdates.enabled === 'boolean') {
         // If enabling a previously disabled task, schedule from now.
-        if (updates.enabled && !existing.enabled) {
+        if (taskUpdates.enabled && !existing.enabled) {
           const interval = clampIntervalMinutes(
-            typeof updates?.interval_minutes !== 'undefined'
-              ? updates.interval_minutes
+            typeof taskUpdates.interval_minutes !== 'undefined'
+              ? taskUpdates.interval_minutes
               : existing.interval_minutes
           );
           nextUpdates.next_run_at = addMinutes(now, interval);
         }
       }
 
-      tasksDb.updateProactiveTask(id, nextUpdates as any);
+      tasksDb.updateProactiveTask(id, nextUpdates);
 
       return { success: true, task: tasksDb.getProactiveTask(id) };
     } catch (error) {
@@ -148,4 +161,3 @@ export const registerTasksIpc = (): void => {
     return result;
   });
 };
-
