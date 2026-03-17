@@ -11,6 +11,7 @@ import {
 } from 'lucide-vue-next';
 
 import {
+  getToolCallIdFromPart,
   getToolInput,
   getToolName,
   getToolOutput,
@@ -20,6 +21,13 @@ import {
   isToolResultPart,
   normalizeToolNameKey,
 } from '../../../shared/chat/tool_parts';
+import {
+  parseToolInput,
+  parseToolOutput,
+  type ParsedToolInput,
+  type ParsedToolOutput,
+} from '../../../shared/chat/tool_payloads';
+import { getToolUiState, updateToolUiState } from './tool_ui_state';
 
 export {
   getApprovalId,
@@ -97,15 +105,80 @@ const coerceToTimestampMs = (value: unknown): number | null => {
   return null;
 };
 
-const getToolDurationMs = (part: unknown): number | null => {
-  if (!isObjectRecord(part)) return null;
+type ParsedToolPayload = {
+  input: ParsedToolInput;
+  output: ParsedToolOutput;
+  rawInput: unknown;
+  rawOutput: unknown;
+  toolName: string;
+};
 
-  const explicitDuration = coerceToTimestampMs(part.durationMs);
+const toolPayloadCache = new WeakMap<object, ParsedToolPayload>();
+
+const getParsedToolPayload = (part: unknown): ParsedToolPayload => {
+  if (!isObjectRecord(part)) {
+    return {
+      input: { kind: 'unknown', input: undefined },
+      output: { kind: 'unknown', output: undefined },
+      rawInput: undefined,
+      rawOutput: undefined,
+      toolName: 'tool',
+    };
+  }
+
+  const cached = toolPayloadCache.get(part);
+  const rawInput = getToolInput(part);
+  const rawOutput = getToolOutput(part);
+  const toolName = getToolName(part);
+
+  if (
+    cached &&
+    cached.toolName === toolName &&
+    Object.is(cached.rawInput, rawInput) &&
+    Object.is(cached.rawOutput, rawOutput)
+  ) {
+    return cached;
+  }
+
+  const payload: ParsedToolPayload = {
+    input: parseToolInput(toolName, rawInput),
+    output: parseToolOutput(toolName, rawOutput),
+    rawInput,
+    rawOutput,
+    toolName,
+  };
+
+  toolPayloadCache.set(part, payload);
+  return payload;
+};
+
+export const getParsedToolInput = (part: unknown): ParsedToolInput =>
+  getParsedToolPayload(part).input;
+
+export const getParsedToolOutput = (part: unknown): ParsedToolOutput =>
+  getParsedToolPayload(part).output;
+
+const getToolDurationMs = (part: unknown): number | null => {
+  const toolCallId = getToolCallIdFromPart(part);
+  const uiState = toolCallId ? getToolUiState(toolCallId) : undefined;
+
+  const explicitDuration = coerceToTimestampMs(uiState?.durationMs);
   if (explicitDuration !== null && explicitDuration >= 0) return explicitDuration;
 
-  const startedAt = coerceToTimestampMs(part.startedAt);
-  const endedAt = coerceToTimestampMs(part.endedAt);
+  const startedAt = coerceToTimestampMs(uiState?.startedAt);
+  const endedAt = coerceToTimestampMs(uiState?.endedAt);
   if (startedAt !== null && endedAt !== null) return Math.max(0, endedAt - startedAt);
+
+  if (isObjectRecord(part)) {
+    const fallbackDuration = coerceToTimestampMs(part.durationMs);
+    if (fallbackDuration !== null && fallbackDuration >= 0) return fallbackDuration;
+
+    const fallbackStart = coerceToTimestampMs(part.startedAt);
+    const fallbackEnd = coerceToTimestampMs(part.endedAt);
+    if (fallbackStart !== null && fallbackEnd !== null) {
+      return Math.max(0, fallbackEnd - fallbackStart);
+    }
+  }
 
   return null;
 };
@@ -229,11 +302,13 @@ type ToolInputDisplay = {
 };
 
 const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
-  const input = getToolInput(part);
+  const parsedInput = getParsedToolInput(part);
+  const input = parsedInput.kind === 'unknown' ? getToolInput(part) : parsedInput.input;
   const stateKind = getToolStateKind(part);
 
   if (stateKind === 'success' && isObjectRecord(input)) {
-    const toolKey = normalizeToolNameKey(getToolName(part));
+    const toolKey =
+      parsedInput.kind === 'unknown' ? normalizeToolNameKey(getToolName(part)) : parsedInput.kind;
 
     if (toolKey === 'shell' && typeof input.command === 'string' && input.command.trim()) {
       const meta: string[] = [];
@@ -252,11 +327,7 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       };
     }
 
-    if (
-      (toolKey === 'web' || toolKey === 'web_search') &&
-      typeof input.query === 'string' &&
-      input.query.trim()
-    ) {
+    if (toolKey === 'web' && typeof input.query === 'string' && input.query.trim()) {
       const meta: string[] = [];
       if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
         meta.push(`limit: ${Math.trunc(input.limit)}`);
@@ -323,16 +394,24 @@ export const getToolInputDisplayValue = (part: unknown): unknown =>
 export const getToolInputDisplayMetaText = (part: unknown): string =>
   getToolInputDisplay(part).metaText ?? '';
 
-export const isToolCollapsed = (part: unknown): boolean =>
-  isObjectRecord(part) && part.collapsed === true;
+export const isToolCollapsed = (part: unknown): boolean => {
+  const toolCallId = getToolCallIdFromPart(part);
+  const uiState = toolCallId ? getToolUiState(toolCallId) : undefined;
+  if (uiState && typeof uiState.collapsed === 'boolean') {
+    return uiState.collapsed;
+  }
+
+  return getToolStateKind(part) === 'success';
+};
 
 export const canToggleToolCollapse = (part: unknown): boolean =>
   isToolCallPart(part) || isToolResultPart(part);
 
 export const toggleToolCollapse = (_message: UIMessage, part: unknown) => {
   // Collapse state is a purely UI concern; do not persist it.
-  if (!isObjectRecord(part)) return;
-  part.collapsed = !isToolCollapsed(part);
+  const toolCallId = getToolCallIdFromPart(part);
+  if (!toolCallId) return;
+  updateToolUiState(toolCallId, { collapsed: !isToolCollapsed(part) });
 };
 
 export const getUsedToolNames = (message: any): string[] => {
@@ -361,29 +440,16 @@ const getUrlDomain = (value: string): string => {
   }
 };
 
-const parseJsonIfPossible = (value: unknown): unknown => {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  if (!trimmed) return value;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return value;
-  }
-};
-
 export const getWebSearchCitations = (part: unknown): WebSearchCitation[] => {
   if (!isToolResultPart(part)) return [];
-  const toolName = getToolName(part).toLowerCase();
-  if (toolName !== 'web' && toolName !== 'web_search' && toolName !== 'web-search') {
+  const parsedOutput = getParsedToolOutput(part);
+  if (parsedOutput.kind !== 'web') {
     return [];
   }
 
-  const outputRaw = parseJsonIfPossible(getToolOutput(part));
-  if (!isObjectRecord(outputRaw)) return [];
-
-  const results = outputRaw.results;
-  if (!Array.isArray(results)) return [];
+  const results = Array.isArray(parsedOutput.output.results)
+    ? parsedOutput.output.results
+    : [];
 
   const seen = new Set<string>();
   const citations: WebSearchCitation[] = [];

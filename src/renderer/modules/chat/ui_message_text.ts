@@ -1,9 +1,9 @@
 import type { UIMessage } from 'ai';
 
-const isObjectRecord = (value: unknown): value is Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+import type { TextPart } from '../../../shared/chat/message_parts';
+import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
-export const isTextPart = (part: unknown): part is { type: 'text'; text: string } =>
+export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
 
 export const extractTextFromMessage = (message: UIMessage | undefined): string => {
@@ -22,14 +22,14 @@ export const upsertTextIntoMessageParts = (
   let replaced = false;
 
   for (const part of parts) {
-    if (isObjectRecord(part) && part.type === 'text') {
+    if (isTextPart(part)) {
       if (replaced) continue;
       nextParts.push({
-        ...(part as any),
+        ...part,
         type: 'text',
         text: nextText,
         state: 'done',
-      } as any);
+      });
       replaced = true;
       continue;
     }
@@ -37,9 +37,8 @@ export const upsertTextIntoMessageParts = (
   }
 
   if (!replaced) {
-    nextParts.unshift({ type: 'text', text: nextText, state: 'done' } as any);
+    nextParts.unshift({ type: 'text', text: nextText, state: 'done' });
   }
 
   return nextParts;
 };
-

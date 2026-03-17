@@ -6,9 +6,17 @@ import {
   getToolName,
   parseToolInputFromText,
 } from './ui_message_tool_parts';
-import { isObjectRecord } from '../../../shared/chat/tool_parts';
-
-type MessagePartRecord = Record<string, any> & { type: string };
+import type { ToolUiState, ToolUiStatePatch } from './tool_ui_state';
+import {
+  isDynamicToolPart,
+  isMemoryPart,
+  isObjectRecord,
+  isTextPart,
+  type DynamicToolPart,
+  type MemoryPart,
+  type TextPart,
+  type UiMessagePart,
+} from '../../../shared/chat/message_parts';
 
 export type StreamState = {
   activeAssistantMessageId: string | null;
@@ -37,6 +45,7 @@ export type StreamContext = {
   createMessageId: () => string;
   currentThreadId: string | null;
   nowMs: number;
+  toolUiStateMap: Readonly<Record<string, ToolUiState>>;
 };
 
 export type MessageOp =
@@ -55,6 +64,7 @@ export type StreamEffect =
       source: string;
     }
   | { type: 'notify_persisted'; threadId: string; shouldNotify: boolean }
+  | { type: 'tool_ui_state'; toolCallId: string; patch: ToolUiStatePatch }
   | {
       type: 'approval_request';
       payload: {
@@ -139,104 +149,95 @@ const updateAssistantMessage = (
   return { state: nextState, messageOps, updatedMessage: updated ?? undefined };
 };
 
-const buildStreamingTextParts = (parts: UIMessage['parts'], delta: string): UIMessage['parts'] => {
+const buildStreamingTextParts = (parts: UiMessagePart[], delta: string): UiMessagePart[] => {
   const nextParts = [...parts];
   const lastPart = nextParts[nextParts.length - 1];
-  const shouldAppendToLast =
-    isObjectRecord(lastPart) && lastPart.type === 'text' && lastPart.state === 'streaming';
+  const shouldAppendToLast = isTextPart(lastPart) && lastPart.state === 'streaming';
 
   if (shouldAppendToLast) {
     const textPartIndex = nextParts.length - 1;
-    const textPart = nextParts[textPartIndex] as Record<string, unknown>;
-    const previousText = typeof textPart.text === 'string' ? textPart.text : '';
+    const textPart = nextParts[textPartIndex] as TextPart;
+    const previousText = textPart.text || '';
     nextParts[textPartIndex] = {
       ...textPart,
       text: `${previousText}${delta}`,
       state: 'streaming',
-    } as any;
+    };
   } else {
-    nextParts.push({
+    const newPart: TextPart = {
       type: 'text',
       text: delta,
       state: 'streaming',
-    } as any);
+    };
+    nextParts.push(newPart);
   }
 
   return nextParts;
 };
 
 const finalizeTextParts = (
-  parts: UIMessage['parts'],
+  parts: UiMessagePart[],
   fullText: string,
   streamedText: string
-): { parts: UIMessage['parts']; hasStreamingTextPart: boolean; appendedText?: string } => {
+): { parts: UiMessagePart[]; hasStreamingTextPart: boolean; appendedText?: string } => {
   const nextParts = [...parts];
   const textPartIndices = nextParts
     .map((part, index) => ({ part, index }))
-    .filter(({ part }) => isObjectRecord(part) && part.type === 'text')
+    .filter(({ part }) => isTextPart(part))
     .map(({ index }) => index);
 
   const existingTextPart =
     textPartIndices.length > 0
-      ? (nextParts[textPartIndices[textPartIndices.length - 1]] as Record<string, unknown>)
+      ? (nextParts[textPartIndices[textPartIndices.length - 1]] as TextPart)
       : undefined;
-  const existingStreamed =
-    existingTextPart && typeof existingTextPart.text === 'string' ? existingTextPart.text : '';
+  const existingStreamed = existingTextPart ? existingTextPart.text : '';
 
   const finalText = fullText.length > 0 ? fullText : streamedText || existingStreamed;
   let hasStreamingTextPart = false;
 
   for (const index of textPartIndices) {
-    const part = nextParts[index] as Record<string, unknown>;
+    const part = nextParts[index] as TextPart;
     if (part.state === 'streaming') {
       hasStreamingTextPart = true;
       nextParts[index] = {
         ...part,
-        type: 'text',
         state: 'done',
-      } as any;
+      };
     }
   }
 
   if (textPartIndices.length === 0 && finalText) {
-    nextParts.push({
+    const newPart: TextPart = {
       type: 'text',
       text: finalText,
       state: 'done',
-    } as any);
+    };
+    nextParts.push(newPart);
     return { parts: nextParts, hasStreamingTextPart, appendedText: finalText };
   }
 
   if (!hasStreamingTextPart && finalText && !existingStreamed) {
-    nextParts.push({
+    const newPart: TextPart = {
       type: 'text',
       text: finalText,
       state: 'done',
-    } as any);
+    };
+    nextParts.push(newPart);
     return { parts: nextParts, hasStreamingTextPart, appendedText: finalText };
   }
 
   return { parts: nextParts, hasStreamingTextPart };
 };
 
-const hasRenderableContent = (parts: UIMessage['parts']): boolean =>
-  parts.some(part => {
-    if (isObjectRecord(part) && part.type === 'text') {
-      return typeof part.text === 'string' && part.text.trim().length > 0;
-    }
-    return true;
-  });
+const hasRenderableContent = (parts: UiMessagePart[]): boolean =>
+  parts.some(part => (isTextPart(part) ? part.text.trim().length > 0 : true));
 
 const buildToolPartUpdate = (
-  part: MessagePartRecord,
+  part: DynamicToolPart,
   chunk: UIMessageChunk,
-  nowMs: number
-): MessagePartRecord => {
+  inputText?: string
+): DynamicToolPart => {
   const nextPart = { ...part };
-
-  if (typeof nextPart.startedAt !== 'number' || !Number.isFinite(nextPart.startedAt)) {
-    nextPart.startedAt = nowMs;
-  }
 
   if ('providerExecuted' in chunk && typeof chunk.providerExecuted === 'boolean') {
     nextPart.providerExecuted = chunk.providerExecuted;
@@ -254,11 +255,8 @@ const buildToolPartUpdate = (
   }
 
   if (chunk.type === 'tool-input-delta') {
-    const delta = typeof chunk.inputTextDelta === 'string' ? chunk.inputTextDelta : '';
-    const previousInputText = typeof nextPart.inputText === 'string' ? nextPart.inputText : '';
-    const inputText = `${previousInputText}${delta}`;
-    nextPart.inputText = inputText;
-    nextPart.input = parseToolInputFromText(inputText);
+    const nextInputText = typeof inputText === 'string' ? inputText : '';
+    nextPart.input = parseToolInputFromText(nextInputText);
     nextPart.state = 'input-streaming';
     return nextPart;
   }
@@ -270,7 +268,6 @@ const buildToolPartUpdate = (
       nextPart.input = chunk.input ?? nextPart.input ?? {};
     }
     nextPart.state = 'input-available';
-    delete nextPart.inputText;
     return nextPart;
   }
 
@@ -284,23 +281,12 @@ const buildToolPartUpdate = (
       error: chunk.errorText || 'Invalid tool input',
     };
     nextPart.state = 'output-error';
-    nextPart.endedAt = nowMs;
-    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-    delete nextPart.inputText;
     return nextPart;
   }
 
   if (chunk.type === 'tool-output-available') {
     nextPart.output = chunk.output;
     nextPart.state = chunk.preliminary ? 'input-streaming' : 'output-available';
-    if (!chunk.preliminary) {
-      nextPart.endedAt = nowMs;
-      nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-      if (typeof nextPart.collapsed !== 'boolean') {
-        nextPart.collapsed = true;
-      }
-    }
-    delete nextPart.inputText;
     return nextPart;
   }
 
@@ -309,9 +295,6 @@ const buildToolPartUpdate = (
       error: chunk.errorText || 'Tool execution failed',
     };
     nextPart.state = 'output-error';
-    nextPart.endedAt = nowMs;
-    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-    delete nextPart.inputText;
     return nextPart;
   }
 
@@ -321,13 +304,94 @@ const buildToolPartUpdate = (
       message: 'Tool execution denied',
       toolCallId: nextPart.toolCallId,
     };
-    nextPart.endedAt = nowMs;
-    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-    delete nextPart.inputText;
     return nextPart;
   }
 
   return nextPart;
+};
+
+const buildToolUiStatePatch = (
+  chunk: UIMessageChunk,
+  nowMs: number,
+  previousState: ToolUiState | undefined,
+  nextInputText?: string
+): ToolUiStatePatch => {
+  const patch: ToolUiStatePatch = {};
+  const startedAt =
+    typeof previousState?.startedAt === 'number' && Number.isFinite(previousState.startedAt)
+      ? previousState.startedAt
+      : undefined;
+
+  const ensureStartedAt = () => {
+    if (startedAt === undefined && patch.startedAt === undefined) {
+      patch.startedAt = nowMs;
+    }
+  };
+
+  const finalizeDuration = () => {
+    const resolvedStart = startedAt ?? nowMs;
+    if (startedAt === undefined) {
+      patch.startedAt = resolvedStart;
+    }
+    patch.endedAt = nowMs;
+    patch.durationMs = Math.max(0, nowMs - resolvedStart);
+  };
+
+  const clearInputText = () => {
+    if (previousState?.inputText !== undefined) {
+      patch.inputText = undefined;
+    }
+  };
+
+  if (chunk.type === 'tool-input-start') {
+    ensureStartedAt();
+    if (typeof previousState?.inputText !== 'string' || previousState.inputText.length > 0) {
+      patch.inputText = '';
+    }
+    return patch;
+  }
+
+  if (chunk.type === 'tool-input-delta') {
+    ensureStartedAt();
+    patch.inputText = typeof nextInputText === 'string' ? nextInputText : '';
+    return patch;
+  }
+
+  if (chunk.type === 'tool-input-available') {
+    clearInputText();
+    return patch;
+  }
+
+  if (chunk.type === 'tool-input-error') {
+    finalizeDuration();
+    clearInputText();
+    return patch;
+  }
+
+  if (chunk.type === 'tool-output-available') {
+    clearInputText();
+    if (!chunk.preliminary) {
+      finalizeDuration();
+      if (typeof previousState?.collapsed !== 'boolean') {
+        patch.collapsed = true;
+      }
+    }
+    return patch;
+  }
+
+  if (chunk.type === 'tool-output-error') {
+    finalizeDuration();
+    clearInputText();
+    return patch;
+  }
+
+  if (chunk.type === 'tool-output-denied') {
+    finalizeDuration();
+    clearInputText();
+    return patch;
+  }
+
+  return patch;
 };
 
 export const reduceStream = (
@@ -373,10 +437,10 @@ export const reduceStream = (
     };
 
     const updateResult = updateAssistantMessage(nextState, ctx, message => {
-      const nextParts = buildStreamingTextParts(message.parts, action.delta);
+      const nextParts = buildStreamingTextParts(message.parts as UiMessagePart[], action.delta);
       return {
         ...message,
-        parts: nextParts,
+        parts: nextParts as UIMessage['parts'],
       };
     });
 
@@ -424,14 +488,18 @@ export const reduceStream = (
 
     const updateResult = updateAssistantMessage(nextStateBase, ctx, message => {
       const streamedText = state.streamingAssistantText;
-      const finalizeResult = finalizeTextParts(message.parts, action.fullText, streamedText);
+      const finalizeResult = finalizeTextParts(
+        message.parts as UiMessagePart[],
+        action.fullText,
+        streamedText
+      );
 
       const updatedMessage: UIMessage = {
         ...message,
-        parts: finalizeResult.parts,
+        parts: finalizeResult.parts as UIMessage['parts'],
       };
 
-      if (!hasRenderableContent(updatedMessage.parts)) {
+      if (!hasRenderableContent(updatedMessage.parts as UiMessagePart[])) {
         return null;
       }
 
@@ -493,74 +561,104 @@ export const reduceStream = (
       const existingToolName = getToolName(existingPart);
       const existingInput = getToolInput(existingPart) ?? {};
 
+      const effects: StreamEffect[] = [
+        {
+          type: 'approval_request',
+          payload: {
+            approvalId: approvalChunk.approvalId,
+            toolCallId: approvalChunk.toolCallId,
+            toolCall: {
+              toolName: existingToolName,
+              toolCallId: approvalChunk.toolCallId,
+              args: existingInput,
+            },
+          },
+        },
+      ];
+
+      const existingUiState = ctx.toolUiStateMap[approvalChunk.toolCallId];
+      if (
+        !existingUiState ||
+        typeof existingUiState.startedAt !== 'number' ||
+        !Number.isFinite(existingUiState.startedAt)
+      ) {
+        effects.unshift({
+          type: 'tool_ui_state',
+          toolCallId: approvalChunk.toolCallId,
+          patch: { startedAt: ctx.nowMs },
+        });
+      }
+
       return {
         state,
         messageOps: [],
-        effects: [
-          {
-            type: 'approval_request',
-            payload: {
-              approvalId: approvalChunk.approvalId,
-              toolCallId: approvalChunk.toolCallId,
-              toolCall: {
-                toolName: existingToolName,
-                toolCallId: approvalChunk.toolCallId,
-                args: existingInput,
-              },
-            },
-          },
-        ],
+        effects,
       };
     }
 
+    const toolCallId = chunk.toolCallId;
+    const previousUiState = toolCallId ? ctx.toolUiStateMap[toolCallId] : undefined;
+    let nextInputText: string | undefined;
+    if (chunk.type === 'tool-input-delta') {
+      const delta = typeof chunk.inputTextDelta === 'string' ? chunk.inputTextDelta : '';
+      const previousInputText =
+        typeof previousUiState?.inputText === 'string' ? previousUiState.inputText : '';
+      nextInputText = `${previousInputText}${delta}`;
+    }
+
     const updateResult = updateAssistantMessage(state, ctx, message => {
-      const nextParts = [...message.parts];
+      const nextParts = [...(message.parts as UiMessagePart[])];
       for (let i = 0; i < nextParts.length; i += 1) {
         const part = nextParts[i];
-        if (!isObjectRecord(part) || part.type !== 'text' || part.state !== 'streaming') continue;
+        if (!isTextPart(part) || part.state !== 'streaming') continue;
         nextParts[i] = {
           ...part,
           state: 'done',
-        } as any;
+        };
       }
 
-      const toolCallId = chunk.toolCallId;
       const existingPartIndex = nextParts.findIndex(
         part => getToolCallIdFromPart(part) === toolCallId
       );
-      const existingPart =
-        existingPartIndex >= 0 && isObjectRecord(nextParts[existingPartIndex])
-          ? (nextParts[existingPartIndex] as MessagePartRecord)
-          : undefined;
+      const existingPart = existingPartIndex >= 0 ? nextParts[existingPartIndex] : undefined;
+      const existingToolPart = isDynamicToolPart(existingPart) ? existingPart : undefined;
       const chunkToolName =
         'toolName' in chunk && typeof chunk.toolName === 'string' && chunk.toolName.trim()
           ? chunk.toolName
           : undefined;
 
-      const nextPart: MessagePartRecord = {
-        ...(existingPart || {}),
+      const nextPart: DynamicToolPart = {
+        ...(existingToolPart || {}),
         type: 'dynamic-tool',
         toolCallId,
         toolName:
           chunkToolName ||
-          (existingPart && typeof existingPart.toolName === 'string' ? existingPart.toolName : 'tool'),
+          (existingToolPart ? existingToolPart.toolName : 'tool'),
       };
 
-      const updatedPart = buildToolPartUpdate(nextPart, chunk, ctx.nowMs);
+      const updatedPart = buildToolPartUpdate(nextPart, chunk, nextInputText);
 
       if (existingPartIndex >= 0) {
-        nextParts[existingPartIndex] = updatedPart as any;
+        nextParts[existingPartIndex] = updatedPart;
       } else {
-        nextParts.push(updatedPart as any);
+        nextParts.push(updatedPart);
       }
 
       return {
         ...message,
-        parts: nextParts,
+        parts: nextParts as UIMessage['parts'],
       };
     });
 
     const effects: StreamEffect[] = [{ type: 'scroll' }];
+    const uiPatch = buildToolUiStatePatch(chunk, ctx.nowMs, previousUiState, nextInputText);
+    if (toolCallId && Object.keys(uiPatch).length > 0) {
+      effects.unshift({
+        type: 'tool_ui_state',
+        toolCallId,
+        patch: uiPatch,
+      });
+    }
     if (
       chunk.type === 'tool-input-available' ||
       chunk.type === 'tool-input-error' ||
@@ -593,23 +691,19 @@ export const reduceStream = (
       : [];
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
-      const nextParts = [...message.parts] as Array<Record<string, any>>;
-      const existingIndex = nextParts.findIndex(part => {
-        if (!isObjectRecord(part)) return false;
-        const partType = typeof part.type === 'string' ? part.type : '';
-        return partType === 'memory-retrieval';
-      });
+      const nextParts = [...(message.parts as UiMessagePart[])];
+      const existingIndex = nextParts.findIndex(part => isMemoryPart(part));
 
-      const memoryPart: MessagePartRecord = {
+      const memoryPart: MemoryPart = {
         type: 'memory-retrieval',
         query: typeof action.chunk.query === 'string' ? action.chunk.query : '',
         results,
       };
 
       if (existingIndex >= 0) {
-        nextParts[existingIndex] = memoryPart as any;
+        nextParts[existingIndex] = memoryPart;
       } else {
-        nextParts.unshift(memoryPart as any);
+        nextParts.unshift(memoryPart);
       }
 
       return {

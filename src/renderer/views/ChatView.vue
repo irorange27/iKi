@@ -382,6 +382,7 @@ import {
   isTextPart,
   upsertTextIntoMessageParts,
 } from '../modules/chat/ui_message_text';
+import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
 import { useConfigStore } from '../store/config';
 import VueMarkdown from 'vue-markdown-render';
 import { markdownCodeBlockPlugin } from '../utils/markdown_code_block_plugin';
@@ -632,6 +633,7 @@ const createNewThread = async (model?: string) => {
     chat.messages.splice(0, chat.messages.length);
     persistence.resetPersistedMessageIds();
     editingUserMessageId.value = null;
+    resetToolUiStateMap();
     streamController.resetTransientState();
     showWelcome.value = false;
 
@@ -665,6 +667,7 @@ const loadThreadMessages = async (threadId: string) => {
     const chatMessages = dbMessages.map((message: any) => parseStoredUiMessage(message));
     chat.messages.splice(0, chat.messages.length, ...(chatMessages as any[]));
     editingUserMessageId.value = null;
+    resetToolUiStateMap();
     streamController.resetTransientState();
     scrollToBottom();
   } catch (error) {
@@ -709,6 +712,7 @@ const handleThreadDeleted = async (threadId: string) => {
   chat.messages.splice(0, chat.messages.length);
   persistence.resetPersistedMessageIds();
   editingUserMessageId.value = null;
+  resetToolUiStateMap();
   streamController.resetTransientState();
   showWelcome.value = true;
 

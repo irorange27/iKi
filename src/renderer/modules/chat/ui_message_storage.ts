@@ -1,5 +1,7 @@
 import type { UIMessage } from 'ai';
 
+import type { TextPart, UiMessagePart } from '../../../shared/chat/message_parts';
+
 const isObjectRecord = (value: unknown): value is Record<string, any> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -10,11 +12,9 @@ const normalizeRole = (role: unknown): 'system' | 'user' | 'assistant' => {
   return 'user';
 };
 
-const normalizeParts = (parts: unknown): Array<Record<string, unknown>> => {
+const normalizeParts = (parts: unknown): UiMessagePart[] => {
   if (!Array.isArray(parts)) return [];
-  return parts.filter(part => isObjectRecord(part) && typeof part.type === 'string') as Array<
-    Record<string, unknown>
-  >;
+  return parts.filter(part => isObjectRecord(part) && typeof part.type === 'string') as UiMessagePart[];
 };
 
 export const parseStoredUiMessage = (row: { id: string; message: string }): UIMessage => {
@@ -29,7 +29,7 @@ export const parseStoredUiMessage = (row: { id: string; message: string }): UIMe
           parts:
             parsedParts.length > 0
               ? (parsedParts as UIMessage['parts'])
-              : ([{ type: 'text', text: '' }] as UIMessage['parts']),
+              : ([{ type: 'text', text: '' } as TextPart] as UIMessage['parts']),
         };
       }
 
@@ -37,7 +37,7 @@ export const parseStoredUiMessage = (row: { id: string; message: string }): UIMe
         return {
           id: row.id,
           role: normalizeRole(parsed.role),
-          parts: [{ type: 'text', text: parsed.content }],
+          parts: [{ type: 'text', text: parsed.content } as TextPart],
         };
       }
     }
@@ -48,7 +48,6 @@ export const parseStoredUiMessage = (row: { id: string; message: string }): UIMe
   return {
     id: row.id,
     role: 'user',
-    parts: [{ type: 'text', text: row.message }],
+    parts: [{ type: 'text', text: row.message } as TextPart],
   };
 };
-

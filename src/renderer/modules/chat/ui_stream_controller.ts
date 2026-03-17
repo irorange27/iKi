@@ -1,6 +1,7 @@
 import type { UIMessage, UIMessageChunk } from 'ai';
 import { ref, type Ref } from 'vue';
 
+import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
 import type { UiMessagePersistence } from './ui_message_persistence';
 import {
   createInitialStreamState,
@@ -10,7 +11,15 @@ import {
   type StreamEffect,
   type StreamState,
 } from './ui_stream_reducer';
-import { createToolApprovalMachine } from './tool_approval_machine';
+import {
+  createToolApprovalService,
+  type ApprovalEvent,
+} from './tool_approval_service';
+import {
+  getToolUiState,
+  getToolUiStateMap,
+  updateToolUiState,
+} from './tool_ui_state';
 
 type ElectronAPI = {
   chat: {
@@ -142,6 +151,10 @@ export const createChatUiStreamController = (deps: {
         });
         continue;
       }
+      if (effect.type === 'tool_ui_state') {
+        updateToolUiState(effect.toolCallId, effect.patch);
+        continue;
+      }
       if (effect.type === 'notify_persisted') {
         if (!effect.shouldNotify) continue;
         const messagesSnapshot = [...(deps.chat.messages as UIMessage[])];
@@ -154,7 +167,43 @@ export const createChatUiStreamController = (deps: {
         continue;
       }
       if (effect.type === 'approval_request') {
-        await approvals.handleToolApprovalRequest(effect.payload);
+        const approvalStartedAt = Date.now();
+        if (effect.payload.toolCallId) {
+          const uiState = getToolUiState(effect.payload.toolCallId);
+          if (!uiState || typeof uiState.startedAt !== 'number' || !Number.isFinite(uiState.startedAt)) {
+            updateToolUiState(effect.payload.toolCallId, { startedAt: approvalStartedAt });
+          }
+        }
+
+        const assistantMessage = getOrCreateAssistantMessage();
+        const approvalEvent: ApprovalEvent = {
+          type: 'approval_requested',
+          request: effect.payload,
+          nowMs: approvalStartedAt,
+        };
+        const patch = approvals.applyApprovalEvent(assistantMessage, approvalEvent);
+        if (patch.didChange) {
+          const messageIndex = deps.chat.messages.findIndex(
+            (message: any) => message.id === patch.message.id
+          );
+          if (messageIndex >= 0) {
+            deps.chat.messages.splice(messageIndex, 1, patch.message as any);
+          } else {
+            deps.chat.messages.push(patch.message as any);
+          }
+
+          const threadId = activeStreamThreadId.value || deps.getCurrentThreadId() || '';
+          if (threadId) {
+            await deps.persistence.upsertUiMessage({
+              message: patch.message,
+              parentId: activeAssistantParentId.value || undefined,
+              source: 'tool-approval-request',
+              threadId,
+            });
+          }
+        }
+
+        deps.scrollToBottom();
         continue;
       }
       if (effect.type === 'reset_approvals') {
@@ -170,6 +219,7 @@ export const createChatUiStreamController = (deps: {
       createMessageId: deps.createMessageId,
       currentThreadId: deps.getCurrentThreadId(),
       nowMs: Date.now(),
+      toolUiStateMap: getToolUiStateMap(),
     };
 
     const result = reduceStream(state, context, action);
@@ -262,23 +312,109 @@ export const createChatUiStreamController = (deps: {
     }
   };
 
-  const approvals = createToolApprovalMachine({
-    electronAPI: deps.electronAPI as any,
-    chat: deps.chat,
+  const approvals = createToolApprovalService({
     createMessageId: deps.createMessageId,
-    getCurrentThreadId: deps.getCurrentThreadId,
-    isStreamBoundToCurrentThread,
-    getOrCreateAssistantMessage,
-    scrollToBottom: deps.scrollToBottom,
-    activeStreamThreadId,
-    activeAssistantMessageId,
-    activeAssistantParentId,
-    streamingAssistantText,
-    streamRenderTraceId,
-    streamRenderChunkCount,
-    streamRenderChars,
-    upsertUiMessage: deps.persistence.upsertUiMessage,
   });
+
+  const handleToolApproval = async (
+    message: UIMessage,
+    part: any,
+    approved: boolean
+  ): Promise<void> => {
+    const approvalId = getApprovalId(part);
+    if (!approvalId) return;
+    const toolCallId = getToolCallIdFromPart(part);
+
+    // After a reload, transient streaming state is empty, so UI chunks from a resumed approval would be ignored.
+    // Re-bind the stream to the current thread + assistant message so resume works reliably.
+    const currentThreadId = deps.getCurrentThreadId();
+    if (currentThreadId) {
+      activeStreamThreadId.value = currentThreadId;
+    }
+    if (message?.id) {
+      activeAssistantMessageId.value = message.id;
+    }
+    if (!activeAssistantParentId.value && message?.id) {
+      const messageIndex = deps.chat.messages.findIndex((m: any) => m && m.id === message.id);
+      if (messageIndex >= 0) {
+        const parent = [...deps.chat.messages.slice(0, messageIndex)]
+          .reverse()
+          .find((m: any) => m && m.role === 'user' && typeof m.id === 'string');
+        if (isObjectRecord(parent) && typeof parent.id === 'string') {
+          activeAssistantParentId.value = parent.id;
+        }
+      }
+    }
+    streamingAssistantText.value = '';
+    streamRenderTraceId.value = `approval-${Date.now()}`;
+    streamRenderChunkCount.value = 0;
+    streamRenderChars.value = 0;
+
+    approvals.setApprovalProcessing(approvalId, true);
+
+    try {
+      const result = await deps.electronAPI.chat.approveTool(approvalId, approved);
+      if (!result?.success) {
+        throw new Error(result?.error || 'Tool approval failed');
+      }
+
+      const nowMs = Date.now();
+      const event: ApprovalEvent = approved
+        ? {
+            type: 'approval_approved',
+            approvalId,
+            approved: true,
+            reason: 'User approved tool execution.',
+            nowMs,
+          }
+        : {
+            type: 'approval_rejected',
+            approvalId,
+            approved: false,
+            reason: 'User rejected tool execution.',
+            nowMs,
+          };
+
+      const patch = approvals.applyApprovalEvent(message, event);
+      if (patch.didChange) {
+        const messageIndex = deps.chat.messages.findIndex(
+          (m: any) => m && m.id === patch.message.id
+        );
+        if (messageIndex >= 0) {
+          deps.chat.messages.splice(messageIndex, 1, patch.message as any);
+        } else {
+          deps.chat.messages.push(patch.message as any);
+        }
+
+        const threadId = activeStreamThreadId.value || deps.getCurrentThreadId() || '';
+        if (threadId) {
+          await deps.persistence.upsertUiMessage({
+            message: patch.message,
+            parentId: activeAssistantParentId.value || undefined,
+            source: approved ? 'tool-approval:approve' : 'tool-approval:reject',
+            threadId,
+          });
+        }
+      }
+
+      if (!approved && toolCallId) {
+        const uiState = getToolUiState(toolCallId);
+        const startedAt =
+          typeof uiState?.startedAt === 'number' && Number.isFinite(uiState.startedAt)
+            ? uiState.startedAt
+            : nowMs;
+        updateToolUiState(toolCallId, {
+          startedAt,
+          endedAt: nowMs,
+          durationMs: Math.max(0, nowMs - startedAt),
+        });
+      }
+    } catch (error) {
+      console.error('Failed to approve tool:', error);
+    } finally {
+      approvals.setApprovalProcessing(approvalId, false);
+    }
+  };
 
   return {
     // state (used by the view for rendering keys / streaming markers)
@@ -297,7 +433,7 @@ export const createChatUiStreamController = (deps: {
     stopActiveStreamIfNeeded,
 
     // approvals
-    handleToolApproval: approvals.handleToolApproval,
+    handleToolApproval,
     isApprovalProcessing: approvals.isApprovalProcessing,
   };
 };

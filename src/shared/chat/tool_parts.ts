@@ -1,7 +1,13 @@
-type ToolPartRecord = Record<string, any> & { type: string };
+import type {
+  DynamicToolPart,
+  DynamicToolState,
+  ToolApproval,
+  ToolPart,
+} from './message_parts';
+import { isObjectRecord } from './message_parts';
 
-export const isObjectRecord = (value: unknown): value is Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+export type { DynamicToolPart, DynamicToolState, ToolApproval, ToolPart };
+export { isObjectRecord };
 
 export const getApprovalId = (part: unknown): string | null => {
   if (!isObjectRecord(part)) return null;
@@ -31,10 +37,18 @@ export const parseToolInputFromText = (inputText: string): unknown => {
   }
 };
 
-export const isToolPart = (part: unknown): part is ToolPartRecord =>
+const TOOL_PART_TYPES = new Set([
+  'dynamic-tool',
+  'tool-call',
+  'tool-result',
+  'tool-approval-request',
+  'tool-approval-response',
+]);
+
+export const isToolPart = (part: unknown): part is ToolPart =>
   isObjectRecord(part) &&
   typeof part.type === 'string' &&
-  (part.type === 'dynamic-tool' || part.type.startsWith('tool-'));
+  TOOL_PART_TYPES.has(part.type);
 
 export const isApprovalRequestedPart = (part: unknown): boolean => {
   if (!isToolPart(part)) return false;
@@ -46,9 +60,10 @@ export const isToolResultPart = (part: unknown): boolean => {
   if (!isToolPart(part) || !isObjectRecord(part) || isApprovalRequestedPart(part)) return false;
 
   if (part.type === 'tool-result' || part.type === 'tool-approval-response') return true;
-  if (part.output !== undefined || part.result !== undefined) return true;
+  if ('output' in part && part.output !== undefined) return true;
+  if ('result' in part && part.result !== undefined) return true;
 
-  if (typeof part.state === 'string') {
+  if ('state' in part && typeof part.state === 'string') {
     return (
       part.state === 'approval-responded' ||
       part.state === 'done' ||
@@ -128,15 +143,6 @@ export const getToolOutput = (part: unknown): unknown => {
 export const normalizeToolNameKey = (value: string): string =>
   value.trim().toLowerCase().replace(/[-\s]+/g, '_');
 
-type DynamicToolState =
-  | 'input-streaming'
-  | 'input-available'
-  | 'approval-requested'
-  | 'approval-responded'
-  | 'output-available'
-  | 'output-error'
-  | 'output-denied';
-
 const DYNAMIC_TOOL_STATES = new Set<DynamicToolState>([
   'input-streaming',
   'input-available',
@@ -145,6 +151,7 @@ const DYNAMIC_TOOL_STATES = new Set<DynamicToolState>([
   'output-available',
   'output-error',
   'output-denied',
+  'done',
 ]);
 
 const getApprovalIdFromPart = (part: Record<string, unknown>, fallbackId: string): string => {
@@ -181,7 +188,7 @@ const getDeniedReasonFromToolPart = (part: Record<string, unknown>): string | un
 export const normalizeDynamicToolPart = (
   part: Record<string, unknown>,
   fallbackToolCallId: string
-): Record<string, unknown> => {
+): DynamicToolPart => {
   const toolCallId =
     typeof part.toolCallId === 'string' && part.toolCallId.length > 0
       ? part.toolCallId
@@ -195,7 +202,7 @@ export const normalizeDynamicToolPart = (
     : 'input-available';
   const input = part.input ?? {};
 
-  const normalizedBase: Record<string, unknown> = {
+  const normalizedBase: DynamicToolPart = {
     type: 'dynamic-tool',
     toolCallId,
     toolName,

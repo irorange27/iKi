@@ -5,6 +5,7 @@ import {
 } from 'ai';
 
 import type { AgentMessage } from '../../../core/agent';
+import type { DynamicToolPart, TextPart, UiMessagePart } from '../../../shared/chat/message_parts';
 import { isObjectRecord, normalizeDynamicToolPart } from '../../../shared/chat/tool_parts';
 import { getErrorMessage } from '../../utils/errors';
 import type {
@@ -58,7 +59,7 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
         ? message.role
         : 'user';
 
-    const parts = Array.isArray(message.parts)
+    const parts: UiMessagePart[] = Array.isArray(message.parts)
       ? message.parts
           .map((part, partIndex) => {
             if (!isObjectRecord(part)) return null;
@@ -71,9 +72,17 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             if (partType === 'memory-retrieval') {
               return null;
             }
-            return partRecord;
+            if (partType === 'text' && typeof partRecord.text === 'string') {
+              const textPart: TextPart = {
+                type: 'text',
+                text: partRecord.text,
+                ...(typeof partRecord.state === 'string' ? { state: partRecord.state as TextPart['state'] } : {}),
+              };
+              return textPart;
+            }
+            return null;
           })
-          .filter((part): part is Exclude<typeof part, null> => part !== null)
+          .filter((part): part is TextPart | DynamicToolPart => part !== null)
       : [];
 
     return {
@@ -116,11 +125,6 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
           const normalized = normalizeDynamicToolPart(part, createRuntimeId('tool_call'));
 
           // Keep only semantically meaningful fields; drop renderer-only UI state.
-          delete normalized.startedAt;
-          delete normalized.endedAt;
-          delete normalized.durationMs;
-          delete normalized.inputText;
-          delete normalized.collapsed;
           delete normalized.callProviderMetadata;
 
           nextParts.push(normalized);
