@@ -293,7 +293,7 @@
 
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue';
-import type { UIMessage, UIMessageChunk } from 'ai';
+import type { UIMessage } from 'ai';
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
@@ -304,27 +304,53 @@ import {
   ChevronDown,
   CircleHelp,
   Clock,
-  Download,
-  FilePenLine,
-  FileText,
-  Folder,
   FolderOpen,
   Loader2,
   Pencil,
-  Search,
   ShieldBan,
-  Terminal,
-  Trash2,
-  Wrench,
   XCircle,
 } from 'lucide-vue-next';
+import {
+  canToggleToolCollapse,
+  formatJson,
+  getToolDurationLabel,
+  getToolIconComponent,
+  getToolInput,
+  getToolInputDisplayMetaText,
+  getToolInputDisplayTitle,
+  getToolInputDisplayValue,
+  getToolName,
+  getToolOutput,
+  getToolStateLabel,
+  getToolStatePillClass,
+  getToolTitle,
+  getUsedToolNames,
+  getWebSearchCitations,
+  hasDisplayValue,
+  hasWebSearchCitations,
+  isApprovalRequestedPart,
+  isToolCallPart,
+  isToolCollapsed,
+  isToolPart,
+  isToolResultPart,
+  toggleToolCollapse,
+} from '../modules/chat/ui_message_tool_parts';
+import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
+import { createChatUiStreamController } from '../modules/chat/ui_stream_controller';
+import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
+import {
+  extractTextFromMessage,
+  isTextPart,
+  upsertTextIntoMessageParts,
+} from '../modules/chat/ui_message_text';
 import { useConfigStore } from '../store/config';
 import VueMarkdown from 'vue-markdown-render';
-import hljs from 'highlight.js/lib/common';
-import 'highlight.js/styles/atom-one-dark.css';
+import { markdownCodeBlockPlugin } from '../utils/markdown_code_block_plugin';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
+
+const electronAPI = window.electronAPI as any;
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -344,241 +370,24 @@ const currentModel = ref<string>('');
 const selectedTools = ref<string[]>([]);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<any>(null);
-const activeAssistantMessageId = ref<string | null>(null);
-const activeAssistantParentId = ref<string | null>(null);
-const activeStreamThreadId = ref<string | null>(null);
-const streamingAssistantText = ref('');
-const approvalProcessing = ref<Record<string, boolean>>({});
-const persistedMessageIds = new Set<string>();
-const messagePersistInFlight = new Map<string, Promise<void>>();
-const streamRenderTick = ref(0);
-const streamRenderTraceId = ref('');
-const streamRenderChunkCount = ref(0);
-const streamRenderChars = ref(0);
-const shouldLogStreamChunk = (count: number) => count <= 3 || count % 20 === 0;
+const persistence = createUiMessagePersistence({ electronAPI });
 const TITLE_REGEN_INTERVAL = 2;
 const editingUserMessageId = ref<string | null>(null);
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-type MessagePartRecord = Record<string, any> & { type: string };
-type MarkdownToken = { info?: string; content?: string };
-type MarkdownFenceRenderer = (
-  tokens: MarkdownToken[],
-  idx: number,
-  options: unknown,
-  env: unknown,
-  self: unknown
-) => string;
-type MarkdownPlugin = (md: {
-  renderer: {
-    rules: {
-      fence?: MarkdownFenceRenderer;
-      [key: string]: MarkdownFenceRenderer | undefined;
-    };
-  };
-  utils: {
-    escapeHtml: (value: string) => string;
-  };
-}) => void;
-
-type MarkdownHighlightResult = {
-  html: string;
-  displayLanguage: string;
-  languageClass: string;
-};
-
-type WebSearchCitation = {
-  title: string;
-  url: string;
-  domain: string;
-};
-
 const isObjectRecord = (value: unknown): value is Record<string, any> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const normalizeLanguage = (value: string): string => value.trim().toLowerCase();
-
-const sanitizeLanguageClass = (value: string): string =>
-  value.replace(/[^a-z0-9_-]/gi, '');
-
-const highlightCode = (
-  source: string,
-  languageHint: string,
-  escapeHtml: (value: string) => string
-): MarkdownHighlightResult => {
-  const code = source || '';
-  const hint = normalizeLanguage(languageHint);
-  const safeHintClass = sanitizeLanguageClass(hint);
-  const fallback: MarkdownHighlightResult = {
-    html: escapeHtml(code),
-    displayLanguage: hint || 'code',
-    languageClass: safeHintClass || 'text',
-  };
-
-  if (!code.trim()) return fallback;
-
-  try {
-    if (hint && hljs.getLanguage(hint)) {
-      return {
-        html: hljs.highlight(code, { language: hint, ignoreIllegals: true }).value,
-        displayLanguage: hint,
-        languageClass: sanitizeLanguageClass(hint) || 'text',
-      };
-    }
-
-    const autoResult = hljs.highlightAuto(code);
-    const detected = normalizeLanguage(autoResult.language || '');
-    const safeDetected = sanitizeLanguageClass(detected);
-
-    return {
-      html: autoResult.value || fallback.html,
-      displayLanguage: hint || safeDetected || 'code',
-      languageClass: safeDetected || safeHintClass || 'text',
-    };
-  } catch {
-    return fallback;
-  }
-};
-
-const markdownCodeBlockPlugin: MarkdownPlugin = md => {
-  md.renderer.rules.fence = (tokens, idx) => {
-    const token = tokens[idx];
-    const rawInfo = typeof token?.info === 'string' ? token.info.trim() : '';
-    const languageHint = rawInfo.split(/\s+/).filter(Boolean)[0] || '';
-    const sourceRaw = typeof token?.content === 'string' ? token.content : '';
-    const source = sourceRaw.replace(/^\n+/, '').replace(/\n+$/, '');
-    const { html, displayLanguage, languageClass } = highlightCode(
-      source,
-      languageHint,
-      md.utils.escapeHtml
-    );
-    const escapedLanguage = md.utils.escapeHtml(displayLanguage || 'code');
-    const codeClass = md.utils.escapeHtml(languageClass || 'text');
-    const renderedFence = `<pre><code class="hljs language-${codeClass}">${html}</code></pre>`;
-
-    return `<div class="md-code-block"><div class="md-code-header"><span class="md-code-lang">${escapedLanguage}</span><button type="button" class="md-code-copy-btn" aria-label="Copy code" title="Copy code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div>${renderedFence}</div>`;
-  };
-};
-
 const markdownPlugins = [markdownCodeBlockPlugin];
 
-const normalizeRole = (role: unknown): 'system' | 'user' | 'assistant' => {
-  if (role === 'system' || role === 'assistant' || role === 'user') {
-    return role;
-  }
-  return 'user';
-};
-
-const normalizeParts = (parts: unknown): Array<Record<string, unknown>> => {
-  if (!Array.isArray(parts)) return [];
-  return parts.filter(
-    part => isObjectRecord(part) && typeof part.type === 'string'
-  ) as Array<Record<string, unknown>>;
-};
-
-const parseStoredUiMessage = (row: { id: string; message: string }): UIMessage => {
-  try {
-    const parsed = JSON.parse(row.message);
-    if (isObjectRecord(parsed)) {
-      if (Array.isArray(parsed.parts)) {
-        const parsedParts = normalizeParts(parsed.parts);
-        return {
-          id: row.id,
-          role: normalizeRole(parsed.role),
-          parts:
-            parsedParts.length > 0
-              ? (parsedParts as UIMessage['parts'])
-              : ([{ type: 'text', text: '' }] as UIMessage['parts']),
-        };
-      }
-
-      if (typeof parsed.content === 'string') {
-        return {
-          id: row.id,
-          role: normalizeRole(parsed.role),
-          parts: [{ type: 'text', text: parsed.content }],
-        };
-      }
-    }
-  } catch {
-    // Fallback below.
-  }
-
-  return {
-    id: row.id,
-    role: 'user',
-    parts: [{ type: 'text', text: row.message }],
-  };
-};
-
-const extractTextFromMessage = (message: UIMessage | undefined): string => {
-  if (!message || !Array.isArray(message.parts)) return '';
-  return message.parts
-    .filter(part => isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string')
-    .map(part => String(part.text))
-    .join('');
-};
-
-const upsertTextIntoMessageParts = (parts: UIMessage['parts'], nextText: string): UIMessage['parts'] => {
-  const nextParts: UIMessage['parts'] = [];
-  let replaced = false;
-
-  for (const part of parts) {
-    if (isObjectRecord(part) && part.type === 'text') {
-      if (replaced) continue;
-      nextParts.push({
-        ...(part as any),
-        type: 'text',
-        text: nextText,
-        state: 'done',
-      } as any);
-      replaced = true;
-      continue;
-    }
-    nextParts.push(part);
-  }
-
-  if (!replaced) {
-    nextParts.unshift({ type: 'text', text: nextText, state: 'done' } as any);
-  }
-
-  return nextParts;
-};
-
 const truncateConversationAfterIndex = async (messageIndex: number) => {
-  const messagesToDelete = chat.messages.slice(messageIndex + 1) as unknown as UIMessage[];
-  if (!messagesToDelete.length) return;
-
-  const idsToDelete = messagesToDelete
-    .map(message => (message && typeof message.id === 'string' ? message.id : ''))
-    .filter(id => id.length > 0);
-
-  if (idsToDelete.length === 0) {
-    chat.messages.splice(messageIndex + 1, chat.messages.length);
-    return;
-  }
-
-  const inFlight = idsToDelete
-    .map(id => messagePersistInFlight.get(id))
-    .filter((promise): promise is Promise<void> => Boolean(promise));
-  if (inFlight.length) {
-    await Promise.allSettled(inFlight);
-  }
-
-  chat.messages.splice(messageIndex + 1, chat.messages.length);
-
-  for (const id of idsToDelete) {
-    persistedMessageIds.delete(id);
-    messagePersistInFlight.delete(id);
-  }
-
-  await Promise.allSettled(idsToDelete.map(id => window.electronAPI.chat.messages.delete(id)));
+  await persistence.truncateConversationAfterIndex({ chat, messageIndex });
 };
 
 const beginEditMessage = async (message: UIMessage) => {
   if (!message || message.role !== 'user' || typeof message.id !== 'string') return;
-  await stopActiveStreamIfNeeded('edit-message');
+  await streamController.stopActiveStreamIfNeeded('edit-message');
   editingUserMessageId.value = message.id;
   const text = extractTextFromMessage(message);
   await chatInputRef.value?.setDraftMessage(text, { focus: true, select: true });
@@ -596,123 +405,15 @@ const upsertUiMessage = async (
   source = 'unknown',
   threadIdOverride?: string
 ) => {
-  const threadId = threadIdOverride || currentThread.value?.id;
+  const threadId = threadIdOverride || currentThread.value?.id || '';
   if (!threadId) return;
 
-  const persistKey = message.id;
-  const inFlightPersist = messagePersistInFlight.get(persistKey);
-  if (inFlightPersist) {
-    console.log(
-      `[ChatPersist][Renderer] waiting id=${persistKey} source=${source} parent=${parentId || 'null'}`
-    );
-    await inFlightPersist;
-  }
-
-  const persistTask = (async () => {
-    const serializedMessage = JSON.stringify(message);
-    const metadata = JSON.stringify({ format: 'ai-ui-message-v1' });
-
-    if (persistedMessageIds.has(message.id)) {
-      console.log(
-        `[ChatPersist][Renderer] update id=${message.id} source=${source} thread=${threadId}`
-      );
-      await window.electronAPI.chat.messages.update(message.id, {
-        message: serializedMessage,
-        metadata,
-      });
-      return;
-    }
-
-    console.log(
-      `[ChatPersist][Renderer] create id=${message.id} source=${source} thread=${threadId} parent=${parentId || 'null'}`
-    );
-
-    try {
-      const savedMessage = await window.electronAPI.chat.messages.create({
-        id: message.id,
-        thread_id: threadId,
-        parent_id: parentId || null,
-        depth: 0,
-        message: serializedMessage,
-        timestamp: new Date().toISOString(),
-        metadata,
-      });
-
-      if (savedMessage?.id) {
-        message.id = savedMessage.id;
-        persistedMessageIds.add(savedMessage.id);
-      } else {
-        persistedMessageIds.add(message.id);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorCode =
-        typeof error === 'object' && error !== null && 'code' in error
-          ? String((error as { code?: unknown }).code)
-          : '';
-      console.warn(
-        `[ChatPersist][Renderer] create-failed id=${message.id} source=${source} code=${errorCode || 'unknown'} error=${errorMessage}`
-      );
-
-      if (
-        errorCode === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
-        errorMessage.includes('UNIQUE constraint failed: chat_messages.id')
-      ) {
-        persistedMessageIds.add(message.id);
-        await window.electronAPI.chat.messages.update(message.id, {
-          message: serializedMessage,
-          metadata,
-        });
-        console.warn(
-          `[ChatPersist][Renderer] duplicate-resolved-via-update id=${message.id} source=${source}`
-        );
-        return;
-      }
-
-      throw error;
-    }
-  })();
-
-  messagePersistInFlight.set(persistKey, persistTask);
-
-  try {
-    await persistTask;
-  } finally {
-    if (messagePersistInFlight.get(persistKey) === persistTask) {
-      messagePersistInFlight.delete(persistKey);
-    }
-  }
-};
-
-const getAssistantMessageById = (id: string | null): UIMessage | undefined => {
-  if (!id) return undefined;
-  return chat.messages.find((message: any) => message.id === id) as UIMessage | undefined;
-};
-
-const getOrCreateAssistantMessage = (): UIMessage => {
-  const existing = getAssistantMessageById(activeAssistantMessageId.value);
-  if (existing) return existing;
-
-  const assistantMessage: UIMessage = {
-    id: createMessageId(),
-    role: 'assistant',
-    parts: [],
-  };
-
-  chat.messages.push(assistantMessage as any);
-  activeAssistantMessageId.value = assistantMessage.id;
-  return assistantMessage;
-};
-
-const TOOL_STATE_LABELS: Record<string, string> = {
-  'input-streaming': 'Running',
-  'input-available': 'Queued',
-  'approval-requested': 'Awaiting approval',
-  'approval-responded': 'Approved',
-  'output-available': 'Completed',
-  'output-error': 'Failed',
-  'output-denied': 'Denied',
-  done: 'Done',
+  await persistence.upsertUiMessage({
+    message,
+    threadId,
+    parentId,
+    source,
+  });
 };
 
 const getPartType = (part: unknown): string =>
@@ -721,516 +422,22 @@ const getPartType = (part: unknown): string =>
 const getPartRenderKey = (messageId: string, part: unknown, partIndex: number): string => {
   const partType = getPartType(part);
   if (isTextPart(part)) {
-    return `${messageId}-${partType}-${partIndex}-${part.text.length}-${streamRenderTick.value}`;
+    return `${messageId}-${partType}-${partIndex}-${part.text.length}-${streamController.streamRenderTick.value}`;
   }
   return `${messageId}-${partType}-${partIndex}`;
 };
 
-const isTextPart = (part: unknown): part is { type: 'text'; text: string } =>
-  isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
-
 const isStreamingTextPart = (message: UIMessage, part: unknown): boolean => {
   if (!isTextPart(part)) return false;
-  if (!activeAssistantMessageId.value) return false;
-  if (message.id !== activeAssistantMessageId.value) return false;
+  if (!streamController.activeAssistantMessageId.value) return false;
+  if (message.id !== streamController.activeAssistantMessageId.value) return false;
   return isObjectRecord(part) && part.state === 'streaming';
 };
 
 const getTextPartContent = (part: unknown): string => {
-  void streamRenderTick.value;
+  // Re-render streaming text even if the part object is mutated in-place.
+  void streamController.streamRenderTick.value;
   return isTextPart(part) ? part.text : '';
-};
-
-const getApprovalId = (part: unknown): string | null => {
-  if (!isObjectRecord(part)) return null;
-  if (typeof part.approvalId === 'string') return part.approvalId;
-  if (!isObjectRecord(part.approval)) return null;
-  return typeof part.approval.id === 'string' ? part.approval.id : null;
-};
-
-const getToolCallIdFromPart = (part: unknown): string | null => {
-  if (!isObjectRecord(part)) return null;
-  if (typeof part.toolCallId === 'string' && part.toolCallId.length > 0) return part.toolCallId;
-  if (typeof part.id === 'string' && part.id.length > 0) return part.id;
-  if (isObjectRecord(part.toolCall) && typeof part.toolCall.toolCallId === 'string') {
-    return part.toolCall.toolCallId;
-  }
-  return null;
-};
-
-const parseToolInputFromText = (inputText: string): unknown => {
-  const trimmedInput = inputText.trim();
-  if (!trimmedInput) return {};
-
-  try {
-    return JSON.parse(trimmedInput);
-  } catch {
-    return inputText;
-  }
-};
-
-const isToolPart = (part: unknown): part is MessagePartRecord =>
-  isObjectRecord(part) &&
-  typeof part.type === 'string' &&
-  (part.type === 'dynamic-tool' || part.type.startsWith('tool-'));
-
-const isApprovalRequestedPart = (part: unknown): boolean => {
-  if (!isToolPart(part)) return false;
-  if (!getApprovalId(part)) return false;
-  return part.type === 'tool-approval-request' || part.state === 'approval-requested';
-};
-
-const isToolResultPart = (part: unknown): boolean => {
-  if (!isToolPart(part) || !isObjectRecord(part) || isApprovalRequestedPart(part)) return false;
-
-  if (part.type === 'tool-result' || part.type === 'tool-approval-response') return true;
-  if (part.output !== undefined || part.result !== undefined) return true;
-
-  if (typeof part.state === 'string') {
-    return (
-      part.state === 'approval-responded' ||
-      part.state === 'done' ||
-      part.state.startsWith('output-')
-    );
-  }
-
-  return false;
-};
-
-const isToolCallPart = (part: unknown): boolean =>
-  isToolPart(part) && !isApprovalRequestedPart(part) && !isToolResultPart(part);
-
-const getToolName = (part: unknown): string => {
-  if (!isObjectRecord(part)) return 'tool';
-
-  if (typeof part.toolName === 'string' && part.toolName.trim()) {
-    return part.toolName;
-  }
-
-  if (isObjectRecord(part.toolCall) && typeof part.toolCall.toolName === 'string') {
-    return part.toolCall.toolName;
-  }
-
-  if (part.type === 'dynamic-tool' && typeof part.toolName === 'string') {
-    return part.toolName;
-  }
-
-  if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-    const typeName = part.type.replace(/^tool-/, '');
-    if (
-      typeName === 'call' ||
-      typeName === 'result' ||
-      typeName === 'approval-request' ||
-      typeName === 'approval-response'
-    ) {
-      return 'tool';
-    }
-    return typeName || 'tool';
-  }
-
-  return 'tool';
-};
-
-const getToolInput = (part: unknown): unknown => {
-  if (!isObjectRecord(part)) return undefined;
-  if (part.input !== undefined) return part.input;
-  if (part.args !== undefined) return part.args;
-  if (isObjectRecord(part.toolCall)) {
-    if (part.toolCall.args !== undefined) return part.toolCall.args;
-    if (part.toolCall.input !== undefined) return part.toolCall.input;
-  }
-  return undefined;
-};
-
-const getToolOutput = (part: unknown): unknown => {
-  if (!isObjectRecord(part)) return undefined;
-
-  if (part.output !== undefined) return part.output;
-  if (part.result !== undefined) return part.result;
-
-  if (part.type === 'tool-approval-response') {
-    return {
-      approvalId: part.approvalId,
-      approved: part.approved,
-      reason: part.reason,
-    };
-  }
-
-  if (isObjectRecord(part.approval) && Object.keys(part.approval).length > 0) {
-    return part.approval;
-  }
-
-  return undefined;
-};
-
-const getToolStateLabel = (part: unknown): string => {
-  if (!isObjectRecord(part) || typeof part.state !== 'string') return '';
-  return TOOL_STATE_LABELS[part.state] ?? part.state;
-};
-
-type ToolStateKind = 'success' | 'error' | 'denied' | 'pending' | 'running' | 'neutral';
-
-const getToolStateKind = (part: unknown): ToolStateKind => {
-  if (!isObjectRecord(part) || typeof part.state !== 'string') return 'neutral';
-
-  const state = part.state;
-  if (state === 'output-available' || state === 'done') return 'success';
-  if (state === 'output-error') return 'error';
-  if (state === 'output-denied') return 'denied';
-  if (state === 'approval-requested') return 'pending';
-  if (state === 'input-streaming' || state === 'input-available' || state === 'approval-responded') {
-    return 'running';
-  }
-
-  return 'neutral';
-};
-
-const getToolStatePillClass = (part: unknown): string => `tool-state-${getToolStateKind(part)}`;
-
-const coerceToTimestampMs = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-
-  if (typeof value === 'string' && value.trim()) {
-    const trimmed = value.trim();
-
-    const asNumber = Number(trimmed);
-    if (Number.isFinite(asNumber)) return asNumber;
-
-    const parsedIso = Date.parse(trimmed);
-    if (!Number.isNaN(parsedIso)) return parsedIso;
-  }
-
-  return null;
-};
-
-const getToolDurationMs = (part: unknown): number | null => {
-  if (!isObjectRecord(part)) return null;
-
-  const explicitDuration = coerceToTimestampMs(part.durationMs);
-  if (explicitDuration !== null && explicitDuration >= 0) return explicitDuration;
-
-  const startedAt = coerceToTimestampMs(part.startedAt);
-  const endedAt = coerceToTimestampMs(part.endedAt);
-  if (startedAt !== null && endedAt !== null) return Math.max(0, endedAt - startedAt);
-
-  return null;
-};
-
-const formatDurationMs = (ms: number): string => {
-  if (!Number.isFinite(ms) || ms < 0) return '';
-  const secondsTotal = ms / 1000;
-
-  const formatSeconds = (seconds: number) => {
-    const fixed = seconds.toFixed(1);
-    return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
-  };
-
-  if (secondsTotal < 60) {
-    return `${formatSeconds(secondsTotal)} s`;
-  }
-
-  const minutes = Math.floor(secondsTotal / 60);
-  const seconds = Math.round(secondsTotal % 60);
-  return `${minutes}m ${seconds}s`;
-};
-
-const getToolDurationLabel = (part: unknown): string => {
-  const ms = getToolDurationMs(part);
-  if (ms === null) return '';
-  return formatDurationMs(ms);
-};
-
-const normalizeToolNameKey = (value: string): string =>
-  value.trim().toLowerCase().replace(/[-\s]+/g, '_');
-
-const TOOL_ICON_COMPONENTS: Record<string, any> = {
-  web: Search,
-  web_search: Search,
-  fetch: Download,
-  shell: Terminal,
-  read_file: FileText,
-  write_file: FilePenLine,
-  list_dir: Folder,
-  delete_file: Trash2,
-};
-
-const getToolIconComponent = (part: unknown): any => {
-  const rawName = getToolName(part);
-  const toolKey = typeof rawName === 'string' ? normalizeToolNameKey(rawName) : 'tool';
-  return TOOL_ICON_COMPONENTS[toolKey] || Wrench;
-};
-
-const normalizeSingleLineText = (value: string): string => value.replace(/\s+/g, ' ').trim();
-
-const getPathBasename = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  const segments = trimmed.split(/[\\/]/).filter(Boolean);
-  return segments.length > 0 ? segments[segments.length - 1] : trimmed;
-};
-
-const getToolTitle = (part: unknown): string => {
-  if (isObjectRecord(part) && typeof part.title === 'string' && part.title.trim()) {
-    return normalizeSingleLineText(part.title);
-  }
-
-  const input = getToolInput(part);
-  if (isObjectRecord(input)) {
-    const descriptionCandidate =
-      typeof input.description === 'string'
-        ? input.description
-        : typeof input.reason === 'string'
-          ? input.reason
-          : typeof input.rationale === 'string'
-            ? input.rationale
-            : '';
-    if (descriptionCandidate.trim()) {
-      return normalizeSingleLineText(descriptionCandidate);
-    }
-  }
-
-  const rawName = getToolName(part);
-  const toolKey = typeof rawName === 'string' ? normalizeToolNameKey(rawName) : 'tool';
-
-  if (isObjectRecord(input)) {
-    if (toolKey === 'web' || toolKey === 'web_search') {
-      if (typeof input.query === 'string' && input.query.trim()) {
-        return normalizeSingleLineText(input.query);
-      }
-    }
-
-    if (toolKey === 'fetch') {
-      if (typeof input.url === 'string' && input.url.trim()) {
-        return normalizeSingleLineText(input.url);
-      }
-    }
-
-    if (toolKey === 'shell') {
-      if (typeof input.command === 'string' && input.command.trim()) {
-        return normalizeSingleLineText(input.command);
-      }
-    }
-
-    if (
-      toolKey === 'read_file' ||
-      toolKey === 'write_file' ||
-      toolKey === 'list_dir' ||
-      toolKey === 'delete_file'
-    ) {
-      if (typeof input.path === 'string' && input.path.trim()) {
-        return getPathBasename(input.path);
-      }
-    }
-  }
-
-  if (typeof rawName === 'string' && rawName.trim()) {
-    return normalizeSingleLineText(rawName);
-  }
-
-  return 'tool';
-};
-
-type ToolInputDisplay = {
-  title: string;
-  value: unknown;
-  metaText?: string;
-  isPrimary: boolean;
-};
-
-const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
-  const input = getToolInput(part);
-  const stateKind = getToolStateKind(part);
-
-  if (stateKind === 'success' && isObjectRecord(input)) {
-    const toolKey = normalizeToolNameKey(getToolName(part));
-
-    if (toolKey === 'shell' && typeof input.command === 'string' && input.command.trim()) {
-      const meta: string[] = [];
-      if (typeof input.cwd === 'string' && input.cwd.trim()) {
-        meta.push(`cwd: ${normalizeSingleLineText(input.cwd)}`);
-      }
-      if (typeof input.timeout === 'number' && Number.isFinite(input.timeout)) {
-        meta.push(`timeout: ${Math.trunc(input.timeout)} ms`);
-      }
-
-      return {
-        title: 'Command',
-        value: input.command.trim(),
-        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
-        isPrimary: true,
-      };
-    }
-
-    if ((toolKey === 'web' || toolKey === 'web_search') && typeof input.query === 'string' && input.query.trim()) {
-      const meta: string[] = [];
-      if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-        meta.push(`limit: ${Math.trunc(input.limit)}`);
-      }
-
-      return {
-        title: 'Query',
-        value: input.query.trim(),
-        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
-        isPrimary: true,
-      };
-    }
-
-    if (toolKey === 'fetch' && typeof input.url === 'string' && input.url.trim()) {
-      const meta: string[] = [];
-      if (typeof input.maxChars === 'number' && Number.isFinite(input.maxChars)) {
-        meta.push(`maxChars: ${Math.trunc(input.maxChars)}`);
-      }
-
-      return {
-        title: 'URL',
-        value: input.url.trim(),
-        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
-        isPrimary: true,
-      };
-    }
-
-    if (
-      (toolKey === 'read_file' ||
-        toolKey === 'write_file' ||
-        toolKey === 'list_dir' ||
-        toolKey === 'delete_file') &&
-      typeof input.path === 'string' &&
-      input.path.trim()
-    ) {
-      const meta: string[] = [];
-      if (toolKey === 'list_dir' && typeof input.recursive === 'boolean') {
-        meta.push(`recursive: ${input.recursive ? 'true' : 'false'}`);
-      }
-      if (typeof input.encoding === 'string' && input.encoding.trim()) {
-        meta.push(`encoding: ${normalizeSingleLineText(input.encoding)}`);
-      }
-
-      return {
-        title: 'Path',
-        value: input.path.trim(),
-        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
-        isPrimary: true,
-      };
-    }
-  }
-
-  return {
-    title: 'Input',
-    value: input,
-    isPrimary: false,
-  };
-};
-
-const getToolInputDisplayTitle = (part: unknown): string => getToolInputDisplay(part).title;
-const getToolInputDisplayValue = (part: unknown): unknown => getToolInputDisplay(part).value;
-const getToolInputDisplayMetaText = (part: unknown): string => getToolInputDisplay(part).metaText ?? '';
-
-const isToolCollapsed = (part: unknown): boolean => isObjectRecord(part) && part.collapsed === true;
-
-const canToggleToolCollapse = (part: unknown): boolean =>
-  isToolCallPart(part) || isToolResultPart(part);
-
-const toggleToolCollapse = (message: UIMessage, part: unknown) => {
-  // Collapse state is a purely UI concern; do not persist it.
-  void message;
-  if (!isObjectRecord(part)) return;
-  part.collapsed = !isToolCollapsed(part);
-};
-
-const getUsedToolNames = (message: any): string[] => {
-  const parts = Array.isArray(message?.parts) ? message.parts : [];
-  const names: string[] = [];
-  const seen = new Set<string>();
-
-  for (const part of parts) {
-    if (!isToolPart(part)) continue;
-    const rawName = getToolName(part);
-    const name = typeof rawName === 'string' ? rawName.trim() : '';
-    if (!name || name === 'tool') continue;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    names.push(name);
-  }
-
-  return names;
-};
-
-const getUrlDomain = (value: string): string => {
-  try {
-    return new URL(value).hostname.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-};
-
-const parseJsonIfPossible = (value: unknown): unknown => {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  if (!trimmed) return value;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return value;
-  }
-};
-
-const getWebSearchCitations = (part: unknown): WebSearchCitation[] => {
-  if (!isToolResultPart(part)) return [];
-  const toolName = getToolName(part).toLowerCase();
-  if (toolName !== 'web' && toolName !== 'web_search' && toolName !== 'web-search') {
-    return [];
-  }
-
-  const outputRaw = parseJsonIfPossible(getToolOutput(part));
-  if (!isObjectRecord(outputRaw)) return [];
-
-  const results = outputRaw.results;
-  if (!Array.isArray(results)) return [];
-
-  const seen = new Set<string>();
-  const citations: WebSearchCitation[] = [];
-
-  for (const item of results) {
-    if (!isObjectRecord(item)) continue;
-    const url = typeof item.url === 'string' ? item.url.trim() : '';
-    if (!url || seen.has(url)) continue;
-    const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : url;
-    citations.push({
-      title,
-      url,
-      domain: getUrlDomain(url),
-    });
-    seen.add(url);
-  }
-
-  return citations;
-};
-
-const hasWebSearchCitations = (part: unknown): boolean =>
-  getWebSearchCitations(part).length > 0;
-
-const hasDisplayValue = (value: unknown): boolean => {
-  if (value === null || value === undefined) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
-  if (Array.isArray(value)) return value.length > 0;
-  if (isObjectRecord(value)) return Object.keys(value).length > 0;
-  return true;
-};
-
-const formatJson = (value: unknown): string => {
-  if (value === undefined) return '';
-  if (typeof value === 'string') {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2);
-    } catch {
-      return value;
-    }
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
 };
 
 const copyTextToClipboard = async (text: string): Promise<boolean> => {
@@ -1277,44 +484,6 @@ const handleMarkdownClick = async (event: MouseEvent) => {
   }, 1200);
 };
 
-const isApprovalProcessing = (part: unknown): boolean => {
-  const approvalId = getApprovalId(part);
-  return approvalId ? !!approvalProcessing.value[approvalId] : false;
-};
-
-const resetTransientState = () => {
-  activeAssistantMessageId.value = null;
-  activeAssistantParentId.value = null;
-  activeStreamThreadId.value = null;
-  streamingAssistantText.value = '';
-  approvalProcessing.value = {};
-  streamRenderTraceId.value = '';
-  streamRenderChunkCount.value = 0;
-  streamRenderChars.value = 0;
-};
-
-const isStreamBoundToCurrentThread = (): boolean => {
-  if (!activeStreamThreadId.value) return false;
-  return currentThread.value?.id === activeStreamThreadId.value;
-};
-
-const stopActiveStreamIfNeeded = async (reason: string, targetThreadId?: string) => {
-  if (!activeStreamThreadId.value) return;
-  if (targetThreadId && activeStreamThreadId.value === targetThreadId) return;
-
-  console.log(
-    `[StreamDebug][Renderer][ChatView] stop-stream reason=${reason} streamThread=${activeStreamThreadId.value} currentThread=${currentThread.value?.id || 'null'} targetThread=${targetThreadId || 'null'}`
-  );
-
-  try {
-    await window.electronAPI.chat.stopStream();
-  } catch (error) {
-    console.warn('[StreamDebug][Renderer][ChatView] stop-stream failed:', error);
-  } finally {
-    resetTransientState();
-  }
-};
-
 const scrollToBottom = () => {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -1323,18 +492,43 @@ const scrollToBottom = () => {
   });
 };
 
+const streamController = createChatUiStreamController({
+  chat,
+  electronAPI,
+  persistence,
+  createMessageId,
+  scrollToBottom,
+  getCurrentThreadId: () => currentThread.value?.id || null,
+  onAssistantMessagePersisted: async ({ threadId, messagesSnapshot }) => {
+    if (!currentThread.value || currentThread.value.id !== threadId) return;
+
+    if (
+      messagesSnapshot.length > 0 &&
+      shouldRegenerateThreadTitle(messagesSnapshot, currentThread.value.title)
+    ) {
+      const generatedTitle = await generateThreadTitle(messagesSnapshot);
+      if (generatedTitle) {
+        await updateThreadTitleById(threadId, generatedTitle);
+      }
+    }
+  },
+});
+
+const isApprovalProcessing = streamController.isApprovalProcessing;
+const handleToolApproval = streamController.handleToolApproval;
+
 const createNewThread = async (model?: string) => {
   try {
-    const thread = await window.electronAPI.chat.threads.create({
+    const thread = await electronAPI.chat.threads.create({
       title: 'New Chat',
       model: model || null,
       metadata: JSON.stringify({}),
     });
     currentThread.value = thread;
     chat.messages.splice(0, chat.messages.length);
-    persistedMessageIds.clear();
+    persistence.resetPersistedMessageIds();
     editingUserMessageId.value = null;
-    resetTransientState();
+    streamController.resetTransientState();
     showWelcome.value = false;
 
     // Refresh sidebar to show new thread
@@ -1355,16 +549,19 @@ const createNewThread = async (model?: string) => {
 // Load messages for a thread
 const loadThreadMessages = async (threadId: string) => {
   try {
-    const dbMessages = await window.electronAPI.chat.messages.list(threadId);
-    persistedMessageIds.clear();
-    for (const message of dbMessages) {
-      persistedMessageIds.add(message.id);
-    }
+    const dbMessages = await electronAPI.chat.messages.list(threadId);
+    persistence.resetPersistedMessageIds(
+      Array.isArray(dbMessages)
+        ? dbMessages
+            .map((message: any) => (message && typeof message.id === 'string' ? message.id : ''))
+            .filter((id: string) => id.length > 0)
+        : []
+    );
 
     const chatMessages = dbMessages.map((message: any) => parseStoredUiMessage(message));
     chat.messages.splice(0, chat.messages.length, ...(chatMessages as any[]));
     editingUserMessageId.value = null;
-    resetTransientState();
+    streamController.resetTransientState();
     scrollToBottom();
   } catch (error) {
     console.error('Failed to load thread messages:', error);
@@ -1378,9 +575,9 @@ const selectThread = async (threadId: string) => {
       return;
     }
 
-    await stopActiveStreamIfNeeded('switch-thread', threadId);
+    await streamController.stopActiveStreamIfNeeded('switch-thread', threadId);
 
-    const thread = await window.electronAPI.chat.threads.get(threadId);
+    const thread = await electronAPI.chat.threads.get(threadId);
     if (!thread) {
       console.error('Thread not found:', threadId);
       return;
@@ -1402,13 +599,13 @@ const selectThread = async (threadId: string) => {
 const handleThreadDeleted = async (threadId: string) => {
   if (currentThread.value?.id !== threadId) return;
 
-  await stopActiveStreamIfNeeded('delete-thread');
+  await streamController.stopActiveStreamIfNeeded('delete-thread');
   currentThread.value = null;
   currentModel.value = '';
   chat.messages.splice(0, chat.messages.length);
-  persistedMessageIds.clear();
+  persistence.resetPersistedMessageIds();
   editingUserMessageId.value = null;
-  resetTransientState();
+  streamController.resetTransientState();
   showWelcome.value = true;
 
   if (sidebarRef.value?.setCurrentThread) {
@@ -1428,7 +625,7 @@ const updateThreadTitle = async (title: string) => {
   if (currentThread.value.title === title) return;
 
   try {
-    await window.electronAPI.chat.threads.update(currentThread.value.id, { title });
+    await electronAPI.chat.threads.update(currentThread.value.id, { title });
     if (currentThread.value) {
       currentThread.value.title = title;
     }
@@ -1448,7 +645,7 @@ const updateThreadTitleById = async (threadId: string, title: string) => {
   }
 
   try {
-    await window.electronAPI.chat.threads.update(threadId, { title });
+    await electronAPI.chat.threads.update(threadId, { title });
     await refreshThreads();
   } catch (error) {
     console.error('Failed to update thread title by id:', error);
@@ -1496,7 +693,7 @@ const generateThreadTitle = async (messages: UIMessage[]): Promise<string | null
       return getFallbackThreadTitle(messages);
     }
 
-    const title = await window.electronAPI.toolModel.generateTitle(conversationContent);
+    const title = await electronAPI.toolModel.generateTitle(conversationContent);
     return title || getFallbackThreadTitle(messages);
   } catch (error) {
     console.error('Failed to generate thread title with agent:', error);
@@ -1505,7 +702,7 @@ const generateThreadTitle = async (messages: UIMessage[]): Promise<string | null
 };
 
 const handleNewChat = async () => {
-  await stopActiveStreamIfNeeded('new-chat');
+  await streamController.stopActiveStreamIfNeeded('new-chat');
   await createNewThread(currentModel.value);
 };
 
@@ -1513,7 +710,7 @@ const handleModelSelected = (data: { provider: any; model: string }) => {
   currentModel.value = data.model;
   // Update thread model if thread exists
   if (currentThread.value) {
-    window.electronAPI.chat.threads.update(currentThread.value.id, { model: data.model });
+    electronAPI.chat.threads.update(currentThread.value.id, { model: data.model });
   }
 };
 
@@ -1542,7 +739,7 @@ const handleMessageSent = async (
 
     // Update thread model if provided
     if (model && currentThread.value.model !== model) {
-      await window.electronAPI.chat.threads.update(currentThread.value.id, { model });
+      await electronAPI.chat.threads.update(currentThread.value.id, { model });
       currentThread.value.model = model;
       currentModel.value = model;
     }
@@ -1555,7 +752,7 @@ const handleMessageSent = async (
     showWelcome.value = false;
 
     if (pendingEditMessageId && currentThread.value) {
-      await stopActiveStreamIfNeeded('edit-resend');
+      await streamController.stopActiveStreamIfNeeded('edit-resend');
 
       const messageIndex = chat.messages.findIndex(
         (message: any) => message && message.id === pendingEditMessageId
@@ -1572,13 +769,11 @@ const handleMessageSent = async (
         await upsertUiMessage(updatedUserMessage, undefined, 'user-message-edit', currentThread.value.id);
         await truncateConversationAfterIndex(messageIndex);
 
-        activeAssistantParentId.value = updatedUserMessage.id;
-        activeAssistantMessageId.value = null;
-        activeStreamThreadId.value = currentThread.value.id;
-        streamingAssistantText.value = '';
-        streamRenderTraceId.value = `view-${Date.now()}`;
-        streamRenderChunkCount.value = 0;
-        streamRenderChars.value = 0;
+        streamController.beginTurn({
+          threadId: currentThread.value.id,
+          parentId: updatedUserMessage.id,
+          tracePrefix: 'view',
+        });
 
         editingUserMessageId.value = null;
         scrollToBottom();
@@ -1595,535 +790,17 @@ const handleMessageSent = async (
     };
 
     chat.messages.push(userMessage as any);
-    activeAssistantParentId.value = userMessage.id;
-    activeAssistantMessageId.value = null;
-    activeStreamThreadId.value = currentThread.value.id;
     const threadId = currentThread.value.id;
-    streamingAssistantText.value = '';
-    streamRenderTraceId.value = `view-${Date.now()}`;
-    streamRenderChunkCount.value = 0;
-    streamRenderChars.value = 0;
-      await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
+    streamController.beginTurn({
+      threadId,
+      parentId: userMessage.id,
+      tracePrefix: 'view',
+    });
+    await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
 
-      scrollToBottom();
+    scrollToBottom();
   } finally {
     onReady?.();
-  }
-};
-
-const handleStreamChunk = (chunk: string) => {
-  if (!isStreamBoundToCurrentThread()) return;
-
-  streamRenderTick.value += 1;
-  streamingAssistantText.value += chunk;
-  if (!streamRenderTraceId.value) {
-    streamRenderTraceId.value = `view-${Date.now()}`;
-  }
-  streamRenderChunkCount.value += 1;
-  streamRenderChars.value += chunk.length;
-  if (shouldLogStreamChunk(streamRenderChunkCount.value)) {
-    console.log(
-      `[StreamDebug][Renderer][ChatView][${streamRenderTraceId.value}] handleStreamChunk#${streamRenderChunkCount.value} len=${chunk.length} totalChars=${streamRenderChars.value}`
-    );
-  }
-  const assistantMessage = getOrCreateAssistantMessage();
-  const messageIndex = chat.messages.findIndex((message: any) => message.id === assistantMessage.id);
-  if (messageIndex < 0) return;
-
-  const currentMessage = chat.messages[messageIndex] as UIMessage;
-  const nextParts = [...currentMessage.parts];
-  const lastPart = nextParts[nextParts.length - 1];
-  const shouldAppendToLastStreamingText =
-    isObjectRecord(lastPart) && lastPart.type === 'text' && lastPart.state === 'streaming';
-
-  if (shouldAppendToLastStreamingText) {
-    const textPartIndex = nextParts.length - 1;
-    const textPart = nextParts[textPartIndex] as Record<string, unknown>;
-    const previousText = typeof textPart.text === 'string' ? textPart.text : '';
-    nextParts[textPartIndex] = {
-      ...textPart,
-      text: `${previousText}${chunk}`,
-      state: 'streaming',
-    } as any;
-  } else {
-    nextParts.push({
-      type: 'text',
-      text: chunk,
-      state: 'streaming',
-    } as any);
-  }
-
-  chat.messages.splice(
-    messageIndex,
-    1,
-    {
-      ...currentMessage,
-      parts: nextParts,
-    } as any
-  );
-
-  scrollToBottom();
-};
-
-const handleResponseReceived = async (fullText: string) => {
-  if (!isStreamBoundToCurrentThread()) return;
-
-  streamRenderTick.value += 1;
-  if (!currentThread.value) return;
-  const responseThreadId = activeStreamThreadId.value || currentThread.value.id;
-
-  const assistantMessageId = activeAssistantMessageId.value;
-  const existingAssistantMessage = getAssistantMessageById(assistantMessageId);
-  if (!existingAssistantMessage && !fullText.trim()) {
-    resetTransientState();
-    return;
-  }
-
-  const baseAssistantMessage = existingAssistantMessage || getOrCreateAssistantMessage();
-  const messageIndex = chat.messages.findIndex((message: any) => message.id === baseAssistantMessage.id);
-  if (messageIndex < 0) {
-    resetTransientState();
-    return;
-  }
-
-  const currentAssistantMessage = chat.messages[messageIndex] as UIMessage;
-  const nextParts = [...currentAssistantMessage.parts];
-  const textPartIndices = nextParts
-    .map((part, index) => ({ part, index }))
-    .filter(({ part }) => isObjectRecord(part) && part.type === 'text')
-    .map(({ index }) => index);
-  const existingTextPart =
-    textPartIndices.length > 0
-      ? (nextParts[textPartIndices[textPartIndices.length - 1]] as Record<string, unknown>)
-      : undefined;
-  const streamedText =
-    existingTextPart && typeof existingTextPart.text === 'string' ? existingTextPart.text : '';
-  const finalText =
-    fullText.length > 0
-      ? fullText
-      : streamingAssistantText.value || streamedText;
-  let hasStreamingTextPart = false;
-
-  for (const index of textPartIndices) {
-    const part = nextParts[index] as Record<string, unknown>;
-    if (part.state === 'streaming') {
-      hasStreamingTextPart = true;
-      nextParts[index] = {
-        ...part,
-        type: 'text',
-        state: 'done',
-      } as any;
-    }
-  }
-
-  if (textPartIndices.length === 0 && finalText) {
-    nextParts.push({
-      type: 'text',
-      text: finalText,
-      state: 'done',
-    } as any);
-  } else if (!hasStreamingTextPart && finalText && !streamedText) {
-    nextParts.push({
-      type: 'text',
-      text: finalText,
-      state: 'done',
-    } as any);
-  }
-
-  const assistantMessage: UIMessage = {
-    ...currentAssistantMessage,
-    parts: nextParts,
-  };
-
-  const hasRenderableContent = assistantMessage.parts.some(part => {
-    if (isObjectRecord(part) && part.type === 'text') {
-      return typeof part.text === 'string' && part.text.trim().length > 0;
-    }
-    return true;
-  });
-
-  if (!hasRenderableContent) {
-    const messageIndex = chat.messages.findIndex((message: any) => message.id === assistantMessage.id);
-    if (messageIndex >= 0) {
-      chat.messages.splice(messageIndex, 1);
-    }
-    resetTransientState();
-    scrollToBottom();
-    return;
-  }
-
-  chat.messages.splice(messageIndex, 1, assistantMessage as any);
-  const messagesSnapshotForTitle = [...(chat.messages as UIMessage[])];
-  console.log(
-    `[StreamDebug][Renderer][ChatView][${streamRenderTraceId.value || 'unknown'}] handleResponseReceived fullTextLen=${(fullText || '').length} chunkCount=${streamRenderChunkCount.value} chunkChars=${streamRenderChars.value}`
-  );
-
-  await upsertUiMessage(
-    assistantMessage,
-    activeAssistantParentId.value || undefined,
-    'assistant-response',
-    responseThreadId
-  );
-
-  if (currentThread.value?.id !== responseThreadId) {
-    return;
-  }
-
-  // Regenerate title from full conversation context on interval
-  if (
-    messagesSnapshotForTitle.length > 0 &&
-    shouldRegenerateThreadTitle(messagesSnapshotForTitle, currentThread.value.title)
-  ) {
-    const generatedTitle = await generateThreadTitle(messagesSnapshotForTitle);
-    if (generatedTitle) {
-      await updateThreadTitleById(responseThreadId, generatedTitle);
-    }
-  }
-
-  resetTransientState();
-  streamRenderTraceId.value = '';
-  streamRenderChunkCount.value = 0;
-  streamRenderChars.value = 0;
-  scrollToBottom();
-};
-
-const handleToolUiChunk = async (chunk: UIMessageChunk) => {
-  if (
-    chunk.type !== 'tool-input-start' &&
-    chunk.type !== 'tool-input-delta' &&
-    chunk.type !== 'tool-input-available' &&
-    chunk.type !== 'tool-input-error' &&
-    chunk.type !== 'tool-output-available' &&
-    chunk.type !== 'tool-output-error' &&
-    chunk.type !== 'tool-output-denied' &&
-    chunk.type !== 'tool-approval-request'
-  ) {
-    return;
-  }
-
-  if (chunk.type === 'tool-approval-request') {
-    const existingAssistantMessage = getAssistantMessageById(activeAssistantMessageId.value);
-    const existingPart = existingAssistantMessage?.parts.find(
-      part => getToolCallIdFromPart(part) === chunk.toolCallId
-    );
-    const existingToolName =
-      isObjectRecord(existingPart) && typeof existingPart.toolName === 'string'
-        ? existingPart.toolName
-        : 'tool';
-    const existingInput =
-      isObjectRecord(existingPart) && existingPart.input !== undefined ? existingPart.input : {};
-
-    await handleToolApprovalRequest({
-      approvalId: chunk.approvalId,
-      toolCallId: chunk.toolCallId,
-      toolCall: {
-        toolName: existingToolName,
-        toolCallId: chunk.toolCallId,
-        args: existingInput,
-      },
-    });
-    return;
-  }
-
-  const assistantMessage = getOrCreateAssistantMessage();
-  const messageIndex = chat.messages.findIndex((message: any) => message.id === assistantMessage.id);
-  if (messageIndex < 0) return;
-
-  const currentAssistantMessage = chat.messages[messageIndex] as UIMessage;
-  const nextParts = [...currentAssistantMessage.parts];
-  for (let i = 0; i < nextParts.length; i += 1) {
-    const part = nextParts[i];
-    if (!isObjectRecord(part) || part.type !== 'text' || part.state !== 'streaming') continue;
-    nextParts[i] = {
-      ...part,
-      state: 'done',
-    } as any;
-  }
-
-  const toolCallId = chunk.toolCallId;
-  const existingPartIndex = nextParts.findIndex(part => getToolCallIdFromPart(part) === toolCallId);
-  const existingPart =
-    existingPartIndex >= 0 && isObjectRecord(nextParts[existingPartIndex])
-      ? (nextParts[existingPartIndex] as MessagePartRecord)
-      : undefined;
-  const chunkToolName =
-    'toolName' in chunk && typeof chunk.toolName === 'string' && chunk.toolName.trim()
-      ? chunk.toolName
-      : undefined;
-
-  const nextPart: MessagePartRecord = {
-    ...(existingPart || {}),
-    type: 'dynamic-tool',
-    toolCallId,
-    toolName:
-      chunkToolName ||
-      (existingPart && typeof existingPart.toolName === 'string' ? existingPart.toolName : 'tool'),
-  };
-
-  const nowMs = Date.now();
-  if (typeof nextPart.startedAt !== 'number' || !Number.isFinite(nextPart.startedAt)) {
-    nextPart.startedAt = nowMs;
-  }
-
-  if ('providerExecuted' in chunk && typeof chunk.providerExecuted === 'boolean') {
-    nextPart.providerExecuted = chunk.providerExecuted;
-  }
-  if ('title' in chunk && typeof chunk.title === 'string') {
-    nextPart.title = chunk.title;
-  }
-
-  if (chunk.type === 'tool-input-start') {
-    nextPart.state = 'input-streaming';
-    if (nextPart.input === undefined) {
-      nextPart.input = {};
-    }
-  } else if (chunk.type === 'tool-input-delta') {
-    const delta = typeof chunk.inputTextDelta === 'string' ? chunk.inputTextDelta : '';
-    const previousInputText = typeof nextPart.inputText === 'string' ? nextPart.inputText : '';
-    const inputText = `${previousInputText}${delta}`;
-    nextPart.inputText = inputText;
-    nextPart.input = parseToolInputFromText(inputText);
-    nextPart.state = 'input-streaming';
-  } else if (chunk.type === 'tool-input-available') {
-    if (isObjectRecord(nextPart.input) && isObjectRecord(chunk.input)) {
-      // Preserve any fields that may have been present in streamed JSON but stripped by tool schema validation.
-      nextPart.input = { ...nextPart.input, ...chunk.input };
-    } else {
-      nextPart.input = chunk.input ?? nextPart.input ?? {};
-    }
-    nextPart.state = 'input-available';
-    delete nextPart.inputText;
-  } else if (chunk.type === 'tool-input-error') {
-    if (isObjectRecord(nextPart.input) && isObjectRecord(chunk.input)) {
-      nextPart.input = { ...nextPart.input, ...chunk.input };
-    } else {
-      nextPart.input = chunk.input ?? nextPart.input ?? {};
-    }
-    nextPart.output = {
-      error: chunk.errorText || 'Invalid tool input',
-    };
-    nextPart.state = 'output-error';
-    nextPart.endedAt = nowMs;
-    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-    delete nextPart.inputText;
-  } else if (chunk.type === 'tool-output-available') {
-    nextPart.output = chunk.output;
-    nextPart.state = chunk.preliminary ? 'input-streaming' : 'output-available';
-    if (!chunk.preliminary) {
-      nextPart.endedAt = nowMs;
-      nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-      if (typeof nextPart.collapsed !== 'boolean') {
-        nextPart.collapsed = true;
-      }
-    }
-    delete nextPart.inputText;
-  } else if (chunk.type === 'tool-output-error') {
-    nextPart.output = {
-      error: chunk.errorText || 'Tool execution failed',
-    };
-    nextPart.state = 'output-error';
-    nextPart.endedAt = nowMs;
-    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-    delete nextPart.inputText;
-  } else if (chunk.type === 'tool-output-denied') {
-    nextPart.state = 'output-denied';
-    nextPart.output = {
-      message: 'Tool execution denied',
-      toolCallId,
-    };
-    nextPart.endedAt = nowMs;
-    nextPart.durationMs = Math.max(0, nowMs - (nextPart.startedAt as number));
-    delete nextPart.inputText;
-  }
-
-  if (existingPartIndex >= 0) {
-    nextParts[existingPartIndex] = nextPart as any;
-  } else {
-    nextParts.push(nextPart as any);
-  }
-
-  const updatedMessage: UIMessage = {
-    ...currentAssistantMessage,
-    parts: nextParts,
-  };
-
-  chat.messages.splice(messageIndex, 1, updatedMessage as any);
-
-  if (
-    chunk.type === 'tool-input-available' ||
-    chunk.type === 'tool-input-error' ||
-    chunk.type === 'tool-output-available' ||
-    chunk.type === 'tool-output-error' ||
-    chunk.type === 'tool-output-denied'
-  ) {
-    const streamThreadId = activeStreamThreadId.value || currentThread.value?.id;
-    await upsertUiMessage(
-      updatedMessage,
-      activeAssistantParentId.value || undefined,
-      `tool-ui-chunk:${chunk.type}`,
-      streamThreadId
-    );
-  }
-
-  scrollToBottom();
-};
-
-const handleUiChunk = async (chunk: unknown) => {
-  if (!isStreamBoundToCurrentThread()) return;
-  if (!isObjectRecord(chunk) || typeof chunk.type !== 'string') return;
-
-  if (chunk.type === 'text-delta') {
-    const delta = typeof chunk.delta === 'string' ? chunk.delta : '';
-    if (!delta) return;
-    handleStreamChunk(delta);
-    return;
-  }
-
-  if (chunk.type === 'finish' || chunk.type === 'abort') {
-    await handleResponseReceived(streamingAssistantText.value);
-    return;
-  }
-
-  if (chunk.type === 'error') {
-    const errorText =
-      typeof chunk.errorText === 'string' && chunk.errorText.trim().length > 0
-        ? chunk.errorText
-        : 'Unknown chat stream error';
-    console.error('[ChatView] UI stream error:', errorText);
-    if (streamingAssistantText.value.trim().length > 0) {
-      await handleResponseReceived(streamingAssistantText.value);
-    } else {
-      resetTransientState();
-    }
-    return;
-  }
-
-  await handleToolUiChunk(chunk as UIMessageChunk);
-};
-
-const handleToolApprovalRequest = async (request: any) => {
-  if (!isStreamBoundToCurrentThread()) return;
-  const streamThreadId = activeStreamThreadId.value || currentThread.value?.id;
-  const assistantMessage = getOrCreateAssistantMessage();
-  const requestedToolCallId = request.toolCallId || request.toolCall?.toolCallId;
-  const existingPartIndex = assistantMessage.parts.findIndex(part => {
-    if (getApprovalId(part) === request.approvalId) return true;
-    if (!requestedToolCallId) return false;
-    return getToolCallIdFromPart(part) === requestedToolCallId;
-  });
-
-  const existingPart =
-    existingPartIndex >= 0 && isObjectRecord(assistantMessage.parts[existingPartIndex])
-      ? (assistantMessage.parts[existingPartIndex] as MessagePartRecord)
-      : undefined;
-
-  const approvalPart: MessagePartRecord = {
-    ...(existingPart || {}),
-    type: 'dynamic-tool',
-    toolName: request.toolCall?.toolName || existingPart?.toolName || 'tool',
-    toolCallId: requestedToolCallId || getToolCallIdFromPart(existingPart) || createMessageId(),
-    input: request.toolCall?.args ?? existingPart?.input ?? {},
-    state: 'approval-requested',
-    approval: {
-      id: request.approvalId,
-    },
-  };
-
-  if (typeof approvalPart.startedAt !== 'number' || !Number.isFinite(approvalPart.startedAt)) {
-    approvalPart.startedAt = Date.now();
-  }
-  delete approvalPart.endedAt;
-  delete approvalPart.durationMs;
-
-  if (existingPartIndex >= 0) {
-    assistantMessage.parts.splice(existingPartIndex, 1, approvalPart as any);
-  } else {
-    assistantMessage.parts.push(approvalPart as any);
-  }
-
-  const assistantMessageToPersist =
-    existingPartIndex >= 0
-      ? ({
-          ...assistantMessage,
-          parts: [...assistantMessage.parts],
-        } as UIMessage)
-      : assistantMessage;
-  await upsertUiMessage(
-    assistantMessageToPersist,
-    activeAssistantParentId.value || undefined,
-    'tool-approval-request',
-    streamThreadId
-  );
-  scrollToBottom();
-};
-
-const handleToolApproval = async (message: UIMessage, part: any, approved: boolean) => {
-  const approvalId = getApprovalId(part);
-  if (!approvalId) return;
-
-  // After a reload, transient streaming state is empty, so UI chunks from a resumed approval would be ignored.
-  // Re-bind the stream to the current thread + assistant message so resume works reliably.
-  if (currentThread.value?.id) {
-    activeStreamThreadId.value = currentThread.value.id;
-  }
-  if (message?.id) {
-    activeAssistantMessageId.value = message.id;
-  }
-  if (!activeAssistantParentId.value && message?.id) {
-    const messageIndex = chat.messages.findIndex((m: any) => m && m.id === message.id);
-    if (messageIndex >= 0) {
-      const parent = [...chat.messages.slice(0, messageIndex)]
-        .reverse()
-        .find((m: any) => m && m.role === 'user' && typeof m.id === 'string');
-      if (parent?.id) {
-        activeAssistantParentId.value = parent.id;
-      }
-    }
-  }
-  streamingAssistantText.value = '';
-  streamRenderTraceId.value = `approval-${Date.now()}`;
-  streamRenderChunkCount.value = 0;
-  streamRenderChars.value = 0;
-
-  approvalProcessing.value[approvalId] = true;
-
-  try {
-    const result = await window.electronAPI.chat.approveTool(approvalId, approved);
-    if (!result?.success) {
-      throw new Error(result?.error || 'Tool approval failed');
-    }
-
-    if (approved) {
-      part.state = 'approval-responded';
-      part.approval = {
-        id: approvalId,
-        approved: true,
-        reason: 'User approved tool execution.',
-      };
-    } else {
-      const nowMs = Date.now();
-      if (typeof part.startedAt !== 'number' || !Number.isFinite(part.startedAt)) {
-        part.startedAt = nowMs;
-      }
-      part.endedAt = nowMs;
-      part.durationMs = Math.max(0, nowMs - (part.startedAt as number));
-      part.state = 'output-denied';
-      part.approval = {
-        id: approvalId,
-        approved: false,
-        reason: 'User rejected tool execution.',
-      };
-    }
-
-    await upsertUiMessage(
-      message,
-      activeAssistantParentId.value || undefined,
-      approved ? 'tool-approval:approve' : 'tool-approval:reject'
-    );
-  } catch (error) {
-    console.error('Failed to approve tool:', error);
-  } finally {
-    approvalProcessing.value[approvalId] = false;
   }
 };
 
@@ -2136,14 +813,14 @@ onMounted(async () => {
   // Load threads on mount
   await refreshThreads();
 
-  window.electronAPI.chat.removeAllListeners();
-  window.electronAPI.chat.onUiChunk((chunk: unknown) => {
-    void handleUiChunk(chunk);
+  electronAPI.chat.removeAllListeners();
+  electronAPI.chat.onUiChunk((chunk: unknown) => {
+    void streamController.handleUiChunk(chunk);
   });
 });
 
 onUnmounted(() => {
-  window.electronAPI.chat.removeAllListeners();
+  electronAPI.chat.removeAllListeners();
 });
 </script>
 

@@ -208,7 +208,7 @@
                   </div>
 
                   <div v-if="isAutoToolMode" class="mt-2 text-xs text-accent leading-snug">
-                    iKi will automatically pick the most relevant tools based on your message.
+                    Auto enables the default toolset. iKi will decide if and when to call tools.
                   </div>
                 </div>
                 <div class="max-h-72 overflow-y-auto p-2">
@@ -720,7 +720,7 @@ const sendMessage = async () => {
           ? undefined
           : selectedTools.value.length > 0
           ? JSON.parse(JSON.stringify(selectedTools.value))
-          : undefined,
+          : [],
       skillMode: isAutoSkillMode.value ? 'auto' : 'manual',
       skillIds: isAutoSkillMode.value ? undefined : JSON.parse(JSON.stringify(selectedSkillIds.value)),
       threadId: props.threadId,
