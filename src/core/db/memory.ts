@@ -205,6 +205,31 @@ export const listShortMemory = (threadId: string, limit?: number): ShortMemoryEn
   }));
 };
 
+export const listShortMemoryAcrossThreads = (
+  limit?: number,
+  options?: { includeIncognito?: boolean }
+): ShortMemoryEntry[] => {
+  const safeLimit = typeof limit === 'number' ? limit : 50;
+  const includeIncognito = Boolean(options?.includeIncognito);
+  const rows = getDb()
+    .prepare(
+      `
+      SELECT memory_short.*
+      FROM memory_short
+      INNER JOIN chat_threads ON chat_threads.id = memory_short.thread_id
+      ${includeIncognito ? '' : 'WHERE chat_threads.is_incognito = 0'}
+      ORDER BY memory_short.updated_at DESC
+      LIMIT ?
+    `
+    )
+    .all(safeLimit) as ShortMemoryEntry[];
+
+  return rows.map(row => ({
+    ...row,
+    importance: typeof row.importance === 'number' ? row.importance : Number(row.importance || 0),
+  }));
+};
+
 export const pruneShortMemory = (threadId: string, maxCount = SHORT_MEMORY_LIMIT) => {
   if (!threadId || maxCount <= 0) return null;
   return getDb()
@@ -272,6 +297,27 @@ export const listLongMemory = (threadId: string, limit?: number): LongMemoryEntr
       'SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?'
     )
     .all(threadId, safeLimit) as LongMemoryEntry[];
+  return rows;
+};
+
+export const listLongMemoryAcrossThreads = (
+  limit?: number,
+  options?: { includeIncognito?: boolean }
+): LongMemoryEntry[] => {
+  const safeLimit = typeof limit === 'number' ? limit : 50;
+  const includeIncognito = Boolean(options?.includeIncognito);
+  const rows = getDb()
+    .prepare(
+      `
+      SELECT memory_long.*
+      FROM memory_long
+      INNER JOIN chat_threads ON chat_threads.id = memory_long.thread_id
+      ${includeIncognito ? '' : 'WHERE chat_threads.is_incognito = 0'}
+      ORDER BY memory_long.updated_at DESC
+      LIMIT ?
+    `
+    )
+    .all(safeLimit) as LongMemoryEntry[];
   return rows;
 };
 
