@@ -22,7 +22,7 @@ export interface AppConfig {
       enable: boolean;
       type: 'http' | 'https' | 'socks5';
       host: string;
-      port: number;
+      port: number | null;
       username?: string;
       password?: string;
     };

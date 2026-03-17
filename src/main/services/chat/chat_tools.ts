@@ -19,7 +19,12 @@ const normalizeExplicitTools = (tools: unknown[]): string[] => {
   return resolved;
 };
 
+const AUTO_TOOL_ALLOWLIST = new Set<string>(['web', 'fetch']);
+
 const getAllToolNames = (): string[] => defaultToolRegistry.getToolMetadata().map(t => t.name);
+
+const getAutoToolNames = (): string[] =>
+  getAllToolNames().filter(name => AUTO_TOOL_ALLOWLIST.has(name));
 
 export const resolveToolNames = (params: {
   tools?: string[];
@@ -28,9 +33,9 @@ export const resolveToolNames = (params: {
   const explicitTools = hasExplicitToolsParam ? normalizeExplicitTools(params.tools) : [];
   const mode: ToolResolveMode = hasExplicitToolsParam ? 'manual' : 'auto';
 
-  // Default behavior: expose all registered tools and let the model decide if/when to call them.
+  // Default behavior: only expose low-risk tools in auto mode.
   // Explicit empty array disables tools.
-  const resolvedTools = mode === 'manual' ? explicitTools : getAllToolNames();
+  const resolvedTools = mode === 'manual' ? explicitTools : getAutoToolNames();
 
   return { explicitTools, resolvedTools, mode };
 };

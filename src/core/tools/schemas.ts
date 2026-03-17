@@ -25,23 +25,23 @@ const shellInputFields = {
 };
 
 const readFileInputFields = {
-  path: z.string().describe('The absolute path to the file to read'),
+  path: z.string().describe('Absolute path or workspace-relative path to the file to read'),
   encoding: z.string().describe('File encoding'),
 };
 
 const writeFileInputFields = {
-  path: z.string().describe('The absolute path to the file to write'),
+  path: z.string().describe('Absolute path or workspace-relative path to the file to write'),
   content: z.string().describe('The content to write to the file'),
   encoding: z.string().describe('File encoding'),
 };
 
 const listDirInputFields = {
-  path: z.string().describe('The absolute path to the directory to list'),
+  path: z.string().describe('Absolute path or workspace-relative path to the directory to list'),
   recursive: z.boolean().describe('Whether to list subdirectories recursively'),
 };
 
 const deleteFileInputFields = {
-  path: z.string().describe('The absolute path to the file to delete'),
+  path: z.string().describe('Absolute path or workspace-relative path to the file to delete'),
 };
 
 export const WebToolInputSchema = z.object({

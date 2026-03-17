@@ -1,5 +1,6 @@
 import { getConfig } from '../../../core/db/database';
 import type { AppConfig } from '../../../shared/types/config';
+import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
 
 export const DEFAULT_OPENAI_MODEL = 'whisper-1';
 export const DEFAULT_WHISPER_NODE_MODEL = 'base.en';
@@ -10,15 +11,8 @@ export const FALLBACK_WHISPER_MODEL_BASE_URLS = [
 ];
 
 export const DEFAULT_SPEECH_CONFIG: AppConfig['speech'] = {
-  enabled: false,
-  providerType: 'openai',
-  apiKey: '',
-  baseUrl: '',
-  downloadBaseUrl: '',
+  ...DEFAULT_APP_CONFIG.speech,
   model: DEFAULT_OPENAI_MODEL,
-  modelPath: '',
-  language: '',
-  prompt: '',
 };
 
 export const getSpeechConfig = (): AppConfig['speech'] => {

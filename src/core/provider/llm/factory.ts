@@ -4,6 +4,7 @@ import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { getProviders } from '../../db/providers';
 import { getPersonaPrompt } from '../../persona';
+import { fetchWithTimeout } from '../../network/http';
 
 export interface ProviderConfig {
   id: string;
@@ -177,7 +178,7 @@ export const generateChat = async (options: {
 export const fetchModelsFromDev = async (providerType: string) => {
   console.log(`[Factory] Fetching latest models for ${providerType} from models.dev...`);
   try {
-    const response = await fetch('https://models.dev/api.json');
+    const response = await fetchWithTimeout('https://models.dev/api.json');
     if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
 
     const data = (await response.json()) as Record<string, { models?: Record<string, unknown> }>;

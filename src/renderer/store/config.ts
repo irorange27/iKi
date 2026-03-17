@@ -1,110 +1,14 @@
 import { defineStore } from 'pinia';
 import type { AppConfig } from '../../shared/types/config';
+import { createDefaultAppConfig, mergeAppConfig } from '../../shared/config/defaults';
 import { configService } from '../services/config_service';
 
-export const DEFAULT_CONFIG: AppConfig = {
-  general: {
-    language: 'en',
-    theme: 'system',
-    autoUpdate: true,
-    minimizeToTray: false,
-    closeToTray: false,
-    startMinimized: false,
-    quickChatHideOnBlur: false,
-  },
-  ui: {
-    fontSize: 15,
-    density: 'comfortable',
-    chatContentPadding: 24,
-    composerPadding: 10,
-    messageBubblePaddingX: 16,
-    messageBubblePaddingY: 12,
-    messageGap: 18,
-  },
-  network: {
-    proxy: {
-      enable: false,
-      type: 'http',
-      host: '',
-      port: null,
-    },
-    timeout: 5000,
-    retryAttempts: 3,
-  },
-  security: {
-    encryptApikeys: true,
-    requirePassword: false,
-    sessionTimeout: 60,
-    enableLogging: true,
-    logLevel: 'info',
-  },
-  advanced: {
-    enableExperimentalFeatures: false,
-    debugMode: false,
-    developerMode: false,
-  },
-  keybindings: {
-    sendMessage: 'Enter',
-    openSettings: 'Cmd+,',
-  },
-  memory: {
-    enabled: false,
-    autoSummarize: false,
-    maxRetrievalCount: 5,
-    similarThreshold: 0.1,
-  },
-  speech: {
-    enabled: false,
-    providerType: 'openai',
-    apiKey: '',
-    baseUrl: '',
-    downloadBaseUrl: '',
-    model: 'whisper-1',
-    modelPath: '',
-    language: '',
-    prompt: '',
-  },
-  toolModel: {
-    model: '',
-  },
-  toolExecution: {
-    shellApprovalMode: 'high-risk',
-    shellHighRiskPatterns: [],
-  },
-} as AppConfig;
-
-const mergeConfigWithDefaults = (rawConfig: Partial<AppConfig> | null | undefined): AppConfig => {
-  const merged = {
-    ...DEFAULT_CONFIG,
-    ...(rawConfig || {}),
-  } as AppConfig;
-
-  merged.ui = {
-    ...DEFAULT_CONFIG.ui,
-    ...(rawConfig?.ui || {}),
-  };
-
-  merged.general = {
-    ...DEFAULT_CONFIG.general,
-    ...(rawConfig?.general || {}),
-  };
-
-  merged.speech = {
-    ...DEFAULT_CONFIG.speech,
-    ...(rawConfig?.speech || {}),
-  };
-
-  merged.toolExecution = {
-    ...DEFAULT_CONFIG.toolExecution,
-    ...(rawConfig?.toolExecution || {}),
-  };
-
-  return merged;
-};
+const mergeConfigWithDefaults = (rawConfig: Partial<AppConfig> | null | undefined): AppConfig =>
+  mergeAppConfig(rawConfig ?? null);
 
 export const useConfigStore = defineStore('config', {
   state: (): { config: AppConfig; initialized: boolean } => ({
-    config: DEFAULT_CONFIG,
+    config: createDefaultAppConfig(),
     initialized: false,
   }),
 
@@ -155,9 +59,7 @@ export const useConfigStore = defineStore('config', {
     },
 
     resetSection(section: keyof AppConfig) {
-      const defaultSection = JSON.parse(
-        JSON.stringify(DEFAULT_CONFIG[section])
-      ) as AppConfig[typeof section];
+      const defaultSection = createDefaultAppConfig()[section];
       this.config = {
         ...this.config,
         [section]: defaultSection,
