@@ -1,4 +1,4 @@
-import db from './database';
+import { getDb } from './database';
 import { PromptApp } from '../../shared/types/chat';
 
 type PromptAppRow = PromptApp & {
@@ -10,7 +10,7 @@ type PromptAppRow = PromptApp & {
 };
 
 export const getPromptApps = (): PromptApp[] => {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT * FROM prompt_apps ORDER BY sort_order ASC, created_at DESC')
     .all() as PromptAppRow[];
   return rows.map(row => ({
@@ -24,7 +24,7 @@ export const getPromptApps = (): PromptApp[] => {
 };
 
 export const getPromptApp = (id: string): PromptApp | null => {
-  const row = db.prepare('SELECT * FROM prompt_apps WHERE id = ?').get(id) as
+  const row = getDb().prepare('SELECT * FROM prompt_apps WHERE id = ?').get(id) as
     | PromptAppRow
     | undefined;
   if (!row) return null;
@@ -39,7 +39,7 @@ export const getPromptApp = (id: string): PromptApp | null => {
 };
 
 export const getEnabledPromptApps = (): PromptApp[] => {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT * FROM prompt_apps WHERE enabled = 1 ORDER BY sort_order ASC, created_at DESC')
     .all() as PromptAppRow[];
   return rows.map(row => ({
@@ -56,7 +56,7 @@ export const addPromptApp = (
   app: Partial<PromptApp> & { id: string; name: string; prompt_template: string }
 ) => {
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         INSERT INTO prompt_apps (
             id, name, description, icon, prompt_template, placeholders, model, enabled, sort_order,
             created_at, updated_at, tools, reasoning_effort, expects_image_result, is_incognito,
@@ -102,7 +102,7 @@ export const updatePromptApp = (id: string, app: Partial<PromptApp>) => {
 
   if (!fields) return null;
 
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         UPDATE prompt_apps 
         SET ${fields}, updated_at = @updated_at 
         WHERE id = @id
@@ -122,7 +122,7 @@ export const updatePromptApp = (id: string, app: Partial<PromptApp>) => {
 };
 
 export const deletePromptApp = (id: string) => {
-  return db.prepare('DELETE FROM prompt_apps WHERE id = ?').run(id);
+  return getDb().prepare('DELETE FROM prompt_apps WHERE id = ?').run(id);
 };
 
 export const togglePromptAppEnabled = (id: string) => {

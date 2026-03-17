@@ -1,10 +1,10 @@
-import { app } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
 import type { SkillSummary, SkillSource } from '../../shared/types/skill';
+import { getUserDataPath } from '../platform';
 
 type SkillRecord = SkillSummary & {
   filePath: string;
@@ -37,14 +37,10 @@ const getCodexHome = (): string => {
 const getSkillRootsInternal = (): Array<{ source: SkillSource; root: string }> => {
   const roots: Array<{ source: SkillSource; root: string }> = [];
 
-  try {
-    roots.push({
-      source: 'user',
-      root: path.join(app.getPath('userData'), 'skills'),
-    });
-  } catch {
-    // ignore
-  }
+  roots.push({
+    source: 'user',
+    root: path.join(getUserDataPath(), 'skills'),
+  });
 
   roots.push({
     source: 'codex',

@@ -1,10 +1,10 @@
-import db from './database';
+import { getDb } from './database';
 import { Provider } from '../../shared/types/provider';
 
 type ProviderRow = Provider & { enabled: number | boolean; is_response_api?: number | boolean };
 
 export const getProviders = (): Provider[] => {
-  const rows = db.prepare('SELECT * FROM providers').all() as ProviderRow[];
+  const rows = getDb().prepare('SELECT * FROM providers').all() as ProviderRow[];
   return rows.map(row => ({
     ...row,
     enabled: Boolean(row.enabled),
@@ -13,7 +13,9 @@ export const getProviders = (): Provider[] => {
 };
 
 export const getProvider = (id: string): Provider | null => {
-  const row = db.prepare('SELECT * FROM providers WHERE id = ?').get(id) as ProviderRow | undefined;
+  const row = getDb()
+    .prepare('SELECT * FROM providers WHERE id = ?')
+    .get(id) as ProviderRow | undefined;
   if (!row) return null;
   return {
     ...row,
@@ -23,7 +25,7 @@ export const getProvider = (id: string): Provider | null => {
 };
 
 export const getProviderIsEnabled = (id: string): { enabled: boolean } | null => {
-  const provider = db.prepare('SELECT enabled FROM providers WHERE id = ?').get(id) as
+  const provider = getDb().prepare('SELECT enabled FROM providers WHERE id = ?').get(id) as
     | { enabled: number | boolean }
     | undefined;
   if (!provider) return null;
@@ -42,7 +44,7 @@ export const addProvider = (
   }
 ) => {
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     INSERT INTO providers (
       id, name, type, api_key, models, base_url, enabled, created_at, updated_at,
       available_models, api_version, is_response_api, acp_command, acp_args,
@@ -88,7 +90,7 @@ export const updateProvider = (id: string, provider: Partial<Provider>) => {
 
   if (!fields) return null;
 
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     UPDATE providers 
     SET ${fields}, updated_at = @updated_at 
     WHERE id = @id
@@ -108,5 +110,5 @@ export const updateProvider = (id: string, provider: Partial<Provider>) => {
 };
 
 export const deleteProvider = (id: string) => {
-  return db.prepare('DELETE FROM providers WHERE id = ?').run(id);
+  return getDb().prepare('DELETE FROM providers WHERE id = ?').run(id);
 };

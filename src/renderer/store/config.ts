@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia';
 import type { AppConfig } from '../../shared/types/config';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
+import { configService } from '../services/config_service';
 
 export const DEFAULT_CONFIG: AppConfig = {
   general: {
@@ -97,19 +95,11 @@ export const useConfigStore = defineStore('config', {
   actions: {
     // 初始化：从主进程获取动态配置
     async initialize() {
-      if (!window.electronAPI) {
-        console.error(
-          'CRITICAL: window.electronAPI is missing! Preload script may not have loaded.'
-        );
-        return;
-      }
-
       // 1. Fetch latest config
       try {
-        const saved = await window.electronAPI.config.get();
+        const saved = await configService.get();
         // 合并配置，防止字段缺失
         this.config = mergeConfigWithDefaults(saved as Partial<AppConfig>);
-        this.applyCssVariables();
       } catch (error) {
         console.warn('Failed to load config, using defaults:', error);
       }
@@ -117,16 +107,8 @@ export const useConfigStore = defineStore('config', {
       // 2. Setup listeners (once)
       if (!this.initialized) {
         // Listen for config updates from main process
-        window.electronAPI.config.onUpdated((newConfig: AppConfig) => {
+        configService.onUpdated((newConfig: AppConfig) => {
           this.config = mergeConfigWithDefaults(newConfig);
-          this.applyCssVariables();
-        });
-
-        // Listen for system theme changes
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-          if (this.config.general.theme === 'system') {
-            this.applyCssVariables();
-          }
         });
 
         this.initialized = true;
@@ -136,58 +118,23 @@ export const useConfigStore = defineStore('config', {
     async saveConfig() {
       // De-proxy config before sending to IPC
       const rawConfig = JSON.parse(JSON.stringify(this.config));
-      await window.electronAPI.config.set(rawConfig);
+      await configService.set(rawConfig);
     },
 
     // ✅ 更新UI设置并自动保存
     updateUi<K extends keyof AppConfig['ui']>(key: K, value: AppConfig['ui'][K]) {
       this.config.ui[key] = value;
-      this.applyCssVariables();
       // 可选：自动保存
       // this.saveConfig();
     },
     updateGeneral<K extends keyof AppConfig['general']>(key: K, value: AppConfig['general'][K]) {
       this.config.general[key] = value;
-      if (key === 'theme') {
-        this.applyCssVariables();
-      }
-    },
-    applyCssVariables() {
-      const {
-        fontSize,
-        density,
-        chatContentPadding,
-        composerPadding,
-        messageBubblePaddingX,
-        messageBubblePaddingY,
-        messageGap,
-      } = this.config.ui;
-      const { theme: configTheme } = this.config.general;
-
-      // Resolve 'system' theme
-      let resolvedTheme = configTheme;
-      if (configTheme === 'system') {
-        resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light';
-      }
-
-      const root = document.documentElement;
-      root.style.setProperty('--font-size', `${fontSize}px`);
-      root.style.setProperty('--chat-content-padding', `${chatContentPadding}px`);
-      root.style.setProperty('--chat-composer-padding', `${composerPadding}px`);
-      root.style.setProperty('--chat-bubble-padding-x', `${messageBubblePaddingX}px`);
-      root.style.setProperty('--chat-bubble-padding-y', `${messageBubblePaddingY}px`);
-      root.style.setProperty('--chat-message-gap', `${messageGap}px`);
-      root.setAttribute('data-density', density);
-      root.setAttribute('data-theme', resolvedTheme);
     },
 
     resetConfig() {
       // 重新读取系统配置（获取当前最新系统设置）
-      window.electronAPI.config.get().then((sysConfig: AppConfig) => {
-        this.config = sysConfig;
-        this.applyCssVariables();
+      configService.get().then((sysConfig: AppConfig) => {
+        this.config = mergeConfigWithDefaults(sysConfig);
       });
     },
 
@@ -199,9 +146,6 @@ export const useConfigStore = defineStore('config', {
         ...this.config,
         [section]: defaultSection,
       } as AppConfig;
-      if (section === 'ui' || section === 'general') {
-        this.applyCssVariables();
-      }
       this.saveConfig();
     },
   },

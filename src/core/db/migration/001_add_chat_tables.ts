@@ -1,11 +1,11 @@
-import db from '../database';
+import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
   name: '001_add_chat_tables',
   up: () => {
     // Create chat_threads table
-    db.exec(`
+    getDb().exec(`
             CREATE TABLE IF NOT EXISTS chat_threads (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -27,7 +27,7 @@ export const migration: Migration = {
         `);
 
     // Create chat_messages table
-    db.exec(`
+    getDb().exec(`
             CREATE TABLE IF NOT EXISTS chat_messages (
                 id TEXT PRIMARY KEY,
                 thread_id TEXT NOT NULL,
@@ -45,7 +45,7 @@ export const migration: Migration = {
   },
   down: () => {
     // Drop tables in reverse order (messages first due to foreign key)
-    db.exec('DROP TABLE IF EXISTS chat_messages;');
-    db.exec('DROP TABLE IF EXISTS chat_threads;');
+    getDb().exec('DROP TABLE IF EXISTS chat_messages;');
+    getDb().exec('DROP TABLE IF EXISTS chat_threads;');
   },
 };

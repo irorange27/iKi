@@ -1,16 +1,5 @@
-import { watchEffect, onUnmounted } from 'vue';
-import { useConfigStore } from '../store/config';
+import { useConfigEffects } from './useConfigEffects';
 
 export function useTheme() {
-  const configStore = useConfigStore();
-
-  const stop = watchEffect(() => {
-    if (configStore.config) {
-      configStore.applyCssVariables();
-    }
-  });
-
-  onUnmounted(() => {
-    stop();
-  });
+  useConfigEffects();
 }

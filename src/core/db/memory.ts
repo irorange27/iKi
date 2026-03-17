@@ -1,4 +1,4 @@
-import db, { getConfig } from './database';
+import { getDb, getConfig } from './database';
 import type { AppConfig } from '../../shared/types/config';
 
 export type ShortMemoryEntry = {
@@ -137,7 +137,7 @@ export const addShortMemory = (
   if (!isMemoryEnabled() && !options?.force) return null;
 
   const now = nowIso();
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     INSERT INTO memory_short (
       id, thread_id, message_id, role, content, emotion, importance, created_at, updated_at
     ) VALUES (
@@ -193,7 +193,7 @@ export const addShortMemoryFromChatMessage = (
 
 export const listShortMemory = (threadId: string, limit?: number): ShortMemoryEntry[] => {
   const safeLimit = typeof limit === 'number' ? limit : 50;
-  const rows = db
+  const rows = getDb()
     .prepare(
       'SELECT * FROM memory_short WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?'
     )
@@ -207,7 +207,7 @@ export const listShortMemory = (threadId: string, limit?: number): ShortMemoryEn
 
 export const pruneShortMemory = (threadId: string, maxCount = SHORT_MEMORY_LIMIT) => {
   if (!threadId || maxCount <= 0) return null;
-  return db
+  return getDb()
     .prepare(
       `
       DELETE FROM memory_short
@@ -239,7 +239,7 @@ export const addLongMemory = (
 
   const now = nowIso();
   const embedding = JSON.stringify(textToEmbedding(entry.summary));
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     INSERT INTO memory_long (
       id, thread_id, summary, embedding, source_message_ids, emotion, tags, metadata, created_at, updated_at
     ) VALUES (
@@ -267,7 +267,7 @@ export const addLongMemory = (
 
 export const listLongMemory = (threadId: string, limit?: number): LongMemoryEntry[] => {
   const safeLimit = typeof limit === 'number' ? limit : 50;
-  const rows = db
+  const rows = getDb()
     .prepare(
       'SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?'
     )
@@ -285,7 +285,7 @@ export const updateLongMemory = (id: string, updates: Partial<LongMemoryEntry>) 
 
   if (!fields) return null;
 
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     UPDATE memory_long
     SET ${fields}, updated_at = @updated_at
     WHERE id = @id
@@ -312,7 +312,7 @@ export const searchLongMemory = (
   if (!threadId || !query.trim()) return [];
   if (!isMemoryEnabled() && !options?.force) return [];
 
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC')
     .all(threadId) as LongMemoryEntry[];
 

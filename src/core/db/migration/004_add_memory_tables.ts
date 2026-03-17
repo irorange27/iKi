@@ -1,10 +1,10 @@
-import db from '../database';
+import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
   name: '004_add_memory_tables',
   up: () => {
-    db.exec(`
+    getDb().exec(`
       CREATE TABLE IF NOT EXISTS memory_short (
         id TEXT PRIMARY KEY,
         thread_id TEXT NOT NULL,
@@ -40,7 +40,7 @@ export const migration: Migration = {
     `);
   },
   down: () => {
-    db.exec('DROP TABLE IF EXISTS memory_long;');
-    db.exec('DROP TABLE IF EXISTS memory_short;');
+    getDb().exec('DROP TABLE IF EXISTS memory_long;');
+    getDb().exec('DROP TABLE IF EXISTS memory_short;');
   },
 };

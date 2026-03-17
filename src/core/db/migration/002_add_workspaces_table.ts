@@ -1,11 +1,11 @@
-import db from '../database';
+import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
   name: '002_add_workspaces_table',
   up: () => {
     // Create workspaces table
-    db.exec(`
+    getDb().exec(`
             CREATE TABLE IF NOT EXISTS workspaces (
                 id TEXT PRIMARY KEY,
                 path TEXT NOT NULL,
@@ -19,6 +19,6 @@ export const migration: Migration = {
   },
   down: () => {
     // Drop workspaces table
-    db.exec('DROP TABLE IF EXISTS workspaces;');
+    getDb().exec('DROP TABLE IF EXISTS workspaces;');
   },
 };

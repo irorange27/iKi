@@ -1,8 +1,8 @@
-import db from '../database';
+import { getDb } from '../database';
 
 // Migration table to track executed migrations
 const initMigrationsTable = () => {
-  db.exec(`
+  getDb().exec(`
         CREATE TABLE IF NOT EXISTS migrations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -19,7 +19,7 @@ export interface Migration {
 
 // Check if a migration has been executed
 export const isMigrationExecuted = (name: string): boolean => {
-  const row = db.prepare('SELECT name FROM migrations WHERE name = ?').get(name) as
+  const row = getDb().prepare('SELECT name FROM migrations WHERE name = ?').get(name) as
     | { name: string }
     | undefined;
   return !!row;
@@ -28,7 +28,7 @@ export const isMigrationExecuted = (name: string): boolean => {
 // Mark a migration as executed
 export const markMigrationExecuted = (name: string) => {
   const now = new Date().toISOString();
-  db.prepare('INSERT INTO migrations (name, executed_at) VALUES (?, ?)').run(name, now);
+  getDb().prepare('INSERT INTO migrations (name, executed_at) VALUES (?, ?)').run(name, now);
 };
 
 // Run a migration
@@ -64,7 +64,7 @@ export const runMigrations = (migrations: Migration[]) => {
 // Get all executed migrations
 export const getExecutedMigrations = (): string[] => {
   initMigrationsTable();
-  const rows = db.prepare('SELECT name FROM migrations ORDER BY executed_at').all() as {
+  const rows = getDb().prepare('SELECT name FROM migrations ORDER BY executed_at').all() as {
     name: string;
   }[];
   return rows.map(row => row.name);

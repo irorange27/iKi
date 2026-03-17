@@ -1,10 +1,10 @@
-import db from '../database';
+import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
   name: '005_add_proactive_tasks_table',
   up: () => {
-    db.exec(`
+    getDb().exec(`
       CREATE TABLE IF NOT EXISTS proactive_tasks (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -32,7 +32,6 @@ export const migration: Migration = {
     `);
   },
   down: () => {
-    db.exec('DROP TABLE IF EXISTS proactive_tasks;');
+    getDb().exec('DROP TABLE IF EXISTS proactive_tasks;');
   },
 };
-

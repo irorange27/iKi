@@ -1,11 +1,11 @@
-import db from './database';
+import { getDb } from './database';
 import { ChatMessage } from '../../shared/types/chat';
 
 const escapeLike = (value: string): string =>
   value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 
 export const getChatMessages = (threadId: string): ChatMessage[] => {
-  const rows = db
+  const rows = getDb()
     .prepare(
       'SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
     )
@@ -22,7 +22,7 @@ export const findChatMessagesByMessageSubstring = (
   if (!safeNeedle) return [];
 
   const pattern = `%${escapeLike(safeNeedle)}%`;
-  const rows = db
+  const rows = getDb()
     .prepare(
       "SELECT * FROM chat_messages WHERE message LIKE ? ESCAPE '\\' ORDER BY updated_at DESC, timestamp DESC LIMIT ?"
     )
@@ -31,7 +31,7 @@ export const findChatMessagesByMessageSubstring = (
 };
 
 export const getChatMessage = (id: string): ChatMessage | null => {
-  const row = db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(id) as
+  const row = getDb().prepare('SELECT * FROM chat_messages WHERE id = ?').get(id) as
     | ChatMessage
     | undefined;
   if (!row) return null;
@@ -39,7 +39,7 @@ export const getChatMessage = (id: string): ChatMessage | null => {
 };
 
 export const getChatMessagesByParent = (parentId: string): ChatMessage[] => {
-  const rows = db
+  const rows = getDb()
     .prepare(
       'SELECT * FROM chat_messages WHERE parent_id = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
     )
@@ -48,7 +48,7 @@ export const getChatMessagesByParent = (parentId: string): ChatMessage[] => {
 };
 
 export const getChatMessagesBySlot = (slotId: string): ChatMessage[] => {
-  const rows = db
+  const rows = getDb()
     .prepare(
       'SELECT * FROM chat_messages WHERE slot_id = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
     )
@@ -57,7 +57,7 @@ export const getChatMessagesBySlot = (slotId: string): ChatMessage[] => {
 };
 
 export const getChatMessagesByDepth = (threadId: string, depth: number): ChatMessage[] => {
-  const rows = db
+  const rows = getDb()
     .prepare(
       'SELECT * FROM chat_messages WHERE thread_id = ? AND depth = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
     )
@@ -75,7 +75,7 @@ export const addChatMessage = (
   }
 ) => {
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         INSERT INTO chat_messages (
             id, thread_id, parent_id, slot_id, depth, message, timestamp, metadata, created_at, updated_at
         ) VALUES (
@@ -108,7 +108,7 @@ export const updateChatMessage = (id: string, message: Partial<ChatMessage>) => 
 
   if (!fields) return null;
 
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         UPDATE chat_messages 
         SET ${fields}, updated_at = @updated_at 
         WHERE id = @id
@@ -124,13 +124,13 @@ export const updateChatMessage = (id: string, message: Partial<ChatMessage>) => 
 };
 
 export const deleteChatMessage = (id: string) => {
-  return db.prepare('DELETE FROM chat_messages WHERE id = ?').run(id);
+  return getDb().prepare('DELETE FROM chat_messages WHERE id = ?').run(id);
 };
 
 export const deleteChatMessagesByThread = (threadId: string) => {
-  return db.prepare('DELETE FROM chat_messages WHERE thread_id = ?').run(threadId);
+  return getDb().prepare('DELETE FROM chat_messages WHERE thread_id = ?').run(threadId);
 };
 
 export const deleteChatMessagesByParent = (parentId: string) => {
-  return db.prepare('DELETE FROM chat_messages WHERE parent_id = ?').run(parentId);
+  return getDb().prepare('DELETE FROM chat_messages WHERE parent_id = ?').run(parentId);
 };

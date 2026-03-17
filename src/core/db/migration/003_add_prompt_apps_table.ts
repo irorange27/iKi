@@ -1,11 +1,11 @@
-import db from '../database';
+import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
   name: '003_add_prompt_apps_table',
   up: () => {
     // Create prompt_apps table
-    db.exec(`
+    getDb().exec(`
             CREATE TABLE IF NOT EXISTS prompt_apps (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -31,6 +31,6 @@ export const migration: Migration = {
   },
   down: () => {
     // Drop prompt_apps table
-    db.exec('DROP TABLE IF EXISTS prompt_apps;');
+    getDb().exec('DROP TABLE IF EXISTS prompt_apps;');
   },
 };

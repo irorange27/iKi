@@ -1,12 +1,12 @@
-import { app, nativeTheme, screen } from 'electron';
 import path from 'path';
 import fs from 'fs-extra';
 import type { AppConfig } from '../shared/types/config';
+import { getDisplayScale, getLocale, getTheme, getUserDataPath } from './platform';
 
 // Pure function: detect system and generate dynamic default configuration
 function getSystemConfig(): AppConfig {
-  const locale = app.getLocale().split('-')[0];
-  const scale = screen.getPrimaryDisplay().scaleFactor;
+  const locale = getLocale();
+  const scale = getDisplayScale();
 
   return {
     ui: {
@@ -22,7 +22,7 @@ function getSystemConfig(): AppConfig {
     },
     general: {
       language: locale || 'en',
-      theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
+      theme: getTheme(),
       autoUpdate: true,
       minimizeToTray: false,
       closeToTray: false,
@@ -78,7 +78,7 @@ function getSystemConfig(): AppConfig {
 
 // Simplified configuration manager
 export class ConfigManager {
-  private path = path.join(app.getPath('userData'), 'iki-config.json');
+  private path = path.join(getUserDataPath(), 'iki-config.json');
 
   async read() {
     try {

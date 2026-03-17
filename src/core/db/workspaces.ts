@@ -1,10 +1,12 @@
-import db from './database';
+import { getDb } from './database';
 import { Workspace } from '../../shared/types/chat';
 
 type WorkspaceRow = Workspace & { is_temporary?: number; show_in_list?: number };
 
 export const getWorkspaces = (): Workspace[] => {
-  const rows = db.prepare('SELECT * FROM workspaces ORDER BY updated_at DESC').all() as WorkspaceRow[];
+  const rows = getDb()
+    .prepare('SELECT * FROM workspaces ORDER BY updated_at DESC')
+    .all() as WorkspaceRow[];
   return rows.map(row => ({
     ...row,
     is_temporary: row.is_temporary || 0,
@@ -13,7 +15,7 @@ export const getWorkspaces = (): Workspace[] => {
 };
 
 export const getWorkspace = (id: string): Workspace | null => {
-  const row = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as
+  const row = getDb().prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as
     | WorkspaceRow
     | undefined;
   if (!row) return null;
@@ -25,7 +27,7 @@ export const getWorkspace = (id: string): Workspace | null => {
 };
 
 export const getWorkspaceByPath = (path: string): Workspace | null => {
-  const row = db.prepare('SELECT * FROM workspaces WHERE path = ?').get(path) as
+  const row = getDb().prepare('SELECT * FROM workspaces WHERE path = ?').get(path) as
     | WorkspaceRow
     | undefined;
   if (!row) return null;
@@ -37,7 +39,7 @@ export const getWorkspaceByPath = (path: string): Workspace | null => {
 };
 
 export const getVisibleWorkspaces = (): Workspace[] => {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT * FROM workspaces WHERE show_in_list = 1 ORDER BY updated_at DESC')
     .all() as WorkspaceRow[];
   return rows.map(row => ({
@@ -51,7 +53,7 @@ export const addWorkspace = (
   workspace: Partial<Workspace> & { id: string; path: string; name: string }
 ) => {
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         INSERT INTO workspaces (
             id, path, name, is_temporary, show_in_list, created_at, updated_at
         ) VALUES (
@@ -81,7 +83,7 @@ export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
 
   if (!fields) return null;
 
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         UPDATE workspaces 
         SET ${fields}, updated_at = @updated_at 
         WHERE id = @id
@@ -99,7 +101,7 @@ export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
 };
 
 export const deleteWorkspace = (id: string) => {
-  return db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
+  return getDb().prepare('DELETE FROM workspaces WHERE id = ?').run(id);
 };
 
 export const toggleWorkspaceVisibility = (id: string) => {

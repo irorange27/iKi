@@ -1,4 +1,4 @@
-import db from './database';
+import { getDb } from './database';
 import { ChatThread } from '../../shared/types/chat';
 
 type ChatThreadRow = ChatThread & {
@@ -9,7 +9,9 @@ type ChatThreadRow = ChatThread & {
 };
 
 export const getChatThreads = (): ChatThread[] => {
-  const rows = db.prepare('SELECT * FROM chat_threads ORDER BY updated_at DESC').all() as ChatThreadRow[];
+  const rows = getDb()
+    .prepare('SELECT * FROM chat_threads ORDER BY updated_at DESC')
+    .all() as ChatThreadRow[];
   return rows.map(row => ({
     ...row,
     is_generating: Boolean(row.is_generating),
@@ -20,7 +22,7 @@ export const getChatThreads = (): ChatThread[] => {
 };
 
 export const getChatThread = (id: string): ChatThread | null => {
-  const row = db.prepare('SELECT * FROM chat_threads WHERE id = ?').get(id) as
+  const row = getDb().prepare('SELECT * FROM chat_threads WHERE id = ?').get(id) as
     | ChatThreadRow
     | undefined;
   if (!row) return null;
@@ -34,7 +36,7 @@ export const getChatThread = (id: string): ChatThread | null => {
 };
 
 export const getChatThreadsByWorkspace = (workspaceId: string): ChatThread[] => {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT * FROM chat_threads WHERE workspace_id = ? ORDER BY updated_at DESC')
     .all(workspaceId) as ChatThreadRow[];
   return rows.map(row => ({
@@ -47,7 +49,7 @@ export const getChatThreadsByWorkspace = (workspaceId: string): ChatThread[] => 
 };
 
 export const getFavoritedChatThreads = (): ChatThread[] => {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT * FROM chat_threads WHERE is_favorited = 1 ORDER BY updated_at DESC')
     .all() as ChatThreadRow[];
   return rows.map(row => ({
@@ -63,7 +65,7 @@ export const addChatThread = (
   thread: Partial<ChatThread> & { id: string; title: string; metadata: string }
 ) => {
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         INSERT INTO chat_threads (
             id, title, model, is_generating, reasoning_effort, metadata, created_at, updated_at,
             prompt_app_id, tools, is_favorited, is_incognito, workspace_id, enable_artifacts,
@@ -106,7 +108,7 @@ export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
 
   if (!fields) return null;
 
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
         UPDATE chat_threads 
         SET ${fields}, updated_at = @updated_at 
         WHERE id = @id
@@ -129,12 +131,12 @@ export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
 
 export const touchChatThread = (id: string) => {
   const now = new Date().toISOString();
-  return db.prepare('UPDATE chat_threads SET updated_at = ? WHERE id = ?').run(now, id);
+  return getDb().prepare('UPDATE chat_threads SET updated_at = ? WHERE id = ?').run(now, id);
 };
 
 export const deleteChatThread = (id: string) => {
   // Messages will be deleted automatically due to CASCADE
-  return db.prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
+  return getDb().prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
 };
 
 export const toggleFavoriteChatThread = (id: string) => {

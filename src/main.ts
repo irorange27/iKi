@@ -1,9 +1,44 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { registerStandardTools } from './core/tools';
+import { setPlatformInfo } from './core/platform';
 import { registerMainIpc } from './main/ipc';
 import { startProactiveTaskScheduler } from './main/services/tasks/proactive_tasks';
 import { createMainWindow } from './main/windows/main_window';
+
+const updatePlatformTheme = () => {
+  setPlatformInfo({
+    theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
+  });
+};
+
+const updatePlatformDisplayScale = () => {
+  try {
+    const scale = screen.getPrimaryDisplay().scaleFactor;
+    setPlatformInfo({ displayScale: scale });
+  } catch {
+    // ignore
+  }
+};
+
+setPlatformInfo({
+  userDataPath: app.getPath('userData'),
+  locale: app.getLocale(),
+});
+
+if (app.isReady()) {
+  updatePlatformTheme();
+  updatePlatformDisplayScale();
+} else {
+  app.on('ready', () => {
+    updatePlatformTheme();
+    updatePlatformDisplayScale();
+  });
+}
+
+nativeTheme.on('updated', () => {
+  updatePlatformTheme();
+});
 
 // Register standard tools + IPC handlers on startup.
 registerStandardTools();

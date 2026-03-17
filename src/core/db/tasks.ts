@@ -1,4 +1,4 @@
-import db from './database';
+import { getDb } from './database';
 import type { ProactiveTask } from '../../shared/types/tasks';
 
 type ProactiveTaskRow = Omit<ProactiveTask, 'enabled' | 'notify'> & {
@@ -15,14 +15,14 @@ const normalizeRow = (row: ProactiveTaskRow): ProactiveTask => ({
 });
 
 export const getProactiveTasks = (): ProactiveTask[] => {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT * FROM proactive_tasks ORDER BY updated_at DESC')
     .all() as ProactiveTaskRow[];
   return rows.map(normalizeRow);
 };
 
 export const getProactiveTask = (id: string): ProactiveTask | null => {
-  const row = db
+  const row = getDb()
     .prepare('SELECT * FROM proactive_tasks WHERE id = ?')
     .get(id) as ProactiveTaskRow | undefined;
   if (!row) return null;
@@ -30,7 +30,7 @@ export const getProactiveTask = (id: string): ProactiveTask | null => {
 };
 
 export const listDueProactiveTasks = (now: string): ProactiveTask[] => {
-  const rows = db
+  const rows = getDb()
     .prepare(
       `
       SELECT * FROM proactive_tasks
@@ -59,7 +59,7 @@ export const addProactiveTask = (
     typeof task.next_run_at === 'string' && task.next_run_at.trim()
       ? task.next_run_at.trim()
       : new Date(Date.now() + Math.max(1, intervalMinutes) * 60_000).toISOString();
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     INSERT INTO proactive_tasks (
       id,
       name,
@@ -134,7 +134,7 @@ export const updateProactiveTask = (id: string, updates: Partial<ProactiveTask>)
 
   if (!fields) return null;
 
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     UPDATE proactive_tasks
     SET ${fields}, updated_at = @updated_at
     WHERE id = @id
@@ -160,5 +160,5 @@ export const updateProactiveTask = (id: string, updates: Partial<ProactiveTask>)
 };
 
 export const deleteProactiveTask = (id: string) => {
-  return db.prepare('DELETE FROM proactive_tasks WHERE id = ?').run(id);
+  return getDb().prepare('DELETE FROM proactive_tasks WHERE id = ?').run(id);
 };
