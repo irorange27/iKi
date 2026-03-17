@@ -1,21 +1,38 @@
 import { z } from 'zod';
 import { tool } from 'ai';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
-import type { AgentTool, AgentMessage } from '../agent/types';
-
-/**
- * Enhanced Tool Result interface
- */
-export interface ToolResult {
-  toolName: string;
-  toolCallId?: string;
-  args: unknown;
-  result: unknown;
-  isError: boolean;
-  error?: string;
-}
+import type { AgentTool } from '../agent/types';
 
 type ApprovalPolicy = boolean | ToolNeedsApprovalFunction<unknown>;
+
+const deriveJsonSchema = (
+  schema: z.ZodTypeAny | undefined,
+  fallbackTitle?: string
+): Record<string, unknown> => {
+  if (!schema) {
+    return {
+      type: 'object',
+      title: fallbackTitle,
+      properties: {},
+    };
+  }
+
+  try {
+    const jsonSchema = zodToJsonSchema(schema, { $refStrategy: 'none', name: fallbackTitle });
+    if (jsonSchema && typeof jsonSchema === 'object') {
+      return jsonSchema as Record<string, unknown>;
+    }
+  } catch (error) {
+    console.warn('[ToolSchema] Failed to derive JSON schema from Zod', error);
+  }
+
+  return {
+    type: 'object',
+    title: fallbackTitle,
+    properties: {},
+  };
+};
 
 /**
  * Base class for all tools with built-in validation
@@ -33,10 +50,11 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   protected abstract handler(args: z.infer<P>): Promise<unknown>;
 
   /**
-   * Get parameters in JSON Schema format (fallback if not provided)
-   * Note: In a real app, you might want to use zod-to-json-schema
+   * Get parameters in JSON Schema format (derived from Zod)
    */
-  abstract get parameters(): Record<string, unknown>;
+  get parameters(): Record<string, unknown> {
+    return deriveJsonSchema(this.paramSchema, this.name);
+  }
 
   /**
    * Execute the tool with validation
@@ -96,9 +114,10 @@ export class ToolRegistry {
   getToolDefinitions(): Record<string, { description: string; parameters: unknown }> {
     const definitions: Record<string, { description: string; parameters: unknown }> = {};
     for (const tool of this.tools.values()) {
+      const parameters = tool.parameters ?? deriveJsonSchema(tool.paramSchema, tool.name);
       definitions[tool.name] = {
         description: tool.description,
-        parameters: tool.parameters,
+        parameters,
       };
     }
     return definitions;
@@ -114,60 +133,8 @@ export class ToolRegistry {
       name: t.name,
       type: t.type,
       description: t.description,
-      parameters: t.parameters,
+      parameters: t.parameters ?? deriveJsonSchema(t.paramSchema, t.name),
     }));
-  }
-}
-
-/**
- * Global Tool Runner for executing tool calls
- */
-export class ToolRunner {
-  constructor(private registry: ToolRegistry) { }
-
-  async run(toolName: string, args: unknown, toolCallId?: string): Promise<ToolResult> {
-    const tool = this.registry.get(toolName);
-    if (!tool) {
-      return {
-        toolName,
-        toolCallId,
-        args,
-        result: null,
-        isError: true,
-        error: `Tool "${toolName}" not found`,
-      };
-    }
-
-    try {
-      // Use paramSchema if available for validation
-      let finalArgs = args;
-      if (tool.paramSchema) {
-        finalArgs = tool.paramSchema.parse(args);
-      }
-
-      const result = await tool.handler(finalArgs);
-      return {
-        toolName,
-        toolCallId,
-        args: finalArgs,
-        result,
-        isError: false,
-      };
-    } catch (err: unknown) {
-      console.error(`Error executing tool ${toolName}:`, err);
-      return {
-        toolName,
-        toolCallId,
-        args,
-        result: null,
-        isError: true,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-  }
-
-  async runMany(toolCalls: Array<{ name: string; arguments: unknown; id?: string }>): Promise<ToolResult[]> {
-    return Promise.all(toolCalls.map(tc => this.run(tc.name, tc.arguments, tc.id)));
   }
 }
 
@@ -178,39 +145,22 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   name: string;
   type: string;
   description: string;
-  parameters: Record<string, unknown>;
+  parameters?: Record<string, unknown>;
   paramSchema?: P;
   needsApproval?: ApprovalPolicy;
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
+  const parameters =
+    options.parameters ?? deriveJsonSchema(options.paramSchema, options.name);
   return {
     ...options,
+    parameters,
     needsApproval: options.needsApproval ?? false,
     paramSchema: options.paramSchema as unknown as AgentTool['paramSchema'],
   };
 }
 
 /**
- * Helper to format tool results into agent messages
- */
-export function formatToolResultMessages(results: ToolResult[]): AgentMessage[] {
-  return results.map(result => ({
-    role: 'user' as const,
-    content: JSON.stringify({
-      tool: result.toolName,
-      result: result.isError ? { error: result.error } : result.result,
-    }),
-    timestamp: new Date().toISOString(),
-    metadata: {
-      toolName: result.toolName,
-      toolCallId: result.toolCallId,
-      isError: result.isError,
-    },
-  }));
-}
-
-/**
  * Export a default registry for simple use cases
  */
 export const defaultToolRegistry = new ToolRegistry();
-export const defaultToolRunner = new ToolRunner(defaultToolRegistry);

@@ -53,6 +53,16 @@ export const DEFAULT_CONFIG: AppConfig = {
     maxRetrievalCount: 5,
     similarThreshold: 0.1,
   },
+  speech: {
+    enabled: false,
+    providerType: 'openai',
+    apiKey: '',
+    baseUrl: '',
+    model: 'whisper-1',
+    modelPath: '',
+    language: '',
+    prompt: '',
+  },
   toolModel: {
     model: '',
   },
@@ -76,6 +86,11 @@ const mergeConfigWithDefaults = (rawConfig: Partial<AppConfig> | null | undefine
   merged.general = {
     ...DEFAULT_CONFIG.general,
     ...(rawConfig?.general || {}),
+  };
+
+  merged.speech = {
+    ...DEFAULT_CONFIG.speech,
+    ...(rawConfig?.speech || {}),
   };
 
   merged.toolExecution = {

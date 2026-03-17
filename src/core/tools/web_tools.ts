@@ -2,6 +2,15 @@ import { z } from 'zod';
 import { BaseTool } from './base';
 import { getConfig } from '../db/database';
 import type { AppConfig } from '../../shared/types/config';
+import {
+  DEFAULT_FETCH_MAX_CHARS,
+  DEFAULT_SEARCH_RESULT_LIMIT,
+  FetchToolInputSchema,
+  MAX_FETCH_MAX_CHARS,
+  MAX_SEARCH_RESULT_LIMIT,
+  MIN_FETCH_MAX_CHARS,
+  WebToolInputSchema,
+} from './schemas';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
 const MIN_NETWORK_TIMEOUT_MS = 1000;
@@ -9,13 +18,8 @@ const MAX_NETWORK_TIMEOUT_MS = 60000;
 const DEFAULT_NETWORK_RETRY_ATTEMPTS = 0;
 const MIN_NETWORK_RETRY_ATTEMPTS = 0;
 const MAX_NETWORK_RETRY_ATTEMPTS = 10;
-const DEFAULT_SEARCH_RESULT_LIMIT = 5;
-const MAX_SEARCH_RESULT_LIMIT = 10;
 // Give search a bit more time than the global default, but keep it interactive.
 const MIN_WEB_SEARCH_TIMEOUT_MS = 12000;
-const DEFAULT_FETCH_MAX_CHARS = 12000;
-const MIN_FETCH_MAX_CHARS = 500;
-const MAX_FETCH_MAX_CHARS = 80000;
 
 const getNetworkTimeoutMs = (): number => {
   const rawConfig = getConfig('app_config') as Partial<AppConfig> | null;
@@ -337,30 +341,7 @@ export class WebSearchTool extends BaseTool {
   description =
     'Search the web for recent/public information and return a short list of relevant results.';
 
-  paramSchema = z.object({
-    query: z.string().min(1).describe('Search query text'),
-    limit: z
-      .number()
-      .int()
-      .optional()
-      .default(DEFAULT_SEARCH_RESULT_LIMIT)
-      .describe('Maximum number of search results'),
-  });
-
-  get parameters() {
-    return {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Search query text' },
-        limit: {
-          type: 'number',
-          description: `Maximum number of search results (${DEFAULT_SEARCH_RESULT_LIMIT}-${MAX_SEARCH_RESULT_LIMIT})`,
-          default: DEFAULT_SEARCH_RESULT_LIMIT,
-        },
-      },
-      required: ['query'],
-    };
-  }
+  paramSchema = WebToolInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     const limit = Math.min(
@@ -474,30 +455,7 @@ export class FetchTool extends BaseTool {
   description =
     'Fetch a webpage or text URL and return clean text content (with status and metadata).';
 
-  paramSchema = z.object({
-    url: z.string().url().describe('HTTP/HTTPS URL to fetch'),
-    maxChars: z
-      .number()
-      .int()
-      .optional()
-      .default(DEFAULT_FETCH_MAX_CHARS)
-      .describe('Maximum number of characters to return from fetched content'),
-  });
-
-  get parameters() {
-    return {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: 'HTTP/HTTPS URL to fetch' },
-        maxChars: {
-          type: 'number',
-          description: `Maximum number of characters to return (${MIN_FETCH_MAX_CHARS}-${MAX_FETCH_MAX_CHARS})`,
-          default: DEFAULT_FETCH_MAX_CHARS,
-        },
-      },
-      required: ['url'],
-    };
-  }
+  paramSchema = FetchToolInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     const parsedUrl = ensureHttpUrl(args.url);

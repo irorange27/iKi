@@ -2,6 +2,7 @@ export * from './base';
 export * from './file_tools';
 export * from './shell_tools';
 export * from './web_tools';
+export * from './schemas';
 
 import { defaultToolRegistry } from './base';
 import { ReadFileTool, WriteFileTool, ListDirTool, DeleteFileTool } from './file_tools';

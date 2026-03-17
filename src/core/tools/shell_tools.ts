@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import { BaseTool } from './base';
 import { getConfig } from '../db/database';
 import type { AppConfig } from '../../shared/types/config';
+import { ShellToolInputSchema } from './schemas';
 
 const execAsync = promisify(exec);
 const invalidCustomShellPatterns = new Set<string>();
@@ -123,26 +124,7 @@ export class ShellExecutionTool extends BaseTool {
   description =
     'Execute a shell command on the local system. Use this for system operations, installing packages, or running scripts. BE CAREFUL with destructive commands.';
 
-  paramSchema = z.object({
-    command: z.string().describe('The shell command to execute'),
-    cwd: z.string().optional().describe('The working directory in which to execute the command'),
-    timeout: z.number().optional().default(30000).describe('Command timeout in milliseconds'),
-  });
-
-  get parameters() {
-    return {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: 'The shell command to execute' },
-        cwd: {
-          type: 'string',
-          description: 'The working directory in which to execute the command',
-        },
-        timeout: { type: 'number', description: 'Command timeout in milliseconds' },
-      },
-      required: ['command'],
-    };
-  }
+  paramSchema = ShellToolInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     try {

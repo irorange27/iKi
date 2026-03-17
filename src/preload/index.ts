@@ -6,6 +6,11 @@ import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
 import type { LongMemorySearchResult } from '../shared/types/memory';
 import type { ProactiveTask } from '../shared/types/tasks';
+import type {
+  SpeechStatus,
+  SpeechTranscriptionInput,
+  SpeechTranscriptionResult,
+} from '../shared/types/speech';
 
 console.log('👋 This message is being logged by "preload.ts", included via Vite');
 
@@ -131,6 +136,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   tools: {
     list: () => ipcRenderer.invoke('tools:list'),
   },
+  speech: {
+    getStatus: (): Promise<SpeechStatus> => ipcRenderer.invoke('speech:get-status'),
+    transcribe: (input: SpeechTranscriptionInput): Promise<SpeechTranscriptionResult> =>
+      ipcRenderer.invoke('speech:transcribe', input),
+  },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     roots: () => ipcRenderer.invoke('skills:roots'),
@@ -143,18 +153,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     short: {
       list: (threadId: string, limit?: number) =>
         ipcRenderer.invoke('memory:short:list', threadId, limit),
+      listAll: (limit?: number) => ipcRenderer.invoke('memory:short:listAll', limit),
       add: (entry: ShortMemoryInput) => ipcRenderer.invoke('memory:short:add', entry),
     },
     long: {
       add: (entry: LongMemoryInput) => ipcRenderer.invoke('memory:long:add', entry),
       list: (threadId: string, limit?: number) =>
         ipcRenderer.invoke('memory:long:list', threadId, limit),
+      listAll: (limit?: number) => ipcRenderer.invoke('memory:long:listAll', limit),
       search: (
         threadId: string,
         query: string,
         options?: { limit?: number; threshold?: number; force?: boolean }
       ): Promise<LongMemorySearchResult[]> =>
         ipcRenderer.invoke('memory:long:search', threadId, query, options),
+      searchAll: (
+        query: string,
+        options?: { limit?: number; threshold?: number; force?: boolean }
+      ): Promise<LongMemorySearchResult[]> =>
+        ipcRenderer.invoke('memory:long:searchAll', query, options),
     },
   },
   tasks: {

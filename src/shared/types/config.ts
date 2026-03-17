@@ -51,6 +51,16 @@ export interface AppConfig {
     maxRetrievalCount: number;
     similarThreshold: number;
   };
+  speech: {
+    enabled: boolean;
+    providerType: 'openai' | 'whisper-node' | '';
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+    modelPath: string;
+    language: string;
+    prompt: string;
+  };
   toolModel: {
     model: string;
   };

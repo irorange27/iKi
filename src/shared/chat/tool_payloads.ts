@@ -1,141 +1,30 @@
 import { z } from 'zod';
 
+import {
+  DeleteFileInputSchemaUi,
+  DeleteFileOutputSchema,
+  FetchToolInputSchemaUi,
+  FetchToolOutputSchema,
+  ListDirInputSchemaUi,
+  ListDirOutputSchema,
+  ReadFileInputSchemaUi,
+  ReadFileOutputSchema,
+  ShellToolInputSchemaUi,
+  ShellToolOutputSchema,
+  WebToolInputSchemaUi,
+  WebToolOutputSchema,
+  WriteFileInputSchemaUi,
+  WriteFileOutputSchema,
+} from '../../core/tools/schemas';
 import { normalizeToolNameKey } from './tool_parts';
 
-
-const WebToolInputSchema = z
-  .object({
-    query: z.string().optional(),
-    limit: z.number().optional(),
-  })
-  .passthrough();
-
-const FetchToolInputSchema = z
-  .object({
-    url: z.string().optional(),
-    maxChars: z.number().optional(),
-  })
-  .passthrough();
-
-const ShellToolInputSchema = z
-  .object({
-    command: z.string().optional(),
-    cwd: z.string().optional(),
-    timeout: z.number().optional(),
-  })
-  .passthrough();
-
-const ReadFileInputSchema = z
-  .object({
-    path: z.string().optional(),
-    encoding: z.string().optional(),
-  })
-  .passthrough();
-
-const WriteFileInputSchema = z
-  .object({
-    path: z.string().optional(),
-    content: z.string().optional(),
-    encoding: z.string().optional(),
-  })
-  .passthrough();
-
-const ListDirInputSchema = z
-  .object({
-    path: z.string().optional(),
-    recursive: z.boolean().optional(),
-  })
-  .passthrough();
-
-const DeleteFileInputSchema = z
-  .object({
-    path: z.string().optional(),
-  })
-  .passthrough();
-
-const WebToolOutputSchema = z
-  .object({
-    query: z.string().optional(),
-    source: z.string().optional(),
-    results: z
-      .array(
-        z
-          .object({
-            title: z.string().optional(),
-            url: z.string().optional(),
-          })
-          .passthrough()
-      )
-      .optional(),
-    resultCount: z.number().optional(),
-    warnings: z.array(z.string()).optional(),
-    sourcesTried: z.array(z.string()).optional(),
-  })
-  .passthrough();
-
-const FetchToolOutputSchema = z
-  .object({
-    url: z.string().optional(),
-    finalUrl: z.string().optional(),
-    ok: z.boolean().optional(),
-    status: z.number().optional(),
-    statusText: z.string().optional(),
-    contentType: z.string().optional(),
-    title: z.string().optional(),
-    content: z.string().optional(),
-    truncated: z.boolean().optional(),
-    error: z.string().optional(),
-  })
-  .passthrough();
-
-const ShellToolOutputSchema = z
-  .object({
-    stdout: z.string().optional(),
-    stderr: z.string().optional(),
-    exitCode: z.number().optional(),
-    isError: z.boolean().optional(),
-  })
-  .passthrough();
-
-const ReadFileOutputSchema = z
-  .object({
-    path: z.string().optional(),
-    content: z.string().optional(),
-  })
-  .passthrough();
-
-const WriteFileOutputSchema = z
-  .object({
-    path: z.string().optional(),
-    success: z.boolean().optional(),
-  })
-  .passthrough();
-
-const ListDirOutputSchema = z.array(
-  z
-    .object({
-      name: z.string().optional(),
-      isDirectory: z.boolean().optional(),
-      isFile: z.boolean().optional(),
-      path: z.string().optional(),
-    })
-    .passthrough()
-);
-
-const DeleteFileOutputSchema = z
-  .object({
-    path: z.string().optional(),
-    deleted: z.boolean().optional(),
-  })
-  .passthrough();
-
-export type WebToolInput = z.infer<typeof WebToolInputSchema>;
-export type FetchToolInput = z.infer<typeof FetchToolInputSchema>;
-export type ShellToolInput = z.infer<typeof ShellToolInputSchema>;
-export type ReadFileToolInput = z.infer<typeof ReadFileInputSchema>;
-export type WriteFileToolInput = z.infer<typeof WriteFileInputSchema>;
-export type ListDirToolInput = z.infer<typeof ListDirInputSchema>;
-export type DeleteFileToolInput = z.infer<typeof DeleteFileInputSchema>;
+export type WebToolInput = z.infer<typeof WebToolInputSchemaUi>;
+export type FetchToolInput = z.infer<typeof FetchToolInputSchemaUi>;
+export type ShellToolInput = z.infer<typeof ShellToolInputSchemaUi>;
+export type ReadFileToolInput = z.infer<typeof ReadFileInputSchemaUi>;
+export type WriteFileToolInput = z.infer<typeof WriteFileInputSchemaUi>;
+export type ListDirToolInput = z.infer<typeof ListDirInputSchemaUi>;
+export type DeleteFileToolInput = z.infer<typeof DeleteFileInputSchemaUi>;
 
 export type WebToolOutput = z.infer<typeof WebToolOutputSchema>;
 export type FetchToolOutput = z.infer<typeof FetchToolOutputSchema>;
@@ -192,31 +81,31 @@ export const parseToolInput = (toolName: string, value: unknown): ParsedToolInpu
   switch (toolKey) {
     case 'web':
     case 'web_search': {
-      const parsed = parseWithSchema(WebToolInputSchema, normalizedValue);
+      const parsed = parseWithSchema(WebToolInputSchemaUi, normalizedValue);
       return parsed ? { kind: 'web', input: parsed } : { kind: 'unknown', input: value };
     }
     case 'fetch': {
-      const parsed = parseWithSchema(FetchToolInputSchema, normalizedValue);
+      const parsed = parseWithSchema(FetchToolInputSchemaUi, normalizedValue);
       return parsed ? { kind: 'fetch', input: parsed } : { kind: 'unknown', input: value };
     }
     case 'shell': {
-      const parsed = parseWithSchema(ShellToolInputSchema, normalizedValue);
+      const parsed = parseWithSchema(ShellToolInputSchemaUi, normalizedValue);
       return parsed ? { kind: 'shell', input: parsed } : { kind: 'unknown', input: value };
     }
     case 'read_file': {
-      const parsed = parseWithSchema(ReadFileInputSchema, normalizedValue);
+      const parsed = parseWithSchema(ReadFileInputSchemaUi, normalizedValue);
       return parsed ? { kind: 'read_file', input: parsed } : { kind: 'unknown', input: value };
     }
     case 'write_file': {
-      const parsed = parseWithSchema(WriteFileInputSchema, normalizedValue);
+      const parsed = parseWithSchema(WriteFileInputSchemaUi, normalizedValue);
       return parsed ? { kind: 'write_file', input: parsed } : { kind: 'unknown', input: value };
     }
     case 'list_dir': {
-      const parsed = parseWithSchema(ListDirInputSchema, normalizedValue);
+      const parsed = parseWithSchema(ListDirInputSchemaUi, normalizedValue);
       return parsed ? { kind: 'list_dir', input: parsed } : { kind: 'unknown', input: value };
     }
     case 'delete_file': {
-      const parsed = parseWithSchema(DeleteFileInputSchema, normalizedValue);
+      const parsed = parseWithSchema(DeleteFileInputSchemaUi, normalizedValue);
       return parsed ? { kind: 'delete_file', input: parsed } : { kind: 'unknown', input: value };
     }
     default:

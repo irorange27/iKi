@@ -2,7 +2,12 @@ import { z } from 'zod';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { BaseTool } from './base';
-import { tool, type Tool } from 'ai';
+import {
+  DeleteFileInputSchema,
+  ListDirInputSchema,
+  ReadFileInputSchema,
+  WriteFileInputSchema,
+} from './schemas';
 
 const workspaceRoot = path.resolve(process.cwd());
 
@@ -17,47 +22,13 @@ const resolvePathWithinWorkspace = (inputPath: string) => {
   return absolutePath;
 };
 
-/**
- * Tool for reading file content
- */
-export const readFileTool: Tool = tool({
-  description: 'Read the content of a file from the local filesystem',
-  inputSchema: z.object({
-    path: z.string().describe('The absolute path to the file to read'),
-    encoding: z.string().optional().default('utf-8').describe('File encoding'),
-  }),
-  needsApproval: false,
-  execute: async ({ path: filePath, encoding }) => {
-    const absolutePath = resolvePathWithinWorkspace(filePath);
-
-    const content = await fs.readFile(absolutePath, {
-      encoding: encoding as BufferEncoding,
-    });
-    return { path: absolutePath, content };
-  },
-});
-
 export class ReadFileTool extends BaseTool {
   name = 'read_file';
   type = 'function';
   needsApproval = false;
   description = 'Read the content of a file from the local filesystem.';
 
-  paramSchema = z.object({
-    path: z.string().describe('The absolute path to the file to read'),
-    encoding: z.string().optional().default('utf-8').describe('File encoding'),
-  });
-
-  get parameters() {
-    return {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'The absolute path to the file to read' },
-        encoding: { type: 'string', description: 'File encoding', default: 'utf-8' },
-      },
-      required: ['path'],
-    };
-  }
+  paramSchema = ReadFileInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = resolvePathWithinWorkspace(args.path);
@@ -75,23 +46,7 @@ export class WriteFileTool extends BaseTool {
   type = 'function';
   description = 'Write or overwrite content to a file on the local filesystem.';
   needsApproval = true;
-  paramSchema = z.object({
-    path: z.string().describe('The absolute path to the file to write'),
-    content: z.string().describe('The content to write to the file'),
-    encoding: z.string().optional().default('utf-8').describe('File encoding'),
-  });
-
-  get parameters() {
-    return {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'The absolute path to the file to write' },
-        content: { type: 'string', description: 'The content to write to the file' },
-        encoding: { type: 'string', description: 'File encoding', default: 'utf-8' },
-      },
-      required: ['path', 'content'],
-    };
-  }
+  paramSchema = WriteFileInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = resolvePathWithinWorkspace(args.path);
@@ -112,29 +67,7 @@ export class ListDirTool extends BaseTool {
   type = 'function';
   description = 'List the contents of a directory on the local filesystem.';
   needsApproval = false;
-  paramSchema = z.object({
-    path: z.string().describe('The absolute path to the directory to list'),
-    recursive: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('Whether to list subdirectories recursively'),
-  });
-
-  get parameters() {
-    return {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'The absolute path to the directory to list' },
-        recursive: {
-          type: 'boolean',
-          description: 'Whether to list subdirectories recursively',
-          default: false,
-        },
-      },
-      required: ['path'],
-    };
-  }
+  paramSchema = ListDirInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = resolvePathWithinWorkspace(args.path);
@@ -159,19 +92,7 @@ export class DeleteFileTool extends BaseTool {
   needsApproval = true;
   description = 'Delete a file from the local filesystem. BE CAREFUL with this tool.';
 
-  paramSchema = z.object({
-    path: z.string().describe('The absolute path to the file to delete'),
-  });
-
-  get parameters() {
-    return {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'The absolute path to the file to delete' },
-      },
-      required: ['path'],
-    };
-  }
+  paramSchema = DeleteFileInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = resolvePathWithinWorkspace(args.path);
