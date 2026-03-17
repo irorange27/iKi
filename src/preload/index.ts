@@ -10,6 +10,9 @@ import type {
   SpeechStatus,
   SpeechTranscriptionInput,
   SpeechTranscriptionResult,
+  WhisperNodeDownloadProgress,
+  WhisperNodeDownloadResult,
+  WhisperNodeModelInfo,
 } from '../shared/types/speech';
 
 console.log('👋 This message is being logged by "preload.ts", included via Vite');
@@ -140,6 +143,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getStatus: (): Promise<SpeechStatus> => ipcRenderer.invoke('speech:get-status'),
     transcribe: (input: SpeechTranscriptionInput): Promise<SpeechTranscriptionResult> =>
       ipcRenderer.invoke('speech:transcribe', input),
+    listModels: (): Promise<WhisperNodeModelInfo[]> => ipcRenderer.invoke('speech:list-models'),
+    downloadModel: (modelName: string): Promise<WhisperNodeDownloadResult> =>
+      ipcRenderer.invoke('speech:download-model', modelName),
+    onDownloadProgress: (callback: (payload: WhisperNodeDownloadProgress) => void) => {
+      ipcRenderer.on('speech:download-progress', (_event, payload) => callback(payload));
+    },
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('speech:download-progress');
+    },
   },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),

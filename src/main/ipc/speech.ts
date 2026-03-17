@@ -1,7 +1,9 @@
 import { ipcMain } from 'electron';
 
 import {
+  downloadWhisperNodeModel,
   getSpeechStatus,
+  listWhisperNodeModels,
   transcribeSpeech,
 } from '../services/speech/speech_service';
 import type { SpeechTranscriptionInput } from '../../shared/types/speech';
@@ -27,6 +29,30 @@ export const registerSpeechIpc = (): void => {
     } catch (error: unknown) {
       console.error('Speech transcription failed:', error);
       throw error;
+    }
+  });
+
+  ipcMain.handle('speech:list-models', () => {
+    try {
+      return listWhisperNodeModels();
+    } catch (error: unknown) {
+      console.error('Failed to list whisper models:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('speech:download-model', async (event, modelName: string) => {
+    try {
+      return await downloadWhisperNodeModel(modelName, payload => {
+        event.sender.send('speech:download-progress', payload);
+      });
+    } catch (error: unknown) {
+      console.error('Failed to download whisper model:', error);
+      return {
+        model: modelName,
+        success: false,
+        error: error instanceof Error ? error.message : 'Download failed',
+      };
     }
   });
 };
