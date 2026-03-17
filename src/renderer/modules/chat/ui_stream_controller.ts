@@ -24,6 +24,11 @@ const shouldLogStreamChunk = (count: number) => count <= 3 || count % 20 === 0;
 const isObjectRecord = (value: unknown): value is Record<string, any> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isMemoryRetrievalChunk = (
+  chunk: Record<string, unknown>
+): chunk is { type: 'memory-retrieval'; query?: unknown; results?: unknown } =>
+  chunk.type === 'memory-retrieval';
+
 export type ChatUiStreamController = ReturnType<typeof createChatUiStreamController>;
 
 export const createChatUiStreamController = (deps: {
@@ -454,9 +459,65 @@ export const createChatUiStreamController = (deps: {
     deps.scrollToBottom();
   };
 
+  const handleMemoryRetrievalChunk = async (chunk: { query?: unknown; results?: unknown }) => {
+    if (!isStreamBoundToCurrentThread()) return;
+
+    const results = Array.isArray(chunk.results)
+      ? chunk.results.filter(entry => isObjectRecord(entry) && typeof entry.summary === 'string')
+      : [];
+
+    const assistantMessage = getOrCreateAssistantMessage();
+    const messageIndex = deps.chat.messages.findIndex(
+      (message: any) => message.id === assistantMessage.id
+    );
+    if (messageIndex < 0) return;
+
+    const currentAssistantMessage = deps.chat.messages[messageIndex] as UIMessage;
+    const nextParts = [...currentAssistantMessage.parts];
+    const existingIndex = nextParts.findIndex(
+      part => isObjectRecord(part) && part.type === 'memory-retrieval'
+    );
+
+    if (results.length === 0) {
+      if (existingIndex >= 0) {
+        nextParts.splice(existingIndex, 1);
+        deps.chat.messages.splice(messageIndex, 1, {
+          ...currentAssistantMessage,
+          parts: nextParts,
+        } as any);
+      }
+      return;
+    }
+
+    const memoryPart: MessagePartRecord = {
+      type: 'memory-retrieval',
+      query: typeof chunk.query === 'string' ? chunk.query : '',
+      results,
+    };
+
+    if (existingIndex >= 0) {
+      nextParts[existingIndex] = memoryPart;
+    } else {
+      nextParts.unshift(memoryPart);
+    }
+
+    const updatedMessage: UIMessage = {
+      ...currentAssistantMessage,
+      parts: nextParts,
+    };
+
+    deps.chat.messages.splice(messageIndex, 1, updatedMessage as any);
+    deps.scrollToBottom();
+  };
+
   const handleUiChunk = async (chunk: unknown) => {
     if (!isStreamBoundToCurrentThread()) return;
     if (!isObjectRecord(chunk) || typeof chunk.type !== 'string') return;
+
+    if (isMemoryRetrievalChunk(chunk)) {
+      await handleMemoryRetrievalChunk(chunk);
+      return;
+    }
 
     if (chunk.type === 'text-delta') {
       const delta = typeof chunk.delta === 'string' ? chunk.delta : '';

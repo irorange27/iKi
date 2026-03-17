@@ -222,6 +222,9 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             if (part.type === 'dynamic-tool') {
               return normalizeDynamicToolPart(part, `${messageId}_tool_${partIndex}`);
             }
+            if (part.type === 'memory-retrieval') {
+              return null;
+            }
             return part;
           })
           .filter((part): part is Exclude<typeof part, null> => part !== null)
@@ -276,6 +279,23 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
 
           nextParts.push(normalized);
           continue;
+        }
+
+        if (part.type === 'memory-retrieval') {
+          const normalized: Record<string, unknown> = {
+            type: 'memory-retrieval',
+          };
+          if (typeof part.query === 'string' && part.query.trim()) {
+            normalized.query = part.query.trim();
+          }
+          if (Array.isArray(part.results)) {
+            normalized.results = part.results.filter(
+              entry => entry && typeof entry === 'object' && 'summary' in entry
+            );
+          } else {
+            normalized.results = [];
+          }
+          nextParts.push(normalized);
         }
       }
 
@@ -460,6 +480,15 @@ export const createUiChunkEmitter = (
       ensureStarted();
       const uiChunk = toUiChunkFromToolEvent(event);
       if (uiChunk) emitChunk(uiChunk);
+    },
+    emitMemoryRetrieval: payload => {
+      if (terminated) return;
+      ensureStarted();
+      emitChunk({
+        type: 'memory-retrieval',
+        query: payload?.query ?? '',
+        results: Array.isArray(payload?.results) ? payload.results : [],
+      });
     },
     finish: () => {
       if (terminated) return;
@@ -663,4 +692,3 @@ export const getPromptFromMessage = (message: ChatInputMessage | undefined): str
   if (!message || message.role !== 'user') return '';
   return extractTextFromContent(message.content);
 };
-

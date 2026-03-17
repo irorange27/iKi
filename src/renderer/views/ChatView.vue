@@ -29,10 +29,21 @@
             <div v-for="(m, index) in chat.messages" :key="m.id ? m.id : index" class="message-wrapper" :class="m.role">
               <div class="message-shell">
                 <div
-                  v-if="m.role === 'assistant' && getUsedToolNames(m).length > 0"
+                  v-if="m.role === 'assistant' && hasUsageSummary(m)"
                   class="tool-usage-summary"
                 >
-                  <span class="tool-usage-label">Tools used</span>
+                  <span
+                    v-if="getMemoryCountForMessage(m) > 0"
+                    class="tool-usage-label"
+                  >
+                    {{ getMemoryCountForMessage(m) }} memories
+                  </span>
+                  <span
+                    v-if="getUsedToolNames(m).length > 0"
+                    class="tool-usage-label"
+                  >
+                    Tools used
+                  </span>
                   <span
                     v-for="toolName in getUsedToolNames(m)"
                     :key="toolName"
@@ -49,6 +60,32 @@
                   </div>
                   <div v-else-if="isTextPart(part)" class="message-text markdown-content">
                     <VueMarkdown :source="getTextPartContent(part)" :plugins="markdownPlugins" />
+                  </div>
+                  <div v-else-if="isMemoryPart(part)" class="memory-card">
+                    <div class="memory-card-header">
+                      <div class="memory-card-title">Memories</div>
+                      <div class="memory-card-count">{{ getMemoryResults(part).length }}</div>
+                    </div>
+                    <div v-if="getMemoryQuery(part)" class="memory-card-query">
+                      Query: {{ getMemoryQuery(part) }}
+                    </div>
+                    <ul class="memory-card-list">
+                      <li
+                        v-for="entry in getMemoryResults(part)"
+                        :key="entry.id || entry.summary"
+                        class="memory-card-item"
+                      >
+                        <div class="memory-card-meta">
+                          <span class="memory-card-score">
+                            Score {{ formatMemoryScore(entry.score) }}
+                          </span>
+                          <span v-if="entry.updated_at" class="memory-card-time">
+                            {{ formatShortTimestamp(entry.updated_at) }}
+                          </span>
+                        </div>
+                        <div class="memory-card-content">{{ entry.summary }}</div>
+                      </li>
+                    </ul>
                   </div>
                   <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
                     <div class="tool-approval-header">
@@ -804,6 +841,30 @@ const handleMessageSent = async (
   }
 };
 
+const handleTaskPush = async (payload: unknown) => {
+  if (!isObjectRecord(payload)) return;
+  if (payload.type !== 'task-result') return;
+  const threadId = typeof payload.threadId === 'string' ? payload.threadId : '';
+  if (!threadId) return;
+
+  // Keep sidebar ordering up to date even if user isn't viewing that thread.
+  void refreshThreads();
+
+  if (currentThread.value?.id !== threadId) return;
+
+  const message = payload.message;
+  if (!isObjectRecord(message) || !Array.isArray(message.parts)) {
+    await loadThreadMessages(threadId);
+    return;
+  }
+
+  const messageId = typeof message.id === 'string' ? message.id : '';
+  if (messageId && chat.messages.some((m: any) => m?.id === messageId)) return;
+
+  chat.messages.push(message as any);
+  scrollToBottom();
+};
+
 // Listen for model selection from ChatInput
 onMounted(async () => {
   // Initialize config store if not already initialized
@@ -817,10 +878,24 @@ onMounted(async () => {
   electronAPI.chat.onUiChunk((chunk: unknown) => {
     void streamController.handleUiChunk(chunk);
   });
+
+  try {
+    electronAPI.tasks?.removeAllListeners?.();
+    electronAPI.tasks?.onPush?.((payload: unknown) => {
+      void handleTaskPush(payload);
+    });
+  } catch {
+    // Ignore missing tasks IPC in older builds.
+  }
 });
 
 onUnmounted(() => {
   electronAPI.chat.removeAllListeners();
+  try {
+    electronAPI.tasks?.removeAllListeners?.();
+  } catch {
+    // ignore
+  }
 });
 </script>
 

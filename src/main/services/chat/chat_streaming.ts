@@ -287,7 +287,12 @@ export const createChatStreaming = (deps: {
     try {
       const inputMessages = deps.memory.injectMemoryIntoMessages(
         await toModelInputMessages(options.messages),
-        options.threadId
+        options.threadId,
+        {
+          onRetrieved: payload => {
+            uiChunkEmitter.emitMemoryRetrieval(payload);
+          },
+        }
       );
 
       const { skillsSystemPrompt } = await resolveSkillsSystemPrompt({

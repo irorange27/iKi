@@ -5,6 +5,7 @@ import { AppConfig } from '../shared/types/config';
 import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
 import type { LongMemorySearchResult } from '../shared/types/memory';
+import type { ProactiveTask } from '../shared/types/tasks';
 
 console.log('👋 This message is being logged by "preload.ts", included via Vite');
 
@@ -30,6 +31,8 @@ type LongMemoryInput = {
   tags?: string[];
   metadata?: unknown;
 };
+type ProactiveTaskInput = Partial<ProactiveTask> &
+  Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model' | 'interval_minutes'>;
 
 contextBridge.exposeInMainWorld('electronAPI', {
   config: {
@@ -152,6 +155,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
         options?: { limit?: number; threshold?: number; force?: boolean }
       ): Promise<LongMemorySearchResult[]> =>
         ipcRenderer.invoke('memory:long:search', threadId, query, options),
+    },
+  },
+  tasks: {
+    list: () => ipcRenderer.invoke('tasks:list'),
+    get: (id: string) => ipcRenderer.invoke('tasks:get', id),
+    create: (task: ProactiveTaskInput) => ipcRenderer.invoke('tasks:create', task),
+    update: (id: string, updates: Partial<ProactiveTask>) =>
+      ipcRenderer.invoke('tasks:update', id, updates),
+    delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),
+    runNow: (id: string) => ipcRenderer.invoke('tasks:run-now', id),
+    onPush: (callback: (payload: unknown) => void) => {
+      ipcRenderer.on('tasks:push', (_event, payload) => callback(payload));
+    },
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('tasks:push');
     },
   },
   openSettings: () => ipcRenderer.send('open-settings'),

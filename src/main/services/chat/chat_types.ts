@@ -29,8 +29,8 @@ export type UiChunkEmitter = {
   messageId: string;
   emitTextDelta: (delta: string) => void;
   emitToolEvent: (event: ToolStreamEvent) => void;
+  emitMemoryRetrieval: (payload: { query: string; results: Array<Record<string, unknown>> }) => void;
   finish: () => void;
   abort: () => void;
   error: (errorText: string) => void;
 };
-

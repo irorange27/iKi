@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import started from 'electron-squirrel-startup';
 import { registerStandardTools } from './core/tools';
 import { registerMainIpc } from './main/ipc';
+import { startProactiveTaskScheduler } from './main/services/tasks/proactive_tasks';
 import { createMainWindow } from './main/windows/main_window';
 
 // Register standard tools + IPC handlers on startup.
@@ -16,7 +17,10 @@ if (started) {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createMainWindow);
+app.on('ready', () => {
+  startProactiveTaskScheduler();
+  createMainWindow();
+});
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

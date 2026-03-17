@@ -46,6 +46,10 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
         timestamp,
         metadata: message.metadata || '{}',
       });
+      // Keep thread ordering consistent with recent activity.
+      if (message.thread_id) {
+        chatThreadDb.touchChatThread(message.thread_id);
+      }
     } catch (error: unknown) {
       const errorCode =
         typeof error === 'object' && error !== null && 'code' in error
@@ -83,7 +87,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     return created;
   };
 
-  const updateMessage = (id: string, message: any) => {
+    const updateMessage = (id: string, message: any) => {
     const sanitizedUpdate =
       message && typeof message === 'object' && message !== null
         ? {
@@ -108,6 +112,10 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
           messageId: id,
           messageJson,
         });
+      }
+
+      if (threadId) {
+        chatThreadDb.touchChatThread(threadId);
       }
     } catch (error) {
       console.warn('[Memory][Main] short memory update failed:', getErrorMessage(error));
@@ -135,4 +143,3 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
 };
 
 export type ChatPersistence = ReturnType<typeof createChatPersistence>;
-

@@ -669,6 +669,192 @@
         <button class="reset-btn" @click="resetSection('memory')">Reset Memory</button>
       </section>
 
+      <!-- Tasks -->
+      <section v-show="activeSection === 'tasks'" class="config-section">
+        <div class="settings-card">
+          <div class="card-title">Proactive Tasks</div>
+          <p class="card-help">
+            Create scheduled tasks that run in the background and push results into a chat thread.
+          </p>
+
+          <label class="input-label">
+            <span>Name</span>
+            <input v-model="taskForm.name" type="text" placeholder="Daily briefing" />
+          </label>
+
+          <label class="input-label">
+            <span>Prompt</span>
+            <textarea
+              v-model="taskForm.prompt"
+              placeholder="What should this task do?"
+            />
+          </label>
+
+          <div class="task-form-grid">
+            <label class="input-label">
+              <span>Every (minutes)</span>
+              <input
+                v-model.number="taskForm.interval_minutes"
+                type="number"
+                min="1"
+                max="10080"
+              />
+            </label>
+
+            <label class="input-label">
+              <span>Provider</span>
+              <select v-model="taskForm.provider_type">
+                <option
+                  v-for="provider in uniqueProviderTypes"
+                  :key="provider.type"
+                  :value="provider.type"
+                >
+                  {{ provider.name }}
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <label class="input-label">
+            <span>Model</span>
+            <select v-model="taskForm.model">
+              <option v-for="model in taskAvailableModels" :key="model" :value="model">
+                {{ model }}
+              </option>
+            </select>
+          </label>
+
+          <label class="input-label">
+            <span>Push To Thread</span>
+            <select v-model="taskForm.thread_id">
+              <option value="">Auto-create dedicated thread</option>
+              <option v-for="thread in taskThreads" :key="thread.id" :value="thread.id">
+                {{ thread.title || thread.id }}
+              </option>
+            </select>
+          </label>
+
+          <div class="task-tools">
+            <div class="task-tools-title">Allowed Tools (safe)</div>
+            <div class="task-tools-grid">
+              <label v-for="tool in SAFE_TASK_TOOLS" :key="tool" class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="taskForm.tools.includes(tool)"
+                  @change="
+                    toggleTaskTool(
+                      tool,
+                      ($event.target as HTMLInputElement).checked
+                    )
+                  "
+                />
+                {{ tool }}
+              </label>
+            </div>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="taskForm.enabled" />
+            Enabled
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="taskForm.notify" />
+            Desktop notification
+          </label>
+
+          <div class="task-form-actions">
+            <button
+              class="secondary-btn"
+              @click="createProactiveTask"
+              :disabled="taskCreateLoading"
+            >
+              {{ taskCreateLoading ? 'Creating...' : 'Create Task' }}
+            </button>
+            <button class="secondary-btn" @click="refreshTasks" :disabled="tasksLoading">
+              Refresh
+            </button>
+          </div>
+
+          <p v-if="taskCreateError" class="tasks-error">{{ taskCreateError }}</p>
+          <p v-if="tasksError" class="tasks-error">{{ tasksError }}</p>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-title">Existing Tasks</div>
+
+          <div v-if="tasksLoading" class="tasks-empty">Loading...</div>
+          <div v-else-if="proactiveTasks.length === 0" class="tasks-empty">No tasks yet.</div>
+          <div v-else class="tasks-list">
+            <div v-for="task in proactiveTasks" :key="task.id" class="task-item">
+              <div class="task-item-header">
+                <div class="task-item-title">
+                  <span class="task-name">{{ task.name }}</span>
+                  <span class="task-status" :class="`status-${task.last_status || 'idle'}`">
+                    {{ task.last_status || 'idle' }}
+                  </span>
+                </div>
+                <div class="task-item-actions">
+                  <button
+                    class="skills-mini-btn"
+                    @click="runTaskNow(task)"
+                    :disabled="!!taskRunLoading[task.id]"
+                  >
+                    {{ taskRunLoading[task.id] ? 'Running...' : 'Run now' }}
+                  </button>
+                  <button class="skills-mini-btn" @click="deleteTask(task)">Delete</button>
+                </div>
+              </div>
+
+              <div class="task-item-meta">
+                <label class="checkbox-label task-compact-check">
+                  <input
+                    type="checkbox"
+                    :checked="task.enabled"
+                    @change="toggleTaskEnabled(task, ($event.target as HTMLInputElement).checked)"
+                  />
+                  Enabled
+                </label>
+                <label class="checkbox-label task-compact-check">
+                  <input
+                    type="checkbox"
+                    :checked="task.notify"
+                    @change="toggleTaskNotify(task, ($event.target as HTMLInputElement).checked)"
+                  />
+                  Notify
+                </label>
+
+                <label class="input-label task-inline-field">
+                  <span>Every (min)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10080"
+                    :value="task.interval_minutes"
+                    @change="updateTaskInterval(task, ($event.target as HTMLInputElement).value)"
+                  />
+                </label>
+              </div>
+
+              <div class="task-item-times">
+                <div>
+                  <span class="task-meta-label">Next:</span>
+                  {{ task.next_run_at ? formatTimestamp(task.next_run_at) : '-' }}
+                </div>
+                <div>
+                  <span class="task-meta-label">Last:</span>
+                  {{ task.last_run_at ? formatTimestamp(task.last_run_at) : '-' }}
+                </div>
+              </div>
+
+              <div v-if="task.last_error" class="tasks-error task-error-block">
+                {{ task.last_error }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Skills -->
       <section v-show="activeSection === 'skills'" class="config-section">
         <div class="settings-card">
@@ -800,7 +986,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   Cog,
@@ -808,6 +994,7 @@ import {
   Brain,
   Bot,
   RefreshCw,
+  AlarmClock,
   Wand2,
 } from 'lucide-vue-next';
 
@@ -821,6 +1008,7 @@ import type {
   LongMemorySearchResult,
 } from '../../shared/types/memory';
 import type { SkillSummary } from '../../shared/types/skill';
+import type { ProactiveTask } from '../../shared/types/tasks';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -858,6 +1046,39 @@ const skillContents = ref<Record<string, string>>({});
 const skillContentLoading = ref<Record<string, boolean>>({});
 const skillContentTruncated = ref<Record<string, boolean>>({});
 
+const proactiveTasks = ref<ProactiveTask[]>([]);
+const tasksLoading = ref(false);
+const tasksError = ref('');
+const taskCreateLoading = ref(false);
+const taskCreateError = ref('');
+const taskRunLoading = ref<Record<string, boolean>>({});
+const taskThreads = ref<ChatThread[]>([]);
+
+const SAFE_TASK_TOOLS = ['web', 'fetch', 'read_file', 'list_dir'] as const;
+type SafeTaskTool = (typeof SAFE_TASK_TOOLS)[number];
+
+const taskForm = ref<{
+  name: string;
+  prompt: string;
+  interval_minutes: number;
+  enabled: boolean;
+  notify: boolean;
+  provider_type: string;
+  model: string;
+  thread_id: string;
+  tools: SafeTaskTool[];
+}>({
+  name: '',
+  prompt: '',
+  interval_minutes: 60,
+  enabled: true,
+  notify: true,
+  provider_type: '',
+  model: '',
+  thread_id: '',
+  tools: ['web', 'fetch'],
+});
+
 // Load providers
 const loadProviders = async () => {
   try {
@@ -894,6 +1115,29 @@ const availableProvidersWithModels = computed(() => {
       };
     })
     .filter((p: any) => p.models.length > 0);
+});
+
+const uniqueProviderTypes = computed(() => {
+  const seen = new Set<string>();
+  return availableProvidersWithModels.value
+    .filter(provider => {
+      if (!provider.type) return false;
+      if (seen.has(provider.type)) return false;
+      seen.add(provider.type);
+      return true;
+    })
+    .map(provider => ({
+      type: provider.type,
+      name: `${provider.name} (${provider.type})`,
+      models: provider.models as string[],
+    }));
+});
+
+const taskAvailableModels = computed(() => {
+  const type = taskForm.value.provider_type;
+  if (!type) return [];
+  const provider = availableProvidersWithModels.value.find(p => p.type === type);
+  return provider?.models || [];
 });
 
 // Computed: Get selected tool model
@@ -961,6 +1205,31 @@ const getProviderTypeForModel = (model: string): string => {
   return 'openai'; // Default fallback
 };
 
+watch(
+  () => availableProvidersWithModels.value,
+  providersList => {
+    if (!taskForm.value.provider_type && providersList.length > 0) {
+      taskForm.value.provider_type = providersList[0].type;
+    }
+
+    const models = taskAvailableModels.value;
+    if (!taskForm.value.model || (models.length > 0 && !models.includes(taskForm.value.model))) {
+      taskForm.value.model = models[0] || '';
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => taskForm.value.provider_type,
+  () => {
+    const models = taskAvailableModels.value;
+    if (!taskForm.value.model || (models.length > 0 && !models.includes(taskForm.value.model))) {
+      taskForm.value.model = models[0] || '';
+    }
+  }
+);
+
 const menuItems = [
   { key: 'general', label: 'General', icon: Cog },
   { key: 'ui', label: 'Appearance', icon: Palette },
@@ -971,6 +1240,7 @@ const menuItems = [
   // { key: "advanced", label: "Advanced", icon: Zap },
   // { key: "keybindings", label: "Keybindings", icon: Keyboard },
   { key: 'memory', label: 'Memory', icon: Brain },
+  { key: 'tasks', label: 'Tasks', icon: AlarmClock },
   { key: 'skills', label: 'Skills', icon: Wand2 },
 ];
 
@@ -1219,6 +1489,171 @@ const runMemorySearch = async () => {
   }
 };
 
+const loadTaskThreads = async () => {
+  try {
+    const threads = await window.electronAPI.chat.threads.list();
+    taskThreads.value = Array.isArray(threads) ? threads : [];
+  } catch (error) {
+    taskThreads.value = [];
+  }
+};
+
+const loadProactiveTasks = async () => {
+  tasksLoading.value = true;
+  tasksError.value = '';
+  try {
+    const list = await window.electronAPI.tasks.list();
+    proactiveTasks.value = Array.isArray(list) ? list : [];
+  } catch (error: any) {
+    tasksError.value = `Failed to load tasks: ${error?.message || 'Unknown error'}`;
+    proactiveTasks.value = [];
+  } finally {
+    tasksLoading.value = false;
+  }
+};
+
+const refreshTasks = async () => {
+  await Promise.all([loadProactiveTasks(), loadTaskThreads()]);
+};
+
+const toggleTaskTool = (tool: SafeTaskTool, checked: boolean) => {
+  const existing = taskForm.value.tools;
+  if (checked) {
+    if (!existing.includes(tool)) {
+      taskForm.value.tools = [...existing, tool];
+    }
+    return;
+  }
+  taskForm.value.tools = existing.filter(t => t !== tool);
+};
+
+const createProactiveTask = async () => {
+  taskCreateError.value = '';
+  const name = taskForm.value.name.trim();
+  const prompt = taskForm.value.prompt.trim();
+  if (!name) {
+    taskCreateError.value = 'Task name is required.';
+    return;
+  }
+  if (!prompt) {
+    taskCreateError.value = 'Task prompt is required.';
+    return;
+  }
+  if (!taskForm.value.provider_type) {
+    taskCreateError.value = 'Please select a provider.';
+    return;
+  }
+  if (!taskForm.value.model) {
+    taskCreateError.value = 'Please select a model.';
+    return;
+  }
+
+  taskCreateLoading.value = true;
+  try {
+    const result = await window.electronAPI.tasks.create({
+      name,
+      prompt,
+      provider_type: taskForm.value.provider_type,
+      model: taskForm.value.model,
+      interval_minutes: taskForm.value.interval_minutes,
+      enabled: taskForm.value.enabled,
+      notify: taskForm.value.notify,
+      thread_id: taskForm.value.thread_id || null,
+      tools: taskForm.value.tools,
+    });
+
+    if (result?.success === false) {
+      taskCreateError.value = result?.error || 'Failed to create task.';
+      return;
+    }
+
+    taskForm.value.name = '';
+    taskForm.value.prompt = '';
+    taskForm.value.thread_id = '';
+    await loadProactiveTasks();
+  } catch (error: any) {
+    taskCreateError.value = `Failed to create task: ${error?.message || 'Unknown error'}`;
+  } finally {
+    taskCreateLoading.value = false;
+  }
+};
+
+const runTaskNow = async (task: ProactiveTask) => {
+  if (taskRunLoading.value[task.id]) return;
+  taskRunLoading.value = { ...taskRunLoading.value, [task.id]: true };
+  try {
+    const result = await window.electronAPI.tasks.runNow(task.id);
+    if (result?.success === false) {
+      tasksError.value = result?.error || 'Task run failed.';
+    }
+  } catch (error: any) {
+    tasksError.value = `Task run failed: ${error?.message || 'Unknown error'}`;
+  } finally {
+    taskRunLoading.value = { ...taskRunLoading.value, [task.id]: false };
+    await loadProactiveTasks();
+    await loadTaskThreads();
+  }
+};
+
+const deleteTask = async (task: ProactiveTask) => {
+  const confirmed = window.confirm(`Delete task "${task.name}"?\nThis cannot be undone.`);
+  if (!confirmed) return;
+  try {
+    const result = await window.electronAPI.tasks.delete(task.id);
+    if (result?.success === false) {
+      tasksError.value = result?.error || 'Failed to delete task.';
+      return;
+    }
+    proactiveTasks.value = proactiveTasks.value.filter(t => t.id !== task.id);
+  } catch (error: any) {
+    tasksError.value = `Failed to delete task: ${error?.message || 'Unknown error'}`;
+  }
+};
+
+const toggleTaskEnabled = async (task: ProactiveTask, enabled: boolean) => {
+  try {
+    const result = await window.electronAPI.tasks.update(task.id, { enabled });
+    if (result?.success === false) {
+      tasksError.value = result?.error || 'Failed to update task.';
+      return;
+    }
+    await loadProactiveTasks();
+  } catch (error: any) {
+    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  }
+};
+
+const toggleTaskNotify = async (task: ProactiveTask, notify: boolean) => {
+  try {
+    const result = await window.electronAPI.tasks.update(task.id, { notify });
+    if (result?.success === false) {
+      tasksError.value = result?.error || 'Failed to update task.';
+      return;
+    }
+    await loadProactiveTasks();
+  } catch (error: any) {
+    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  }
+};
+
+const updateTaskInterval = async (task: ProactiveTask, raw: string) => {
+  const next = Number.parseInt(raw, 10);
+  if (!Number.isFinite(next) || next <= 0) {
+    tasksError.value = 'Interval must be a positive number (minutes).';
+    return;
+  }
+  try {
+    const result = await window.electronAPI.tasks.update(task.id, { interval_minutes: next });
+    if (result?.success === false) {
+      tasksError.value = result?.error || 'Failed to update task.';
+      return;
+    }
+    await loadProactiveTasks();
+  } catch (error: any) {
+    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  }
+};
+
 const loadSkillRoots = async () => {
   try {
     const roots = await window.electronAPI.skills.roots();
@@ -1324,14 +1759,36 @@ onMounted(async () => {
   await loadProviders();
   await loadMemoryThreads();
   await loadSkillRoots();
+
+  try {
+    window.electronAPI.tasks.removeAllListeners?.();
+    window.electronAPI.tasks.onPush((payload: any) => {
+      if (payload?.type === 'task-result') {
+        void loadProactiveTasks();
+      }
+    });
+  } catch {
+    // Ignore missing tasks IPC when running older builds.
+  }
 });
 
 watch(activeSection, section => {
   if (section === 'memory') {
     void loadMemoryThreads();
   }
+  if (section === 'tasks') {
+    void refreshTasks();
+  }
   if (section === 'skills') {
     void refreshSkills();
+  }
+});
+
+onUnmounted(() => {
+  try {
+    window.electronAPI.tasks.removeAllListeners?.();
+  } catch {
+    // ignore
   }
 });
 </script>
@@ -1841,6 +2298,188 @@ input:checked + .slider::before {
   color: var(--text-secondary);
   font-size: 0.85em;
   margin-top: 8px;
+}
+
+.task-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.task-form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.task-tools {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px 14px;
+  background: var(--bg-secondary);
+  margin-bottom: 14px;
+}
+
+.task-tools-title {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.92em;
+  margin-bottom: 10px;
+}
+
+.task-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.tasks-empty {
+  color: var(--text-secondary);
+  font-size: 0.95em;
+  padding: 10px 2px;
+}
+
+.tasks-error {
+  color: var(--danger-color);
+  font-size: 0.95em;
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.task-item {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  padding: 14px 14px;
+}
+
+.task-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-item-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.task-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 520px;
+}
+
+.task-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
+  color: var(--text-primary);
+}
+
+.task-status.status-running {
+  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
+}
+
+.task-status.status-success {
+  background: color-mix(in srgb, var(--success-color, var(--accent-color)) 16%, var(--bg-primary));
+  border-color: color-mix(
+    in srgb,
+    var(--success-color, var(--accent-color)) 35%,
+    var(--border-color)
+  );
+}
+
+.task-status.status-error {
+  background: color-mix(in srgb, var(--danger-color) 14%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
+}
+
+.task-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.task-item-meta {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.task-compact-check {
+  margin-bottom: 0;
+}
+
+.task-inline-field {
+  margin-bottom: 0;
+  width: 160px;
+}
+
+.task-inline-field input {
+  margin-top: 4px;
+}
+
+.task-item-times {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+.task-meta-label {
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.task-error-block {
+  margin-top: 12px;
+  background: color-mix(in srgb, var(--danger-color) 7%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--danger-color) 25%, var(--border-color));
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+@media (max-width: 840px) {
+  .task-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .task-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .task-name {
+    max-width: 320px;
+  }
 }
 
 .config-section > .settings-card:first-of-type,

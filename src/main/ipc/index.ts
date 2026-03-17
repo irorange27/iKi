@@ -4,6 +4,7 @@ import { registerMemoryIpc } from './memory';
 import { registerPromptAppsIpc } from './prompt_apps';
 import { registerProvidersIpc } from './providers';
 import { registerSkillsIpc } from './skills';
+import { registerTasksIpc } from './tasks';
 import { registerToolModelIpc } from './tool_model';
 import { registerToolsIpc } from './tools';
 import { registerWindowIpc } from './window';
@@ -24,5 +25,6 @@ export const registerMainIpc = (): void => {
   registerToolModelIpc();
   registerToolsIpc();
   registerSkillsIpc();
+  registerTasksIpc();
   registerChatIpc();
 };

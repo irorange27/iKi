@@ -6,6 +6,19 @@ import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import type { AppConfig } from '../../../shared/types/config';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage } from './chat_types';
+
+type MemoryPreview = {
+  id: string;
+  summary: string;
+  score: number;
+  updated_at?: string;
+  tags?: string | null;
+};
+
+type MemoryRetrievalPayload = {
+  query: string;
+  results: MemoryPreview[];
+};
 import { getPromptFromMessage } from './chat_ui';
 
 const formatMemoryLine = (entry: { summary: string; score: number; updated_at?: string }) => {
@@ -137,7 +150,10 @@ export const createChatMemory = () => {
 
   const injectMemoryIntoMessages = (
     messages: ChatInputMessage[],
-    threadId?: string
+    threadId?: string,
+    options?: {
+      onRetrieved?: (payload: MemoryRetrievalPayload) => void;
+    }
   ): ChatInputMessage[] => {
     if (!threadId) return messages;
     const memoryConfig = getMemoryConfig();
@@ -151,6 +167,17 @@ export const createChatMemory = () => {
       limit: memoryConfig.maxRetrievalCount,
       threshold: memoryConfig.similarThreshold,
     });
+
+    if (options?.onRetrieved) {
+      const preview: MemoryPreview[] = results.map(entry => ({
+        id: entry.id,
+        summary: entry.summary,
+        score: entry.score,
+        updated_at: entry.updated_at,
+        tags: entry.tags,
+      }));
+      options.onRetrieved({ query, results: preview });
+    }
 
     if (!results.length) return messages;
     const systemContent = buildMemorySystemMessage(results);
@@ -198,4 +225,3 @@ export const createChatMemory = () => {
 };
 
 export type ChatMemory = ReturnType<typeof createChatMemory>;
-

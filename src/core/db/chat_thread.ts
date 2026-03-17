@@ -127,6 +127,11 @@ export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
   return stmt.run(params);
 };
 
+export const touchChatThread = (id: string) => {
+  const now = new Date().toISOString();
+  return db.prepare('UPDATE chat_threads SET updated_at = ? WHERE id = ?').run(now, id);
+};
+
 export const deleteChatThread = (id: string) => {
   // Messages will be deleted automatically due to CASCADE
   return db.prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
