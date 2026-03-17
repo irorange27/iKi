@@ -10,137 +10,35 @@ import {
   Wrench,
 } from 'lucide-vue-next';
 
-type MessagePartRecord = Record<string, any> & { type: string };
+import {
+  getToolInput,
+  getToolName,
+  getToolOutput,
+  isObjectRecord,
+  isToolCallPart,
+  isToolPart,
+  isToolResultPart,
+  normalizeToolNameKey,
+} from '../../../shared/chat/tool_parts';
+
+export {
+  getApprovalId,
+  getToolCallIdFromPart,
+  getToolInput,
+  getToolName,
+  getToolOutput,
+  isApprovalRequestedPart,
+  isToolCallPart,
+  isToolPart,
+  isToolResultPart,
+  normalizeToolNameKey,
+  parseToolInputFromText,
+} from '../../../shared/chat/tool_parts';
 
 export type WebSearchCitation = {
   title: string;
   url: string;
   domain: string;
-};
-
-const isObjectRecord = (value: unknown): value is Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-export const getApprovalId = (part: unknown): string | null => {
-  if (!isObjectRecord(part)) return null;
-  if (typeof part.approvalId === 'string') return part.approvalId;
-  if (!isObjectRecord(part.approval)) return null;
-  return typeof part.approval.id === 'string' ? part.approval.id : null;
-};
-
-export const getToolCallIdFromPart = (part: unknown): string | null => {
-  if (!isObjectRecord(part)) return null;
-  if (typeof part.toolCallId === 'string' && part.toolCallId.length > 0) return part.toolCallId;
-  if (typeof part.id === 'string' && part.id.length > 0) return part.id;
-  if (isObjectRecord(part.toolCall) && typeof part.toolCall.toolCallId === 'string') {
-    return part.toolCall.toolCallId;
-  }
-  return null;
-};
-
-export const parseToolInputFromText = (inputText: string): unknown => {
-  const trimmedInput = inputText.trim();
-  if (!trimmedInput) return {};
-
-  try {
-    return JSON.parse(trimmedInput);
-  } catch {
-    return inputText;
-  }
-};
-
-export const isToolPart = (part: unknown): part is MessagePartRecord =>
-  isObjectRecord(part) &&
-  typeof part.type === 'string' &&
-  (part.type === 'dynamic-tool' || part.type.startsWith('tool-'));
-
-export const isApprovalRequestedPart = (part: unknown): boolean => {
-  if (!isToolPart(part)) return false;
-  if (!getApprovalId(part)) return false;
-  return part.type === 'tool-approval-request' || part.state === 'approval-requested';
-};
-
-export const isToolResultPart = (part: unknown): boolean => {
-  if (!isToolPart(part) || !isObjectRecord(part) || isApprovalRequestedPart(part)) return false;
-
-  if (part.type === 'tool-result' || part.type === 'tool-approval-response') return true;
-  if (part.output !== undefined || part.result !== undefined) return true;
-
-  if (typeof part.state === 'string') {
-    return (
-      part.state === 'approval-responded' ||
-      part.state === 'done' ||
-      part.state.startsWith('output-')
-    );
-  }
-
-  return false;
-};
-
-export const isToolCallPart = (part: unknown): boolean =>
-  isToolPart(part) && !isApprovalRequestedPart(part) && !isToolResultPart(part);
-
-export const getToolName = (part: unknown): string => {
-  if (!isObjectRecord(part)) return 'tool';
-
-  if (typeof part.toolName === 'string' && part.toolName.trim()) {
-    return part.toolName;
-  }
-
-  if (isObjectRecord(part.toolCall) && typeof part.toolCall.toolName === 'string') {
-    return part.toolCall.toolName;
-  }
-
-  if (part.type === 'dynamic-tool' && typeof part.toolName === 'string') {
-    return part.toolName;
-  }
-
-  if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-    const typeName = part.type.replace(/^tool-/, '');
-    if (
-      typeName === 'call' ||
-      typeName === 'result' ||
-      typeName === 'approval-request' ||
-      typeName === 'approval-response'
-    ) {
-      return 'tool';
-    }
-    return typeName || 'tool';
-  }
-
-  return 'tool';
-};
-
-export const getToolInput = (part: unknown): unknown => {
-  if (!isObjectRecord(part)) return undefined;
-  if (part.input !== undefined) return part.input;
-  if (part.args !== undefined) return part.args;
-  if (isObjectRecord(part.toolCall)) {
-    if (part.toolCall.args !== undefined) return part.toolCall.args;
-    if (part.toolCall.input !== undefined) return part.toolCall.input;
-  }
-  return undefined;
-};
-
-export const getToolOutput = (part: unknown): unknown => {
-  if (!isObjectRecord(part)) return undefined;
-
-  if (part.output !== undefined) return part.output;
-  if (part.result !== undefined) return part.result;
-
-  if (part.type === 'tool-approval-response') {
-    return {
-      approvalId: part.approvalId,
-      approved: part.approved,
-      reason: part.reason,
-    };
-  }
-
-  if (isObjectRecord(part.approval) && Object.keys(part.approval).length > 0) {
-    return part.approval;
-  }
-
-  return undefined;
 };
 
 const TOOL_STATE_LABELS: Record<string, string> = {
@@ -161,7 +59,7 @@ export const getToolStateLabel = (part: unknown): string => {
 
 type ToolStateKind = 'success' | 'error' | 'denied' | 'pending' | 'running' | 'neutral';
 
-const getToolStateKind = (part: unknown): ToolStateKind => {
+export const getToolStateKind = (part: unknown): ToolStateKind => {
   if (!isObjectRecord(part) || typeof part.state !== 'string') return 'neutral';
 
   const state = part.state;
@@ -235,9 +133,6 @@ export const getToolDurationLabel = (part: unknown): string => {
   if (ms === null) return '';
   return formatDurationMs(ms);
 };
-
-export const normalizeToolNameKey = (value: string): string =>
-  value.trim().toLowerCase().replace(/[-\s]+/g, '_');
 
 const TOOL_ICON_COMPONENTS: Record<string, any> = {
   web: Search,
@@ -535,4 +430,3 @@ export const formatJson = (value: unknown): string => {
     return String(value);
   }
 };
-

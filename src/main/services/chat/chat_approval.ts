@@ -5,13 +5,13 @@ import * as chatMessageDb from '../../../core/db/chat_message';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import { buildSkillsSystemPrompt, normalizeSkillIds } from '../../../core/skills';
 import { defaultToolRegistry } from '../../../core/tools';
+import { isObjectRecord } from '../../../shared/chat/tool_parts';
 import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import type { ActiveStreamState, ChatUiMessage, ChatWebContents } from './chat_types';
 import {
   createUiChunkEmitter,
-  isObjectRecord,
   parseStoredUiMessageRow,
   toAgentMessages,
   toModelInputMessages,
@@ -363,4 +363,3 @@ export const createChatApproval = (deps: {
 };
 
 export type ChatApproval = ReturnType<typeof createChatApproval>;
-

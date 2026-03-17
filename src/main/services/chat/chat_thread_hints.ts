@@ -1,5 +1,5 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
-import { isObjectRecord } from './chat_ui';
+import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
 export const persistThreadRuntimeHints = (params: {
   threadId: string;
@@ -40,4 +40,3 @@ export const persistThreadRuntimeHints = (params: {
     console.warn('[Main] Failed to persist thread runtime hints:', error);
   }
 };
-

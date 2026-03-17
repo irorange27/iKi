@@ -33,7 +33,7 @@
                   class="tool-usage-summary"
                 >
                   <span
-                    v-if="getMemoryCountForMessage(m) > 0"
+                    v-if="hasMemoryPart(m)"
                     class="tool-usage-label"
                   >
                     {{ getMemoryCountForMessage(m) }} memories
@@ -69,7 +69,7 @@
                     <div v-if="getMemoryQuery(part)" class="memory-card-query">
                       Query: {{ getMemoryQuery(part) }}
                     </div>
-                    <ul class="memory-card-list">
+                    <ul v-if="getMemoryResults(part).length > 0" class="memory-card-list">
                       <li
                         v-for="entry in getMemoryResults(part)"
                         :key="entry.id || entry.summary"
@@ -86,6 +86,7 @@
                         <div class="memory-card-content">{{ entry.summary }}</div>
                       </li>
                     </ul>
+                    <div v-else class="memory-card-empty">No memories found.</div>
                   </div>
                   <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
                     <div class="tool-approval-header">
@@ -358,6 +359,7 @@ import {
   getToolInputDisplayValue,
   getToolName,
   getToolOutput,
+  getToolStateKind,
   getToolStateLabel,
   getToolStatePillClass,
   getToolTitle,
@@ -415,6 +417,71 @@ const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).sl
 
 const isObjectRecord = (value: unknown): value is Record<string, any> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+type MemoryPreviewEntry = {
+  id?: string;
+  summary: string;
+  score?: number;
+  updated_at?: string;
+  tags?: string | null;
+};
+
+type MemoryPart = {
+  type: 'memory-retrieval';
+  query?: string;
+  results?: MemoryPreviewEntry[];
+};
+
+const isMemoryPart = (part: unknown): part is MemoryPart => {
+  if (!isObjectRecord(part)) return false;
+  const partType = typeof part.type === 'string' ? part.type : '';
+  return partType === 'memory-retrieval';
+};
+
+const getMemoryResults = (part: unknown): MemoryPreviewEntry[] => {
+  if (!isMemoryPart(part)) return [];
+  const results = Array.isArray(part.results) ? part.results : [];
+  return results.filter(
+    entry => isObjectRecord(entry) && typeof entry.summary === 'string'
+  ) as MemoryPreviewEntry[];
+};
+
+const getMemoryQuery = (part: unknown): string => {
+  if (!isMemoryPart(part)) return '';
+  return typeof part.query === 'string' ? part.query : '';
+};
+
+const formatMemoryScore = (value: unknown): string => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value.toFixed(3);
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed.toFixed(3);
+  }
+  return '0.000';
+};
+
+const formatShortTimestamp = (value: string): string => {
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  return new Date(parsed).toLocaleDateString();
+};
+
+const getMemoryPartForMessage = (message: UIMessage): MemoryPart | null => {
+  if (!Array.isArray(message.parts)) return null;
+  const part = message.parts.find(entry => isMemoryPart(entry));
+  return part ?? null;
+};
+
+const hasMemoryPart = (message: UIMessage): boolean => Boolean(getMemoryPartForMessage(message));
+
+const getMemoryCountForMessage = (message: UIMessage): number => {
+  const memoryPart = getMemoryPartForMessage(message);
+  if (!memoryPart) return 0;
+  return getMemoryResults(memoryPart).length;
+};
+
+const hasUsageSummary = (message: UIMessage): boolean =>
+  hasMemoryPart(message) || getUsedToolNames(message).length > 0;
 
 const markdownPlugins = [markdownCodeBlockPlugin];
 
@@ -963,6 +1030,88 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+}
+
+.memory-card {
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.memory-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.memory-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.memory-card-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.memory-card-query {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.memory-card-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.memory-card-item {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.memory-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.memory-card-score {
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+.memory-card-time {
+  margin-left: auto;
+}
+
+.memory-card-content {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.memory-card-empty {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .message-wrapper.user .message-shell {

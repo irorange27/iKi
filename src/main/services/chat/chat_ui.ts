@@ -5,6 +5,7 @@ import {
 } from 'ai';
 
 import type { AgentMessage } from '../../../core/agent';
+import { isObjectRecord, normalizeDynamicToolPart } from '../../../shared/chat/tool_parts';
 import { getErrorMessage } from '../../utils/errors';
 import type {
   ChatInputMessage,
@@ -16,21 +17,8 @@ import type {
   UiChunkEmitter,
 } from './chat_types';
 
-export const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
 const createRuntimeId = (prefix: string) =>
   `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-const DYNAMIC_TOOL_STATES = new Set([
-  'input-streaming',
-  'input-available',
-  'approval-requested',
-  'approval-responded',
-  'output-available',
-  'output-error',
-  'output-denied',
-]);
 
 const getNestedToolEventField = (event: ToolStreamEvent, field: 'toolCallId' | 'toolName'): unknown => {
   if (field in event) return event[field];
@@ -57,151 +45,6 @@ const getToolNameFromEvent = (event: ToolStreamEvent): string =>
     ? (getNestedToolEventField(event, 'toolName') as string)
     : 'tool';
 
-const getApprovalIdFromPart = (part: Record<string, unknown>, fallbackId: string): string => {
-  if (typeof part.approvalId === 'string' && part.approvalId.length > 0) return part.approvalId;
-  if (isObjectRecord(part.approval) && typeof part.approval.id === 'string' && part.approval.id) {
-    return part.approval.id;
-  }
-  return fallbackId;
-};
-
-const getErrorTextFromToolPart = (part: Record<string, unknown>): string => {
-  if (typeof part.errorText === 'string' && part.errorText.trim()) return part.errorText;
-  if (typeof part.output === 'string' && part.output.trim()) return part.output;
-  if (isObjectRecord(part.output)) {
-    if (typeof part.output.error === 'string' && part.output.error.trim()) return part.output.error;
-    if (typeof part.output.message === 'string' && part.output.message.trim()) {
-      return part.output.message;
-    }
-  }
-  return 'Tool execution failed';
-};
-
-const getDeniedReasonFromToolPart = (part: Record<string, unknown>): string | undefined => {
-  if (isObjectRecord(part.approval) && typeof part.approval.reason === 'string') {
-    return part.approval.reason;
-  }
-  if (typeof part.output === 'string' && part.output.trim()) return part.output;
-  if (isObjectRecord(part.output) && typeof part.output.message === 'string') {
-    return part.output.message;
-  }
-  return undefined;
-};
-
-const normalizeDynamicToolPart = (
-  part: Record<string, unknown>,
-  fallbackToolCallId: string
-): Record<string, unknown> => {
-  const toolCallId =
-    typeof part.toolCallId === 'string' && part.toolCallId.length > 0
-      ? part.toolCallId
-      : fallbackToolCallId;
-  const toolName =
-    typeof part.toolName === 'string' && part.toolName.length > 0 ? part.toolName : 'tool';
-
-  const rawState = typeof part.state === 'string' ? part.state : 'input-available';
-  const state = DYNAMIC_TOOL_STATES.has(rawState) ? rawState : 'input-available';
-  const input = part.input ?? {};
-
-  const normalizedBase: Record<string, unknown> = {
-    type: 'dynamic-tool',
-    toolCallId,
-    toolName,
-  };
-
-  if (typeof part.title === 'string' && part.title.trim()) {
-    normalizedBase.title = part.title;
-  }
-  if (typeof part.providerExecuted === 'boolean') {
-    normalizedBase.providerExecuted = part.providerExecuted;
-  }
-  if (isObjectRecord(part.callProviderMetadata)) {
-    normalizedBase.callProviderMetadata = part.callProviderMetadata;
-  }
-
-  if (state === 'input-streaming') {
-    return { ...normalizedBase, state, input };
-  }
-  if (state === 'input-available') {
-    return { ...normalizedBase, state, input };
-  }
-  if (state === 'approval-requested') {
-    return {
-      ...normalizedBase,
-      state,
-      input,
-      approval: {
-        id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
-      },
-    };
-  }
-  if (state === 'approval-responded') {
-    const approved =
-      isObjectRecord(part.approval) && typeof part.approval.approved === 'boolean'
-        ? part.approval.approved
-        : false;
-    const reason =
-      isObjectRecord(part.approval) && typeof part.approval.reason === 'string'
-        ? part.approval.reason
-        : undefined;
-
-    return {
-      ...normalizedBase,
-      state,
-      input,
-      approval: {
-        id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
-        approved,
-        ...(typeof reason === 'string' && reason.length > 0 ? { reason } : {}),
-      },
-    };
-  }
-  if (state === 'output-available') {
-    const approval =
-      isObjectRecord(part.approval) &&
-      typeof part.approval.id === 'string' &&
-      part.approval.approved === true
-        ? {
-            id: part.approval.id,
-            approved: true as const,
-            ...(typeof part.approval.reason === 'string' && part.approval.reason.length > 0
-              ? { reason: part.approval.reason }
-              : {}),
-          }
-        : undefined;
-
-    return {
-      ...normalizedBase,
-      state,
-      input,
-      output: part.output ?? null,
-      ...(typeof part.preliminary === 'boolean' ? { preliminary: part.preliminary } : {}),
-      ...(approval ? { approval } : {}),
-    };
-  }
-  if (state === 'output-error') {
-    return {
-      ...normalizedBase,
-      state,
-      input,
-      errorText: getErrorTextFromToolPart(part),
-    };
-  }
-
-  const deniedReason = getDeniedReasonFromToolPart(part);
-  return {
-    ...normalizedBase,
-    state: 'output-denied',
-    input,
-    approval: {
-      id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
-      approved: false,
-      ...(typeof deniedReason === 'string' && deniedReason.length > 0
-        ? { reason: deniedReason }
-        : {}),
-    },
-  };
-};
 
 const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMessage[] =>
   messages.map((message, messageIndex) => {
@@ -218,14 +61,17 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
     const parts = Array.isArray(message.parts)
       ? message.parts
           .map((part, partIndex) => {
-            if (!isObjectRecord(part) || typeof part.type !== 'string') return null;
-            if (part.type === 'dynamic-tool') {
-              return normalizeDynamicToolPart(part, `${messageId}_tool_${partIndex}`);
+            if (!isObjectRecord(part)) return null;
+            const partRecord = part as Record<string, unknown>;
+            const partType = typeof partRecord.type === 'string' ? partRecord.type : '';
+            if (!partType) return null;
+            if (partType === 'dynamic-tool') {
+              return normalizeDynamicToolPart(partRecord, `${messageId}_tool_${partIndex}`);
             }
-            if (part.type === 'memory-retrieval') {
+            if (partType === 'memory-retrieval') {
               return null;
             }
-            return part;
+            return partRecord;
           })
           .filter((part): part is Exclude<typeof part, null> => part !== null)
       : [];
@@ -445,7 +291,11 @@ export const createUiChunkEmitter = (
   let textStarted = false;
   let terminated = false;
 
-  const emitChunk = (chunk: UIMessageChunk) => {
+  const emitChunk = (
+    chunk:
+      | UIMessageChunk
+      | { type: 'memory-retrieval'; query?: string; results?: Array<Record<string, unknown>> }
+  ) => {
     webContents.send('chat:ui-chunk', chunk);
   };
 
