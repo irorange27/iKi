@@ -333,7 +333,6 @@
 import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
-import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
@@ -375,15 +374,12 @@ import {
   toggleToolCollapse,
 } from '../modules/chat/ui_message_tool_parts';
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
-import { createChatUiStreamController } from '../modules/chat/ui_stream_controller';
-import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
-import {
-  extractTextFromMessage,
-  isTextPart,
-  upsertTextIntoMessageParts,
-} from '../modules/chat/ui_message_text';
-import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
+import { createChatMessageStore } from '../modules/chat/chat_message_store';
+import { isTextPart } from '../modules/chat/ui_message_text';
+import { isObjectRecord } from '../../shared/utils/guards';
 import { useConfigStore } from '../store/config';
+import { useChatThreads } from '../composables/useChatThreads';
+import { useChatStreaming } from '../composables/useChatStreaming';
 import VueMarkdown from 'vue-markdown-render';
 import { markdownCodeBlockPlugin } from '../utils/markdown_code_block_plugin';
 
@@ -393,31 +389,16 @@ declare const window: any;
 const electronAPI = window.electronAPI as any;
 
 const configStore = useConfigStore();
-const { config } = storeToRefs(configStore);
 
-interface ChatThread {
-  id: string;
-  title: string;
-  model?: string;
-}
-
-const showWelcome = ref(true);
 // Create Chat instance for message management (without API endpoint for Electron)
 const chat = new Chat({});
 const messagesContainer = ref<HTMLElement | null>(null);
-const currentThread = ref<ChatThread | null>(null);
-const currentModel = ref<string>('');
-const selectedTools = ref<string[]>([]);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<any>(null);
 const persistence = createUiMessagePersistence({ electronAPI });
-const TITLE_REGEN_INTERVAL = 2;
-const editingUserMessageId = ref<string | null>(null);
+const messageStore = createChatMessageStore(chat);
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-const isObjectRecord = (value: unknown): value is Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 type MemoryPreviewEntry = {
   id?: string;
@@ -486,41 +467,6 @@ const hasUsageSummary = (message: UIMessage): boolean =>
 
 const markdownPlugins = [markdownCodeBlockPlugin];
 
-const truncateConversationAfterIndex = async (messageIndex: number) => {
-  await persistence.truncateConversationAfterIndex({ chat, messageIndex });
-};
-
-const beginEditMessage = async (message: UIMessage) => {
-  if (!message || message.role !== 'user' || typeof message.id !== 'string') return;
-  await streamController.stopActiveStreamIfNeeded('edit-message');
-  editingUserMessageId.value = message.id;
-  const text = extractTextFromMessage(message);
-  await chatInputRef.value?.setDraftMessage(text, { focus: true, select: true });
-  scrollToBottom();
-};
-
-const cancelEditing = async () => {
-  editingUserMessageId.value = null;
-  await chatInputRef.value?.setDraftMessage('', { focus: true });
-};
-
-const upsertUiMessage = async (
-  message: UIMessage,
-  parentId?: string,
-  source = 'unknown',
-  threadIdOverride?: string
-) => {
-  const threadId = threadIdOverride || currentThread.value?.id || '';
-  if (!threadId) return;
-
-  await persistence.upsertUiMessage({
-    message,
-    threadId,
-    parentId,
-    source,
-  });
-};
-
 const getPartType = (part: unknown): string =>
   isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
 
@@ -530,13 +476,6 @@ const getPartRenderKey = (messageId: string, part: unknown, partIndex: number): 
     return `${messageId}-${partType}-${partIndex}-${part.text.length}-${streamController.streamRenderTick.value}`;
   }
   return `${messageId}-${partType}-${partIndex}`;
-};
-
-const isStreamingTextPart = (message: UIMessage, part: unknown): boolean => {
-  if (!isTextPart(part)) return false;
-  if (!streamController.activeAssistantMessageId.value) return false;
-  if (message.id !== streamController.activeAssistantMessageId.value) return false;
-  return isObjectRecord(part) && part.state === 'streaming';
 };
 
 const getTextPartContent = (part: unknown): string => {
@@ -597,343 +536,68 @@ const scrollToBottom = () => {
   });
 };
 
-const streamController = createChatUiStreamController({
-  chat,
+const {
+  currentThread,
+  currentModel,
+  selectedTools,
+  showWelcome,
+  refreshThreads,
+  createNewThread,
+  selectThread: selectThreadBase,
+  handleThreadDeleted: handleThreadDeletedBase,
+  handleNewChat: handleNewChatBase,
+  handleModelSelected,
+  getCurrentThreadId,
+  handleAssistantMessagePersisted,
+  handleTaskPush,
+} = useChatThreads({
   electronAPI,
+  messageStore,
+  persistence,
+  sidebarRef,
+  scrollToBottom,
+});
+
+const streaming = useChatStreaming({
+  electronAPI,
+  messageStore,
   persistence,
   createMessageId,
   scrollToBottom,
-  getCurrentThreadId: () => currentThread.value?.id || null,
-  onAssistantMessagePersisted: async ({ threadId, messagesSnapshot }) => {
-    if (!currentThread.value || currentThread.value.id !== threadId) return;
-
-    if (
-      messagesSnapshot.length > 0 &&
-      shouldRegenerateThreadTitle(messagesSnapshot, currentThread.value.title)
-    ) {
-      const generatedTitle = await generateThreadTitle(messagesSnapshot);
-      if (generatedTitle) {
-        await updateThreadTitleById(threadId, generatedTitle);
-      }
-    }
-  },
+  getCurrentThreadId,
+  onAssistantMessagePersisted: handleAssistantMessagePersisted,
+  currentThread,
+  currentModel,
+  selectedTools,
+  showWelcome,
+  createNewThread,
+  selectThread: selectThreadBase,
+  handleThreadDeleted: handleThreadDeletedBase,
+  handleNewChat: handleNewChatBase,
 });
 
-const isApprovalProcessing = streamController.isApprovalProcessing;
-const handleToolApproval = streamController.handleToolApproval;
+const streamController = streaming.streamController;
+const editingUserMessageId = streaming.editingUserMessageId;
+const isApprovalProcessing = streaming.isApprovalProcessing;
+const handleToolApproval = streaming.handleToolApproval;
+const handleMessageSent = streaming.handleMessageSent;
+const isStreamingTextPart = streaming.isStreamingTextPart;
+const selectThread = streaming.selectThread;
+const handleThreadDeleted = streaming.handleThreadDeleted;
+const handleNewChat = streaming.handleNewChat;
 
-const createNewThread = async (model?: string) => {
-  try {
-    const thread = await electronAPI.chat.threads.create({
-      title: 'New Chat',
-      model: model || null,
-      metadata: JSON.stringify({}),
-    });
-    currentThread.value = thread;
-    chat.messages.splice(0, chat.messages.length);
-    persistence.resetPersistedMessageIds();
-    editingUserMessageId.value = null;
-    resetToolUiStateMap();
-    streamController.resetTransientState();
-    showWelcome.value = false;
-
-    // Refresh sidebar to show new thread
-    if (sidebarRef.value?.refresh) {
-      await sidebarRef.value.refresh();
-    }
-    if (sidebarRef.value?.setCurrentThread) {
-      sidebarRef.value.setCurrentThread(thread.id);
-    }
-
-    return thread;
-  } catch (error) {
-    console.error('Failed to create thread:', error);
-    return null;
-  }
+const beginEditMessage = async (message: UIMessage) => {
+  const setDraft = async (text: string) => {
+    await chatInputRef.value?.setDraftMessage(text, { focus: true, select: true });
+  };
+  await streaming.beginEditMessage(message, setDraft);
 };
 
-// Load messages for a thread
-const loadThreadMessages = async (threadId: string) => {
-  try {
-    const dbMessages = await electronAPI.chat.messages.list(threadId);
-    persistence.resetPersistedMessageIds(
-      Array.isArray(dbMessages)
-        ? dbMessages
-            .map((message: any) => (message && typeof message.id === 'string' ? message.id : ''))
-            .filter((id: string) => id.length > 0)
-        : []
-    );
-
-    const chatMessages = dbMessages.map((message: any) => parseStoredUiMessage(message));
-    chat.messages.splice(0, chat.messages.length, ...(chatMessages as any[]));
-    editingUserMessageId.value = null;
-    resetToolUiStateMap();
-    streamController.resetTransientState();
-    scrollToBottom();
-  } catch (error) {
-    console.error('Failed to load thread messages:', error);
-  }
-};
-
-// Select a thread
-const selectThread = async (threadId: string) => {
-  try {
-    if (currentThread.value?.id === threadId) {
-      return;
-    }
-
-    await streamController.stopActiveStreamIfNeeded('switch-thread', threadId);
-
-    const thread = await electronAPI.chat.threads.get(threadId);
-    if (!thread) {
-      console.error('Thread not found:', threadId);
-      return;
-    }
-
-    currentThread.value = thread;
-    showWelcome.value = false;
-    await loadThreadMessages(threadId);
-
-    // Update sidebar current thread
-    if (sidebarRef.value?.setCurrentThread) {
-      sidebarRef.value.setCurrentThread(threadId);
-    }
-  } catch (error) {
-    console.error('Failed to select thread:', error);
-  }
-};
-
-const handleThreadDeleted = async (threadId: string) => {
-  if (currentThread.value?.id !== threadId) return;
-
-  await streamController.stopActiveStreamIfNeeded('delete-thread');
-  currentThread.value = null;
-  currentModel.value = '';
-  chat.messages.splice(0, chat.messages.length);
-  persistence.resetPersistedMessageIds();
-  editingUserMessageId.value = null;
-  resetToolUiStateMap();
-  streamController.resetTransientState();
-  showWelcome.value = true;
-
-  if (sidebarRef.value?.setCurrentThread) {
-    sidebarRef.value.setCurrentThread(null);
-  }
-};
-
-// Refresh threads list
-const refreshThreads = async () => {
-  if (sidebarRef.value?.refresh) {
-    await sidebarRef.value.refresh();
-  }
-};
-
-const updateThreadTitle = async (title: string) => {
-  if (!currentThread.value) return;
-  if (currentThread.value.title === title) return;
-
-  try {
-    await electronAPI.chat.threads.update(currentThread.value.id, { title });
-    if (currentThread.value) {
-      currentThread.value.title = title;
-    }
-    // Refresh sidebar to show updated title
-    await refreshThreads();
-  } catch (error) {
-    console.error('Failed to update thread title:', error);
-  }
-};
-
-const updateThreadTitleById = async (threadId: string, title: string) => {
-  if (!threadId || !title.trim()) return;
-
-  if (currentThread.value?.id === threadId) {
-    await updateThreadTitle(title);
-    return;
-  }
-
-  try {
-    await electronAPI.chat.threads.update(threadId, { title });
-    await refreshThreads();
-  } catch (error) {
-    console.error('Failed to update thread title by id:', error);
-  }
-};
-
-const getConversationContentForTitle = (messages: UIMessage[]): string => {
-  const lines: string[] = [];
-
-  for (const message of messages) {
-    const text = extractTextFromMessage(message).trim();
-    if (!text) continue;
-
-    const role =
-      message.role === 'assistant' ? 'Assistant' : message.role === 'system' ? 'System' : 'User';
-    lines.push(`${role}: ${text}`);
-  }
-
-  return lines.join('\n');
-};
-
-const getFallbackThreadTitle = (messages: UIMessage[]): string | null => {
-  const latestUserText = [...messages]
-    .reverse()
-    .filter(message => message.role === 'user')
-    .map(message => extractTextFromMessage(message).trim())
-    .find(text => text.length > 0);
-  const fallbackText = latestUserText || extractTextFromMessage(messages[0]).trim();
-  if (!fallbackText) return null;
-  return fallbackText.slice(0, 50) + (fallbackText.length > 50 ? '...' : '');
-};
-
-const shouldRegenerateThreadTitle = (messages: UIMessage[], currentTitle: string): boolean => {
-  const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
-  if (assistantMessageCount === 0) return false;
-  if (currentTitle === 'New Chat') return true;
-  return assistantMessageCount % TITLE_REGEN_INTERVAL === 0;
-};
-
-// Generate thread title using full conversation context
-const generateThreadTitle = async (messages: UIMessage[]): Promise<string | null> => {
-  try {
-    const conversationContent = getConversationContentForTitle(messages);
-    if (!conversationContent.trim()) {
-      return getFallbackThreadTitle(messages);
-    }
-
-    const title = await electronAPI.toolModel.generateTitle(conversationContent);
-    return title || getFallbackThreadTitle(messages);
-  } catch (error) {
-    console.error('Failed to generate thread title with agent:', error);
-    return getFallbackThreadTitle(messages);
-  }
-};
-
-const handleNewChat = async () => {
-  await streamController.stopActiveStreamIfNeeded('new-chat');
-  await createNewThread(currentModel.value);
-};
-
-const handleModelSelected = (data: { provider: any; model: string }) => {
-  currentModel.value = data.model;
-  // Update thread model if thread exists
-  if (currentThread.value) {
-    electronAPI.chat.threads.update(currentThread.value.id, { model: data.model });
-  }
-};
-
-const handleMessageSent = async (
-  content: string,
-  model?: string,
-  tools?: string[],
-  onReady?: () => void
-) => {
-  try {
-    const pendingEditMessageId = editingUserMessageId.value;
-
-    // Create thread if it doesn't exist
-    if (!currentThread.value) {
-      const thread = await createNewThread(model || currentModel.value);
-      if (!thread) {
-        console.error('Failed to create thread');
-        return;
-      }
-    }
-
-    if (!currentThread.value) {
-      console.error('No thread available');
-      return;
-    }
-
-    // Update thread model if provided
-    if (model && currentThread.value.model !== model) {
-      await electronAPI.chat.threads.update(currentThread.value.id, { model });
-      currentThread.value.model = model;
-      currentModel.value = model;
-    }
-
-    // Store selected tools
-    if (tools) {
-      selectedTools.value = tools;
-    }
-
-    showWelcome.value = false;
-
-    if (pendingEditMessageId && currentThread.value) {
-      await streamController.stopActiveStreamIfNeeded('edit-resend');
-
-      const messageIndex = chat.messages.findIndex(
-        (message: any) => message && message.id === pendingEditMessageId
-      );
-
-      if (messageIndex >= 0) {
-        const currentUserMessage = chat.messages[messageIndex] as UIMessage;
-        const updatedUserMessage: UIMessage = {
-          ...currentUserMessage,
-          parts: upsertTextIntoMessageParts(currentUserMessage.parts, content),
-        };
-
-        chat.messages.splice(messageIndex, 1, updatedUserMessage as any);
-        await upsertUiMessage(updatedUserMessage, undefined, 'user-message-edit', currentThread.value.id);
-        await truncateConversationAfterIndex(messageIndex);
-
-        streamController.beginTurn({
-          threadId: currentThread.value.id,
-          parentId: updatedUserMessage.id,
-          tracePrefix: 'view',
-        });
-
-        editingUserMessageId.value = null;
-        scrollToBottom();
-        return;
-      }
-
-      editingUserMessageId.value = null;
-    }
-
-    const userMessage: UIMessage = {
-      id: createMessageId(),
-      role: 'user',
-      parts: [{ type: 'text', text: content, state: 'done' }],
-    };
-
-    chat.messages.push(userMessage as any);
-    const threadId = currentThread.value.id;
-    streamController.beginTurn({
-      threadId,
-      parentId: userMessage.id,
-      tracePrefix: 'view',
-    });
-    await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
-
-    scrollToBottom();
-  } finally {
-    onReady?.();
-  }
-};
-
-const handleTaskPush = async (payload: unknown) => {
-  if (!isObjectRecord(payload)) return;
-  if (payload.type !== 'task-result') return;
-  const threadId = typeof payload.threadId === 'string' ? payload.threadId : '';
-  if (!threadId) return;
-
-  // Keep sidebar ordering up to date even if user isn't viewing that thread.
-  void refreshThreads();
-
-  if (currentThread.value?.id !== threadId) return;
-
-  const message = payload.message;
-  if (!isObjectRecord(message) || !Array.isArray(message.parts)) {
-    await loadThreadMessages(threadId);
-    return;
-  }
-
-  const messageId = typeof message.id === 'string' ? message.id : '';
-  if (messageId && chat.messages.some((m: any) => m?.id === messageId)) return;
-
-  chat.messages.push(message as any);
-  scrollToBottom();
+const cancelEditing = async () => {
+  const clearDraft = async () => {
+    await chatInputRef.value?.setDraftMessage('', { focus: true });
+  };
+  await streaming.cancelEditing(clearDraft);
 };
 
 // Listen for model selection from ChatInput

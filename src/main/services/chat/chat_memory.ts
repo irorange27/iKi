@@ -158,12 +158,14 @@ export const createChatMemory = () => {
     if (!threadId) return messages;
     const memoryConfig = getMemoryConfig();
     if (!memoryConfig?.enabled) return messages;
+    const thread = chatThreadDb.getChatThread(threadId);
+    if (thread?.is_incognito) return messages;
 
     const lastMessage = messages[messages.length - 1];
     const query = getPromptFromMessage(lastMessage);
     if (!query.trim()) return messages;
 
-    const results = memoryDb.searchLongMemory(threadId, query, {
+    const results = memoryDb.searchLongMemoryAcrossThreads(query, {
       limit: memoryConfig.maxRetrievalCount,
       threshold: memoryConfig.similarThreshold,
     });

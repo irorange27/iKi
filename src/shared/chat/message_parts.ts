@@ -1,3 +1,7 @@
+import { isObjectRecord } from '../utils/guards';
+
+export { isObjectRecord };
+
 export type TextPart = {
   type: 'text';
   text: string;
@@ -106,9 +110,6 @@ export type ToolPart =
   | ToolApprovalResponsePart;
 
 export type UiMessagePart = TextPart | MemoryPart | ToolPart;
-
-export const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';

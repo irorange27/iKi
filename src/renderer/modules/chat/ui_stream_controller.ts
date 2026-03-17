@@ -1,7 +1,9 @@
 import type { UIMessage, UIMessageChunk } from 'ai';
 import { ref, type Ref } from 'vue';
 
+import { isObjectRecord } from '../../../shared/utils/guards';
 import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
+import type { ChatMessageStore } from './chat_message_store';
 import type { UiMessagePersistence } from './ui_message_persistence';
 import {
   createInitialStreamState,
@@ -28,9 +30,6 @@ type ElectronAPI = {
   };
 };
 
-const isObjectRecord = (value: unknown): value is Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
 const isMemoryRetrievalChunk = (
   chunk: Record<string, unknown>
 ): chunk is { type: 'memory-retrieval'; query?: unknown; results?: unknown } =>
@@ -39,7 +38,7 @@ const isMemoryRetrievalChunk = (
 export type ChatUiStreamController = ReturnType<typeof createChatUiStreamController>;
 
 export const createChatUiStreamController = (deps: {
-  chat: { messages: unknown[] };
+  messageStore: ChatMessageStore;
   electronAPI: ElectronAPI;
   persistence: UiMessagePersistence;
   createMessageId: () => string;
@@ -57,10 +56,8 @@ export const createChatUiStreamController = (deps: {
   const streamRenderChunkCount = ref(initialState.streamRenderChunkCount);
   const streamRenderChars = ref(initialState.streamRenderChars);
 
-  const getAssistantMessageById = (id: string | null): UIMessage | undefined => {
-    if (!id) return undefined;
-    return deps.chat.messages.find((message: any) => message.id === id) as UIMessage | undefined;
-  };
+  const getAssistantMessageById = (id: string | null): UIMessage | undefined =>
+    deps.messageStore.getById(id);
 
   const getOrCreateAssistantMessage = (): UIMessage => {
     const existing = getAssistantMessageById(activeAssistantMessageId.value);
@@ -72,7 +69,7 @@ export const createChatUiStreamController = (deps: {
       parts: [],
     };
 
-    deps.chat.messages.push(assistantMessage as any);
+    deps.messageStore.append(assistantMessage);
     activeAssistantMessageId.value = assistantMessage.id;
     return assistantMessage;
   };
@@ -108,24 +105,18 @@ export const createChatUiStreamController = (deps: {
     if (ops.length === 0) return;
     for (const op of ops) {
       if (op.type === 'append') {
-        deps.chat.messages.push(op.message as any);
+        deps.messageStore.append(op.message);
         continue;
       }
 
-      const index = deps.chat.messages.findIndex((message: any) => message.id === op.messageId);
+      const index = deps.messageStore.findIndexById(op.messageId);
       if (op.type === 'replace') {
-        if (index >= 0) {
-          deps.chat.messages.splice(index, 1, op.message as any);
-        } else {
-          deps.chat.messages.push(op.message as any);
-        }
+        deps.messageStore.replaceAt(index, op.message);
         continue;
       }
 
       if (op.type === 'remove') {
-        if (index >= 0) {
-          deps.chat.messages.splice(index, 1);
-        }
+        deps.messageStore.removeAt(index);
       }
     }
   };
@@ -157,7 +148,7 @@ export const createChatUiStreamController = (deps: {
       }
       if (effect.type === 'notify_persisted') {
         if (!effect.shouldNotify) continue;
-        const messagesSnapshot = [...(deps.chat.messages as UIMessage[])];
+        const messagesSnapshot = deps.messageStore.snapshot();
         await Promise.resolve(
           deps.onAssistantMessagePersisted?.({
             threadId: effect.threadId,
@@ -183,14 +174,7 @@ export const createChatUiStreamController = (deps: {
         };
         const patch = approvals.applyApprovalEvent(assistantMessage, approvalEvent);
         if (patch.didChange) {
-          const messageIndex = deps.chat.messages.findIndex(
-            (message: any) => message.id === patch.message.id
-          );
-          if (messageIndex >= 0) {
-            deps.chat.messages.splice(messageIndex, 1, patch.message as any);
-          } else {
-            deps.chat.messages.push(patch.message as any);
-          }
+          deps.messageStore.upsert(patch.message);
 
           const threadId = activeStreamThreadId.value || deps.getCurrentThreadId() || '';
           if (threadId) {
@@ -215,7 +199,7 @@ export const createChatUiStreamController = (deps: {
   const dispatch = async (action: StreamAction) => {
     const state = getStateFromRefs();
     const context = {
-      messages: deps.chat.messages as UIMessage[],
+      messages: deps.messageStore.messages,
       createMessageId: deps.createMessageId,
       currentThreadId: deps.getCurrentThreadId(),
       nowMs: Date.now(),
@@ -335,11 +319,9 @@ export const createChatUiStreamController = (deps: {
       activeAssistantMessageId.value = message.id;
     }
     if (!activeAssistantParentId.value && message?.id) {
-      const messageIndex = deps.chat.messages.findIndex((m: any) => m && m.id === message.id);
+      const messageIndex = deps.messageStore.findIndexById(message.id);
       if (messageIndex >= 0) {
-        const parent = [...deps.chat.messages.slice(0, messageIndex)]
-          .reverse()
-          .find((m: any) => m && m.role === 'user' && typeof m.id === 'string');
+        const parent = deps.messageStore.findLatestUserBefore(messageIndex);
         if (isObjectRecord(parent) && typeof parent.id === 'string') {
           activeAssistantParentId.value = parent.id;
         }
@@ -377,14 +359,7 @@ export const createChatUiStreamController = (deps: {
 
       const patch = approvals.applyApprovalEvent(message, event);
       if (patch.didChange) {
-        const messageIndex = deps.chat.messages.findIndex(
-          (m: any) => m && m.id === patch.message.id
-        );
-        if (messageIndex >= 0) {
-          deps.chat.messages.splice(messageIndex, 1, patch.message as any);
-        } else {
-          deps.chat.messages.push(patch.message as any);
-        }
+        deps.messageStore.upsert(patch.message);
 
         const threadId = activeStreamThreadId.value || deps.getCurrentThreadId() || '';
         if (threadId) {

@@ -304,23 +304,23 @@ export const updateLongMemory = (id: string, updates: Partial<LongMemoryEntry>) 
   return stmt.run(params);
 };
 
-export const searchLongMemory = (
-  threadId: string,
+type LongMemorySearchOptions = {
+  limit?: number;
+  threshold?: number;
+  force?: boolean;
+  includeIncognito?: boolean;
+};
+
+const scoreLongMemoryRows = (
+  rows: LongMemoryEntry[],
   query: string,
-  options?: { limit?: number; threshold?: number; force?: boolean }
+  options?: Pick<LongMemorySearchOptions, 'limit' | 'threshold'>
 ): LongMemorySearchResult[] => {
-  if (!threadId || !query.trim()) return [];
-  if (!isMemoryEnabled() && !options?.force) return [];
-
-  const rows = getDb()
-    .prepare('SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC')
-    .all(threadId) as LongMemoryEntry[];
-
   const queryEmbedding = textToEmbedding(query);
   const threshold = options?.threshold ?? 0.1;
   const limit = options?.limit ?? 5;
 
-  const scored = rows
+  return rows
     .map(row => {
       const embedding = parseEmbedding(row.embedding);
       const score = cosineSimilarity(queryEmbedding, embedding);
@@ -329,6 +329,42 @@ export const searchLongMemory = (
     .filter(row => row.score >= threshold)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
+};
 
-  return scored;
+export const searchLongMemory = (
+  threadId: string,
+  query: string,
+  options?: LongMemorySearchOptions
+): LongMemorySearchResult[] => {
+  if (!threadId || !query.trim()) return [];
+  if (!isMemoryEnabled() && !options?.force) return [];
+
+  const rows = getDb()
+    .prepare('SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC')
+    .all(threadId) as LongMemoryEntry[];
+
+  return scoreLongMemoryRows(rows, query, options);
+};
+
+export const searchLongMemoryAcrossThreads = (
+  query: string,
+  options?: LongMemorySearchOptions
+): LongMemorySearchResult[] => {
+  if (!query.trim()) return [];
+  if (!isMemoryEnabled() && !options?.force) return [];
+
+  const includeIncognito = Boolean(options?.includeIncognito);
+  const rows = getDb()
+    .prepare(
+      `
+      SELECT memory_long.*
+      FROM memory_long
+      INNER JOIN chat_threads ON chat_threads.id = memory_long.thread_id
+      ${includeIncognito ? '' : 'WHERE chat_threads.is_incognito = 0'}
+      ORDER BY memory_long.updated_at DESC
+    `
+    )
+    .all() as LongMemoryEntry[];
+
+  return scoreLongMemoryRows(rows, query, options);
 };

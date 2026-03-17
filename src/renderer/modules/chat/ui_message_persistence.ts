@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import type { ChatMessageStore } from './chat_message_store';
 
 type ElectronAPI = {
   chat: {
@@ -122,10 +123,12 @@ export const createUiMessagePersistence = (deps: { electronAPI: ElectronAPI }) =
   };
 
   const truncateConversationAfterIndex = async (params: {
-    chat: { messages: unknown[] };
+    messageStore: ChatMessageStore;
     messageIndex: number;
   }): Promise<void> => {
-    const messagesToDelete = params.chat.messages.slice(params.messageIndex + 1) as unknown as UIMessage[];
+    const messagesToDelete = params.messageStore.messages.slice(
+      params.messageIndex + 1
+    ) as UIMessage[];
     if (!messagesToDelete.length) return;
 
     const idsToDelete = messagesToDelete
@@ -133,7 +136,7 @@ export const createUiMessagePersistence = (deps: { electronAPI: ElectronAPI }) =
       .filter(id => id.length > 0);
 
     if (idsToDelete.length === 0) {
-      params.chat.messages.splice(params.messageIndex + 1, params.chat.messages.length);
+      params.messageStore.truncateAfterIndex(params.messageIndex);
       return;
     }
 
@@ -144,7 +147,7 @@ export const createUiMessagePersistence = (deps: { electronAPI: ElectronAPI }) =
       await Promise.allSettled(inFlight);
     }
 
-    params.chat.messages.splice(params.messageIndex + 1, params.chat.messages.length);
+    params.messageStore.truncateAfterIndex(params.messageIndex);
 
     for (const id of idsToDelete) {
       persistedMessageIds.delete(id);
@@ -160,4 +163,3 @@ export const createUiMessagePersistence = (deps: { electronAPI: ElectronAPI }) =
     upsertUiMessage,
   };
 };
-

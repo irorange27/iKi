@@ -17,6 +17,7 @@ import type {
   ToolStreamEvent,
   UiChunkEmitter,
 } from './chat_types';
+export { parseStoredUiMessageRow } from '../../../shared/chat/ui_message_codec';
 
 const createRuntimeId = (prefix: string) =>
   `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -158,45 +159,6 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
   } catch {
     return raw;
   }
-};
-
-const normalizeUiRole = (value: unknown): 'system' | 'user' | 'assistant' => {
-  if (value === 'system' || value === 'user' || value === 'assistant') return value;
-  return 'user';
-};
-
-export const parseStoredUiMessageRow = (row: { id: string; message: string }): ChatUiMessage => {
-  try {
-    const parsed = JSON.parse(row.message);
-    if (isObjectRecord(parsed)) {
-      if (Array.isArray(parsed.parts)) {
-        const parts = parsed.parts.filter(
-          part => isObjectRecord(part) && typeof part.type === 'string'
-        ) as ChatUiMessage['parts'];
-        return {
-          id: row.id,
-          role: normalizeUiRole(parsed.role),
-          parts: parts.length > 0 ? parts : ([{ type: 'text', text: '' }] as any),
-        };
-      }
-
-      if (typeof parsed.content === 'string') {
-        return {
-          id: row.id,
-          role: normalizeUiRole(parsed.role),
-          parts: [{ type: 'text', text: parsed.content }] as any,
-        };
-      }
-    }
-  } catch {
-    // fall through
-  }
-
-  return {
-    id: row.id,
-    role: 'user',
-    parts: [{ type: 'text', text: row.message }] as any,
-  };
 };
 
 const toUiChunkFromToolEvent = (event: ToolStreamEvent): UIMessageChunk | null => {
