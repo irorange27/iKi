@@ -187,10 +187,11 @@ Note:
 - Approvals are recommended via WebSocket using type "approve-tool" or via HTTP with connection_id.
 
 ## Tool Policy
-- If tools is omitted: auto mode, allow only low-risk tools (web, fetch).
+- If tools is omitted: auto mode. Only low-risk tools (web, fetch) are eligible, and a router
+  picks the minimal subset for the request.
 - tools: [] explicitly disables tools.
 - tools: ["read_file","shell"] is manual mode.
-- Effective tools = requested tools (or auto allowlist) intersect client.allowed_tools.
+- Effective tools = requested tools (or auto-selected safe tools) intersect client.allowed_tools.
 - Approval still follows each tool's needsApproval rule.
 
 ## Data Model Changes (Minimal)
