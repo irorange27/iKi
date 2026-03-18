@@ -1,8 +1,10 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import { buildSkillsSystemPrompt, listSkills, normalizeSkillIds } from '../../../core/skills';
+import { getToolModel } from '../../../core/provider/tool_model';
 import { selectSkillsWithAgent } from '../../../core/provider/skill_selection';
 import type { ChatInputMessage } from './chat_types';
 import { toLlmChatMessages } from './chat_ui';
+import { getAutoPinnedSkillIds, recordAutoSkillSelection } from '../workflow/workflow_optimizer';
 
 export const resolveSkillsSystemPrompt = async (params: {
   inputMessages: ChatInputMessage[];
@@ -14,6 +16,7 @@ export const resolveSkillsSystemPrompt = async (params: {
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
 
   let pinnedSkillIds: string[] = [];
+  let autoPinnedSkillIds: string[] = [];
   if (normalizedThreadId) {
     try {
       const thread = chatThreadDb.getChatThread(normalizedThreadId);
@@ -23,6 +26,8 @@ export const resolveSkillsSystemPrompt = async (params: {
     } catch (error) {
       console.warn('[Main] Failed to resolve skill_ids from thread:', error);
     }
+
+    autoPinnedSkillIds = getAutoPinnedSkillIds(normalizedThreadId);
   }
 
   let normalizedSkillIds = normalizeSkillIds(params.skillIds);
@@ -52,17 +57,30 @@ export const resolveSkillsSystemPrompt = async (params: {
       source: skill.source,
     }));
 
-    const autoSelectedSkillIds = await selectSkillsWithAgent({
-      messages: toLlmChatMessages(params.inputMessages),
-      availableSkills: availableSkillCatalog,
-    });
+    const toolModel = getToolModel();
+    const autoSelectedSkillIds =
+      toolModel && availableSkillCatalog.length > 0
+        ? await selectSkillsWithAgent({
+            messages: toLlmChatMessages(params.inputMessages),
+            availableSkills: availableSkillCatalog,
+          })
+        : [];
 
     if (autoSelectedSkillIds.length > 0) {
       console.log('[Main] Auto-selected skills:', autoSelectedSkillIds);
     }
 
+    if (normalizedThreadId && toolModel && availableSkillCatalog.length > 0) {
+      recordAutoSkillSelection({
+        threadId: normalizedThreadId,
+        availableSkillIds: availableSkillCatalog.map(skill => skill.id),
+        selectedSkillIds: autoSelectedSkillIds,
+      });
+    }
+
     const union = new Set<string>();
     for (const id of pinnedSkillIds) union.add(id);
+    for (const id of autoPinnedSkillIds) union.add(id);
     for (const id of autoSelectedSkillIds) union.add(id);
     normalizedSkillIds = Array.from(union);
   }
@@ -72,4 +90,3 @@ export const resolveSkillsSystemPrompt = async (params: {
 
   return { skillsSystemPrompt };
 };
-

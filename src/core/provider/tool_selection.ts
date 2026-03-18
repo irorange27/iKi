@@ -4,54 +4,50 @@ import {
   tryParseJson,
   type SelectionMessage,
 } from './catalog_selection';
+import { getToolModel } from './tool_model';
 
 export type ToolSelectionMessage = SelectionMessage;
 
 export type ToolCatalogItem = {
   name: string;
-  description: string;
+  description?: string;
 };
 
 const MAX_INPUT_CHARS = 4500;
 const MAX_MESSAGES = 16;
-const MAX_OUTPUT_TOKENS = 220;
+const MAX_OUTPUT_TOKENS = 240;
+const MAX_TOOLS_SELECTED = 4;
+const MAX_CATALOG_ITEMS = 40;
 
 const SYSTEM_PROMPT =
   'You are a tool router for an AI assistant.\n' +
-  'Your job: pick the minimal set of tools that may be needed to correctly complete the user request.\n' +
+  'Your job: pick the minimal set of tools that would materially improve the next response.\n' +
   'Rules:\n' +
   '- Output ONLY valid JSON.\n' +
   '- Prefer using NO tools when possible.\n' +
   '- Return a JSON array of tool names. Example: ["web","fetch"].\n' +
   '- If no tool is needed, return [].\n' +
   '- Never invent tool names not present in the catalog.\n' +
-  '- Only include high-risk tools (shell, write_file, delete_file) when explicitly needed by the request.\n';
+  `- Choose at most ${MAX_TOOLS_SELECTED} tools.\n`;
 
-const normalizeToolName = (
-  toolName: string,
-  canonicalByLower: Map<string, string>
-): string | null => {
-  const trimmed = toolName.trim();
+const normalizeToolName = (value: string, canonicalByLower: Map<string, string>): string | null => {
+  const trimmed = value.trim();
   if (!trimmed) return null;
   return canonicalByLower.get(trimmed.toLowerCase()) ?? null;
 };
 
-const parseToolNames = (
-  raw: string,
-  availableTools: ToolCatalogItem[]
-): string[] => {
+const parseToolNames = (raw: string, availableTools: ToolCatalogItem[]): string[] => {
   const parsed = tryParseJson(raw);
   if (!parsed) return [];
 
   const canonicalByLower = new Map<string, string>();
-  for (const t of availableTools) {
-    canonicalByLower.set(t.name.toLowerCase(), t.name);
+  for (const tool of availableTools) {
+    canonicalByLower.set(tool.name.toLowerCase(), tool.name);
   }
 
   const fromArray = (values: unknown[]): string[] => {
     const selected: string[] = [];
     const seen = new Set<string>();
-
     for (const value of values) {
       if (typeof value !== 'string') continue;
       const normalized = normalizeToolName(value, canonicalByLower);
@@ -59,8 +55,8 @@ const parseToolNames = (
       if (seen.has(normalized)) continue;
       seen.add(normalized);
       selected.push(normalized);
+      if (selected.length >= MAX_TOOLS_SELECTED) break;
     }
-
     return selected;
   };
 
@@ -69,9 +65,14 @@ const parseToolNames = (
   }
 
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    const toolsValue = (parsed as { tools?: unknown }).tools;
+    const toolsValue = (parsed as { tools?: unknown; toolNames?: unknown }).tools;
+    const toolNamesValue = (parsed as { tools?: unknown; toolNames?: unknown }).toolNames;
+
     if (Array.isArray(toolsValue)) {
       return fromArray(toolsValue);
+    }
+    if (Array.isArray(toolNamesValue)) {
+      return fromArray(toolNamesValue);
     }
   }
 
@@ -80,14 +81,21 @@ const parseToolNames = (
 
 const buildToolCatalogText = (tools: ToolCatalogItem[]) => {
   if (!tools.length) return '';
-  const lines = tools.map(tool => `- ${tool.name}: ${normalizeWhitespace(tool.description || '')}`);
+  const sliced = tools.slice(0, MAX_CATALOG_ITEMS);
+  const lines = sliced.map(tool => {
+    const desc = normalizeWhitespace(tool.description || '');
+    return `- ${tool.name}${desc ? `: ${desc}` : ''}`;
+  });
   return lines.join('\n');
 };
 
 export const selectToolsWithAgent = async (params: {
   messages: ToolSelectionMessage[];
   availableTools: ToolCatalogItem[];
-}): Promise<string[]> => {
+}): Promise<string[] | null> => {
+  const toolModel = getToolModel();
+  if (!toolModel) return null;
+
   return selectCatalogWithAgent({
     messages: params.messages,
     availableCatalog: params.availableTools,

@@ -1,6 +1,12 @@
 import { getAppConfig } from '../../../core/config';
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import * as emotionDb from '../../../core/db/emotion';
 import * as memoryDb from '../../../core/db/memory';
+import {
+  buildAffectSystemMessage,
+  collectEmotionSamples,
+  computeAffectState,
+} from '../../../core/emotion/affect_state';
 import { generateLongMemorySummary } from '../../../core/memory/auto_summarize';
 import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import { getErrorMessage } from '../../utils/errors';
@@ -37,10 +43,16 @@ const buildMemorySystemMessage = (
 
 export const createChatMemory = () => {
   const memorySummarizeInFlight = new Set<string>();
+  const emotionInFlight = new Set<string>();
 
   const getMemoryConfig = () => {
     const appConfig = getAppConfig();
     return appConfig?.memory || null;
+  };
+
+  const getEmotionConfig = () => {
+    const memoryConfig = getMemoryConfig();
+    return memoryConfig?.emotion || null;
   };
 
   const shouldAutoSummarizeThread = (threadId: string): boolean => {
@@ -66,6 +78,32 @@ export const createChatMemory = () => {
       }
     }
     return false;
+  };
+
+  const canStoreShortMemory = () => {
+    const memoryConfig = getMemoryConfig();
+    return Boolean(memoryConfig?.enabled || memoryConfig?.autoSummarize);
+  };
+
+  const getAffectContextMessage = (threadId: string): string => {
+    const emotionConfig = getEmotionConfig();
+    if (!emotionConfig?.enabled || !emotionConfig.injectToSystemPrompt) return '';
+    const fetchLimit = Math.max(
+      10,
+      Math.floor(emotionConfig.windowSize || 0) * 3,
+      Math.floor(emotionConfig.minSampleCount || 0)
+    );
+
+    const events = emotionDb.listEmotionEvents(threadId, fetchLimit);
+    let affectState = computeAffectState(collectEmotionSamples(events), emotionConfig);
+
+    if (!affectState && canStoreShortMemory()) {
+      const shortEntries = memoryDb.listShortMemory(threadId, fetchLimit);
+      affectState = computeAffectState(collectEmotionSamples(shortEntries), emotionConfig);
+    }
+
+    if (!affectState) return '';
+    return buildAffectSystemMessage(affectState);
   };
 
   const maybeAutoSummarizeLongMemory = async (
@@ -118,8 +156,11 @@ export const createChatMemory = () => {
   };
 
   const queueEmotionAnalysis = (params: { threadId: string; messageId: string; messageJson: string }) => {
-    const memoryConfig = getMemoryConfig();
-    if (!memoryConfig?.enabled) return;
+    const emotionConfig = getEmotionConfig();
+    if (!emotionConfig?.enabled) return;
+    const thread = chatThreadDb.getChatThread(params.threadId);
+    if (thread?.is_incognito) return;
+    if (emotionInFlight.has(params.messageId)) return;
 
     const extracted = memoryDb.extractTextFromMessageJson(params.messageJson);
     if (!extracted || extracted.role !== 'user') return;
@@ -127,22 +168,41 @@ export const createChatMemory = () => {
     const content = extracted.content.trim();
     if (!content) return;
 
+    emotionInFlight.add(params.messageId);
     void (async () => {
       try {
         const emotion = await analyzeEmotionWithAgent(content);
         if (!emotion) return;
-        memoryDb.addShortMemory({
+
+        emotionDb.addEmotionEvent({
           thread_id: params.threadId,
           message_id: params.messageId,
           role: extracted.role,
-          content: extracted.content,
           emotion,
         });
+        emotionDb.pruneEmotionEvents(params.threadId);
+
+        if (canStoreShortMemory()) {
+          const memoryConfig = getMemoryConfig();
+          const forceShortMemory = Boolean(memoryConfig?.autoSummarize);
+          memoryDb.addShortMemory(
+            {
+              thread_id: params.threadId,
+              message_id: params.messageId,
+              role: extracted.role,
+              content: extracted.content,
+              emotion,
+            },
+            forceShortMemory ? { force: true } : undefined
+          );
+        }
       } catch (error) {
         console.warn(
           `[Emotion][Main] analysis failed message=${params.messageId}:`,
           getErrorMessage(error)
         );
+      } finally {
+        emotionInFlight.delete(params.messageId);
       }
     })();
   };
@@ -156,42 +216,49 @@ export const createChatMemory = () => {
   ): ChatInputMessage[] => {
     if (!threadId) return messages;
     const memoryConfig = getMemoryConfig();
-    if (!memoryConfig?.enabled) return messages;
     const thread = chatThreadDb.getChatThread(threadId);
     if (thread?.is_incognito) return messages;
 
-    const lastMessage = messages[messages.length - 1];
-    const query = getPromptFromMessage(lastMessage);
-    if (!query.trim()) return messages;
+    const systemMessages: ChatInputMessage[] = [];
+    if (memoryConfig?.enabled) {
+      const lastMessage = messages[messages.length - 1];
+      const query = getPromptFromMessage(lastMessage);
+      if (query.trim()) {
+        const results = memoryDb.searchLongMemoryAcrossThreads(query, {
+          limit: memoryConfig.maxRetrievalCount,
+          threshold: memoryConfig.similarThreshold,
+        });
 
-    const results = memoryDb.searchLongMemoryAcrossThreads(query, {
-      limit: memoryConfig.maxRetrievalCount,
-      threshold: memoryConfig.similarThreshold,
-    });
+        if (options?.onRetrieved) {
+          const preview: MemoryPreview[] = results.map(entry => ({
+            id: entry.id,
+            summary: entry.summary,
+            score: entry.score,
+            updated_at: entry.updated_at,
+            tags: entry.tags,
+          }));
+          options.onRetrieved({ query, results: preview });
+        }
 
-    if (options?.onRetrieved) {
-      const preview: MemoryPreview[] = results.map(entry => ({
-        id: entry.id,
-        summary: entry.summary,
-        score: entry.score,
-        updated_at: entry.updated_at,
-        tags: entry.tags,
-      }));
-      options.onRetrieved({ query, results: preview });
+        if (results.length) {
+          const systemContent = buildMemorySystemMessage(results);
+          if (systemContent.trim()) {
+            systemMessages.push({ role: 'system', content: systemContent });
+          }
+        }
+      }
     }
 
-    if (!results.length) return messages;
-    const systemContent = buildMemorySystemMessage(results);
-    if (!systemContent.trim()) return messages;
+    const affectContent = getAffectContextMessage(threadId);
+    if (affectContent.trim()) {
+      systemMessages.push({ role: 'system', content: affectContent });
+    }
+
+    if (!systemMessages.length) return messages;
 
     const insertIndex = messages.findIndex(message => message.role !== 'system');
     const headIndex = insertIndex === -1 ? messages.length : insertIndex;
-    const memoryMessage: ChatInputMessage = {
-      role: 'system',
-      content: systemContent,
-    };
-
-    return [...messages.slice(0, headIndex), memoryMessage, ...messages.slice(headIndex)];
+    return [...messages.slice(0, headIndex), ...systemMessages, ...messages.slice(headIndex)];
   };
 
   const onMessagePersisted = (params: { threadId: string; messageId: string; messageJson: string }) => {

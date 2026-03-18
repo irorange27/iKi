@@ -52,11 +52,7 @@
             @click="selectProvider(cp.id)"
           >
             <span class="provider-icon">
-              <LobeIcon
-                :name="cp.icon || 'custom'"
-                :size="20"
-                :useCdn="cp.icon ? cp.icon !== 'custom' : false"
-              />
+              <LobeIcon v-bind="getCustomIconProps(cp.icon)" :size="20" />
             </span>
             <div class="provider-item-main">
               <span class="provider-item-name">{{ cp.name }}</span>
@@ -296,6 +292,15 @@ const getProviderIconName = (providerId: string): string => {
     azure: 'azure',
   };
   return iconMap[providerId] || providerId;
+};
+
+const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
+
+const getCustomIconProps = (icon?: string) => {
+  if (!icon || icon === 'custom') {
+    return { name: 'grid-2x2', cdnPrefix: CUSTOM_ICON_CDN, useCdn: true };
+  }
+  return { name: icon, useCdn: true };
 };
 
 const fetchLatestModels = async () => {

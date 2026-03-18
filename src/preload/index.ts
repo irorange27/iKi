@@ -39,6 +39,7 @@ type LongMemoryInput = {
   tags?: string[];
   metadata?: unknown;
 };
+type LongMemoryUpdateInput = Partial<Omit<LongMemoryInput, 'thread_id'>>;
 type ProactiveTaskInput = Partial<ProactiveTask> &
   Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model' | 'interval_minutes'>;
 
@@ -170,6 +171,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     long: {
       add: (entry: LongMemoryInput) => ipcRenderer.invoke('memory:long:add', entry),
+      update: (id: string, updates: LongMemoryUpdateInput) =>
+        ipcRenderer.invoke('memory:long:update', id, updates),
+      delete: (id: string) => ipcRenderer.invoke('memory:long:delete', id),
       list: (threadId: string, limit?: number) =>
         ipcRenderer.invoke('memory:long:list', threadId, limit),
       listAll: (limit?: number) => ipcRenderer.invoke('memory:long:listAll', limit),

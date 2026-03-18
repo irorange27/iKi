@@ -1,3 +1,5 @@
+import type { WorkflowOptimizationConfig } from './workflow';
+
 export interface AppConfig {
   general: {
     language: string | 'zh' | 'en';
@@ -50,6 +52,16 @@ export interface AppConfig {
     autoSummarize: boolean;
     maxRetrievalCount: number;
     similarThreshold: number;
+    emotion: {
+      enabled: boolean;
+      injectToSystemPrompt: boolean;
+      minConfidence: number;
+      minSampleCount: number;
+      windowSize: number;
+      halfLifeMinutes: number;
+      maxAgeMinutes: number;
+      includeNeutral: boolean;
+    };
   };
   speech: {
     enabled: boolean;
@@ -69,6 +81,7 @@ export interface AppConfig {
     shellApprovalMode: 'high-risk' | 'always' | 'never';
     shellHighRiskPatterns: string[];
   };
+  workflowOptimization: WorkflowOptimizationConfig;
   agent: {
     enabled: boolean;
     systemPrompt: string;

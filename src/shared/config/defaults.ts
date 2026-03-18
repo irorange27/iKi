@@ -50,6 +50,16 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     autoSummarize: false,
     maxRetrievalCount: 5,
     similarThreshold: 0.1,
+    emotion: {
+      enabled: false,
+      injectToSystemPrompt: true,
+      minConfidence: 0.45,
+      minSampleCount: 2,
+      windowSize: 8,
+      halfLifeMinutes: 60,
+      maxAgeMinutes: 180,
+      includeNeutral: false,
+    },
   },
   speech: {
     enabled: false,
@@ -68,6 +78,15 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   toolExecution: {
     shellApprovalMode: 'high-risk',
     shellHighRiskPatterns: [],
+  },
+  workflowOptimization: {
+    enabled: true,
+    autoPinSkills: true,
+    minAutoSkillRuns: 6,
+    minSkillSelections: 3,
+    pinConfidence: 0.6,
+    unpinConfidence: 0.4,
+    maxPinnedSkills: 4,
   },
   agent: {
     enabled: false,
@@ -125,6 +144,10 @@ export const mergeAppConfigWithBase = (
     memory: {
       ...base.memory,
       ...(rawConfig.memory ?? {}),
+      emotion: {
+        ...base.memory.emotion,
+        ...((rawConfig.memory ?? {}).emotion ?? {}),
+      },
     },
     speech: {
       ...base.speech,
@@ -137,6 +160,10 @@ export const mergeAppConfigWithBase = (
     toolExecution: {
       ...base.toolExecution,
       ...(rawConfig.toolExecution ?? {}),
+    },
+    workflowOptimization: {
+      ...base.workflowOptimization,
+      ...(rawConfig.workflowOptimization ?? {}),
     },
     agent: {
       ...base.agent,

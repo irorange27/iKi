@@ -3,6 +3,8 @@ import { DEFAULT_APP_CONFIG } from './defaults';
 
 const booleanField = (value: boolean) => z.boolean().catch(value);
 const numberField = (value: number) => z.number().finite().catch(value);
+const intField = (value: number) => z.number().int().nonnegative().catch(value);
+const ratioField = (value: number) => z.number().min(0).max(1).catch(value);
 const stringField = (value: string) => z.string().catch(value);
 const stringArrayField = (value: string[]) => z.array(z.string()).catch(value);
 
@@ -92,6 +94,20 @@ const MemorySchema = z
     autoSummarize: booleanField(DEFAULT_APP_CONFIG.memory.autoSummarize),
     maxRetrievalCount: numberField(DEFAULT_APP_CONFIG.memory.maxRetrievalCount),
     similarThreshold: numberField(DEFAULT_APP_CONFIG.memory.similarThreshold),
+    emotion: z
+      .object({
+        enabled: booleanField(DEFAULT_APP_CONFIG.memory.emotion.enabled),
+        injectToSystemPrompt: booleanField(
+          DEFAULT_APP_CONFIG.memory.emotion.injectToSystemPrompt
+        ),
+        minConfidence: numberField(DEFAULT_APP_CONFIG.memory.emotion.minConfidence),
+        minSampleCount: numberField(DEFAULT_APP_CONFIG.memory.emotion.minSampleCount),
+        windowSize: numberField(DEFAULT_APP_CONFIG.memory.emotion.windowSize),
+        halfLifeMinutes: numberField(DEFAULT_APP_CONFIG.memory.emotion.halfLifeMinutes),
+        maxAgeMinutes: numberField(DEFAULT_APP_CONFIG.memory.emotion.maxAgeMinutes),
+        includeNeutral: booleanField(DEFAULT_APP_CONFIG.memory.emotion.includeNeutral),
+      })
+      .catch(DEFAULT_APP_CONFIG.memory.emotion),
   })
   .catch(DEFAULT_APP_CONFIG.memory);
 
@@ -128,6 +144,18 @@ const ToolExecutionSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.toolExecution);
 
+const WorkflowOptimizationSchema = z
+  .object({
+    enabled: booleanField(DEFAULT_APP_CONFIG.workflowOptimization.enabled),
+    autoPinSkills: booleanField(DEFAULT_APP_CONFIG.workflowOptimization.autoPinSkills),
+    minAutoSkillRuns: intField(DEFAULT_APP_CONFIG.workflowOptimization.minAutoSkillRuns),
+    minSkillSelections: intField(DEFAULT_APP_CONFIG.workflowOptimization.minSkillSelections),
+    pinConfidence: ratioField(DEFAULT_APP_CONFIG.workflowOptimization.pinConfidence),
+    unpinConfidence: ratioField(DEFAULT_APP_CONFIG.workflowOptimization.unpinConfidence),
+    maxPinnedSkills: intField(DEFAULT_APP_CONFIG.workflowOptimization.maxPinnedSkills),
+  })
+  .catch(DEFAULT_APP_CONFIG.workflowOptimization);
+
 const AgentSchema = z
   .object({
     enabled: booleanField(DEFAULT_APP_CONFIG.agent.enabled),
@@ -154,6 +182,7 @@ export const AppConfigSchema = z
     speech: SpeechSchema,
     toolModel: ToolModelSchema,
     toolExecution: ToolExecutionSchema,
+    workflowOptimization: WorkflowOptimizationSchema,
     agent: AgentSchema,
   })
   .passthrough()
