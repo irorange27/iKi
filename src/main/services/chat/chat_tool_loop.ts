@@ -2,7 +2,6 @@ import type { ToolApprovalResponse } from 'ai';
 
 import type { SimpleAgent, AgentResult } from '../../../core/agent';
 import { getErrorMessage } from '../../utils/errors';
-import { shouldLogChunk } from './chat_constants';
 import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_types';
 
 export type RegisterApprovalBatch = (
@@ -16,7 +15,6 @@ export type ToolLoopStreamParams = {
   prompt: string;
   approvalResponses?: ToolApprovalResponse[];
   shouldCancel?: () => boolean;
-  debugLabel?: string;
   onToolEvent?: (event: ToolStreamEvent) => void;
   abortSignal?: AbortSignal;
   uiChunkEmitter?: UiChunkEmitter;
@@ -49,9 +47,6 @@ const streamToolLoop = async (params: ToolLoopStreamParams & { registerApprovalB
     params.abortSignal
   );
   let fullResponse = '';
-  let chunkCount = 0;
-  let chunkChars = 0;
-  const startedAt = Date.now();
   let cancelled = false;
   let next: IteratorResult<string, AgentResult> | null = null;
 
@@ -70,13 +65,6 @@ const streamToolLoop = async (params: ToolLoopStreamParams & { registerApprovalB
 
       const chunk = next.value;
       if (typeof chunk === 'string' && chunk) {
-        chunkCount += 1;
-        chunkChars += chunk.length;
-        if (params.debugLabel && shouldLogChunk(chunkCount)) {
-          console.log(
-            `[StreamDebug][Main][Agent][${params.debugLabel}] chunk#${chunkCount} len=${chunk.length} totalChars=${chunkChars}`
-          );
-        }
         fullResponse += chunk;
         params.uiChunkEmitter?.emitTextDelta(chunk);
       }
@@ -97,11 +85,6 @@ const streamToolLoop = async (params: ToolLoopStreamParams & { registerApprovalB
   }
 
   if (cancelled || !next) {
-    if (params.debugLabel) {
-      console.log(
-        `[StreamDebug][Main][Agent][${params.debugLabel}] cancelled chunkCount=${chunkCount} totalChars=${chunkChars} durationMs=${Date.now() - startedAt}`
-      );
-    }
     params.uiChunkEmitter?.abort();
     return { awaitingApproval: false, cancelled: true };
   }
@@ -124,11 +107,6 @@ const streamToolLoop = async (params: ToolLoopStreamParams & { registerApprovalB
     finalText = fullResponse;
   }
 
-  if (params.debugLabel) {
-    console.log(
-      `[StreamDebug][Main][Agent][${params.debugLabel}] done chunkCount=${chunkCount} totalChars=${chunkChars} finalTextLen=${(finalText || '').length} durationMs=${Date.now() - startedAt}`
-    );
-  }
   params.uiChunkEmitter?.finish();
   return { awaitingApproval: false };
 };

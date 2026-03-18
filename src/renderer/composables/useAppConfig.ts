@@ -66,7 +66,6 @@ export const useAppConfig = () => {
     saveTimer = setTimeout(async () => {
       try {
         await store.saveConfig();
-        console.log('✅ Config auto-saved');
       } catch (error) {
         console.error('❌ Auto-save failed:', error);
       }

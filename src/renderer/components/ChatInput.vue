@@ -187,7 +187,6 @@ const inputRef = ref<HTMLInputElement | null>(null);
 const message = ref('');
 const isLoading = ref(false);
 const isStopping = ref(false);
-const streamDebugRequestId = ref('');
 const selectedProvider = ref<any>(null);
 const selectedModel = ref('');
 const availableProviders = ref<any[]>([]);
@@ -294,9 +293,6 @@ const stopStreaming = async () => {
   if (!isLoading.value || isStopping.value) return;
 
   isStopping.value = true;
-  console.log(
-    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value || 'unknown'}] stopStreaming requested`
-  );
 
   try {
     const result = await window.electronAPI.chat.stopStream();
@@ -367,10 +363,6 @@ const sendMessage = async () => {
   message.value = '';
   isLoading.value = true;
   isStopping.value = false;
-  streamDebugRequestId.value = `req-${Date.now()}`;
-  console.log(
-    `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] sendMessage provider=${selectedProvider.value.type} model=${selectedModel.value} toolMode=${isAutoToolMode.value ? 'auto' : 'manual'} toolCount=${isAutoToolMode.value ? 0 : selectedTools.value.length} skillMode=${isAutoSkillMode.value ? 'auto' : 'manual'} skillCount=${isAutoSkillMode.value ? 0 : selectedSkillIds.value.length} promptLen=${userMessage.length}`
-  );
 
   // Emit message-sent and wait for ChatView to finish thread/message setup.
   await new Promise<void>(resolve => {
@@ -440,19 +432,8 @@ const sendMessage = async () => {
       throw new Error(streamResult?.error || 'Stream failed');
     }
 
-    if (streamResult?.awaitingApproval) {
-      console.log(
-        `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] awaitingApproval=true pause-for-user-approval`
-      );
-      isLoading.value = false;
-      isStopping.value = false;
-    } else {
-      isLoading.value = false;
-      isStopping.value = false;
-    }
-    console.log(
-      `[StreamDebug][Renderer][ChatInput][${streamDebugRequestId.value}] chat.stream resolved`
-    );
+    isLoading.value = false;
+    isStopping.value = false;
   } catch (error: any) {
     console.error('Failed to send message:', error);
     isLoading.value = false;

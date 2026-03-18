@@ -547,36 +547,27 @@ const selectProvider = (providerId: string) => {
 
 // Save provider configuration
 const saveProviderConfig = async () => {
-  console.log('saveProviderConfig called');
-  console.log('selectedProviderId:', selectedProviderId.value);
-  console.log('selectedProviderInfo:', selectedProviderInfo.value);
-  console.log('providerFormData:', providerFormData.value);
-
   if (!selectedProviderId.value || !selectedProviderInfo.value) {
-    console.log('Early return - missing required data');
     return;
   }
 
   const existingConfig = selectedProviderConfig.value;
-  console.log('existingConfig:', existingConfig);
 
   try {
     if (existingConfig) {
       // Update existing
-      console.log('Updating existing provider:', existingConfig.id);
       const modelsToSave =
         selectedModels.value[selectedProviderId.value!] || getSelectedModelsForProvider();
       const availableToSave =
         dynamicModels.value[selectedProviderId.value!] ||
         parseModelList(existingConfig.available_models);
-      const result = await (window as any).electronAPI.providers.update(existingConfig.id, {
+      await (window as any).electronAPI.providers.update(existingConfig.id, {
         api_key: providerFormData.value.api_key,
         base_url: providerFormData.value.base_url,
         enabled: true,
         models: JSON.stringify(modelsToSave),
         available_models: JSON.stringify(availableToSave),
       });
-      console.log('Update result:', result);
     } else {
       // Create new configuration for built-in provider
       const builtIn = selectedProviderInfo.value;
@@ -592,14 +583,11 @@ const saveProviderConfig = async () => {
         enabled: true,
         available_models: JSON.stringify(availableToSave),
       };
-      console.log('Adding new provider:', newProvider);
-      const result = await (window as any).electronAPI.providers.add(newProvider);
-      console.log('Add result:', result);
+      await (window as any).electronAPI.providers.add(newProvider);
     }
 
     showConfigForm.value = false;
     await loadProviders();
-    console.log('Providers reloaded, new list:', providers.value);
   } catch (error) {
     console.error('Error saving provider:', error);
   }

@@ -251,8 +251,6 @@ export const createChatApproval = (deps: {
   };
 
   const approveTool = async (webContents: ChatWebContents, approvalId: string, approved: boolean) => {
-    console.log(`[Main] Tool approval: ${approvalId}, approved: ${approved}`);
-
     let session = pendingApprovalSessions.get(approvalId);
     if (!session) {
       session = await tryRecoverApprovalSession(approvalId, webContents);
@@ -288,9 +286,6 @@ export const createChatApproval = (deps: {
     );
 
     if (waitingForApprovals.length > 0) {
-      console.log(
-        `[Main] Tool approval pending batch completion: resolved=${session.collectedApprovalResponses.size} total=${session.pendingApprovalIds.size} waiting=${waitingForApprovals.join(',')}`
-      );
       return {
         success: true,
         awaitingApproval: true,

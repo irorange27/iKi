@@ -207,15 +207,6 @@ export const recordAutoSkillSelection = (params: {
 
   upsertWorkflowProfile(normalizedThreadId, profile);
 
-  if (
-    prevPinned.length !== nextPinned.length ||
-    prevPinned.some((id, idx) => id !== nextPinned[idx])
-  ) {
-    console.log('[Workflow] Auto-pinned skills updated', {
-      threadId: normalizedThreadId,
-      pinnedSkills: nextPinned,
-    });
-  }
 };
 
 export const resetWorkflowOptimizationState = (): void => {

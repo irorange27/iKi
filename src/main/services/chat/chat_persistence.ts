@@ -48,9 +48,6 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
       typeof message.message === 'string'
         ? sanitizeUiMessageJsonForStorage(message.message)
         : JSON.stringify(message.message ?? {});
-    console.log(
-      `[ChatPersist][Main] create-request id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'} depth=${message.depth || 0}`
-    );
 
     try {
       chatMessageDb.addChatMessage({
@@ -98,9 +95,6 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     });
 
     const created = chatMessageDb.getChatMessage(messageId);
-    console.log(
-      `[ChatPersist][Main] create-success id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'}`
-    );
     return created;
   };
 

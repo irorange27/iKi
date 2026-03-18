@@ -32,8 +32,6 @@ import './assets/styles/index.css';
 // If you are encountering issues with type declarations for CSS imports,
 // you can create a `declaration.d.ts` file in your project with the following content:
 // declare module '*.css';
-
-console.log('👋 This message is being logged by "renderer.ts", included via Vite');
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';

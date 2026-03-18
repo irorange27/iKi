@@ -66,10 +66,6 @@ export const resolveSkillsSystemPrompt = async (params: {
           })
         : [];
 
-    if (autoSelectedSkillIds.length > 0) {
-      console.log('[Main] Auto-selected skills:', autoSelectedSkillIds);
-    }
-
     if (normalizedThreadId && toolModel && availableSkillCatalog.length > 0) {
       recordAutoSkillSelection({
         threadId: normalizedThreadId,

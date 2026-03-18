@@ -25,7 +25,6 @@ export const createMainWindow = (): BrowserWindow => {
   } else {
     const indexPath = getRendererProdHtmlPath();
     mainWindow.loadFile(indexPath);
-    console.log('Loaded index.html from file', indexPath);
   }
 
   if (!app.isPackaged) {

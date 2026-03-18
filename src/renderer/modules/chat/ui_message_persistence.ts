@@ -40,9 +40,6 @@ export const createUiMessagePersistence = (deps: { electronAPI: ElectronAPI }) =
     const persistKey = message.id;
     const inFlightPersist = messagePersistInFlight.get(persistKey);
     if (inFlightPersist) {
-      console.log(
-        `[ChatPersist][Renderer] waiting id=${persistKey} source=${source} parent=${params.parentId || 'null'}`
-      );
       await inFlightPersist;
     }
 
@@ -51,19 +48,12 @@ export const createUiMessagePersistence = (deps: { electronAPI: ElectronAPI }) =
       const metadata = JSON.stringify({ format: 'ai-ui-message-v1' });
 
       if (persistedMessageIds.has(message.id)) {
-        console.log(
-          `[ChatPersist][Renderer] update id=${message.id} source=${source} thread=${threadId}`
-        );
         await deps.electronAPI.chat.messages.update(message.id, {
           message: serializedMessage,
           metadata,
         });
         return;
       }
-
-      console.log(
-        `[ChatPersist][Renderer] create id=${message.id} source=${source} thread=${threadId} parent=${params.parentId || 'null'}`
-      );
 
       try {
         const savedMessage = await deps.electronAPI.chat.messages.create({
