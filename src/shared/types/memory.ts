@@ -26,3 +26,10 @@ export interface LongMemoryEntry {
 export interface LongMemorySearchResult extends LongMemoryEntry {
   score: number;
 }
+
+export interface AffectStateEntry {
+  thread_id: string;
+  state: string;
+  created_at: string;
+  updated_at: string;
+}

@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 
+import * as affectDb from '../../core/db/affect_state';
 import * as memoryDb from '../../core/db/memory';
 
 let memoryIpcRegistered = false;
@@ -34,4 +35,5 @@ export const registerMemoryIpc = (): void => {
   ipcMain.handle('memory:long:searchAll', (_event, query, options) =>
     memoryDb.searchLongMemoryAcrossThreads(query, options)
   );
+  ipcMain.handle('memory:affect:get', (_event, threadId) => affectDb.getAffectState(threadId));
 };

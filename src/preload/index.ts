@@ -4,8 +4,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { AppConfig } from '../shared/types/config';
 import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
-import type { LongMemorySearchResult } from '../shared/types/memory';
+import type { AffectStateEntry, LongMemorySearchResult } from '../shared/types/memory';
 import type { ProactiveTask } from '../shared/types/tasks';
+import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -14,8 +15,6 @@ import type {
   WhisperNodeDownloadResult,
   WhisperNodeModelInfo,
 } from '../shared/types/speech';
-
-console.log('👋 This message is being logged by "preload.ts", included via Vite');
 
 type ProviderInput = Partial<Provider> &
   Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
@@ -39,9 +38,8 @@ type LongMemoryInput = {
   tags?: string[];
   metadata?: unknown;
 };
-type LongMemoryUpdateInput = Partial<Omit<LongMemoryInput, 'thread_id'>>;
 type ProactiveTaskInput = Partial<ProactiveTask> &
-  Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model' | 'interval_minutes'>;
+  Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model'>;
 
 contextBridge.exposeInMainWorld('electronAPI', {
   config: {
@@ -110,6 +108,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
       delete: (id: string) => ipcRenderer.invoke('chat:messages:delete', id),
     },
   },
+  memory: {
+    short: {
+      list: (threadId: string, limit?: number) =>
+        ipcRenderer.invoke('memory:short:list', threadId, limit),
+      add: (entry: ShortMemoryInput) => ipcRenderer.invoke('memory:short:add', entry),
+      listAll: (limit?: number) => ipcRenderer.invoke('memory:short:listAll', limit),
+    },
+    long: {
+      add: (entry: LongMemoryInput) => ipcRenderer.invoke('memory:long:add', entry),
+      update: (id: string, updates: Partial<LongMemoryInput>) =>
+        ipcRenderer.invoke('memory:long:update', id, updates),
+      delete: (id: string) => ipcRenderer.invoke('memory:long:delete', id),
+      list: (threadId: string, limit?: number) =>
+        ipcRenderer.invoke('memory:long:list', threadId, limit),
+      listAll: (limit?: number) => ipcRenderer.invoke('memory:long:listAll', limit),
+      search: (threadId: string, query: string, options?: Record<string, unknown>) =>
+        ipcRenderer.invoke('memory:long:search', threadId, query, options),
+      searchAll: (query: string, options?: Record<string, unknown>) =>
+        ipcRenderer.invoke('memory:long:searchAll', query, options),
+    },
+    affect: {
+      get: (threadId: string): Promise<AffectStateEntry | null> =>
+        ipcRenderer.invoke('memory:affect:get', threadId),
+    },
+  },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),
     get: (id: string) => ipcRenderer.invoke('workspaces:get', id),
@@ -165,34 +188,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   workflow: {
     resetAutoPinnedSkills: () => ipcRenderer.invoke('workflow:reset-auto-skills'),
   },
-  memory: {
-    short: {
-      list: (threadId: string, limit?: number) =>
-        ipcRenderer.invoke('memory:short:list', threadId, limit),
-      listAll: (limit?: number) => ipcRenderer.invoke('memory:short:listAll', limit),
-      add: (entry: ShortMemoryInput) => ipcRenderer.invoke('memory:short:add', entry),
-    },
-    long: {
-      add: (entry: LongMemoryInput) => ipcRenderer.invoke('memory:long:add', entry),
-      update: (id: string, updates: LongMemoryUpdateInput) =>
-        ipcRenderer.invoke('memory:long:update', id, updates),
-      delete: (id: string) => ipcRenderer.invoke('memory:long:delete', id),
-      list: (threadId: string, limit?: number) =>
-        ipcRenderer.invoke('memory:long:list', threadId, limit),
-      listAll: (limit?: number) => ipcRenderer.invoke('memory:long:listAll', limit),
-      search: (
-        threadId: string,
-        query: string,
-        options?: { limit?: number; threshold?: number; force?: boolean }
-      ): Promise<LongMemorySearchResult[]> =>
-        ipcRenderer.invoke('memory:long:search', threadId, query, options),
-      searchAll: (
-        query: string,
-        options?: { limit?: number; threshold?: number; force?: boolean }
-      ): Promise<LongMemorySearchResult[]> =>
-        ipcRenderer.invoke('memory:long:searchAll', query, options),
-    },
-  },
   tasks: {
     list: () => ipcRenderer.invoke('tasks:list'),
     get: (id: string) => ipcRenderer.invoke('tasks:get', id),
@@ -207,6 +202,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('tasks:push');
     },
+  },
+  mcp: {
+    list: (): Promise<McpServerSummary[]> => ipcRenderer.invoke('mcp:list'),
+    add: (input: McpServerInput) => ipcRenderer.invoke('mcp:add', input),
+    update: (id: string, updates: Partial<McpServerInput>) =>
+      ipcRenderer.invoke('mcp:update', id, updates),
+    delete: (id: string) => ipcRenderer.invoke('mcp:delete', id),
+    connect: (id: string) => ipcRenderer.invoke('mcp:connect', id),
+    disconnect: (id: string) => ipcRenderer.invoke('mcp:disconnect', id),
+    refreshTools: (id: string) => ipcRenderer.invoke('mcp:refresh-tools', id),
   },
   openSettings: () => ipcRenderer.send('open-settings'),
   closeWindow: () => ipcRenderer.send('close-window'),

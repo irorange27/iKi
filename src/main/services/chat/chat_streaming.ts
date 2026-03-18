@@ -1,13 +1,17 @@
 import { SimpleAgent } from '../../../core/agent';
 import { getAppConfig } from '../../../core/config';
+import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import * as emotionDb from '../../../core/db/emotion';
 import * as memoryDb from '../../../core/db/memory';
 import {
+  type AffectState,
   buildAffectSystemMessage,
   collectEmotionSamples,
   computeAffectState,
+  rehydrateAffectState,
 } from '../../../core/emotion/affect_state';
+import { shouldGuardTools } from '../../../core/emotion/affect_policy';
 import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import * as llmFactory from '../../../core/provider/llm/factory';
 import * as deepseekProvider from '../../../core/provider/llm/deepseek';
@@ -73,32 +77,38 @@ export const createChatStreaming = (deps: {
     ];
   };
 
-  const buildRealtimeAffectMessage = async (
+  const buildRealtimeAffectContext = async (
     threadId: string | undefined,
     prompt: string
-  ): Promise<string> => {
+  ): Promise<{ message: string; state: AffectState | null }> => {
     const emotionConfig = getEmotionConfig();
     if (
       !emotionConfig?.enabled ||
       !emotionConfig.injectToSystemPrompt ||
       !emotionConfig.realtimeAnalysis
     ) {
-      return '';
+      return { message: '', state: null };
     }
 
     const content = prompt.trim();
-    if (!content) return '';
+    if (!content) return { message: '', state: null };
 
     const minSampleCount = Math.max(1, Math.floor(emotionConfig.minSampleCount || 1));
-    if (!threadId && minSampleCount > 1) return '';
+    if (!threadId && minSampleCount > 1) return { message: '', state: null };
 
     if (threadId) {
       const thread = chatThreadDb.getChatThread(threadId);
-      if (thread?.is_incognito) return '';
+      if (thread?.is_incognito) return { message: '', state: null };
     }
 
-    const emotion = await analyzeEmotionWithAgent(content);
-    if (!emotion) return '';
+    let emotion;
+    try {
+      emotion = await analyzeEmotionWithAgent(content);
+    } catch (error) {
+      console.warn('[Emotion][Main] realtime analysis failed:', error);
+      return { message: '', state: null };
+    }
+    if (!emotion) return { message: '', state: null };
 
     if (threadId) {
       deps.memory.recordRealtimeEmotion?.(threadId, content, emotion);
@@ -136,8 +146,60 @@ export const createChatStreaming = (deps: {
       );
     }
 
-    if (!affectState) return '';
-    return buildAffectSystemMessage(affectState);
+    if (!affectState) return { message: '', state: null };
+    return { message: buildAffectSystemMessage(affectState), state: affectState };
+  };
+
+  const getStoredAffectState = (threadId?: string): AffectState | null => {
+    if (!threadId) return null;
+    const emotionConfig = getEmotionConfig();
+    if (!emotionConfig?.enabled) return null;
+    const record = affectDb.getAffectState(threadId);
+    if (!record?.state) return null;
+    return rehydrateAffectState(record.state, { maxAgeMinutes: emotionConfig.maxAgeMinutes });
+  };
+
+  const getAffectStateForPolicy = (threadId?: string): AffectState | null => {
+    const emotionConfig = getEmotionConfig();
+    if (!emotionConfig?.enabled) return null;
+    if (threadId) {
+      const thread = chatThreadDb.getChatThread(threadId);
+      if (thread?.is_incognito) return null;
+      const computed = deps.memory.getAffectState?.(threadId) ?? null;
+      if (computed) return computed;
+    }
+    return getStoredAffectState(threadId);
+  };
+
+  const shouldRequireGuardedTools = (state: AffectState | null | undefined) => {
+    const emotionConfig = getEmotionConfig();
+    return shouldGuardTools(state, emotionConfig?.toolGuard);
+  };
+
+  const applyToolGuard = (
+    tools: string[],
+    mode: 'manual' | 'auto',
+    guardActive: boolean
+  ): string[] => {
+    const emotionConfig = getEmotionConfig();
+    if (!guardActive || !emotionConfig?.toolGuard) return tools;
+    if (mode === 'auto' && emotionConfig.toolGuard.disableAutoTools) {
+      return [];
+    }
+    return tools;
+  };
+
+  const registerToolWithGuard = (
+    agent: SimpleAgent,
+    toolName: string,
+    guardActive: boolean
+  ) => {
+    const tool = defaultToolRegistry.get(toolName);
+    if (!tool) return;
+    const emotionConfig = getEmotionConfig();
+    const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
+    const registered = requireApproval ? { ...tool, needsApproval: true } : tool;
+    agent.registerTool(registered);
   };
 
   const getModels = async (providerType: string) => {
@@ -167,14 +229,12 @@ export const createChatStreaming = (deps: {
   const stopStream = (senderId: number) => {
     const streamState = deps.activeStreams.get(senderId);
     if (!streamState) {
-      console.log(`[StreamDebug][Main][${senderId}] stop-stream ignored: no active stream`);
       return { success: false, error: 'No active stream' };
     }
 
     streamState.cancelled = true;
     streamState.stoppedByUser = true;
     streamState.abortController.abort('user-stop-request');
-    console.log(`[StreamDebug][Main][${senderId}] stop-stream acknowledged`);
     return { success: true };
   };
 
@@ -190,17 +250,24 @@ export const createChatStreaming = (deps: {
     try {
       const modelMessages = await toModelInputMessages(options.messages);
       const lastModelMessage = modelMessages[modelMessages.length - 1];
-      const realtimeAffect = lastModelMessage
-        ? await buildRealtimeAffectMessage(options.threadId, getPromptFromMessage(lastModelMessage))
-        : '';
+      const realtimeContext = lastModelMessage
+        ? await buildRealtimeAffectContext(
+            options.threadId,
+            getPromptFromMessage(lastModelMessage)
+          )
+        : { message: '', state: null };
       const inputMessages = deps.memory.injectMemoryIntoMessages(
         modelMessages,
         options.threadId,
-        { skipAffect: Boolean(realtimeAffect) }
+        { skipAffect: Boolean(realtimeContext.message) }
       );
-      const finalMessages = realtimeAffect
-        ? insertSystemMessage(inputMessages, realtimeAffect)
+      const finalMessages = realtimeContext.message
+        ? insertSystemMessage(inputMessages, realtimeContext.message)
         : inputMessages;
+
+      const affectStateForPolicy =
+        realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
+      const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
 
       const { skillsSystemPrompt } = await resolveSkillsSystemPrompt({
         inputMessages: finalMessages,
@@ -211,16 +278,18 @@ export const createChatStreaming = (deps: {
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
+        inputMessages: finalMessages,
       });
+      const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
 
       persistThreadRuntimeHints({
         threadId: options.threadId ?? '',
         providerType: options.providerType,
         model: options.model,
-        tools: resolvedTools,
+        tools: guardedTools,
       });
 
-      if (resolvedTools.length > 0) {
+      if (guardedTools.length > 0) {
         // Use Agent when tools are enabled for this request
         const agent = new SimpleAgent({
           enabled: true,
@@ -232,13 +301,8 @@ export const createChatStreaming = (deps: {
         });
 
         // Register selected tools
-        for (const toolName of resolvedTools) {
-          const tool = defaultToolRegistry.get(toolName);
-          if (tool) agent.registerTool(tool);
-        }
-
-        if (mode === 'auto') {
-          console.log('[Main] send(): auto-enabled tools:', resolvedTools);
+        for (const toolName of guardedTools) {
+          registerToolWithGuard(agent, toolName, guardActive);
         }
 
         // Separate user prompt from history
@@ -281,7 +345,6 @@ export const createChatStreaming = (deps: {
     }
   ) => {
     const senderId = webContents.id;
-    const streamDebugId = `${senderId}-${Date.now()}`;
     const existingStream = deps.activeStreams.get(senderId);
     if (existingStream) {
       existingStream.cancelled = true;
@@ -295,17 +358,16 @@ export const createChatStreaming = (deps: {
     };
     const uiChunkEmitter = createUiChunkEmitter(webContents);
     deps.activeStreams.set(senderId, streamState);
-    const streamStartedAt = Date.now();
-    console.log(
-      `[StreamDebug][Main][${streamDebugId}] start provider=${options.providerType} model=${options.model} messageCount=${options.messages?.length ?? 0} toolCount=${options.tools?.length ?? 0}`
-    );
 
     try {
       const modelMessages = await toModelInputMessages(options.messages);
       const lastModelMessage = modelMessages[modelMessages.length - 1];
-      const realtimeAffect = lastModelMessage
-        ? await buildRealtimeAffectMessage(options.threadId, getPromptFromMessage(lastModelMessage))
-        : '';
+      const realtimeContext = lastModelMessage
+        ? await buildRealtimeAffectContext(
+            options.threadId,
+            getPromptFromMessage(lastModelMessage)
+          )
+        : { message: '', state: null };
       const inputMessages = deps.memory.injectMemoryIntoMessages(
         modelMessages,
         options.threadId,
@@ -313,12 +375,16 @@ export const createChatStreaming = (deps: {
           onRetrieved: payload => {
             uiChunkEmitter.emitMemoryRetrieval(payload);
           },
-          skipAffect: Boolean(realtimeAffect),
+          skipAffect: Boolean(realtimeContext.message),
         }
       );
-      const finalMessages = realtimeAffect
-        ? insertSystemMessage(inputMessages, realtimeAffect)
+      const finalMessages = realtimeContext.message
+        ? insertSystemMessage(inputMessages, realtimeContext.message)
         : inputMessages;
+
+      const affectStateForPolicy =
+        realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
+      const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
 
       const { skillsSystemPrompt } = await resolveSkillsSystemPrompt({
         inputMessages: finalMessages,
@@ -329,16 +395,18 @@ export const createChatStreaming = (deps: {
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
+        inputMessages: finalMessages,
       });
+      const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
 
       persistThreadRuntimeHints({
         threadId: options.threadId ?? '',
         providerType: options.providerType,
         model: options.model,
-        tools: resolvedTools,
+        tools: guardedTools,
       });
 
-      const enableTools = resolvedTools.length > 0;
+      const enableTools = guardedTools.length > 0;
       const systemPrompt = [enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '', skillsSystemPrompt]
         .filter(Boolean)
         .join('\n\n');
@@ -353,25 +421,13 @@ export const createChatStreaming = (deps: {
       });
 
       if (enableTools) {
-        console.log(
-          '[Main] Streaming chat with tools:',
-          resolvedTools,
-          mode === 'manual' ? '(manual)' : '(auto)'
-        );
-
-        for (const toolName of resolvedTools) {
-          const tool = defaultToolRegistry.get(toolName);
-          console.log(`[Main] Registering tool: ${toolName}`, tool ? 'found' : 'not found');
-          if (tool) {
-            agent.registerTool(tool);
-          } else {
+        for (const toolName of guardedTools) {
+          if (!defaultToolRegistry.get(toolName)) {
             console.warn(`[Main] Tool ${toolName} not found in registry`);
+            continue;
           }
+          registerToolWithGuard(agent, toolName, guardActive);
         }
-
-        console.log('[Main] Registered tools count:', agent.getTools().length);
-      } else {
-        console.log('[Main] Streaming chat without tools');
       }
 
       if (!finalMessages || finalMessages.length === 0) {
@@ -392,7 +448,6 @@ export const createChatStreaming = (deps: {
         webContents,
         prompt,
         shouldCancel: () => streamState.cancelled,
-        debugLabel: streamDebugId,
         onToolEvent: eventPart => {
           if (
             eventPart.type === 'tool-approval-request' &&
@@ -406,9 +461,6 @@ export const createChatStreaming = (deps: {
         abortSignal: streamState.abortController.signal,
         uiChunkEmitter,
       });
-      console.log(
-        `[StreamDebug][Main][${streamDebugId}] complete mode=agent stopped=${streamState.stoppedByUser} awaitingApproval=${streamResult.awaitingApproval ?? false} durationMs=${Date.now() - streamStartedAt}`
-      );
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
@@ -416,16 +468,11 @@ export const createChatStreaming = (deps: {
       };
     } catch (error: unknown) {
       if (streamState.cancelled) {
-        console.log(
-          `[StreamDebug][Main][${streamDebugId}] cancelled-in-catch durationMs=${Date.now() - streamStartedAt}`
-        );
         uiChunkEmitter.abort();
         return { success: true, stopped: streamState.stoppedByUser };
       }
       const message = getErrorMessage(error);
-      console.error(
-        `[StreamDebug][Main][${streamDebugId}] error=${message} durationMs=${Date.now() - streamStartedAt}`
-      );
+      console.error('[Main] Stream failed:', message);
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {

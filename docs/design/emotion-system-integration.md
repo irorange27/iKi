@@ -12,9 +12,9 @@ system" and actual decision-making.
 - Provide configuration and guardrails to avoid unstable or noisy emotion use.
 
 ## Non-Goals
-- Real-time emotion analysis before every response (adds latency and tool usage).
 - Psychiatric inference or clinical interpretation.
-- Tool-level safety policies based purely on emotion (future follow-up).
+- Always-on real-time emotion analysis for every response (it's optional and adds latency).
+- Opaque, non-configurable safety blocking. All guardrails remain explicit and user controlled.
 
 ## Architecture
 ### Data Flow
@@ -95,14 +95,17 @@ per thread, pulled from the persisted `affect_states` table.
 - When memory storage is disabled, emotion signals do not create memory_short content entries.
 
 ## Limitations
-- Affect state lags by one message because analysis is asynchronous.
+- Persisted affect state lags by one message because analysis is asynchronous. With real-time
+  analysis enabled, the current response can still incorporate the latest signal, but storage
+  updates after persistence.
 - Tool guardrails require valence/arousal to be present; missing signals will bypass guarding.
 - Existing historical memory entries are not backfilled into emotion events.
 
 ## Testing
-Unit tests cover payload parsing, aggregation weighting, neutral filtering, and message generation.
+Unit tests cover payload parsing, aggregation weighting, neutral filtering, message generation,
+and tool guard thresholds.
 
 ## Future Work
-- Optional real-time emotion analysis before response for low-latency environments.
-- Tool-level safety policies keyed off high arousal or negative valence.
-- UI display of per-thread affect state for transparency and debugging.
+- Per-thread affect history/timeline for audit and debugging workflows.
+- Adaptive real-time analysis gating based on latency budgets and model availability.
+- Calibrated guardrail presets based on observed false positives/negatives.

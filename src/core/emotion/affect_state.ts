@@ -124,6 +124,61 @@ const parseTimestamp = (value?: string): Date | null => {
   return parsed;
 };
 
+export const rehydrateAffectState = (
+  raw: string | null | undefined,
+  options?: { maxAgeMinutes?: number; now?: Date }
+): AffectState | null => {
+  if (!raw || typeof raw !== 'string') return null;
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    const data = JSON.parse(raw);
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      parsed = data as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+
+  if (!parsed) return null;
+  const label = normalizeLabel(parsed.label);
+  const confidence = toNumber(parsed.confidence);
+  if (!label || confidence === null) return null;
+
+  const startAt = typeof parsed.startAt === 'string' ? parsed.startAt : '';
+  const endAt = typeof parsed.endAt === 'string' ? parsed.endAt : '';
+  const startDate = parseTimestamp(startAt);
+  const endDate = parseTimestamp(endAt);
+  if (!endDate) return null;
+
+  const now = options?.now ?? new Date();
+  const ageMinutes = Math.max(0, (now.getTime() - endDate.getTime()) / 60000);
+  const maxAgeMinutes = options?.maxAgeMinutes ?? 0;
+  if (maxAgeMinutes > 0 && ageMinutes > maxAgeMinutes) return null;
+
+  const windowMinutes =
+    startDate && endDate ? Math.max(0, (endDate.getTime() - startDate.getTime()) / 60000) : 0;
+
+  const sampleCount = toNumber(parsed.sampleCount) ?? 0;
+  const windowSize = toNumber(parsed.windowSize) ?? 0;
+  const valence = toNumber(parsed.valence);
+  const arousal = toNumber(parsed.arousal);
+  const emotions = parseEmotionsList(parsed.emotions);
+
+  return {
+    label,
+    confidence: clamp(confidence, 0, 1),
+    ...(valence !== null ? { valence: clamp(valence, -1, 1) } : {}),
+    ...(arousal !== null ? { arousal: clamp(arousal, 0, 1) } : {}),
+    ...(emotions.length > 0 ? { emotions } : {}),
+    sampleCount,
+    windowSize,
+    startAt: startDate ? startDate.toISOString() : startAt,
+    endAt: endDate.toISOString(),
+    ageMinutes,
+    windowMinutes,
+  };
+};
+
 export const toEmotionSample = (entry: {
   emotion: string | null | undefined;
   created_at?: string;

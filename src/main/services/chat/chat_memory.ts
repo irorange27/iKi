@@ -1,4 +1,5 @@
 import { getAppConfig } from '../../../core/config';
+import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import * as emotionDb from '../../../core/db/emotion';
 import * as memoryDb from '../../../core/db/memory';
@@ -11,6 +12,7 @@ import { generateLongMemorySummary } from '../../../core/memory/auto_summarize';
 import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage } from './chat_types';
+import { getPromptFromMessage } from './chat_ui';
 
 type MemoryPreview = {
   id: string;
@@ -24,7 +26,6 @@ type MemoryRetrievalPayload = {
   query: string;
   results: MemoryPreview[];
 };
-import { getPromptFromMessage } from './chat_ui';
 
 const formatMemoryLine = (entry: { summary: string; score: number; updated_at?: string }) => {
   const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
@@ -143,6 +144,14 @@ export const createChatMemory = () => {
   const getAffectContextMessage = (threadId: string): string => {
     const emotionConfig = getEmotionConfig();
     if (!emotionConfig?.enabled || !emotionConfig.injectToSystemPrompt) return '';
+    const affectState = computeAffectStateForThread(threadId);
+    if (!affectState) return '';
+    return buildAffectSystemMessage(affectState);
+  };
+
+  const computeAffectStateForThread = (threadId: string) => {
+    const emotionConfig = getEmotionConfig();
+    if (!emotionConfig?.enabled) return null;
     const fetchLimit = Math.max(
       10,
       Math.floor(emotionConfig.windowSize || 0) * 3,
@@ -157,8 +166,16 @@ export const createChatMemory = () => {
       affectState = computeAffectState(collectEmotionSamples(shortEntries), emotionConfig);
     }
 
-    if (!affectState) return '';
-    return buildAffectSystemMessage(affectState);
+    return affectState;
+  };
+
+  const persistAffectState = (threadId: string) => {
+    const affectState = computeAffectStateForThread(threadId);
+    if (!affectState) {
+      affectDb.deleteAffectState(threadId);
+      return;
+    }
+    affectDb.upsertAffectState(threadId, affectState);
   };
 
   const maybeAutoSummarizeLongMemory = async (
@@ -252,6 +269,8 @@ export const createChatMemory = () => {
             forceShortMemory ? { force: true } : undefined
           );
         }
+
+        persistAffectState(params.threadId);
       } catch (error) {
         console.warn(
           `[Emotion][Main] analysis failed message=${params.messageId}:`,
@@ -348,7 +367,9 @@ export const createChatMemory = () => {
     }
   };
 
-  return { injectMemoryIntoMessages, onMessagePersisted, recordRealtimeEmotion };
+  const getAffectState = (threadId: string) => computeAffectStateForThread(threadId);
+
+  return { injectMemoryIntoMessages, onMessagePersisted, recordRealtimeEmotion, getAffectState };
 };
 
 export type ChatMemory = ReturnType<typeof createChatMemory>;

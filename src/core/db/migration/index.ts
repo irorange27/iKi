@@ -7,6 +7,9 @@ import { migration as migration005 } from './005_add_proactive_tasks_table';
 import { migration as migration006 } from './006_add_app_clients_table';
 import { migration as migration007 } from './007_add_emotion_events_table';
 import { migration as migration008 } from './008_add_workflow_profiles_table';
+import { migration as migration009McpServers } from './009_add_mcp_servers_table';
+import { migration as migration009AffectStates } from './009_add_affect_states_table';
+import { migration as migration010ProactiveCron } from './010_add_proactive_tasks_cron';
 
 // Register all migrations here
 const migrations = [
@@ -18,6 +21,9 @@ const migrations = [
   migration006,
   migration007,
   migration008,
+  migration009McpServers,
+  migration009AffectStates,
+  migration010ProactiveCron,
   // Add more migrations here as needed
 ];
 
