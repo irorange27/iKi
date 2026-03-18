@@ -10,6 +10,8 @@ A local agent pet for AI provider orchestration.
 
 - Acts as a local agent for streamlined AI interactions.
 
+- Self-optimizing workflow (auto tool routing and auto-pinned skills).
+
 ## Getting Started
 
 1. Clone the repository:
