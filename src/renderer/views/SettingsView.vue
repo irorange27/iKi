@@ -795,6 +795,23 @@
               Inject Emotion Context into Agent
             </label>
 
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                :checked="config.memory.emotion.realtimeAnalysis"
+                @change="
+                  updateEmotion(
+                    'realtimeAnalysis',
+                    ($event.target as HTMLInputElement).checked
+                  )
+                "
+              />
+              Analyze Current Message Before Reply (adds latency)
+            </label>
+            <p class="card-help">
+              Runs one extra model call to include the user's current affect in this response.
+            </p>
+
             <div class="slider-field">
               <span>Minimum Confidence</span>
               <span class="value-badge">{{
