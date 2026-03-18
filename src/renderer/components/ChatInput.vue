@@ -30,217 +30,9 @@
               </span>
             </button>
             <!-- skill choose -->
-            <div
-              class="relative"
-              @mouseenter="openSkillSelector"
-              @mouseleave="scheduleCloseSkillSelector"
-            >
-              <button
-                class="relative h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
-                :class="{ 'text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
-                @click="showSkillSelector = !showSkillSelector"
-                @mouseenter="openSkillSelector"
-                @mouseleave="scheduleCloseSkillSelector"
-              >
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                  />
-                </svg>
-                <span
-                  v-if="isAutoSkillMode || selectedSkillIds.length > 0"
-                  class="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#4a9eff] text-[9px] text-white"
-                >
-                  {{ isAutoSkillMode ? 'A' : selectedSkillIds.length }}
-                </span>
-              </button>
-
-              <!-- Skill Selector Menu -->
-              <div
-                v-if="showSkillSelector"
-                class="absolute bottom-full left-0 mb-2 w-80 rounded-xl border border-color bg-secondary shadow-xl z-50 overflow-hidden"
-                @mouseenter="openSkillSelector"
-                @mouseleave="scheduleCloseSkillSelector"
-              >
-                <div class="p-3 border-b border-color bg-tertiary">
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm font-semibold text-primary">Skills</span>
-                  </div>
-                  <div class="mt-1 text-xs text-muted leading-snug">
-                    Inject reusable instructions (workflows, best practices) into the next
-                    response. Skills are loaded from your local filesystem.
-                  </div>
-
-                  <div class="mt-2 flex items-center gap-2">
-                    <button
-                      class="tool-mode-btn"
-                      :class="{ active: isAutoSkillMode }"
-                      @click="toggleAutoSkillMode"
-                    >
-                      Auto
-                    </button>
-                    <div class="flex-1" />
-                    <button
-                      class="tool-action-btn"
-                      :disabled="isAutoSkillMode"
-                      @click="selectAllSkills"
-                    >
-                      Select all
-                    </button>
-                    <button
-                      class="tool-action-btn"
-                      :disabled="isAutoSkillMode"
-                      @click="clearAllSkills"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div v-if="isAutoSkillMode" class="mt-2 text-xs text-accent leading-snug">
-                    iKi will automatically pick relevant skills based on your message.
-                  </div>
-                </div>
-                <div class="max-h-72 overflow-y-auto p-2">
-                  <div
-                    v-if="availableSkills.length === 0"
-                    class="p-4 text-center text-sm text-muted"
-                  >
-                    No skills found.
-                  </div>
-                  <button
-                    v-for="skill in availableSkills"
-                    :key="skill.id"
-                    class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-hover flex items-center justify-between group"
-                    :disabled="isAutoSkillMode"
-                    :class="{
-                      'text-accent bg-hover/50': isSkillSelected(skill.id) && !isAutoSkillMode,
-                      'opacity-60 cursor-not-allowed': isAutoSkillMode,
-                    }"
-                    @click="toggleSkill(skill.id)"
-                  >
-                    <div class="flex flex-col">
-                      <span class="font-medium">{{ skill.name }}</span>
-                      <span class="text-[10px] text-muted truncate max-w-[180px]">
-                        {{ skill.description || skill.path || skill.id }}
-                      </span>
-                    </div>
-                    <div
-                      class="flex h-4 w-4 items-center justify-center rounded border border-color"
-                      :class="{ 'bg-accent border-accent': isSkillSelected(skill.id) }"
-                    >
-                      <svg
-                        v-if="isSkillSelected(skill.id)"
-                        class="h-3 w-3 text-white"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fill-rule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clip-rule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <SkillSelector v-model:skill-ids="selectedSkillIds" v-model:mode="skillMode" />
             <!-- tool choose -->
-            <div
-              class="relative"
-              @mouseenter="openToolSelector"
-              @mouseleave="scheduleCloseToolSelector"
-            >
-              <button class="relative h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
-                :class="{ 'text-accent': isAutoToolMode || selectedTools.length > 0 }"
-                @click="showToolSelector = !showToolSelector"
-                @mouseenter="openToolSelector"
-                @mouseleave="scheduleCloseToolSelector">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-                <span v-if="isAutoToolMode || selectedTools.length > 0"
-                  class="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#4a9eff] text-[9px] text-white">
-                  {{ isAutoToolMode ? 'A' : selectedTools.length }}
-                </span>
-              </button>
-
-              <!-- Tool Selector Menu -->
-              <div v-if="showToolSelector"
-                class="absolute bottom-full left-0 mb-2 w-80 rounded-xl border border-color bg-secondary shadow-xl z-50 overflow-hidden"
-                @mouseenter="openToolSelector"
-                @mouseleave="scheduleCloseToolSelector">
-                <div class="p-3 border-b border-color bg-tertiary">
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm font-semibold text-primary">Tools</span>
-                  </div>
-                  <div class="mt-1 text-xs text-muted leading-snug">
-                    Allow iKi to use tools (web, files, shell) for the next response. Choose Auto
-                    or select manually.
-                  </div>
-
-                  <div class="mt-2 flex items-center gap-2">
-                    <button
-                      class="tool-mode-btn"
-                      :class="{ active: isAutoToolMode }"
-                      @click="toggleAutoToolMode"
-                    >
-                      Auto
-                    </button>
-                    <div class="flex-1" />
-                    <button
-                      class="tool-action-btn"
-                      :disabled="isAutoToolMode"
-                      @click="selectAllTools"
-                    >
-                      Select all
-                    </button>
-                    <button
-                      class="tool-action-btn"
-                      :disabled="isAutoToolMode"
-                      @click="clearAllTools"
-                    >
-                      Clear
-                    </button>
-                  </div>
-
-                  <div v-if="isAutoToolMode" class="mt-2 text-xs text-accent leading-snug">
-                    Auto enables the default toolset. iKi will decide if and when to call tools.
-                  </div>
-                </div>
-                <div class="max-h-72 overflow-y-auto p-2">
-                  <div v-if="availableTools.length === 0" class="p-4 text-center text-sm text-muted">
-                    No tools available.
-                  </div>
-                  <button v-for="tool in availableTools" :key="tool.name"
-                    class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-hover flex items-center justify-between group"
-                    :disabled="isAutoToolMode"
-                    :class="{
-                      'text-accent bg-hover/50': isToolSelected(tool.name) && !isAutoToolMode,
-                      'opacity-60 cursor-not-allowed': isAutoToolMode,
-                    }" @click="toggleTool(tool.name)">
-                    <div class="flex flex-col">
-                      <span class="font-medium">{{ tool.name }}</span>
-                      <span class="text-[10px] text-muted truncate max-w-[180px]">{{
-                        tool.description
-                        }}</span>
-                    </div>
-                    <div class="flex h-4 w-4 items-center justify-center rounded border border-color"
-                      :class="{ 'bg-accent border-accent': isToolSelected(tool.name) && !isAutoToolMode }">
-                      <svg v-if="isToolSelected(tool.name) && !isAutoToolMode" class="h-3 w-3 text-white" viewBox="0 0 20 20"
-                        fill="currentColor">
-                        <path fill-rule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clip-rule="evenodd" />
-                      </svg>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <ToolSelector v-model:tools="selectedTools" v-model:mode="toolMode" />
             <div class="relative">
               <button class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-secondary icon-btn"
                 @click="showModelSelector = !showModelSelector">
@@ -379,6 +171,8 @@ import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
 import type { SpeechStatus } from '../../shared/types/speech';
 import { parseModelList } from '../../shared/utils/provider_models';
+import ToolSelector from './ToolSelector.vue';
+import SkillSelector from './SkillSelector.vue';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -402,18 +196,12 @@ const isProviderConfigured = ref(false);
 const isComposing = ref(false);
 const justEndedComposition = ref(false);
 const showModelSelector = ref(false);
-const showToolSelector = ref(false);
-const showSkillSelector = ref(false);
-const availableTools = ref<any[]>([]);
-const availableSkills = ref<any[]>([]);
 const selectedTools = ref<string[]>([]);
 const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
 const toolMode = ref<'manual' | 'auto'>('manual');
 const isAutoToolMode = computed(() => toolMode.value === 'auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
-const toolSelectorCloseTimer = ref<number | null>(null);
-const skillSelectorCloseTimer = ref<number | null>(null);
 const speechStatus = ref<SpeechStatus | null>(null);
 const isRecording = ref(false);
 const isTranscribing = ref(false);
@@ -499,128 +287,6 @@ const selectProviderAndModel = (provider: any, model: string) => {
   selectedModel.value = model;
   showModelSelector.value = false;
   emit('model-selected', { provider, model });
-};
-
-const loadAvailableTools = async () => {
-  try {
-    const tools = await window.electronAPI.tools.list();
-    availableTools.value = tools;
-    // Default: enable all tools so the agent can decide whether to call them.
-    // Only apply if the user hasn't made a selection yet.
-    if (selectedTools.value.length === 0 && Array.isArray(tools) && tools.length > 0) {
-      selectedTools.value = tools
-        .map((tool: any) => (tool && typeof tool.name === 'string' ? tool.name : ''))
-        .filter((name: string) => typeof name === 'string' && name.trim().length > 0);
-    }
-  } catch (e) {
-    console.error('Failed to load tools:', e);
-  }
-};
-
-const loadAvailableSkills = async () => {
-  try {
-    const skills = await window.electronAPI.skills.list();
-    availableSkills.value = Array.isArray(skills) ? skills : [];
-  } catch (e) {
-    console.error('Failed to load skills:', e);
-    availableSkills.value = [];
-  }
-};
-
-const toggleAutoSkillMode = () => {
-  skillMode.value = isAutoSkillMode.value ? 'manual' : 'auto';
-};
-
-const toggleSkill = (skillId: string) => {
-  if (isAutoSkillMode.value) return;
-  const index = selectedSkillIds.value.indexOf(skillId);
-  if (index === -1) {
-    selectedSkillIds.value.push(skillId);
-  } else {
-    selectedSkillIds.value.splice(index, 1);
-  }
-};
-
-const isSkillSelected = (skillId: string) => {
-  return selectedSkillIds.value.includes(skillId);
-};
-
-const selectAllSkills = () => {
-  if (isAutoSkillMode.value) return;
-  selectedSkillIds.value = availableSkills.value
-    .map((skill: any) => (skill && typeof skill.id === 'string' ? skill.id : ''))
-    .filter((id: string) => typeof id === 'string' && id.trim().length > 0);
-};
-
-const clearAllSkills = () => {
-  if (isAutoSkillMode.value) return;
-  selectedSkillIds.value = [];
-};
-
-const openSkillSelector = () => {
-  if (skillSelectorCloseTimer.value !== null) {
-    window.clearTimeout(skillSelectorCloseTimer.value);
-    skillSelectorCloseTimer.value = null;
-  }
-  showSkillSelector.value = true;
-};
-
-const scheduleCloseSkillSelector = () => {
-  if (skillSelectorCloseTimer.value !== null) {
-    window.clearTimeout(skillSelectorCloseTimer.value);
-  }
-  skillSelectorCloseTimer.value = window.setTimeout(() => {
-    showSkillSelector.value = false;
-    skillSelectorCloseTimer.value = null;
-  }, 180);
-};
-
-const toggleTool = (toolName: string) => {
-  if (isAutoToolMode.value) return;
-  const index = selectedTools.value.indexOf(toolName);
-  if (index === -1) {
-    selectedTools.value.push(toolName);
-  } else {
-    selectedTools.value.splice(index, 1);
-  }
-};
-
-const isToolSelected = (toolName: string) => {
-  return selectedTools.value.includes(toolName);
-};
-
-const selectAllTools = () => {
-  if (isAutoToolMode.value) return;
-  selectedTools.value = availableTools.value
-    .map((t: any) => (t && typeof t.name === 'string' ? t.name : ''))
-    .filter((name: string) => typeof name === 'string' && name.trim().length > 0);
-};
-
-const clearAllTools = () => {
-  if (isAutoToolMode.value) return;
-  selectedTools.value = [];
-};
-
-const toggleAutoToolMode = () => {
-  toolMode.value = isAutoToolMode.value ? 'manual' : 'auto';
-};
-
-const openToolSelector = () => {
-  if (toolSelectorCloseTimer.value !== null) {
-    window.clearTimeout(toolSelectorCloseTimer.value);
-    toolSelectorCloseTimer.value = null;
-  }
-  showToolSelector.value = true;
-};
-
-const scheduleCloseToolSelector = () => {
-  if (toolSelectorCloseTimer.value !== null) {
-    window.clearTimeout(toolSelectorCloseTimer.value);
-  }
-  toolSelectorCloseTimer.value = window.setTimeout(() => {
-    showToolSelector.value = false;
-    toolSelectorCloseTimer.value = null;
-  }, 180);
 };
 
 const loadSpeechStatus = async () => {
@@ -1157,19 +823,9 @@ const sendMessage = async () => {
 onMounted(async () => {
   await loadAvailableProviders();
   await loadSpeechStatus();
-  await loadAvailableTools();
-  await loadAvailableSkills();
 });
 
 onUnmounted(() => {
-  if (toolSelectorCloseTimer.value !== null) {
-    window.clearTimeout(toolSelectorCloseTimer.value);
-    toolSelectorCloseTimer.value = null;
-  }
-  if (skillSelectorCloseTimer.value !== null) {
-    window.clearTimeout(skillSelectorCloseTimer.value);
-    skillSelectorCloseTimer.value = null;
-  }
   if (speechErrorTimer.value !== null) {
     window.clearTimeout(speechErrorTimer.value);
     speechErrorTimer.value = null;
@@ -1308,32 +964,4 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.tool-mode-btn {
-  font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-secondary);
-}
-
-.tool-mode-btn.active {
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.18);
-  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.35);
-  color: var(--text-primary);
-}
-
-.tool-action-btn {
-  font-size: 11px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.tool-action-btn:hover:not(:disabled) {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
 </style>
