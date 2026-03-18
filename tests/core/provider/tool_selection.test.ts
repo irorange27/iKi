@@ -20,18 +20,15 @@ beforeEach(() => {
 });
 
 describe('selectToolsWithAgent', () => {
-  it('returns empty when tool model is unavailable', async () => {
+  it('returns null when tool model is unavailable', async () => {
     getToolModelMock.mockReturnValue(null);
 
     const tools = await selectToolsWithAgent({
-      messages: [{ role: 'user', content: 'Search the web for today news.' }],
-      availableTools: [
-        { name: 'web', description: 'Search the web' },
-        { name: 'fetch', description: 'Fetch a URL' },
-      ],
+      messages: [{ role: 'user', content: 'Search the web for this.' }],
+      availableTools: [{ name: 'web' }, { name: 'fetch' }],
     });
 
-    expect(tools).toEqual([]);
+    expect(tools).toBeNull();
     expect(SimpleAgentMock).not.toHaveBeenCalled();
   });
 
@@ -40,18 +37,13 @@ describe('selectToolsWithAgent', () => {
     SimpleAgentMock.mockImplementation(
       () =>
         ({
-          generate: vi
-            .fn()
-            .mockResolvedValue({ response: '["web","NOPE","FETCH","web"]' }),
+          generate: vi.fn().mockResolvedValue({ response: '["web","NOPE","FETCH"]' }),
         }) as unknown as InstanceType<typeof SimpleAgent>
     );
 
     const tools = await selectToolsWithAgent({
-      messages: [{ role: 'user', content: 'Please look up the latest info and open the URL.' }],
-      availableTools: [
-        { name: 'web', description: 'Search the web' },
-        { name: 'fetch', description: 'Fetch a URL' },
-      ],
+      messages: [{ role: 'user', content: 'Fetch this URL.' }],
+      availableTools: [{ name: 'web' }, { name: 'fetch' }],
     });
 
     expect(tools).toEqual(['web', 'fetch']);
@@ -62,19 +54,16 @@ describe('selectToolsWithAgent', () => {
     SimpleAgentMock.mockImplementation(
       () =>
         ({
-          generate: vi.fn().mockResolvedValue({ response: '{ "tools": ["read_file"] }' }),
+          generate: vi.fn().mockResolvedValue({ response: '{ "tools": ["fetch"] }' }),
         }) as unknown as InstanceType<typeof SimpleAgent>
     );
 
     const tools = await selectToolsWithAgent({
-      messages: [{ role: 'user', content: 'Read the config file.' }],
-      availableTools: [
-        { name: 'read_file', description: 'Read a file' },
-        { name: 'list_dir', description: 'List a directory' },
-      ],
+      messages: [{ role: 'user', content: 'Get this page.' }],
+      availableTools: [{ name: 'web' }, { name: 'fetch' }],
     });
 
-    expect(tools).toEqual(['read_file']);
+    expect(tools).toEqual(['fetch']);
   });
 
   it('handles fenced JSON output', async () => {
@@ -82,16 +71,15 @@ describe('selectToolsWithAgent', () => {
     SimpleAgentMock.mockImplementation(
       () =>
         ({
-          generate: vi.fn().mockResolvedValue({ response: '```json\n["shell"]\n```' }),
+          generate: vi.fn().mockResolvedValue({ response: '```json\n["web"]\n```' }),
         }) as unknown as InstanceType<typeof SimpleAgent>
     );
 
     const tools = await selectToolsWithAgent({
-      messages: [{ role: 'user', content: 'Run `npm test`.' }],
-      availableTools: [{ name: 'shell', description: 'Run shell commands' }],
+      messages: [{ role: 'user', content: 'Search.' }],
+      availableTools: [{ name: 'web' }, { name: 'fetch' }],
     });
 
-    expect(tools).toEqual(['shell']);
+    expect(tools).toEqual(['web']);
   });
 });
-
