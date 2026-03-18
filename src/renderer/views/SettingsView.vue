@@ -1804,18 +1804,18 @@ watch(
 );
 
 const menuItems = [
-  { key: 'general', label: 'General', icon: Cog },
-  { key: 'ui', label: 'Appearance', icon: Palette },
+  { key: 'general', label: 'General', icon: Cog }, 
   { key: 'provider', label: 'Providers', icon: Bot },
-  { key: 'speech', label: 'Speech', icon: Mic },
+  { key: 'skills', label: 'Skills', icon: Wand2 },  
+  { key: 'memory', label: 'Memory', icon: Brain },
+  { key: 'ui', label: 'Appearance', icon: Palette },
+  { key: 'speech', label: 'Speech', icon: Mic },  
+  { key: 'tasks', label: 'Tasks', icon: AlarmClock },
   // { key: "chat", label: "Chat", icon: MessageCircleMore },
   // { key: "network", label: "Network", icon: Globe },
   // { key: "security", label: "Security", icon: Lock },
   // { key: "advanced", label: "Advanced", icon: Zap },
   // { key: "keybindings", label: "Keybindings", icon: Keyboard },
-  { key: 'memory', label: 'Memory', icon: Brain },
-  { key: 'tasks', label: 'Tasks', icon: AlarmClock },
-  { key: 'skills', label: 'Skills', icon: Wand2 },
 ];
 
 const activeSectionMeta = computed(() => {
