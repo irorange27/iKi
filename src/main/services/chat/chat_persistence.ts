@@ -22,6 +22,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
       model: thread.model || null,
       metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
       is_generating: false,
+      client_id: typeof thread.client_id === 'string' ? thread.client_id : null,
     });
     return chatThreadDb.getChatThread(threadId);
   };

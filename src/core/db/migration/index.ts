@@ -4,6 +4,7 @@ import { migration as migration002 } from './002_add_workspaces_table';
 import { migration as migration003 } from './003_add_prompt_apps_table';
 import { migration as migration004 } from './004_add_memory_tables';
 import { migration as migration005 } from './005_add_proactive_tasks_table';
+import { migration as migration006 } from './006_add_app_clients_table';
 
 // Register all migrations here
 const migrations = [
@@ -12,6 +13,7 @@ const migrations = [
   migration003,
   migration004,
   migration005,
+  migration006,
   // Add more migrations here as needed
 ];
 

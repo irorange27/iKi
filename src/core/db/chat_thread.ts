@@ -68,12 +68,12 @@ export const addChatThread = (
   const stmt = getDb().prepare(`
         INSERT INTO chat_threads (
             id, title, model, is_generating, reasoning_effort, metadata, created_at, updated_at,
-            prompt_app_id, tools, is_favorited, is_incognito, workspace_id, enable_artifacts,
-            artifact_workspace_id, skill_ids
+            client_id, prompt_app_id, tools, is_favorited, is_incognito, workspace_id,
+            enable_artifacts, artifact_workspace_id, skill_ids
         ) VALUES (
             @id, @title, @model, @is_generating, @reasoning_effort, @metadata, @created_at, @updated_at,
-            @prompt_app_id, @tools, @is_favorited, @is_incognito, @workspace_id, @enable_artifacts,
-            @artifact_workspace_id, @skill_ids
+            @client_id, @prompt_app_id, @tools, @is_favorited, @is_incognito, @workspace_id,
+            @enable_artifacts, @artifact_workspace_id, @skill_ids
         )
     `);
 
@@ -86,6 +86,7 @@ export const addChatThread = (
     metadata: thread.metadata,
     created_at: now,
     updated_at: now,
+    client_id: thread.client_id || null,
     prompt_app_id: thread.prompt_app_id || null,
     tools: thread.tools || null,
     is_favorited: thread.is_favorited || 0,
@@ -143,4 +144,11 @@ export const toggleFavoriteChatThread = (id: string) => {
   const thread = getChatThread(id);
   if (!thread) return null;
   return updateChatThread(id, { is_favorited: thread.is_favorited === 1 ? 0 : 1 });
+};
+
+export const assignClientToLegacyThreads = (clientId: string) => {
+  if (!clientId) return null;
+  return getDb()
+    .prepare('UPDATE chat_threads SET client_id = ? WHERE client_id IS NULL')
+    .run(clientId);
 };

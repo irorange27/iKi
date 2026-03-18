@@ -7,6 +7,7 @@ export interface ChatThread {
   metadata: string; // JSON string
   created_at: string;
   updated_at: string;
+  client_id?: string;
   prompt_app_id?: string;
   tools?: string; // JSON string
   is_favorited: number; // 0 or 1

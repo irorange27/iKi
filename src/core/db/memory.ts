@@ -207,22 +207,35 @@ export const listShortMemory = (threadId: string, limit?: number): ShortMemoryEn
 
 export const listShortMemoryAcrossThreads = (
   limit?: number,
-  options?: { includeIncognito?: boolean }
+  options?: { includeIncognito?: boolean; clientId?: string }
 ): ShortMemoryEntry[] => {
   const safeLimit = typeof limit === 'number' ? limit : 50;
   const includeIncognito = Boolean(options?.includeIncognito);
+  const filters: string[] = [];
+  const params: unknown[] = [];
+
+  if (!includeIncognito) {
+    filters.push('chat_threads.is_incognito = 0');
+  }
+
+  if (options?.clientId) {
+    filters.push('chat_threads.client_id = ?');
+    params.push(options.clientId);
+  }
+
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const rows = getDb()
     .prepare(
       `
       SELECT memory_short.*
       FROM memory_short
       INNER JOIN chat_threads ON chat_threads.id = memory_short.thread_id
-      ${includeIncognito ? '' : 'WHERE chat_threads.is_incognito = 0'}
+      ${whereClause}
       ORDER BY memory_short.updated_at DESC
       LIMIT ?
     `
     )
-    .all(safeLimit) as ShortMemoryEntry[];
+    .all(...params, safeLimit) as ShortMemoryEntry[];
 
   return rows.map(row => ({
     ...row,
@@ -302,22 +315,35 @@ export const listLongMemory = (threadId: string, limit?: number): LongMemoryEntr
 
 export const listLongMemoryAcrossThreads = (
   limit?: number,
-  options?: { includeIncognito?: boolean }
+  options?: { includeIncognito?: boolean; clientId?: string }
 ): LongMemoryEntry[] => {
   const safeLimit = typeof limit === 'number' ? limit : 50;
   const includeIncognito = Boolean(options?.includeIncognito);
+  const filters: string[] = [];
+  const params: unknown[] = [];
+
+  if (!includeIncognito) {
+    filters.push('chat_threads.is_incognito = 0');
+  }
+
+  if (options?.clientId) {
+    filters.push('chat_threads.client_id = ?');
+    params.push(options.clientId);
+  }
+
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const rows = getDb()
     .prepare(
       `
       SELECT memory_long.*
       FROM memory_long
       INNER JOIN chat_threads ON chat_threads.id = memory_long.thread_id
-      ${includeIncognito ? '' : 'WHERE chat_threads.is_incognito = 0'}
+      ${whereClause}
       ORDER BY memory_long.updated_at DESC
       LIMIT ?
     `
     )
-    .all(safeLimit) as LongMemoryEntry[];
+    .all(...params, safeLimit) as LongMemoryEntry[];
   return rows;
 };
 
@@ -355,6 +381,7 @@ type LongMemorySearchOptions = {
   threshold?: number;
   force?: boolean;
   includeIncognito?: boolean;
+  clientId?: string;
 };
 
 const scoreLongMemoryRows = (
@@ -400,17 +427,30 @@ export const searchLongMemoryAcrossThreads = (
   if (!isMemoryEnabled() && !options?.force) return [];
 
   const includeIncognito = Boolean(options?.includeIncognito);
+  const filters: string[] = [];
+  const params: unknown[] = [];
+
+  if (!includeIncognito) {
+    filters.push('chat_threads.is_incognito = 0');
+  }
+
+  if (options?.clientId) {
+    filters.push('chat_threads.client_id = ?');
+    params.push(options.clientId);
+  }
+
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   const rows = getDb()
     .prepare(
       `
       SELECT memory_long.*
       FROM memory_long
       INNER JOIN chat_threads ON chat_threads.id = memory_long.thread_id
-      ${includeIncognito ? '' : 'WHERE chat_threads.is_incognito = 0'}
+      ${whereClause}
       ORDER BY memory_long.updated_at DESC
     `
     )
-    .all() as LongMemoryEntry[];
+    .all(...params) as LongMemoryEntry[];
 
   return scoreLongMemoryRows(rows, query, options);
 };
