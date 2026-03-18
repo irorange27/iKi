@@ -11,11 +11,13 @@ import * as chatThreadDb from '../core/db/chat_thread';
 import * as memoryDb from '../core/db/memory';
 import {
   createAppClient,
+  getAppClientById,
   getAppClientByToken,
   listAppClients,
   touchAppClient,
   type AppClient,
 } from '../core/db/app_clients';
+import { createNapCatReverseBridge } from './napcat_adapter';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -62,6 +64,18 @@ const normalizeAllowedTools = (tools: unknown): string[] => {
     .map(value => value.trim())
     .filter(Boolean);
   return cleaned;
+};
+
+const ensureNapCatClient = (): string => {
+  const existing = getAppClientById('client_napcat');
+  if (existing) return existing.id;
+  const created = createAppClient({
+    id: 'client_napcat',
+    name: 'NapCat',
+    scopes: [],
+    allowedTools: [],
+  });
+  return created.client.id;
 };
 
 const ensureUserDataDir = () => {
@@ -227,8 +241,6 @@ export const startDaemonServer = (options?: { port?: number }) => {
   const port = Number.isFinite(options?.port) ? Number(options?.port) : DEFAULT_PORT;
 
   writePortFile(userDataPath, port);
-  console.log(`[Daemon] bootstrap token stored at ${path.join(userDataPath, 'daemon.token')}`);
-  console.log(`[Daemon] port stored at ${path.join(userDataPath, 'daemon.port')}`);
   initializeDatabase();
   registerStandardTools();
 
@@ -236,6 +248,12 @@ export const startDaemonServer = (options?: { port?: number }) => {
   const sessions = new Map<number, WsSession>();
   const wsSessions = new Map<WebSocket, WsSession>();
   let nextSessionId = 1;
+  const napcatClientId = ensureNapCatClient();
+  const napcatBridge = createNapCatReverseBridge({
+    chatService,
+    clientId: napcatClientId,
+    accessToken: process.env.IKI_NAPCAT_ACCESS_TOKEN || process.env.IKI_NAPCAT_TOKEN,
+  });
 
   const server = http.createServer(async (req, res) => {
     withCors(res);
@@ -560,49 +578,54 @@ export const startDaemonServer = (options?: { port?: number }) => {
 
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
-    if (url.pathname !== '/v1/chat/stream') {
-      socket.destroy();
-      return;
-    }
 
-    const auth = authenticateWebSocket(req);
-    if (!auth.client) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      socket.destroy();
-      return;
-    }
+    if (url.pathname === '/v1/chat/stream') {
+      const auth = authenticateWebSocket(req);
+      if (!auth.client) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
+      }
 
-    wss.handleUpgrade(req, socket, head, ws => {
-      const id = nextSessionId++;
-      const webContents = {
-        id,
-        send: (channel: string, ...args: unknown[]) => {
-          if (ws.readyState !== ws.OPEN) return;
-          if (channel === 'chat:ui-chunk' && args.length === 1) {
-            ws.send(JSON.stringify(args[0]));
-            return;
-          }
-          ws.send(JSON.stringify({ channel, payload: args }));
-        },
-      };
+      wss.handleUpgrade(req, socket, head, ws => {
+        const id = nextSessionId++;
+        const webContents = {
+          id,
+          send: (channel: string, ...args: unknown[]) => {
+            if (ws.readyState !== ws.OPEN) return;
+            if (channel === 'chat:ui-chunk' && args.length === 1) {
+              ws.send(JSON.stringify(args[0]));
+              return;
+            }
+            ws.send(JSON.stringify({ channel, payload: args }));
+          },
+        };
 
-      const session: WsSession = {
-        id,
-        ws,
-        client: auth.client as DaemonClient,
-        webContents,
-      };
-      sessions.set(id, session);
-      wsSessions.set(ws, session);
+        const session: WsSession = {
+          id,
+          ws,
+          client: auth.client as DaemonClient,
+          webContents,
+        };
+        sessions.set(id, session);
+        wsSessions.set(ws, session);
 
-      ws.on('close', () => {
-        sessions.delete(id);
-        wsSessions.delete(ws);
+        ws.on('close', () => {
+          sessions.delete(id);
+          wsSessions.delete(ws);
+        });
+
+        ws.send(JSON.stringify({ channel: 'daemon', payload: { type: 'ready', connection_id: id } }));
+        wss.emit('connection', ws, req);
       });
+      return;
+    }
 
-      ws.send(JSON.stringify({ channel: 'daemon', payload: { type: 'ready', connection_id: id } }));
-      wss.emit('connection', ws, req);
-    });
+    if (napcatBridge.handleUpgrade(req, socket, head)) {
+      return;
+    }
+
+    socket.destroy();
   });
 
   wss.on('connection', ws => {
