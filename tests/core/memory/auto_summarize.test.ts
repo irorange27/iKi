@@ -34,12 +34,10 @@ beforeEach(() => {
 });
 
 describe('generateLongMemorySummary', () => {
-  it('returns null when tool model is unavailable', async () => {
-    getToolModelMock.mockReturnValue(null);
+  it('returns null when there are no entries', async () => {
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
 
-    const result = await generateLongMemorySummary([
-      makeEntry({ content: 'This content is long enough to summarize for memory storage.' }),
-    ]);
+    const result = await generateLongMemorySummary([]);
 
     expect(result).toBeNull();
     expect(SimpleAgentMock).not.toHaveBeenCalled();
