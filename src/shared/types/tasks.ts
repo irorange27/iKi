@@ -1,4 +1,4 @@
-export type ProactiveTaskScheduleType = 'interval';
+export type ProactiveTaskScheduleType = 'interval' | 'cron';
 export type ProactiveTaskStatus = 'idle' | 'running' | 'success' | 'error';
 
 export interface ProactiveTask {
@@ -7,6 +7,8 @@ export interface ProactiveTask {
   prompt: string;
   schedule_type: ProactiveTaskScheduleType;
   interval_minutes: number;
+  cron_expression?: string | null;
+  schedule_timezone?: string | null;
   enabled: boolean;
   provider_type: string;
   model: string;
@@ -21,4 +23,3 @@ export interface ProactiveTask {
   created_at: string;
   updated_at: string;
 }
-

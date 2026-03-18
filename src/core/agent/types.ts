@@ -40,6 +40,14 @@ export const AgentToolSchema = z.object({
   parameters: z.record(z.string(), z.any()), // JSON Schema format for LLM
   paramSchema: z.any().optional(), // Optional Zod schema (z.ZodTypeAny) for parameter validation
   needsApproval: z.any().optional().default(false),
+  displayName: z.string().optional(),
+  source: z
+    .object({
+      kind: z.enum(['builtin', 'mcp']),
+      id: z.string().optional(),
+      name: z.string().optional(),
+    })
+    .optional(),
   handler: z.any(), // Function type: (args: Record<string, any>) => Promise<any>
 });
 

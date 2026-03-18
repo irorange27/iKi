@@ -75,12 +75,42 @@ describe('tasks IPC', () => {
     expect(params.enabled).toBe(true);
     expect(params.notify).toBe(true);
     expect(params.interval_minutes).toBe(1);
+    expect(params.schedule_type).toBe('interval');
+    expect(params.cron_expression).toBeNull();
+    expect(params.schedule_timezone).toBeNull();
     expect(params.tools).toBe('["web","fetch"]');
     expect(params.thread_id).toBeNull();
-    expect(params.schedule_type).toBe('interval');
     expect(params.next_run_at).toBe('2026-03-18T12:01:00.000Z');
     expect(typeof params.id).toBe('string');
     expect((params.id as string).startsWith('task_')).toBe(true);
+  });
+
+  it('creates cron tasks and computes next run time from the expression', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:23:00.000Z'));
+
+    const handler = ipcHandlers.get('tasks:create');
+    if (!handler) throw new Error('tasks:create handler not registered');
+
+    getProactiveTaskMock.mockReturnValue({ id: 'task_cron' } as any);
+
+    const result = await handler(null, {
+      name: 'Cron Task',
+      prompt: 'Ping',
+      provider_type: 'openai',
+      model: 'gpt-4',
+      schedule_type: 'cron',
+      cron_expression: '0 2 * * *',
+      schedule_timezone: 'UTC',
+    });
+
+    expect(result).toEqual({ success: true, task: { id: 'task_cron' } });
+
+    const params = addProactiveTaskMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.schedule_type).toBe('cron');
+    expect(params.cron_expression).toBe('0 2 * * *');
+    expect(params.schedule_timezone).toBe('UTC');
+    expect(params.next_run_at).toBe('2026-03-18T02:00:00.000Z');
   });
 
   it('rejects create when required fields are missing', async () => {
@@ -116,6 +146,29 @@ describe('tasks IPC', () => {
     expect(params.interval_minutes).toBe(90);
     expect(params.tools).toBe('["web"]');
     expect(params.next_run_at).toBe('2026-03-18T11:30:00.000Z');
+  });
+
+  it('recomputes next_run_at when cron expression changes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T05:10:00.000Z'));
+
+    const handler = ipcHandlers.get('tasks:update');
+    if (!handler) throw new Error('tasks:update handler not registered');
+
+    getProactiveTaskMock.mockReturnValue({
+      id: 'task_cron',
+      enabled: true,
+      interval_minutes: 60,
+      schedule_type: 'cron',
+      cron_expression: '0 5 * * *',
+      schedule_timezone: 'UTC',
+    } as any);
+
+    await handler(null, 'task_cron', { cron_expression: '0 6 * * *' });
+
+    const params = updateProactiveTaskMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(params.cron_expression).toBe('0 6 * * *');
+    expect(params.next_run_at).toBe('2026-03-18T06:00:00.000Z');
   });
 
   it('schedules next_run_at when enabling a previously disabled task', async () => {

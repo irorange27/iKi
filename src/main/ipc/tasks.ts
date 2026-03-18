@@ -5,23 +5,29 @@ import type { ProactiveTask } from '../../shared/types/tasks';
 import { isObjectRecord } from '../../shared/utils/guards';
 import { getErrorMessage } from '../utils/errors';
 import { runProactiveTask } from '../services/tasks/proactive_tasks';
+import {
+  clampIntervalMinutes,
+  computeNextRunAt,
+  normalizeCronExpression,
+  normalizeScheduleTimezone,
+  normalizeScheduleType,
+  validateCronExpression,
+} from '../services/tasks/task_schedule';
 
 let tasksIpcRegistered = false;
 
 const createRuntimeId = (prefix: string) =>
   `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-const clampIntervalMinutes = (value: unknown): number => {
-  const asNumber = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(asNumber)) return 60;
-  return Math.min(60 * 24 * 7, Math.max(1, Math.trunc(asNumber)));
-};
-
-const addMinutes = (base: Date, minutes: number): string => {
-  const next = new Date(base.getTime());
-  next.setMinutes(next.getMinutes() + minutes);
-  return next.toISOString();
-};
+const computeNextRunAtFromNow = (
+  schedule: {
+    schedule_type: ProactiveTask['schedule_type'];
+    interval_minutes: number;
+    cron_expression?: string | null;
+    schedule_timezone?: string | null;
+  },
+  now: Date
+) => computeNextRunAt(schedule, now.toISOString());
 
 const normalizeToolsJson = (raw: unknown): string | null => {
   if (!raw) return null;
@@ -67,8 +73,10 @@ export const registerTasksIpc = (): void => {
       const model = typeof taskInput.model === 'string' ? taskInput.model.trim() : '';
       const enabled = taskInput.enabled !== false;
       const notify = taskInput.notify !== false;
+      const schedule_type = normalizeScheduleType(taskInput.schedule_type);
       const interval_minutes = clampIntervalMinutes(taskInput.interval_minutes);
-      const schedule_type = 'interval' as const;
+      const cron_expression = normalizeCronExpression(taskInput.cron_expression);
+      const schedule_timezone = normalizeScheduleTimezone(taskInput.schedule_timezone);
       const tools = normalizeToolsJson(taskInput.tools);
       const thread_id =
         typeof taskInput.thread_id === 'string' && taskInput.thread_id.trim()
@@ -80,6 +88,14 @@ export const registerTasksIpc = (): void => {
       if (!provider_type) throw new Error('Task provider_type is required');
       if (!model) throw new Error('Task model is required');
 
+      if (schedule_type === 'cron') {
+        if (!cron_expression) throw new Error('Cron expression is required');
+        const cronError = validateCronExpression(cron_expression, schedule_timezone);
+        if (cronError) {
+          throw new Error(`Invalid cron expression: ${cronError}`);
+        }
+      }
+
       tasksDb.addProactiveTask({
         id,
         name,
@@ -90,10 +106,20 @@ export const registerTasksIpc = (): void => {
         notify,
         schedule_type,
         interval_minutes,
+        cron_expression,
+        schedule_timezone,
         tools,
         thread_id,
         // First run is scheduled from "now".
-        next_run_at: addMinutes(now, interval_minutes),
+        next_run_at: computeNextRunAtFromNow(
+          {
+            schedule_type,
+            interval_minutes,
+            cron_expression,
+            schedule_timezone,
+          },
+          now
+        ),
       });
 
       return { success: true, task: tasksDb.getProactiveTask(id) };
@@ -110,33 +136,73 @@ export const registerTasksIpc = (): void => {
       const taskUpdates = normalizeTaskInput(updates);
       const now = new Date();
       const nextUpdates: Partial<ProactiveTask> = { ...taskUpdates };
+      const hasScheduleType = typeof taskUpdates.schedule_type === 'string';
+      const scheduleType = hasScheduleType
+        ? normalizeScheduleType(taskUpdates.schedule_type)
+        : normalizeScheduleType(existing.schedule_type);
+      const hasCronExpression = Object.prototype.hasOwnProperty.call(taskUpdates, 'cron_expression');
+      const hasScheduleTimezone = Object.prototype.hasOwnProperty.call(taskUpdates, 'schedule_timezone');
+      const hasIntervalMinutes = typeof taskUpdates.interval_minutes !== 'undefined';
 
       if (typeof taskUpdates.tools !== 'undefined') {
         nextUpdates.tools = normalizeToolsJson(taskUpdates.tools);
       }
 
-      if (typeof taskUpdates.interval_minutes !== 'undefined') {
-        const interval = clampIntervalMinutes(taskUpdates.interval_minutes);
-        nextUpdates.interval_minutes = interval;
+      if (hasScheduleType) {
+        nextUpdates.schedule_type = scheduleType;
+      }
 
-        // When schedule changes, reset next run from "now" (if enabled).
-        const enabledAfter =
-          typeof taskUpdates.enabled === 'boolean' ? taskUpdates.enabled : existing.enabled;
-        if (enabledAfter) {
-          nextUpdates.next_run_at = addMinutes(now, interval);
+      if (hasCronExpression) {
+        nextUpdates.cron_expression = normalizeCronExpression(taskUpdates.cron_expression);
+      }
+
+      if (hasScheduleTimezone) {
+        nextUpdates.schedule_timezone = normalizeScheduleTimezone(taskUpdates.schedule_timezone);
+      }
+
+      if (hasIntervalMinutes) {
+        nextUpdates.interval_minutes = clampIntervalMinutes(taskUpdates.interval_minutes);
+      }
+
+      const enabledUpdate = typeof taskUpdates.enabled === 'boolean';
+      const enabledAfter = enabledUpdate ? taskUpdates.enabled : existing.enabled;
+      const enablingFromDisabled = enabledUpdate && taskUpdates.enabled && !existing.enabled;
+      const intervalMinutes =
+        typeof nextUpdates.interval_minutes === 'number'
+          ? nextUpdates.interval_minutes
+          : existing.interval_minutes;
+      const cronExpression =
+        (hasCronExpression ? nextUpdates.cron_expression : existing.cron_expression) ?? null;
+      const scheduleTimezone =
+        (hasScheduleTimezone ? nextUpdates.schedule_timezone : existing.schedule_timezone) ?? null;
+
+      if (scheduleType === 'interval' && (hasScheduleType || hasCronExpression || hasScheduleTimezone)) {
+        nextUpdates.cron_expression = null;
+        nextUpdates.schedule_timezone = null;
+      }
+
+      const scheduleChanged =
+        (scheduleType === 'interval' && (hasScheduleType || hasIntervalMinutes)) ||
+        (scheduleType === 'cron' && (hasScheduleType || hasCronExpression || hasScheduleTimezone));
+
+      if (scheduleType === 'cron' && (scheduleChanged || enablingFromDisabled)) {
+        if (!cronExpression) throw new Error('Cron expression is required');
+        const cronError = validateCronExpression(cronExpression, scheduleTimezone);
+        if (cronError) {
+          throw new Error(`Invalid cron expression: ${cronError}`);
         }
       }
 
-      if (typeof taskUpdates.enabled === 'boolean') {
-        // If enabling a previously disabled task, schedule from now.
-        if (taskUpdates.enabled && !existing.enabled) {
-          const interval = clampIntervalMinutes(
-            typeof taskUpdates.interval_minutes !== 'undefined'
-              ? taskUpdates.interval_minutes
-              : existing.interval_minutes
-          );
-          nextUpdates.next_run_at = addMinutes(now, interval);
-        }
+      if ((scheduleChanged || enablingFromDisabled) && enabledAfter) {
+        nextUpdates.next_run_at = computeNextRunAtFromNow(
+          {
+            schedule_type: scheduleType,
+            interval_minutes: intervalMinutes,
+            cron_expression: scheduleType === 'cron' ? cronExpression : null,
+            schedule_timezone: scheduleType === 'cron' ? scheduleTimezone : null,
+          },
+          now
+        );
       }
 
       tasksDb.updateProactiveTask(id, nextUpdates);
