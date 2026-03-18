@@ -100,6 +100,7 @@ const MemorySchema = z
         injectToSystemPrompt: booleanField(
           DEFAULT_APP_CONFIG.memory.emotion.injectToSystemPrompt
         ),
+        realtimeAnalysis: booleanField(DEFAULT_APP_CONFIG.memory.emotion.realtimeAnalysis),
         minConfidence: numberField(DEFAULT_APP_CONFIG.memory.emotion.minConfidence),
         minSampleCount: numberField(DEFAULT_APP_CONFIG.memory.emotion.minSampleCount),
         windowSize: numberField(DEFAULT_APP_CONFIG.memory.emotion.windowSize),

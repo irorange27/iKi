@@ -1,4 +1,14 @@
 import { SimpleAgent } from '../../../core/agent';
+import { getAppConfig } from '../../../core/config';
+import * as chatThreadDb from '../../../core/db/chat_thread';
+import * as emotionDb from '../../../core/db/emotion';
+import * as memoryDb from '../../../core/db/memory';
+import {
+  buildAffectSystemMessage,
+  collectEmotionSamples,
+  computeAffectState,
+} from '../../../core/emotion/affect_state';
+import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import * as llmFactory from '../../../core/provider/llm/factory';
 import * as deepseekProvider from '../../../core/provider/llm/deepseek';
 import * as kimiProvider from '../../../core/provider/llm/kimi';
@@ -12,6 +22,7 @@ import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
 import type {
   ActiveStreamState,
+  ChatInputMessage,
   ChatTransportMessage,
   ChatWebContents,
 } from './chat_types';
@@ -39,6 +50,95 @@ export const createChatStreaming = (deps: {
   const toolLoopRunner = createToolLoopRunner({
     registerApprovalBatch: deps.approvals.registerApprovalBatch,
   });
+
+  const getMemoryConfig = () => getAppConfig()?.memory || null;
+  const getEmotionConfig = () => getAppConfig()?.memory?.emotion || null;
+
+  const canStoreShortMemory = () => {
+    const memoryConfig = getMemoryConfig();
+    return Boolean(memoryConfig?.enabled || memoryConfig?.autoSummarize);
+  };
+
+  const insertSystemMessage = (
+    messages: ChatInputMessage[],
+    content: string
+  ): ChatInputMessage[] => {
+    if (!content.trim()) return messages;
+    const insertIndex = messages.findIndex(message => message.role !== 'system');
+    const headIndex = insertIndex === -1 ? messages.length : insertIndex;
+    return [
+      ...messages.slice(0, headIndex),
+      { role: 'system', content },
+      ...messages.slice(headIndex),
+    ];
+  };
+
+  const buildRealtimeAffectMessage = async (
+    threadId: string | undefined,
+    prompt: string
+  ): Promise<string> => {
+    const emotionConfig = getEmotionConfig();
+    if (
+      !emotionConfig?.enabled ||
+      !emotionConfig.injectToSystemPrompt ||
+      !emotionConfig.realtimeAnalysis
+    ) {
+      return '';
+    }
+
+    const content = prompt.trim();
+    if (!content) return '';
+
+    const minSampleCount = Math.max(1, Math.floor(emotionConfig.minSampleCount || 1));
+    if (!threadId && minSampleCount > 1) return '';
+
+    if (threadId) {
+      const thread = chatThreadDb.getChatThread(threadId);
+      if (thread?.is_incognito) return '';
+    }
+
+    const emotion = await analyzeEmotionWithAgent(content);
+    if (!emotion) return '';
+
+    if (threadId) {
+      deps.memory.recordRealtimeEmotion?.(threadId, content, emotion);
+    }
+
+    const realtimeSample = {
+      emotion: {
+        label: emotion.label,
+        confidence: emotion.confidence,
+        ...(typeof emotion.valence === 'number' ? { valence: emotion.valence } : {}),
+        ...(typeof emotion.arousal === 'number' ? { arousal: emotion.arousal } : {}),
+        ...(emotion.emotions ? { emotions: emotion.emotions } : {}),
+      },
+      timestamp: new Date(),
+    };
+
+    const fetchLimit = Math.max(
+      10,
+      Math.floor(emotionConfig.windowSize || 0) * 3,
+      minSampleCount
+    );
+
+    const samples = [realtimeSample];
+    if (threadId) {
+      const events = emotionDb.listEmotionEvents(threadId, fetchLimit);
+      samples.push(...collectEmotionSamples(events));
+    }
+
+    let affectState = computeAffectState(samples, emotionConfig);
+    if (!affectState && threadId && canStoreShortMemory()) {
+      const shortEntries = memoryDb.listShortMemory(threadId, fetchLimit);
+      affectState = computeAffectState(
+        [realtimeSample, ...collectEmotionSamples(shortEntries)],
+        emotionConfig
+      );
+    }
+
+    if (!affectState) return '';
+    return buildAffectSystemMessage(affectState);
+  };
 
   const getModels = async (providerType: string) => {
     try {
@@ -88,13 +188,22 @@ export const createChatStreaming = (deps: {
     threadId?: string;
   }) => {
     try {
+      const modelMessages = await toModelInputMessages(options.messages);
+      const lastModelMessage = modelMessages[modelMessages.length - 1];
+      const realtimeAffect = lastModelMessage
+        ? await buildRealtimeAffectMessage(options.threadId, getPromptFromMessage(lastModelMessage))
+        : '';
       const inputMessages = deps.memory.injectMemoryIntoMessages(
-        await toModelInputMessages(options.messages),
-        options.threadId
+        modelMessages,
+        options.threadId,
+        { skipAffect: Boolean(realtimeAffect) }
       );
+      const finalMessages = realtimeAffect
+        ? insertSystemMessage(inputMessages, realtimeAffect)
+        : inputMessages;
 
       const { skillsSystemPrompt } = await resolveSkillsSystemPrompt({
-        inputMessages,
+        inputMessages: finalMessages,
         threadId: options.threadId,
         skillIds: options.skillIds,
         skillMode: options.skillMode,
@@ -102,7 +211,6 @@ export const createChatStreaming = (deps: {
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
-        inputMessages,
       });
 
       persistThreadRuntimeHints({
@@ -134,8 +242,8 @@ export const createChatStreaming = (deps: {
         }
 
         // Separate user prompt from history
-        const history = inputMessages.slice(0, -1);
-        const lastMessage = inputMessages[inputMessages.length - 1];
+        const history = finalMessages.slice(0, -1);
+        const lastMessage = finalMessages[finalMessages.length - 1];
         const prompt = getPromptFromMessage(lastMessage);
 
         if (!prompt.trim()) {
@@ -151,7 +259,7 @@ export const createChatStreaming = (deps: {
       const text = await llmFactory.generateChat({
         providerType: options.providerType,
         modelId: options.model,
-        messages: toLlmChatMessages(inputMessages),
+        messages: toLlmChatMessages(finalMessages),
         extraSystemPrompt: skillsSystemPrompt,
       });
       return { success: true, text };
@@ -193,18 +301,27 @@ export const createChatStreaming = (deps: {
     );
 
     try {
+      const modelMessages = await toModelInputMessages(options.messages);
+      const lastModelMessage = modelMessages[modelMessages.length - 1];
+      const realtimeAffect = lastModelMessage
+        ? await buildRealtimeAffectMessage(options.threadId, getPromptFromMessage(lastModelMessage))
+        : '';
       const inputMessages = deps.memory.injectMemoryIntoMessages(
-        await toModelInputMessages(options.messages),
+        modelMessages,
         options.threadId,
         {
           onRetrieved: payload => {
             uiChunkEmitter.emitMemoryRetrieval(payload);
           },
+          skipAffect: Boolean(realtimeAffect),
         }
       );
+      const finalMessages = realtimeAffect
+        ? insertSystemMessage(inputMessages, realtimeAffect)
+        : inputMessages;
 
       const { skillsSystemPrompt } = await resolveSkillsSystemPrompt({
-        inputMessages,
+        inputMessages: finalMessages,
         threadId: options.threadId,
         skillIds: options.skillIds,
         skillMode: options.skillMode,
@@ -212,7 +329,6 @@ export const createChatStreaming = (deps: {
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
-        inputMessages,
       });
 
       persistThreadRuntimeHints({
@@ -258,12 +374,12 @@ export const createChatStreaming = (deps: {
         console.log('[Main] Streaming chat without tools');
       }
 
-      if (!inputMessages || inputMessages.length === 0) {
+      if (!finalMessages || finalMessages.length === 0) {
         throw new Error('No messages provided for streaming');
       }
 
-      const history = inputMessages.slice(0, -1);
-      const lastMessage = inputMessages[inputMessages.length - 1];
+      const history = finalMessages.slice(0, -1);
+      const lastMessage = finalMessages[finalMessages.length - 1];
       const prompt = getPromptFromMessage(lastMessage);
 
       if (!prompt.trim()) {

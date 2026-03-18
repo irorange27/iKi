@@ -55,6 +55,7 @@ export interface AppConfig {
     emotion: {
       enabled: boolean;
       injectToSystemPrompt: boolean;
+      realtimeAnalysis: boolean;
       minConfidence: number;
       minSampleCount: number;
       windowSize: number;

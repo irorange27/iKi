@@ -53,6 +53,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     emotion: {
       enabled: false,
       injectToSystemPrompt: true,
+      realtimeAnalysis: false,
       minConfidence: 0.45,
       minSampleCount: 2,
       windowSize: 8,

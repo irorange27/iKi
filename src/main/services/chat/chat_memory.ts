@@ -41,9 +41,22 @@ const buildMemorySystemMessage = (
   return ['Long-term memory (use only if relevant; ignore if unrelated):', ...lines].join('\n');
 };
 
+const EMOTION_CACHE_TTL_MS = 2 * 60 * 1000;
+const EMOTION_CACHE_LIMIT = 200;
+
+const hashText = (text: string): string => {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+};
+
 export const createChatMemory = () => {
   const memorySummarizeInFlight = new Set<string>();
   const emotionInFlight = new Set<string>();
+  const realtimeEmotionCache = new Map<string, { emotion: unknown; createdAt: number }>();
 
   const getMemoryConfig = () => {
     const appConfig = getAppConfig();
@@ -83,6 +96,48 @@ export const createChatMemory = () => {
   const canStoreShortMemory = () => {
     const memoryConfig = getMemoryConfig();
     return Boolean(memoryConfig?.enabled || memoryConfig?.autoSummarize);
+  };
+
+  const buildEmotionCacheKey = (threadId: string, content: string) =>
+    `${threadId}:${hashText(content)}`;
+
+  const pruneRealtimeEmotionCache = () => {
+    const now = Date.now();
+    for (const [key, entry] of realtimeEmotionCache) {
+      if (now - entry.createdAt > EMOTION_CACHE_TTL_MS) {
+        realtimeEmotionCache.delete(key);
+      }
+    }
+    while (realtimeEmotionCache.size > EMOTION_CACHE_LIMIT) {
+      const oldestKey = realtimeEmotionCache.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      realtimeEmotionCache.delete(oldestKey);
+    }
+  };
+
+  const recordRealtimeEmotion = (threadId: string, content: string, emotion: unknown) => {
+    if (!threadId) return;
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    pruneRealtimeEmotionCache();
+    const key = buildEmotionCacheKey(threadId, trimmed);
+    realtimeEmotionCache.set(key, { emotion, createdAt: Date.now() });
+  };
+
+  const consumeRealtimeEmotion = (threadId: string, content: string): unknown | null => {
+    if (!threadId) return null;
+    const trimmed = content.trim();
+    if (!trimmed) return null;
+    pruneRealtimeEmotionCache();
+    const key = buildEmotionCacheKey(threadId, trimmed);
+    const entry = realtimeEmotionCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.createdAt > EMOTION_CACHE_TTL_MS) {
+      realtimeEmotionCache.delete(key);
+      return null;
+    }
+    realtimeEmotionCache.delete(key);
+    return entry.emotion;
   };
 
   const getAffectContextMessage = (threadId: string): string => {
@@ -171,7 +226,8 @@ export const createChatMemory = () => {
     emotionInFlight.add(params.messageId);
     void (async () => {
       try {
-        const emotion = await analyzeEmotionWithAgent(content);
+        const cachedEmotion = consumeRealtimeEmotion(params.threadId, content);
+        const emotion = cachedEmotion ?? (await analyzeEmotionWithAgent(content));
         if (!emotion) return;
 
         emotionDb.addEmotionEvent({
@@ -212,6 +268,7 @@ export const createChatMemory = () => {
     threadId?: string,
     options?: {
       onRetrieved?: (payload: MemoryRetrievalPayload) => void;
+      skipAffect?: boolean;
     }
   ): ChatInputMessage[] => {
     if (!threadId) return messages;
@@ -249,9 +306,11 @@ export const createChatMemory = () => {
       }
     }
 
-    const affectContent = getAffectContextMessage(threadId);
-    if (affectContent.trim()) {
-      systemMessages.push({ role: 'system', content: affectContent });
+    if (!options?.skipAffect) {
+      const affectContent = getAffectContextMessage(threadId);
+      if (affectContent.trim()) {
+        systemMessages.push({ role: 'system', content: affectContent });
+      }
     }
 
     if (!systemMessages.length) return messages;
@@ -289,7 +348,7 @@ export const createChatMemory = () => {
     }
   };
 
-  return { injectMemoryIntoMessages, onMessagePersisted };
+  return { injectMemoryIntoMessages, onMessagePersisted, recordRealtimeEmotion };
 };
 
 export type ChatMemory = ReturnType<typeof createChatMemory>;
