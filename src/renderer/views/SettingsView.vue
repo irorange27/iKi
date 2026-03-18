@@ -2946,6 +2946,19 @@ onUnmounted(() => {
   background: transparent;
   border: 1px solid var(--border-color);
   color: var(--text-primary);
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--font-size);
+  line-height: 1;
+  min-height: 36px;
+  transition: all 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .secondary-btn:hover {
@@ -3970,7 +3983,7 @@ input[type='range'] {
 }
 
 .memory-refresh {
-  height: 38px;
+  min-height: 38px;
 }
 
 .memory-panels {
