@@ -1,0 +1,113 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import type { AgentResult, SimpleAgent } from '../../../../src/core/agent';
+import { createToolLoopRunner } from '../../../../src/main/services/chat/chat_tool_loop';
+
+const createAsyncGenerator = (chunks: string[], result: AgentResult) =>
+  (async function* () {
+    for (const chunk of chunks) {
+      yield chunk;
+    }
+    return result;
+  })();
+
+const createAgent = (stream: AsyncGenerator<string, AgentResult, unknown>) =>
+  ({
+    stream: vi.fn().mockReturnValue(stream),
+  }) as unknown as SimpleAgent;
+
+const createUiChunkEmitter = () => ({
+  messageId: 'msg_1',
+  emitTextDelta: vi.fn(),
+  emitToolEvent: vi.fn(),
+  emitMemoryRetrieval: vi.fn(),
+  finish: vi.fn(),
+  abort: vi.fn(),
+  error: vi.fn(),
+});
+
+describe('tool loop runner', () => {
+  it('streams text and finishes when no approvals are required', async () => {
+    const registerApprovalBatch = vi.fn();
+    const runner = createToolLoopRunner({ registerApprovalBatch });
+    const agentResult: AgentResult = { response: 'Final text', iterations: 1 };
+    const agent = createAgent(createAsyncGenerator(['Hello ', 'world'], agentResult));
+    const uiChunkEmitter = createUiChunkEmitter();
+    const webContents = { id: 1, send: vi.fn() };
+
+    const result = await runner.stream({
+      agent,
+      webContents,
+      prompt: 'hi',
+      uiChunkEmitter,
+    });
+
+    expect(result.awaitingApproval).toBe(false);
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenCalledTimes(2);
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(1, 'Hello ');
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(2, 'world');
+    expect(uiChunkEmitter.finish).toHaveBeenCalledTimes(1);
+    expect(registerApprovalBatch).not.toHaveBeenCalled();
+  });
+
+  it('registers approval batch and does not finish when approval is needed', async () => {
+    const registerApprovalBatch = vi.fn();
+    const runner = createToolLoopRunner({ registerApprovalBatch });
+    const agentResult: AgentResult = {
+      response: '',
+      iterations: 1,
+      toolApprovalRequests: [
+        {
+          approvalId: 'approval_1',
+          toolCall: { toolName: 'web', args: {} },
+        },
+      ],
+    };
+    const agent = createAgent(createAsyncGenerator([], agentResult));
+    const uiChunkEmitter = createUiChunkEmitter();
+    const webContents = { id: 2, send: vi.fn() };
+
+    const result = await runner.stream({
+      agent,
+      webContents,
+      prompt: 'go',
+      uiChunkEmitter,
+    });
+
+    expect(result.awaitingApproval).toBe(true);
+    expect(registerApprovalBatch).toHaveBeenCalledWith(agentResult.toolApprovalRequests, {
+      agent,
+      webContents,
+    });
+    expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
+  });
+
+  it('aborts when cancelled during streaming', async () => {
+    const registerApprovalBatch = vi.fn();
+    const runner = createToolLoopRunner({ registerApprovalBatch });
+    const agentResult: AgentResult = { response: 'Final text', iterations: 1 };
+    const agent = createAgent(createAsyncGenerator(['Hello ', 'world'], agentResult));
+    const uiChunkEmitter = createUiChunkEmitter();
+    const webContents = { id: 3, send: vi.fn() };
+    let cancelChecks = 0;
+
+    const result = await runner.stream({
+      agent,
+      webContents,
+      prompt: 'hi',
+      uiChunkEmitter,
+      shouldCancel: () => {
+        cancelChecks += 1;
+        return cancelChecks > 1;
+      },
+    });
+
+    expect(result.awaitingApproval).toBe(false);
+    expect(result.cancelled).toBe(true);
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenCalledTimes(1);
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(1, 'Hello ');
+    expect(uiChunkEmitter.abort).toHaveBeenCalledTimes(1);
+    expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
+    expect(registerApprovalBatch).not.toHaveBeenCalled();
+  });
+});
