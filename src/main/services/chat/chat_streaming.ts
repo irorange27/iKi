@@ -100,7 +100,10 @@ export const createChatStreaming = (deps: {
         skillMode: options.skillMode,
       });
 
-      const { resolvedTools, mode } = await resolveToolNames({ tools: options.tools });
+      const { resolvedTools, mode } = await resolveToolNames({
+        tools: options.tools,
+        inputMessages,
+      });
 
       persistThreadRuntimeHints({
         threadId: options.threadId ?? '',
@@ -207,7 +210,10 @@ export const createChatStreaming = (deps: {
         skillMode: options.skillMode,
       });
 
-      const { resolvedTools, mode } = await resolveToolNames({ tools: options.tools });
+      const { resolvedTools, mode } = await resolveToolNames({
+        tools: options.tools,
+        inputMessages,
+      });
 
       persistThreadRuntimeHints({
         threadId: options.threadId ?? '',

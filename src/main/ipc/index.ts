@@ -8,6 +8,7 @@ import { registerSkillsIpc } from './skills';
 import { registerTasksIpc } from './tasks';
 import { registerToolModelIpc } from './tool_model';
 import { registerToolsIpc } from './tools';
+import { registerWorkflowIpc } from './workflow';
 import { registerWindowIpc } from './window';
 import { registerWorkspacesIpc } from './workspaces';
 
@@ -26,6 +27,7 @@ export const registerMainIpc = (): void => {
   registerToolModelIpc();
   registerToolsIpc();
   registerSkillsIpc();
+  registerWorkflowIpc();
   registerSpeechIpc();
   registerTasksIpc();
   registerChatIpc();

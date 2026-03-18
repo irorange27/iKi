@@ -162,6 +162,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     read: (id: string, options?: { maxChars?: number }) =>
       ipcRenderer.invoke('skills:read', id, options),
   },
+  workflow: {
+    resetAutoPinnedSkills: () => ipcRenderer.invoke('workflow:reset-auto-skills'),
+  },
   memory: {
     short: {
       list: (threadId: string, limit?: number) =>

@@ -39,8 +39,8 @@
           <span class="text-sm font-semibold text-primary">Tools</span>
         </div>
         <div class="mt-1 text-xs text-muted leading-snug">
-          Allow iKi to use tools (web, files, shell) for the next response. Choose Auto
-          or select manually.
+          Allow iKi to use tools (web, files, shell) for the next response. Auto lets iKi
+          choose the minimal safe toolset based on your message.
         </div>
 
         <div class="mt-2 flex items-center gap-2">
@@ -69,7 +69,7 @@
         </div>
 
         <div v-if="isAutoToolMode" class="mt-2 text-xs text-accent leading-snug">
-          Auto enables the default toolset. iKi will decide if and when to call tools.
+          Auto picks only the tools needed. It may choose none.
         </div>
       </div>
       <div class="max-h-72 overflow-y-auto p-2">

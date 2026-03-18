@@ -1433,6 +1433,41 @@
             </div>
           </div>
         </div>
+
+        <div class="settings-card">
+          <div class="card-title">Workflow Optimization</div>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="config.workflowOptimization.enabled"
+              @change="updateWorkflowOptimization('enabled', ($event.target as HTMLInputElement).checked)"
+            />
+            Enable self-optimizing workflow
+          </label>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="config.workflowOptimization.autoPinSkills"
+              :disabled="!config.workflowOptimization.enabled"
+              @change="updateWorkflowOptimization('autoPinSkills', ($event.target as HTMLInputElement).checked)"
+            />
+            Auto-pin frequently used skills per thread
+          </label>
+          <p class="card-help">
+            iKi learns which skills consistently help in a thread and keeps them pinned in auto
+            mode. This never affects manual skill selection.
+          </p>
+          <div class="skills-toolbar-actions">
+            <button
+              class="secondary-btn skills-btn"
+              @click="resetWorkflowOptimization"
+              :disabled="workflowResetting"
+            >
+              {{ workflowResetting ? 'Resetting...' : 'Reset auto-pinned skills' }}
+            </button>
+          </div>
+          <p v-if="workflowResetError" class="skills-error">{{ workflowResetError }}</p>
+        </div>
       </section>
 
       <!-- Footer operabar -->
@@ -1522,6 +1557,8 @@ const expandedSkillIds = ref<string[]>([]);
 const skillContents = ref<Record<string, string>>({});
 const skillContentLoading = ref<Record<string, boolean>>({});
 const skillContentTruncated = ref<Record<string, boolean>>({});
+const workflowResetting = ref(false);
+const workflowResetError = ref('');
 const speechStatus = ref<SpeechStatus | null>(null);
 const speechStatusLoading = ref(false);
 let speechStatusTimer: number | null = null;
@@ -2178,6 +2215,33 @@ const updateToolExecution = <K extends keyof AppConfig['toolExecution']>(
 ) => {
   config.value.toolExecution[key] = value;
   autoSave();
+};
+
+const updateWorkflowOptimization = <K extends keyof AppConfig['workflowOptimization']>(
+  key: K,
+  value: AppConfig['workflowOptimization'][K]
+) => {
+  config.value.workflowOptimization[key] = value;
+  autoSave();
+};
+
+const resetWorkflowOptimization = async () => {
+  workflowResetError.value = '';
+  if (!window?.electronAPI?.workflow?.resetAutoPinnedSkills) {
+    workflowResetError.value = 'Workflow reset unavailable.';
+    return;
+  }
+  workflowResetting.value = true;
+  try {
+    const result = await window.electronAPI.workflow.resetAutoPinnedSkills();
+    if (!result?.success) {
+      workflowResetError.value = result?.error || 'Failed to reset workflow data.';
+    }
+  } catch (error: any) {
+    workflowResetError.value = `Failed to reset workflow data: ${error?.message || 'Unknown error'}`;
+  } finally {
+    workflowResetting.value = false;
+  }
 };
 
 const shellHighRiskPatternText = computed(() =>

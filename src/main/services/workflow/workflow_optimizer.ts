@@ -191,6 +191,11 @@ export const recordAutoSkillSelection = (params: {
     }
   }
   profile.skills = nextSkills;
+  for (const id of profile.pinnedSkills) {
+    if (!profile.skills[id]) {
+      profile.skills[id] = { selections: 0 };
+    }
+  }
 
   const nextPinned = computePinnedSkills({
     profile,
