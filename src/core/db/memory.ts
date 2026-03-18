@@ -376,6 +376,11 @@ export const updateLongMemory = (id: string, updates: Partial<LongMemoryEntry>) 
   return stmt.run(params);
 };
 
+export const deleteLongMemory = (id: string) => {
+  if (!id) return null;
+  return getDb().prepare('DELETE FROM memory_long WHERE id = ?').run(id);
+};
+
 type LongMemorySearchOptions = {
   limit?: number;
   threshold?: number;

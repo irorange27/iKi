@@ -15,7 +15,13 @@ export const registerMemoryIpc = (): void => {
   ipcMain.handle('memory:short:listAll', (_event, limit) =>
     memoryDb.listShortMemoryAcrossThreads(limit)
   );
-  ipcMain.handle('memory:long:add', (_event, entry) => memoryDb.addLongMemory(entry));
+  ipcMain.handle('memory:long:add', (_event, entry) =>
+    memoryDb.addLongMemory(entry, { force: true })
+  );
+  ipcMain.handle('memory:long:update', (_event, id, updates) =>
+    memoryDb.updateLongMemory(id, updates)
+  );
+  ipcMain.handle('memory:long:delete', (_event, id) => memoryDb.deleteLongMemory(id));
   ipcMain.handle('memory:long:list', (_event, threadId, limit) =>
     memoryDb.listLongMemory(threadId, limit)
   );

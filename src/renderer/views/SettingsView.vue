@@ -765,6 +765,146 @@
           </p>
         </div>
 
+        <div class="settings-card">
+          <div class="card-title">Emotion Context</div>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="config.memory.emotion.enabled"
+              @change="updateEmotion('enabled', ($event.target as HTMLInputElement).checked)"
+            />
+            Enable Emotion Analysis
+          </label>
+          <p class="card-help">
+            Infer affect signals from recent user messages to guide tone and pacing. Emotion events
+            are stored without message content.
+          </p>
+
+          <template v-if="config.memory.emotion.enabled">
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                :checked="config.memory.emotion.injectToSystemPrompt"
+                @change="
+                  updateEmotion(
+                    'injectToSystemPrompt',
+                    ($event.target as HTMLInputElement).checked
+                  )
+                "
+              />
+              Inject Emotion Context into Agent
+            </label>
+
+            <div class="slider-field">
+              <span>Minimum Confidence</span>
+              <span class="value-badge">{{
+                Math.round(config.memory.emotion.minConfidence * 100)
+              }}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="Math.round(config.memory.emotion.minConfidence * 100)"
+              @input="
+                updateEmotion(
+                  'minConfidence',
+                  parseInt(($event.target as HTMLInputElement).value) / 100
+                )
+              "
+            />
+            <p class="slider-hint">
+              Higher values make emotion context more conservative.
+            </p>
+
+            <div class="slider-field">
+              <span>Minimum Samples</span>
+              <span class="value-badge">{{ config.memory.emotion.minSampleCount }}</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="8"
+              step="1"
+              :value="config.memory.emotion.minSampleCount"
+              @input="
+                updateEmotion(
+                  'minSampleCount',
+                  parseInt(($event.target as HTMLInputElement).value)
+                )
+              "
+            />
+
+            <div class="slider-field">
+              <span>Window Size</span>
+              <span class="value-badge">{{ config.memory.emotion.windowSize }}</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="20"
+              step="1"
+              :value="config.memory.emotion.windowSize"
+              @input="
+                updateEmotion(
+                  'windowSize',
+                  parseInt(($event.target as HTMLInputElement).value)
+                )
+              "
+            />
+            <p class="slider-hint">
+              Number of recent messages used to compute affect state.
+            </p>
+
+            <label class="input-label">
+              <span>Half-life (minutes)</span>
+              <input
+                type="number"
+                min="5"
+                max="720"
+                :value="config.memory.emotion.halfLifeMinutes"
+                @input="
+                  updateEmotion(
+                    'halfLifeMinutes',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+
+            <label class="input-label">
+              <span>Max Age (minutes)</span>
+              <input
+                type="number"
+                min="10"
+                max="1440"
+                :value="config.memory.emotion.maxAgeMinutes"
+                @input="
+                  updateEmotion(
+                    'maxAgeMinutes',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                :checked="config.memory.emotion.includeNeutral"
+                @change="
+                  updateEmotion(
+                    'includeNeutral',
+                    ($event.target as HTMLInputElement).checked
+                  )
+                "
+              />
+              Include Neutral Signals
+            </label>
+          </template>
+        </div>
+
         <div class="settings-card memory-viewer">
           <div class="card-title">Memory Viewer</div>
           <p class="card-help">
@@ -797,6 +937,52 @@
             No chat threads yet. Start a chat to generate memory entries.
           </p>
           <p v-if="memoryError" class="memory-error">{{ memoryError }}</p>
+
+          <div v-if="memoryThreads.length" class="memory-panel memory-editor">
+            <div class="memory-panel-header">
+              <span>New Long Memory</span>
+            </div>
+            <div class="memory-editor-grid">
+              <label class="input-label">
+                <span>Thread</span>
+                <select
+                  :value="newLongMemoryThreadId"
+                  :disabled="isMemoryThreadLocked"
+                  @change="newLongMemoryThreadId = ($event.target as HTMLSelectElement).value"
+                >
+                  <option value="" disabled>Select a thread</option>
+                  <option v-for="thread in memoryThreads" :key="thread.id" :value="thread.id">
+                    {{ thread.title || thread.id }}
+                  </option>
+                </select>
+              </label>
+              <label class="input-label">
+                <span>Summary</span>
+                <textarea
+                  class="memory-editor-textarea"
+                  :value="newLongMemorySummary"
+                  placeholder="Add a durable user fact, preference, or project detail."
+                  @input="newLongMemorySummary = ($event.target as HTMLTextAreaElement).value"
+                />
+              </label>
+            </div>
+            <div class="memory-editor-actions">
+              <button
+                class="secondary-btn"
+                @click="createLongMemory"
+                :disabled="memoryMutationLoading || !canCreateLongMemory"
+              >
+                {{ memoryMutationLoading ? 'Saving...' : 'Add Memory' }}
+              </button>
+            </div>
+            <p
+              v-if="selectedMemoryThreadId === ALL_THREADS && !newLongMemoryThreadId"
+              class="memory-empty"
+            >
+              Choose a thread to enable manual memory creation.
+            </p>
+            <p v-if="memoryMutationError" class="memory-error">{{ memoryMutationError }}</p>
+          </div>
 
           <div class="memory-panels">
             <div class="memory-panel">
@@ -839,7 +1025,30 @@
                   <div class="memory-item-meta">
                     <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
                   </div>
-                  <div class="memory-item-content">{{ entry.summary }}</div>
+                  <div v-if="editingLongMemoryId === entry.id" class="memory-edit">
+                    <textarea
+                      class="memory-editor-textarea"
+                      :value="editingLongMemorySummary"
+                      @input="editingLongMemorySummary = ($event.target as HTMLTextAreaElement).value"
+                    />
+                    <div class="memory-inline-actions">
+                      <button
+                        class="secondary-btn memory-inline-btn"
+                        @click="saveLongMemoryEdit(entry)"
+                        :disabled="memoryMutationLoading || !canSaveLongMemoryEdit"
+                      >
+                        {{ memoryMutationLoading ? 'Saving...' : 'Save' }}
+                      </button>
+                      <button
+                        class="secondary-btn memory-inline-btn"
+                        @click="cancelEditLongMemory"
+                        :disabled="memoryMutationLoading"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                  <div v-else class="memory-item-content">{{ entry.summary }}</div>
                   <div v-if="isAllThreadsSelected" class="memory-item-sub">
                     Thread: {{ getThreadLabel(entry.thread_id) }}
                   </div>
@@ -848,6 +1057,22 @@
                   </div>
                   <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
                     Emotion: {{ formatJson(entry.emotion) }}
+                  </div>
+                  <div v-if="editingLongMemoryId !== entry.id" class="memory-inline-actions">
+                    <button
+                      class="secondary-btn memory-inline-btn"
+                      @click="startEditLongMemory(entry)"
+                      :disabled="memoryMutationLoading"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      class="secondary-btn memory-inline-btn memory-danger-btn"
+                      @click="deleteLongMemoryEntry(entry)"
+                      :disabled="memoryMutationLoading"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </li>
               </ul>
@@ -1281,6 +1506,13 @@ const memorySearchLoading = ref(false);
 const memoryError = ref('');
 const memorySearchError = ref('');
 const memoryThreadsLoaded = ref(false);
+const newLongMemoryThreadId = ref('');
+const newLongMemorySummary = ref('');
+const memoryMutationLoading = ref(false);
+const memoryMutationError = ref('');
+const editingLongMemoryId = ref('');
+const editingLongMemorySummary = ref('');
+const editingLongMemoryOriginal = ref('');
 const skills = ref<SkillSummary[]>([]);
 const skillsLoading = ref(false);
 const skillsError = ref('');
@@ -1920,6 +2152,13 @@ const updateMemory = <K extends keyof AppConfig['memory']>(
   config.value.memory[key] = value;
   autoSave();
 };
+const updateEmotion = <K extends keyof AppConfig['memory']['emotion']>(
+  key: K,
+  value: AppConfig['memory']['emotion'][K]
+) => {
+  config.value.memory.emotion[key] = value;
+  autoSave();
+};
 const updateToolModel = (key: 'model', value: string) => {
   config.value.toolModel[key] = value;
   autoSave();
@@ -1946,6 +2185,20 @@ const shellHighRiskPatternText = computed(() =>
 );
 const hasMemoryQuery = computed(() => memorySearchQuery.value.trim().length > 0);
 const isAllThreadsSelected = computed(() => selectedMemoryThreadId.value === ALL_THREADS);
+const isMemoryThreadLocked = computed(
+  () => !!selectedMemoryThreadId.value && selectedMemoryThreadId.value !== ALL_THREADS
+);
+const canCreateLongMemory = computed(() => {
+  return (
+    newLongMemorySummary.value.trim().length > 0 &&
+    newLongMemoryThreadId.value.trim().length > 0
+  );
+});
+const canSaveLongMemoryEdit = computed(() => {
+  if (!editingLongMemoryId.value) return false;
+  const summary = editingLongMemorySummary.value.trim();
+  return summary.length > 0 && summary !== editingLongMemoryOriginal.value.trim();
+});
 const threadLabelMap = computed(() => {
   const map = new Map<string, string>();
   for (const thread of memoryThreads.value) {
@@ -2018,6 +2271,20 @@ const formatJson = (raw: string | null | undefined) => {
   }
 };
 
+const syncNewLongMemoryThread = () => {
+  if (selectedMemoryThreadId.value && selectedMemoryThreadId.value !== ALL_THREADS) {
+    newLongMemoryThreadId.value = selectedMemoryThreadId.value;
+    return;
+  }
+  if (selectedMemoryThreadId.value === ALL_THREADS) {
+    newLongMemoryThreadId.value = '';
+    return;
+  }
+  if (!newLongMemoryThreadId.value && memoryThreads.value.length > 0) {
+    newLongMemoryThreadId.value = memoryThreads.value[0].id;
+  }
+};
+
 const loadMemoryThreads = async () => {
   if (memoryThreadsLoaded.value) return;
   try {
@@ -2026,9 +2293,13 @@ const loadMemoryThreads = async () => {
     memoryThreadsLoaded.value = true;
     if (!selectedMemoryThreadId.value && memoryThreads.value.length > 0) {
       selectedMemoryThreadId.value = memoryThreads.value[0].id;
+      syncNewLongMemoryThread();
       await refreshMemory();
     } else if (selectedMemoryThreadId.value === ALL_THREADS) {
+      syncNewLongMemoryThread();
       await refreshMemory();
+    } else {
+      syncNewLongMemoryThread();
     }
   } catch (error: any) {
     memoryError.value = `Failed to load threads: ${error?.message || 'Unknown error'}`;
@@ -2037,8 +2308,15 @@ const loadMemoryThreads = async () => {
 
 const selectMemoryThread = async (threadId: string) => {
   selectedMemoryThreadId.value = threadId;
+  syncNewLongMemoryThread();
   memorySearchResults.value = [];
   memorySearchError.value = '';
+  memoryMutationError.value = '';
+  if (editingLongMemoryId.value) {
+    editingLongMemoryId.value = '';
+    editingLongMemorySummary.value = '';
+    editingLongMemoryOriginal.value = '';
+  }
   await refreshMemory();
 };
 
@@ -2058,6 +2336,14 @@ const refreshMemory = async () => {
         ]);
     shortMemoryEntries.value = Array.isArray(shortEntries) ? shortEntries : [];
     longMemoryEntries.value = Array.isArray(longEntries) ? longEntries : [];
+    if (
+      editingLongMemoryId.value &&
+      !longMemoryEntries.value.some(entry => entry.id === editingLongMemoryId.value)
+    ) {
+      editingLongMemoryId.value = '';
+      editingLongMemorySummary.value = '';
+      editingLongMemoryOriginal.value = '';
+    }
   } catch (error: any) {
     memoryError.value = `Failed to load memory: ${error?.message || 'Unknown error'}`;
   } finally {
@@ -2094,6 +2380,104 @@ const runMemorySearch = async () => {
     memorySearchError.value = `Search failed: ${error?.message || 'Unknown error'}`;
   } finally {
     memorySearchLoading.value = false;
+  }
+};
+
+const createLongMemory = async () => {
+  const threadId = newLongMemoryThreadId.value.trim();
+  const summary = newLongMemorySummary.value.trim();
+  if (!threadId) {
+    memoryMutationError.value = 'Select a thread for the new memory.';
+    return;
+  }
+  if (!summary) {
+    memoryMutationError.value = 'Summary cannot be empty.';
+    return;
+  }
+
+  memoryMutationLoading.value = true;
+  memoryMutationError.value = '';
+  try {
+    await window.electronAPI.memory.long.add({
+      thread_id: threadId,
+      summary,
+      metadata: {
+        source: 'manual',
+        createdAt: new Date().toISOString(),
+      },
+    });
+    newLongMemorySummary.value = '';
+    await refreshMemory();
+    if (hasMemoryQuery.value) {
+      await runMemorySearch();
+    }
+  } catch (error: any) {
+    memoryMutationError.value = `Failed to add memory: ${error?.message || 'Unknown error'}`;
+  } finally {
+    memoryMutationLoading.value = false;
+  }
+};
+
+const startEditLongMemory = (entry: LongMemoryEntry) => {
+  editingLongMemoryId.value = entry.id;
+  editingLongMemorySummary.value = entry.summary || '';
+  editingLongMemoryOriginal.value = entry.summary || '';
+  memoryMutationError.value = '';
+};
+
+const cancelEditLongMemory = () => {
+  editingLongMemoryId.value = '';
+  editingLongMemorySummary.value = '';
+  editingLongMemoryOriginal.value = '';
+};
+
+const saveLongMemoryEdit = async (entry: LongMemoryEntry) => {
+  if (editingLongMemoryId.value !== entry.id) return;
+  const summary = editingLongMemorySummary.value.trim();
+  if (!summary) {
+    memoryMutationError.value = 'Summary cannot be empty.';
+    return;
+  }
+  if (summary === editingLongMemoryOriginal.value.trim()) {
+    cancelEditLongMemory();
+    return;
+  }
+
+  memoryMutationLoading.value = true;
+  memoryMutationError.value = '';
+  try {
+    await window.electronAPI.memory.long.update(entry.id, { summary });
+    await refreshMemory();
+    if (hasMemoryQuery.value) {
+      await runMemorySearch();
+    }
+    cancelEditLongMemory();
+  } catch (error: any) {
+    memoryMutationError.value = `Failed to update memory: ${error?.message || 'Unknown error'}`;
+  } finally {
+    memoryMutationLoading.value = false;
+  }
+};
+
+const deleteLongMemoryEntry = async (entry: LongMemoryEntry) => {
+  if (!entry?.id) return;
+  if (!window.confirm('Delete this long-term memory? This cannot be undone.')) return;
+
+  memoryMutationLoading.value = true;
+  memoryMutationError.value = '';
+  try {
+    await window.electronAPI.memory.long.delete(entry.id);
+    if (editingLongMemoryId.value === entry.id) {
+      cancelEditLongMemory();
+    }
+    await refreshMemory();
+    if (hasMemoryQuery.value) {
+      await runMemorySearch();
+    }
+  } catch (error: any) {
+    memoryMutationError.value = `Failed to delete memory: ${error?.message || 'Unknown error'}`;
+  } finally {
+    memoryMutationLoading.value = false;
   }
 };
 
@@ -3539,6 +3923,38 @@ input[type='range'] {
   padding: 12px;
 }
 
+.memory-editor {
+  margin-bottom: 12px;
+}
+
+.memory-editor-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.memory-editor-textarea {
+  width: 100%;
+  min-height: 74px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  resize: vertical;
+}
+
+.memory-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.memory-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .memory-panel-header {
   display: flex;
   justify-content: space-between;
@@ -3593,6 +4009,29 @@ input[type='range'] {
   font-size: 11px;
   color: var(--text-muted);
   margin-top: 6px;
+}
+
+.memory-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.memory-inline-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+.memory-danger-btn {
+  border-color: color-mix(in srgb, var(--danger-color) 45%, var(--border-color));
+  color: var(--danger-color);
+}
+
+.memory-danger-btn:hover {
+  background: color-mix(in srgb, var(--danger-color) 12%, var(--bg-primary));
+  border-color: var(--danger-color);
 }
 
 .memory-search {
