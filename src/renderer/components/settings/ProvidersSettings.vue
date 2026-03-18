@@ -34,7 +34,9 @@
             <span class="provider-icon">
               <LobeIcon :name="getProviderIconName(bp.id)" :size="24" />
             </span>
-            <span class="provider-item-name">{{ bp.name }}</span>
+            <div class="provider-item-main">
+              <span class="provider-item-name">{{ bp.name }}</span>
+            </div>
             <span class="provider-status-dot" :class="{ active: isProviderEnabled(bp.id) }"></span>
           </div>
 
@@ -50,9 +52,16 @@
             @click="selectProvider(cp.id)"
           >
             <span class="provider-icon">
-              <LobeIcon :name="cp.icon || 'custom'" :size="20" />
+              <LobeIcon
+                :name="cp.icon || 'custom'"
+                :size="20"
+                :useCdn="cp.icon ? cp.icon !== 'custom' : false"
+              />
             </span>
-            <span class="provider-item-name">{{ cp.name }}</span>
+            <div class="provider-item-main">
+              <span class="provider-item-name">{{ cp.name }}</span>
+              <span class="provider-item-badge">CUSTOM</span>
+            </div>
             <span class="provider-status-dot" :class="{ active: isProviderEnabled(cp.id) }"></span>
           </div>
         </div>
@@ -680,19 +689,30 @@ onMounted(() => {
 <style scoped>
 .input-label {
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .input-label input,
 .input-label select {
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   margin-top: 6px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: var(--font-size);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-label input:focus,
+.input-label select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 20%, transparent);
 }
 
 .checkbox-label {
@@ -866,27 +886,30 @@ onMounted(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .provider-list-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s;
-  background: transparent;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
 }
 
 .provider-list-item:hover {
   background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent-color) 30%, var(--border-color));
 }
 
 .provider-list-item.active {
-  background: var(--bg-active);
-  border-left: 3px solid var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-tertiary));
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color);
 }
 
 .provider-list-item.configured {
@@ -894,26 +917,50 @@ onMounted(() => {
 }
 
 .provider-icon {
-  font-size: 1.2em;
-  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Unify icon colors in dark mode */
-  filter: grayscale(1) brightness(1.5);
-  opacity: 0.7;
-  transition: all 0.2s ease;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.provider-list-item:hover .provider-icon,
-.provider-list-item.active .provider-icon {
-  filter: grayscale(0) brightness(1);
-  opacity: 1;
+.provider-icon :deep(.lobe-icon) {
+  filter: grayscale(1) brightness(1.4);
+  opacity: 0.75;
+}
+
+.provider-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .provider-item-name {
-  flex: 1;
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-item-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--border-color) 30%, var(--bg-tertiary));
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .provider-status-dot {
@@ -923,9 +970,6 @@ onMounted(() => {
   background: var(--border-color);
 }
 
-.provider-status-dot.active {
-  background: #22c55e;
-}
 
 /* 密度面板样式 */
 .section-header {
@@ -987,13 +1031,15 @@ onMounted(() => {
 /* Provider Details Panel */
 .provider-details-panel {
   flex: 1;
-  background: var(--bg-secondary);
-  border-radius: 16px;
-  padding: 24px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 24px 28px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .provider-header {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .provider-title-row {
@@ -1005,16 +1051,18 @@ onMounted(() => {
 
 .provider-title-row h3 {
   margin: 0;
-  font-size: 1.5em;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .provider-description {
   color: var(--text-secondary);
   margin: 0;
+  line-height: 1.4;
 }
 
 .provider-config-form {
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 .provider-form-actions {
@@ -1178,13 +1226,15 @@ onMounted(() => {
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
-  background: var(--bg-hover);
-  color: var(--text-muted);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .status-badge.active {
-  background: rgba(34, 197, 94, 0.15);
+  background: color-mix(in srgb, #22c55e 18%, transparent);
   color: #22c55e;
+  border-color: color-mix(in srgb, #22c55e 40%, transparent);
 }
 
 .label-header {
@@ -1198,11 +1248,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1243,9 +1293,9 @@ onMounted(() => {
 .models-selection-container {
   margin-top: 12px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 16px;
-  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--bg-secondary);
   max-height: 400px;
   display: flex;
   flex-direction: column;
@@ -1257,7 +1307,7 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
 }
 
 .models-count {
@@ -1275,9 +1325,9 @@ onMounted(() => {
 .deselect-all-btn {
   padding: 4px 12px;
   border: 1px solid var(--border-color);
-  background: transparent;
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: 999px;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1303,15 +1353,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
   user-select: none;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
 }
 
 .model-checkbox-item:hover {
   background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent-color) 25%, var(--border-color));
 }
 
 .model-checkbox-item input[type='checkbox'] {
@@ -1330,7 +1383,8 @@ onMounted(() => {
 }
 
 .model-checkbox-item:has(input:checked) {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-tertiary));
+  border-color: var(--accent-color);
 }
 
 .model-checkbox-item:has(input:checked) .model-name {
