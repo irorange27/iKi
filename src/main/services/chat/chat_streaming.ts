@@ -1,13 +1,11 @@
-import type { ToolApprovalResponse } from 'ai';
-
-import { SimpleAgent, type AgentResult } from '../../../core/agent';
+import { SimpleAgent } from '../../../core/agent';
 import * as llmFactory from '../../../core/provider/llm/factory';
 import * as deepseekProvider from '../../../core/provider/llm/deepseek';
 import * as kimiProvider from '../../../core/provider/llm/kimi';
 import * as openaiProvider from '../../../core/provider/llm/openai';
 import { defaultToolRegistry } from '../../../core/tools';
 import { getErrorMessage } from '../../utils/errors';
-import { shouldLogChunk, TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
+import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import { resolveSkillsSystemPrompt } from './chat_skills';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
@@ -16,8 +14,6 @@ import type {
   ActiveStreamState,
   ChatTransportMessage,
   ChatWebContents,
-  ToolStreamEvent,
-  UiChunkEmitter,
 } from './chat_types';
 import {
   createUiChunkEmitter,
@@ -26,114 +22,8 @@ import {
   toLlmChatMessages,
   toModelInputMessages,
 } from './chat_ui';
+import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_loop';
 
-export type RegisterApprovalBatch = (
-  approvalRequests: Array<{ approvalId: string }>,
-  session: { agent: SimpleAgent; webContents: ChatWebContents }
-) => void;
-
-export const streamAgentResponse = async (params: {
-  agent: SimpleAgent;
-  webContents: ChatWebContents;
-  prompt: string;
-  approvalResponses?: ToolApprovalResponse[];
-  shouldCancel?: () => boolean;
-  debugLabel?: string;
-  onToolEvent?: (event: ToolStreamEvent) => void;
-  abortSignal?: AbortSignal;
-  uiChunkEmitter?: UiChunkEmitter;
-  registerApprovalBatch: RegisterApprovalBatch;
-}) => {
-  const generator = params.agent.stream(
-    params.prompt,
-    params.approvalResponses,
-    params.onToolEvent,
-    params.abortSignal
-  );
-  let fullResponse = '';
-  let chunkCount = 0;
-  let chunkChars = 0;
-  const startedAt = Date.now();
-  let cancelled = false;
-  let next: IteratorResult<string, AgentResult> | null = null;
-
-  try {
-    next = await generator.next();
-    while (!next.done) {
-      if (params.shouldCancel?.()) {
-        cancelled = true;
-        try {
-          await generator.return(undefined);
-        } catch (error) {
-          console.warn('[Main] Failed to close cancelled tool stream:', error);
-        }
-        break;
-      }
-
-      const chunk = next.value;
-      if (typeof chunk === 'string' && chunk) {
-        chunkCount += 1;
-        chunkChars += chunk.length;
-        if (params.debugLabel && shouldLogChunk(chunkCount)) {
-          console.log(
-            `[StreamDebug][Main][Agent][${params.debugLabel}] chunk#${chunkCount} len=${chunk.length} totalChars=${chunkChars}`
-          );
-        }
-        fullResponse += chunk;
-        params.uiChunkEmitter?.emitTextDelta(chunk);
-      }
-      next = await generator.next();
-    }
-  } catch (error) {
-    if (params.shouldCancel?.() || (error instanceof Error && error.name === 'AbortError')) {
-      cancelled = true;
-      try {
-        await generator.return(undefined);
-      } catch (returnError) {
-        console.warn('[Main] Failed to close aborted tool stream:', returnError);
-      }
-    } else {
-      params.uiChunkEmitter?.error(getErrorMessage(error));
-      throw error;
-    }
-  }
-
-  if (cancelled || !next) {
-    if (params.debugLabel) {
-      console.log(
-        `[StreamDebug][Main][Agent][${params.debugLabel}] cancelled chunkCount=${chunkCount} totalChars=${chunkChars} durationMs=${Date.now() - startedAt}`
-      );
-    }
-    params.uiChunkEmitter?.abort();
-    return { awaitingApproval: false, cancelled: true };
-  }
-
-  const agentResult = (next.value ?? null) as AgentResult | null;
-  let finalText = fullResponse;
-  if (agentResult?.response && agentResult.response.trim()) {
-    finalText = agentResult.response;
-  }
-
-  if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
-    params.registerApprovalBatch(agentResult.toolApprovalRequests, {
-      agent: params.agent,
-      webContents: params.webContents,
-    });
-    return { awaitingApproval: true };
-  }
-
-  if (!finalText.trim() && fullResponse.trim()) {
-    finalText = fullResponse;
-  }
-
-  if (params.debugLabel) {
-    console.log(
-      `[StreamDebug][Main][Agent][${params.debugLabel}] done chunkCount=${chunkCount} totalChars=${chunkChars} finalTextLen=${(finalText || '').length} durationMs=${Date.now() - startedAt}`
-    );
-  }
-  params.uiChunkEmitter?.finish();
-  return { awaitingApproval: false };
-};
 
 export const createChatStreaming = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
@@ -146,6 +36,10 @@ export const createChatStreaming = (deps: {
     registerApprovalBatch: RegisterApprovalBatch;
   };
 }) => {
+  const toolLoopRunner = createToolLoopRunner({
+    registerApprovalBatch: deps.approvals.registerApprovalBatch,
+  });
+
   const getModels = async (providerType: string) => {
     try {
       // 1. Try provider-specific cache if it exists (e.g. for DeepSeek special logic)
@@ -290,8 +184,6 @@ export const createChatStreaming = (deps: {
     };
     const uiChunkEmitter = createUiChunkEmitter(webContents);
     deps.activeStreams.set(senderId, streamState);
-    let partialResponse = '';
-    let llmChunkCount = 0;
     const streamStartedAt = Date.now();
     console.log(
       `[StreamDebug][Main][${streamDebugId}] start provider=${options.providerType} model=${options.model} messageCount=${options.messages?.length ?? 0} toolCount=${options.tools?.length ?? 0}`
@@ -324,16 +216,21 @@ export const createChatStreaming = (deps: {
         tools: resolvedTools,
       });
 
-      if (resolvedTools.length > 0) {
-        const agent = new SimpleAgent({
-          enabled: true,
-          providerType: options.providerType,
-          model: options.model,
-          systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'),
-          enableTools: true,
-          maxIterations: 5,
-        });
+      const enableTools = resolvedTools.length > 0;
+      const systemPrompt = [enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '', skillsSystemPrompt]
+        .filter(Boolean)
+        .join('\n\n');
 
+      const agent = new SimpleAgent({
+        enabled: true,
+        providerType: options.providerType,
+        model: options.model,
+        systemPrompt,
+        enableTools,
+        maxIterations: 5,
+      });
+
+      if (enableTools) {
         console.log(
           '[Main] Streaming chat with tools:',
           resolvedTools,
@@ -351,85 +248,54 @@ export const createChatStreaming = (deps: {
         }
 
         console.log('[Main] Registered tools count:', agent.getTools().length);
-
-        if (!inputMessages || inputMessages.length === 0) {
-          throw new Error('No messages provided for streaming');
-        }
-
-        const history = inputMessages.slice(0, -1);
-        const lastMessage = inputMessages[inputMessages.length - 1];
-        const prompt = getPromptFromMessage(lastMessage);
-
-        if (!prompt.trim()) {
-          throw new Error('No user prompt provided for tool-enabled stream');
-        }
-
-        agent.setMessages(toAgentMessages(history));
-        const streamResult = await streamAgentResponse({
-          agent,
-          webContents,
-          prompt,
-          shouldCancel: () => streamState.cancelled,
-          debugLabel: streamDebugId,
-          onToolEvent: eventPart => {
-            if (
-              eventPart.type === 'tool-approval-request' &&
-              typeof eventPart.approvalId === 'string' &&
-              eventPart.approvalId.length > 0
-            ) {
-              deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, { agent, webContents });
-            }
-            uiChunkEmitter.emitToolEvent(eventPart);
-          },
-          abortSignal: streamState.abortController.signal,
-          uiChunkEmitter,
-          registerApprovalBatch: deps.approvals.registerApprovalBatch,
-        });
-        console.log(
-          `[StreamDebug][Main][${streamDebugId}] complete mode=agent stopped=${streamState.stoppedByUser} awaitingApproval=${streamResult.awaitingApproval ?? false} durationMs=${Date.now() - streamStartedAt}`
-        );
-        return {
-          success: true,
-          awaitingApproval: streamResult.awaitingApproval,
-          stopped: streamState.stoppedByUser,
-        };
-      }
-
-      const result = await llmFactory.streamChat(
-        {
-          providerType: options.providerType,
-          modelId: options.model,
-          messages: toLlmChatMessages(inputMessages),
-          extraSystemPrompt: skillsSystemPrompt,
-        },
-        chunk => {
-          if (streamState.cancelled) return;
-          partialResponse += chunk;
-          llmChunkCount += 1;
-          if (shouldLogChunk(llmChunkCount)) {
-            console.log(
-              `[StreamDebug][Main][${streamDebugId}] chunk#${llmChunkCount} len=${chunk.length} totalChars=${partialResponse.length}`
-            );
-          }
-          uiChunkEmitter.emitTextDelta(chunk);
-        },
-        () => streamState.cancelled,
-        streamState.abortController.signal
-      );
-      const finalText = streamState.cancelled ? partialResponse : result;
-      console.log(
-        `[StreamDebug][Main][${streamDebugId}] complete mode=llm stopped=${streamState.stoppedByUser} chunkCount=${llmChunkCount} partialLen=${partialResponse.length} finalLen=${(finalText || '').length} durationMs=${Date.now() - streamStartedAt}`
-      );
-      if (streamState.cancelled) {
-        uiChunkEmitter.abort();
       } else {
-        uiChunkEmitter.finish();
+        console.log('[Main] Streaming chat without tools');
       }
-      return { success: true, stopped: streamState.stoppedByUser };
+
+      if (!inputMessages || inputMessages.length === 0) {
+        throw new Error('No messages provided for streaming');
+      }
+
+      const history = inputMessages.slice(0, -1);
+      const lastMessage = inputMessages[inputMessages.length - 1];
+      const prompt = getPromptFromMessage(lastMessage);
+
+      if (!prompt.trim()) {
+        throw new Error('No user prompt provided for streaming');
+      }
+
+      agent.setMessages(toAgentMessages(history));
+      const streamResult = await toolLoopRunner.stream({
+        agent,
+        webContents,
+        prompt,
+        shouldCancel: () => streamState.cancelled,
+        debugLabel: streamDebugId,
+        onToolEvent: eventPart => {
+          if (
+            eventPart.type === 'tool-approval-request' &&
+            typeof eventPart.approvalId === 'string' &&
+            eventPart.approvalId.length > 0
+          ) {
+            deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, { agent, webContents });
+          }
+          uiChunkEmitter.emitToolEvent(eventPart);
+        },
+        abortSignal: streamState.abortController.signal,
+        uiChunkEmitter,
+      });
+      console.log(
+        `[StreamDebug][Main][${streamDebugId}] complete mode=agent stopped=${streamState.stoppedByUser} awaitingApproval=${streamResult.awaitingApproval ?? false} durationMs=${Date.now() - streamStartedAt}`
+      );
+      return {
+        success: true,
+        awaitingApproval: streamResult.awaitingApproval,
+        stopped: streamState.stoppedByUser,
+      };
     } catch (error: unknown) {
       if (streamState.cancelled) {
         console.log(
-          `[StreamDebug][Main][${streamDebugId}] cancelled-in-catch chunkCount=${llmChunkCount} partialLen=${partialResponse.length} durationMs=${Date.now() - streamStartedAt}`
+          `[StreamDebug][Main][${streamDebugId}] cancelled-in-catch durationMs=${Date.now() - streamStartedAt}`
         );
         uiChunkEmitter.abort();
         return { success: true, stopped: streamState.stoppedByUser };

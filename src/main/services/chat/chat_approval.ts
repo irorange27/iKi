@@ -16,7 +16,7 @@ import {
   toAgentMessages,
   toModelInputMessages,
 } from './chat_ui';
-import { streamAgentResponse } from './chat_streaming';
+import { createToolLoopRunner } from './chat_tool_loop';
 
 type PendingApprovalSession = {
   agent: SimpleAgent;
@@ -69,6 +69,8 @@ export const createChatApproval = (deps: {
       pendingApprovalSessions.set(approvalId, pendingSession);
     }
   };
+
+  const toolLoopRunner = createToolLoopRunner({ registerApprovalBatch });
 
   const getPendingApprovalIdsFromUiMessage = (message: ChatUiMessage): string[] => {
     const parts = Array.isArray(message.parts) ? (message.parts as unknown[]) : [];
@@ -316,7 +318,7 @@ export const createChatApproval = (deps: {
     deps.activeStreams.set(resumedSenderId, streamState);
 
     try {
-      const streamResult = await streamAgentResponse({
+      const streamResult = await toolLoopRunner.stream({
         agent: session.agent,
         webContents: session.webContents,
         prompt: '',
@@ -337,7 +339,6 @@ export const createChatApproval = (deps: {
         },
         abortSignal: streamState.abortController.signal,
         uiChunkEmitter,
-        registerApprovalBatch,
       });
       return {
         success: true,
