@@ -1,7 +1,7 @@
 {
   "name": "iki",
   "productName": "iki",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "A local agent pet for AI provider orchestration",
   "main": ".vite/build/main.js",
   "scripts": {
