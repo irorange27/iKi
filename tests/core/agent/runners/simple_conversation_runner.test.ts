@@ -52,7 +52,7 @@ describe('SimpleConversationRunner', () => {
     const messages = [{ role: 'system' as const, content: 'hello' }];
 
     runner.registerTool(tool);
-    runner.setMessages(messages);
+    runner.setModelMessages(messages);
     await expect(runner.generate('prompt')).resolves.toEqual({ response: 'done', iterations: 1 });
     const generator = runner.stream('prompt', {
       approvalResponses: [],
@@ -69,7 +69,12 @@ describe('SimpleConversationRunner', () => {
       enableTools: true,
     });
     expect(registerTool).toHaveBeenCalledWith(tool);
-    expect(setMessages).toHaveBeenCalledWith(messages);
+    expect(setMessages).toHaveBeenCalledWith([
+      expect.objectContaining({
+        role: 'system',
+        content: 'hello',
+      }),
+    ]);
     expect(generate).toHaveBeenCalledWith('prompt');
     expect(stream).toHaveBeenCalledTimes(1);
     expect(stream).toHaveBeenCalledWith(

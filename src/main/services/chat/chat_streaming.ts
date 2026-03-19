@@ -34,7 +34,6 @@ import type {
 import {
   createUiChunkEmitter,
   getPromptFromMessage,
-  toAgentMessages,
   toLlmChatMessages,
   toModelInputMessages,
 } from './chat_ui';
@@ -307,7 +306,7 @@ export const createChatStreaming = (deps: {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        runner.setMessages(toAgentMessages(history));
+        runner.setModelMessages(history);
         const result = await runner.generate(prompt);
         return { success: true, text: result.response };
       }
@@ -431,7 +430,7 @@ export const createChatStreaming = (deps: {
         throw new Error('No user prompt provided for streaming');
       }
 
-      runner.setMessages(toAgentMessages(history));
+      runner.setModelMessages(history);
       const streamResult = await toolLoopRunner.stream({
         runner,
         webContents,

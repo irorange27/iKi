@@ -10,12 +10,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import type { ActiveStreamState, ChatWebContents } from './chat_types';
-import {
-  createUiChunkEmitter,
-  parseStoredUiMessageRow,
-  toAgentMessages,
-  toModelInputMessages,
-} from './chat_ui';
+import { createUiChunkEmitter, parseStoredUiMessageRow, toModelInputMessages } from './chat_ui';
 import { createChatConversationRunner } from './chat_conversation_runner';
 import { createToolLoopRunner } from './chat_tool_loop';
 import type { ParsedUiMessage } from '../../../shared/chat/ui_message_codec';
@@ -226,7 +221,7 @@ export const createChatApproval = (deps: {
       if (tool) runner.registerTool(tool);
     }
 
-    runner.setMessages(toAgentMessages(inputMessages));
+    runner.setModelMessages(inputMessages);
 
     const pendingApprovalIds = new Set<string>();
     for (const ui of uiMessages) {

@@ -1,6 +1,6 @@
-import type { ToolApprovalResponse } from 'ai';
+import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
-import type { AgentMessage, AgentResult, AgentTool, PartialAgentConfig } from '../types';
+import type { AgentResult, AgentTool, PartialAgentConfig } from '../types';
 
 export type ConversationRunnerStreamEvent = {
   type: string;
@@ -15,7 +15,7 @@ export type ConversationRunnerStreamOptions = {
 
 export interface ConversationRunner {
   registerTool(tool: AgentTool): void;
-  setMessages(messages: AgentMessage[]): void;
+  setModelMessages(messages: ModelMessage[]): void;
   generate(prompt: string): Promise<AgentResult>;
   stream(
     prompt: string,

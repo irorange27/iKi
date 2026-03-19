@@ -1,5 +1,8 @@
+import type { ModelMessage } from 'ai';
+
 import { SimpleAgent } from '../../iki_simple_agent';
-import type { AgentMessage, AgentResult, AgentTool, PartialAgentConfig } from '../types';
+import { convertModelMessagesToAgentMessages } from '../model_messages';
+import type { AgentResult, AgentTool, PartialAgentConfig } from '../types';
 import type { ConversationRunner, ConversationRunnerStreamOptions } from './conversation_runner';
 
 export class SimpleConversationRunner implements ConversationRunner {
@@ -13,8 +16,8 @@ export class SimpleConversationRunner implements ConversationRunner {
     this.agent.registerTool(tool);
   }
 
-  setMessages(messages: AgentMessage[]): void {
-    this.agent.setMessages(messages);
+  setModelMessages(messages: ModelMessage[]): void {
+    this.agent.setMessages(convertModelMessagesToAgentMessages(messages));
   }
 
   generate(prompt: string): Promise<AgentResult> {
