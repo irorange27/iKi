@@ -38,8 +38,10 @@ export const AgentToolSchema = z.object({
   type: z.string().default('function'),
   description: z.string(),
   parameters: z.record(z.string(), z.any()), // JSON Schema format for LLM
+  outputSchema: z.record(z.string(), z.any()).optional(),
   paramSchema: z.any().optional(), // Optional Zod schema (z.ZodTypeAny) for parameter validation
   needsApproval: z.any().optional().default(false),
+  autoAllowed: z.boolean().optional(),
   displayName: z.string().optional(),
   source: z
     .object({

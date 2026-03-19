@@ -277,6 +277,7 @@ export abstract class BaseAgent {
           const toolDef = tool({
             description: t.description,
             inputSchema: t.paramSchema,
+            ...(t.outputSchema ? { outputSchema: jsonSchema(t.outputSchema as object) } : {}),
             needsApproval: t.needsApproval,
             execute: t.handler,
           } as unknown as Parameters<typeof tool>[0]);
@@ -306,6 +307,7 @@ export abstract class BaseAgent {
           const toolDef = tool({
             description: t.description,
             inputSchema: jsonSchema(t.parameters as object),
+            ...(t.outputSchema ? { outputSchema: jsonSchema(t.outputSchema as object) } : {}),
             needsApproval: t.needsApproval,
             execute: t.handler,
           } as unknown as Parameters<typeof tool>[0]);
