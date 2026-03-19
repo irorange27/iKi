@@ -34,17 +34,30 @@ useAppConfig();
 <style>
 @import './assets/styles/variables.css';
 
-/* 设置整个窗口背景 */
-body {
-  margin: 0;
-  overflow: hidden;
-}
 html,
+body,
+#app,
 .app-container {
   margin: 0;
-  padding: 0;
+  width: 100%;
   height: 100%;
-  border-radius: 40px;
+}
+
+body {
+  overflow: hidden;
+}
+
+html,
+body,
+#app,
+.app-container {
+  background-color: var(--bg-primary);
+}
+
+#app,
+.app-container {
+  /* Keep renderer content clipped to native window corners to avoid halo edges. */
+  overflow: hidden;
 }
 
 /* 可拖拽区域 - 在 macOS 上 */

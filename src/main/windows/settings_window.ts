@@ -11,10 +11,10 @@ export const createSettingsWindow = (): BrowserWindow => {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#2a2d35',
+    hasShadow: false,
     title: 'Settings',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 20 },
-    vibrancy: 'sidebar',
     webPreferences: {
       preload: path.join(__dirname, './index.js'),
       nodeIntegration: false,

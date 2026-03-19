@@ -41,6 +41,8 @@ A local agent pet for AI provider orchestration.
 - Local hooks are managed by Husky and installed through `npm install` (`prepare`)
 - PR title must follow semantic format (CI enforced)
 - Architecture-impacting code changes must include docs/changelog updates (CI enforced)
+- CI quality gate runs `npm run -s ci:quality` (`lint` + `tsc` + tests with coverage)
+- Coverage thresholds are enforced in `vitest.config.mts` for regression prevention
 
 ## Release Flow
 

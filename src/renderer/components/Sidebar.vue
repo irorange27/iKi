@@ -13,6 +13,7 @@
       backgroundColor: sidebar.isCollapsed.value ? 'transparent' : 'var(--bg-secondary)',
       color: 'var(--text-primary)',
       borderColor: 'var(--border-color)',
+      marginBottom: sidebar.isCollapsed.value ? '0px' : 'var(--chat-composer-padding, 10px)',
       overflow: sidebar.isCollapsed.value ? 'visible' : 'hidden',
     }"
   >
