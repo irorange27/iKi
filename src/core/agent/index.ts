@@ -1,6 +1,6 @@
 /**
- * Agent framework main entry point
- * Centralized exports for all agent-related functionality
+ * Conversation-oriented agent framework entry point.
+ * Includes backward-compatible exports while runtime boundaries are being narrowed.
  */
 
 // Export all types
@@ -47,4 +47,9 @@ export {
 export * from '../tools';
 
 // Export default implementation (for backward compatibility)
-export { SimpleAgent as Agent, createAgent, getAgentConfig } from './agent';
+export {
+  SimpleAgent as Agent,
+  createAgent,
+  getAgentConfig,
+  getConversationRunnerConfig,
+} from './agent';

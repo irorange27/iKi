@@ -6,7 +6,7 @@ describe('LlmEmotionRuntime', () => {
   it('returns null when no tool model is available', async () => {
     const runtime = new LlmEmotionRuntime({
       getToolModel: () => null,
-      createAgent: vi.fn(),
+      createGenerator: vi.fn(),
     });
 
     await expect(runtime.run('hello')).resolves.toBeNull();
@@ -16,11 +16,11 @@ describe('LlmEmotionRuntime', () => {
     const generate = vi.fn().mockResolvedValue({
       response: '{"label":"joy","confidence":0.91,"valence":0.5,"arousal":0.2,"language":"en"}',
     });
-    const createAgent = vi.fn(() => ({ generate }));
+    const createGenerator = vi.fn(() => ({ generate }));
 
     const runtime = new LlmEmotionRuntime({
       getToolModel: () => ({ providerType: 'openai', model: 'gpt-4o-mini' }),
-      createAgent,
+      createGenerator,
     });
 
     await expect(runtime.run('hello there')).resolves.toEqual({
@@ -36,7 +36,7 @@ describe('LlmEmotionRuntime', () => {
       truncated: false,
     });
 
-    expect(createAgent).toHaveBeenCalledWith(
+    expect(createGenerator).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',
@@ -54,7 +54,7 @@ describe('LlmEmotionRuntime', () => {
 
     const runtime = new LlmEmotionRuntime({
       getToolModel: () => ({ providerType: 'openai', model: 'gpt-4o-mini' }),
-      createAgent: () => ({ generate }),
+      createGenerator: () => ({ generate }),
     });
 
     const oversized = 'a'.repeat(2105);
@@ -68,7 +68,7 @@ describe('LlmEmotionRuntime', () => {
   it('returns null when the model response cannot be parsed', async () => {
     const runtime = new LlmEmotionRuntime({
       getToolModel: () => ({ providerType: 'openai', model: 'gpt-4o-mini' }),
-      createAgent: () => ({
+      createGenerator: () => ({
         generate: vi.fn().mockResolvedValue({ response: 'not-json' }),
       }),
     });

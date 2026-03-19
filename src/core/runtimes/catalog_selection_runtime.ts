@@ -1,4 +1,5 @@
-import { SimpleAgent } from '../agent';
+import type { ToolModelConfig } from '../provider/tool_model';
+import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
 
 export type SelectionMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -18,20 +19,13 @@ export type CatalogSelectionRequest<T> = {
   logLabel: string;
 };
 
-type ToolModelConfig = {
-  providerType: string;
-  model: string;
-};
-
-type AgentLike = Pick<SimpleAgent, 'generate'>;
-
 export interface CatalogSelectionRuntime {
   run<T>(request: CatalogSelectionRequest<T>): Promise<string[]>;
 }
 
 export type LlmCatalogSelectionRuntimeDeps = {
   getToolModel: () => ToolModelConfig | null;
-  createAgent: (config: ConstructorParameters<typeof SimpleAgent>[0]) => AgentLike;
+  createGenerator: (config?: PromptTextGeneratorConfig) => PromptTextGenerator;
 };
 
 export const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
@@ -125,7 +119,7 @@ export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
     const catalogText = request.buildCatalogText(request.availableCatalog);
     const prompt = request.buildPrompt(catalogText, transcript);
 
-    const agent = this.deps.createAgent({
+    const generator = this.deps.createGenerator({
       enabled: true,
       providerType: toolModel.providerType,
       model: toolModel.model,
@@ -138,7 +132,7 @@ export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
     });
 
     try {
-      const result = await agent.generate(prompt);
+      const result = await generator.generate(prompt);
       return request.parseSelection(result.response || '', request.availableCatalog);
     } catch (error) {
       console.warn(`[${request.logLabel}] selection failed:`, error);

@@ -4,16 +4,16 @@ vi.mock('../../../src/core/provider/tool_model', () => ({
   getToolModel: vi.fn(),
 }));
 
-vi.mock('../../../src/core/agent', () => ({
-  SimpleAgent: vi.fn(),
+vi.mock('../../../src/core/runtimes/prompt_text_generator', () => ({
+  createSimplePromptTextGenerator: vi.fn(),
 }));
 
 import { getToolModel } from '../../../src/core/provider/tool_model';
-import { SimpleAgent } from '../../../src/core/agent';
+import { createSimplePromptTextGenerator } from '../../../src/core/runtimes/prompt_text_generator';
 import { selectSkillsWithAgent } from '../../../src/core/provider/skill_selection';
 
 const getToolModelMock = vi.mocked(getToolModel);
-const SimpleAgentMock = vi.mocked(SimpleAgent);
+const createSimplePromptTextGeneratorMock = vi.mocked(createSimplePromptTextGenerator);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,19 +31,16 @@ describe('selectSkillsWithAgent', () => {
     });
 
     expect(skills).toEqual([]);
-    expect(SimpleAgentMock).not.toHaveBeenCalled();
+    expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
   });
 
   it('parses JSON array and filters unknown skills (case-insensitive)', async () => {
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
-    SimpleAgentMock.mockImplementation(
-      () =>
-        ({
-          generate: vi
-            .fn()
-            .mockResolvedValue({ response: '["codex:.system/openai-docs","NOPE","codex:.SYSTEM/openai-docs"]' }),
-        }) as unknown as InstanceType<typeof SimpleAgent>
-    );
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({
+        response: '["codex:.system/openai-docs","NOPE","codex:.SYSTEM/openai-docs"]',
+      }),
+    });
 
     const skills = await selectSkillsWithAgent({
       messages: [{ role: 'user', content: 'How do I build with OpenAI APIs?' }],
@@ -58,12 +55,9 @@ describe('selectSkillsWithAgent', () => {
 
   it('supports object output with skills field', async () => {
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
-    SimpleAgentMock.mockImplementation(
-      () =>
-        ({
-          generate: vi.fn().mockResolvedValue({ response: '{ "skills": ["user:my-skill"] }' }),
-        }) as unknown as InstanceType<typeof SimpleAgent>
-    );
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: '{ "skills": ["user:my-skill"] }' }),
+    });
 
     const skills = await selectSkillsWithAgent({
       messages: [{ role: 'user', content: 'Use my custom workflow.' }],
@@ -75,12 +69,9 @@ describe('selectSkillsWithAgent', () => {
 
   it('handles fenced JSON output', async () => {
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
-    SimpleAgentMock.mockImplementation(
-      () =>
-        ({
-          generate: vi.fn().mockResolvedValue({ response: '```json\n["user:my-skill"]\n```' }),
-        }) as unknown as InstanceType<typeof SimpleAgent>
-    );
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: '```json\n["user:my-skill"]\n```' }),
+    });
 
     const skills = await selectSkillsWithAgent({
       messages: [{ role: 'user', content: 'Please follow my style guide.' }],
@@ -90,4 +81,3 @@ describe('selectSkillsWithAgent', () => {
     expect(skills).toEqual(['user:my-skill']);
   });
 });
-

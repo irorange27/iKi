@@ -1,11 +1,5 @@
-import { SimpleAgent } from '../agent';
-
-type ToolModelConfig = {
-  providerType: string;
-  model: string;
-};
-
-type AgentLike = Pick<SimpleAgent, 'generate'>;
+import type { ToolModelConfig } from '../provider/tool_model';
+import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
 
 export interface TitleRuntime {
   run(content: string): Promise<string | null>;
@@ -13,7 +7,7 @@ export interface TitleRuntime {
 
 export type LlmTitleRuntimeDeps = {
   getToolModel: () => ToolModelConfig | null;
-  createAgent: (config: ConstructorParameters<typeof SimpleAgent>[0]) => AgentLike;
+  createGenerator: (config?: PromptTextGeneratorConfig) => PromptTextGenerator;
 };
 
 export const sanitizeGeneratedTitle = (value: string): string | null => {
@@ -44,7 +38,7 @@ export class LlmTitleRuntime implements TitleRuntime {
         return null;
       }
 
-      const agent = this.deps.createAgent({
+      const generator = this.deps.createGenerator({
         enabled: true,
         providerType: toolModel.providerType,
         model: toolModel.model,
@@ -57,7 +51,7 @@ export class LlmTitleRuntime implements TitleRuntime {
         enableMemory: false,
       });
 
-      const result = await agent.generate(text);
+      const result = await generator.generate(text);
       return sanitizeGeneratedTitle(result.response || '');
     } catch (error) {
       console.error('Failed to generate title with agent:', error);

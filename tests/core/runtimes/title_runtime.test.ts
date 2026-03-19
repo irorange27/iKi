@@ -17,7 +17,7 @@ describe('LlmTitleRuntime', () => {
   it('returns null when no tool model is available', async () => {
     const runtime = new LlmTitleRuntime({
       getToolModel: () => null,
-      createAgent: vi.fn(),
+      createGenerator: vi.fn(),
     });
 
     await expect(runtime.run('conversation')).resolves.toBeNull();
@@ -27,14 +27,14 @@ describe('LlmTitleRuntime', () => {
     const generate = vi.fn().mockResolvedValue({
       response: '  "Title with\nline break"  ',
     });
-    const createAgent = vi.fn(() => ({ generate }));
+    const createGenerator = vi.fn(() => ({ generate }));
     const runtime = new LlmTitleRuntime({
       getToolModel: () => ({ providerType: 'openai', model: 'gpt-4o-mini' }),
-      createAgent,
+      createGenerator,
     });
 
     await expect(runtime.run('conversation text')).resolves.toBe('Title with line break');
-    expect(createAgent).toHaveBeenCalledWith(
+    expect(createGenerator).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',

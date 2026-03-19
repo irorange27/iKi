@@ -19,8 +19,8 @@ import { ToolRegistry } from '../tools/base';
 import { logger } from '../logger';
 
 /**
- * Abstract base class for all Agent implementations
- * Defines the common interface and shared functionality
+ * Abstract base class for conversation-oriented agent implementations.
+ * Defines shared config, tool, hook, and message-state behavior.
  */
 export abstract class BaseAgent {
   protected config: AgentConfig;

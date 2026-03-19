@@ -1,4 +1,3 @@
-import { SimpleAgent } from '../agent';
 import { CatalogSelectionAgent } from '../agents/catalog_selection_agent';
 import {
   buildTranscript,
@@ -10,6 +9,7 @@ import {
   type CatalogSelectionRuntime,
   type SelectionMessage,
 } from '../runtimes/catalog_selection_runtime';
+import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { getToolModel } from './tool_model';
 
 export type { CatalogSelectionRequest as CatalogSelectorParams };
@@ -32,7 +32,7 @@ export const selectCatalogWithAgent = async <T>(
   const agent = createCatalogSelectionAgent(
     new LlmCatalogSelectionRuntime({
       getToolModel,
-      createAgent: config => new SimpleAgent(config),
+      createGenerator: createSimplePromptTextGenerator,
     })
   );
   return agent.run(params);

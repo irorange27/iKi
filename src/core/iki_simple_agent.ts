@@ -13,8 +13,8 @@ import type { AgentResult, ToolApprovalRequest as AgentToolApprovalRequest } fro
 import { logger } from './logger';
 
 /**
- * LLM-based Simple Agent implementation
- * Uses language models for text generation with optional tool calling support
+ * Default conversation-runner implementation backed by AI SDK text/tool loops.
+ * It owns mutable message state, approvals, and streaming behavior for chat-style flows.
  */
 export class SimpleAgent extends BaseAgent {
   /**
@@ -122,9 +122,7 @@ export class SimpleAgent extends BaseAgent {
         const toolCalls = Array.isArray(message.content)
           ? message.content.filter(
               part =>
-                part &&
-                typeof part === 'object' &&
-                (part as { type?: string }).type === 'tool-call'
+                part && typeof part === 'object' && (part as { type?: string }).type === 'tool-call'
             )
           : [];
         const toolApprovalRequests = Array.isArray(message.content)
@@ -145,9 +143,7 @@ export class SimpleAgent extends BaseAgent {
             toolCalls.length > 0 || toolApprovalRequests.length > 0
               ? {
                   ...(toolCalls.length > 0 ? { toolCalls } : {}),
-                  ...(toolApprovalRequests.length > 0
-                    ? { toolApprovalRequests }
-                    : {}),
+                  ...(toolApprovalRequests.length > 0 ? { toolApprovalRequests } : {}),
                 }
               : undefined,
         });
@@ -333,7 +329,7 @@ export class SimpleAgent extends BaseAgent {
       iteration: this.state.iteration,
       state: this.getState(),
     });
-    
+
     if (!approvalResponses) {
       this.addMessage({ role: 'user', content: prompt });
     }

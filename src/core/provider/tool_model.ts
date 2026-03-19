@@ -1,8 +1,8 @@
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
-import { SimpleAgent } from '../agent';
 import { TitleAgent } from '../agents/title_agent';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
+import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { parseModelList } from '../../shared/utils/provider_models';
 
 export interface ToolModelConfig {
@@ -108,7 +108,7 @@ export const generateTitle = async (conversationContent: string): Promise<string
   const agent = createTitleAgent(
     new LlmTitleRuntime({
       getToolModel,
-      createAgent: config => new SimpleAgent(config),
+      createGenerator: createSimplePromptTextGenerator,
     })
   );
   return agent.run(conversationContent);

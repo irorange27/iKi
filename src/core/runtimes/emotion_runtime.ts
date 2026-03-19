@@ -1,5 +1,9 @@
-import { SimpleAgent } from '../agent';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
+import {
+  createSimplePromptTextGenerator,
+  type PromptTextGenerator,
+  type PromptTextGeneratorConfig,
+} from './prompt_text_generator';
 
 export type EmotionScore = { label: string; score: number };
 export type EmotionResult = {
@@ -119,18 +123,16 @@ const parseEmotionResult = (raw: string): ParsedEmotionResult | null => {
   };
 };
 
-type AgentLike = Pick<SimpleAgent, 'generate'>;
-
 type LlmEmotionRuntimeDeps = {
   getToolModel: () => ToolModelConfig | null;
-  createAgent: (config: ConstructorParameters<typeof SimpleAgent>[0]) => AgentLike;
+  createGenerator: (config?: PromptTextGeneratorConfig) => PromptTextGenerator;
 };
 
 export class LlmEmotionRuntime implements EmotionRuntime {
   constructor(
     private readonly deps: LlmEmotionRuntimeDeps = {
       getToolModel,
-      createAgent: config => new SimpleAgent(config),
+      createGenerator: createSimplePromptTextGenerator,
     }
   ) {}
 
@@ -148,7 +150,7 @@ export class LlmEmotionRuntime implements EmotionRuntime {
     const truncated = inputChars > MAX_INPUT_CHARS;
     const analysisText = truncated ? text.slice(0, MAX_INPUT_CHARS) : text;
 
-    const agent = this.deps.createAgent({
+    const generator = this.deps.createGenerator({
       enabled: true,
       providerType: toolModel.providerType,
       model: toolModel.model,
@@ -169,7 +171,7 @@ export class LlmEmotionRuntime implements EmotionRuntime {
     });
 
     try {
-      const result = await agent.generate(analysisText);
+      const result = await generator.generate(analysisText);
       const parsed = parseEmotionResult(result.response);
       if (!parsed) return null;
       return {

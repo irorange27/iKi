@@ -4,12 +4,12 @@ vi.mock('../../../src/core/provider/tool_model', () => ({
   getToolModel: vi.fn(),
 }));
 
-vi.mock('../../../src/core/agent', () => ({
-  SimpleAgent: vi.fn(),
+vi.mock('../../../src/core/runtimes/prompt_text_generator', () => ({
+  createSimplePromptTextGenerator: vi.fn(),
 }));
 
 import { getToolModel } from '../../../src/core/provider/tool_model';
-import { SimpleAgent } from '../../../src/core/agent';
+import { createSimplePromptTextGenerator } from '../../../src/core/runtimes/prompt_text_generator';
 import { generateLongMemorySummary } from '../../../src/core/memory/auto_summarize';
 import type { ShortMemoryEntry } from '../../../src/core/db/memory';
 
@@ -27,7 +27,7 @@ const makeEntry = (overrides: Partial<ShortMemoryEntry>): ShortMemoryEntry => ({
 });
 
 const getToolModelMock = vi.mocked(getToolModel);
-const SimpleAgentMock = vi.mocked(SimpleAgent);
+const createSimplePromptTextGeneratorMock = vi.mocked(createSimplePromptTextGenerator);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -40,28 +40,23 @@ describe('generateLongMemorySummary', () => {
     const result = await generateLongMemorySummary([]);
 
     expect(result).toBeNull();
-    expect(SimpleAgentMock).not.toHaveBeenCalled();
+    expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
   });
 
   it('returns null when transcript is too short', async () => {
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
 
-    const result = await generateLongMemorySummary([
-      makeEntry({ content: 'Too short.' }),
-    ]);
+    const result = await generateLongMemorySummary([makeEntry({ content: 'Too short.' })]);
 
     expect(result).toBeNull();
-    expect(SimpleAgentMock).not.toHaveBeenCalled();
+    expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
   });
 
   it('ignores NONE summaries', async () => {
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
-    SimpleAgentMock.mockImplementation(
-      () =>
-        ({
-          generate: vi.fn().mockResolvedValue({ response: 'NONE' }),
-        }) as unknown as InstanceType<typeof SimpleAgent>
-    );
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: 'NONE' }),
+    });
 
     const result = await generateLongMemorySummary([
       makeEntry({ content: 'The user likes tea and keeps a daily habit log.' }),
@@ -72,12 +67,9 @@ describe('generateLongMemorySummary', () => {
 
   it('sanitizes summary text and returns source message ids', async () => {
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
-    SimpleAgentMock.mockImplementation(
-      () =>
-        ({
-          generate: vi.fn().mockResolvedValue({ response: '  "User prefers green tea."  ' }),
-        }) as unknown as InstanceType<typeof SimpleAgent>
-    );
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: '  "User prefers green tea."  ' }),
+    });
 
     const entries: ShortMemoryEntry[] = [
       makeEntry({

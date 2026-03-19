@@ -1,6 +1,6 @@
-import { SimpleAgent } from '../agent';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import type { ShortMemoryEntry } from '../db/memory';
+import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 
 export type LongMemorySummaryResult = {
   summary: string;
@@ -93,7 +93,7 @@ export const generateLongMemorySummary = async (
   const { transcript, messageIds } = buildTranscript(entries);
   if (!transcript || transcript.length < MIN_INPUT_CHARS) return null;
 
-  const agent = new SimpleAgent({
+  const generator = createSimplePromptTextGenerator({
     enabled: true,
     providerType: toolModel.providerType,
     model: toolModel.model,
@@ -106,7 +106,7 @@ export const generateLongMemorySummary = async (
   });
 
   try {
-    const result = await agent.generate(transcript);
+    const result = await generator.generate(transcript);
     const summary = sanitizeSummary(result.response || '');
     if (!summary) return null;
 

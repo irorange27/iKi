@@ -1,6 +1,6 @@
 /**
- * Agent framework entry point
- * Re-exports all types and implementations
+ * Conversation-runner compatibility entry point.
+ * Kept for backward compatibility while chat orchestration moves to explicit runner naming.
  */
 
 // Export types
@@ -20,27 +20,24 @@ export { BaseAgent } from './base';
 // Export implementations
 export { SimpleAgent } from '../iki_simple_agent';
 
-// Re-export for backward compatibility
-// Agent is now an alias for LLMAgent (the default implementation)
+// Re-export for backward compatibility.
+// Prefer `createSimpleConversationRunner` for new conversation orchestration code.
 import { SimpleAgent } from '../iki_simple_agent';
+/** @deprecated Use `createSimpleConversationRunner` for chat orchestration. */
 export { SimpleAgent as Agent };
 
 import { getAppConfig } from '../config';
 import type { AgentConfig, PartialAgentConfig } from './types';
 
-/**
- * Create a new agent instance (defaults to LLMAgent)
- * @param config - Optional agent configuration (validated with Zod)
- * @returns A new Agent instance
- */
+/** @deprecated Use `createSimpleConversationRunner` for chat orchestration. */
 export function createAgent(config?: PartialAgentConfig) {
   return new SimpleAgent(config);
 }
 
 /**
- * Get agent configuration from app config
+ * Get conversation-runner configuration from app config.
  */
-export function getAgentConfig(): AgentConfig | null {
+export function getConversationRunnerConfig(): AgentConfig | null {
   try {
     const appConfig = getAppConfig();
     return appConfig?.agent || null;
@@ -48,4 +45,9 @@ export function getAgentConfig(): AgentConfig | null {
     console.error('Failed to get agent config:', error);
     return null;
   }
+}
+
+/** @deprecated Use `getConversationRunnerConfig`. */
+export function getAgentConfig(): AgentConfig | null {
+  return getConversationRunnerConfig();
 }
