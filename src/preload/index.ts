@@ -41,6 +41,14 @@ type LongMemoryInput = {
 type ProactiveTaskInput = Partial<ProactiveTask> &
   Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model'>;
 
+const toIpcSerializable = <T>(value: T): T => {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return value;
+  }
+};
+
 contextBridge.exposeInMainWorld('electronAPI', {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
@@ -195,9 +203,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   tasks: {
     list: () => ipcRenderer.invoke('tasks:list'),
     get: (id: string) => ipcRenderer.invoke('tasks:get', id),
-    create: (task: ProactiveTaskInput) => ipcRenderer.invoke('tasks:create', task),
+    create: (task: ProactiveTaskInput) => ipcRenderer.invoke('tasks:create', toIpcSerializable(task)),
     update: (id: string, updates: Partial<ProactiveTask>) =>
-      ipcRenderer.invoke('tasks:update', id, updates),
+      ipcRenderer.invoke('tasks:update', id, toIpcSerializable(updates)),
     delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),
     runNow: (id: string) => ipcRenderer.invoke('tasks:run-now', id),
     onPush: (callback: (payload: unknown) => void) => {
