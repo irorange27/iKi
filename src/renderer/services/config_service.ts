@@ -1,6 +1,8 @@
 import type {
   AppConfig,
   ConfigRuntimeInfo,
+  DaemonControlAction,
+  DaemonControlResult,
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from '../../shared/types/config';
@@ -12,6 +14,7 @@ type ElectronConfigApi = {
   getRuntimeInfo?: () => Promise<ConfigRuntimeInfo>;
   getDaemonStatus?: () => Promise<DaemonStatusInfo>;
   getDaemonLogs?: (limit?: number) => Promise<DaemonLogsInfo>;
+  controlDaemon?: (action: DaemonControlAction) => Promise<DaemonControlResult>;
   set: (config: AppConfig) => Promise<unknown>;
   onUpdated: (callback: ConfigUpdatedHandler) => void;
 };
@@ -73,6 +76,13 @@ export const configService = {
       throw new Error('window.electronAPI.config.getDaemonLogs is missing');
     }
     return api.getDaemonLogs(limit);
+  },
+  async controlDaemon(action: DaemonControlAction): Promise<DaemonControlResult> {
+    const api = getElectronConfigApi();
+    if (!api || typeof api.controlDaemon !== 'function') {
+      throw new Error('window.electronAPI.config.controlDaemon is missing');
+    }
+    return api.controlDaemon(action);
   },
   onUpdated(callback: ConfigUpdatedHandler): () => void {
     const api = getElectronConfigApi();

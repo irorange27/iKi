@@ -132,6 +132,30 @@
           <div class="card-subtitle">What NapCat needs to connect successfully. Auto-refreshes every 5s while open.</div>
         </div>
         <div class="card-actions">
+          <button
+            class="reset-btn"
+            type="button"
+            :disabled="daemonControlLoading"
+            @click="handleDaemonControl('start')"
+          >
+            Start
+          </button>
+          <button
+            class="reset-btn"
+            type="button"
+            :disabled="daemonControlLoading"
+            @click="handleDaemonControl('restart')"
+          >
+            Restart
+          </button>
+          <button
+            class="reset-btn"
+            type="button"
+            :disabled="daemonControlLoading"
+            @click="handleDaemonControl('stop')"
+          >
+            Stop
+          </button>
           <button class="reset-btn" type="button" @click="loadDaemonStatus">Refresh Status</button>
         </div>
       </div>
@@ -172,6 +196,14 @@
       </div>
 
       <p class="group-description">{{ daemonStatusDetail }}</p>
+      <p
+        v-if="daemonControlMessage"
+        class="group-description"
+        :class="daemonControlSuccess === false ? 'error-text' : ''"
+      >
+        {{ daemonControlMessage }}
+      </p>
+      <p class="group-description">These controls manage the desktop-managed embedded daemon only.</p>
     </div>
 
     <div class="settings-card">
@@ -245,6 +277,7 @@ import { useConfigStore } from '../../store/config';
 import type {
   AppConfig,
   ConfigRuntimeInfo,
+  DaemonControlAction,
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from '../../../shared/types/config';
@@ -286,6 +319,9 @@ const daemonStatusError = ref('');
 const daemonLogs = ref<DaemonLogsInfo | null>(null);
 const daemonLogsLoading = ref(false);
 const daemonLogsError = ref('');
+const daemonControlLoading = ref(false);
+const daemonControlMessage = ref('');
+const daemonControlSuccess = ref<boolean | null>(null);
 let monitoringPollTimer: ReturnType<typeof setInterval> | null = null;
 
 const napcat = computed(() => config.value.bridges.napcat);
@@ -497,6 +533,26 @@ const loadDaemonLogs = async () => {
     daemonLogsError.value = error?.message || 'Failed to load daemon logs.';
   } finally {
     daemonLogsLoading.value = false;
+  }
+};
+
+const handleDaemonControl = async (action: DaemonControlAction) => {
+  if (daemonControlLoading.value) return;
+  daemonControlLoading.value = true;
+  daemonControlMessage.value = '';
+  daemonControlSuccess.value = null;
+
+  try {
+    const result = await configService.controlDaemon(action);
+    daemonStatus.value = result.status;
+    daemonControlSuccess.value = result.success;
+    daemonControlMessage.value = result.message;
+    await loadDaemonLogs();
+  } catch (error: any) {
+    daemonControlSuccess.value = false;
+    daemonControlMessage.value = error?.message || 'Failed to control daemon.';
+  } finally {
+    daemonControlLoading.value = false;
   }
 };
 

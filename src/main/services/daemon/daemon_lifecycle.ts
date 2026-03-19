@@ -162,9 +162,11 @@ const startEmbeddedDaemon = (binding: { host: string; port: number }) => {
   embeddedBinding = binding;
 };
 
-export const startDesktopDaemon = async (): Promise<void> => {
+export const isDesktopDaemonEmbeddedRunning = (): boolean => Boolean(embeddedDaemon);
+
+export const startDesktopDaemon = async (options?: { ignoreAutostartEnv?: boolean }): Promise<void> => {
   if (process.argv.includes(DAEMON_MODE_ARG)) return;
-  if (normalizeBoolEnv(process.env.IKI_DAEMON_AUTOSTART)) {
+  if (!options?.ignoreAutostartEnv && normalizeBoolEnv(process.env.IKI_DAEMON_AUTOSTART)) {
     daemonLog.info('daemon-lifecycle', 'Autostart disabled by IKI_DAEMON_AUTOSTART.', undefined, app.getPath('userData'));
     return;
   }
@@ -261,9 +263,16 @@ export const startDesktopDaemon = async (): Promise<void> => {
 };
 
 export const stopDesktopDaemon = () => {
+  const wasRunning = Boolean(embeddedDaemon);
   startPromise = null;
 
   stopEmbeddedDaemon();
+  return wasRunning;
+};
+
+export const restartDesktopDaemon = async (): Promise<void> => {
+  stopDesktopDaemon();
+  await startDesktopDaemon({ ignoreAutostartEnv: true });
 };
 
 const daemonBindingChanged = (prevConfig: AppConfig, nextConfig: AppConfig): boolean => {

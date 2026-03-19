@@ -36,6 +36,16 @@ export interface DaemonLogsInfo {
   entries: DaemonLogEntry[];
 }
 
+export type DaemonControlAction = 'start' | 'restart' | 'stop';
+
+export interface DaemonControlResult {
+  success: boolean;
+  action: DaemonControlAction;
+  message: string;
+  status: DaemonStatusInfo;
+  embeddedRunning: boolean;
+}
+
 export interface AppConfig {
   general: {
     language: string | 'zh' | 'en';
