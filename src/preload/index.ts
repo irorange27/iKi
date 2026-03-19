@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { AppConfig, ConfigRuntimeInfo, DaemonStatusInfo } from '../shared/types/config';
 import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
+import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry, LongMemorySearchResult } from '../shared/types/memory';
 import type { ProactiveTask } from '../shared/types/tasks';
 import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
@@ -53,7 +54,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     getRuntimeInfo: (): Promise<ConfigRuntimeInfo> => ipcRenderer.invoke('config:get-runtime-info'),
-    getDaemonStatus: (): Promise<DaemonStatusInfo> => ipcRenderer.invoke('config:get-daemon-status'),
+    getDaemonStatus: (): Promise<DaemonStatusInfo> =>
+      ipcRenderer.invoke('config:get-daemon-status'),
     set: (config: AppConfig) => ipcRenderer.invoke('config:set', config),
     onUpdated: (callback: (config: AppConfig) => void) => {
       ipcRenderer.on('config:updated', (_event, config) => {
@@ -118,6 +120,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       update: (id: string, message: ChatMessageInput) =>
         ipcRenderer.invoke('chat:messages:update', id, message),
       delete: (id: string) => ipcRenderer.invoke('chat:messages:delete', id),
+    },
+    usage: {
+      summary: (period: ChatUsagePeriod = '30d'): Promise<ChatUsageSummary> =>
+        ipcRenderer.invoke('chat:usage:summary', period),
     },
   },
   memory: {
@@ -203,7 +209,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   tasks: {
     list: () => ipcRenderer.invoke('tasks:list'),
     get: (id: string) => ipcRenderer.invoke('tasks:get', id),
-    create: (task: ProactiveTaskInput) => ipcRenderer.invoke('tasks:create', toIpcSerializable(task)),
+    create: (task: ProactiveTaskInput) =>
+      ipcRenderer.invoke('tasks:create', toIpcSerializable(task)),
     update: (id: string, updates: Partial<ProactiveTask>) =>
       ipcRenderer.invoke('tasks:update', id, toIpcSerializable(updates)),
     delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),

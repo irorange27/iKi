@@ -19,7 +19,9 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:messages:list', (_, threadId) => chatService.listMessages(threadId));
   ipcMain.handle('chat:messages:get', (_, id) => chatService.getMessage(id));
   ipcMain.handle('chat:messages:create', (_, message) => chatService.createMessage(message));
-  ipcMain.handle('chat:messages:update', (_, id, message) => chatService.updateMessage(id, message));
+  ipcMain.handle('chat:messages:update', (_, id, message) =>
+    chatService.updateMessage(id, message)
+  );
   ipcMain.handle('chat:messages:delete', (_, id) => chatService.deleteMessage(id));
 
   // Chat/LLM Integration
@@ -48,5 +50,8 @@ export const registerChatIpc = (): void => {
     const webContents = event.sender as unknown as ChatWebContents;
     return await chatService.approveTool(webContents, approvalId, approved);
   });
-};
 
+  ipcMain.handle('chat:usage:summary', (_, period) => {
+    return chatService.getUsageSummary(period);
+  });
+};

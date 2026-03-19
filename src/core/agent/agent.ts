@@ -10,6 +10,7 @@ export type {
   AgentTool,
   AgentState,
   AgentResult,
+  AgentUsage,
   AgentHook,
   AgentHookContext,
 } from './types';

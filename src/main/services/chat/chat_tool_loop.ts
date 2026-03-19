@@ -29,6 +29,7 @@ export type ToolLoopStreamParams = {
 export type ToolLoopStreamResult = {
   awaitingApproval: boolean;
   cancelled?: boolean;
+  usage?: AgentResult['usage'];
 };
 
 export type ToolLoopRunner = {
@@ -108,7 +109,7 @@ const streamToolLoop = async (
       webContents: params.webContents,
       ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
     });
-    return { awaitingApproval: true };
+    return { awaitingApproval: true, usage: agentResult.usage };
   }
 
   if (!finalText.trim() && fullResponse.trim()) {
@@ -116,5 +117,5 @@ const streamToolLoop = async (
   }
 
   params.uiChunkEmitter?.finish();
-  return { awaitingApproval: false };
+  return { awaitingApproval: false, usage: agentResult?.usage };
 };

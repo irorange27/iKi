@@ -25,6 +25,25 @@ type PendingApprovalSession = {
 export const createChatApproval = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
   memory: ChatMemory;
+  usage: {
+    recordUsageEvent: (params: {
+      threadId?: string;
+      messageId?: string;
+      providerType: string;
+      model: string;
+      usage?: {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+        cacheReadTokens?: number;
+        cacheWriteTokens?: number;
+        reasoningTokens?: number;
+        estimatedCostUsd?: number;
+      };
+      source?: string;
+      metadata?: Record<string, unknown>;
+    }) => void;
+  };
 }) => {
   const pendingApprovalSessions = new Map<string, PendingApprovalSession>();
 
@@ -345,6 +364,20 @@ export const createChatApproval = (deps: {
         abortSignal: streamState.abortController.signal,
         uiChunkEmitter,
       });
+      if (!streamResult.cancelled && nextApprovalContext) {
+        deps.usage.recordUsageEvent({
+          threadId: nextApprovalContext.threadId,
+          messageId: uiChunkEmitter.messageId,
+          providerType: nextApprovalContext.providerType,
+          model: nextApprovalContext.model,
+          usage: streamResult.usage,
+          source: 'chat.approval-stream',
+          metadata: {
+            sessionId: nextApprovalContext.sessionId,
+            awaitingApproval: streamResult.awaitingApproval,
+          },
+        });
+      }
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,

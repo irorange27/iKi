@@ -22,7 +22,9 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md,vue}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md,vue}\"",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "ci:quality": "npm run -s lint && npm run -s ts && npm run -s test:coverage",
     "commit": "git-cz",
     "commit:check": "commitlint --from=HEAD~20 --to=HEAD --verbose",
     "prepare": "husky"

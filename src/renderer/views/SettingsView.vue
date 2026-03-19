@@ -105,7 +105,8 @@
               @change="
                 updateToolExecution(
                   'shellApprovalMode',
-                  ($event.target as HTMLSelectElement).value as AppConfig['toolExecution']['shellApprovalMode']
+                  ($event.target as HTMLSelectElement)
+                    .value as AppConfig['toolExecution']['shellApprovalMode']
                 )
               "
             >
@@ -299,9 +300,7 @@
                   {{ whisperModelsLoading ? 'Loading' : 'Refresh' }}
                 </button>
               </div>
-              <div v-if="whisperModelsLoading" class="speech-models-empty">
-                Loading models...
-              </div>
+              <div v-if="whisperModelsLoading" class="speech-models-empty">Loading models...</div>
               <div v-else-if="whisperModelsError" class="speech-models-error">
                 {{ whisperModelsError }}
               </div>
@@ -322,13 +321,13 @@
                       <div v-if="model.status === 'invalid'" class="speech-model-badge is-danger">
                         Corrupted
                       </div>
-                      <div
-                        v-if="whisperModelDownloadErrors[model.name]"
-                        class="speech-model-error"
-                      >
+                      <div v-if="whisperModelDownloadErrors[model.name]" class="speech-model-error">
                         {{ whisperModelDownloadErrors[model.name] }}
                       </div>
-                      <div v-else-if="model.status === 'invalid' && model.error" class="speech-model-error">
+                      <div
+                        v-else-if="model.status === 'invalid' && model.error"
+                        class="speech-model-error"
+                      >
                         {{ model.error }}
                       </div>
                     </div>
@@ -343,7 +342,8 @@
                             getWhisperModelStage(model) === 'error' || model.status === 'invalid',
                         }"
                         :disabled="
-                          (isWhisperModelSelected(model) && getWhisperModelStage(model) === 'done') ||
+                          (isWhisperModelSelected(model) &&
+                            getWhisperModelStage(model) === 'done') ||
                           isWhisperStageBusy(getWhisperModelStage(model))
                         "
                         @click="handleWhisperModelAction(model)"
@@ -376,8 +376,8 @@
             </div>
             <p class="group-description">
               Click "Download & Use" to fetch a model and switch to it automatically. whisper-node
-              requires local model files and a working <code>make</code> toolchain. Large models
-              can take a while to download and compile.
+              requires local model files and a working <code>make</code> toolchain. Large models can
+              take a while to download and compile.
             </p>
           </template>
           <div class="speech-status" :class="speechStatusToneClass">
@@ -393,7 +393,11 @@
               :value="speechLanguageValue"
               @change="updateSpeech('language', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-for="option in speechLanguageOptions" :key="option.value" :value="option.value">
+              <option
+                v-for="option in speechLanguageOptions"
+                :key="option.value"
+                :value="option.value"
+              >
                 {{ option.label }}
               </option>
             </select>
@@ -454,7 +458,9 @@
             min="4"
             max="24"
             :value="config.ui.composerPadding"
-            @input="setUiMetric('composerPadding', parseInt(($event.target as HTMLInputElement).value))"
+            @input="
+              setUiMetric('composerPadding', parseInt(($event.target as HTMLInputElement).value))
+            "
           />
         </div>
 
@@ -469,7 +475,10 @@
             max="28"
             :value="config.ui.messageBubblePaddingX"
             @input="
-              setUiMetric('messageBubblePaddingX', parseInt(($event.target as HTMLInputElement).value))
+              setUiMetric(
+                'messageBubblePaddingX',
+                parseInt(($event.target as HTMLInputElement).value)
+              )
             "
           />
         </div>
@@ -485,7 +494,10 @@
             max="20"
             :value="config.ui.messageBubblePaddingY"
             @input="
-              setUiMetric('messageBubblePaddingY', parseInt(($event.target as HTMLInputElement).value))
+              setUiMetric(
+                'messageBubblePaddingY',
+                parseInt(($event.target as HTMLInputElement).value)
+              )
             "
           />
         </div>
@@ -737,7 +749,9 @@
 
             <div class="slider-field">
               <span>Similarity Threshold</span>
-              <span class="value-badge">{{ Math.round(config.memory.similarThreshold * 100) }}%</span>
+              <span class="value-badge"
+                >{{ Math.round(config.memory.similarThreshold * 100) }}%</span
+              >
             </div>
             <input
               type="range"
@@ -795,10 +809,7 @@
                 type="checkbox"
                 :checked="config.memory.emotion.injectToSystemPrompt"
                 @change="
-                  updateEmotion(
-                    'injectToSystemPrompt',
-                    ($event.target as HTMLInputElement).checked
-                  )
+                  updateEmotion('injectToSystemPrompt', ($event.target as HTMLInputElement).checked)
                 "
               />
               Inject Emotion Context into Agent
@@ -809,10 +820,7 @@
                 type="checkbox"
                 :checked="config.memory.emotion.realtimeAnalysis"
                 @change="
-                  updateEmotion(
-                    'realtimeAnalysis',
-                    ($event.target as HTMLInputElement).checked
-                  )
+                  updateEmotion('realtimeAnalysis', ($event.target as HTMLInputElement).checked)
                 "
               />
               Analyze Current Message Before Reply (adds latency)
@@ -823,9 +831,9 @@
 
             <div class="slider-field">
               <span>Minimum Confidence</span>
-              <span class="value-badge">{{
-                Math.round(config.memory.emotion.minConfidence * 100)
-              }}%</span>
+              <span class="value-badge"
+                >{{ Math.round(config.memory.emotion.minConfidence * 100) }}%</span
+              >
             </div>
             <input
               type="range"
@@ -840,9 +848,7 @@
                 )
               "
             />
-            <p class="slider-hint">
-              Higher values make emotion context more conservative.
-            </p>
+            <p class="slider-hint">Higher values make emotion context more conservative.</p>
 
             <div class="slider-field">
               <span>Minimum Samples</span>
@@ -855,10 +861,7 @@
               step="1"
               :value="config.memory.emotion.minSampleCount"
               @input="
-                updateEmotion(
-                  'minSampleCount',
-                  parseInt(($event.target as HTMLInputElement).value)
-                )
+                updateEmotion('minSampleCount', parseInt(($event.target as HTMLInputElement).value))
               "
             />
 
@@ -873,15 +876,10 @@
               step="1"
               :value="config.memory.emotion.windowSize"
               @input="
-                updateEmotion(
-                  'windowSize',
-                  parseInt(($event.target as HTMLInputElement).value)
-                )
+                updateEmotion('windowSize', parseInt(($event.target as HTMLInputElement).value))
               "
             />
-            <p class="slider-hint">
-              Number of recent messages used to compute affect state.
-            </p>
+            <p class="slider-hint">Number of recent messages used to compute affect state.</p>
 
             <label class="input-label">
               <span>Half-life (minutes)</span>
@@ -920,10 +918,7 @@
                 type="checkbox"
                 :checked="config.memory.emotion.includeNeutral"
                 @change="
-                  updateEmotion(
-                    'includeNeutral',
-                    ($event.target as HTMLInputElement).checked
-                  )
+                  updateEmotion('includeNeutral', ($event.target as HTMLInputElement).checked)
                 "
               />
               Include Neutral Signals
@@ -937,18 +932,13 @@
             <input
               type="checkbox"
               :checked="config.memory.emotion.toolGuard.enabled"
-              @change="
-                updateEmotionGuard(
-                  'enabled',
-                  ($event.target as HTMLInputElement).checked
-                )
-              "
+              @change="updateEmotionGuard('enabled', ($event.target as HTMLInputElement).checked)"
             />
             Enable Affect-based Guardrails
           </label>
           <p class="card-help">
-            When high arousal and negative valence are detected, require approvals or suppress
-            auto tools.
+            When high arousal and negative valence are detected, require approvals or suppress auto
+            tools.
           </p>
 
           <template v-if="config.memory.emotion.toolGuard.enabled">
@@ -957,10 +947,7 @@
                 type="checkbox"
                 :checked="config.memory.emotion.toolGuard.requireApproval"
                 @change="
-                  updateEmotionGuard(
-                    'requireApproval',
-                    ($event.target as HTMLInputElement).checked
-                  )
+                  updateEmotionGuard('requireApproval', ($event.target as HTMLInputElement).checked)
                 "
               />
               Require Approval for All Tools
@@ -982,9 +969,9 @@
 
             <div class="slider-field">
               <span>Guard Confidence Threshold</span>
-              <span class="value-badge">{{
-                Math.round(config.memory.emotion.toolGuard.minConfidence * 100)
-              }}%</span>
+              <span class="value-badge"
+                >{{ Math.round(config.memory.emotion.toolGuard.minConfidence * 100) }}%</span
+              >
             </div>
             <input
               type="range"
@@ -1002,9 +989,9 @@
 
             <div class="slider-field">
               <span>Guard Arousal Threshold</span>
-              <span class="value-badge">{{
-                Math.round(config.memory.emotion.toolGuard.minArousal * 100)
-              }}%</span>
+              <span class="value-badge"
+                >{{ Math.round(config.memory.emotion.toolGuard.minArousal * 100) }}%</span
+              >
             </div>
             <input
               type="range"
@@ -1022,9 +1009,9 @@
 
             <div class="slider-field">
               <span>Guard Valence Threshold</span>
-              <span class="value-badge">{{
-                Math.round(config.memory.emotion.toolGuard.maxValence * 100)
-              }}%</span>
+              <span class="value-badge"
+                >{{ Math.round(config.memory.emotion.toolGuard.maxValence * 100) }}%</span
+              >
             </div>
             <input
               type="range"
@@ -1087,9 +1074,7 @@
             <div v-else-if="!selectedMemoryThreadId || isAllThreadsSelected" class="memory-empty">
               Select a thread to view affect state.
             </div>
-            <div v-else-if="!parsedAffectState" class="memory-empty">
-              No affect state yet.
-            </div>
+            <div v-else-if="!parsedAffectState" class="memory-empty">No affect state yet.</div>
             <div v-else class="memory-item">
               <div class="memory-item-meta">
                 <span class="memory-time">{{
@@ -1097,8 +1082,8 @@
                 }}</span>
               </div>
               <div class="memory-item-content">
-                Primary: {{ parsedAffectState.label }}
-                (confidence {{ formatDecimal(parsedAffectState.confidence) }})
+                Primary: {{ parsedAffectState.label }} (confidence
+                {{ formatDecimal(parsedAffectState.confidence) }})
               </div>
               <div class="memory-item-sub">
                 Valence: {{ formatDecimal(parsedAffectState.valence) }} · Arousal:
@@ -1109,9 +1094,8 @@
                 {{ parsedAffectState.windowSize || 0 }}
               </div>
               <div class="memory-item-sub">
-                Window: {{ parsedAffectState.startAt || 'n/a' }} → {{
-                  parsedAffectState.endAt || 'n/a'
-                }}
+                Window: {{ parsedAffectState.startAt || 'n/a' }} →
+                {{ parsedAffectState.endAt || 'n/a' }}
               </div>
             </div>
           </div>
@@ -1207,7 +1191,9 @@
                     <textarea
                       class="memory-editor-textarea"
                       :value="editingLongMemorySummary"
-                      @input="editingLongMemorySummary = ($event.target as HTMLTextAreaElement).value"
+                      @input="
+                        editingLongMemorySummary = ($event.target as HTMLTextAreaElement).value
+                      "
                     />
                     <div class="memory-inline-actions">
                       <button
@@ -1324,10 +1310,7 @@
 
           <label class="input-label">
             <span>Prompt</span>
-            <textarea
-              v-model="taskForm.prompt"
-              placeholder="What should this task do?"
-            />
+            <textarea v-model="taskForm.prompt" placeholder="What should this task do?" />
           </label>
 
           <label class="input-label">
@@ -1340,7 +1323,9 @@
 
           <div class="task-form-grid">
             <label class="input-label">
-              <span>{{ taskForm.schedule_type === 'cron' ? 'Cron Expression' : 'Every (minutes)' }}</span>
+              <span>{{
+                taskForm.schedule_type === 'cron' ? 'Cron Expression' : 'Every (minutes)'
+              }}</span>
               <input
                 v-if="taskForm.schedule_type === 'interval'"
                 v-model.number="taskForm.interval_minutes"
@@ -1408,12 +1393,7 @@
                 <input
                   type="checkbox"
                   :checked="taskForm.tools.includes(tool)"
-                  @change="
-                    toggleTaskTool(
-                      tool,
-                      ($event.target as HTMLInputElement).checked
-                    )
-                  "
+                  @change="toggleTaskTool(tool, ($event.target as HTMLInputElement).checked)"
                 />
                 {{ tool }}
               </label>
@@ -1546,18 +1526,149 @@
         </div>
       </section>
 
+      <!-- Usage -->
+      <section v-show="activeSection === 'usage'" class="config-section usage-section">
+        <div class="settings-card">
+          <div class="usage-toolbar">
+            <div>
+              <div class="card-title">Usage</div>
+              <p class="card-help">
+                Token usage and estimated spend for model responses generated by chat workflows.
+              </p>
+            </div>
+            <label class="input-label usage-period-select">
+              <span>Period</span>
+              <select v-model="usagePeriod">
+                <option
+                  v-for="option in usagePeriodOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <p v-if="usageError" class="tasks-error">{{ usageError }}</p>
+          <div v-else-if="usageLoading" class="tasks-empty">Loading usage...</div>
+          <div v-else-if="usageSummary" class="usage-metrics-grid">
+            <div class="usage-metric-card">
+              <div class="usage-metric-label">Total Cost</div>
+              <div class="usage-metric-value">
+                {{ formatUsageCost(usageSummary.totals.estimatedCostUsd) }}
+              </div>
+            </div>
+            <div class="usage-metric-card">
+              <div class="usage-metric-label">Messages</div>
+              <div class="usage-metric-value">{{ usageSummary.totals.messageCount }}</div>
+            </div>
+            <div class="usage-metric-card">
+              <div class="usage-metric-label">Input Tokens</div>
+              <div class="usage-metric-value">
+                {{ formatUsageTokens(usageSummary.totals.inputTokens) }}
+              </div>
+            </div>
+            <div class="usage-metric-card">
+              <div class="usage-metric-label">Output Tokens</div>
+              <div class="usage-metric-value">
+                {{ formatUsageTokens(usageSummary.totals.outputTokens) }}
+              </div>
+            </div>
+            <div class="usage-metric-card">
+              <div class="usage-metric-label">Cache Read</div>
+              <div class="usage-metric-value">
+                {{ formatUsageTokens(usageSummary.totals.cacheReadTokens) }}
+              </div>
+            </div>
+            <div class="usage-metric-card">
+              <div class="usage-metric-label">Cache Write</div>
+              <div class="usage-metric-value">
+                {{ formatUsageTokens(usageSummary.totals.cacheWriteTokens) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-title">Activity Heatmap</div>
+          <p class="card-help">Token activity over the past year.</p>
+
+          <div v-if="usageLoading" class="tasks-empty">Loading heatmap...</div>
+          <div v-else-if="!usageSummary || usageHeatmapCells.length === 0" class="tasks-empty">
+            No usage data yet.
+          </div>
+          <template v-else>
+            <div class="usage-heatmap-months">
+              <span
+                v-for="marker in usageHeatmapMonthMarkers"
+                :key="`${marker.column}_${marker.label}`"
+                :style="{ gridColumnStart: marker.column + 1 }"
+              >
+                {{ marker.label }}
+              </span>
+            </div>
+            <div class="usage-heatmap-grid">
+              <div
+                v-for="(column, columnIndex) in usageHeatmapColumns"
+                :key="`col_${columnIndex}`"
+                class="usage-heatmap-column"
+              >
+                <div
+                  v-for="cell in column"
+                  :key="cell.date"
+                  class="usage-heatmap-cell"
+                  :style="getHeatmapCellStyle(cell.totalTokens)"
+                  :title="`${formatUsageDate(cell.date)}: ${cell.totalTokens} tokens, ${cell.messageCount} messages`"
+                />
+              </div>
+            </div>
+            <div class="usage-heatmap-footer">
+              <span>{{ formatUsageTokens(usagePastYearTokens) }} tokens in the past year</span>
+              <span class="usage-heatmap-legend">Less ▪▪▪▪ More</span>
+            </div>
+          </template>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-title">Cost Over Time</div>
+          <p class="card-help">Estimated monthly spend in the selected window.</p>
+
+          <div v-if="usageLoading" class="tasks-empty">Loading chart...</div>
+          <div v-else-if="!usageSummary || usageSummary.monthly.length === 0" class="tasks-empty">
+            No cost data in this period.
+          </div>
+          <div v-else class="usage-monthly-chart">
+            <div
+              v-for="row in usageSummary.monthly"
+              :key="row.month"
+              class="usage-month-bar"
+              :title="`${row.month}: ${formatUsageCost(row.estimatedCostUsd)}`"
+            >
+              <div
+                class="usage-month-bar-fill"
+                :style="getMonthlyCostBarStyle(row.estimatedCostUsd)"
+              />
+              <span class="usage-month-label">{{ row.month.slice(5) }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Skills -->
       <section v-show="activeSection === 'skills'" class="config-section">
         <div class="settings-card">
           <div class="skills-toolbar">
             <div class="skills-toolbar-left">
               <div class="card-title">Skills</div>
-              <div class="skills-subtitle">
-                {{ filteredSkills.length }} skill(s) available
-              </div>
+              <div class="skills-subtitle">{{ filteredSkills.length }} skill(s) available</div>
             </div>
             <div class="skills-toolbar-actions">
-              <button class="secondary-btn skills-btn" @click="refreshSkills" :disabled="skillsLoading">
+              <button
+                class="secondary-btn skills-btn"
+                @click="refreshSkills"
+                :disabled="skillsLoading"
+              >
                 <RefreshCw :size="14" :class="{ 'animate-spin': skillsLoading }" />
                 {{ skillsLoading ? 'Refreshing...' : 'Refresh' }}
               </button>
@@ -1568,21 +1679,17 @@
           </div>
 
           <p class="card-help">
-            Skills are instruction packs loaded from local <code>SKILL.md</code> files. Put your custom
-            skills into the Personal skills folder to make them show up here.
+            Skills are instruction packs loaded from local <code>SKILL.md</code> files. Put your
+            custom skills into the Personal skills folder to make them show up here.
           </p>
 
           <div class="skills-paths" v-if="skillRoots.length">
-            <div
-              v-for="root in skillRoots"
-              :key="root.source"
-              class="skills-path-row"
-            >
-              <span class="skills-path-label">{{ root.source === 'user' ? 'Personal' : 'Codex' }}</span>
+            <div v-for="root in skillRoots" :key="root.source" class="skills-path-row">
+              <span class="skills-path-label">{{
+                root.source === 'user' ? 'Personal' : 'Codex'
+              }}</span>
               <code class="skills-path-value">{{ root.path }}</code>
-              <button class="skills-mini-btn" @click="openSkillsFolder(root.source)">
-                Open
-              </button>
+              <button class="skills-mini-btn" @click="openSkillsFolder(root.source)">Open</button>
             </div>
           </div>
 
@@ -1614,7 +1721,9 @@
                       <div class="skill-id">{{ skill.path || skill.id }}</div>
                     </div>
                     <div class="skill-item-actions">
-                      <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">Open</button>
+                      <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">
+                        Open
+                      </button>
                       <button class="skills-mini-btn" @click="toggleSkillContent(skill.id)">
                         {{ isSkillExpanded(skill.id) ? 'Hide' : 'View Content' }}
                       </button>
@@ -1644,7 +1753,9 @@
                       <div class="skill-id">{{ skill.path || skill.id }}</div>
                     </div>
                     <div class="skill-item-actions">
-                      <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">Open</button>
+                      <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">
+                        Open
+                      </button>
                       <button class="skills-mini-btn" @click="toggleSkillContent(skill.id)">
                         {{ isSkillExpanded(skill.id) ? 'Hide' : 'View Content' }}
                       </button>
@@ -1669,7 +1780,9 @@
             <input
               type="checkbox"
               :checked="config.workflowOptimization.enabled"
-              @change="updateWorkflowOptimization('enabled', ($event.target as HTMLInputElement).checked)"
+              @change="
+                updateWorkflowOptimization('enabled', ($event.target as HTMLInputElement).checked)
+              "
             />
             Enable self-optimizing workflow
           </label>
@@ -1678,7 +1791,12 @@
               type="checkbox"
               :checked="config.workflowOptimization.autoPinSkills"
               :disabled="!config.workflowOptimization.enabled"
-              @change="updateWorkflowOptimization('autoPinSkills', ($event.target as HTMLInputElement).checked)"
+              @change="
+                updateWorkflowOptimization(
+                  'autoPinSkills',
+                  ($event.target as HTMLInputElement).checked
+                )
+              "
             />
             Auto-pin frequently used skills per thread
           </label>
@@ -1720,7 +1838,7 @@ import {
   Mic,
   Brain,
   Bot,
-  MessageSquare,
+  BarChart3,
   RefreshCw,
   AlarmClock,
   Wand2,
@@ -1741,6 +1859,11 @@ import type {
 } from '../../shared/types/memory';
 import type { SkillSummary } from '../../shared/types/skill';
 import type { ProactiveTask } from '../../shared/types/tasks';
+import type {
+  ChatUsagePeriod,
+  ChatUsageSummary,
+  ChatUsageHeatmapCell,
+} from '../../shared/types/chat_usage';
 import type {
   SpeechStatus,
   WhisperNodeDownloadProgress,
@@ -1877,7 +2000,8 @@ const speechStatusDetail = computed(() => {
     return 'Validating provider, model, and local dependencies.';
   }
   if (speechStatus.value?.available) {
-    const provider = speechStatus.value.providerType || config.value.speech.providerType || 'unknown';
+    const provider =
+      speechStatus.value.providerType || config.value.speech.providerType || 'unknown';
     const model = speechStatus.value.model || config.value.speech.model || 'auto';
     return `Provider: ${provider} | Model: ${model}`;
   }
@@ -1928,6 +2052,117 @@ const taskForm = ref<{
   thread_id: '',
   tools: ['web', 'fetch'],
 });
+
+const usagePeriod = ref<ChatUsagePeriod>('30d');
+const usageSummary = ref<ChatUsageSummary | null>(null);
+const usageLoading = ref(false);
+const usageError = ref('');
+
+const usagePeriodOptions: Array<{ value: ChatUsagePeriod; label: string }> = [
+  { value: '7d', label: 'Last 7 Days' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: '90d', label: 'Last 90 Days' },
+  { value: '365d', label: 'Last Year' },
+  { value: 'all', label: 'All Time' },
+];
+
+const usageHeatmapCells = computed<ChatUsageHeatmapCell[]>(() => usageSummary.value?.heatmap ?? []);
+
+const usageHeatmapMaxTokens = computed(() => {
+  const max = usageHeatmapCells.value.reduce((acc, cell) => Math.max(acc, cell.totalTokens), 0);
+  return max > 0 ? max : 1;
+});
+
+const usageHeatmapColumns = computed(() => {
+  const columns: ChatUsageHeatmapCell[][] = [];
+  const cells = usageHeatmapCells.value;
+  for (let index = 0; index < cells.length; index += 7) {
+    columns.push(cells.slice(index, index + 7));
+  }
+  return columns;
+});
+
+const usageHeatmapMonthMarkers = computed(() => {
+  const markers: Array<{ label: string; column: number }> = [];
+  let previousMonth = '';
+  usageHeatmapColumns.value.forEach((column, columnIndex) => {
+    const first = column[0];
+    if (!first) return;
+    const date = new Date(`${first.date}T00:00:00.000Z`);
+    const monthLabel = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+    const monthKey = `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
+    if (monthKey !== previousMonth) {
+      markers.push({ label: monthLabel, column: columnIndex });
+      previousMonth = monthKey;
+    }
+  });
+  return markers;
+});
+
+const usageMaxMonthlyCost = computed(() => {
+  const monthly = usageSummary.value?.monthly ?? [];
+  const max = monthly.reduce((acc, row) => Math.max(acc, row.estimatedCostUsd), 0);
+  return max > 0 ? max : 1;
+});
+
+const usagePastYearTokens = computed(() =>
+  usageHeatmapCells.value.reduce((sum, cell) => sum + cell.totalTokens, 0)
+);
+
+const formatUsageTokens = (value: number): string => {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return `${Math.round(value)}`;
+};
+
+const formatUsageCost = (value: number): string => {
+  if (!Number.isFinite(value) || value <= 0) return '$0.000';
+  return `$${value.toFixed(3)}`;
+};
+
+const formatUsageDate = (value: string): string => {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+};
+
+const getHeatmapCellStyle = (tokens: number): Record<string, string> => {
+  const ratio = Math.max(0, Math.min(1, tokens / usageHeatmapMaxTokens.value));
+  const alpha = ratio <= 0 ? 0.08 : 0.18 + ratio * 0.72;
+  return {
+    backgroundColor: `color-mix(in srgb, var(--accent-color) ${Math.round(alpha * 100)}%, var(--bg-primary))`,
+  };
+};
+
+const getMonthlyCostBarStyle = (cost: number): Record<string, string> => {
+  const ratio = Math.max(0, Math.min(1, cost / usageMaxMonthlyCost.value));
+  return {
+    height: `${Math.max(6, Math.round(ratio * 100))}%`,
+  };
+};
+
+const loadUsageSummary = async () => {
+  usageLoading.value = true;
+  usageError.value = '';
+  if (!window?.electronAPI?.chat?.usage?.summary) {
+    usageError.value = 'Usage service unavailable.';
+    usageLoading.value = false;
+    return;
+  }
+
+  try {
+    usageSummary.value = await window.electronAPI.chat.usage.summary(usagePeriod.value);
+  } catch (error: any) {
+    usageError.value = `Failed to load usage: ${error?.message || 'Unknown error'}`;
+  } finally {
+    usageLoading.value = false;
+  }
+};
 
 const loadSpeechStatus = async () => {
   speechStatusLoading.value = true;
@@ -1994,8 +2229,7 @@ const downloadWhisperModel = async (modelName: string) => {
   try {
     const result = await window.electronAPI.speech.downloadModel(modelName);
     if (!result?.success) {
-      whisperModelDownloadErrors.value[modelName] =
-        result?.error || 'Download failed';
+      whisperModelDownloadErrors.value[modelName] = result?.error || 'Download failed';
       whisperModelStages.value[modelName] = 'error';
     } else {
       whisperModelStages.value[modelName] = 'done';
@@ -2004,8 +2238,7 @@ const downloadWhisperModel = async (modelName: string) => {
     await loadWhisperModels();
     scheduleSpeechStatusRefresh();
   } catch (error: any) {
-    whisperModelDownloadErrors.value[modelName] =
-      error?.message || 'Download failed';
+    whisperModelDownloadErrors.value[modelName] = error?.message || 'Download failed';
     whisperModelStages.value[modelName] = 'error';
   } finally {
     // Allow the progress event to drive visual updates when possible.
@@ -2127,15 +2360,12 @@ const getWhisperProgressText = (
   if (stage === 'downloading') {
     const progressState = getWhisperProgressState(model);
     const progress =
-      typeof progressState.progress === 'number'
-        ? Math.round(progressState.progress * 100)
-        : null;
+      typeof progressState.progress === 'number' ? Math.round(progressState.progress * 100) : null;
     const total = progressState.totalBytes ? formatBytes(progressState.totalBytes) : '';
     const downloaded = progressState.downloadedBytes
       ? formatBytes(progressState.downloadedBytes)
       : '';
-    const detail =
-      downloaded && total ? `${downloaded} / ${total}` : total || downloaded || '';
+    const detail = downloaded && total ? `${downloaded} / ${total}` : total || downloaded || '';
     if (progress !== null) {
       return `Downloading ${model.name} · ${progress}%${detail ? ` (${detail})` : ''}`;
     }
@@ -2325,15 +2555,22 @@ watch(
   { deep: true }
 );
 
+watch(usagePeriod, () => {
+  if (activeSection.value === 'usage') {
+    void loadUsageSummary();
+  }
+});
+
 const menuItems = [
-  { key: 'general', label: 'General', icon: Cog }, 
+  { key: 'general', label: 'General', icon: Cog },
   { key: 'provider', label: 'Providers', icon: Bot },
   { key: 'mcp', label: 'MCP', icon: Plug },
   { key: 'bridges', label: 'Bridges', icon: Bot },
-  { key: 'skills', label: 'Skills', icon: Wand2 },  
+  { key: 'usage', label: 'Usage', icon: BarChart3 },
+  { key: 'skills', label: 'Skills', icon: Wand2 },
   { key: 'memory', label: 'Memory', icon: Brain },
   { key: 'ui', label: 'Appearance', icon: Palette },
-  { key: 'speech', label: 'Speech', icon: Mic },  
+  { key: 'speech', label: 'Speech', icon: Mic },
   { key: 'tasks', label: 'Tasks', icon: AlarmClock },
   // { key: "chat", label: "Chat", icon: MessageCircleMore },
   // { key: "network", label: "Network", icon: Globe },
@@ -2511,16 +2748,13 @@ const shellHighRiskPatternText = computed(() =>
 );
 const hasMemoryQuery = computed(() => memorySearchQuery.value.trim().length > 0);
 const isAllThreadsSelected = computed(() => selectedMemoryThreadId.value === ALL_THREADS);
-const parsedAffectState = computed(() =>
-  parseAffectStateSnapshot(affectStateEntry.value?.state)
-);
+const parsedAffectState = computed(() => parseAffectStateSnapshot(affectStateEntry.value?.state));
 const isMemoryThreadLocked = computed(
   () => !!selectedMemoryThreadId.value && selectedMemoryThreadId.value !== ALL_THREADS
 );
 const canCreateLongMemory = computed(() => {
   return (
-    newLongMemorySummary.value.trim().length > 0 &&
-    newLongMemoryThreadId.value.trim().length > 0
+    newLongMemorySummary.value.trim().length > 0 && newLongMemoryThreadId.value.trim().length > 0
   );
 });
 const canSaveLongMemoryEdit = computed(() => {
@@ -2942,9 +3176,7 @@ const createProactiveTask = async () => {
       interval_minutes: taskForm.value.interval_minutes,
       schedule_type: taskForm.value.schedule_type,
       cron_expression:
-        taskForm.value.schedule_type === 'cron'
-          ? taskForm.value.cron_expression.trim()
-          : null,
+        taskForm.value.schedule_type === 'cron' ? taskForm.value.cron_expression.trim() : null,
       schedule_timezone:
         taskForm.value.schedule_type === 'cron' && taskForm.value.schedule_timezone.trim()
           ? taskForm.value.schedule_timezone.trim()
@@ -3177,9 +3409,7 @@ const personalSkills = computed(() =>
   filteredSkills.value.filter(skill => skill.source === 'user')
 );
 
-const codexSkills = computed(() =>
-  filteredSkills.value.filter(skill => skill.source === 'codex')
-);
+const codexSkills = computed(() => filteredSkills.value.filter(skill => skill.source === 'codex'));
 
 onMounted(async () => {
   if (!configStore.initialized) {
@@ -3218,6 +3448,9 @@ watch(activeSection, section => {
   }
   if (section === 'skills') {
     void refreshSkills();
+  }
+  if (section === 'usage') {
+    void loadUsageSummary();
   }
   if (section === 'speech') {
     void loadSpeechStatus();
@@ -3267,7 +3500,8 @@ onUnmounted(() => {
 .input-label textarea {
   resize: vertical;
   min-height: 96px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
 }
 
@@ -3716,8 +3950,9 @@ input:checked + .slider::before {
 .skill-id {
   color: var(--text-secondary);
   font-size: 0.82em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    'Courier New', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3954,6 +4189,131 @@ input:checked + .slider::before {
   padding: 10px 12px;
 }
 
+.usage-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.usage-period-select {
+  width: 220px;
+  margin-bottom: 0;
+}
+
+.usage-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.usage-metric-card {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  padding: 14px;
+}
+
+.usage-metric-label {
+  color: var(--text-secondary);
+  font-size: 0.88em;
+}
+
+.usage-metric-value {
+  font-size: 1.65em;
+  font-weight: 700;
+  margin-top: 8px;
+  line-height: 1;
+}
+
+.usage-heatmap-months {
+  display: grid;
+  grid-template-columns: repeat(53, minmax(0, 1fr));
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.usage-heatmap-months span {
+  white-space: nowrap;
+}
+
+.usage-heatmap-grid {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.usage-heatmap-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.usage-heatmap-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
+}
+
+.usage-heatmap-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 0.85em;
+}
+
+.usage-heatmap-legend {
+  letter-spacing: 0.03em;
+}
+
+.usage-monthly-chart {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  min-height: 180px;
+  padding: 10px 6px 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+}
+
+.usage-month-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  height: 160px;
+}
+
+.usage-month-bar-fill {
+  width: 100%;
+  max-width: 28px;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-color) 85%, white),
+    color-mix(in srgb, var(--accent-color) 45%, var(--bg-primary))
+  );
+  border: 1px solid color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
+}
+
+.usage-month-label {
+  color: var(--text-secondary);
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 @media (max-width: 840px) {
   .task-form-grid {
     grid-template-columns: 1fr;
@@ -3965,6 +4325,19 @@ input:checked + .slider::before {
 
   .task-name {
     max-width: 320px;
+  }
+
+  .usage-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .usage-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .usage-period-select {
+    width: 100%;
   }
 }
 
@@ -4036,7 +4409,11 @@ input:checked + .slider::before {
 
 .speech-btn.is-success {
   background: color-mix(in srgb, var(--success-color, var(--accent-color)) 18%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--success-color, var(--accent-color)) 35%, var(--border-color));
+  border-color: color-mix(
+    in srgb,
+    var(--success-color, var(--accent-color)) 35%,
+    var(--border-color)
+  );
   color: var(--text-primary);
 }
 
@@ -4198,11 +4575,7 @@ input:checked + .slider::before {
     var(--success-color, var(--accent-color)) 40%,
     var(--border-color)
   );
-  background: color-mix(
-    in srgb,
-    var(--success-color, var(--accent-color)) 12%,
-    var(--bg-primary)
-  );
+  background: color-mix(in srgb, var(--success-color, var(--accent-color)) 12%, var(--bg-primary));
 }
 
 .speech-status.is-error {

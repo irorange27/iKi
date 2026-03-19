@@ -43,6 +43,25 @@ import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_lo
 export const createChatStreaming = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
   memory: ChatMemory;
+  usage: {
+    recordUsageEvent: (params: {
+      threadId?: string;
+      messageId?: string;
+      providerType: string;
+      model: string;
+      usage?: {
+        inputTokens?: number;
+        outputTokens?: number;
+        totalTokens?: number;
+        cacheReadTokens?: number;
+        cacheWriteTokens?: number;
+        reasoningTokens?: number;
+        estimatedCostUsd?: number;
+      };
+      source?: string;
+      metadata?: Record<string, unknown>;
+    }) => void;
+  };
   approvals: {
     ensurePendingApprovalSession: (
       approvalId: string,
@@ -336,17 +355,31 @@ export const createChatStreaming = (deps: {
 
         runner.setModelMessages(history);
         const result = await runner.generate(prompt);
+        deps.usage.recordUsageEvent({
+          threadId: options.threadId,
+          providerType: options.providerType,
+          model: options.model,
+          usage: result.usage,
+          source: 'chat.send.tools',
+        });
         return { success: true, text: result.response };
       }
 
       // Fallback to simple LLM call
-      const text = await llmFactory.generateChat({
+      const result = await llmFactory.generateChatWithUsage({
         providerType: options.providerType,
         modelId: options.model,
         messages: toLlmChatMessages(finalMessages),
         extraSystemPrompt: skillsSystemPrompt,
       });
-      return { success: true, text };
+      deps.usage.recordUsageEvent({
+        threadId: options.threadId,
+        providerType: options.providerType,
+        model: options.model,
+        usage: result.usage,
+        source: 'chat.send.llm',
+      });
+      return { success: true, text: result.text };
     } catch (error: unknown) {
       return { success: false, error: getErrorMessage(error) };
     }
@@ -492,6 +525,19 @@ export const createChatStreaming = (deps: {
         abortSignal: streamState.abortController.signal,
         uiChunkEmitter,
       });
+      if (!streamResult.cancelled) {
+        deps.usage.recordUsageEvent({
+          threadId: options.threadId,
+          messageId: uiChunkEmitter.messageId,
+          providerType: options.providerType,
+          model: options.model,
+          usage: streamResult.usage,
+          source: 'chat.stream',
+          metadata: {
+            awaitingApproval: streamResult.awaitingApproval,
+          },
+        });
+      }
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,

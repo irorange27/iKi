@@ -6,6 +6,8 @@ import { getProviders } from '../../db/providers';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import { parseModelList } from '../../../shared/utils/provider_models';
+import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
+import { normalizeLanguageModelUsage } from './usage';
 
 export interface ProviderConfig {
   id: string;
@@ -13,6 +15,11 @@ export interface ProviderConfig {
   apiKey: string;
   baseURL: string;
   models: string[];
+}
+
+export interface ChatGenerationResult {
+  text: string;
+  usage: TokenUsageMetrics;
 }
 
 export type ChatTextMessage = {
@@ -133,18 +140,31 @@ export const generateChat = async (options: {
   messages: ChatTextMessage[];
   extraSystemPrompt?: string;
 }) => {
+  const result = await generateChatWithUsage(options);
+  return result.text;
+};
+
+export const generateChatWithUsage = async (options: {
+  providerType: string;
+  modelId: string;
+  messages: ChatTextMessage[];
+  extraSystemPrompt?: string;
+}): Promise<ChatGenerationResult> => {
   const model = createModel(options.providerType, options.modelId);
   const systemPrompt = [getFullSystemPrompt(options.providerType), options.extraSystemPrompt]
     .filter(value => typeof value === 'string' && value.trim().length > 0)
     .join('\n\n');
 
-  const { text } = await generateText({
+  const result = await generateText({
     model,
     system: systemPrompt,
     messages: toModelMessages(options.messages),
   });
 
-  return text;
+  return {
+    text: result.text,
+    usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
+  };
 };
 
 export const fetchModelsFromDev = async (providerType: string) => {

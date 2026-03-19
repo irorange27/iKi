@@ -11,6 +11,7 @@ import { createModel, getFullSystemPrompt } from './provider/llm/factory';
 import { BaseAgent } from './agent/base';
 import type { AgentResult, ToolApprovalRequest as AgentToolApprovalRequest } from './agent/types';
 import { logger } from './logger';
+import { normalizeLanguageModelUsage } from './provider/llm/usage';
 
 /**
  * Default conversation-runner implementation backed by AI SDK text/tool loops.
@@ -266,6 +267,7 @@ export class SimpleAgent extends BaseAgent {
             args: SimpleAgent.normalizeToolArgs(tc.input),
           })),
           toolApprovalRequests,
+          usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
           iterations: result.steps ? result.steps.length : 1,
         };
       }
@@ -289,6 +291,7 @@ export class SimpleAgent extends BaseAgent {
                 args: SimpleAgent.normalizeToolArgs(tc.input),
               }))
             : undefined,
+        usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
         iterations: result.steps ? result.steps.length : 1,
       };
 
@@ -400,6 +403,7 @@ export class SimpleAgent extends BaseAgent {
 
       const responseObj = await result.response;
       const contentParts = await result.content;
+      const totalUsage = normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage));
 
       const approvalRequests: AgentToolApprovalRequest[] = [];
       for (const part of contentParts) {
@@ -417,6 +421,7 @@ export class SimpleAgent extends BaseAgent {
           response: finalResponse,
           toolCalls: undefined,
           toolApprovalRequests: approvalRequests,
+          usage: totalUsage,
           iterations: (await result.steps).length || 1,
         };
       }
@@ -436,6 +441,7 @@ export class SimpleAgent extends BaseAgent {
 
       const agentResult: AgentResult = {
         response: finalResponse,
+        usage: totalUsage,
         iterations: (await result.steps).length || 1,
       };
 

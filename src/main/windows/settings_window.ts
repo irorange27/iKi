@@ -10,6 +10,7 @@ export const createSettingsWindow = (): BrowserWindow => {
     height: 750,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor: '#2a2d35',
     title: 'Settings',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 20 },

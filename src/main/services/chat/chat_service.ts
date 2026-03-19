@@ -3,6 +3,7 @@ import { createChatApproval } from './chat_approval';
 import { createChatMemory } from './chat_memory';
 import { createChatPersistence } from './chat_persistence';
 import { createChatStreaming } from './chat_streaming';
+import { createChatUsage } from './chat_usage';
 
 export type { ChatWebContents } from './chat_types';
 
@@ -10,11 +11,21 @@ export const createChatService = () => {
   const activeStreams = new Map<number, ActiveStreamState>();
 
   const memory = createChatMemory();
-  const approvals = createChatApproval({ activeStreams, memory });
+  const usage = createChatUsage();
+  const approvals = createChatApproval({
+    activeStreams,
+    memory,
+    usage: {
+      recordUsageEvent: usage.recordUsageEvent,
+    },
+  });
   const persistence = createChatPersistence({ memory });
   const streaming = createChatStreaming({
     activeStreams,
     memory,
+    usage: {
+      recordUsageEvent: usage.recordUsageEvent,
+    },
     approvals: {
       ensurePendingApprovalSession: approvals.ensurePendingApprovalSession,
       registerApprovalBatch: approvals.registerApprovalBatch,
@@ -24,6 +35,7 @@ export const createChatService = () => {
   return {
     ...persistence,
     ...streaming,
+    getUsageSummary: usage.getUsageSummary,
     approveTool: approvals.approveTool,
   };
 };
@@ -31,4 +43,3 @@ export const createChatService = () => {
 export type ChatService = ReturnType<typeof createChatService>;
 
 export const chatService: ChatService = createChatService();
-

@@ -89,11 +89,24 @@ export const ToolApprovalRequestSchema = z.object({
 
 export type ToolApprovalRequest = z.infer<typeof ToolApprovalRequestSchema>;
 
+export const AgentUsageSchema = z.object({
+  inputTokens: z.number().int().nonnegative().default(0),
+  outputTokens: z.number().int().nonnegative().default(0),
+  totalTokens: z.number().int().nonnegative().default(0),
+  cacheReadTokens: z.number().int().nonnegative().default(0),
+  cacheWriteTokens: z.number().int().nonnegative().default(0),
+  reasoningTokens: z.number().int().nonnegative().default(0),
+  estimatedCostUsd: z.number().nonnegative().default(0),
+});
+
+export type AgentUsage = z.infer<typeof AgentUsageSchema>;
+
 // Agent Result Schema
 export const AgentResultSchema = z.object({
   response: z.string(),
   toolCalls: z.array(ToolCallSchema).optional(),
   toolApprovalRequests: z.array(ToolApprovalRequestSchema).optional(),
+  usage: AgentUsageSchema.optional(),
   iterations: z.number().int().nonnegative(),
   requiresApproval: z.boolean().optional(),
 });

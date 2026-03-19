@@ -10,6 +10,7 @@ export const createMainWindow = (): BrowserWindow => {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor: '#2a2d35',
     frame: false,
     // macOS
     titleBarStyle: 'hiddenInset',
