@@ -32,7 +32,9 @@ const {
       streamableTransportInstances.push({ url, options });
     }
 
-    async close() {}
+    async close() {
+      return undefined;
+    }
   }
 
   class MockSSEClientTransport {
@@ -45,24 +47,32 @@ const {
       sseTransportInstances.push({ url, options });
     }
 
-    async close() {}
+    async close() {
+      return undefined;
+    }
   }
 
   class MockStdioClientTransport {
     constructor(readonly options: Record<string, unknown>) {}
 
-    async close() {}
+    async close() {
+      return undefined;
+    }
   }
 
   class MockClient {
-    async connect() {}
+    async connect() {
+      return undefined;
+    }
     async listTools() {
       return { tools: [] };
     }
     async callTool() {
       return { content: [] };
     }
-    async close() {}
+    async close() {
+      return undefined;
+    }
   }
 
   return {

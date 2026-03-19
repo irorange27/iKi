@@ -1,9 +1,13 @@
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 
+// eslint-disable-next-line import/no-unresolved
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+// eslint-disable-next-line import/no-unresolved
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+// eslint-disable-next-line import/no-unresolved
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+// eslint-disable-next-line import/no-unresolved
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';

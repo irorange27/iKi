@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
 import { registerStandardTools } from '../core/tools';
 import { getMcpManager } from '../core/mcp';
@@ -48,8 +49,12 @@ type DaemonSocketServer = {
   close: () => void;
 };
 
-const { WebSocketServer } = require('ws') as {
-  WebSocketServer: new (options: { noServer: boolean }) => DaemonSocketServer;
+const nodeRequire = createRequire(__filename);
+
+const { WebSocketServer } = nodeRequire('ws') as {
+  WebSocketServer: new (options: {
+    noServer: boolean;
+  }) => DaemonSocketServer;
 };
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;

@@ -1,6 +1,7 @@
 import { promises as fs, existsSync, statSync, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import type { AppConfig } from '../../../shared/types/config';
 import type {
   SpeechStatus,
@@ -25,6 +26,8 @@ import {
 
 type WhisperNodeTranscribe = (filePath: string, options?: unknown) => Promise<unknown>;
 
+const nodeRequire = createRequire(__filename);
+
 const WHISPER_NODE_MODELS: Array<Omit<WhisperNodeModelInfo, 'downloaded'>> = [
   { name: 'tiny', fileName: 'ggml-tiny.bin', sizeMB: 75, ramGB: 0.39 },
   { name: 'tiny.en', fileName: 'ggml-tiny.en.bin', sizeMB: 75, ramGB: 0.39 },
@@ -41,7 +44,7 @@ const WHISPER_NODE_MODEL_MAP = new Map(WHISPER_NODE_MODELS.map(model => [model.n
 
 const getWhisperNodeRoot = () => {
   try {
-    return path.dirname(require.resolve('whisper-node/package.json'));
+    return path.dirname(nodeRequire.resolve('whisper-node/package.json'));
   } catch {
     return path.join(process.cwd(), 'node_modules', 'whisper-node');
   }
@@ -130,8 +133,7 @@ const resolveNodeBinaryFromPath = (): string | null => {
 
 const configureShelljsExecPath = () => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const shelljs = require('shelljs') as { config?: { execPath?: string } };
+    const shelljs = nodeRequire('shelljs') as { config?: { execPath?: string } };
     if (!shelljs?.config) return;
     if (shelljs.config.execPath && shelljs.config.execPath.trim()) return;
     let execPath = '';
@@ -560,7 +562,7 @@ export const transcribeWithWhisperNode = async (
   let wavPath = '';
   try {
     wavPath = await convertToWav(inputPath, ffmpegPath);
-    const whisperModule = require('whisper-node') as unknown;
+    const whisperModule = nodeRequire('whisper-node') as unknown;
     const whisper =
       typeof whisperModule === 'function'
         ? (whisperModule as WhisperNodeTranscribe)

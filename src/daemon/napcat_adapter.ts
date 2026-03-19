@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { createRequire } from 'node:module';
 
 import type { ChatService } from '../main/services/chat/chat_service';
 import { parseStoredUiMessageRow } from '../main/services/chat/chat_ui';
@@ -29,7 +30,9 @@ type ReverseBridgeSocketServer = {
   emit: (event: 'connection', ws: ReverseBridgeSocket, req: http.IncomingMessage) => boolean;
 };
 
-const { WebSocketServer } = require('ws') as {
+const nodeRequire = createRequire(__filename);
+
+const { WebSocketServer } = nodeRequire('ws') as {
   WebSocketServer: new (options: { noServer: boolean }) => ReverseBridgeSocketServer;
 };
 

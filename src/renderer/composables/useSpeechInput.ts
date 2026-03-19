@@ -174,7 +174,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       waveformSource = waveformAudioContext.createMediaStreamSource(stream);
       waveformSource.connect(waveformAnalyser);
       if (typeof waveformAudioContext.resume === 'function') {
-        waveformAudioContext.resume().catch(() => {});
+        waveformAudioContext.resume().catch((): void => undefined);
       }
       waveformRafId = window.requestAnimationFrame(updateWaveform);
     } catch (error) {
@@ -207,7 +207,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       const context = waveformAudioContext;
       waveformAudioContext = null;
       if (typeof context.close === 'function') {
-        context.close().catch(() => {});
+        context.close().catch((): void => undefined);
       }
     }
     resetWaveformBars();
