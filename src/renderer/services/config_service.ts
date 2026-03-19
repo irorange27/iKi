@@ -1,9 +1,11 @@
-import type { AppConfig } from '../../shared/types/config';
+import type { AppConfig, ConfigRuntimeInfo, DaemonStatusInfo } from '../../shared/types/config';
 
 type ConfigUpdatedHandler = (config: AppConfig) => void;
 
 type ElectronConfigApi = {
   get: () => Promise<AppConfig>;
+  getRuntimeInfo?: () => Promise<ConfigRuntimeInfo>;
+  getDaemonStatus?: () => Promise<DaemonStatusInfo>;
   set: (config: AppConfig) => Promise<unknown>;
   onUpdated: (callback: ConfigUpdatedHandler) => void;
 };
@@ -44,6 +46,20 @@ export const configService = {
       throw new Error('window.electronAPI.config is missing');
     }
     return api.set(config);
+  },
+  async getRuntimeInfo(): Promise<ConfigRuntimeInfo> {
+    const api = getElectronConfigApi();
+    if (!api || typeof api.getRuntimeInfo !== 'function') {
+      throw new Error('window.electronAPI.config.getRuntimeInfo is missing');
+    }
+    return api.getRuntimeInfo();
+  },
+  async getDaemonStatus(): Promise<DaemonStatusInfo> {
+    const api = getElectronConfigApi();
+    if (!api || typeof api.getDaemonStatus !== 'function') {
+      throw new Error('window.electronAPI.config.getDaemonStatus is missing');
+    }
+    return api.getDaemonStatus();
   },
   onUpdated(callback: ConfigUpdatedHandler): () => void {
     const api = getElectronConfigApi();

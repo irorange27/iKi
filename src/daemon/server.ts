@@ -19,6 +19,7 @@ import {
 } from '../core/db/app_clients';
 import { createNapCatReverseBridge } from './napcat_adapter';
 import type { McpServerInput } from '../shared/types/mcp';
+import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../shared/constants/daemon';
 
 type DaemonSocket = {
   readyState: number;
@@ -61,8 +62,6 @@ type WsSession = {
   webContents: { id: number; send: (channel: string, ...args: unknown[]) => void };
 };
 
-const DEFAULT_PORT = 6127;
-const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_ALLOWED_TOOLS = ['web', 'fetch'];
 const DEFAULT_SCOPES = [
   'chat:read',
@@ -130,6 +129,11 @@ const readOrCreateBootstrapToken = (userDataPath: string): string => {
 const writePortFile = (userDataPath: string, port: number) => {
   const portPath = path.join(userDataPath, 'daemon.port');
   fs.writeFileSync(portPath, String(port), { encoding: 'utf8' });
+};
+
+const writeHostFile = (userDataPath: string, host: string) => {
+  const hostPath = path.join(userDataPath, 'daemon.host');
+  fs.writeFileSync(hostPath, host, { encoding: 'utf8' });
 };
 
 const parseJsonBody = (req: http.IncomingMessage): Promise<JsonValue> =>
@@ -271,10 +275,11 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
 
   const userDataPath = ensureUserDataDir();
   const bootstrapToken = readOrCreateBootstrapToken(userDataPath);
-  const port = Number.isFinite(options?.port) ? Number(options?.port) : DEFAULT_PORT;
-  const host = options?.host?.trim() || DEFAULT_HOST;
+  const port = Number.isFinite(options?.port) ? Number(options?.port) : DEFAULT_DAEMON_PORT;
+  const host = options?.host?.trim() || DEFAULT_DAEMON_HOST;
 
   writePortFile(userDataPath, port);
+  writeHostFile(userDataPath, host);
   initializeDatabase();
   registerStandardTools();
   void getMcpManager().initialize();
@@ -306,6 +311,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         success: true,
         status: 'ok',
         uptime: process.uptime(),
+        host,
         port,
       });
       return;

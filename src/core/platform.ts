@@ -20,10 +20,20 @@ const normalizeLocale = (value: string | undefined): string | undefined => {
 };
 
 export const setPlatformInfo = (info: PlatformInfo) => {
-  platformInfo = {
-    ...platformInfo,
-    ...info,
-  };
+  const next: PlatformInfo = { ...platformInfo };
+  if (typeof info.userDataPath === 'string' && info.userDataPath.trim()) {
+    next.userDataPath = info.userDataPath;
+  }
+  if (typeof info.locale === 'string' && info.locale.trim()) {
+    next.locale = info.locale;
+  }
+  if (info.theme === 'light' || info.theme === 'dark') {
+    next.theme = info.theme;
+  }
+  if (typeof info.displayScale === 'number' && Number.isFinite(info.displayScale)) {
+    next.displayScale = info.displayScale;
+  }
+  platformInfo = next;
 };
 
 export const getPlatformInfo = (): PlatformInfo => ({ ...platformInfo });

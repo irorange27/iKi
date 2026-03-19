@@ -1,4 +1,5 @@
 import type { AppConfig } from '../types/config';
+import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../constants/daemon';
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   general: {
@@ -95,6 +96,10 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     defaultApprovalMode: 'safe-only',
     requestTimeoutMs: 20000,
     maxConcurrentRequests: 4,
+  },
+  daemon: {
+    host: DEFAULT_DAEMON_HOST,
+    port: DEFAULT_DAEMON_PORT,
   },
   bridges: {
     napcat: {
@@ -195,6 +200,10 @@ export const mergeAppConfigWithBase = (
     mcp: {
       ...base.mcp,
       ...(rawConfig.mcp ?? {}),
+    },
+    daemon: {
+      ...base.daemon,
+      ...(rawConfig.daemon ?? {}),
     },
     bridges: {
       ...base.bridges,

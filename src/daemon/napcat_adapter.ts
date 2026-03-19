@@ -84,6 +84,23 @@ const parseToken = (req: http.IncomingMessage): string | null => {
   return tokenParam ? tokenParam.trim() : null;
 };
 
+const getRemoteLabel = (req: http.IncomingMessage): string => {
+  const forwarded = req.headers['x-forwarded-for'];
+  const forwardedText =
+    typeof forwarded === 'string'
+      ? forwarded
+      : Array.isArray(forwarded)
+        ? forwarded[0] || ''
+        : '';
+  const forwardedIp = forwardedText.split(',')[0]?.trim();
+  if (forwardedIp) return forwardedIp;
+
+  const socketIp = req.socket?.remoteAddress || '';
+  const socketPort = req.socket?.remotePort;
+  if (!socketIp) return 'unknown';
+  return typeof socketPort === 'number' ? `${socketIp}:${socketPort}` : socketIp;
+};
+
 const normalizeId = (value: unknown): string => {
   if (value === undefined || value === null) return '';
   return String(value).trim();
@@ -384,9 +401,11 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
   const handleUpgrade = (req: http.IncomingMessage, socket: unknown, head: Buffer) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     if (url.pathname !== '/onebot/v11/ws') return false;
+    const remote = getRemoteLabel(req);
 
     const napcatConfig = getNapCatConfig();
     if (!napcatConfig.enabled) {
+      console.warn(`[NapCat] Upgrade rejected from ${remote}: bridge disabled.`);
       if (socket && typeof (socket as { write?: unknown }).write === 'function') {
         (socket as { write: (data: string) => void }).write('HTTP/1.1 404 Not Found\r\n\r\n');
       }
@@ -398,6 +417,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
     const token = parseToken(req);
     if (napcatConfig.accessToken && token !== napcatConfig.accessToken) {
+      console.warn(`[NapCat] Upgrade rejected from ${remote}: invalid access token.`);
       if (socket && typeof (socket as { write?: unknown }).write === 'function') {
         (socket as { write: (data: string) => void }).write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       }
@@ -408,12 +428,24 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     }
 
     wss.handleUpgrade(req, socket, head, ws => {
+      console.info(`[NapCat] Reverse WS upgraded from ${remote}.`);
       wss.emit('connection', ws, req);
     });
     return true;
   };
 
-  wss.on('connection', ws => {
+  wss.on('connection', (ws, req) => {
+    const remote = getRemoteLabel(req);
+    console.info(`[NapCat] Reverse WS connected: ${remote}.`);
+
+    ws.on('close', () => {
+      console.warn(`[NapCat] Reverse WS disconnected: ${remote}.`);
+    });
+
+    ws.on('error', error => {
+      console.warn('[NapCat] Reverse WS socket error:', error);
+    });
+
     ws.on('message', async (data: unknown) => {
       let payload: Record<string, unknown> | null = null;
       try {

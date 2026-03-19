@@ -1,5 +1,29 @@
 import type { WorkflowOptimizationConfig } from './workflow';
 
+export interface ConfigRuntimeInfo {
+  userDataPath: string;
+  dbPath: string;
+  daemon: {
+    defaultHost: string;
+    defaultPort: number;
+    configuredHost: string;
+    configuredPort: number;
+    napcatWsPath: string;
+    localNapCatWsUrl: string;
+    dockerNapCatWsUrl: string;
+  };
+}
+
+export interface DaemonStatusInfo {
+  online: boolean;
+  host: string;
+  port: number;
+  status: string;
+  source: 'health' | 'recorded' | 'default';
+  uptimeSeconds: number | null;
+  error?: string;
+}
+
 export interface AppConfig {
   general: {
     language: string | 'zh' | 'en';
@@ -97,6 +121,10 @@ export interface AppConfig {
     defaultApprovalMode: 'always' | 'safe-only' | 'never';
     requestTimeoutMs: number;
     maxConcurrentRequests: number;
+  };
+  daemon: {
+    host: string;
+    port: number;
   };
   bridges: {
     napcat: {

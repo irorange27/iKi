@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentResult, SimpleAgent } from '../../../../src/core/agent';
+import type { AgentResult, ConversationRunner } from '../../../../src/core/agent';
 import { createToolLoopRunner } from '../../../../src/main/services/chat/chat_tool_loop';
 
 const createAsyncGenerator = (chunks: string[], result: AgentResult) =>
@@ -11,10 +11,13 @@ const createAsyncGenerator = (chunks: string[], result: AgentResult) =>
     return result;
   })();
 
-const createAgent = (stream: AsyncGenerator<string, AgentResult, unknown>) =>
+const createConversationRunner = (stream: AsyncGenerator<string, AgentResult, unknown>) =>
   ({
+    generate: vi.fn(),
+    registerTool: vi.fn(),
+    setMessages: vi.fn(),
     stream: vi.fn().mockReturnValue(stream),
-  }) as unknown as SimpleAgent;
+  }) as unknown as ConversationRunner;
 
 const createUiChunkEmitter = () => ({
   messageId: 'msg_1',
@@ -31,12 +34,14 @@ describe('tool loop runner', () => {
     const registerApprovalBatch = vi.fn();
     const runner = createToolLoopRunner({ registerApprovalBatch });
     const agentResult: AgentResult = { response: 'Final text', iterations: 1 };
-    const agent = createAgent(createAsyncGenerator(['Hello ', 'world'], agentResult));
+    const conversationRunner = createConversationRunner(
+      createAsyncGenerator(['Hello ', 'world'], agentResult)
+    );
     const uiChunkEmitter = createUiChunkEmitter();
     const webContents = { id: 1, send: vi.fn() };
 
     const result = await runner.stream({
-      agent,
+      runner: conversationRunner,
       webContents,
       prompt: 'hi',
       uiChunkEmitter,
@@ -63,12 +68,12 @@ describe('tool loop runner', () => {
         },
       ],
     };
-    const agent = createAgent(createAsyncGenerator([], agentResult));
+    const conversationRunner = createConversationRunner(createAsyncGenerator([], agentResult));
     const uiChunkEmitter = createUiChunkEmitter();
     const webContents = { id: 2, send: vi.fn() };
 
     const result = await runner.stream({
-      agent,
+      runner: conversationRunner,
       webContents,
       prompt: 'go',
       uiChunkEmitter,
@@ -76,7 +81,7 @@ describe('tool loop runner', () => {
 
     expect(result.awaitingApproval).toBe(true);
     expect(registerApprovalBatch).toHaveBeenCalledWith(agentResult.toolApprovalRequests, {
-      agent,
+      runner: conversationRunner,
       webContents,
     });
     expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
@@ -86,13 +91,15 @@ describe('tool loop runner', () => {
     const registerApprovalBatch = vi.fn();
     const runner = createToolLoopRunner({ registerApprovalBatch });
     const agentResult: AgentResult = { response: 'Final text', iterations: 1 };
-    const agent = createAgent(createAsyncGenerator(['Hello ', 'world'], agentResult));
+    const conversationRunner = createConversationRunner(
+      createAsyncGenerator(['Hello ', 'world'], agentResult)
+    );
     const uiChunkEmitter = createUiChunkEmitter();
     const webContents = { id: 3, send: vi.fn() };
     let cancelChecks = 0;
 
     const result = await runner.stream({
-      agent,
+      runner: conversationRunner,
       webContents,
       prompt: 'hi',
       uiChunkEmitter,

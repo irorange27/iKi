@@ -1,7 +1,7 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppConfig } from '../shared/types/config';
+import { AppConfig, ConfigRuntimeInfo, DaemonStatusInfo } from '../shared/types/config';
 import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
 import type { AffectStateEntry, LongMemorySearchResult } from '../shared/types/memory';
@@ -44,6 +44,8 @@ type ProactiveTaskInput = Partial<ProactiveTask> &
 contextBridge.exposeInMainWorld('electronAPI', {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
+    getRuntimeInfo: (): Promise<ConfigRuntimeInfo> => ipcRenderer.invoke('config:get-runtime-info'),
+    getDaemonStatus: (): Promise<DaemonStatusInfo> => ipcRenderer.invoke('config:get-daemon-status'),
     set: (config: AppConfig) => ipcRenderer.invoke('config:set', config),
     onUpdated: (callback: (config: AppConfig) => void) => {
       ipcRenderer.on('config:updated', (_event, config) => {
