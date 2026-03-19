@@ -60,6 +60,14 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       halfLifeMinutes: 60,
       maxAgeMinutes: 180,
       includeNeutral: false,
+      toolGuard: {
+        enabled: true,
+        minConfidence: 0.6,
+        minArousal: 0.6,
+        maxValence: -0.2,
+        requireApproval: true,
+        disableAutoTools: false,
+      },
     },
   },
   speech: {
@@ -79,6 +87,14 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   toolExecution: {
     shellApprovalMode: 'high-risk',
     shellHighRiskPatterns: [],
+  },
+  mcp: {
+    enabled: false,
+    connectOnStartup: false,
+    allowRemoteServers: false,
+    defaultApprovalMode: 'safe-only',
+    requestTimeoutMs: 20000,
+    maxConcurrentRequests: 4,
   },
   workflowOptimization: {
     enabled: true,
@@ -148,6 +164,10 @@ export const mergeAppConfigWithBase = (
       emotion: {
         ...base.memory.emotion,
         ...((rawConfig.memory ?? {}).emotion ?? {}),
+        toolGuard: {
+          ...base.memory.emotion.toolGuard,
+          ...(((rawConfig.memory ?? {}).emotion ?? {}).toolGuard ?? {}),
+        },
       },
     },
     speech: {
@@ -161,6 +181,10 @@ export const mergeAppConfigWithBase = (
     toolExecution: {
       ...base.toolExecution,
       ...(rawConfig.toolExecution ?? {}),
+    },
+    mcp: {
+      ...base.mcp,
+      ...(rawConfig.mcp ?? {}),
     },
     workflowOptimization: {
       ...base.workflowOptimization,

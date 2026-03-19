@@ -39,7 +39,6 @@ import {
 } from './chat_ui';
 import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_loop';
 
-
 export const createChatStreaming = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
   memory: ChatMemory;
@@ -125,11 +124,7 @@ export const createChatStreaming = (deps: {
       timestamp: new Date(),
     };
 
-    const fetchLimit = Math.max(
-      10,
-      Math.floor(emotionConfig.windowSize || 0) * 3,
-      minSampleCount
-    );
+    const fetchLimit = Math.max(10, Math.floor(emotionConfig.windowSize || 0) * 3, minSampleCount);
 
     const samples = [realtimeSample];
     if (threadId) {
@@ -189,11 +184,7 @@ export const createChatStreaming = (deps: {
     return tools;
   };
 
-  const registerToolWithGuard = (
-    agent: SimpleAgent,
-    toolName: string,
-    guardActive: boolean
-  ) => {
+  const registerToolWithGuard = (agent: SimpleAgent, toolName: string, guardActive: boolean) => {
     const tool = defaultToolRegistry.get(toolName);
     if (!tool) return;
     const emotionConfig = getEmotionConfig();
@@ -243,6 +234,7 @@ export const createChatStreaming = (deps: {
     model: string;
     messages: ChatTransportMessage[];
     tools?: string[]; // Optional specific tools to enable
+    mcpServerIds?: string[];
     skillIds?: string[]; // Optional skill ids to inject into system prompt
     skillMode?: 'manual' | 'auto';
     threadId?: string;
@@ -251,16 +243,11 @@ export const createChatStreaming = (deps: {
       const modelMessages = await toModelInputMessages(options.messages);
       const lastModelMessage = modelMessages[modelMessages.length - 1];
       const realtimeContext = lastModelMessage
-        ? await buildRealtimeAffectContext(
-            options.threadId,
-            getPromptFromMessage(lastModelMessage)
-          )
+        ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
         : { message: '', state: null };
-      const inputMessages = deps.memory.injectMemoryIntoMessages(
-        modelMessages,
-        options.threadId,
-        { skipAffect: Boolean(realtimeContext.message) }
-      );
+      const inputMessages = deps.memory.injectMemoryIntoMessages(modelMessages, options.threadId, {
+        skipAffect: Boolean(realtimeContext.message),
+      });
       const finalMessages = realtimeContext.message
         ? insertSystemMessage(inputMessages, realtimeContext.message)
         : inputMessages;
@@ -278,6 +265,7 @@ export const createChatStreaming = (deps: {
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
+        mcpServerIds: options.mcpServerIds,
         inputMessages: finalMessages,
       });
       const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
@@ -287,6 +275,8 @@ export const createChatStreaming = (deps: {
         providerType: options.providerType,
         model: options.model,
         tools: guardedTools,
+        toolMode: mode,
+        mcpServerIds: options.mcpServerIds,
       });
 
       if (guardedTools.length > 0) {
@@ -339,6 +329,7 @@ export const createChatStreaming = (deps: {
       model: string;
       messages: ChatTransportMessage[];
       tools?: string[];
+      mcpServerIds?: string[];
       skillIds?: string[];
       skillMode?: 'manual' | 'auto';
       threadId?: string;
@@ -363,21 +354,14 @@ export const createChatStreaming = (deps: {
       const modelMessages = await toModelInputMessages(options.messages);
       const lastModelMessage = modelMessages[modelMessages.length - 1];
       const realtimeContext = lastModelMessage
-        ? await buildRealtimeAffectContext(
-            options.threadId,
-            getPromptFromMessage(lastModelMessage)
-          )
+        ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
         : { message: '', state: null };
-      const inputMessages = deps.memory.injectMemoryIntoMessages(
-        modelMessages,
-        options.threadId,
-        {
-          onRetrieved: payload => {
-            uiChunkEmitter.emitMemoryRetrieval(payload);
-          },
-          skipAffect: Boolean(realtimeContext.message),
-        }
-      );
+      const inputMessages = deps.memory.injectMemoryIntoMessages(modelMessages, options.threadId, {
+        onRetrieved: payload => {
+          uiChunkEmitter.emitMemoryRetrieval(payload);
+        },
+        skipAffect: Boolean(realtimeContext.message),
+      });
       const finalMessages = realtimeContext.message
         ? insertSystemMessage(inputMessages, realtimeContext.message)
         : inputMessages;
@@ -395,6 +379,7 @@ export const createChatStreaming = (deps: {
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
+        mcpServerIds: options.mcpServerIds,
         inputMessages: finalMessages,
       });
       const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
@@ -404,6 +389,8 @@ export const createChatStreaming = (deps: {
         providerType: options.providerType,
         model: options.model,
         tools: guardedTools,
+        toolMode: mode,
+        mcpServerIds: options.mcpServerIds,
       });
 
       const enableTools = guardedTools.length > 0;
@@ -454,7 +441,10 @@ export const createChatStreaming = (deps: {
             typeof eventPart.approvalId === 'string' &&
             eventPart.approvalId.length > 0
           ) {
-            deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, { agent, webContents });
+            deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
+              agent,
+              webContents,
+            });
           }
           uiChunkEmitter.emitToolEvent(eventPart);
         },

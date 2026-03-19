@@ -28,7 +28,7 @@ const getElectronConfigApi = (): ElectronConfigApi | null => {
   return api as ElectronConfigApi;
 };
 
-const noop = () => undefined;
+const noop = (): void => undefined;
 
 export const configService = {
   async get(): Promise<AppConfig> {

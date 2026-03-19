@@ -2,77 +2,129 @@
   <div class="chat-input-outer">
     <div class="mx-auto max-w-3xl">
       <div class="relative rounded-xl border chat-input-container">
-        <input ref="inputRef" v-model="message" type="text" placeholder="Type a message..."
+        <input
+          ref="inputRef"
+          v-model="message"
+          type="text"
+          placeholder="Type a message..."
           class="w-full border-0 bg-transparent px-4 py-6 text-primary placeholder-muted focus:outline-none"
           @keydown.enter="handleEnter"
           @compositionstart="handleCompositionStart"
-          @compositionend="handleCompositionEnd" />
+          @compositionend="handleCompositionEnd"
+        />
 
         <!-- Bottom toolbar -->
         <div class="flex items-center justify-between border-t border-color px-3 py-2">
           <div class="flex items-center gap-2">
             <!-- file upload -->
-            <button class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn">
+            <button
+              class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
+            >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                />
               </svg>
             </button>
             <!-- workspace choose -->
-            <button class="relative h-8 w-8 rounded-lg text-accent flex items-center justify-center icon-btn">
+            <button
+              class="relative h-8 w-8 rounded-lg text-accent flex items-center justify-center icon-btn"
+            >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                />
               </svg>
               <span
-                class="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#4a9eff] text-[9px] text-white">
+                class="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#4a9eff] text-[9px] text-white"
+              >
                 1
               </span>
             </button>
             <!-- skill choose -->
             <SkillSelector v-model:skill-ids="selectedSkillIds" v-model:mode="skillMode" />
             <!-- tool choose -->
-            <ToolSelector v-model:tools="selectedTools" v-model:mode="toolMode" />
+            <ToolSelector
+              v-model:tools="selectedTools"
+              v-model:mcp-server-ids="selectedMcpServerIds"
+              v-model:mode="toolMode"
+            />
             <div class="relative">
-              <button class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-secondary icon-btn"
-                @click="showModelSelector = !showModelSelector">
+              <button
+                class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-secondary icon-btn"
+                @click="showModelSelector = !showModelSelector"
+              >
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                   <path
-                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+                  />
                 </svg>
                 <span>{{ selectedModel || 'Select Model' }}</span>
-                <svg class="h-3 w-3 transition-transform" :class="{ 'rotate-180': showModelSelector }" fill="none"
-                  stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                <svg
+                  class="h-3 w-3 transition-transform"
+                  :class="{ 'rotate-180': showModelSelector }"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               </button>
 
               <!-- Model/Provider Selector Menu -->
-              <div v-if="showModelSelector"
-                class="absolute bottom-full left-0 mb-2 w-64 rounded-xl border border-color bg-secondary shadow-xl z-50 overflow-hidden">
+              <div
+                v-if="showModelSelector"
+                class="absolute bottom-full left-0 mb-2 w-64 rounded-xl border border-color bg-secondary shadow-xl z-50 overflow-hidden"
+              >
                 <div class="p-2 border-b border-color bg-tertiary">
-                  <span class="text-xs font-semibold text-muted uppercase tracking-wider">Select AI Model</span>
+                  <span class="text-xs font-semibold text-muted uppercase tracking-wider"
+                    >Select AI Model</span
+                  >
                 </div>
                 <div class="max-h-64 overflow-y-auto p-1">
-                  <div v-if="availableProviders.length === 0" class="p-4 text-center text-sm text-muted">
+                  <div
+                    v-if="availableProviders.length === 0"
+                    class="p-4 text-center text-sm text-muted"
+                  >
                     No providers configured.
                   </div>
                   <div v-for="provider in availableProviders" :key="provider.id" class="mb-1">
                     <div class="px-3 py-1 text-[10px] font-bold text-accent uppercase">
                       {{ provider.name }}
                     </div>
-                    <button v-for="model in parseModelList(provider.models)" :key="model"
+                    <button
+                      v-for="model in parseModelList(provider.models)"
+                      :key="model"
                       class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-hover flex items-center justify-between"
                       :class="{
                         'text-accent bg-hover/50':
                           selectedModel === model && selectedProvider.id === provider.id,
-                      }" @click="selectProviderAndModel(provider, model)">
+                      }"
+                      @click="selectProviderAndModel(provider, model)"
+                    >
                       <span>{{ model }}</span>
-                      <svg v-if="selectedModel === model && selectedProvider.id === provider.id"
-                        class="h-4 w-4 text-accent" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd"
+                      <svg
+                        v-if="selectedModel === model && selectedProvider.id === provider.id"
+                        class="h-4 w-4 text-accent"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fill-rule="evenodd"
                           d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clip-rule="evenodd" />
+                          clip-rule="evenodd"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -82,12 +134,22 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <button class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn">
+            <button
+              class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
+            >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                />
               </svg>
             </button>
 
@@ -99,7 +161,7 @@
                 :style="{ height: `${Math.max(18, Math.round(bar * 100))}%` }"
               />
             </div>
-            
+
             <button
               class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
               :class="[
@@ -134,8 +196,12 @@
                 />
               </svg>
               <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
               </svg>
             </button>
             <span
@@ -145,17 +211,32 @@
             >
               {{ speechStatusLabel }}
             </span>
-            <button class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn" :class="[
-              isLoading ? 'text-danger stop-btn' : 'text-accent',
-              isStopping ? 'is-stopping' : '',
-            ]" :aria-label="isLoading ? 'Stop generation' : 'Send message'" @click="isLoading ? stopStreaming() : sendMessage()"
-              :disabled="isStopping || isRecording || isTranscribing">
-              <svg v-if="isLoading" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <button
+              class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
+              :class="[
+                isLoading ? 'text-danger stop-btn' : 'text-accent',
+                isStopping ? 'is-stopping' : '',
+              ]"
+              :aria-label="isLoading ? 'Stop generation' : 'Send message'"
+              @click="isLoading ? stopStreaming() : sendMessage()"
+              :disabled="isStopping || isRecording || isTranscribing"
+            >
+              <svg
+                v-if="isLoading"
+                class="h-4 w-4"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
               <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
               </svg>
             </button>
           </div>
@@ -196,11 +277,133 @@ const isComposing = ref(false);
 const justEndedComposition = ref(false);
 const showModelSelector = ref(false);
 const selectedTools = ref<string[]>([]);
+const selectedMcpServerIds = ref<string[]>([]);
 const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
 const toolMode = ref<'manual' | 'auto'>('manual');
 const isAutoToolMode = computed(() => toolMode.value === 'auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
+
+type ThreadToolSelectionState = {
+  mode?: 'manual' | 'auto';
+  mcpServerIds: string[];
+};
+
+const parseStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  const resolved: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    resolved.push(trimmed);
+  }
+
+  return resolved;
+};
+
+const parseThreadToolSelectionState = (metadataRaw: unknown): ThreadToolSelectionState => {
+  if (!metadataRaw || typeof metadataRaw !== 'object') {
+    return { mcpServerIds: [] };
+  }
+
+  const metadata = metadataRaw as { toolSelection?: unknown };
+  const toolSelection =
+    metadata.toolSelection && typeof metadata.toolSelection === 'object'
+      ? (metadata.toolSelection as { mode?: unknown; mcpServerIds?: unknown })
+      : null;
+
+  return {
+    mode:
+      toolSelection?.mode === 'auto' || toolSelection?.mode === 'manual'
+        ? toolSelection.mode
+        : undefined,
+    mcpServerIds: parseStringArray(toolSelection?.mcpServerIds),
+  };
+};
+
+const deriveMcpServerIdsFromToolNames = async (toolNames: string[]): Promise<string[]> => {
+  const normalizedToolNames = new Set(parseStringArray(toolNames));
+  if (normalizedToolNames.size === 0) return [];
+
+  try {
+    const tools = await window.electronAPI.tools.list();
+    if (!Array.isArray(tools)) return [];
+
+    const resolvedServerIds = new Set<string>();
+    for (const tool of tools) {
+      if (!tool || typeof tool !== 'object') continue;
+      const name = typeof tool.name === 'string' ? tool.name.trim() : '';
+      const source =
+        tool.source && typeof tool.source === 'object'
+          ? (tool.source as { kind?: unknown; id?: unknown })
+          : null;
+      if (!name || !normalizedToolNames.has(name)) continue;
+      if (source?.kind !== 'mcp' || typeof source.id !== 'string' || !source.id.trim()) continue;
+      resolvedServerIds.add(source.id.trim());
+    }
+
+    return Array.from(resolvedServerIds);
+  } catch (error) {
+    console.error('Failed to derive MCP server ids from tools:', error);
+    return [];
+  }
+};
+
+const resolveSelectedMcpServerIds = async (): Promise<string[]> => {
+  if (selectedMcpServerIds.value.length > 0) {
+    return parseStringArray(selectedMcpServerIds.value);
+  }
+  return await deriveMcpServerIdsFromToolNames(selectedTools.value);
+};
+
+const syncToolSelectionFromThread = async (threadId?: string) => {
+  const normalizedThreadId = typeof threadId === 'string' ? threadId.trim() : '';
+  if (!normalizedThreadId || isLoading.value) return;
+
+  try {
+    const thread = await window.electronAPI.chat.threads.get(normalizedThreadId);
+    if (!thread) return;
+
+    const persistedTools = parseStringArray(
+      typeof thread.tools === 'string' ? JSON.parse(thread.tools) : []
+    );
+
+    let parsedMetadata: unknown = {};
+    if (typeof thread.metadata === 'string' && thread.metadata.trim()) {
+      try {
+        parsedMetadata = JSON.parse(thread.metadata);
+      } catch {
+        parsedMetadata = {};
+      }
+    }
+
+    const selectionState = parseThreadToolSelectionState(parsedMetadata);
+    const resolvedMcpServerIds =
+      selectionState.mcpServerIds.length > 0
+        ? selectionState.mcpServerIds
+        : await deriveMcpServerIdsFromToolNames(persistedTools);
+    const hasPersistedSelection =
+      persistedTools.length > 0 ||
+      resolvedMcpServerIds.length > 0 ||
+      selectionState.mode === 'auto' ||
+      selectionState.mode === 'manual';
+
+    if (!hasPersistedSelection) return;
+
+    selectedTools.value = persistedTools;
+    selectedMcpServerIds.value = resolvedMcpServerIds;
+    if (selectionState.mode) {
+      toolMode.value = selectionState.mode;
+    }
+  } catch (error) {
+    console.error('Failed to sync tool selection from thread:', error);
+  }
+};
 
 const {
   isRecording,
@@ -249,11 +452,17 @@ watch(selectedProvider, () => {
   checkProviderStatus();
 });
 
+watch(
+  () => [props.threadId, isLoading.value] as const,
+  async ([threadId, loading], [previousThreadId, previousLoading]) => {
+    if (loading) return;
+    if (threadId === previousThreadId && previousLoading === loading) return;
+    await syncToolSelectionFromThread(threadId);
+  }
+);
+
 // Emit events to parent
-const emit = defineEmits([
-  'message-sent',
-  'model-selected',
-]);
+const emit = defineEmits(['message-sent', 'model-selected']);
 
 const setDraftMessage = async (
   nextValue: string,
@@ -360,6 +569,8 @@ const sendMessage = async () => {
   }
 
   const userMessage = message.value.trim();
+  const resolvedMcpServerIds = await resolveSelectedMcpServerIds();
+  selectedMcpServerIds.value = resolvedMcpServerIds;
   message.value = '';
   isLoading.value = true;
   isStopping.value = false;
@@ -373,7 +584,14 @@ const sendMessage = async () => {
       resolve();
     };
 
-    emit('message-sent', userMessage, selectedModel.value, selectedTools.value, done);
+    emit(
+      'message-sent',
+      userMessage,
+      selectedModel.value,
+      selectedTools.value,
+      resolvedMcpServerIds,
+      done
+    );
     window.setTimeout(done, 1500);
   });
 
@@ -395,12 +613,12 @@ const sendMessage = async () => {
     const messagesToConvert = userMessageInChat
       ? rawMessages
       : [
-        ...rawMessages,
-        {
-          role: 'user',
-          parts: [{ type: 'text', text: userMessage }],
-        },
-      ];
+          ...rawMessages,
+          {
+            role: 'user',
+            parts: [{ type: 'text', text: userMessage }],
+          },
+        ];
 
     const uiMessages = toUiMessages(messagesToConvert);
 
@@ -417,14 +635,16 @@ const sendMessage = async () => {
       providerType: selectedProvider.value.type,
       model: selectedModel.value,
       messages: transportMessages,
-      tools:
-        isAutoToolMode.value
-          ? undefined
-          : selectedTools.value.length > 0
+      tools: isAutoToolMode.value
+        ? undefined
+        : selectedTools.value.length > 0
           ? JSON.parse(JSON.stringify(selectedTools.value))
           : [],
+      mcpServerIds: JSON.parse(JSON.stringify(resolvedMcpServerIds)),
       skillMode: isAutoSkillMode.value ? 'auto' : 'manual',
-      skillIds: isAutoSkillMode.value ? undefined : JSON.parse(JSON.stringify(selectedSkillIds.value)),
+      skillIds: isAutoSkillMode.value
+        ? undefined
+        : JSON.parse(JSON.stringify(selectedSkillIds.value)),
       threadId: props.threadId,
     });
 
@@ -446,6 +666,7 @@ const sendMessage = async () => {
 onMounted(async () => {
   await loadAvailableProviders();
   await loadSpeechStatus();
+  await syncToolSelectionFromThread(props.threadId);
 });
 </script>
 <style scoped>
@@ -576,5 +797,4 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 </style>

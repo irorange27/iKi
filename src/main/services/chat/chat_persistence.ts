@@ -10,24 +10,26 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => chatThreadDb.getChatThread(id);
   const createThread = (input: unknown) => {
-    const thread = (isObjectRecord(input) ? (input as Partial<ChatThread>) : {});
+    const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
     const threadId =
       typeof thread.id === 'string' && thread.id.trim()
         ? thread.id.trim()
         : `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const title = typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat';
+    const title =
+      typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat';
     chatThreadDb.addChatThread({
       id: threadId,
       title,
       model: thread.model || null,
-      metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
+      metadata:
+        typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
       is_generating: false,
       client_id: typeof thread.client_id === 'string' ? thread.client_id : null,
     });
     return chatThreadDb.getChatThread(threadId);
   };
   const updateThread = (id: string, input: unknown) => {
-    const thread = (isObjectRecord(input) ? (input as Partial<ChatThread>) : {});
+    const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
     return chatThreadDb.updateChatThread(id, thread);
   };
   const deleteThread = (id: string) => chatThreadDb.deleteChatThread(id);
@@ -35,7 +37,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   const listMessages = (threadId: string) => chatMessageDb.getChatMessages(threadId);
   const getMessage = (id: string) => chatMessageDb.getChatMessage(id);
   const createMessage = (input: unknown) => {
-    const message = (isObjectRecord(input) ? (input as Partial<ChatMessage>) : {});
+    const message = isObjectRecord(input) ? (input as Partial<ChatMessage>) : {};
     const messageId =
       typeof message.id === 'string' && message.id.trim()
         ? message.id.trim()
@@ -99,19 +101,16 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   };
 
   const updateMessage = (id: string, input: unknown) => {
-    const sanitizedUpdate =
-      isObjectRecord(input)
-        ? {
-            ...(input as Partial<ChatMessage>),
-            ...(typeof (input as { message?: unknown }).message === 'string'
-              ? {
-                  message: sanitizeUiMessageJsonForStorage(
-                    (input as { message: string }).message
-                  ),
-                }
-              : {}),
-          }
-        : input;
+    const sanitizedUpdate: Partial<ChatMessage> = isObjectRecord(input)
+      ? {
+          ...(input as Partial<ChatMessage>),
+          ...(typeof (input as { message?: unknown }).message === 'string'
+            ? {
+                message: sanitizeUiMessageJsonForStorage((input as { message: string }).message),
+              }
+            : {}),
+        }
+      : {};
 
     const result = chatMessageDb.updateChatMessage(id, sanitizedUpdate);
 

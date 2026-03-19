@@ -7,6 +7,8 @@ export const persistThreadRuntimeHints = (params: {
   providerType: string;
   model: string;
   tools: string[];
+  toolMode: 'manual' | 'auto';
+  mcpServerIds?: string[];
 }): void => {
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
   if (!normalizedThreadId) return;
@@ -23,6 +25,15 @@ export const persistThreadRuntimeHints = (params: {
 
     const metadataRecord = isObjectRecord(parsedMetadata) ? parsedMetadata : {};
     const nextLlm = isObjectRecord(metadataRecord.llm) ? metadataRecord.llm : {};
+    const nextToolSelection = isObjectRecord(metadataRecord.toolSelection)
+      ? metadataRecord.toolSelection
+      : {};
+    const normalizedMcpServerIds = Array.isArray(params.mcpServerIds)
+      ? params.mcpServerIds
+          .filter((serverId): serverId is string => typeof serverId === 'string')
+          .map(serverId => serverId.trim())
+          .filter(Boolean)
+      : [];
 
     const update: Partial<ChatThread> = {
       model: params.model || thread?.model || null,
@@ -33,6 +44,12 @@ export const persistThreadRuntimeHints = (params: {
           ...(nextLlm as Record<string, unknown>),
           providerType: params.providerType,
           model: params.model,
+          updatedAt: new Date().toISOString(),
+        },
+        toolSelection: {
+          ...(nextToolSelection as Record<string, unknown>),
+          mode: params.toolMode,
+          mcpServerIds: normalizedMcpServerIds,
           updatedAt: new Date().toISOString(),
         },
       }),

@@ -9,7 +9,7 @@ import { isObjectRecord } from '../../../shared/chat/tool_parts';
 import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
-import type { ActiveStreamState, ChatUiMessage, ChatWebContents } from './chat_types';
+import type { ActiveStreamState, ChatWebContents } from './chat_types';
 import {
   createUiChunkEmitter,
   parseStoredUiMessageRow,
@@ -17,6 +17,7 @@ import {
   toModelInputMessages,
 } from './chat_ui';
 import { createToolLoopRunner } from './chat_tool_loop';
+import type { ParsedUiMessage } from '../../../shared/chat/ui_message_codec';
 
 type PendingApprovalSession = {
   agent: SimpleAgent;
@@ -72,7 +73,7 @@ export const createChatApproval = (deps: {
 
   const toolLoopRunner = createToolLoopRunner({ registerApprovalBatch });
 
-  const getPendingApprovalIdsFromUiMessage = (message: ChatUiMessage): string[] => {
+  const getPendingApprovalIdsFromUiMessage = (message: ParsedUiMessage): string[] => {
     const parts = Array.isArray(message.parts) ? (message.parts as unknown[]) : [];
     const ids: string[] = [];
 
@@ -94,7 +95,7 @@ export const createChatApproval = (deps: {
     return ids;
   };
 
-  const getToolNameForApproval = (message: ChatUiMessage, approvalId: string): string | null => {
+  const getToolNameForApproval = (message: ParsedUiMessage, approvalId: string): string | null => {
     const parts = Array.isArray(message.parts) ? (message.parts as unknown[]) : [];
     for (const part of parts) {
       if (!isObjectRecord(part)) continue;
@@ -191,7 +192,9 @@ export const createChatApproval = (deps: {
 
     // 4) Load UI messages from DB and convert them back to model messages (AI SDK boundary).
     const rows = chatMessageDb.getChatMessages(threadId);
-    const uiMessages = rows.map(row => parseStoredUiMessageRow({ id: row.id, message: row.message }));
+    const uiMessages = rows.map(row =>
+      parseStoredUiMessageRow({ id: row.id, message: row.message })
+    );
     const inputMessages = deps.memory.injectMemoryIntoMessages(
       await toModelInputMessages(uiMessages),
       threadId
@@ -250,7 +253,11 @@ export const createChatApproval = (deps: {
     return session;
   };
 
-  const approveTool = async (webContents: ChatWebContents, approvalId: string, approved: boolean) => {
+  const approveTool = async (
+    webContents: ChatWebContents,
+    approvalId: string,
+    approved: boolean
+  ) => {
     let session = pendingApprovalSessions.get(approvalId);
     if (!session) {
       session = await tryRecoverApprovalSession(approvalId, webContents);

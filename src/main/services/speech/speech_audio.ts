@@ -1,10 +1,7 @@
-import { createRequire } from 'node:module';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-
-const require = createRequire(import.meta.url);
 
 const runFfmpeg = async (args: string[], ffmpegPath: string): Promise<void> => {
   await new Promise<void>((resolve, reject) => {

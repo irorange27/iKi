@@ -24,9 +24,6 @@ export type StreamState = {
   activeStreamThreadId: string | null;
   streamingAssistantText: string;
   streamRenderTick: number;
-  streamRenderTraceId: string;
-  streamRenderChunkCount: number;
-  streamRenderChars: number;
 };
 
 export const createInitialStreamState = (): StreamState => ({
@@ -35,9 +32,6 @@ export const createInitialStreamState = (): StreamState => ({
   activeStreamThreadId: null,
   streamingAssistantText: '',
   streamRenderTick: 0,
-  streamRenderTraceId: '',
-  streamRenderChunkCount: 0,
-  streamRenderChars: 0,
 });
 
 export type StreamContext = {
@@ -55,7 +49,6 @@ export type MessageOp =
 
 export type StreamEffect =
   | { type: 'scroll' }
-  | { type: 'log'; level: 'log' | 'warn' | 'error'; message: string }
   | {
       type: 'persist';
       message: UIMessage;
@@ -76,7 +69,7 @@ export type StreamEffect =
   | { type: 'reset_approvals' };
 
 export type StreamAction =
-  | { type: 'begin_turn'; threadId: string; parentId: string; tracePrefix?: string }
+  | { type: 'begin_turn'; threadId: string; parentId: string }
   | { type: 'reset' }
   | { type: 'text_delta'; delta: string }
   | { type: 'finalize_response'; fullText: string }
@@ -89,17 +82,12 @@ export type ReduceResult = {
   effects: StreamEffect[];
 };
 
-const shouldLogStreamChunk = (count: number) => count <= 3 || count % 20 === 0;
-
 const resetTransientState = (state: StreamState): StreamState => ({
   ...state,
   activeAssistantMessageId: null,
   activeAssistantParentId: null,
   activeStreamThreadId: null,
   streamingAssistantText: '',
-  streamRenderTraceId: '',
-  streamRenderChunkCount: 0,
-  streamRenderChars: 0,
 });
 
 const updateAssistantMessage = (
@@ -406,9 +394,6 @@ export const reduceStream = (
       activeAssistantMessageId: null,
       activeStreamThreadId: action.threadId,
       streamingAssistantText: '',
-      streamRenderTraceId: `${action.tracePrefix || 'view'}-${ctx.nowMs}`,
-      streamRenderChunkCount: 0,
-      streamRenderChars: 0,
     };
 
     return {
@@ -431,9 +416,6 @@ export const reduceStream = (
       ...state,
       streamRenderTick: state.streamRenderTick + 1,
       streamingAssistantText: `${state.streamingAssistantText}${action.delta}`,
-      streamRenderTraceId: state.streamRenderTraceId || `view-${ctx.nowMs}`,
-      streamRenderChunkCount: state.streamRenderChunkCount + 1,
-      streamRenderChars: state.streamRenderChars + action.delta.length,
     };
 
     const updateResult = updateAssistantMessage(nextState, ctx, message => {
@@ -445,13 +427,6 @@ export const reduceStream = (
     });
 
     const effects: StreamEffect[] = [{ type: 'scroll' }];
-    if (shouldLogStreamChunk(nextState.streamRenderChunkCount)) {
-      effects.unshift({
-        type: 'log',
-        level: 'log',
-        message: `[StreamDebug][Renderer][ChatView][${nextState.streamRenderTraceId}] handleStreamChunk#${nextState.streamRenderChunkCount} len=${action.delta.length} totalChars=${nextState.streamRenderChars}`,
-      });
-    }
 
     return {
       state: updateResult.state,
@@ -516,15 +491,6 @@ export const reduceStream = (
     }
 
     const effects: StreamEffect[] = [
-      {
-        type: 'log',
-        level: 'log',
-        message: `[StreamDebug][Renderer][ChatView][${
-          state.streamRenderTraceId || 'unknown'
-        }] handleResponseReceived fullTextLen=${(action.fullText || '').length} chunkCount=${
-          state.streamRenderChunkCount
-        } chunkChars=${state.streamRenderChars}`,
-      },
       {
         type: 'persist',
         message: updatedMessage,

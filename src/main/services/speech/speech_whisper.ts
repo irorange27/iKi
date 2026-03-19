@@ -1,10 +1,4 @@
-import { createRequire } from 'node:module';
-import {
-  promises as fs,
-  existsSync,
-  statSync,
-  createWriteStream,
-} from 'node:fs';
+import { promises as fs, existsSync, statSync, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import type { AppConfig } from '../../../shared/types/config';
@@ -31,8 +25,6 @@ import {
 
 type WhisperNodeTranscribe = (filePath: string, options?: unknown) => Promise<unknown>;
 
-const require = createRequire(import.meta.url);
-
 const WHISPER_NODE_MODELS: Array<Omit<WhisperNodeModelInfo, 'downloaded'>> = [
   { name: 'tiny', fileName: 'ggml-tiny.bin', sizeMB: 75, ramGB: 0.39 },
   { name: 'tiny.en', fileName: 'ggml-tiny.en.bin', sizeMB: 75, ramGB: 0.39 },
@@ -45,9 +37,7 @@ const WHISPER_NODE_MODELS: Array<Omit<WhisperNodeModelInfo, 'downloaded'>> = [
   { name: 'large-v3-turbo', fileName: 'ggml-large-v3-turbo.bin', sizeMB: 1600, ramGB: 3.2 },
 ];
 
-const WHISPER_NODE_MODEL_MAP = new Map(
-  WHISPER_NODE_MODELS.map(model => [model.name, model])
-);
+const WHISPER_NODE_MODEL_MAP = new Map(WHISPER_NODE_MODELS.map(model => [model.name, model]));
 
 const getWhisperNodeRoot = () => {
   try {
@@ -128,8 +118,7 @@ const resolveNodeBinaryFromPath = (): string | null => {
   try {
     const result = spawnSync(command, ['node'], { encoding: 'utf8' });
     if (result.status === 0) {
-      const output =
-        typeof result.stdout === 'string' ? result.stdout : result.stdout?.toString() || '';
+      const output = String(result.stdout ?? '');
       const first = output.split(/\r?\n/).find(line => line.trim().length > 0);
       if (first && existsSync(first.trim())) return first.trim();
     }
@@ -296,7 +285,7 @@ const downloadWhisperModelFromUrl = async (
       if (value && value.length > 0) {
         downloadedBytes += value.length;
         if (!fileStream.write(Buffer.from(value))) {
-          await new Promise(resolve => fileStream.once('drain', resolve));
+          await new Promise<void>(resolve => fileStream.once('drain', () => resolve()));
         }
         onProgress?.(downloadedBytes, totalBytes);
       }
@@ -329,7 +318,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
     return {
       available: false,
       enabled: true,
-      providerType: config.providerType,
+      providerType: 'whisper-node',
       reason: 'whisper-node not installed',
     };
   }
@@ -337,7 +326,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
     return {
       available: false,
       enabled: true,
-      providerType: config.providerType,
+      providerType: 'whisper-node',
       reason: 'Model path not found',
     };
   }
@@ -349,7 +338,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
       return {
         available: false,
         enabled: true,
-        providerType: config.providerType,
+        providerType: 'whisper-node',
         reason: 'Unknown whisper-node model. Use a custom model path.',
       };
     }
@@ -357,7 +346,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
       return {
         available: false,
         enabled: true,
-        providerType: config.providerType,
+        providerType: 'whisper-node',
         reason: 'Model not downloaded',
       };
     }
@@ -367,7 +356,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
       return {
         available: false,
         enabled: true,
-        providerType: config.providerType,
+        providerType: 'whisper-node',
         reason: check.reason || 'Model file invalid',
       };
     }
@@ -378,7 +367,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
       return {
         available: false,
         enabled: true,
-        providerType: config.providerType,
+        providerType: 'whisper-node',
         reason: check.reason || 'Model file invalid',
       };
     }
@@ -388,7 +377,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
     return {
       available: false,
       enabled: true,
-      providerType: config.providerType,
+      providerType: 'whisper-node',
       reason: 'ffmpeg not available',
     };
   }
@@ -453,7 +442,8 @@ export const downloadWhisperNodeModel = async (
       }
     }
   }
-  const scriptName = process.platform === 'win32' ? 'download-ggml-model.cmd' : 'download-ggml-model.sh';
+  const scriptName =
+    process.platform === 'win32' ? 'download-ggml-model.cmd' : 'download-ggml-model.sh';
   const scriptPath = path.join(modelsDir, scriptName);
 
   try {

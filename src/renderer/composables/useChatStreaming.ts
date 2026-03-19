@@ -33,7 +33,10 @@ export const useChatStreaming = (deps: {
   createMessageId: () => string;
   scrollToBottom: () => void;
   getCurrentThreadId: () => string | null;
-  onAssistantMessagePersisted: (params: { threadId: string; messagesSnapshot: UIMessage[] }) => Promise<void>;
+  onAssistantMessagePersisted: (params: {
+    threadId: string;
+    messagesSnapshot: UIMessage[];
+  }) => Promise<void>;
   currentThread: Ref<ChatThread | null>;
   currentModel: Ref<string>;
   selectedTools: Ref<string[]>;
@@ -88,29 +91,32 @@ export const useChatStreaming = (deps: {
   };
 
   const selectThread = async (threadId: string) => {
-    await streamController.stopActiveStreamIfNeeded('switch-thread', threadId);
+    await streamController.stopActiveStreamIfNeeded(threadId);
     await deps.selectThread(threadId);
     resetEditing();
     resetStreamState();
   };
 
   const handleThreadDeleted = async (threadId: string) => {
-    await streamController.stopActiveStreamIfNeeded('delete-thread');
+    await streamController.stopActiveStreamIfNeeded();
     await deps.handleThreadDeleted(threadId);
     resetEditing();
     resetStreamState();
   };
 
   const handleNewChat = async () => {
-    await streamController.stopActiveStreamIfNeeded('new-chat');
+    await streamController.stopActiveStreamIfNeeded();
     await deps.handleNewChat();
     resetEditing();
     resetStreamState();
   };
 
-  const beginEditMessage = async (message: UIMessage, setDraftMessage: (text: string) => Promise<void>) => {
+  const beginEditMessage = async (
+    message: UIMessage,
+    setDraftMessage: (text: string) => Promise<void>
+  ) => {
     if (!message || message.role !== 'user' || typeof message.id !== 'string') return;
-    await streamController.stopActiveStreamIfNeeded('edit-message');
+    await streamController.stopActiveStreamIfNeeded();
     editingUserMessageId.value = message.id;
     const text = extractTextFromMessage(message);
     await setDraftMessage(text);
@@ -126,6 +132,7 @@ export const useChatStreaming = (deps: {
     content: string,
     model?: string,
     tools?: string[],
+    _mcpServerIds?: string[],
     onReady?: () => void
   ) => {
     try {
@@ -159,7 +166,7 @@ export const useChatStreaming = (deps: {
       deps.showWelcome.value = false;
 
       if (pendingEditMessageId && deps.currentThread.value) {
-        await streamController.stopActiveStreamIfNeeded('edit-resend');
+        await streamController.stopActiveStreamIfNeeded();
 
         const messageIndex = deps.messageStore.findIndexById(pendingEditMessageId);
 
@@ -171,13 +178,17 @@ export const useChatStreaming = (deps: {
           };
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
-          await upsertUiMessage(updatedUserMessage, undefined, 'user-message-edit', deps.currentThread.value.id);
+          await upsertUiMessage(
+            updatedUserMessage,
+            undefined,
+            'user-message-edit',
+            deps.currentThread.value.id
+          );
           await truncateConversationAfterIndex(messageIndex);
 
           streamController.beginTurn({
             threadId: deps.currentThread.value.id,
             parentId: updatedUserMessage.id,
-            tracePrefix: 'view',
           });
 
           editingUserMessageId.value = null;
@@ -199,7 +210,6 @@ export const useChatStreaming = (deps: {
       streamController.beginTurn({
         threadId,
         parentId: userMessage.id,
-        tracePrefix: 'view',
       });
       await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
 

@@ -52,9 +52,6 @@ export const createChatUiStreamController = (deps: {
   const activeStreamThreadId = ref<string | null>(initialState.activeStreamThreadId);
   const streamingAssistantText = ref(initialState.streamingAssistantText);
   const streamRenderTick = ref(initialState.streamRenderTick);
-  const streamRenderTraceId = ref(initialState.streamRenderTraceId);
-  const streamRenderChunkCount = ref(initialState.streamRenderChunkCount);
-  const streamRenderChars = ref(initialState.streamRenderChars);
 
   const getAssistantMessageById = (id: string | null): UIMessage | undefined =>
     deps.messageStore.getById(id);
@@ -85,9 +82,6 @@ export const createChatUiStreamController = (deps: {
     activeStreamThreadId: activeStreamThreadId.value,
     streamingAssistantText: streamingAssistantText.value,
     streamRenderTick: streamRenderTick.value,
-    streamRenderTraceId: streamRenderTraceId.value,
-    streamRenderChunkCount: streamRenderChunkCount.value,
-    streamRenderChars: streamRenderChars.value,
   });
 
   const commitStateToRefs = (state: StreamState) => {
@@ -96,9 +90,6 @@ export const createChatUiStreamController = (deps: {
     activeStreamThreadId.value = state.activeStreamThreadId;
     streamingAssistantText.value = state.streamingAssistantText;
     streamRenderTick.value = state.streamRenderTick;
-    streamRenderTraceId.value = state.streamRenderTraceId;
-    streamRenderChunkCount.value = state.streamRenderChunkCount;
-    streamRenderChars.value = state.streamRenderChars;
   };
 
   const applyMessageOps = (ops: MessageOp[]) => {
@@ -125,11 +116,6 @@ export const createChatUiStreamController = (deps: {
     for (const effect of effects) {
       if (effect.type === 'scroll') {
         deps.scrollToBottom();
-        continue;
-      }
-      if (effect.type === 'log') {
-        const logger = effect.level === 'warn' ? console.warn : effect.level === 'error' ? console.error : console.log;
-        logger(effect.message);
         continue;
       }
       if (effect.type === 'persist') {
@@ -220,29 +206,24 @@ export const createChatUiStreamController = (deps: {
     void resetTransientState();
   };
 
-  const stopActiveStreamIfNeeded = async (reason: string, targetThreadId?: string) => {
+  const stopActiveStreamIfNeeded = async (targetThreadId?: string) => {
     if (!activeStreamThreadId.value) return;
     if (targetThreadId && activeStreamThreadId.value === targetThreadId) return;
-
-    console.log(
-      `[StreamDebug][Renderer][ChatView] stop-stream reason=${reason} streamThread=${activeStreamThreadId.value} currentThread=${deps.getCurrentThreadId() || 'null'} targetThread=${targetThreadId || 'null'}`
-    );
 
     try {
       await deps.electronAPI.chat.stopStream();
     } catch (error) {
-      console.warn('[StreamDebug][Renderer][ChatView] stop-stream failed:', error);
+      console.warn('[ChatView] stop-stream failed:', error);
     } finally {
       await resetTransientState();
     }
   };
 
-  const beginTurn = (params: { threadId: string; parentId: string; tracePrefix?: string }) => {
+  const beginTurn = (params: { threadId: string; parentId: string }) => {
     void dispatch({
       type: 'begin_turn',
       threadId: params.threadId,
       parentId: params.parentId,
-      tracePrefix: params.tracePrefix,
     });
   };
 
@@ -328,9 +309,6 @@ export const createChatUiStreamController = (deps: {
       }
     }
     streamingAssistantText.value = '';
-    streamRenderTraceId.value = `approval-${Date.now()}`;
-    streamRenderChunkCount.value = 0;
-    streamRenderChars.value = 0;
 
     approvals.setApprovalProcessing(approvalId, true);
 

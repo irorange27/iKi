@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AppConfig } from '../types/config';
 import { DEFAULT_APP_CONFIG } from './defaults';
 
 const booleanField = (value: boolean) => z.boolean().catch(value);
@@ -11,9 +12,7 @@ const stringArrayField = (value: string[]) => z.array(z.string()).catch(value);
 const GeneralSchema = z
   .object({
     language: stringField(DEFAULT_APP_CONFIG.general.language),
-    theme: z
-      .enum(['light', 'dark', 'system'])
-      .catch(DEFAULT_APP_CONFIG.general.theme),
+    theme: z.enum(['light', 'dark', 'system']).catch(DEFAULT_APP_CONFIG.general.theme),
     autoUpdate: booleanField(DEFAULT_APP_CONFIG.general.autoUpdate),
     minimizeToTray: booleanField(DEFAULT_APP_CONFIG.general.minimizeToTray),
     closeToTray: booleanField(DEFAULT_APP_CONFIG.general.closeToTray),
@@ -25,9 +24,7 @@ const GeneralSchema = z
 const UiSchema = z
   .object({
     fontSize: numberField(DEFAULT_APP_CONFIG.ui.fontSize),
-    density: z
-      .enum(['compact', 'comfortable', 'spacious'])
-      .catch(DEFAULT_APP_CONFIG.ui.density),
+    density: z.enum(['compact', 'comfortable', 'spacious']).catch(DEFAULT_APP_CONFIG.ui.density),
     chatContentPadding: numberField(DEFAULT_APP_CONFIG.ui.chatContentPadding),
     composerPadding: numberField(DEFAULT_APP_CONFIG.ui.composerPadding),
     messageBubblePaddingX: numberField(DEFAULT_APP_CONFIG.ui.messageBubblePaddingX),
@@ -41,15 +38,9 @@ const NetworkSchema = z
     proxy: z
       .object({
         enable: booleanField(DEFAULT_APP_CONFIG.network.proxy.enable),
-        type: z
-          .enum(['http', 'https', 'socks5'])
-          .catch(DEFAULT_APP_CONFIG.network.proxy.type),
+        type: z.enum(['http', 'https', 'socks5']).catch(DEFAULT_APP_CONFIG.network.proxy.type),
         host: stringField(DEFAULT_APP_CONFIG.network.proxy.host),
-        port: z
-          .number()
-          .finite()
-          .nullable()
-          .catch(DEFAULT_APP_CONFIG.network.proxy.port),
+        port: z.number().finite().nullable().catch(DEFAULT_APP_CONFIG.network.proxy.port),
         username: z.string().optional(),
         password: z.string().optional(),
       })
@@ -97,9 +88,7 @@ const MemorySchema = z
     emotion: z
       .object({
         enabled: booleanField(DEFAULT_APP_CONFIG.memory.emotion.enabled),
-        injectToSystemPrompt: booleanField(
-          DEFAULT_APP_CONFIG.memory.emotion.injectToSystemPrompt
-        ),
+        injectToSystemPrompt: booleanField(DEFAULT_APP_CONFIG.memory.emotion.injectToSystemPrompt),
         realtimeAnalysis: booleanField(DEFAULT_APP_CONFIG.memory.emotion.realtimeAnalysis),
         minConfidence: numberField(DEFAULT_APP_CONFIG.memory.emotion.minConfidence),
         minSampleCount: numberField(DEFAULT_APP_CONFIG.memory.emotion.minSampleCount),
@@ -107,6 +96,20 @@ const MemorySchema = z
         halfLifeMinutes: numberField(DEFAULT_APP_CONFIG.memory.emotion.halfLifeMinutes),
         maxAgeMinutes: numberField(DEFAULT_APP_CONFIG.memory.emotion.maxAgeMinutes),
         includeNeutral: booleanField(DEFAULT_APP_CONFIG.memory.emotion.includeNeutral),
+        toolGuard: z
+          .object({
+            enabled: booleanField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.enabled),
+            minConfidence: numberField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.minConfidence),
+            minArousal: numberField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.minArousal),
+            maxValence: numberField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.maxValence),
+            requireApproval: booleanField(
+              DEFAULT_APP_CONFIG.memory.emotion.toolGuard.requireApproval
+            ),
+            disableAutoTools: booleanField(
+              DEFAULT_APP_CONFIG.memory.emotion.toolGuard.disableAutoTools
+            ),
+          })
+          .catch(DEFAULT_APP_CONFIG.memory.emotion.toolGuard),
       })
       .catch(DEFAULT_APP_CONFIG.memory.emotion),
   })
@@ -139,11 +142,22 @@ const ToolExecutionSchema = z
     shellApprovalMode: z
       .enum(['high-risk', 'always', 'never'])
       .catch(DEFAULT_APP_CONFIG.toolExecution.shellApprovalMode),
-    shellHighRiskPatterns: stringArrayField(
-      DEFAULT_APP_CONFIG.toolExecution.shellHighRiskPatterns
-    ),
+    shellHighRiskPatterns: stringArrayField(DEFAULT_APP_CONFIG.toolExecution.shellHighRiskPatterns),
   })
   .catch(DEFAULT_APP_CONFIG.toolExecution);
+
+const McpSchema = z
+  .object({
+    enabled: booleanField(DEFAULT_APP_CONFIG.mcp.enabled),
+    connectOnStartup: booleanField(DEFAULT_APP_CONFIG.mcp.connectOnStartup),
+    allowRemoteServers: booleanField(DEFAULT_APP_CONFIG.mcp.allowRemoteServers),
+    defaultApprovalMode: z
+      .enum(['always', 'safe-only', 'never'])
+      .catch(DEFAULT_APP_CONFIG.mcp.defaultApprovalMode),
+    requestTimeoutMs: numberField(DEFAULT_APP_CONFIG.mcp.requestTimeoutMs),
+    maxConcurrentRequests: intField(DEFAULT_APP_CONFIG.mcp.maxConcurrentRequests),
+  })
+  .catch(DEFAULT_APP_CONFIG.mcp);
 
 const WorkflowOptimizationSchema = z
   .object({
@@ -183,10 +197,11 @@ export const AppConfigSchema = z
     speech: SpeechSchema,
     toolModel: ToolModelSchema,
     toolExecution: ToolExecutionSchema,
+    mcp: McpSchema,
     workflowOptimization: WorkflowOptimizationSchema,
     agent: AgentSchema,
   })
   .passthrough()
-  .catch(DEFAULT_APP_CONFIG);
+  .catch(DEFAULT_APP_CONFIG as unknown as Record<string, unknown>);
 
-export type AppConfigSchemaType = z.infer<typeof AppConfigSchema>;
+export type AppConfigSchemaType = AppConfig;

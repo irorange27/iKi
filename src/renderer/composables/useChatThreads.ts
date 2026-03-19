@@ -17,7 +17,11 @@ export type ChatThread = {
 type ElectronApi = {
   chat: {
     threads: {
-      create: (thread: { title: string; model?: string | null; metadata: string }) => Promise<ChatThread>;
+      create: (thread: {
+        title: string;
+        model?: string | null;
+        metadata: string;
+      }) => Promise<ChatThread>;
       get: (id: string) => Promise<ChatThread | null>;
       update: (id: string, thread: Partial<ChatThread>) => Promise<unknown>;
     };
@@ -275,7 +279,7 @@ export const useChatThreads = (deps: {
       typeof (message as { id?: unknown }).id === 'string' ? (message as { id: string }).id : '';
     if (messageId && deps.messageStore.hasId(messageId)) return;
 
-    deps.messageStore.append(message as UIMessage);
+    deps.messageStore.append(message as unknown as UIMessage);
     deps.scrollToBottom();
   };
 

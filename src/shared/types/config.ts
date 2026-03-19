@@ -62,6 +62,14 @@ export interface AppConfig {
       halfLifeMinutes: number;
       maxAgeMinutes: number;
       includeNeutral: boolean;
+      toolGuard: {
+        enabled: boolean;
+        minConfidence: number;
+        minArousal: number;
+        maxValence: number;
+        requireApproval: boolean;
+        disableAutoTools: boolean;
+      };
     };
   };
   speech: {
@@ -81,6 +89,14 @@ export interface AppConfig {
   toolExecution: {
     shellApprovalMode: 'high-risk' | 'always' | 'never';
     shellHighRiskPatterns: string[];
+  };
+  mcp: {
+    enabled: boolean;
+    connectOnStartup: boolean;
+    allowRemoteServers: boolean;
+    defaultApprovalMode: 'always' | 'safe-only' | 'never';
+    requestTimeoutMs: number;
+    maxConcurrentRequests: number;
   };
   workflowOptimization: WorkflowOptimizationConfig;
   agent: {

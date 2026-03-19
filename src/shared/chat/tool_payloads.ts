@@ -35,14 +35,7 @@ export type WriteFileToolOutput = z.infer<typeof WriteFileOutputSchema>;
 export type ListDirToolOutput = z.infer<typeof ListDirOutputSchema>;
 export type DeleteFileToolOutput = z.infer<typeof DeleteFileOutputSchema>;
 
-type ToolKind =
-  | 'web'
-  | 'fetch'
-  | 'shell'
-  | 'read_file'
-  | 'write_file'
-  | 'list_dir'
-  | 'delete_file';
+type ToolKind = 'web' | 'fetch' | 'shell' | 'read_file' | 'write_file' | 'list_dir' | 'delete_file';
 
 export type ParsedToolInput =
   | { kind: 'web'; input: WebToolInput }
@@ -90,10 +83,7 @@ const resolveToolKind = (toolName: string): ToolKind | null => {
   return TOOL_ALIASES[toolKey] ?? null;
 };
 
-const parseWithSchema = <T extends z.ZodTypeAny>(
-  schema: T,
-  value: unknown
-): z.infer<T> | null => {
+const parseWithSchema = <T extends z.ZodTypeAny>(schema: T, value: unknown): z.infer<T> | null => {
   const parsed = schema.safeParse(value);
   return parsed.success ? parsed.data : null;
 };
@@ -110,12 +100,13 @@ export const parseToolInput = (toolName: string, value: unknown): ParsedToolInpu
   if (!toolKind) return { kind: 'unknown', input: value };
 
   const normalizedValue = normalizeInputValue(value);
-  const parsed = parseWithSchema(
-    TOOL_SCHEMAS[toolKind].input,
-    normalizedValue
-  ) as ToolInputByKind[typeof toolKind] | null;
+  const parsed = parseWithSchema(TOOL_SCHEMAS[toolKind].input, normalizedValue) as
+    | ToolInputByKind[typeof toolKind]
+    | null;
 
-  return parsed ? { kind: toolKind, input: parsed } : { kind: 'unknown', input: value };
+  return parsed
+    ? ({ kind: toolKind, input: parsed } as ParsedToolInput)
+    : { kind: 'unknown', input: value };
 };
 
 export const parseToolOutput = (toolName: string, value: unknown): ParsedToolOutput => {
@@ -123,12 +114,13 @@ export const parseToolOutput = (toolName: string, value: unknown): ParsedToolOut
   if (!toolKind) return { kind: 'unknown', output: value };
 
   const normalizedValue = normalizeOutputValue(value);
-  const parsed = parseWithSchema(
-    TOOL_SCHEMAS[toolKind].output,
-    normalizedValue
-  ) as ToolOutputByKind[typeof toolKind] | null;
+  const parsed = parseWithSchema(TOOL_SCHEMAS[toolKind].output, normalizedValue) as
+    | ToolOutputByKind[typeof toolKind]
+    | null;
 
-  return parsed ? { kind: toolKind, output: parsed } : { kind: 'unknown', output: value };
+  return parsed
+    ? ({ kind: toolKind, output: parsed } as ParsedToolOutput)
+    : { kind: 'unknown', output: value };
 };
 
 export const parseToolPayload = (toolName: string, input: unknown, output: unknown) => ({
