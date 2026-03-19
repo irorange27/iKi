@@ -1,4 +1,5 @@
 import type { ModelMessage, UIMessage } from 'ai';
+import type { ConversationRunnerStreamEvent } from '../../../core/agent';
 
 export type ChatWebContents = {
   id: number;
@@ -20,16 +21,16 @@ export type ActiveStreamState = {
   abortController: AbortController;
 };
 
-export type ToolStreamEvent = {
-  type: string;
-  [key: string]: unknown;
-};
+export type ToolStreamEvent = ConversationRunnerStreamEvent;
 
 export type UiChunkEmitter = {
   messageId: string;
   emitTextDelta: (delta: string) => void;
   emitToolEvent: (event: ToolStreamEvent) => void;
-  emitMemoryRetrieval: (payload: { query: string; results: Array<Record<string, unknown>> }) => void;
+  emitMemoryRetrieval: (payload: {
+    query: string;
+    results: Array<Record<string, unknown>>;
+  }) => void;
   finish: () => void;
   abort: () => void;
   error: (errorText: string) => void;
