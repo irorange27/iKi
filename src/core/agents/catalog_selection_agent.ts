@@ -4,9 +4,7 @@ import type {
   CatalogSelectionRuntime,
 } from '../runtimes/catalog_selection_runtime';
 
-export class CatalogSelectionAgent<T>
-  implements TaskAgent<CatalogSelectionRequest<T>, string[]>
-{
+export class CatalogSelectionAgent<T> implements TaskAgent<CatalogSelectionRequest<T>, string[]> {
   constructor(private readonly runtime: CatalogSelectionRuntime) {}
 
   async run(request: CatalogSelectionRequest<T>): Promise<string[]> {

@@ -2,10 +2,7 @@ import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { SimpleAgent } from '../agent';
 import { TitleAgent } from '../agents/title_agent';
-import {
-  LlmTitleRuntime,
-  type TitleRuntime,
-} from '../runtimes/title_runtime';
+import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { parseModelList } from '../../shared/utils/provider_models';
 
 export interface ToolModelConfig {
@@ -107,9 +104,7 @@ export { TitleAgent, LlmTitleRuntime };
 
 export const createTitleAgent = (runtime: TitleRuntime) => new TitleAgent(runtime);
 
-export const generateTitle = async (
-  conversationContent: string
-): Promise<string | null> => {
+export const generateTitle = async (conversationContent: string): Promise<string | null> => {
   const agent = createTitleAgent(
     new LlmTitleRuntime({
       getToolModel,

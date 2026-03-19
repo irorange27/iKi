@@ -62,6 +62,7 @@ type WsSession = {
 };
 
 const DEFAULT_PORT = 6127;
+const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_ALLOWED_TOOLS = ['web', 'fetch'];
 const DEFAULT_SCOPES = [
   'chat:read',
@@ -262,7 +263,7 @@ const getThreadOrError = (threadId: string, clientId: string) => {
   return { thread };
 };
 
-export const startDaemonServer = (options?: { port?: number }) => {
+export const startDaemonServer = (options?: { port?: number; host?: string }) => {
   setPlatformInfo({
     userDataPath: process.env.IKI_USER_DATA_PATH,
     locale: process.env.IKI_LOCALE,
@@ -271,6 +272,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
   const userDataPath = ensureUserDataDir();
   const bootstrapToken = readOrCreateBootstrapToken(userDataPath);
   const port = Number.isFinite(options?.port) ? Number(options?.port) : DEFAULT_PORT;
+  const host = options?.host?.trim() || DEFAULT_HOST;
 
   writePortFile(userDataPath, port);
   initializeDatabase();
@@ -904,8 +906,8 @@ export const startDaemonServer = (options?: { port?: number }) => {
     });
   });
 
-  server.listen(port, '127.0.0.1', () => {
-    console.log(`[Daemon] listening on http://127.0.0.1:${port}`);
+  server.listen(port, host, () => {
+    console.log(`[Daemon] listening on http://${host}:${port}`);
   });
 
   const shutdown = () => {
@@ -916,5 +918,5 @@ export const startDaemonServer = (options?: { port?: number }) => {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  return { server, wss, port, bootstrapToken };
+  return { server, wss, port, host, bootstrapToken };
 };
