@@ -1,6 +1,7 @@
 import { BrowserWindow, app } from 'electron';
 import path from 'node:path';
 
+import { maybeOpenDevTools } from './devtools_policy';
 import { getRendererDevServerUrl, getRendererProdHtmlPath } from './renderer';
 
 export const createMainWindow = (): BrowserWindow => {
@@ -27,9 +28,10 @@ export const createMainWindow = (): BrowserWindow => {
     mainWindow.loadFile(indexPath);
   }
 
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
+  maybeOpenDevTools(mainWindow.webContents, {
+    isPackaged: app.isPackaged,
+    autoOpenEnv: process.env.IKI_AUTO_OPEN_DEVTOOLS,
+  });
 
   return mainWindow;
 };
