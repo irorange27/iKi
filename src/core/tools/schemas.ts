@@ -8,6 +8,13 @@ export const MAX_FETCH_MAX_CHARS = 80000;
 export const DEFAULT_SHELL_TIMEOUT_MS = 30000;
 export const DEFAULT_FILE_ENCODING = 'utf-8';
 
+const toolCallDescriptionField = z
+  .string()
+  .trim()
+  .max(160)
+  .describe('One short sentence explaining why this tool call is needed')
+  .optional();
+
 const webInputFields = {
   query: z.string().min(1).describe('Search query text'),
   limit: z.number().int().describe('Maximum number of search results'),
@@ -47,24 +54,28 @@ const deleteFileInputFields = {
 export const WebToolInputSchema = z.object({
   query: webInputFields.query,
   limit: webInputFields.limit.optional().default(DEFAULT_SEARCH_RESULT_LIMIT),
+  description: toolCallDescriptionField,
 });
 
 export const WebToolInputSchemaUi = z
   .object({
     query: webInputFields.query.optional(),
     limit: webInputFields.limit.optional(),
+    description: toolCallDescriptionField,
   })
   .passthrough();
 
 export const FetchToolInputSchema = z.object({
   url: fetchInputFields.url,
   maxChars: fetchInputFields.maxChars.optional().default(DEFAULT_FETCH_MAX_CHARS),
+  description: toolCallDescriptionField,
 });
 
 export const FetchToolInputSchemaUi = z
   .object({
     url: fetchInputFields.url.optional(),
     maxChars: fetchInputFields.maxChars.optional(),
+    description: toolCallDescriptionField,
   })
   .passthrough();
 
@@ -72,6 +83,7 @@ export const ShellToolInputSchema = z.object({
   command: shellInputFields.command,
   cwd: shellInputFields.cwd.optional(),
   timeout: shellInputFields.timeout.optional().default(DEFAULT_SHELL_TIMEOUT_MS),
+  description: toolCallDescriptionField,
 });
 
 export const ShellToolInputSchemaUi = z
@@ -79,18 +91,21 @@ export const ShellToolInputSchemaUi = z
     command: shellInputFields.command.optional(),
     cwd: shellInputFields.cwd.optional(),
     timeout: shellInputFields.timeout.optional(),
+    description: toolCallDescriptionField,
   })
   .passthrough();
 
 export const ReadFileInputSchema = z.object({
   path: readFileInputFields.path,
   encoding: readFileInputFields.encoding.optional().default(DEFAULT_FILE_ENCODING),
+  description: toolCallDescriptionField,
 });
 
 export const ReadFileInputSchemaUi = z
   .object({
     path: readFileInputFields.path.optional(),
     encoding: readFileInputFields.encoding.optional(),
+    description: toolCallDescriptionField,
   })
   .passthrough();
 
@@ -98,6 +113,7 @@ export const WriteFileInputSchema = z.object({
   path: writeFileInputFields.path,
   content: writeFileInputFields.content,
   encoding: writeFileInputFields.encoding.optional().default(DEFAULT_FILE_ENCODING),
+  description: toolCallDescriptionField,
 });
 
 export const WriteFileInputSchemaUi = z
@@ -105,28 +121,33 @@ export const WriteFileInputSchemaUi = z
     path: writeFileInputFields.path.optional(),
     content: writeFileInputFields.content.optional(),
     encoding: writeFileInputFields.encoding.optional(),
+    description: toolCallDescriptionField,
   })
   .passthrough();
 
 export const ListDirInputSchema = z.object({
   path: listDirInputFields.path,
   recursive: listDirInputFields.recursive.optional().default(false),
+  description: toolCallDescriptionField,
 });
 
 export const ListDirInputSchemaUi = z
   .object({
     path: listDirInputFields.path.optional(),
     recursive: listDirInputFields.recursive.optional(),
+    description: toolCallDescriptionField,
   })
   .passthrough();
 
 export const DeleteFileInputSchema = z.object({
   path: deleteFileInputFields.path,
+  description: toolCallDescriptionField,
 });
 
 export const DeleteFileInputSchemaUi = z
   .object({
     path: deleteFileInputFields.path.optional(),
+    description: toolCallDescriptionField,
   })
   .passthrough();
 

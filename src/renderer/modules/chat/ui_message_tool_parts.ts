@@ -235,10 +235,6 @@ const getPathBasename = (value: string): string => {
 };
 
 export const getToolTitle = (part: unknown): string => {
-  if (isObjectRecord(part) && typeof part.title === 'string' && part.title.trim()) {
-    return normalizeSingleLineText(part.title);
-  }
-
   const input = getToolInput(part);
   if (isObjectRecord(input)) {
     const descriptionCandidate =
@@ -252,6 +248,10 @@ export const getToolTitle = (part: unknown): string => {
     if (descriptionCandidate.trim()) {
       return normalizeSingleLineText(descriptionCandidate);
     }
+  }
+
+  if (isObjectRecord(part) && typeof part.title === 'string' && part.title.trim()) {
+    return normalizeSingleLineText(part.title);
   }
 
   const rawName = getToolName(part);
