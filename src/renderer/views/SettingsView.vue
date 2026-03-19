@@ -176,6 +176,8 @@
 
       <ProvidersSettings v-show="activeSection === 'provider'" />
 
+      <McpSettings v-show="activeSection === 'mcp'" @config-change="autoSave" />
+
       <!-- Speech -->
       <section v-show="activeSection === 'speech'" class="config-section">
         <div class="config-group">
@@ -922,6 +924,117 @@
           </template>
         </div>
 
+        <div v-if="config.memory.emotion.enabled" class="settings-card">
+          <div class="card-title">Tool Guardrails</div>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="config.memory.emotion.toolGuard.enabled"
+              @change="
+                updateEmotionGuard(
+                  'enabled',
+                  ($event.target as HTMLInputElement).checked
+                )
+              "
+            />
+            Enable Affect-based Guardrails
+          </label>
+          <p class="card-help">
+            When high arousal and negative valence are detected, require approvals or suppress
+            auto tools.
+          </p>
+
+          <template v-if="config.memory.emotion.toolGuard.enabled">
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                :checked="config.memory.emotion.toolGuard.requireApproval"
+                @change="
+                  updateEmotionGuard(
+                    'requireApproval',
+                    ($event.target as HTMLInputElement).checked
+                  )
+                "
+              />
+              Require Approval for All Tools
+            </label>
+
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                :checked="config.memory.emotion.toolGuard.disableAutoTools"
+                @change="
+                  updateEmotionGuard(
+                    'disableAutoTools',
+                    ($event.target as HTMLInputElement).checked
+                  )
+                "
+              />
+              Disable Auto Tools When Guarded
+            </label>
+
+            <div class="slider-field">
+              <span>Guard Confidence Threshold</span>
+              <span class="value-badge">{{
+                Math.round(config.memory.emotion.toolGuard.minConfidence * 100)
+              }}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="Math.round(config.memory.emotion.toolGuard.minConfidence * 100)"
+              @input="
+                updateEmotionGuard(
+                  'minConfidence',
+                  parseInt(($event.target as HTMLInputElement).value) / 100
+                )
+              "
+            />
+
+            <div class="slider-field">
+              <span>Guard Arousal Threshold</span>
+              <span class="value-badge">{{
+                Math.round(config.memory.emotion.toolGuard.minArousal * 100)
+              }}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="Math.round(config.memory.emotion.toolGuard.minArousal * 100)"
+              @input="
+                updateEmotionGuard(
+                  'minArousal',
+                  parseInt(($event.target as HTMLInputElement).value) / 100
+                )
+              "
+            />
+
+            <div class="slider-field">
+              <span>Guard Valence Threshold</span>
+              <span class="value-badge">{{
+                Math.round(config.memory.emotion.toolGuard.maxValence * 100)
+              }}%</span>
+            </div>
+            <input
+              type="range"
+              min="-100"
+              max="0"
+              step="1"
+              :value="Math.round(config.memory.emotion.toolGuard.maxValence * 100)"
+              @input="
+                updateEmotionGuard(
+                  'maxValence',
+                  parseInt(($event.target as HTMLInputElement).value) / 100
+                )
+              "
+            />
+          </template>
+        </div>
+
         <div class="settings-card memory-viewer">
           <div class="card-title">Memory Viewer</div>
           <p class="card-help">
@@ -954,6 +1067,47 @@
             No chat threads yet. Start a chat to generate memory entries.
           </p>
           <p v-if="memoryError" class="memory-error">{{ memoryError }}</p>
+
+          <div class="memory-panel">
+            <div class="memory-panel-header">
+              <span>Affect State</span>
+            </div>
+            <div v-if="affectStateLoading" class="memory-empty">Loading affect state...</div>
+            <div v-else-if="affectStateError" class="memory-error">{{ affectStateError }}</div>
+            <div v-else-if="!config.memory.emotion.enabled" class="memory-empty">
+              Emotion analysis is disabled.
+            </div>
+            <div v-else-if="!selectedMemoryThreadId || isAllThreadsSelected" class="memory-empty">
+              Select a thread to view affect state.
+            </div>
+            <div v-else-if="!parsedAffectState" class="memory-empty">
+              No affect state yet.
+            </div>
+            <div v-else class="memory-item">
+              <div class="memory-item-meta">
+                <span class="memory-time">{{
+                  formatTimestamp(affectStateEntry?.updated_at || '')
+                }}</span>
+              </div>
+              <div class="memory-item-content">
+                Primary: {{ parsedAffectState.label }}
+                (confidence {{ formatDecimal(parsedAffectState.confidence) }})
+              </div>
+              <div class="memory-item-sub">
+                Valence: {{ formatDecimal(parsedAffectState.valence) }} · Arousal:
+                {{ formatDecimal(parsedAffectState.arousal) }}
+              </div>
+              <div class="memory-item-sub">
+                Samples: {{ parsedAffectState.sampleCount || 0 }} /
+                {{ parsedAffectState.windowSize || 0 }}
+              </div>
+              <div class="memory-item-sub">
+                Window: {{ parsedAffectState.startAt || 'n/a' }} → {{
+                  parsedAffectState.endAt || 'n/a'
+                }}
+              </div>
+            </div>
+          </div>
 
           <div v-if="memoryThreads.length" class="memory-panel memory-editor">
             <div class="memory-panel-header">
@@ -1169,15 +1323,33 @@
             />
           </label>
 
+          <label class="input-label">
+            <span>Schedule Type</span>
+            <select v-model="taskForm.schedule_type">
+              <option value="interval">Interval (minutes)</option>
+              <option value="cron">Cron expression</option>
+            </select>
+          </label>
+
           <div class="task-form-grid">
             <label class="input-label">
-              <span>Every (minutes)</span>
+              <span>{{ taskForm.schedule_type === 'cron' ? 'Cron Expression' : 'Every (minutes)' }}</span>
               <input
+                v-if="taskForm.schedule_type === 'interval'"
                 v-model.number="taskForm.interval_minutes"
                 type="number"
                 min="1"
                 max="10080"
               />
+              <input
+                v-else
+                v-model="taskForm.cron_expression"
+                type="text"
+                placeholder="*/15 * * * *"
+              />
+              <div v-if="taskForm.schedule_type === 'cron'" class="input-hint">
+                5-field cron (min hour day month weekday). Example: 0 9 * * 1-5
+              </div>
             </label>
 
             <label class="input-label">
@@ -1193,6 +1365,15 @@
               </select>
             </label>
           </div>
+
+          <label v-if="taskForm.schedule_type === 'cron'" class="input-label">
+            <span>Time Zone (optional)</span>
+            <input
+              v-model="taskForm.schedule_timezone"
+              type="text"
+              placeholder="Auto (local time zone)"
+            />
+          </label>
 
           <label class="input-label">
             <span>Model</span>
@@ -1302,8 +1483,27 @@
                   />
                   Notify
                 </label>
-
-                <label class="input-label task-inline-field">
+                <template v-if="task.schedule_type === 'cron'">
+                  <label class="input-label task-inline-field task-cron-field">
+                    <span>Cron</span>
+                    <input
+                      type="text"
+                      :value="task.cron_expression || ''"
+                      placeholder="*/15 * * * *"
+                      @change="updateTaskCron(task, ($event.target as HTMLInputElement).value)"
+                    />
+                  </label>
+                  <label class="input-label task-inline-field task-timezone-field">
+                    <span>TZ</span>
+                    <input
+                      type="text"
+                      :value="task.schedule_timezone || ''"
+                      placeholder="Local"
+                      @change="updateTaskTimezone(task, ($event.target as HTMLInputElement).value)"
+                    />
+                  </label>
+                </template>
+                <label v-else class="input-label task-inline-field">
                   <span>Every (min)</span>
                   <input
                     type="number"
@@ -1313,6 +1513,11 @@
                     @change="updateTaskInterval(task, ($event.target as HTMLInputElement).value)"
                   />
                 </label>
+              </div>
+
+              <div class="task-item-schedule">
+                <span class="task-meta-label">Schedule:</span>
+                {{ formatTaskSchedule(task) }}
               </div>
 
               <div class="task-item-times">
@@ -1511,9 +1716,11 @@ import {
   RefreshCw,
   AlarmClock,
   Wand2,
+  Plug,
 } from 'lucide-vue-next';
 
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
+import McpSettings from '../components/settings/McpSettings.vue';
 import { useConfigStore } from '../store/config';
 import type { AppConfig } from '../../shared/types/config';
 import type { ChatThread } from '../../shared/types/chat';
@@ -1521,6 +1728,7 @@ import type {
   ShortMemoryEntry,
   LongMemoryEntry,
   LongMemorySearchResult,
+  AffectStateEntry,
 } from '../../shared/types/memory';
 import type { SkillSummary } from '../../shared/types/skill';
 import type { ProactiveTask } from '../../shared/types/tasks';
@@ -1557,6 +1765,9 @@ const memoryLoading = ref(false);
 const memorySearchLoading = ref(false);
 const memoryError = ref('');
 const memorySearchError = ref('');
+const affectStateEntry = ref<AffectStateEntry | null>(null);
+const affectStateLoading = ref(false);
+const affectStateError = ref('');
 const memoryThreadsLoaded = ref(false);
 const newLongMemoryThreadId = ref('');
 const newLongMemorySummary = ref('');
@@ -1587,6 +1798,16 @@ type WhisperDownloadProgressState = {
   progress?: number;
   downloadedBytes?: number;
   totalBytes?: number;
+};
+type AffectStateSnapshot = {
+  label: string;
+  confidence: number;
+  valence?: number;
+  arousal?: number;
+  sampleCount?: number;
+  windowSize?: number;
+  startAt?: string;
+  endAt?: string;
 };
 const whisperModelStages = ref<Record<string, WhisperDownloadStage>>({});
 const whisperModelDownloadErrors = ref<Record<string, string>>({});
@@ -1674,7 +1895,10 @@ type SafeTaskTool = (typeof SAFE_TASK_TOOLS)[number];
 const taskForm = ref<{
   name: string;
   prompt: string;
+  schedule_type: 'interval' | 'cron';
   interval_minutes: number;
+  cron_expression: string;
+  schedule_timezone: string;
   enabled: boolean;
   notify: boolean;
   provider_type: string;
@@ -1684,7 +1908,10 @@ const taskForm = ref<{
 }>({
   name: '',
   prompt: '',
+  schedule_type: 'interval',
   interval_minutes: 60,
+  cron_expression: '',
+  schedule_timezone: '',
   enabled: true,
   notify: true,
   provider_type: '',
@@ -2092,6 +2319,7 @@ watch(
 const menuItems = [
   { key: 'general', label: 'General', icon: Cog }, 
   { key: 'provider', label: 'Providers', icon: Bot },
+  { key: 'mcp', label: 'MCP', icon: Plug },
   { key: 'skills', label: 'Skills', icon: Wand2 },  
   { key: 'memory', label: 'Memory', icon: Brain },
   { key: 'ui', label: 'Appearance', icon: Palette },
@@ -2213,6 +2441,13 @@ const updateEmotion = <K extends keyof AppConfig['memory']['emotion']>(
   config.value.memory.emotion[key] = value;
   autoSave();
 };
+const updateEmotionGuard = <K extends keyof AppConfig['memory']['emotion']['toolGuard']>(
+  key: K,
+  value: AppConfig['memory']['emotion']['toolGuard'][K]
+) => {
+  config.value.memory.emotion.toolGuard[key] = value;
+  autoSave();
+};
 const updateToolModel = (key: 'model', value: string) => {
   config.value.toolModel[key] = value;
   autoSave();
@@ -2266,6 +2501,9 @@ const shellHighRiskPatternText = computed(() =>
 );
 const hasMemoryQuery = computed(() => memorySearchQuery.value.trim().length > 0);
 const isAllThreadsSelected = computed(() => selectedMemoryThreadId.value === ALL_THREADS);
+const parsedAffectState = computed(() =>
+  parseAffectStateSnapshot(affectStateEntry.value?.state)
+);
 const isMemoryThreadLocked = computed(
   () => !!selectedMemoryThreadId.value && selectedMemoryThreadId.value !== ALL_THREADS
 );
@@ -2352,6 +2590,35 @@ const formatJson = (raw: string | null | undefined) => {
   }
 };
 
+const formatDecimal = (value: unknown, digits = 2) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'n/a';
+  return value.toFixed(digits);
+};
+
+const parseAffectStateSnapshot = (raw: string | null | undefined): AffectStateSnapshot | null => {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const payload = parsed as Record<string, unknown>;
+    const label = typeof payload.label === 'string' ? payload.label : '';
+    const confidence = typeof payload.confidence === 'number' ? payload.confidence : NaN;
+    if (!label || !Number.isFinite(confidence)) return null;
+    return {
+      label,
+      confidence,
+      valence: typeof payload.valence === 'number' ? payload.valence : undefined,
+      arousal: typeof payload.arousal === 'number' ? payload.arousal : undefined,
+      sampleCount: typeof payload.sampleCount === 'number' ? payload.sampleCount : undefined,
+      windowSize: typeof payload.windowSize === 'number' ? payload.windowSize : undefined,
+      startAt: typeof payload.startAt === 'string' ? payload.startAt : undefined,
+      endAt: typeof payload.endAt === 'string' ? payload.endAt : undefined,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const syncNewLongMemoryThread = () => {
   if (selectedMemoryThreadId.value && selectedMemoryThreadId.value !== ALL_THREADS) {
     newLongMemoryThreadId.value = selectedMemoryThreadId.value;
@@ -2405,18 +2672,26 @@ const refreshMemory = async () => {
   if (!selectedMemoryThreadId.value) return;
   memoryLoading.value = true;
   memoryError.value = '';
+  affectStateLoading.value = true;
+  affectStateError.value = '';
   try {
-    const [shortEntries, longEntries] = isAllThreadsSelected.value
+    const shouldFetchAffect = !isAllThreadsSelected.value;
+    const [shortEntries, longEntries, affectEntry] = isAllThreadsSelected.value
       ? await Promise.all([
           window.electronAPI.memory.short.listAll(50),
           window.electronAPI.memory.long.listAll(25),
+          Promise.resolve(null),
         ])
       : await Promise.all([
           window.electronAPI.memory.short.list(selectedMemoryThreadId.value, 50),
           window.electronAPI.memory.long.list(selectedMemoryThreadId.value, 25),
+          shouldFetchAffect
+            ? window.electronAPI.memory.affect.get(selectedMemoryThreadId.value)
+            : Promise.resolve(null),
         ]);
     shortMemoryEntries.value = Array.isArray(shortEntries) ? shortEntries : [];
     longMemoryEntries.value = Array.isArray(longEntries) ? longEntries : [];
+    affectStateEntry.value = affectEntry || null;
     if (
       editingLongMemoryId.value &&
       !longMemoryEntries.value.some(entry => entry.id === editingLongMemoryId.value)
@@ -2427,8 +2702,10 @@ const refreshMemory = async () => {
     }
   } catch (error: any) {
     memoryError.value = `Failed to load memory: ${error?.message || 'Unknown error'}`;
+    affectStateError.value = `Failed to load affect state: ${error?.message || 'Unknown error'}`;
   } finally {
     memoryLoading.value = false;
+    affectStateLoading.value = false;
   }
 };
 
@@ -2600,6 +2877,15 @@ const toggleTaskTool = (tool: SafeTaskTool, checked: boolean) => {
   taskForm.value.tools = existing.filter(t => t !== tool);
 };
 
+const formatTaskSchedule = (task: ProactiveTask): string => {
+  if (task.schedule_type === 'cron') {
+    const cron = task.cron_expression || 'cron';
+    const tz = task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)';
+    return `${cron}${tz}`;
+  }
+  return `Every ${task.interval_minutes} min`;
+};
+
 const createProactiveTask = async () => {
   taskCreateError.value = '';
   const name = taskForm.value.name.trim();
@@ -2610,6 +2896,15 @@ const createProactiveTask = async () => {
   }
   if (!prompt) {
     taskCreateError.value = 'Task prompt is required.';
+    return;
+  }
+  if (taskForm.value.schedule_type === 'interval') {
+    if (!Number.isFinite(taskForm.value.interval_minutes) || taskForm.value.interval_minutes <= 0) {
+      taskCreateError.value = 'Interval must be a positive number (minutes).';
+      return;
+    }
+  } else if (!taskForm.value.cron_expression.trim()) {
+    taskCreateError.value = 'Cron expression is required.';
     return;
   }
   if (!taskForm.value.provider_type) {
@@ -2629,6 +2924,15 @@ const createProactiveTask = async () => {
       provider_type: taskForm.value.provider_type,
       model: taskForm.value.model,
       interval_minutes: taskForm.value.interval_minutes,
+      schedule_type: taskForm.value.schedule_type,
+      cron_expression:
+        taskForm.value.schedule_type === 'cron'
+          ? taskForm.value.cron_expression.trim()
+          : null,
+      schedule_timezone:
+        taskForm.value.schedule_type === 'cron' && taskForm.value.schedule_timezone.trim()
+          ? taskForm.value.schedule_timezone.trim()
+          : null,
       enabled: taskForm.value.enabled,
       notify: taskForm.value.notify,
       thread_id: taskForm.value.thread_id || null,
@@ -2717,6 +3021,42 @@ const updateTaskInterval = async (task: ProactiveTask, raw: string) => {
   }
   try {
     const result = await window.electronAPI.tasks.update(task.id, { interval_minutes: next });
+    if (result?.success === false) {
+      tasksError.value = result?.error || 'Failed to update task.';
+      return;
+    }
+    await loadProactiveTasks();
+  } catch (error: any) {
+    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  }
+};
+
+const updateTaskCron = async (task: ProactiveTask, raw: string) => {
+  const cron = raw.trim();
+  if (!cron) {
+    tasksError.value = 'Cron expression is required.';
+    return;
+  }
+  try {
+    const result = await window.electronAPI.tasks.update(task.id, {
+      cron_expression: cron,
+    });
+    if (result?.success === false) {
+      tasksError.value = result?.error || 'Failed to update task.';
+      return;
+    }
+    await loadProactiveTasks();
+  } catch (error: any) {
+    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  }
+};
+
+const updateTaskTimezone = async (task: ProactiveTask, raw: string) => {
+  const timezone = raw.trim();
+  try {
+    const result = await window.electronAPI.tasks.update(task.id, {
+      schedule_timezone: timezone || null,
+    });
     if (result?.success === false) {
       tasksError.value = result?.error || 'Failed to update task.';
       return;
@@ -2913,6 +3253,12 @@ onUnmounted(() => {
   min-height: 96px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
+}
+
+.input-hint {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85em;
 }
 
 .checkbox-label {
@@ -3550,8 +3896,23 @@ input:checked + .slider::before {
   width: 160px;
 }
 
+.task-cron-field {
+  width: 260px;
+  flex: 1 1 260px;
+}
+
+.task-timezone-field {
+  width: 160px;
+}
+
 .task-inline-field input {
   margin-top: 4px;
+}
+
+.task-item-schedule {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.9em;
 }
 
 .task-item-times {

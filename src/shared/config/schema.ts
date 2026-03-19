@@ -159,6 +159,21 @@ const McpSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.mcp);
 
+const BridgesSchema = z
+  .object({
+    napcat: z
+      .object({
+        enabled: booleanField(DEFAULT_APP_CONFIG.bridges.napcat.enabled),
+        accessToken: stringField(DEFAULT_APP_CONFIG.bridges.napcat.accessToken),
+        providerType: stringField(DEFAULT_APP_CONFIG.bridges.napcat.providerType),
+        model: stringField(DEFAULT_APP_CONFIG.bridges.napcat.model),
+        tools: stringArrayField(DEFAULT_APP_CONFIG.bridges.napcat.tools),
+        requireMention: booleanField(DEFAULT_APP_CONFIG.bridges.napcat.requireMention),
+      })
+      .catch(DEFAULT_APP_CONFIG.bridges.napcat),
+  })
+  .catch(DEFAULT_APP_CONFIG.bridges);
+
 const WorkflowOptimizationSchema = z
   .object({
     enabled: booleanField(DEFAULT_APP_CONFIG.workflowOptimization.enabled),
@@ -198,6 +213,7 @@ export const AppConfigSchema = z
     toolModel: ToolModelSchema,
     toolExecution: ToolExecutionSchema,
     mcp: McpSchema,
+    bridges: BridgesSchema,
     workflowOptimization: WorkflowOptimizationSchema,
     agent: AgentSchema,
   })

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { tool } from 'ai';
+import { jsonSchema, tool } from 'ai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 import type { AgentTool } from '../agent/types';
@@ -19,7 +19,10 @@ const deriveJsonSchema = (
   }
 
   try {
-    const jsonSchema = zodToJsonSchema(schema, { $refStrategy: 'none', name: fallbackTitle });
+    const jsonSchema = zodToJsonSchema(schema as unknown as Parameters<typeof zodToJsonSchema>[0], {
+      $refStrategy: 'none',
+      name: fallbackTitle,
+    });
     if (jsonSchema && typeof jsonSchema === 'object') {
       return jsonSchema as Record<string, unknown>;
     }
@@ -43,6 +46,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   abstract needsApproval?: ApprovalPolicy;
   abstract description: string;
   abstract paramSchema: P;
+  outputSchema?: Record<string, unknown>;
 
   /**
    * Raw handler implementation
@@ -71,6 +75,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
     return tool({
       description: this.description,
       inputSchema: this.paramSchema,
+      ...(this.outputSchema ? { outputSchema: jsonSchema(this.outputSchema as object) } : {}),
       needsApproval: this.needsApproval ?? false,
       execute: async (args: z.infer<P>) => await this.handler(args),
     } as unknown as Parameters<typeof tool>[0]);
@@ -85,8 +90,12 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       type: this.type,
       description: this.description,
       parameters: this.parameters,
+      outputSchema: this.outputSchema,
       paramSchema: this.paramSchema,
       needsApproval: this.needsApproval ?? false,
+      autoAllowed: false,
+      displayName: this.name,
+      source: { kind: 'builtin' },
       handler: (args: unknown) => this.execute(args),
     };
   }
@@ -100,7 +109,10 @@ export class ToolRegistry {
 
   register(tool: AgentTool | BaseTool): void {
     const t = tool instanceof BaseTool ? tool.toAgentTool() : tool;
-    this.tools.set(t.name, t);
+    const source =
+      t.source && typeof t.source === 'object' ? t.source : { kind: 'builtin' as const };
+    const displayName = typeof t.displayName === 'string' ? t.displayName : t.name;
+    this.tools.set(t.name, { ...t, autoAllowed: t.autoAllowed === true, source, displayName });
   }
 
   get(name: string): AgentTool | undefined {
@@ -111,13 +123,32 @@ export class ToolRegistry {
     return Array.from(this.tools.values());
   }
 
-  getToolDefinitions(): Record<string, { description: string; parameters: unknown }> {
-    const definitions: Record<string, { description: string; parameters: unknown }> = {};
+  remove(name: string): void {
+    this.tools.delete(name);
+  }
+
+  removeBySource(predicate: (source?: AgentTool['source']) => boolean): void {
+    for (const [name, tool] of this.tools.entries()) {
+      if (predicate(tool.source)) {
+        this.tools.delete(name);
+      }
+    }
+  }
+
+  getToolDefinitions(): Record<
+    string,
+    { description: string; parameters: unknown; outputSchema?: unknown }
+  > {
+    const definitions: Record<
+      string,
+      { description: string; parameters: unknown; outputSchema?: unknown }
+    > = {};
     for (const tool of this.tools.values()) {
       const parameters = tool.parameters ?? deriveJsonSchema(tool.paramSchema, tool.name);
       definitions[tool.name] = {
         description: tool.description,
         parameters,
+        outputSchema: tool.outputSchema,
       };
     }
     return definitions;
@@ -128,12 +159,22 @@ export class ToolRegistry {
     type: string;
     description: string;
     parameters: unknown;
+    outputSchema?: unknown;
+    displayName?: string;
+    source?: AgentTool['source'];
+    needsApproval?: boolean;
+    autoAllowed?: boolean;
   }> {
     return Array.from(this.tools.values()).map(t => ({
       name: t.name,
       type: t.type,
       description: t.description,
       parameters: t.parameters ?? deriveJsonSchema(t.paramSchema, t.name),
+      outputSchema: t.outputSchema,
+      displayName: t.displayName,
+      source: t.source,
+      autoAllowed: t.autoAllowed === true,
+      needsApproval: typeof t.needsApproval === 'boolean' ? t.needsApproval : undefined,
     }));
   }
 }
@@ -146,17 +187,23 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   type: string;
   description: string;
   parameters?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   paramSchema?: P;
   needsApproval?: ApprovalPolicy;
+  autoAllowed?: boolean;
+  displayName?: string;
+  source?: AgentTool['source'];
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
-  const parameters =
-    options.parameters ?? deriveJsonSchema(options.paramSchema, options.name);
+  const parameters = options.parameters ?? deriveJsonSchema(options.paramSchema, options.name);
   return {
     ...options,
     parameters,
     needsApproval: options.needsApproval ?? false,
+    autoAllowed: options.autoAllowed === true,
     paramSchema: options.paramSchema as unknown as AgentTool['paramSchema'],
+    displayName: options.displayName ?? options.name,
+    source: options.source ?? { kind: 'builtin' },
   };
 }
 

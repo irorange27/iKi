@@ -96,6 +96,16 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     requestTimeoutMs: 20000,
     maxConcurrentRequests: 4,
   },
+  bridges: {
+    napcat: {
+      enabled: false,
+      accessToken: '',
+      providerType: '',
+      model: '',
+      tools: [],
+      requireMention: true,
+    },
+  },
   workflowOptimization: {
     enabled: true,
     autoPinSkills: true,
@@ -185,6 +195,14 @@ export const mergeAppConfigWithBase = (
     mcp: {
       ...base.mcp,
       ...(rawConfig.mcp ?? {}),
+    },
+    bridges: {
+      ...base.bridges,
+      ...(rawConfig.bridges ?? {}),
+      napcat: {
+        ...base.bridges.napcat,
+        ...((rawConfig.bridges ?? {}).napcat ?? {}),
+      },
     },
     workflowOptimization: {
       ...base.workflowOptimization,

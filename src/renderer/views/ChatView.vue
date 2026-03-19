@@ -132,6 +132,9 @@
                         />
                         <span class="tool-card-title">{{ getToolTitle(part) }}</span>
                         <span class="tool-card-tool">{{ getToolName(part) }}</span>
+                        <span v-if="getMcpServerLabel(part)" class="tool-card-server">
+                          MCP Server: {{ getMcpServerLabel(part) }}
+                        </span>
                       </div>
                       <div class="tool-card-meta">
                         <span
@@ -233,6 +236,9 @@
                         />
                         <span class="tool-card-title">{{ getToolTitle(part) }}</span>
                         <span class="tool-card-tool">{{ getToolName(part) }}</span>
+                        <span v-if="getMcpServerLabel(part)" class="tool-card-server">
+                          MCP Server: {{ getMcpServerLabel(part) }}
+                        </span>
                       </div>
                       <div class="tool-card-meta">
                         <span
@@ -423,6 +429,51 @@ type MemoryPreviewEntry = {
   score?: number;
   updated_at?: string;
   tags?: string | null;
+};
+
+type ToolSource = {
+  kind?: 'builtin' | 'mcp';
+  id?: string;
+  name?: string;
+};
+
+const toolSourceMap = ref<Map<string, ToolSource>>(new Map());
+const toolSourceLoading = ref(false);
+
+const loadToolSources = async () => {
+  if (toolSourceLoading.value) return;
+  toolSourceLoading.value = true;
+  try {
+    if (!electronAPI?.tools?.list) return;
+    const list = await electronAPI.tools.list();
+    if (!Array.isArray(list)) return;
+    const next = new Map<string, ToolSource>();
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      const name = (item as { name?: unknown }).name;
+      if (typeof name !== 'string' || !name.trim()) continue;
+      const source = (item as { source?: unknown }).source;
+      if (source && typeof source === 'object') {
+        next.set(name, source as ToolSource);
+      }
+    }
+    toolSourceMap.value = next;
+  } catch (error) {
+    console.warn('Failed to load tool metadata:', error);
+  } finally {
+    toolSourceLoading.value = false;
+  }
+};
+
+const getMcpServerLabel = (part: unknown): string => {
+  const toolName = getToolName(part);
+  if (!toolName) return '';
+  const source = toolSourceMap.value.get(toolName);
+  if (!source && (toolName.startsWith('mcp_') || toolName.startsWith('mcp:'))) {
+    void loadToolSources();
+  }
+  if (source?.kind !== 'mcp') return '';
+  return source.name || source.id || '';
 };
 
 type MemoryPart = {
@@ -620,13 +671,14 @@ const cancelEditing = async () => {
 // Listen for model selection from ChatInput
 onMounted(async () => {
   // Initialize config store if not already initialized
-  if (!configStore.initialized) {
-    await configStore.initialize();
-  }
-  // Load threads on mount
-  await refreshThreads();
+    if (!configStore.initialized) {
+      await configStore.initialize();
+    }
+    // Load threads on mount
+    await refreshThreads();
+    await loadToolSources();
 
-  electronAPI.chat.removeAllListeners();
+    electronAPI.chat.removeAllListeners();
   electronAPI.chat.onUiChunk((chunk: unknown) => {
     void streamController.handleUiChunk(chunk);
   });
@@ -1283,6 +1335,13 @@ onUnmounted(() => {
   padding: 2px 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
+}
+
+.tool-card-server {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .tool-card-meta {

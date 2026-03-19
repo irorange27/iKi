@@ -1,10 +1,10 @@
-import Database from 'better-sqlite3';
+import Database = require('better-sqlite3');
 import path from 'path';
 import fs from 'fs';
 import { initializeMigrations } from './migration';
 import { getUserDataPath } from '../platform';
 
-let db: Database | null = null;
+let db: Database.Database | null = null;
 let initialized = false;
 let initializing = false;
 let dbPathOverride: string | null = null;
@@ -16,7 +16,7 @@ const resolveDbPath = (): string => {
   return path.join(getUserDataPath(), 'iKi_v0.db');
 };
 
-const initCoreTables = (database: Database) => {
+const initCoreTables = (database: Database.Database) => {
   database.exec(`
     CREATE TABLE IF NOT EXISTS config (
       key TEXT PRIMARY KEY,
@@ -63,7 +63,7 @@ export const initializeDatabase = (options?: { dbPath?: string }) => {
   return db;
 };
 
-export const getDb = (): Database => {
+export const getDb = (): Database.Database => {
   if (!initialized || !db) {
     return initializeDatabase();
   }

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { registerStandardTools } from './core/tools';
+import { getMcpManager } from './core/mcp';
 import { setPlatformInfo } from './core/platform';
 import { registerMainIpc } from './main/ipc';
 import { startProactiveTaskScheduler } from './main/services/tasks/proactive_tasks';
@@ -42,6 +43,7 @@ nativeTheme.on('updated', () => {
 
 // Register standard tools + IPC handlers on startup.
 registerStandardTools();
+void getMcpManager().initialize();
 registerMainIpc();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.

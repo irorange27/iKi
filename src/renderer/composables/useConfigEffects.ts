@@ -4,6 +4,11 @@ import { useConfigStore } from '../store/config';
 
 const SYSTEM_THEME_QUERY = '(prefers-color-scheme: dark)';
 
+type LegacyMediaQueryList = MediaQueryList & {
+  addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+  removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+};
+
 const resolveTheme = (theme: AppConfig['general']['theme']): 'light' | 'dark' => {
   if (theme !== 'system') return theme;
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'light';
@@ -45,31 +50,34 @@ export const useConfigEffects = () => {
     { deep: true, immediate: true }
   );
 
-  let media: MediaQueryList | null = null;
+  let media: LegacyMediaQueryList | null = null;
   const handleMediaChange = () => {
     if (store.config.general.theme === 'system') {
       apply();
     }
   };
+  const legacyMediaChangeListener = () => {
+    handleMediaChange();
+  };
 
   onMounted(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    media = window.matchMedia(SYSTEM_THEME_QUERY);
-    if ('addEventListener' in media) {
+    media = window.matchMedia(SYSTEM_THEME_QUERY) as LegacyMediaQueryList;
+    if (typeof media.addEventListener === 'function') {
       media.addEventListener('change', handleMediaChange);
-    } else if ('addListener' in media) {
+    } else if (typeof media.addListener === 'function') {
       // Legacy Electron/Chromium fallback.
-      media.addListener(handleMediaChange);
+      media.addListener(legacyMediaChangeListener);
     }
   });
 
   onUnmounted(() => {
     stopWatch();
     if (!media) return;
-    if ('removeEventListener' in media) {
+    if (typeof media.removeEventListener === 'function') {
       media.removeEventListener('change', handleMediaChange);
-    } else if ('removeListener' in media) {
-      media.removeListener(handleMediaChange);
+    } else if (typeof media.removeListener === 'function') {
+      media.removeListener(legacyMediaChangeListener);
     }
   });
 };

@@ -34,7 +34,8 @@ const nowIso = () => new Date().toISOString();
 
 const toStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
-    return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim())
+    return value
+      .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
       .map(entry => entry.trim());
   }
   if (typeof value === 'string' && value.trim()) {
@@ -120,9 +121,9 @@ export const getAppClientById = (id: string): AppClient | null => {
 export const getAppClientByToken = (token: string): AppClient | null => {
   if (!token || typeof token !== 'string') return null;
   const tokenHash = hashToken(token.trim());
-  const row = getDb()
-    .prepare('SELECT * FROM app_clients WHERE token_hash = ?')
-    .get(tokenHash) as AppClientRow | undefined;
+  const row = getDb().prepare('SELECT * FROM app_clients WHERE token_hash = ?').get(tokenHash) as
+    | AppClientRow
+    | undefined;
   return row ? normalizeClient(row) : null;
 };
 

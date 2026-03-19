@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model: string;
       messages: Array<Record<string, unknown>>;
       tools?: string[];
+      mcpServerIds?: string[];
       skillIds?: string[];
       skillMode?: 'manual' | 'auto';
       threadId?: string;
@@ -77,6 +78,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model: string;
       messages: Array<Record<string, unknown>>;
       tools?: string[];
+      mcpServerIds?: string[];
       skillIds?: string[];
       skillMode?: 'manual' | 'auto';
       threadId?: string;

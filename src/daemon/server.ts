@@ -1,9 +1,9 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { WebSocketServer, type WebSocket } from 'ws';
 
 import { registerStandardTools } from '../core/tools';
+import { getMcpManager } from '../core/mcp';
 import { initializeDatabase } from '../core/db/database';
 import { getUserDataPath, setPlatformInfo } from '../core/platform';
 import { createChatService } from '../main/services/chat/chat_service';
@@ -18,6 +18,32 @@ import {
   type AppClient,
 } from '../core/db/app_clients';
 import { createNapCatReverseBridge } from './napcat_adapter';
+import type { McpServerInput } from '../shared/types/mcp';
+
+type DaemonSocket = {
+  readyState: number;
+  send: (data: string) => void;
+  on: (event: string, listener: (...args: unknown[]) => void) => void;
+};
+
+type DaemonSocketServer = {
+  handleUpgrade: (
+    req: http.IncomingMessage,
+    socket: unknown,
+    head: Buffer,
+    callback: (ws: DaemonSocket) => void
+  ) => void;
+  on: (
+    event: 'connection',
+    listener: (ws: DaemonSocket, req: http.IncomingMessage) => void
+  ) => void;
+  emit: (event: 'connection', ws: DaemonSocket, req: http.IncomingMessage) => boolean;
+  close: () => void;
+};
+
+const { WebSocketServer } = require('ws') as {
+  WebSocketServer: new (options: { noServer: boolean }) => DaemonSocketServer;
+};
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -30,7 +56,7 @@ type DaemonClient = {
 
 type WsSession = {
   id: number;
-  ws: WebSocket;
+  ws: DaemonSocket;
   client: DaemonClient;
   webContents: { id: number; send: (channel: string, ...args: unknown[]) => void };
 };
@@ -44,6 +70,8 @@ const DEFAULT_SCOPES = [
   'memory:write',
   'tools:run',
   'tools:approve',
+  'mcp:read',
+  'mcp:write',
 ];
 
 const MAX_BODY_BYTES = 1024 * 1024 * 2;
@@ -155,8 +183,7 @@ const toDaemonClient = (client: AppClient): DaemonClient => ({
   allowedTools: client.allowedTools,
 });
 
-const hasScope = (client: DaemonClient, scope: string): boolean =>
-  client.scopes.includes(scope);
+const hasScope = (client: DaemonClient, scope: string): boolean => client.scopes.includes(scope);
 
 const extractBearerToken = (authHeader: string | undefined): string | null => {
   if (!authHeader) return null;
@@ -166,7 +193,9 @@ const extractBearerToken = (authHeader: string | undefined): string | null => {
   return token || null;
 };
 
-const authenticateRequest = (req: http.IncomingMessage): { client?: DaemonClient; error?: string } => {
+const authenticateRequest = (
+  req: http.IncomingMessage
+): { client?: DaemonClient; error?: string } => {
   const token =
     extractBearerToken(req.headers.authorization as string | undefined) ||
     (typeof req.headers['x-iki-token'] === 'string' ? req.headers['x-iki-token'] : null);
@@ -184,13 +213,14 @@ const authenticateRequest = (req: http.IncomingMessage): { client?: DaemonClient
   return { client: toDaemonClient(client) };
 };
 
-const authenticateWebSocket = (req: http.IncomingMessage): { client?: DaemonClient; error?: string } => {
+const authenticateWebSocket = (
+  req: http.IncomingMessage
+): { client?: DaemonClient; error?: string } => {
   const url = new URL(req.url || '/', 'http://127.0.0.1');
   const tokenFromQuery = url.searchParams.get('token');
   const clientIdFromQuery = url.searchParams.get('client_id');
   const authHeaderToken = extractBearerToken(req.headers.authorization as string | undefined);
-  const token =
-    authHeaderToken || (typeof tokenFromQuery === 'string' ? tokenFromQuery : null);
+  const token = authHeaderToken || (typeof tokenFromQuery === 'string' ? tokenFromQuery : null);
   const clientId =
     (typeof req.headers['x-iki-client'] === 'string' ? req.headers['x-iki-client'] : null) ||
     (typeof clientIdFromQuery === 'string' ? clientIdFromQuery : null);
@@ -209,7 +239,9 @@ const authenticateWebSocket = (req: http.IncomingMessage): { client?: DaemonClie
 const resolveToolsForClient = (requested: unknown, allowedTools: string[]): string[] => {
   const allowed = new Set(allowedTools);
   const cleanedRequested = Array.isArray(requested)
-    ? requested.filter((t): t is string => typeof t === 'string' && t.trim()).map(t => t.trim())
+    ? requested
+        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+        .map(t => t.trim())
     : null;
 
   if (!cleanedRequested) {
@@ -243,10 +275,12 @@ export const startDaemonServer = (options?: { port?: number }) => {
   writePortFile(userDataPath, port);
   initializeDatabase();
   registerStandardTools();
+  void getMcpManager().initialize();
 
   const chatService = createChatService();
+  const mcpManager = getMcpManager();
   const sessions = new Map<number, WsSession>();
-  const wsSessions = new Map<WebSocket, WsSession>();
+  const wsSessions = new Map<DaemonSocket, WsSession>();
   let nextSessionId = 1;
   const napcatClientId = ensureNapCatClient();
   const napcatBridge = createNapCatReverseBridge({
@@ -277,9 +311,10 @@ export const startDaemonServer = (options?: { port?: number }) => {
     }
 
     if (req.method === 'POST' && pathName === '/v1/clients/register') {
-      const setupToken = typeof req.headers['x-iki-setup-token'] === 'string'
-        ? req.headers['x-iki-setup-token']
-        : '';
+      const setupToken =
+        typeof req.headers['x-iki-setup-token'] === 'string'
+          ? req.headers['x-iki-setup-token']
+          : '';
       if (bootstrapToken && setupToken !== bootstrapToken) {
         writeJson(res, 401, { success: false, error: 'Invalid setup token' });
         return;
@@ -403,8 +438,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
           }
         }
 
-        const providerType =
-          typeof body.providerType === 'string' ? body.providerType : '';
+        const providerType = typeof body.providerType === 'string' ? body.providerType : '';
         const model = typeof body.model === 'string' ? body.model : '';
         if (!providerType || !model) {
           writeJson(res, 400, { success: false, error: 'Missing providerType or model' });
@@ -443,8 +477,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
       }
       try {
         const body = (await parseJsonBody(req)) as Record<string, unknown>;
-        const approvalId =
-          typeof body.approval_id === 'string' ? body.approval_id : '';
+        const approvalId = typeof body.approval_id === 'string' ? body.approval_id : '';
         const approved = Boolean(body.approved);
         const connectionId =
           typeof body.connection_id === 'number'
@@ -464,11 +497,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
           return;
         }
 
-        const result = await chatService.approveTool(
-          session.webContents,
-          approvalId,
-          approved
-        );
+        const result = await chatService.approveTool(session.webContents, approvalId, approved);
         writeJson(res, 200, result);
         return;
       } catch (error) {
@@ -571,6 +600,117 @@ export const startDaemonServer = (options?: { port?: number }) => {
       }
     }
 
+    if (req.method === 'GET' && pathName === '/v1/mcp/servers') {
+      if (!hasScope(client, 'mcp:read')) {
+        writeJson(res, 403, { success: false, error: 'Missing mcp:read scope' });
+        return;
+      }
+      const servers = mcpManager.listServers();
+      writeJson(res, 200, { success: true, servers });
+      return;
+    }
+
+    if (req.method === 'POST' && pathName === '/v1/mcp/servers') {
+      if (!hasScope(client, 'mcp:write')) {
+        writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+        return;
+      }
+      try {
+        const body = (await parseJsonBody(req)) as McpServerInput;
+        const created = await mcpManager.addServer(body);
+        writeJson(res, 200, { success: true, server: created });
+        return;
+      } catch (error) {
+        writeJson(res, 400, {
+          success: false,
+          error: error instanceof Error ? error.message : 'Invalid MCP server payload',
+        });
+        return;
+      }
+    }
+
+    const mcpMatch = pathName.match(/^\/v1\/mcp\/servers\/([^/]+)(?:\/([^/]+))?$/);
+    if (req.method === 'POST' && mcpMatch) {
+      const serverId = mcpMatch[1];
+      const action = mcpMatch[2];
+      if (!serverId) {
+        writeJson(res, 400, { success: false, error: 'Missing MCP server id' });
+        return;
+      }
+
+      if (action === 'connect') {
+        if (!hasScope(client, 'mcp:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+          return;
+        }
+        try {
+          const status = await mcpManager.connectServer(serverId);
+          writeJson(res, 200, { success: true, status });
+        } catch (error) {
+          writeJson(res, 400, {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to connect MCP server',
+          });
+        }
+        return;
+      }
+
+      if (action === 'disconnect') {
+        if (!hasScope(client, 'mcp:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+          return;
+        }
+        await mcpManager.disconnectServer(serverId);
+        writeJson(res, 200, { success: true });
+        return;
+      }
+
+      if (action === 'refresh-tools') {
+        if (!hasScope(client, 'mcp:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing mcp:read scope' });
+          return;
+        }
+        try {
+          const tools = await mcpManager.refreshTools(serverId);
+          writeJson(res, 200, { success: true, tools });
+        } catch (error) {
+          writeJson(res, 400, {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to refresh tools',
+          });
+        }
+        return;
+      }
+
+      if (action === 'delete') {
+        if (!hasScope(client, 'mcp:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+          return;
+        }
+        await mcpManager.deleteServer(serverId);
+        writeJson(res, 200, { success: true });
+        return;
+      }
+
+      if (!action) {
+        if (!hasScope(client, 'mcp:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+          return;
+        }
+        try {
+          const body = (await parseJsonBody(req)) as Partial<McpServerInput>;
+          const updated = await mcpManager.updateServer(serverId, body);
+          writeJson(res, 200, { success: true, server: updated });
+        } catch (error) {
+          writeJson(res, 400, {
+            success: false,
+            error: error instanceof Error ? error.message : 'Invalid MCP server update',
+          });
+        }
+        return;
+      }
+    }
+
     writeJson(res, 404, { success: false, error: 'Not found' });
   });
 
@@ -592,7 +732,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
         const webContents = {
           id,
           send: (channel: string, ...args: unknown[]) => {
-            if (ws.readyState !== ws.OPEN) return;
+            if (ws.readyState !== 1) return;
             if (channel === 'chat:ui-chunk' && args.length === 1) {
               ws.send(JSON.stringify(args[0]));
               return;
@@ -615,7 +755,9 @@ export const startDaemonServer = (options?: { port?: number }) => {
           wsSessions.delete(ws);
         });
 
-        ws.send(JSON.stringify({ channel: 'daemon', payload: { type: 'ready', connection_id: id } }));
+        ws.send(
+          JSON.stringify({ channel: 'daemon', payload: { type: 'ready', connection_id: id } })
+        );
         wss.emit('connection', ws, req);
       });
       return;
@@ -632,9 +774,9 @@ export const startDaemonServer = (options?: { port?: number }) => {
     const session = wsSessions.get(ws);
     if (!session) return;
 
-    ws.on('message', async data => {
+    ws.on('message', async (data: unknown) => {
       try {
-        const parsed = JSON.parse(data.toString()) as Record<string, unknown>;
+        const parsed = JSON.parse(String(data)) as Record<string, unknown>;
         const messageType = typeof parsed.type === 'string' ? parsed.type : '';
 
         if (messageType === 'start') {
@@ -662,8 +804,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
             }
           }
 
-          const providerType =
-            typeof payload.providerType === 'string' ? payload.providerType : '';
+          const providerType = typeof payload.providerType === 'string' ? payload.providerType : '';
           const model = typeof payload.model === 'string' ? payload.model : '';
           if (!providerType || !model) {
             ws.send(
@@ -722,8 +863,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
             );
             return;
           }
-          const approvalId =
-            typeof parsed.approval_id === 'string' ? parsed.approval_id : '';
+          const approvalId = typeof parsed.approval_id === 'string' ? parsed.approval_id : '';
           const approved = Boolean(parsed.approved);
           if (!approvalId) {
             ws.send(
@@ -734,11 +874,7 @@ export const startDaemonServer = (options?: { port?: number }) => {
             );
             return;
           }
-          const result = await chatService.approveTool(
-            session.webContents,
-            approvalId,
-            approved
-          );
+          const result = await chatService.approveTool(session.webContents, approvalId, approved);
           ws.send(
             JSON.stringify({
               channel: 'daemon',

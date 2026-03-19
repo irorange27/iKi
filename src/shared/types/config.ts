@@ -98,6 +98,16 @@ export interface AppConfig {
     requestTimeoutMs: number;
     maxConcurrentRequests: number;
   };
+  bridges: {
+    napcat: {
+      enabled: boolean;
+      accessToken: string;
+      providerType: string;
+      model: string;
+      tools: string[];
+      requireMention: boolean;
+    };
+  };
   workflowOptimization: WorkflowOptimizationConfig;
   agent: {
     enabled: boolean;
