@@ -178,6 +178,13 @@
 
       <McpSettings v-show="activeSection === 'mcp'" @config-change="autoSave" />
 
+      <NapCatSettings
+        :active="activeSection === 'bridges'"
+        v-show="activeSection === 'bridges'"
+        @config-change="autoSave"
+        @reset="resetSection('bridges')"
+      />
+
       <!-- Speech -->
       <section v-show="activeSection === 'speech'" class="config-section">
         <div class="config-group">
@@ -1713,6 +1720,7 @@ import {
   Mic,
   Brain,
   Bot,
+  MessageSquare,
   RefreshCw,
   AlarmClock,
   Wand2,
@@ -1721,6 +1729,7 @@ import {
 
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
+import NapCatSettings from '../components/settings/NapCatSettings.vue';
 import { useConfigStore } from '../store/config';
 import type { AppConfig } from '../../shared/types/config';
 import type { ChatThread } from '../../shared/types/chat';
@@ -2320,6 +2329,7 @@ const menuItems = [
   { key: 'general', label: 'General', icon: Cog }, 
   { key: 'provider', label: 'Providers', icon: Bot },
   { key: 'mcp', label: 'MCP', icon: Plug },
+  { key: 'channels', label: 'Channels', icon: Bot },
   { key: 'skills', label: 'Skills', icon: Wand2 },  
   { key: 'memory', label: 'Memory', icon: Brain },
   { key: 'ui', label: 'Appearance', icon: Palette },

@@ -286,7 +286,6 @@ export const startDaemonServer = (options?: { port?: number }) => {
   const napcatBridge = createNapCatReverseBridge({
     chatService,
     clientId: napcatClientId,
-    accessToken: process.env.IKI_NAPCAT_ACCESS_TOKEN || process.env.IKI_NAPCAT_TOKEN,
   });
 
   const server = http.createServer(async (req, res) => {
