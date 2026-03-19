@@ -22,18 +22,13 @@ const updateHash = () => {
 };
 window.addEventListener('hashchange', updateHash);
 
-const isSettings = computed(() => {
-  console.log('Current Hash:', currentHash.value);
-  return currentHash.value.includes('settings');
-});
+const isSettings = computed(() => currentHash.value.includes('settings'));
 const closeSettings = () => {
   // @ts-ignore
   window.electronAPI?.closeWindow();
 };
 
 useAppConfig();
-
-console.log('👋 This message is being logged by "App.vue", included via Vite');
 </script>
 
 <style>
