@@ -1,24 +1,22 @@
-import { spawn, type ChildProcess } from 'node:child_process';
 import http from 'node:http';
-import path from 'node:path';
 import { app } from 'electron';
 
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../../../shared/constants/daemon';
 import { getAppConfig } from '../../../core/config';
 import type { AppConfig } from '../../../shared/types/config';
 import { startDaemonServer } from '../../../daemon/server';
+import { logger } from '../../../core/logger';
 
 export const DAEMON_MODE_ARG = '--iki-daemon';
 
 const HEALTHCHECK_TIMEOUT_MS = 1200;
 const HEALTHCHECK_RETRY_MS = 200;
 const STARTUP_WAIT_TIMEOUT_MS = 8000;
-const SHUTDOWN_GRACE_MS = 1500;
 
 const AUTOSTART_DISABLED_VALUES = new Set(['0', 'false', 'off', 'no']);
 
-let managedDaemonProcess: ChildProcess | null = null;
 let embeddedDaemon: ReturnType<typeof startDaemonServer> | null = null;
+let embeddedBinding: { host: string; port: number } | null = null;
 let startPromise: Promise<void> | null = null;
 
 const sleep = (ms: number): Promise<void> =>
@@ -61,11 +59,22 @@ type DaemonHealthInfo = {
   port: number;
 };
 
-const readDaemonHealth = async (port: number): Promise<DaemonHealthInfo | null> =>
+const resolveHealthProbeHost = (host: string): string => {
+  const normalized = host.trim();
+  if (!normalized || normalized === '0.0.0.0' || normalized === '::') {
+    return '127.0.0.1';
+  }
+  return normalized;
+};
+
+const readDaemonHealth = async (
+  port: number,
+  probeHost = '127.0.0.1'
+): Promise<DaemonHealthInfo | null> =>
   new Promise(resolve => {
     const req = http.request(
       {
-        host: '127.0.0.1',
+        host: probeHost,
         port,
         method: 'GET',
         path: '/v1/health',
@@ -107,42 +116,28 @@ const readDaemonHealth = async (port: number): Promise<DaemonHealthInfo | null> 
     req.end();
   });
 
-const probeDaemonHealth = async (port: number): Promise<boolean> => {
-  const health = await readDaemonHealth(port);
+const probeDaemonHealth = async (port: number, probeHost: string): Promise<boolean> => {
+  const health = await readDaemonHealth(port, probeHost);
   return Boolean(health?.ok);
 };
 
-const waitForDaemonHealthy = async (port: number, timeoutMs = STARTUP_WAIT_TIMEOUT_MS) => {
+const waitForDaemonHealthy = async (
+  port: number,
+  probeHost: string,
+  timeoutMs = STARTUP_WAIT_TIMEOUT_MS
+) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await probeDaemonHealth(port)) return true;
+    if (await probeDaemonHealth(port, probeHost)) return true;
     await sleep(HEALTHCHECK_RETRY_MS);
   }
   return false;
 };
 
-const resolveDaemonArgs = (): string[] => {
-  if (app.isPackaged) {
-    return [DAEMON_MODE_ARG];
-  }
-
-  // In dev, prefer current entry script to match the active boot path.
-  const currentEntry = process.argv[1];
-  if (typeof currentEntry === 'string' && currentEntry.trim()) {
-    return [currentEntry, DAEMON_MODE_ARG];
-  }
-
-  // Fallback for uncommon launch paths.
-  return [path.resolve(app.getAppPath()), DAEMON_MODE_ARG];
-};
-
-const buildDaemonEnv = (binding: { host: string; port: number }): NodeJS.ProcessEnv => ({
-  ...process.env,
-  IKI_USER_DATA_PATH: app.getPath('userData'),
-  IKI_LOCALE: app.getLocale(),
-  IKI_DAEMON_HOST: binding.host,
-  IKI_DAEMON_PORT: String(binding.port),
-});
+const sameBinding = (
+  left: { host: string; port: number },
+  right: { host: string; port: number }
+): boolean => left.host === right.host && left.port === right.port;
 
 const stopEmbeddedDaemon = () => {
   if (!embeddedDaemon) return;
@@ -150,9 +145,10 @@ const stopEmbeddedDaemon = () => {
     embeddedDaemon.server.close();
     embeddedDaemon.wss.close();
   } catch (error) {
-    console.warn('[Daemon] Failed to stop embedded daemon:', error);
+    logger.warn(`[Daemon] Failed to stop embedded daemon: ${String(error)}`);
   } finally {
     embeddedDaemon = null;
+    embeddedBinding = null;
   }
 };
 
@@ -163,87 +159,71 @@ const startEmbeddedDaemon = (binding: { host: string; port: number }) => {
   process.env.IKI_DAEMON_HOST = binding.host;
   process.env.IKI_DAEMON_PORT = String(binding.port);
   embeddedDaemon = startDaemonServer({ host: binding.host, port: binding.port });
-  console.warn(
-    `[Daemon] Falling back to embedded daemon on http://${binding.host}:${binding.port}.`
-  );
+  embeddedBinding = binding;
 };
 
 export const startDesktopDaemon = async (): Promise<void> => {
   if (process.argv.includes(DAEMON_MODE_ARG)) return;
   if (normalizeBoolEnv(process.env.IKI_DAEMON_AUTOSTART)) {
-    console.log('[Daemon] Autostart disabled by IKI_DAEMON_AUTOSTART.');
+    logger.info('[Daemon] Autostart disabled by IKI_DAEMON_AUTOSTART.');
     return;
   }
   if (startPromise) return startPromise;
 
   startPromise = (async () => {
     const binding = resolveDaemonBinding();
-    const existingHealth = await readDaemonHealth(binding.port);
+    const probeHost = resolveHealthProbeHost(binding.host);
+
+    if (embeddedBinding && sameBinding(embeddedBinding, binding)) {
+      const healthy = await probeDaemonHealth(binding.port, probeHost);
+      if (healthy) {
+        logger.info(
+          `[Daemon] Embedded daemon already running on http://${binding.host}:${binding.port}.`
+        );
+        return;
+      }
+      logger.warn('[Daemon] Embedded daemon health check failed, restarting.');
+      stopEmbeddedDaemon();
+    } else if (embeddedBinding) {
+      logger.info('[Daemon] Restarting embedded daemon for updated binding.');
+      stopEmbeddedDaemon();
+    }
+
+    const existingHealth = await readDaemonHealth(binding.port, probeHost);
 
     if (existingHealth?.ok) {
       if (existingHealth.host === binding.host) {
-        console.log(
-          `[Daemon] Existing daemon detected on ${binding.host}:${binding.port}, skipping spawn.`
+        logger.info(
+          `[Daemon] Existing daemon detected on ${binding.host}:${binding.port}, skipping embedded startup.`
         );
-        stopEmbeddedDaemon();
         return;
       }
-      console.warn(
+      logger.warn(
         `[Daemon] Port ${binding.port} already in use by daemon host=${existingHealth.host}, but settings host=${binding.host}.`
       );
-      console.warn(
+      logger.warn(
         '[Daemon] Close the existing daemon instance first to apply the new host binding.'
       );
       return;
     }
 
-    const daemonArgs = resolveDaemonArgs();
-    const child = spawn(process.execPath, daemonArgs, {
-      env: buildDaemonEnv(binding),
-      stdio: ['ignore', 'ignore', 'pipe'],
-      detached: false,
-    });
+    startEmbeddedDaemon(binding);
 
-    managedDaemonProcess = child;
-
-    child.once('error', error => {
-      console.warn('[Daemon] Failed to spawn desktop-managed daemon:', error);
-    });
-
-    child.stderr?.on('data', chunk => {
-      const text = String(chunk || '').trim();
-      if (!text) return;
-      console.warn(`[Daemon][child] ${text}`);
-    });
-
-    child.once('exit', (code, signal) => {
-      if (managedDaemonProcess === child) {
-        managedDaemonProcess = null;
-      }
-      if (code === 0 || signal === 'SIGTERM') return;
-      console.warn(
-        `[Daemon] Desktop-managed daemon exited unexpectedly (code=${code}, signal=${signal}).`
-      );
-    });
-
-    const healthy = await waitForDaemonHealthy(binding.port);
+    const healthy = await waitForDaemonHealthy(binding.port, probeHost);
     if (!healthy) {
-      console.warn(
-        `[Daemon] Autostarted process not healthy within ${STARTUP_WAIT_TIMEOUT_MS}ms, switching to embedded mode.`
+      logger.warn(
+        `[Daemon] Embedded daemon not healthy within ${STARTUP_WAIT_TIMEOUT_MS}ms; stopping embedded instance.`
       );
-      if (!child.killed) child.kill('SIGTERM');
-      if (managedDaemonProcess === child) managedDaemonProcess = null;
-      startEmbeddedDaemon(binding);
+      stopEmbeddedDaemon();
       return;
     }
 
-    stopEmbeddedDaemon();
-    console.log(
-      `[Daemon] Desktop-managed daemon ready on http://${binding.host}:${binding.port}.`
+    logger.info(
+      `[Daemon] Desktop-embedded daemon ready on http://${binding.host}:${binding.port}.`
     );
   })()
     .catch(error => {
-      console.warn('[Daemon] Autostart flow failed:', error);
+      logger.warn(`[Daemon] Autostart flow failed: ${String(error)}`);
     })
     .finally(() => {
       startPromise = null;
@@ -254,18 +234,6 @@ export const startDesktopDaemon = async (): Promise<void> => {
 
 export const stopDesktopDaemon = () => {
   startPromise = null;
-
-  const child = managedDaemonProcess;
-  managedDaemonProcess = null;
-  if (child && !child.killed) {
-    child.kill('SIGTERM');
-    const timer = setTimeout(() => {
-      if (!child.killed) {
-        child.kill('SIGKILL');
-      }
-    }, SHUTDOWN_GRACE_MS);
-    timer.unref();
-  }
 
   stopEmbeddedDaemon();
 };
