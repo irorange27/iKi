@@ -1,12 +1,17 @@
 import type { ToolApprovalResponse } from 'ai';
 
-import type { ConversationRunner, AgentResult } from '../../../core/agent';
+import type { ConversationRunner, AgentResult, ToolApprovalRequest } from '../../../core/agent';
 import { getErrorMessage } from '../../utils/errors';
+import type { ApprovalRecoveryContext } from './chat_approval_types';
 import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_types';
 
 export type RegisterApprovalBatch = (
-  approvalRequests: Array<{ approvalId: string }>,
-  session: { runner: ConversationRunner; webContents: ChatWebContents }
+  approvalRequests: ToolApprovalRequest[],
+  session: {
+    runner: ConversationRunner;
+    webContents: ChatWebContents;
+    recoveryContext?: ApprovalRecoveryContext;
+  }
 ) => void;
 
 export type ToolLoopStreamParams = {
@@ -18,6 +23,7 @@ export type ToolLoopStreamParams = {
   onToolEvent?: (event: ToolStreamEvent) => void;
   abortSignal?: AbortSignal;
   uiChunkEmitter?: UiChunkEmitter;
+  approvalContext?: ApprovalRecoveryContext;
 };
 
 export type ToolLoopStreamResult = {
@@ -100,6 +106,7 @@ const streamToolLoop = async (
     params.registerApprovalBatch(agentResult.toolApprovalRequests, {
       runner: params.runner,
       webContents: params.webContents,
+      ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
     });
     return { awaitingApproval: true };
   }

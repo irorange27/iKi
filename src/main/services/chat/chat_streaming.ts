@@ -22,6 +22,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import { resolveSkillsSystemPrompt } from './chat_skills';
+import type { ApprovalRecoveryContext } from './chat_approval_types';
 import { createChatConversationRunner } from './chat_conversation_runner';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
@@ -45,7 +46,11 @@ export const createChatStreaming = (deps: {
   approvals: {
     ensurePendingApprovalSession: (
       approvalId: string,
-      session: { runner: ConversationRunner; webContents: ChatWebContents }
+      session: {
+        runner: ConversationRunner;
+        webContents: ChatWebContents;
+        recoveryContext?: ApprovalRecoveryContext;
+      }
     ) => unknown;
     registerApprovalBatch: RegisterApprovalBatch;
   };
@@ -195,6 +200,29 @@ export const createChatStreaming = (deps: {
     const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
     const registered = requireApproval ? { ...tool, needsApproval: true } : tool;
     runner.registerTool(registered);
+  };
+
+  const createApprovalRecoveryContext = (params: {
+    threadId?: string;
+    sessionId: string;
+    providerType: string;
+    model: string;
+    systemPrompt: string;
+    enabledTools: string[];
+  }): ApprovalRecoveryContext | undefined => {
+    const threadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
+    const sessionId = params.sessionId.trim();
+    if (!threadId || !sessionId) return undefined;
+
+    return {
+      sessionId,
+      threadId,
+      assistantMessageId: sessionId,
+      providerType: params.providerType,
+      model: params.model,
+      systemPrompt: params.systemPrompt,
+      enabledTools: [...params.enabledTools],
+    };
   };
 
   const getModels = async (providerType: string) => {
@@ -399,6 +427,16 @@ export const createChatStreaming = (deps: {
       const systemPrompt = [enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '', skillsSystemPrompt]
         .filter(Boolean)
         .join('\n\n');
+      const approvalContext = enableTools
+        ? createApprovalRecoveryContext({
+            threadId: options.threadId,
+            sessionId: uiChunkEmitter.messageId,
+            providerType: options.providerType,
+            model: options.model,
+            systemPrompt,
+            enabledTools: guardedTools,
+          })
+        : undefined;
 
       const runner = createChatConversationRunner({
         providerType: options.providerType,
@@ -435,6 +473,7 @@ export const createChatStreaming = (deps: {
         runner,
         webContents,
         prompt,
+        approvalContext,
         shouldCancel: () => streamState.cancelled,
         onToolEvent: eventPart => {
           if (
@@ -445,6 +484,7 @@ export const createChatStreaming = (deps: {
             deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
               runner,
               webContents,
+              recoveryContext: approvalContext,
             });
           }
           uiChunkEmitter.emitToolEvent(eventPart);

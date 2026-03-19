@@ -1,23 +1,23 @@
 import type { ToolApprovalResponse } from 'ai';
 
 import type { ConversationRunner } from '../../../core/agent';
+import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
-import * as chatThreadDb from '../../../core/db/chat_thread';
-import { buildSkillsSystemPrompt, normalizeSkillIds } from '../../../core/skills';
 import { defaultToolRegistry } from '../../../core/tools';
-import { isObjectRecord } from '../../../shared/chat/tool_parts';
+import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_approval';
 import { getErrorMessage } from '../../utils/errors';
-import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
+import type { ApprovalRecoveryContext } from './chat_approval_types';
 import type { ActiveStreamState, ChatWebContents } from './chat_types';
 import { createUiChunkEmitter, parseStoredUiMessageRow, toModelInputMessages } from './chat_ui';
 import { createChatConversationRunner } from './chat_conversation_runner';
 import { createToolLoopRunner } from './chat_tool_loop';
-import type { ParsedUiMessage } from '../../../shared/chat/ui_message_codec';
 
 type PendingApprovalSession = {
+  sessionId?: string;
   runner: ConversationRunner;
   webContents: ChatWebContents;
+  recoveryContext?: ApprovalRecoveryContext;
   pendingApprovalIds: Set<string>;
   collectedApprovalResponses: Map<string, ToolApprovalResponse>;
 };
@@ -30,14 +30,28 @@ export const createChatApproval = (deps: {
 
   const ensurePendingApprovalSession = (
     approvalId: string,
-    session: { runner: ConversationRunner; webContents: ChatWebContents }
+    session: {
+      runner: ConversationRunner;
+      webContents: ChatWebContents;
+      recoveryContext?: ApprovalRecoveryContext;
+    }
   ) => {
     const existing = pendingApprovalSessions.get(approvalId);
-    if (existing) return existing;
+    if (existing) {
+      existing.webContents = session.webContents;
+      existing.recoveryContext = session.recoveryContext ?? existing.recoveryContext;
+      if (session.recoveryContext?.sessionId) {
+        existing.sessionId = session.recoveryContext.sessionId;
+      }
+      existing.pendingApprovalIds.add(approvalId);
+      return existing;
+    }
 
     const created: PendingApprovalSession = {
+      sessionId: session.recoveryContext?.sessionId,
       runner: session.runner,
       webContents: session.webContents,
+      recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set([approvalId]),
       collectedApprovalResponses: new Map(),
     };
@@ -46,8 +60,16 @@ export const createChatApproval = (deps: {
   };
 
   const registerApprovalBatch = (
-    approvalRequests: Array<{ approvalId: string }>,
-    session: { runner: ConversationRunner; webContents: ChatWebContents }
+    approvalRequests: Array<{
+      approvalId: string;
+      toolCallId?: string;
+      toolCall?: { toolName: string; args: Record<string, unknown> };
+    }>,
+    session: {
+      runner: ConversationRunner;
+      webContents: ChatWebContents;
+      recoveryContext?: ApprovalRecoveryContext;
+    }
   ) => {
     const approvalIds = approvalRequests
       .map(request => request.approvalId)
@@ -55,9 +77,34 @@ export const createChatApproval = (deps: {
 
     if (approvalIds.length === 0) return;
 
+    if (session.recoveryContext) {
+      chatToolApprovalDb.upsertChatToolApprovalSession({
+        session_id: session.recoveryContext.sessionId,
+        thread_id: session.recoveryContext.threadId,
+        assistant_message_id: session.recoveryContext.assistantMessageId,
+        provider_type: session.recoveryContext.providerType,
+        model: session.recoveryContext.model,
+        system_prompt: session.recoveryContext.systemPrompt,
+        enabled_tools: JSON.stringify(session.recoveryContext.enabledTools),
+      });
+
+      chatToolApprovalDb.upsertChatToolApprovals(
+        approvalRequests.map(request => ({
+          approval_id: request.approvalId,
+          session_id: session.recoveryContext!.sessionId,
+          tool_call_id: request.toolCallId || null,
+          tool_name: request.toolCall?.toolName || null,
+          tool_args: request.toolCall ? JSON.stringify(request.toolCall.args ?? {}) : null,
+          state: 'pending',
+        }))
+      );
+    }
+
     const pendingSession: PendingApprovalSession = {
+      sessionId: session.recoveryContext?.sessionId,
       runner: session.runner,
       webContents: session.webContents,
+      recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set(approvalIds),
       collectedApprovalResponses: new Map(),
     };
@@ -69,50 +116,6 @@ export const createChatApproval = (deps: {
 
   const toolLoopRunner = createToolLoopRunner({ registerApprovalBatch });
 
-  const getPendingApprovalIdsFromUiMessage = (message: ParsedUiMessage): string[] => {
-    const parts = Array.isArray(message.parts) ? (message.parts as unknown[]) : [];
-    const ids: string[] = [];
-
-    for (const part of parts) {
-      if (!isObjectRecord(part)) continue;
-      if (part.type !== 'dynamic-tool') continue;
-      if (part.state !== 'approval-requested') continue;
-
-      const approvalId =
-        typeof part.approvalId === 'string'
-          ? part.approvalId
-          : isObjectRecord(part.approval) && typeof part.approval.id === 'string'
-            ? part.approval.id
-            : '';
-
-      if (approvalId) ids.push(approvalId);
-    }
-
-    return ids;
-  };
-
-  const getToolNameForApproval = (message: ParsedUiMessage, approvalId: string): string | null => {
-    const parts = Array.isArray(message.parts) ? (message.parts as unknown[]) : [];
-    for (const part of parts) {
-      if (!isObjectRecord(part)) continue;
-      if (part.type !== 'dynamic-tool') continue;
-      if (part.state !== 'approval-requested') continue;
-
-      const partApprovalId =
-        typeof part.approvalId === 'string'
-          ? part.approvalId
-          : isObjectRecord(part.approval) && typeof part.approval.id === 'string'
-            ? part.approval.id
-            : '';
-
-      if (partApprovalId !== approvalId) continue;
-      if (typeof part.toolName === 'string' && part.toolName.trim()) {
-        return part.toolName.trim();
-      }
-    }
-    return null;
-  };
-
   const tryRecoverApprovalSession = async (
     approvalId: string,
     webContents: ChatWebContents
@@ -121,52 +124,34 @@ export const createChatApproval = (deps: {
     const needle = approvalId.trim();
     if (!needle) return null;
 
-    // 1) Find a message that contains this approval id and is still pending.
-    const candidates = chatMessageDb.findChatMessagesByMessageSubstring(needle, 50);
-    const match = candidates.find(row => {
-      const ui = parseStoredUiMessageRow({ id: row.id, message: row.message });
-      return getPendingApprovalIdsFromUiMessage(ui).includes(needle);
-    });
-
-    if (!match) return null;
-
-    const threadId = typeof match.thread_id === 'string' ? match.thread_id : '';
-    if (!threadId) return null;
-
-    // 2) Load thread context (provider/model/tools/skills)
-    const thread = chatThreadDb.getChatThread(threadId);
-    if (!thread) return null;
-
-    let providerType = '';
-    let model = '';
-    try {
-      const meta = thread.metadata ? JSON.parse(thread.metadata) : {};
-      if (isObjectRecord(meta) && isObjectRecord(meta.llm)) {
-        if (typeof meta.llm.providerType === 'string') providerType = meta.llm.providerType;
-        if (typeof meta.llm.model === 'string') model = meta.llm.model;
-      }
-    } catch {
-      // ignore
-    }
-
-    if (!model && typeof thread.model === 'string') {
-      model = thread.model;
-    }
-
-    // providerType is mandatory for rebuilding the agent; without it we cannot reliably resume.
-    if (!providerType || !model) {
-      console.warn('[Main] Cannot recover approval session: missing providerType/model', {
-        threadId,
-        providerType,
-        model,
-      });
+    const approvalRecord = chatToolApprovalDb.getChatToolApproval(needle);
+    if (!approvalRecord || approvalRecord.state === 'consumed') {
       return null;
     }
 
+    const approvalSession = chatToolApprovalDb.getChatToolApprovalSession(
+      approvalRecord.session_id
+    );
+    if (!approvalSession) return null;
+
+    const threadId = approvalSession.thread_id;
+    if (!threadId) return null;
+
+    const rows = chatMessageDb.getChatMessages(threadId);
+    if (rows.length === 0) return null;
+
+    const uiMessages = rows.map(row =>
+      parseStoredUiMessageRow({ id: row.id, message: row.message })
+    );
+    const inputMessages = deps.memory.injectMemoryIntoMessages(
+      await toModelInputMessages(uiMessages),
+      threadId
+    );
+
     let toolNames: string[] = [];
-    if (thread.tools) {
+    if (approvalSession.enabled_tools) {
       try {
-        const parsed = JSON.parse(thread.tools);
+        const parsed = JSON.parse(approvalSession.enabled_tools);
         if (Array.isArray(parsed)) {
           toolNames = parsed.filter(
             (t): t is string => typeof t === 'string' && t.trim().length > 0
@@ -177,41 +162,27 @@ export const createChatApproval = (deps: {
       }
     }
 
-    // 3) Rebuild tool list if thread.tools was not persisted (older threads).
+    const activeApprovals = chatToolApprovalDb.getActiveChatToolApprovalsBySession(
+      approvalSession.session_id
+    );
+    if (activeApprovals.length === 0) {
+      return null;
+    }
+
     if (toolNames.length === 0) {
-      const toolName = getToolNameForApproval(
-        parseStoredUiMessageRow({ id: match.id, message: match.message }),
-        needle
+      toolNames = Array.from(
+        new Set(
+          activeApprovals
+            .map(record => (typeof record.tool_name === 'string' ? record.tool_name.trim() : ''))
+            .filter(Boolean)
+        )
       );
-      if (toolName) toolNames = [toolName];
     }
-
-    // 4) Load UI messages from DB and convert them back to model messages (AI SDK boundary).
-    const rows = chatMessageDb.getChatMessages(threadId);
-    const uiMessages = rows.map(row =>
-      parseStoredUiMessageRow({ id: row.id, message: row.message })
-    );
-    const inputMessages = deps.memory.injectMemoryIntoMessages(
-      await toModelInputMessages(uiMessages),
-      threadId
-    );
-
-    // 5) Rebuild agent + pending approval batch.
-    let normalizedSkillIds: string[] = [];
-    try {
-      if (thread.skill_ids) {
-        normalizedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
-      }
-    } catch {
-      normalizedSkillIds = [];
-    }
-    const skillsSystemPrompt =
-      normalizedSkillIds.length > 0 ? await buildSkillsSystemPrompt(normalizedSkillIds) : '';
 
     const runner = createChatConversationRunner({
-      providerType,
-      model,
-      systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'),
+      providerType: approvalSession.provider_type,
+      model: approvalSession.model,
+      systemPrompt: approvalSession.system_prompt,
       enableTools: true,
       maxIterations: 5,
     });
@@ -223,22 +194,38 @@ export const createChatApproval = (deps: {
 
     runner.setModelMessages(inputMessages);
 
-    const pendingApprovalIds = new Set<string>();
-    for (const ui of uiMessages) {
-      for (const id of getPendingApprovalIdsFromUiMessage(ui)) {
-        pendingApprovalIds.add(id);
-      }
-    }
-
-    if (pendingApprovalIds.size === 0) {
-      return null;
+    const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
+    const collectedApprovalResponses = new Map<string, ToolApprovalResponse>();
+    for (const record of activeApprovals) {
+      if (record.state !== 'answered' || !record.decision) continue;
+      collectedApprovalResponses.set(record.approval_id, {
+        type: 'tool-approval-response',
+        approvalId: record.approval_id,
+        approved: record.decision === 'approved',
+        reason:
+          typeof record.decision_reason === 'string' && record.decision_reason.trim()
+            ? record.decision_reason
+            : record.decision === 'approved'
+              ? 'User approved tool execution.'
+              : 'User rejected tool execution.',
+      });
     }
 
     const session: PendingApprovalSession = {
+      sessionId: approvalSession.session_id,
       runner,
       webContents,
+      recoveryContext: {
+        sessionId: approvalSession.session_id,
+        threadId: approvalSession.thread_id,
+        assistantMessageId: approvalSession.assistant_message_id,
+        providerType: approvalSession.provider_type,
+        model: approvalSession.model,
+        systemPrompt: approvalSession.system_prompt,
+        enabledTools: toolNames,
+      },
       pendingApprovalIds,
-      collectedApprovalResponses: new Map(),
+      collectedApprovalResponses,
     };
 
     for (const id of pendingApprovalIds) {
@@ -253,11 +240,18 @@ export const createChatApproval = (deps: {
     approvalId: string,
     approved: boolean
   ) => {
+    const storedApproval = chatToolApprovalDb.getChatToolApproval(approvalId);
     let session = pendingApprovalSessions.get(approvalId);
     if (!session) {
       session = await tryRecoverApprovalSession(approvalId, webContents);
     }
     if (!session) {
+      if (storedApproval && storedApproval.state !== 'pending') {
+        return {
+          success: false,
+          error: 'Approval request already processed.',
+        };
+      }
       return {
         success: false,
         error: 'Approval request not found or already processed.',
@@ -282,6 +276,8 @@ export const createChatApproval = (deps: {
     }
 
     session.collectedApprovalResponses.set(approvalId, approvalResponse);
+    const decision: ChatToolApprovalDecision = approved ? 'approved' : 'rejected';
+    chatToolApprovalDb.answerChatToolApproval(approvalId, decision, approvalResponse.reason);
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
       id => !session.collectedApprovalResponses.has(id)
@@ -298,6 +294,9 @@ export const createChatApproval = (deps: {
     for (const pendingId of session.pendingApprovalIds) {
       pendingApprovalSessions.delete(pendingId);
     }
+    if (session.sessionId) {
+      chatToolApprovalDb.consumeChatToolApprovalSession(session.sessionId);
+    }
 
     const resumedSenderId = session.webContents.id;
     const existingStream = deps.activeStreams.get(resumedSenderId);
@@ -312,6 +311,13 @@ export const createChatApproval = (deps: {
       abortController: new AbortController(),
     };
     const uiChunkEmitter = createUiChunkEmitter(session.webContents);
+    const nextApprovalContext = session.recoveryContext
+      ? {
+          ...session.recoveryContext,
+          sessionId: uiChunkEmitter.messageId,
+          assistantMessageId: uiChunkEmitter.messageId,
+        }
+      : undefined;
     deps.activeStreams.set(resumedSenderId, streamState);
 
     try {
@@ -320,6 +326,7 @@ export const createChatApproval = (deps: {
         webContents: session.webContents,
         prompt: '',
         approvalResponses: Array.from(session.collectedApprovalResponses.values()),
+        approvalContext: nextApprovalContext,
         shouldCancel: () => streamState.cancelled,
         onToolEvent: eventPart => {
           if (
@@ -330,6 +337,7 @@ export const createChatApproval = (deps: {
             ensurePendingApprovalSession(eventPart.approvalId, {
               runner: session.runner,
               webContents: session.webContents,
+              recoveryContext: nextApprovalContext,
             });
           }
           uiChunkEmitter.emitToolEvent(eventPart);

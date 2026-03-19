@@ -10,6 +10,7 @@ export type {
   AgentTool,
   AgentState,
   AgentResult,
+  ToolApprovalRequest,
   AgentHook,
   AgentHookContext,
   PartialAgentConfig,

@@ -10,6 +10,7 @@ import { migration as migration008 } from './008_add_workflow_profiles_table';
 import { migration as migration009McpServers } from './009_add_mcp_servers_table';
 import { migration as migration009AffectStates } from './009_add_affect_states_table';
 import { migration as migration010ProactiveCron } from './010_add_proactive_tasks_cron';
+import { migration as migration011ChatToolApprovals } from './011_add_chat_tool_approval_tables';
 
 // Register all migrations here
 const migrations = [
@@ -24,6 +25,7 @@ const migrations = [
   migration009McpServers,
   migration009AffectStates,
   migration010ProactiveCron,
+  migration011ChatToolApprovals,
   // Add more migrations here as needed
 ];
 
