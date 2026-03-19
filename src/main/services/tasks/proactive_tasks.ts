@@ -4,35 +4,15 @@ import * as tasksDb from '../../../core/db/tasks';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
+import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
 
 const SCHEDULER_TICK_MS = 30_000;
-const MIN_INTERVAL_MINUTES = 1;
-const MAX_INTERVAL_MINUTES = 60 * 24 * 7; // 7 days
 
 let schedulerTimer: NodeJS.Timeout | null = null;
 let tickInFlight = false;
 const taskInFlight = new Set<string>();
 
 const nowIso = () => new Date().toISOString();
-
-const clampIntervalMinutes = (value: unknown): number => {
-  const asNumber = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(asNumber)) return 60;
-  return Math.min(MAX_INTERVAL_MINUTES, Math.max(MIN_INTERVAL_MINUTES, Math.trunc(asNumber)));
-};
-
-const addMinutes = (baseIso: string, minutes: number): string => {
-  const base = new Date(baseIso);
-  if (Number.isNaN(base.getTime())) return nowIso();
-  base.setMinutes(base.getMinutes() + minutes);
-  return base.toISOString();
-};
-
-const computeNextRunAt = (task: { schedule_type?: string; interval_minutes?: number }, fromIso: string) => {
-  // For now we only support a simple interval schedule.
-  const minutes = clampIntervalMinutes(task.interval_minutes);
-  return addMinutes(fromIso, minutes);
-};
 
 const safeParseTools = (raw: unknown): string[] => {
   if (Array.isArray(raw)) {
@@ -88,7 +68,10 @@ const ensureTaskThread = async (task: {
   model: string;
   thread_id?: string | null;
   prompt: string;
+  schedule_type?: string;
   interval_minutes: number;
+  cron_expression?: string | null;
+  schedule_timezone?: string | null;
 }): Promise<string> => {
   const existingThreadId = typeof task.thread_id === 'string' && task.thread_id.trim() ? task.thread_id.trim() : '';
   if (existingThreadId) {
@@ -112,10 +95,17 @@ const ensureTaskThread = async (task: {
   tasksDb.updateProactiveTask(task.id, { thread_id: threadId });
 
   // Write a "pinned" intro message so the thread explains what it is.
+  const scheduleLine =
+    task.schedule_type === 'cron'
+      ? `**Schedule:** ${task.cron_expression || 'cron'}${
+          task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)'
+        }`
+      : `**Schedule:** every ${clampIntervalMinutes(task.interval_minutes)} minute(s)`;
+
   const introText = [
     `### ⏰ Proactive Task Created`,
     `**Name:** ${task.name}`,
-    `**Schedule:** every ${clampIntervalMinutes(task.interval_minutes)} minute(s)`,
+    scheduleLine,
     '',
     '**Prompt:**',
     task.prompt,
@@ -164,7 +154,10 @@ export const runProactiveTask = async (taskId: string, options?: { reason?: 'sch
       model: task.model,
       thread_id: task.thread_id ?? null,
       prompt: task.prompt,
+      schedule_type: task.schedule_type,
       interval_minutes: task.interval_minutes,
+      cron_expression: task.cron_expression ?? null,
+      schedule_timezone: task.schedule_timezone ?? null,
     });
 
     const selectedTools = filterSafeTools(safeParseTools(task.tools));
