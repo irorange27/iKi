@@ -282,7 +282,7 @@ const selectedTools = ref<string[]>([]);
 const selectedMcpServerIds = ref<string[]>([]);
 const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
-const toolMode = ref<'manual' | 'auto'>('manual');
+const toolMode = ref<'manual' | 'auto'>('auto');
 const isAutoToolMode = computed(() => toolMode.value === 'auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 
