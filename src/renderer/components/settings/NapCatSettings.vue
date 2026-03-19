@@ -129,7 +129,7 @@
       <div class="card-header">
         <div>
           <div class="card-title">Connection Summary</div>
-          <div class="card-subtitle">What NapCat needs to connect successfully</div>
+          <div class="card-subtitle">What NapCat needs to connect successfully. Auto-refreshes every 5s while open.</div>
         </div>
         <div class="card-actions">
           <button class="reset-btn" type="button" @click="loadDaemonStatus">Refresh Status</button>
@@ -208,7 +208,7 @@
       <div class="card-header">
         <div>
           <div class="card-title">Recent Logs</div>
-          <div class="card-subtitle">Recent daemon and NapCat events for local debugging</div>
+          <div class="card-subtitle">Recent daemon and NapCat events for local debugging. Auto-refreshes every 5s while open.</div>
         </div>
         <div class="card-actions">
           <button class="reset-btn" type="button" @click="loadDaemonLogs">Refresh Logs</button>
@@ -237,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { configService } from '../../services/config_service';
@@ -270,6 +270,8 @@ type ProviderOption = {
   duplicateCount: number;
 };
 
+const MONITORING_POLL_MS = 5000;
+
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
 
@@ -284,6 +286,7 @@ const daemonStatusError = ref('');
 const daemonLogs = ref<DaemonLogsInfo | null>(null);
 const daemonLogsLoading = ref(false);
 const daemonLogsError = ref('');
+let monitoringPollTimer: ReturnType<typeof setInterval> | null = null;
 
 const napcat = computed(() => config.value.bridges.napcat);
 const accessToken = computed(() => napcat.value.accessToken.trim());
@@ -470,6 +473,7 @@ const loadRuntimeInfo = async () => {
 };
 
 const loadDaemonStatus = async () => {
+  if (daemonStatusLoading.value) return;
   daemonStatusLoading.value = true;
   daemonStatusError.value = '';
   try {
@@ -483,6 +487,7 @@ const loadDaemonStatus = async () => {
 };
 
 const loadDaemonLogs = async () => {
+  if (daemonLogsLoading.value) return;
   daemonLogsLoading.value = true;
   daemonLogsError.value = '';
   try {
@@ -495,18 +500,42 @@ const loadDaemonLogs = async () => {
   }
 };
 
+const refreshMonitoring = () => {
+  void loadDaemonStatus();
+  void loadDaemonLogs();
+};
+
+const stopMonitoringPoll = () => {
+  if (monitoringPollTimer === null) return;
+  clearInterval(monitoringPollTimer);
+  monitoringPollTimer = null;
+};
+
+const startMonitoringPoll = () => {
+  if (monitoringPollTimer !== null) return;
+  monitoringPollTimer = setInterval(() => {
+    refreshMonitoring();
+  }, MONITORING_POLL_MS);
+};
+
 watch(
   () => props.active,
   active => {
     if (active) {
       void loadProviders();
       void loadRuntimeInfo();
-      void loadDaemonStatus();
-      void loadDaemonLogs();
+      refreshMonitoring();
+      startMonitoringPoll();
+      return;
     }
+    stopMonitoringPoll();
   },
   { immediate: true }
 );
+
+onUnmounted(() => {
+  stopMonitoringPoll();
+});
 </script>
 
 <style scoped>
