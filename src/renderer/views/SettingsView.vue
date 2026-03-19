@@ -182,7 +182,7 @@
         :active="activeSection === 'bridges'"
         v-show="activeSection === 'bridges'"
         @config-change="autoSave"
-        @reset="resetSection('bridges')"
+        @reset="resetBridgeSection"
       />
 
       <!-- Speech -->
@@ -2552,6 +2552,12 @@ const updateShellHighRiskPatterns = (value: string) => {
 
 const resetSection = (section: keyof AppConfig) => {
   configStore.resetSection(section);
+  saved.value = true;
+};
+
+const resetBridgeSection = () => {
+  configStore.resetSection('bridges');
+  configStore.resetSection('daemon');
   saved.value = true;
 };
 

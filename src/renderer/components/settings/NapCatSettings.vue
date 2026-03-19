@@ -3,8 +3,9 @@
     <div class="config-group">
       <h3>NapCat (QQ)</h3>
       <p class="group-description">
-        Configure the reverse WebSocket bridge exposed by the daemon at
-        <code>ws://127.0.0.1:6127/onebot/v11/ws</code>.
+        Configure the reverse WebSocket bridge exposed by the daemon at path
+        <code>/onebot/v11/ws</code>. If NapCat runs in Docker, use a host-reachable daemon address
+        instead of <code>localhost</code>.
       </p>
 
       <label class="checkbox-label">
@@ -28,6 +29,36 @@
           If set, NapCat must connect with <code>?access_token=...</code>.
         </small>
       </label>
+
+      <div class="config-inline">
+        <label class="input-label">
+          <span>Daemon Host</span>
+          <input
+            type="text"
+            :value="daemonHost"
+            placeholder="127.0.0.1"
+            @input="updateDaemonHost(($event.target as HTMLInputElement).value)"
+          />
+          <small class="input-help">
+            Use <code>0.0.0.0</code> to listen on all interfaces for LAN/Docker access.
+          </small>
+        </label>
+
+        <label class="input-label">
+          <span>Daemon Port</span>
+          <input
+            type="number"
+            min="1"
+            max="65535"
+            :value="daemonPort"
+            placeholder="6127"
+            @input="updateDaemonPort(($event.target as HTMLInputElement).value)"
+          />
+        </label>
+      </div>
+      <p class="group-description">
+        Changing daemon host/port will restart the desktop-managed daemon after saving settings.
+      </p>
 
       <div class="config-inline">
         <label class="input-label">
@@ -100,6 +131,9 @@
           <div class="card-title">Connection Summary</div>
           <div class="card-subtitle">What NapCat needs to connect successfully</div>
         </div>
+        <div class="card-actions">
+          <button class="reset-btn" type="button" @click="loadDaemonStatus">Refresh Status</button>
+        </div>
       </div>
 
       <div class="summary-list">
@@ -110,8 +144,18 @@
           </span>
         </div>
         <div class="summary-row">
+          <span class="summary-label">Daemon</span>
+          <span class="status-chip" :class="daemonStatusClass">
+            {{ daemonStatusChip }}
+          </span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Listening</span>
+          <code class="summary-code">{{ activeDaemonAddress }}</code>
+        </div>
+        <div class="summary-row">
           <span class="summary-label">Endpoint</span>
-          <code>ws://127.0.0.1:6127/onebot/v11/ws</code>
+          <code class="summary-code">ws://{{ activeDaemonAddress }}/onebot/v11/ws</code>
         </div>
         <div class="summary-row">
           <span class="summary-label">Authentication</span>
@@ -126,6 +170,38 @@
           <span>{{ toolSummary }}</span>
         </div>
       </div>
+
+      <p class="group-description">{{ daemonStatusDetail }}</p>
+    </div>
+
+    <div class="settings-card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Runtime Paths</div>
+          <div class="card-subtitle">The desktop app and daemon should read the same config DB</div>
+        </div>
+      </div>
+
+      <div class="summary-list">
+        <div class="summary-row">
+          <span class="summary-label">Config DB</span>
+          <code class="summary-code">{{ configPathSummary }}</code>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Local NapCat URL</span>
+          <code class="summary-code">{{ localWsUrl }}</code>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Docker NapCat URL</span>
+          <code class="summary-code">{{ dockerWsUrl }}</code>
+        </div>
+      </div>
+
+      <p class="group-description">
+        When the URL already includes <code>access_token=...</code>, leave NapCat's separate
+        <code>Token</code> field empty to avoid mixing two auth paths.
+      </p>
+      <p v-if="runtimeInfoError" class="error-text">{{ runtimeInfoError }}</p>
     </div>
 
     <div class="config-actions">
@@ -138,9 +214,11 @@
 import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
+import { configService } from '../../services/config_service';
 import { useConfigStore } from '../../store/config';
-import type { AppConfig } from '../../../shared/types/config';
+import type { AppConfig, ConfigRuntimeInfo, DaemonStatusInfo } from '../../../shared/types/config';
 import type { Provider } from '../../../shared/types/provider';
+import { buildNapCatWsUrl, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../../../shared/constants/daemon';
 import { parseModelList } from '../../../shared/utils/provider_models';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -167,8 +245,24 @@ const { config } = storeToRefs(configStore);
 const providers = ref<Provider[]>([]);
 const providersLoading = ref(false);
 const providersError = ref('');
+const runtimeInfo = ref<ConfigRuntimeInfo | null>(null);
+const runtimeInfoError = ref('');
+const daemonStatus = ref<DaemonStatusInfo | null>(null);
+const daemonStatusLoading = ref(false);
+const daemonStatusError = ref('');
 
 const napcat = computed(() => config.value.bridges.napcat);
+const accessToken = computed(() => napcat.value.accessToken.trim());
+const daemonHost = computed(() => {
+  const host = config.value.daemon?.host;
+  if (typeof host !== 'string' || !host.trim()) return DEFAULT_DAEMON_HOST;
+  return host.trim();
+});
+const daemonPort = computed(() => {
+  const port = Number(config.value.daemon?.port);
+  if (!Number.isFinite(port) || port < 1 || port > 65535) return DEFAULT_DAEMON_PORT;
+  return Math.trunc(port);
+});
 
 const providerOptions = computed<ProviderOption[]>(() => {
   const byType = new Map<string, ProviderOption>();
@@ -226,11 +320,66 @@ const toolSummary = computed(() => {
   return napcat.value.tools.length > 0 ? napcat.value.tools.join(', ') : 'Disabled';
 });
 
+const configPathSummary = computed(() => runtimeInfo.value?.dbPath || 'Unavailable');
+const daemonStatusChip = computed(() => {
+  if (daemonStatusLoading.value) return 'Checking';
+  if (daemonStatus.value?.online) return 'Online';
+  return 'Offline';
+});
+const daemonStatusClass = computed(() => ({
+  active: Boolean(daemonStatus.value?.online),
+}));
+const daemonStatusDetail = computed(() => {
+  if (daemonStatusLoading.value) return 'Checking daemon health...';
+  if (daemonStatusError.value) return daemonStatusError.value;
+  if (!daemonStatus.value) return 'Daemon status unavailable.';
+  if (daemonStatus.value.online && daemonStatus.value.uptimeSeconds !== null) {
+    return `Uptime ${daemonStatus.value.uptimeSeconds.toFixed(0)}s`;
+  }
+  if (daemonStatus.value.error) return daemonStatus.value.error;
+  return `Using ${daemonStatus.value.source} address information.`;
+});
+const activeDaemonHost = computed(() => daemonStatus.value?.host || daemonHost.value);
+const activeDaemonPort = computed(() => daemonStatus.value?.port || daemonPort.value);
+const activeDaemonAddress = computed(() => `${activeDaemonHost.value}:${activeDaemonPort.value}`);
+
+const localWsUrl = computed(() =>
+  buildNapCatWsUrl(
+    activeDaemonHost.value,
+    activeDaemonPort.value,
+    accessToken.value
+  )
+);
+
+const dockerWsUrl = computed(() =>
+  buildNapCatWsUrl(
+    'host.docker.internal',
+    activeDaemonPort.value,
+    accessToken.value
+  )
+);
+
 const updateNapCat = <K extends keyof AppConfig['bridges']['napcat']>(
   key: K,
   value: AppConfig['bridges']['napcat'][K]
 ) => {
   config.value.bridges.napcat[key] = value;
+  emit('config-change');
+};
+
+const updateDaemonHost = (value: string) => {
+  config.value.daemon.host = value;
+  emit('config-change');
+};
+
+const updateDaemonPort = (value: string) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) {
+    config.value.daemon.port = DEFAULT_DAEMON_PORT;
+    emit('config-change');
+    return;
+  }
+  config.value.daemon.port = Math.trunc(parsed);
   emit('config-change');
 };
 
@@ -262,11 +411,36 @@ const loadProviders = async () => {
   }
 };
 
+const loadRuntimeInfo = async () => {
+  runtimeInfoError.value = '';
+  try {
+    runtimeInfo.value = await configService.getRuntimeInfo();
+  } catch (error: any) {
+    runtimeInfo.value = null;
+    runtimeInfoError.value = error?.message || 'Failed to load runtime info.';
+  }
+};
+
+const loadDaemonStatus = async () => {
+  daemonStatusLoading.value = true;
+  daemonStatusError.value = '';
+  try {
+    daemonStatus.value = await configService.getDaemonStatus();
+  } catch (error: any) {
+    daemonStatus.value = null;
+    daemonStatusError.value = error?.message || 'Failed to load daemon status.';
+  } finally {
+    daemonStatusLoading.value = false;
+  }
+};
+
 watch(
   () => props.active,
   active => {
     if (active) {
       void loadProviders();
+      void loadRuntimeInfo();
+      void loadDaemonStatus();
     }
   },
   { immediate: true }
@@ -282,10 +456,10 @@ watch(
 
 .config-group,
 .settings-card {
-  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
-  border-radius: 16px;
-  background: var(--color-surface, rgba(255, 255, 255, 0.03));
-  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  background: var(--bg-primary);
+  padding: 20px 22px;
 }
 
 .config-inline {
@@ -312,12 +486,24 @@ watch(
 .input-label select,
 .input-label textarea {
   width: 100%;
-  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  background: var(--color-input, rgba(0, 0, 0, 0.18));
-  color: inherit;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   padding: 10px 12px;
   font: inherit;
+}
+
+.input-label input::placeholder,
+.input-label textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+.input-label input:focus,
+.input-label select:focus,
+.input-label textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
 }
 
 .input-label textarea {
@@ -327,7 +513,7 @@ watch(
 .input-help,
 .group-description,
 .card-subtitle {
-  color: var(--color-text-muted, rgba(255, 255, 255, 0.64));
+  color: var(--text-secondary);
 }
 
 .warning-text,
@@ -366,7 +552,13 @@ watch(
 }
 
 .summary-label {
-  color: var(--color-text-muted, rgba(255, 255, 255, 0.64));
+  color: var(--text-secondary);
+}
+
+.summary-code {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .status-chip {
@@ -389,11 +581,15 @@ watch(
 }
 
 .reset-btn {
-  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-color);
   border-radius: 999px;
   background: transparent;
-  color: inherit;
+  color: var(--text-primary);
   padding: 10px 16px;
   cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  accent-color: var(--accent-color);
 }
 </style>
