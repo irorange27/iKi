@@ -107,11 +107,47 @@ interface ChatThread {
   title: string;
   model?: string;
   updated_at: string;
+  client_id?: string;
+  metadata?: string;
 }
 
 const chatThreads = ref<ChatThread[]>([]);
 const currentThreadId = ref<string | null>(null);
 const deletingThreadIds = ref<Record<string, boolean>>({});
+
+const NON_DESKTOP_SOURCES = new Set(['napcat']);
+const NON_DESKTOP_PREFIXES = ['napcat_'];
+
+const parseThreadSource = (metadataRaw: string | undefined): string => {
+  if (!metadataRaw || typeof metadataRaw !== 'string' || !metadataRaw.trim()) return '';
+  try {
+    const parsed = JSON.parse(metadataRaw) as { source?: unknown };
+    return typeof parsed.source === 'string' ? parsed.source.trim().toLowerCase() : '';
+  } catch {
+    return '';
+  }
+};
+
+const isDesktopMainUiThread = (thread: ChatThread): boolean => {
+  const threadId = typeof thread.id === 'string' ? thread.id.trim() : '';
+  if (!threadId) return false;
+
+  if (NON_DESKTOP_PREFIXES.some(prefix => threadId.startsWith(prefix))) {
+    return false;
+  }
+
+  const clientId = typeof thread.client_id === 'string' ? thread.client_id.trim() : '';
+  if (clientId === 'client_napcat') {
+    return false;
+  }
+
+  const source = parseThreadSource(thread.metadata);
+  if (source && NON_DESKTOP_SOURCES.has(source)) {
+    return false;
+  }
+
+  return true;
+};
 
 // Emit events to parent
 const emit = defineEmits<{
@@ -124,7 +160,9 @@ const emit = defineEmits<{
 const loadChatThreads = async () => {
   try {
     const threads = await window.electronAPI.chat.threads.list();
-    chatThreads.value = threads;
+    chatThreads.value = Array.isArray(threads)
+      ? (threads as ChatThread[]).filter(isDesktopMainUiThread)
+      : [];
   } catch (error) {
     console.error('Failed to load chat threads:', error);
   }
