@@ -1,6 +1,7 @@
 import { BrowserWindow, app } from 'electron';
 import path from 'node:path';
 
+import { maybeOpenDevTools } from './devtools_policy';
 import { getRendererDevServerUrl, getRendererProdHtmlPath } from './renderer';
 
 export const createSettingsWindow = (): BrowserWindow => {
@@ -30,6 +31,13 @@ export const createSettingsWindow = (): BrowserWindow => {
     });
   }
 
-  settingsWindow.webContents.openDevTools({ mode: 'detach' });
+  maybeOpenDevTools(
+    settingsWindow.webContents,
+    {
+      isPackaged: app.isPackaged,
+      autoOpenEnv: process.env.IKI_AUTO_OPEN_DEVTOOLS,
+    },
+    { mode: 'detach' }
+  );
   return settingsWindow;
 };
