@@ -81,6 +81,9 @@ describe('createChatApproval', () => {
       memory: {
         injectMemoryIntoMessages: vi.fn(messages => messages),
       } as never,
+      usage: {
+        recordUsageEvent: vi.fn(),
+      },
     });
 
     const runner = {} as never;
@@ -214,6 +217,9 @@ describe('createChatApproval', () => {
       memory: {
         injectMemoryIntoMessages: vi.fn(messages => messages),
       } as never,
+      usage: {
+        recordUsageEvent: vi.fn(),
+      },
     });
 
     const result = await approvals.approveTool({ id: 9, send: vi.fn() }, 'approval_1', true);

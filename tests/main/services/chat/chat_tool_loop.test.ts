@@ -33,7 +33,19 @@ describe('tool loop runner', () => {
   it('streams text and finishes when no approvals are required', async () => {
     const registerApprovalBatch = vi.fn();
     const runner = createToolLoopRunner({ registerApprovalBatch });
-    const agentResult: AgentResult = { response: 'Final text', iterations: 1 };
+    const agentResult: AgentResult = {
+      response: 'Final text',
+      iterations: 1,
+      usage: {
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        estimatedCostUsd: 0,
+      },
+    };
     const conversationRunner = createConversationRunner(
       createAsyncGenerator(['Hello ', 'world'], agentResult)
     );
@@ -48,6 +60,7 @@ describe('tool loop runner', () => {
     });
 
     expect(result.awaitingApproval).toBe(false);
+    expect(result.usage?.totalTokens).toBe(15);
     expect(uiChunkEmitter.emitTextDelta).toHaveBeenCalledTimes(2);
     expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(1, 'Hello ');
     expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(2, 'world');
@@ -61,6 +74,15 @@ describe('tool loop runner', () => {
     const agentResult: AgentResult = {
       response: '',
       iterations: 1,
+      usage: {
+        inputTokens: 2,
+        outputTokens: 1,
+        totalTokens: 3,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        estimatedCostUsd: 0,
+      },
       toolApprovalRequests: [
         {
           approvalId: 'approval_1',
@@ -80,6 +102,7 @@ describe('tool loop runner', () => {
     });
 
     expect(result.awaitingApproval).toBe(true);
+    expect(result.usage?.totalTokens).toBe(3);
     expect(registerApprovalBatch).toHaveBeenCalledWith(agentResult.toolApprovalRequests, {
       runner: conversationRunner,
       webContents,

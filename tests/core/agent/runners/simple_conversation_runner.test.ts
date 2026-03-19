@@ -26,13 +26,14 @@ describe('SimpleConversationRunner', () => {
     );
 
     SimpleAgentMock.mockImplementation(
-      () =>
-        ({
+      function MockSimpleAgent() {
+        return {
           registerTool,
           setMessages,
           generate,
           stream,
-        }) as unknown as InstanceType<typeof SimpleAgent>
+        } as unknown as InstanceType<typeof SimpleAgent>;
+      } as unknown as (...args: unknown[]) => InstanceType<typeof SimpleAgent>
     );
 
     const runner = createSimpleConversationRunner({

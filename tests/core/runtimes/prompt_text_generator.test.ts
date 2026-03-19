@@ -18,10 +18,11 @@ describe('SimplePromptTextGenerator', () => {
     const generate = vi.fn().mockResolvedValue({ response: 'text' });
 
     SimpleAgentMock.mockImplementation(
-      () =>
-        ({
+      function MockSimpleAgent() {
+        return {
           generate,
-        }) as unknown as InstanceType<typeof SimpleAgent>
+        } as unknown as InstanceType<typeof SimpleAgent>;
+      } as unknown as (...args: unknown[]) => InstanceType<typeof SimpleAgent>
     );
 
     const generator = createSimplePromptTextGenerator({
