@@ -20,8 +20,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Preflight (lockfile sync)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Verify lockfile with npm ci
+        run: npm ci --ignore-scripts
+
   build:
     name: Build (${{ matrix.label }})
+    needs: preflight
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -62,13 +80,32 @@ jobs:
             out/iki-*/**/*
           if-no-files-found: error
 
+  publish:
+    name: Publish release assets
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: make-*
+          path: release-artifacts
+
+      - name: Verify downloaded files
+        run: |
+          if ! find release-artifacts -type f | grep -q .; then
+            echo "No release artifacts found."
+            exit 1
+          fi
+
       - name: Upload assets to release
-        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
-            out/make/**/*
+            release-artifacts/**/*
           fail_on_unmatched_files: true
           overwrite_files: true
         env:
