@@ -651,8 +651,7 @@ onUnmounted(() => {
 }
 
 .bg-secondary {
-  background:
-    linear-gradient(180deg, rgba(38, 42, 50, 0.96) 0%, rgba(31, 35, 42, 0.98) 100%);
+  background: linear-gradient(180deg, rgba(38, 42, 50, 0.96) 0%, rgba(31, 35, 42, 0.98) 100%);
 }
 
 .bg-tertiary {

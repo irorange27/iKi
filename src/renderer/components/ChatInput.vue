@@ -14,7 +14,9 @@
         />
 
         <!-- Bottom toolbar -->
-        <div class="composer-toolbar flex items-center justify-between border-t border-color px-3 py-2">
+        <div
+          class="composer-toolbar flex items-center justify-between border-t border-color px-3 py-2"
+        >
           <div class="composer-toolbar-left flex items-center gap-2">
             <!-- file upload -->
             <button
@@ -676,8 +678,7 @@ onMounted(async () => {
 
 .chat-input-container {
   border-color: rgba(112, 119, 138, 0.34);
-  background:
-    linear-gradient(180deg, rgba(54, 58, 68, 0.96) 0%, rgba(46, 49, 57, 0.98) 100%);
+  background: linear-gradient(180deg, rgba(54, 58, 68, 0.96) 0%, rgba(46, 49, 57, 0.98) 100%);
   box-shadow:
     0 18px 36px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
