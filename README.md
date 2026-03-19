@@ -46,6 +46,9 @@ A local agent pet for AI provider orchestration.
 
 - `release-please` runs on pushes to `main`
 - release PR and version/tag are generated from Conventional Commits
+- `release-build` runs automatically on version file updates in `main`
+  (`package.json` / `.release-please-manifest.json`) and on GitHub Release publish
+- release-build outputs are uploaded to both workflow artifacts and release assets
 - machine-generated release notes live in `CHANGELOG.md`
 - curated product notes continue in `changelogs/`
 - `release-please` uses `RELEASE_PLEASE_TOKEN` (recommended PAT) for PR creation;
