@@ -1,4 +1,4 @@
-import { SimpleAgent } from '../../../core/agent';
+import { type ConversationRunner } from '../../../core/agent';
 import { getAppConfig } from '../../../core/config';
 import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
@@ -22,6 +22,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import { resolveSkillsSystemPrompt } from './chat_skills';
+import { createChatConversationRunner } from './chat_conversation_runner';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
 import type {
@@ -45,7 +46,7 @@ export const createChatStreaming = (deps: {
   approvals: {
     ensurePendingApprovalSession: (
       approvalId: string,
-      session: { agent: SimpleAgent; webContents: ChatWebContents }
+      session: { runner: ConversationRunner; webContents: ChatWebContents }
     ) => unknown;
     registerApprovalBatch: RegisterApprovalBatch;
   };
@@ -184,13 +185,17 @@ export const createChatStreaming = (deps: {
     return tools;
   };
 
-  const registerToolWithGuard = (agent: SimpleAgent, toolName: string, guardActive: boolean) => {
+  const registerToolWithGuard = (
+    runner: ConversationRunner,
+    toolName: string,
+    guardActive: boolean
+  ) => {
     const tool = defaultToolRegistry.get(toolName);
     if (!tool) return;
     const emotionConfig = getEmotionConfig();
     const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
     const registered = requireApproval ? { ...tool, needsApproval: true } : tool;
-    agent.registerTool(registered);
+    runner.registerTool(registered);
   };
 
   const getModels = async (providerType: string) => {
@@ -280,19 +285,17 @@ export const createChatStreaming = (deps: {
       });
 
       if (guardedTools.length > 0) {
-        // Use Agent when tools are enabled for this request
-        const agent = new SimpleAgent({
-          enabled: true,
+        const runner = createChatConversationRunner({
           providerType: options.providerType,
           model: options.model,
-          systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'), // Persona is already integrated in SimpleAgent
+          systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'),
           enableTools: true,
           maxIterations: 5,
         });
 
         // Register selected tools
         for (const toolName of guardedTools) {
-          registerToolWithGuard(agent, toolName, guardActive);
+          registerToolWithGuard(runner, toolName, guardActive);
         }
 
         // Separate user prompt from history
@@ -304,8 +307,8 @@ export const createChatStreaming = (deps: {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        agent.setMessages(toAgentMessages(history));
-        const result = await agent.generate(prompt);
+        runner.setMessages(toAgentMessages(history));
+        const result = await runner.generate(prompt);
         return { success: true, text: result.response };
       }
 
@@ -398,8 +401,7 @@ export const createChatStreaming = (deps: {
         .filter(Boolean)
         .join('\n\n');
 
-      const agent = new SimpleAgent({
-        enabled: true,
+      const runner = createChatConversationRunner({
         providerType: options.providerType,
         model: options.model,
         systemPrompt,
@@ -413,7 +415,7 @@ export const createChatStreaming = (deps: {
             console.warn(`[Main] Tool ${toolName} not found in registry`);
             continue;
           }
-          registerToolWithGuard(agent, toolName, guardActive);
+          registerToolWithGuard(runner, toolName, guardActive);
         }
       }
 
@@ -429,9 +431,9 @@ export const createChatStreaming = (deps: {
         throw new Error('No user prompt provided for streaming');
       }
 
-      agent.setMessages(toAgentMessages(history));
+      runner.setMessages(toAgentMessages(history));
       const streamResult = await toolLoopRunner.stream({
-        agent,
+        runner,
         webContents,
         prompt,
         shouldCancel: () => streamState.cancelled,
@@ -442,7 +444,7 @@ export const createChatStreaming = (deps: {
             eventPart.approvalId.length > 0
           ) {
             deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
-              agent,
+              runner,
               webContents,
             });
           }

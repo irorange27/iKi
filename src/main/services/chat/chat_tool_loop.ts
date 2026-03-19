@@ -1,16 +1,16 @@
 import type { ToolApprovalResponse } from 'ai';
 
-import type { SimpleAgent, AgentResult } from '../../../core/agent';
+import type { ConversationRunner, AgentResult } from '../../../core/agent';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_types';
 
 export type RegisterApprovalBatch = (
   approvalRequests: Array<{ approvalId: string }>,
-  session: { agent: SimpleAgent; webContents: ChatWebContents }
+  session: { runner: ConversationRunner; webContents: ChatWebContents }
 ) => void;
 
 export type ToolLoopStreamParams = {
-  agent: SimpleAgent;
+  runner: ConversationRunner;
   webContents: ChatWebContents;
   prompt: string;
   approvalResponses?: ToolApprovalResponse[];
@@ -39,13 +39,14 @@ export const createToolLoopRunner = (deps: {
     }),
 });
 
-const streamToolLoop = async (params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch }) => {
-  const generator = params.agent.stream(
-    params.prompt,
-    params.approvalResponses,
-    params.onToolEvent,
-    params.abortSignal
-  );
+const streamToolLoop = async (
+  params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch }
+) => {
+  const generator = params.runner.stream(params.prompt, {
+    approvalResponses: params.approvalResponses,
+    onStreamPart: params.onToolEvent,
+    abortSignal: params.abortSignal,
+  });
   let fullResponse = '';
   let cancelled = false;
   let next: IteratorResult<string, AgentResult> | null = null;
@@ -97,7 +98,7 @@ const streamToolLoop = async (params: ToolLoopStreamParams & { registerApprovalB
 
   if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
     params.registerApprovalBatch(agentResult.toolApprovalRequests, {
-      agent: params.agent,
+      runner: params.runner,
       webContents: params.webContents,
     });
     return { awaitingApproval: true };

@@ -15,6 +15,13 @@ export type {
   PartialAgentConfig,
 } from './types';
 
+export type {
+  ConversationRunner,
+  ConversationRunnerFactory,
+  ConversationRunnerStreamEvent,
+  ConversationRunnerStreamOptions,
+} from './runners/conversation_runner';
+
 // Export Zod schemas
 export {
   AgentConfigSchema,
@@ -31,6 +38,10 @@ export { BaseAgent } from './base';
 
 // Export implementations
 export { SimpleAgent } from '../iki_simple_agent';
+export {
+  SimpleConversationRunner,
+  createSimpleConversationRunner,
+} from './runners/simple_conversation_runner';
 
 // Export tools
 export * from '../tools';

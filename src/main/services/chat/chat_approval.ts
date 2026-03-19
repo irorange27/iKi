@@ -1,6 +1,6 @@
 import type { ToolApprovalResponse } from 'ai';
 
-import { SimpleAgent } from '../../../core/agent';
+import type { ConversationRunner } from '../../../core/agent';
 import * as chatMessageDb from '../../../core/db/chat_message';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import { buildSkillsSystemPrompt, normalizeSkillIds } from '../../../core/skills';
@@ -16,11 +16,12 @@ import {
   toAgentMessages,
   toModelInputMessages,
 } from './chat_ui';
+import { createChatConversationRunner } from './chat_conversation_runner';
 import { createToolLoopRunner } from './chat_tool_loop';
 import type { ParsedUiMessage } from '../../../shared/chat/ui_message_codec';
 
 type PendingApprovalSession = {
-  agent: SimpleAgent;
+  runner: ConversationRunner;
   webContents: ChatWebContents;
   pendingApprovalIds: Set<string>;
   collectedApprovalResponses: Map<string, ToolApprovalResponse>;
@@ -34,13 +35,13 @@ export const createChatApproval = (deps: {
 
   const ensurePendingApprovalSession = (
     approvalId: string,
-    session: { agent: SimpleAgent; webContents: ChatWebContents }
+    session: { runner: ConversationRunner; webContents: ChatWebContents }
   ) => {
     const existing = pendingApprovalSessions.get(approvalId);
     if (existing) return existing;
 
     const created: PendingApprovalSession = {
-      agent: session.agent,
+      runner: session.runner,
       webContents: session.webContents,
       pendingApprovalIds: new Set([approvalId]),
       collectedApprovalResponses: new Map(),
@@ -51,7 +52,7 @@ export const createChatApproval = (deps: {
 
   const registerApprovalBatch = (
     approvalRequests: Array<{ approvalId: string }>,
-    session: { agent: SimpleAgent; webContents: ChatWebContents }
+    session: { runner: ConversationRunner; webContents: ChatWebContents }
   ) => {
     const approvalIds = approvalRequests
       .map(request => request.approvalId)
@@ -60,7 +61,7 @@ export const createChatApproval = (deps: {
     if (approvalIds.length === 0) return;
 
     const pendingSession: PendingApprovalSession = {
-      agent: session.agent,
+      runner: session.runner,
       webContents: session.webContents,
       pendingApprovalIds: new Set(approvalIds),
       collectedApprovalResponses: new Map(),
@@ -212,8 +213,7 @@ export const createChatApproval = (deps: {
     const skillsSystemPrompt =
       normalizedSkillIds.length > 0 ? await buildSkillsSystemPrompt(normalizedSkillIds) : '';
 
-    const agent = new SimpleAgent({
-      enabled: true,
+    const runner = createChatConversationRunner({
       providerType,
       model,
       systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'),
@@ -223,10 +223,10 @@ export const createChatApproval = (deps: {
 
     for (const name of toolNames) {
       const tool = defaultToolRegistry.get(name);
-      if (tool) agent.registerTool(tool);
+      if (tool) runner.registerTool(tool);
     }
 
-    agent.setMessages(toAgentMessages(inputMessages));
+    runner.setMessages(toAgentMessages(inputMessages));
 
     const pendingApprovalIds = new Set<string>();
     for (const ui of uiMessages) {
@@ -240,7 +240,7 @@ export const createChatApproval = (deps: {
     }
 
     const session: PendingApprovalSession = {
-      agent,
+      runner,
       webContents,
       pendingApprovalIds,
       collectedApprovalResponses: new Map(),
@@ -321,7 +321,7 @@ export const createChatApproval = (deps: {
 
     try {
       const streamResult = await toolLoopRunner.stream({
-        agent: session.agent,
+        runner: session.runner,
         webContents: session.webContents,
         prompt: '',
         approvalResponses: Array.from(session.collectedApprovalResponses.values()),
@@ -333,7 +333,7 @@ export const createChatApproval = (deps: {
             eventPart.approvalId.length > 0
           ) {
             ensurePendingApprovalSession(eventPart.approvalId, {
-              agent: session.agent,
+              runner: session.runner,
               webContents: session.webContents,
             });
           }
