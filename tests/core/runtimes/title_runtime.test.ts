@@ -1,0 +1,50 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  LlmTitleRuntime,
+  sanitizeGeneratedTitle,
+} from '../../../src/core/runtimes/title_runtime';
+
+describe('sanitizeGeneratedTitle', () => {
+  it('strips quotes and collapses newlines', () => {
+    expect(sanitizeGeneratedTitle(' "Agent tools\nsummary" ')).toBe('Agent tools summary');
+  });
+
+  it('truncates long titles', () => {
+    const longTitle = 'a'.repeat(80);
+    expect(sanitizeGeneratedTitle(longTitle)).toBe(`${'a'.repeat(57)}...`);
+  });
+});
+
+describe('LlmTitleRuntime', () => {
+  it('returns null when no tool model is available', async () => {
+    const runtime = new LlmTitleRuntime({
+      getToolModel: () => null,
+      createAgent: vi.fn(),
+    });
+
+    await expect(runtime.run('conversation')).resolves.toBeNull();
+  });
+
+  it('sanitizes the generated title', async () => {
+    const generate = vi.fn().mockResolvedValue({
+      response: '  "Title with\nline break"  ',
+    });
+    const createAgent = vi.fn(() => ({ generate }));
+    const runtime = new LlmTitleRuntime({
+      getToolModel: () => ({ providerType: 'openai', model: 'gpt-4o-mini' }),
+      createAgent,
+    });
+
+    await expect(runtime.run('conversation text')).resolves.toBe('Title with line break');
+    expect(createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        enableTools: false,
+        maxIterations: 1,
+      })
+    );
+    expect(generate).toHaveBeenCalledWith('conversation text');
+  });
+});

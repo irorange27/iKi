@@ -1,21 +1,21 @@
 <template>
   <div class="chat-input-outer">
-    <div class="mx-auto max-w-3xl">
-      <div class="relative rounded-xl border chat-input-container">
+    <div class="mx-auto max-w-4xl">
+      <div class="relative rounded-[22px] border chat-input-container">
         <input
           ref="inputRef"
           v-model="message"
           type="text"
           placeholder="Type a message..."
-          class="w-full border-0 bg-transparent px-4 py-6 text-primary placeholder-muted focus:outline-none"
+          class="chat-input-field w-full border-0 bg-transparent px-4 py-6 text-primary placeholder-muted focus:outline-none"
           @keydown.enter="handleEnter"
           @compositionstart="handleCompositionStart"
           @compositionend="handleCompositionEnd"
         />
 
         <!-- Bottom toolbar -->
-        <div class="flex items-center justify-between border-t border-color px-3 py-2">
-          <div class="flex items-center gap-2">
+        <div class="composer-toolbar flex items-center justify-between border-t border-color px-3 py-2">
+          <div class="composer-toolbar-left flex items-center gap-2">
             <!-- file upload -->
             <button
               class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
@@ -133,7 +133,7 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="composer-toolbar-right flex items-center gap-2">
             <button
               class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
             >
@@ -212,7 +212,7 @@
               {{ speechStatusLabel }}
             </span>
             <button
-              class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
+              class="send-btn h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
               :class="[
                 isLoading ? 'text-danger stop-btn' : 'text-accent',
                 isStopping ? 'is-stopping' : '',
@@ -675,8 +675,29 @@ onMounted(async () => {
 }
 
 .chat-input-container {
-  border-color: var(--border-color);
-  background-color: var(--bg-tertiary);
+  border-color: rgba(112, 119, 138, 0.34);
+  background:
+    linear-gradient(180deg, rgba(54, 58, 68, 0.96) 0%, rgba(46, 49, 57, 0.98) 100%);
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.chat-input-field {
+  padding-top: 28px;
+  padding-bottom: 28px;
+  font-size: 15px;
+}
+
+.composer-toolbar {
+  padding: 10px 12px 12px;
+  border-top-color: rgba(112, 119, 138, 0.24);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.composer-toolbar-left,
+.composer-toolbar-right {
+  gap: 10px;
 }
 
 .text-primary {
@@ -693,6 +714,11 @@ onMounted(async () => {
 
 button {
   transition: all 0.2s;
+}
+
+.send-btn {
+  background: rgba(96, 165, 250, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.18);
 }
 
 .text-secondary {
@@ -716,6 +742,11 @@ button {
   color: #ffffff;
 }
 
+.send-btn:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.22);
+  color: #ffffff;
+}
+
 .is-stopping {
   opacity: 0.75;
 }
@@ -725,7 +756,7 @@ button {
 }
 
 .icon-btn:hover {
-  background-color: var(--bg-hover);
+  background-color: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
 }
 
@@ -789,8 +820,8 @@ button {
 
 .shadow-xl {
   box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.2),
-    0 10px 10px -5px rgba(0, 0, 0, 0.1);
+    0 24px 44px rgba(0, 0, 0, 0.3),
+    0 12px 18px rgba(0, 0, 0, 0.18);
 }
 
 button:disabled {

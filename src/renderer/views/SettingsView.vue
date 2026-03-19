@@ -2329,7 +2329,7 @@ const menuItems = [
   { key: 'general', label: 'General', icon: Cog }, 
   { key: 'provider', label: 'Providers', icon: Bot },
   { key: 'mcp', label: 'MCP', icon: Plug },
-  { key: 'channels', label: 'Channels', icon: Bot },
+  { key: 'bridges', label: 'Bridges', icon: Bot },
   { key: 'skills', label: 'Skills', icon: Wand2 },  
   { key: 'memory', label: 'Memory', icon: Brain },
   { key: 'ui', label: 'Appearance', icon: Palette },

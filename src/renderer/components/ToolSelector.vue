@@ -28,7 +28,7 @@
 
     <div
       v-if="showToolSelector"
-      class="absolute bottom-full left-0 z-50 mb-2 w-[22rem] overflow-hidden rounded-2xl border border-color bg-secondary shadow-xl"
+      class="tool-selector-popover absolute bottom-full left-0 z-50 mb-3 w-[27rem] overflow-hidden rounded-[22px] border border-color bg-secondary shadow-xl"
       @mouseenter="openToolSelector"
       @mouseleave="scheduleCloseToolSelector"
     >
@@ -626,6 +626,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.tool-selector-popover {
+  backdrop-filter: blur(18px);
+}
+
 .text-primary {
   color: var(--text-primary);
 }
@@ -647,21 +651,22 @@ onUnmounted(() => {
 }
 
 .bg-secondary {
-  background-color: var(--bg-secondary);
+  background:
+    linear-gradient(180deg, rgba(38, 42, 50, 0.96) 0%, rgba(31, 35, 42, 0.98) 100%);
 }
 
 .bg-tertiary {
-  background-color: var(--bg-tertiary);
+  background-color: rgba(70, 76, 89, 0.42);
 }
 
 .shadow-xl {
   box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.2),
-    0 10px 10px -5px rgba(0, 0, 0, 0.1);
+    0 24px 52px rgba(0, 0, 0, 0.34),
+    0 12px 24px rgba(0, 0, 0, 0.18);
 }
 
 .icon-btn:hover {
-  background-color: var(--bg-hover);
+  background-color: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
 }
 
@@ -670,31 +675,34 @@ onUnmounted(() => {
 }
 
 .tool-mode-btn {
-  font-size: 12px;
-  padding: 6px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.03);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(115, 123, 144, 0.26);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
 }
 
 .tool-mode-btn.active {
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.18);
-  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.35);
-  color: var(--text-primary);
+  background: rgba(96, 165, 250, 0.92);
+  border-color: rgba(96, 165, 250, 1);
+  box-shadow: 0 10px 22px rgba(96, 165, 250, 0.28);
+  color: #102033;
 }
 
 .tool-action-btn,
 .tool-icon-btn {
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(115, 123, 144, 0.22);
   color: var(--text-secondary);
 }
 
 .tool-action-btn {
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 11px;
-  background: transparent;
+  padding: 10px 16px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .tool-icon-btn {
@@ -709,7 +717,7 @@ onUnmounted(() => {
 
 .tool-action-btn:hover:not(:disabled),
 .tool-icon-btn:hover:not(:disabled) {
-  background-color: var(--bg-hover);
+  background-color: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
 }
 
@@ -720,10 +728,10 @@ onUnmounted(() => {
 }
 
 .tool-group-title {
-  padding: 4px 8px;
-  font-size: 10px;
+  padding: 6px 8px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
@@ -734,19 +742,22 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px 12px;
   border-radius: 14px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.015);
   text-align: left;
   color: var(--text-primary);
 }
 
 .tool-row:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .tool-row-selected {
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.1);
-  color: var(--accent-color);
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.24);
+  color: var(--text-primary);
 }
 
 .tool-row-disabled {
@@ -755,8 +766,8 @@ onUnmounted(() => {
 }
 
 .tool-description {
-  max-width: 220px;
-  font-size: 10px;
+  max-width: 250px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -765,10 +776,10 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
-  border: 1px solid var(--border-color);
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(115, 123, 144, 0.28);
   flex-shrink: 0;
 }
 
