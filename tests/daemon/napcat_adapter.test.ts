@@ -30,6 +30,15 @@ vi.mock('../../src/core/db/providers', () => ({
   getProviders: vi.fn(),
 }));
 
+vi.mock('../../src/core/daemon_logs', () => ({
+  daemonLog: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 vi.mock('../../src/main/services/chat/chat_ui', () => ({
   parseStoredUiMessageRow: vi.fn((row: { message: string }) => JSON.parse(row.message)),
 }));
@@ -108,7 +117,6 @@ describe('createNapCatReverseBridge', () => {
     delete process.env.IKI_NAPCAT_MODEL;
     delete process.env.IKI_NAPCAT_TOOLS;
     delete process.env.IKI_NAPCAT_REQUIRE_MENTION;
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
   afterEach(() => {

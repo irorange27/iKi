@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 
 import { registerStandardTools } from '../core/tools';
 import { getMcpManager } from '../core/mcp';
+import { daemonLog } from '../core/daemon_logs';
 import { initializeDatabase } from '../core/db/database';
 import { getUserDataPath, setPlatformInfo } from '../core/platform';
 import { createChatService } from '../main/services/chat/chat_service';
@@ -917,7 +918,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
   });
 
   server.listen(port, host, () => {
-    console.log(`[Daemon] listening on http://${host}:${port}`);
+    daemonLog.info('daemon', `Listening on http://${host}:${port}.`, undefined, userDataPath);
   });
 
   const shutdown = () => {

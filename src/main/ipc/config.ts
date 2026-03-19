@@ -5,9 +5,15 @@ import path from 'node:path';
 
 import { setConfig, migrateFromJson } from '../../core/db/database';
 import { getAppConfig } from '../../core/config';
+import { readRecentDaemonLogs } from '../../core/daemon_logs';
 import { getMcpManager } from '../../core/mcp';
 import { normalizeAppConfig } from '../../shared/config/normalize';
-import type { AppConfig, ConfigRuntimeInfo, DaemonStatusInfo } from '../../shared/types/config';
+import type {
+  AppConfig,
+  ConfigRuntimeInfo,
+  DaemonLogsInfo,
+  DaemonStatusInfo,
+} from '../../shared/types/config';
 import { applyDesktopDaemonConfigUpdate } from '../services/daemon/daemon_lifecycle';
 import {
   buildNapCatWsUrl,
@@ -163,6 +169,14 @@ const getRuntimeInfo = (): ConfigRuntimeInfo => {
   };
 };
 
+const getDaemonLogs = (limit = 120): DaemonLogsInfo => {
+  const userDataPath = app.getPath('userData');
+  const parsedLimit = Number(limit);
+  const normalizedLimit =
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(Math.trunc(parsedLimit), 500) : 120;
+  return readRecentDaemonLogs(normalizedLimit, userDataPath);
+};
+
 const saveConfig = (config: unknown): AppConfig => {
   const normalized = normalizeAppConfig(config);
   setConfig('app_config', normalized);
@@ -241,6 +255,10 @@ export const registerConfigIpc = (): void => {
 
   ipcMain.handle('config:get-daemon-status', async () => {
     return getDaemonStatus();
+  });
+
+  ipcMain.handle('config:get-daemon-logs', (_event, limit?: number) => {
+    return getDaemonLogs(limit);
   });
 
   ipcMain.handle('config:set', async (_event, config) => {

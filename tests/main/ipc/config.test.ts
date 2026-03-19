@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-const { ipcHandlers, getPathMock, readFileSyncMock, httpGetMock } = vi.hoisted(() => ({
+const { ipcHandlers, getPathMock, readFileSyncMock, httpGetMock, readRecentDaemonLogsMock } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, (...args: any[]) => any>(),
   getPathMock: vi.fn((name: string) => {
     if (name === 'userData') return '/tmp/iki-user-data';
@@ -12,6 +12,17 @@ const { ipcHandlers, getPathMock, readFileSyncMock, httpGetMock } = vi.hoisted((
     throw new Error(`Unexpected file read: ${filePath}`);
   }),
   httpGetMock: vi.fn(),
+  readRecentDaemonLogsMock: vi.fn((limit: number, userDataPath: string) => ({
+    filePath: `${userDataPath}/logs/daemon.log`,
+    entries: [
+      {
+        timestamp: '2026-03-19T00:00:00.000Z',
+        level: 'info',
+        source: 'daemon',
+        message: `log tail ${limit}`,
+      },
+    ],
+  })),
 }));
 
 vi.mock('electron', () => ({
@@ -62,6 +73,10 @@ vi.mock('../../../src/core/config', () => ({
       maxConcurrentRequests: 4,
     },
   })),
+}));
+
+vi.mock('../../../src/core/daemon_logs', () => ({
+  readRecentDaemonLogs: readRecentDaemonLogsMock,
 }));
 
 vi.mock('../../../src/core/mcp', () => ({
@@ -140,6 +155,26 @@ describe('config IPC', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 42,
+    });
+  });
+
+  it('returns recent daemon logs from the shared log store', async () => {
+    const handler = ipcHandlers.get('config:get-daemon-logs');
+    if (!handler) throw new Error('config:get-daemon-logs handler not registered');
+
+    const result = await handler(null, 50);
+
+    expect(readRecentDaemonLogsMock).toHaveBeenCalledWith(50, '/tmp/iki-user-data');
+    expect(result).toEqual({
+      filePath: '/tmp/iki-user-data/logs/daemon.log',
+      entries: [
+        {
+          timestamp: '2026-03-19T00:00:00.000Z',
+          level: 'info',
+          source: 'daemon',
+          message: 'log tail 50',
+        },
+      ],
     });
   });
 });

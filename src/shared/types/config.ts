@@ -24,6 +24,18 @@ export interface DaemonStatusInfo {
   error?: string;
 }
 
+export interface DaemonLogEntry {
+  timestamp: string;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  source: string;
+  message: string;
+}
+
+export interface DaemonLogsInfo {
+  filePath: string;
+  entries: DaemonLogEntry[];
+}
+
 export interface AppConfig {
   general: {
     language: string | 'zh' | 'en';

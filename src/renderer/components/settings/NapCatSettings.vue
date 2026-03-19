@@ -204,6 +204,32 @@
       <p v-if="runtimeInfoError" class="error-text">{{ runtimeInfoError }}</p>
     </div>
 
+    <div class="settings-card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Recent Logs</div>
+          <div class="card-subtitle">Recent daemon and NapCat events for local debugging</div>
+        </div>
+        <div class="card-actions">
+          <button class="reset-btn" type="button" @click="loadDaemonLogs">Refresh Logs</button>
+        </div>
+      </div>
+
+      <div class="summary-list">
+        <div class="summary-row">
+          <span class="summary-label">Log File</span>
+          <code class="summary-code">{{ daemonLogPath }}</code>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Entries</span>
+          <span>{{ daemonLogCount }}</span>
+        </div>
+      </div>
+
+      <pre class="log-view">{{ daemonLogText }}</pre>
+      <p v-if="daemonLogsError" class="error-text">{{ daemonLogsError }}</p>
+    </div>
+
     <div class="config-actions">
       <button class="reset-btn" type="button" @click="emit('reset')">Reset Bridges</button>
     </div>
@@ -216,7 +242,12 @@ import { storeToRefs } from 'pinia';
 
 import { configService } from '../../services/config_service';
 import { useConfigStore } from '../../store/config';
-import type { AppConfig, ConfigRuntimeInfo, DaemonStatusInfo } from '../../../shared/types/config';
+import type {
+  AppConfig,
+  ConfigRuntimeInfo,
+  DaemonLogsInfo,
+  DaemonStatusInfo,
+} from '../../../shared/types/config';
 import type { Provider } from '../../../shared/types/provider';
 import { buildNapCatWsUrl, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../../../shared/constants/daemon';
 import { parseModelList } from '../../../shared/utils/provider_models';
@@ -250,6 +281,9 @@ const runtimeInfoError = ref('');
 const daemonStatus = ref<DaemonStatusInfo | null>(null);
 const daemonStatusLoading = ref(false);
 const daemonStatusError = ref('');
+const daemonLogs = ref<DaemonLogsInfo | null>(null);
+const daemonLogsLoading = ref(false);
+const daemonLogsError = ref('');
 
 const napcat = computed(() => config.value.bridges.napcat);
 const accessToken = computed(() => napcat.value.accessToken.trim());
@@ -342,6 +376,20 @@ const daemonStatusDetail = computed(() => {
 const activeDaemonHost = computed(() => daemonStatus.value?.host || daemonHost.value);
 const activeDaemonPort = computed(() => daemonStatus.value?.port || daemonPort.value);
 const activeDaemonAddress = computed(() => `${activeDaemonHost.value}:${activeDaemonPort.value}`);
+const daemonLogPath = computed(() => daemonLogs.value?.filePath || 'Unavailable');
+const daemonLogCount = computed(() => {
+  if (daemonLogsLoading.value) return 'Loading...';
+  return String(daemonLogs.value?.entries.length || 0);
+});
+const daemonLogText = computed(() => {
+  if (daemonLogsLoading.value) return 'Loading daemon logs...';
+  if (daemonLogsError.value) return daemonLogsError.value;
+  const entries = daemonLogs.value?.entries || [];
+  if (entries.length === 0) return 'No daemon logs available yet.';
+  return entries
+    .map(entry => `[${entry.timestamp}] [${entry.level}] [${entry.source}] ${entry.message}`)
+    .join('\n');
+});
 
 const localWsUrl = computed(() =>
   buildNapCatWsUrl(
@@ -434,6 +482,19 @@ const loadDaemonStatus = async () => {
   }
 };
 
+const loadDaemonLogs = async () => {
+  daemonLogsLoading.value = true;
+  daemonLogsError.value = '';
+  try {
+    daemonLogs.value = await configService.getDaemonLogs(120);
+  } catch (error: any) {
+    daemonLogs.value = null;
+    daemonLogsError.value = error?.message || 'Failed to load daemon logs.';
+  } finally {
+    daemonLogsLoading.value = false;
+  }
+};
+
 watch(
   () => props.active,
   active => {
@@ -441,6 +502,7 @@ watch(
       void loadProviders();
       void loadRuntimeInfo();
       void loadDaemonStatus();
+      void loadDaemonLogs();
     }
   },
   { immediate: true }
@@ -530,7 +592,17 @@ watch(
 }
 
 .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
   margin-bottom: 14px;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .card-title {
@@ -559,6 +631,22 @@ watch(
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.log-view {
+  margin: 16px 0 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 14px;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .status-chip {
