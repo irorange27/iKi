@@ -48,3 +48,5 @@ A local agent pet for AI provider orchestration.
 - release PR and version/tag are generated from Conventional Commits
 - machine-generated release notes live in `CHANGELOG.md`
 - curated product notes continue in `changelogs/`
+- `release-please` uses `RELEASE_PLEASE_TOKEN` (recommended PAT) for PR creation;
+  if omitted, ensure Actions is allowed to create/approve pull requests in repo settings

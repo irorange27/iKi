@@ -14,8 +14,18 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      - name: Token mode hint
+        if: ${{ secrets.RELEASE_PLEASE_TOKEN == '' }}
+        run: |
+          echo "RELEASE_PLEASE_TOKEN is not set."
+          echo "Falling back to GITHUB_TOKEN."
+          echo "If PR creation fails, either set RELEASE_PLEASE_TOKEN"
+          echo "or enable Settings -> Actions -> General -> Workflow permissions ->"
+          echo "\"Allow GitHub Actions to create and approve pull requests\"."
+
       - name: Run release-please
         uses: googleapis/release-please-action@v4
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
