@@ -26,5 +26,8 @@ module.exports = {
     'subject-empty': [2, 'never'],
     'subject-full-stop': [2, 'never', '.'],
     'header-max-length': [2, 'always', 100],
+    // Keep title strict but avoid blocking commits on wrapped prose formatting.
+    'body-max-line-length': [0],
+    'footer-max-line-length': [0],
   },
 }
