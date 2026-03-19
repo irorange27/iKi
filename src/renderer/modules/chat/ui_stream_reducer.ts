@@ -163,6 +163,48 @@ const buildStreamingTextParts = (parts: UiMessagePart[], delta: string): UiMessa
   return nextParts;
 };
 
+const normalizeTextForToolDedup = (value: string): string =>
+  value.replace(/\s+/g, ' ').trim();
+
+const isToolLikePart = (part: UiMessagePart): boolean => {
+  if (isDynamicToolPart(part)) return true;
+  return isObjectRecord(part) && typeof part.type === 'string' && part.type.startsWith('tool-');
+};
+
+const dedupeToolBridgedRepeatedTextParts = (parts: UiMessagePart[]): UiMessagePart[] => {
+  if (parts.length < 3) return parts;
+
+  const latestIndexByText = new Map<string, number>();
+  const removedTextIndices = new Set<number>();
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (!isTextPart(part)) continue;
+
+    const normalizedText = normalizeTextForToolDedup(part.text);
+    if (!normalizedText) continue;
+
+    const previousIndex = latestIndexByText.get(normalizedText);
+    if (previousIndex !== undefined && previousIndex < index) {
+      const between = parts.slice(previousIndex + 1, index);
+      const hasToolBetween = between.some(isToolLikePart);
+      const hasMeaningfulTextBetween = between.some(
+        entry => isTextPart(entry) && normalizeTextForToolDedup(entry.text).length > 0
+      );
+
+      if (hasToolBetween && !hasMeaningfulTextBetween) {
+        removedTextIndices.add(previousIndex);
+      }
+    }
+
+    latestIndexByText.set(normalizedText, index);
+  }
+
+  if (removedTextIndices.size === 0) return parts;
+
+  return parts.filter((part, index) => !(removedTextIndices.has(index) && isTextPart(part)));
+};
+
 const finalizeTextParts = (
   parts: UiMessagePart[],
   fullText: string,
@@ -468,13 +510,14 @@ export const reduceStream = (
         action.fullText,
         streamedText
       );
+      const dedupedParts = dedupeToolBridgedRepeatedTextParts(finalizeResult.parts);
 
       const updatedMessage: UIMessage = {
         ...message,
-        parts: finalizeResult.parts as UIMessage['parts'],
+        parts: dedupedParts as UIMessage['parts'],
       };
 
-      if (!hasRenderableContent(updatedMessage.parts as UiMessagePart[])) {
+      if (!hasRenderableContent(dedupedParts)) {
         return null;
       }
 

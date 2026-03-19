@@ -18,6 +18,12 @@ import {
   type AppClient,
 } from '../core/db/app_clients';
 import { createNapCatReverseBridge } from './napcat_adapter';
+import {
+  DEFAULT_ALLOWED_TOOLS,
+  readRequestedMcpServerIds,
+  resolveMcpServerIdsForClient,
+  resolveToolsForClient,
+} from './tool_access';
 import type { McpServerInput } from '../shared/types/mcp';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../shared/constants/daemon';
 
@@ -62,7 +68,6 @@ type WsSession = {
   webContents: { id: number; send: (channel: string, ...args: unknown[]) => void };
 };
 
-const DEFAULT_ALLOWED_TOOLS = ['web', 'fetch'];
 const DEFAULT_SCOPES = [
   'chat:read',
   'chat:write',
@@ -239,21 +244,6 @@ const authenticateWebSocket = (
 
   touchAppClient(client.id);
   return { client: toDaemonClient(client) };
-};
-
-const resolveToolsForClient = (requested: unknown, allowedTools: string[]): string[] => {
-  const allowed = new Set(allowedTools);
-  const cleanedRequested = Array.isArray(requested)
-    ? requested
-        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
-        .map(t => t.trim())
-    : null;
-
-  if (!cleanedRequested) {
-    return DEFAULT_ALLOWED_TOOLS.filter(tool => allowed.has(tool));
-  }
-
-  return cleanedRequested.filter(tool => allowed.has(tool));
 };
 
 const getThreadOrError = (threadId: string, clientId: string) => {
@@ -453,7 +443,9 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         }
         const messages = Array.isArray(body.messages) ? body.messages : [];
         const tools = resolveToolsForClient(body.tools, client.allowedTools);
-        if (tools.length > 0 && !hasScope(client, 'tools:run')) {
+        const requestedMcpServerIds = readRequestedMcpServerIds(body);
+        const mcpServerIds = resolveMcpServerIdsForClient(requestedMcpServerIds, client.allowedTools);
+        if ((tools.length > 0 || mcpServerIds.length > 0) && !hasScope(client, 'tools:run')) {
           writeJson(res, 403, { success: false, error: 'Missing tools:run scope' });
           return;
         }
@@ -463,6 +455,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
           model,
           messages,
           tools,
+          mcpServerIds,
           skillIds: Array.isArray(body.skillIds) ? (body.skillIds as string[]) : undefined,
           skillMode:
             body.skillMode === 'manual' || body.skillMode === 'auto' ? body.skillMode : undefined,
@@ -824,7 +817,12 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
           }
           const messages = Array.isArray(payload.messages) ? payload.messages : [];
           const tools = resolveToolsForClient(payload.tools, session.client.allowedTools);
-          if (tools.length > 0 && !hasScope(session.client, 'tools:run')) {
+          const requestedMcpServerIds = readRequestedMcpServerIds(payload);
+          const mcpServerIds = resolveMcpServerIdsForClient(
+            requestedMcpServerIds,
+            session.client.allowedTools
+          );
+          if ((tools.length > 0 || mcpServerIds.length > 0) && !hasScope(session.client, 'tools:run')) {
             ws.send(
               JSON.stringify({
                 channel: 'daemon',
@@ -839,6 +837,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
             model,
             messages,
             tools,
+            mcpServerIds,
             skillIds: Array.isArray(payload.skillIds) ? (payload.skillIds as string[]) : undefined,
             skillMode:
               payload.skillMode === 'manual' || payload.skillMode === 'auto'
