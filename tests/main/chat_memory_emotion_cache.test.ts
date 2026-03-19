@@ -23,6 +23,12 @@ vi.mock('../../src/core/db/emotion', () => ({
   listEmotionEvents: vi.fn(() => []),
 }));
 
+vi.mock('../../src/core/db/affect_state', () => ({
+  upsertAffectState: vi.fn(),
+  deleteAffectState: vi.fn(),
+  getAffectState: vi.fn(() => null),
+}));
+
 vi.mock('../../src/core/provider/emotion_model', () => ({
   analyzeEmotionWithAgent: vi.fn(),
 }));

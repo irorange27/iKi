@@ -11,7 +11,7 @@
     "app:dev": "tsc && concurrently \"npm run vite:dev\" \"electron .\" \"tsc -w\"",
     "app:build": "npm run vite:build && tsc && electron-builder",
     "app:preview": "npm run vite:build && tsc && electron .",
-    "daemon:start": "tsc && node dist/daemon/index.js",
+    "daemon:start": "tsc && node scripts/start-daemon.cjs",
     "ts": "tsc",
     "watch": "tsc -w",
     "start": "electron-forge start",
