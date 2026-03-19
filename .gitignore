@@ -1,5 +1,7 @@
 dist/
 
+docs/
+
 .vscode/
 .VSCodeCounter/
 
