@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - package.json
-      - .release-please-manifest.json
   release:
     types:
       - published

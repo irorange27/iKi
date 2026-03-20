@@ -50,14 +50,9 @@ A local agent pet for AI provider orchestration.
 
 ## Release Flow
 
-- `release-please` runs on pushes to `main`
-- release PR and version/tag are generated from Conventional Commits
-- `release-build` runs automatically on version file updates in `main`
-  (`package.json` / `.release-please-manifest.json`) and on GitHub Release publish
+- Conventional Commits remain required for history hygiene, but release intent is manual
+- `release-build` runs automatically on `package.json` version updates in `main`
+  and on GitHub Release publish
 - release-build first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds
 - release-build outputs are uploaded to workflow artifacts per OS, then published once to release assets
-- root `CHANGELOG.md` is the machine-generated release log managed by `release-please`
 - curated product notes continue in `changelogs/`
-- `release-please` uses `RELEASE_PLEASE_TOKEN` when present (recommended PAT)
-- if `RELEASE_PLEASE_TOKEN` is omitted, it falls back to `GITHUB_TOKEN`; ensure
-  Actions is allowed to create/approve pull requests in repo settings
