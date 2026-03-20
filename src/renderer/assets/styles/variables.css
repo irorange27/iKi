@@ -58,12 +58,8 @@
   --app-shell-border-color: transparent;
   --app-shell-shadow: none;
   --chat-composer-border-color: rgba(112, 119, 138, 0.34);
-  --chat-composer-background: linear-gradient(
-    180deg,
-    rgba(54, 58, 68, 0.96) 0%,
-    rgba(46, 49, 57, 0.98) 100%
-  );
-  --chat-composer-toolbar-background: rgba(255, 255, 255, 0.02);
+  --chat-composer-background: #2a2d35;
+  --chat-composer-toolbar-background: #2a2d35;
   --chat-composer-toolbar-border-color: rgba(112, 119, 138, 0.24);
   --chat-composer-control-background: rgba(255, 255, 255, 0.04);
   --chat-composer-control-border-color: rgba(112, 119, 138, 0.28);
