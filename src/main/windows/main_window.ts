@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { maybeOpenDevTools } from './devtools_policy';
 import { loadRendererEntry } from './renderer';
+import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
 
 export const createMainWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
@@ -10,7 +11,7 @@ export const createMainWindow = (): BrowserWindow => {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    backgroundColor: '#2a2d35',
+    backgroundColor: resolveWindowBootstrapBackgroundColor(),
     // Start shadow-free until the renderer resolves the active theme and opts in for light mode.
     hasShadow: false,
     frame: false,

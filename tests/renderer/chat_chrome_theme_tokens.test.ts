@@ -10,6 +10,7 @@ describe('chat chrome theme tokens', () => {
   it('defines dedicated composer and user bubble tokens with light-theme overrides', () => {
     const variablesSource = readFileSync(VARIABLES_CSS_PATH, 'utf8');
 
+    expect(variablesSource).toMatch(/--theme-chat-composer-background:/);
     expect(variablesSource).toMatch(/--chat-composer-border-color:/);
     expect(variablesSource).toMatch(/--chat-composer-background:/);
     expect(variablesSource).toMatch(/--chat-composer-toolbar-background:/);
@@ -19,7 +20,7 @@ describe('chat chrome theme tokens', () => {
     expect(variablesSource).toMatch(/--chat-user-bubble-background:/);
     expect(variablesSource).toMatch(/--chat-user-bubble-radius:/);
     expect(variablesSource).toMatch(
-      /\[data-theme='light'\][\s\S]*--chat-composer-background:[\s\S]*--chat-user-bubble-background:/i
+      /\[data-theme='light'\][\s\S]*--theme-chat-composer-background:[\s\S]*--theme-chat-user-bubble-background:/i
     );
   });
 

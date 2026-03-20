@@ -1,5 +1,7 @@
 import { onMounted, onUnmounted, watch } from 'vue';
 import type { AppConfig } from '../../shared/types/config';
+import { resolveThemeSelection } from '../../shared/theme/registry';
+import { THEME_SLOT_TO_CSS_VARIABLE } from '../../shared/theme/types';
 import { useConfigStore } from '../store/config';
 
 const SYSTEM_THEME_QUERY = '(prefers-color-scheme: dark)';
@@ -17,10 +19,9 @@ type WindowWithChromeApi = Window & {
 
 let lastNativeWindowShadow: boolean | null = null;
 
-const resolveTheme = (theme: AppConfig['general']['theme']): 'light' | 'dark' => {
-  if (theme !== 'system') return theme;
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'light';
-  return window.matchMedia(SYSTEM_THEME_QUERY).matches ? 'dark' : 'light';
+const systemPrefersDark = (): boolean => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia(SYSTEM_THEME_QUERY).matches;
 };
 
 const syncNativeWindowShadow = (resolvedTheme: 'light' | 'dark') => {
@@ -42,7 +43,12 @@ export const applyCssVariables = (config: AppConfig) => {
     messageBubblePaddingY,
     messageGap,
   } = config.ui;
-  const resolvedTheme = resolveTheme(config.general.theme);
+  const resolvedTheme = resolveThemeSelection({
+    presetId: config.general.themePresetId,
+    themeMode: config.general.theme,
+    systemPrefersDark: systemPrefersDark(),
+    base46Presets: config.themes.base46Presets,
+  });
 
   const root = document.documentElement;
   root.style.setProperty('--font-size', `${fontSize}px`);
@@ -51,9 +57,16 @@ export const applyCssVariables = (config: AppConfig) => {
   root.style.setProperty('--chat-bubble-padding-x', `${messageBubblePaddingX}px`);
   root.style.setProperty('--chat-bubble-padding-y', `${messageBubblePaddingY}px`);
   root.style.setProperty('--chat-message-gap', `${messageGap}px`);
+  for (const [slot, variableName] of Object.entries(THEME_SLOT_TO_CSS_VARIABLE)) {
+    const value = resolvedTheme.palette[slot as keyof typeof resolvedTheme.palette];
+    if (typeof value === 'string') {
+      root.style.setProperty(variableName, value);
+    }
+  }
   root.setAttribute('data-density', density);
-  root.setAttribute('data-theme', resolvedTheme);
-  syncNativeWindowShadow(resolvedTheme);
+  root.setAttribute('data-theme', resolvedTheme.resolvedVariant);
+  root.setAttribute('data-theme-preset', resolvedTheme.presetId);
+  syncNativeWindowShadow(resolvedTheme.resolvedVariant);
 };
 
 export const useConfigEffects = () => {
@@ -62,7 +75,7 @@ export const useConfigEffects = () => {
   const apply = () => applyCssVariables(store.config);
 
   const stopWatch = watch(
-    () => [store.config.ui, store.config.general],
+    () => [store.config.ui, store.config.general, store.config.themes],
     () => apply(),
     { deep: true, immediate: true }
   );

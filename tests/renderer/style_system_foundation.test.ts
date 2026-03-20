@@ -42,6 +42,7 @@ describe('renderer style system foundation', () => {
   it('defines canonical semantic and preserved visual tokens in variables.css', () => {
     const variablesSource = readFileSync(VARIABLES_CSS_PATH, 'utf8');
 
+    expect(variablesSource).toMatch(/--theme-bg-primary:/);
     expect(variablesSource).toMatch(/--warning-color:/);
     expect(variablesSource).toMatch(/--accent-contrast:/);
     expect(variablesSource).toMatch(/--radius-base:/);
@@ -53,7 +54,8 @@ describe('renderer style system foundation', () => {
     expect(variablesSource).toMatch(/--chat-composer-stop-background:/);
     expect(variablesSource).toMatch(/--composer-workspace-badge-background:/);
     expect(variablesSource).toMatch(/--sidebar-resize-indicator-color:/);
-    expect(variablesSource).toMatch(/\[data-theme='light'\][\s\S]*--warning-color:/i);
+    expect(variablesSource).toMatch(/--bg-primary:\s*var\(--theme-bg-primary\);/);
+    expect(variablesSource).toMatch(/\[data-theme='light'\][\s\S]*--theme-warning-color:/i);
   });
 
   it('promotes settings_shared.css into the shared settings primitive layer', () => {

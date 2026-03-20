@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { AppConfig } from '../types/config';
 import { DEFAULT_APP_CONFIG } from './defaults';
+import { Base46ThemePresetInputSchema } from '../theme/base46_schema';
 
 const booleanField = (value: boolean) => z.boolean().catch(value);
 const numberField = (value: number) => z.number().finite().catch(value);
@@ -13,6 +14,7 @@ const GeneralSchema = z
   .object({
     language: stringField(DEFAULT_APP_CONFIG.general.language),
     theme: z.enum(['light', 'dark', 'system']).catch(DEFAULT_APP_CONFIG.general.theme),
+    themePresetId: stringField(DEFAULT_APP_CONFIG.general.themePresetId),
     autoUpdate: booleanField(DEFAULT_APP_CONFIG.general.autoUpdate),
     minimizeToTray: booleanField(DEFAULT_APP_CONFIG.general.minimizeToTray),
     closeToTray: booleanField(DEFAULT_APP_CONFIG.general.closeToTray),
@@ -32,6 +34,23 @@ const UiSchema = z
     messageGap: numberField(DEFAULT_APP_CONFIG.ui.messageGap),
   })
   .catch(DEFAULT_APP_CONFIG.ui);
+
+const ThemesSchema = z
+  .object({
+    base46Presets: z
+      .record(z.string(), Base46ThemePresetInputSchema)
+      .catch(
+        DEFAULT_APP_CONFIG.themes.base46Presets as unknown as Record<
+          string,
+          z.infer<typeof Base46ThemePresetInputSchema>
+        >
+      ),
+  })
+  .catch(
+    DEFAULT_APP_CONFIG.themes as unknown as {
+      base46Presets: Record<string, z.infer<typeof Base46ThemePresetInputSchema>>;
+    }
+  );
 
 const NetworkSchema = z
   .object({
@@ -224,6 +243,7 @@ export const AppConfigSchema = z
   .object({
     general: GeneralSchema,
     ui: UiSchema,
+    themes: ThemesSchema,
     network: NetworkSchema,
     security: SecuritySchema,
     advanced: AdvancedSchema,

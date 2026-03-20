@@ -1,4 +1,5 @@
 import type { WorkflowOptimizationConfig } from './workflow';
+import type { ThemeConfig } from '../theme/types';
 
 export interface ConfigRuntimeInfo {
   userDataPath: string;
@@ -50,6 +51,7 @@ export interface AppConfig {
   general: {
     language: string | 'zh' | 'en';
     theme: 'light' | 'dark' | 'system';
+    themePresetId: string;
     autoUpdate: boolean;
     minimizeToTray: boolean;
     closeToTray: boolean;
@@ -65,6 +67,7 @@ export interface AppConfig {
     messageBubblePaddingY: number; // 6-20px
     messageGap: number; // 8-32px
   };
+  themes: ThemeConfig;
   network: {
     proxy: {
       enable: boolean;

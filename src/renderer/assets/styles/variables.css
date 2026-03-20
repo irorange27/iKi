@@ -12,41 +12,98 @@
   --control-radius-sm: 6px;
   --pill-radius: 999px;
 
-  /* 暗色主题（默认） - 保持原有高级感 */
-  --bg-primary: #2a2d35;
-  /* 聊天主背景 */
-  --bg-secondary: #22272c;
-  /* 侧边栏背景 */
-  --bg-tertiary: #2e3036;
-  /* 输入框/卡片背景 */
-  --bg-hover: #3a3d45;
-  /* 悬停状态 */
-  --bg-active: #4e5256;
-  /* 选中状态 */
-  --text-primary: #ffffff;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --border-color: #4e5256;
-  --accent-color: #61afef;
-  --accent-hover: #5ba2dc;
-  --accent-contrast: #ffffff;
-  --accent-rgb: 96, 165, 250;
-  --reference-inline-color: #8eabc4;
-  --reference-inline-hover: #b4c9db;
-  --reference-inline-underline: rgba(142, 171, 196, 0.45);
-  --success-color: #10b981;
-  --success-rgb: 16, 185, 129;
-  --status-success-color: #34d399;
-  --warning-color: #f59e0b;
-  --warning-rgb: 245, 158, 11;
-  --danger-color: #ef4444;
-  --danger-rgb: 239, 68, 68;
-  --status-danger-color: #f87171;
-  --chart-1: oklch(65.67% 0.0439 209.79);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  /* Builtin dark-theme inputs; runtime preset injection overrides only these slots. */
+  --theme-bg-primary: #2a2d35;
+  --theme-bg-secondary: #22272c;
+  --theme-bg-tertiary: #2e3036;
+  --theme-bg-hover: #3a3d45;
+  --theme-bg-active: #4e5256;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #9ca3af;
+  --theme-text-muted: #6b7280;
+  --theme-border-color: #4e5256;
+  --theme-accent-color: #61afef;
+  --theme-accent-hover: #5ba2dc;
+  --theme-accent-contrast: #ffffff;
+  --theme-accent-rgb: 96, 165, 250;
+  --theme-reference-inline-color: #8eabc4;
+  --theme-reference-inline-hover: #b4c9db;
+  --theme-reference-inline-underline: rgba(142, 171, 196, 0.45);
+  --theme-success-color: #10b981;
+  --theme-success-rgb: 16, 185, 129;
+  --theme-status-success-color: #34d399;
+  --theme-warning-color: #f59e0b;
+  --theme-warning-rgb: 245, 158, 11;
+  --theme-danger-color: #ef4444;
+  --theme-danger-rgb: 239, 68, 68;
+  --theme-status-danger-color: #f87171;
+  --theme-chart-1: oklch(65.67% 0.0439 209.79);
+  --theme-chart-2: oklch(0.696 0.17 162.48);
+  --theme-chart-3: oklch(0.769 0.188 70.08);
+  --theme-chart-4: oklch(0.627 0.265 303.9);
+  --theme-chart-5: oklch(0.645 0.246 16.439);
+  --theme-app-shell-border-color: transparent;
+  --theme-app-shell-shadow: none;
+  --theme-chat-composer-border-color: rgba(112, 119, 138, 0.34);
+  --theme-chat-composer-background: #2a2d35;
+  --theme-chat-composer-toolbar-background: #2a2d35;
+  --theme-chat-composer-toolbar-border-color: rgba(112, 119, 138, 0.24);
+  --theme-chat-composer-control-background: rgba(255, 255, 255, 0.04);
+  --theme-chat-composer-control-border-color: rgba(112, 119, 138, 0.28);
+  --theme-chat-composer-control-hover-background: rgba(255, 255, 255, 0.08);
+  --theme-chat-composer-control-hover-border-color: rgba(152, 160, 180, 0.38);
+  --theme-chat-composer-control-disabled-background: rgba(255, 255, 255, 0.03);
+  --theme-chat-composer-control-disabled-border-color: rgba(112, 119, 138, 0.18);
+  --theme-chat-composer-send-background: rgba(96, 165, 250, 0.14);
+  --theme-chat-composer-send-hover-background: rgba(96, 165, 250, 0.22);
+  --theme-chat-composer-send-hover-border-color: rgba(96, 165, 250, 0.3);
+  --theme-chat-composer-send-hover-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.14);
+  --theme-chat-composer-stop-background: rgba(239, 68, 68, 0.18);
+  --theme-chat-composer-stop-hover-background: rgba(239, 68, 68, 0.28);
+  --theme-chat-composer-stop-hover-border-color: rgba(239, 68, 68, 0.34);
+  --theme-chat-composer-action-foreground: #ffffff;
+  --theme-composer-workspace-badge-background: #4a9eff;
+  --theme-composer-workspace-badge-foreground: #ffffff;
+  --theme-sidebar-resize-indicator-color: rgba(156, 163, 175, 0.5);
+  --theme-chat-composer-backdrop-filter: blur(18px);
+  --theme-chat-composer-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --theme-chat-user-bubble-background: #2f3643;
+  --theme-chat-user-bubble-border-color: rgba(47, 54, 67, 0.22);
+  --theme-chat-user-bubble-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
+  --theme-chat-user-bubble-text: #f8fbff;
+  --theme-chat-user-bubble-radius: 28px 10px 28px 28px;
+
+  /* Semantic renderer tokens consumed by components. */
+  --bg-primary: var(--theme-bg-primary);
+  --bg-secondary: var(--theme-bg-secondary);
+  --bg-tertiary: var(--theme-bg-tertiary);
+  --bg-hover: var(--theme-bg-hover);
+  --bg-active: var(--theme-bg-active);
+  --text-primary: var(--theme-text-primary);
+  --text-secondary: var(--theme-text-secondary);
+  --text-muted: var(--theme-text-muted);
+  --border-color: var(--theme-border-color);
+  --accent-color: var(--theme-accent-color);
+  --accent-hover: var(--theme-accent-hover);
+  --accent-contrast: var(--theme-accent-contrast);
+  --accent-rgb: var(--theme-accent-rgb);
+  --reference-inline-color: var(--theme-reference-inline-color);
+  --reference-inline-hover: var(--theme-reference-inline-hover);
+  --reference-inline-underline: var(--theme-reference-inline-underline);
+  --success-color: var(--theme-success-color);
+  --success-rgb: var(--theme-success-rgb);
+  --status-success-color: var(--theme-status-success-color);
+  --warning-color: var(--theme-warning-color);
+  --warning-rgb: var(--theme-warning-rgb);
+  --danger-color: var(--theme-danger-color);
+  --danger-rgb: var(--theme-danger-rgb);
+  --status-danger-color: var(--theme-status-danger-color);
+  --chart-1: var(--theme-chart-1);
+  --chart-2: var(--theme-chart-2);
+  --chart-3: var(--theme-chart-3);
+  --chart-4: var(--theme-chart-4);
+  --chart-5: var(--theme-chart-5);
   --sidebar-background: var(--bg-secondary);
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--accent-color);
@@ -55,36 +112,40 @@
   --sidebar-accent-foreground: var(--text-primary);
   --sidebar-border: var(--border-color);
   --sidebar-ring: var(--accent-color);
-  --app-shell-border-color: transparent;
-  --app-shell-shadow: none;
-  --chat-composer-border-color: rgba(112, 119, 138, 0.34);
-  --chat-composer-background: #2a2d35;
-  --chat-composer-toolbar-background: #2a2d35;
-  --chat-composer-toolbar-border-color: rgba(112, 119, 138, 0.24);
-  --chat-composer-control-background: rgba(255, 255, 255, 0.04);
-  --chat-composer-control-border-color: rgba(112, 119, 138, 0.28);
-  --chat-composer-control-hover-background: rgba(255, 255, 255, 0.08);
-  --chat-composer-control-hover-border-color: rgba(152, 160, 180, 0.38);
-  --chat-composer-control-disabled-background: rgba(255, 255, 255, 0.03);
-  --chat-composer-control-disabled-border-color: rgba(112, 119, 138, 0.18);
-  --chat-composer-send-background: rgba(96, 165, 250, 0.14);
-  --chat-composer-send-hover-background: rgba(96, 165, 250, 0.22);
-  --chat-composer-send-hover-border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.3);
-  --chat-composer-send-hover-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.14);
-  --chat-composer-stop-background: rgba(239, 68, 68, 0.18);
-  --chat-composer-stop-hover-background: rgba(239, 68, 68, 0.28);
-  --chat-composer-stop-hover-border-color: rgba(239, 68, 68, 0.34);
-  --chat-composer-action-foreground: #ffffff;
-  --composer-workspace-badge-background: #4a9eff;
-  --composer-workspace-badge-foreground: #ffffff;
-  --sidebar-resize-indicator-color: rgba(156, 163, 175, 0.5);
-  --chat-composer-backdrop-filter: blur(18px);
-  --chat-composer-shadow: 0 18px 36px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  --chat-user-bubble-background: #2f3643;
-  --chat-user-bubble-border-color: rgba(47, 54, 67, 0.22);
-  --chat-user-bubble-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
-  --chat-user-bubble-text: #f8fbff;
-  --chat-user-bubble-radius: 28px 10px 28px 28px;
+  --app-shell-border-color: var(--theme-app-shell-border-color);
+  --app-shell-shadow: var(--theme-app-shell-shadow);
+  --chat-composer-border-color: var(--theme-chat-composer-border-color);
+  --chat-composer-background: var(--theme-chat-composer-background);
+  --chat-composer-toolbar-background: var(--theme-chat-composer-toolbar-background);
+  --chat-composer-toolbar-border-color: var(--theme-chat-composer-toolbar-border-color);
+  --chat-composer-control-background: var(--theme-chat-composer-control-background);
+  --chat-composer-control-border-color: var(--theme-chat-composer-control-border-color);
+  --chat-composer-control-hover-background: var(--theme-chat-composer-control-hover-background);
+  --chat-composer-control-hover-border-color: var(--theme-chat-composer-control-hover-border-color);
+  --chat-composer-control-disabled-background: var(
+    --theme-chat-composer-control-disabled-background
+  );
+  --chat-composer-control-disabled-border-color: var(
+    --theme-chat-composer-control-disabled-border-color
+  );
+  --chat-composer-send-background: var(--theme-chat-composer-send-background);
+  --chat-composer-send-hover-background: var(--theme-chat-composer-send-hover-background);
+  --chat-composer-send-hover-border-color: var(--theme-chat-composer-send-hover-border-color);
+  --chat-composer-send-hover-shadow: var(--theme-chat-composer-send-hover-shadow);
+  --chat-composer-stop-background: var(--theme-chat-composer-stop-background);
+  --chat-composer-stop-hover-background: var(--theme-chat-composer-stop-hover-background);
+  --chat-composer-stop-hover-border-color: var(--theme-chat-composer-stop-hover-border-color);
+  --chat-composer-action-foreground: var(--theme-chat-composer-action-foreground);
+  --composer-workspace-badge-background: var(--theme-composer-workspace-badge-background);
+  --composer-workspace-badge-foreground: var(--theme-composer-workspace-badge-foreground);
+  --sidebar-resize-indicator-color: var(--theme-sidebar-resize-indicator-color);
+  --chat-composer-backdrop-filter: var(--theme-chat-composer-backdrop-filter);
+  --chat-composer-shadow: var(--theme-chat-composer-shadow);
+  --chat-user-bubble-background: var(--theme-chat-user-bubble-background);
+  --chat-user-bubble-border-color: var(--theme-chat-user-bubble-border-color);
+  --chat-user-bubble-shadow: var(--theme-chat-user-bubble-shadow);
+  --chat-user-bubble-text: var(--theme-chat-user-bubble-text);
+  --chat-user-bubble-radius: var(--theme-chat-user-bubble-radius);
 }
 
 [data-density='comfortable'] {
@@ -111,75 +172,76 @@
   --control-radius-sm: 8px;
 }
 
-/* 亮色主题 */
 [data-theme='light'] {
   color-scheme: light;
-  --bg-primary: #ffffff;
-  --bg-secondary: #f3f4f6;
-  --bg-tertiary: #ffffff;
-  --bg-hover: #e5e7eb;
-  --bg-active: #dbeafe;
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
-  --border-color: #e5e7eb;
-  --accent-color: #7299a0;
-  --accent-hover: #81a4aa;
-  --accent-contrast: #ffffff;
-  --accent-rgb: 59, 130, 246;
-  --reference-inline-color: #7f98aa;
-  --reference-inline-hover: #668397;
-  --reference-inline-underline: rgba(127, 152, 170, 0.42);
-  --warning-color: #b45309;
-  --warning-rgb: 180, 83, 9;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --app-shell-border-color: rgba(203, 213, 225, 0.92);
-  --app-shell-shadow:
+  --theme-bg-primary: #ffffff;
+  --theme-bg-secondary: #f3f4f6;
+  --theme-bg-tertiary: #ffffff;
+  --theme-bg-hover: #e5e7eb;
+  --theme-bg-active: #dbeafe;
+  --theme-text-primary: #111827;
+  --theme-text-secondary: #4b5563;
+  --theme-text-muted: #9ca3af;
+  --theme-border-color: #e5e7eb;
+  --theme-accent-color: #7299a0;
+  --theme-accent-hover: #81a4aa;
+  --theme-accent-contrast: #ffffff;
+  --theme-accent-rgb: 59, 130, 246;
+  --theme-reference-inline-color: #7f98aa;
+  --theme-reference-inline-hover: #668397;
+  --theme-reference-inline-underline: rgba(127, 152, 170, 0.42);
+  --theme-success-color: #10b981;
+  --theme-success-rgb: 16, 185, 129;
+  --theme-status-success-color: #34d399;
+  --theme-warning-color: #b45309;
+  --theme-warning-rgb: 180, 83, 9;
+  --theme-danger-color: #ef4444;
+  --theme-danger-rgb: 239, 68, 68;
+  --theme-status-danger-color: #f87171;
+  --theme-chart-1: oklch(0.646 0.222 41.116);
+  --theme-chart-2: oklch(0.6 0.118 184.704);
+  --theme-chart-3: oklch(0.398 0.07 227.392);
+  --theme-chart-4: oklch(0.828 0.189 84.429);
+  --theme-chart-5: oklch(0.769 0.188 70.08);
+  --theme-app-shell-border-color: rgba(203, 213, 225, 0.92);
+  --theme-app-shell-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.72), inset 0 0 0 1px rgba(203, 213, 225, 0.88);
-  --chat-composer-border-color: rgba(212, 220, 229, 0.96);
-  --chat-composer-background: linear-gradient(
+  --theme-chat-composer-border-color: rgba(212, 220, 229, 0.96);
+  --theme-chat-composer-background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.98) 0%,
     rgba(248, 250, 252, 0.98) 100%
   );
-  --chat-composer-toolbar-background: rgba(244, 247, 251, 0.94);
-  --chat-composer-toolbar-border-color: rgba(223, 229, 238, 0.96);
-  --chat-composer-control-background: rgba(241, 245, 249, 0.96);
-  --chat-composer-control-border-color: rgba(203, 213, 225, 0.96);
-  --chat-composer-control-hover-background: rgba(226, 232, 240, 0.98);
-  --chat-composer-control-hover-border-color: rgba(184, 198, 214, 0.98);
-  --chat-composer-control-disabled-background: rgba(248, 250, 252, 0.98);
-  --chat-composer-control-disabled-border-color: rgba(226, 232, 240, 0.98);
-  --chat-composer-send-background: rgba(96, 165, 250, 0.14);
-  --chat-composer-send-hover-background: rgba(96, 165, 250, 0.22);
-  --chat-composer-send-hover-border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.3);
-  --chat-composer-send-hover-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.14);
-  --chat-composer-stop-background: rgba(239, 68, 68, 0.18);
-  --chat-composer-stop-hover-background: rgba(239, 68, 68, 0.28);
-  --chat-composer-stop-hover-border-color: rgba(239, 68, 68, 0.34);
-  --chat-composer-action-foreground: #ffffff;
-  --composer-workspace-badge-background: #4a9eff;
-  --composer-workspace-badge-foreground: #ffffff;
-  --sidebar-resize-indicator-color: rgba(156, 163, 175, 0.5);
-  --chat-composer-backdrop-filter: none;
-  --chat-composer-shadow:
+  --theme-chat-composer-toolbar-background: rgba(244, 247, 251, 0.94);
+  --theme-chat-composer-toolbar-border-color: rgba(223, 229, 238, 0.96);
+  --theme-chat-composer-control-background: rgba(241, 245, 249, 0.96);
+  --theme-chat-composer-control-border-color: rgba(203, 213, 225, 0.96);
+  --theme-chat-composer-control-hover-background: rgba(226, 232, 240, 0.98);
+  --theme-chat-composer-control-hover-border-color: rgba(184, 198, 214, 0.98);
+  --theme-chat-composer-control-disabled-background: rgba(248, 250, 252, 0.98);
+  --theme-chat-composer-control-disabled-border-color: rgba(226, 232, 240, 0.98);
+  --theme-chat-composer-send-background: rgba(96, 165, 250, 0.14);
+  --theme-chat-composer-send-hover-background: rgba(96, 165, 250, 0.22);
+  --theme-chat-composer-send-hover-border-color: rgba(59, 130, 246, 0.3);
+  --theme-chat-composer-send-hover-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.14);
+  --theme-chat-composer-stop-background: rgba(239, 68, 68, 0.18);
+  --theme-chat-composer-stop-hover-background: rgba(239, 68, 68, 0.28);
+  --theme-chat-composer-stop-hover-border-color: rgba(239, 68, 68, 0.34);
+  --theme-chat-composer-action-foreground: #ffffff;
+  --theme-composer-workspace-badge-background: #4a9eff;
+  --theme-composer-workspace-badge-foreground: #ffffff;
+  --theme-sidebar-resize-indicator-color: rgba(156, 163, 175, 0.5);
+  --theme-chat-composer-backdrop-filter: none;
+  --theme-chat-composer-shadow:
     0 0 0 1px rgba(226, 232, 240, 0.65), 0 10px 24px rgba(148, 163, 184, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.75);
-  --chat-user-bubble-background: linear-gradient(180deg, #7ea7b1 0%, #769eaa 100%);
-  --chat-user-bubble-border-color: rgba(106, 146, 156, 0.32);
-  --chat-user-bubble-shadow: 0 12px 22px rgba(125, 166, 176, 0.18);
-  --chat-user-bubble-text: #ffffff;
-  --chat-user-bubble-radius: 28px;
+  --theme-chat-user-bubble-background: linear-gradient(180deg, #7ea7b1 0%, #769eaa 100%);
+  --theme-chat-user-bubble-border-color: rgba(106, 146, 156, 0.32);
+  --theme-chat-user-bubble-shadow: 0 12px 22px rgba(125, 166, 176, 0.18);
+  --theme-chat-user-bubble-text: #ffffff;
+  --theme-chat-user-bubble-radius: 28px;
 }
 
 [data-theme='dark'] {
-  /* Dark theme is the default in :root. 
-     This selector is preserved for explicit overrides if needed. */
   color-scheme: dark;
 }
-
-/* 系统主题跟随（由 electron 或 JS 在运行时设置） */

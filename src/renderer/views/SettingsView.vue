@@ -143,7 +143,7 @@
         </div>
 
         <div class="config-group">
-          <h3>Theme</h3>
+          <h3>Theme Mode</h3>
           <div class="button-group">
             <button
               v-for="theme in themeOptions"
@@ -154,6 +154,73 @@
               {{ theme.charAt(0).toUpperCase() + theme.slice(1) }}
             </button>
           </div>
+        </div>
+
+        <div class="config-group">
+          <h3>Theme Preset</h3>
+          <label class="input-label">
+            <span>Preset</span>
+            <select
+              :value="currentThemePresetId"
+              @change="setThemePreset(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="preset in themePresetOptions" :key="preset.id" :value="preset.id">
+                {{ preset.label }}
+              </option>
+            </select>
+          </label>
+          <p class="group-description">
+            Base46 presets compile into iKi's semantic desktop theme tokens. Theme mode still
+            controls light, dark, or system selection when the preset provides both variants.
+          </p>
+        </div>
+
+        <div v-if="currentThemePresetId === customBase46PresetId" class="config-group">
+          <h3>Custom Base46</h3>
+          <label class="input-label">
+            <span>Preset Label</span>
+            <input
+              :value="customBase46LabelDraft"
+              placeholder="Custom Base46"
+              @input="customBase46LabelDraft = ($event.target as HTMLInputElement).value"
+            />
+          </label>
+          <div class="theme-editor-toolbar">
+            <div class="button-group">
+              <button
+                v-for="variant in base46EditorVariants"
+                :key="variant"
+                :class="{ active: customBase46EditorVariant === variant }"
+                @click="setCustomBase46EditorVariant(variant)"
+              >
+                {{ capitalizeWord(variant) }}
+              </button>
+            </div>
+            <div class="theme-editor-actions">
+              <button class="secondary-btn" @click="restoreCustomBase46Editor">
+                Restore Saved
+              </button>
+              <button class="secondary-btn" @click="resetCustomBase46Preset">Reset Preset</button>
+              <button class="primary-btn" @click="applyCustomBase46Variant">
+                Apply {{ capitalizeWord(customBase46EditorVariant) }} Variant
+              </button>
+            </div>
+          </div>
+          <label class="input-label">
+            <span>{{ capitalizeWord(customBase46EditorVariant) }} Variant JSON</span>
+            <textarea
+              class="theme-json-editor"
+              rows="18"
+              :value="customBase46Draft"
+              @input="updateCustomBase46Draft(($event.target as HTMLTextAreaElement).value)"
+            />
+          </label>
+          <p class="group-description">
+            Paste a Base46-compatible JSON document here. The selected variant must declare
+            <code>"type": "{{ customBase46EditorVariant }}"</code>.
+          </p>
+          <p v-if="customBase46Error" class="error-text">{{ customBase46Error }}</p>
+          <p v-else-if="customBase46Status" class="success-text">{{ customBase46Status }}</p>
         </div>
 
         <div class="config-group">
@@ -534,7 +601,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   Cog,
@@ -560,6 +627,14 @@ import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.
 import { useConfigStore } from '../store/config';
 import type { AppConfig } from '../../shared/types/config';
 import type { Provider } from '../../shared/types/provider';
+import type { ThemeVariant } from '../../shared/theme/types';
+import { parseBase46ThemeDocument } from '../../shared/theme/base46_schema';
+import {
+  CUSTOM_BASE46_PRESET_ID,
+  DEFAULT_THEME_PRESET_ID,
+  createDefaultThemeConfig,
+  listThemePresetSummaries,
+} from '../../shared/theme/registry';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
 
@@ -578,6 +653,12 @@ const toolModelTestResult = ref<{
   status: 'success' | 'warning' | 'error';
   message: string;
 } | null>(null);
+const customBase46PresetId = CUSTOM_BASE46_PRESET_ID;
+const customBase46EditorVariant = ref<ThemeVariant>('dark');
+const customBase46LabelDraft = ref('Custom Base46');
+const customBase46Draft = ref('');
+const customBase46Error = ref('');
+const customBase46Status = ref('');
 
 type AvailableProvider = {
   id: string;
@@ -743,11 +824,39 @@ const activeSectionLabel = computed(() => activeSectionMeta.value.label);
 const activeSectionIcon = computed(() => activeSectionMeta.value.icon);
 
 const themeOptions = ['light', 'dark', 'system'] as const;
+const base46EditorVariants = ['dark', 'light'] as const;
 const densityOptions = [
   { key: 'compact' as const, label: 'Compact' },
   { key: 'comfortable' as const, label: 'Comfortable' },
   { key: 'spacious' as const, label: 'Spacious' },
 ];
+const themePresetOptions = computed(() =>
+  listThemePresetSummaries(config.value.themes.base46Presets)
+);
+const currentThemePresetId = computed(() => {
+  const configuredId = config.value.general.themePresetId;
+  return themePresetOptions.value.some(preset => preset.id === configuredId)
+    ? configuredId
+    : DEFAULT_THEME_PRESET_ID;
+});
+
+const capitalizeWord = (value: string): string =>
+  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
+
+const getDefaultCustomBase46Preset = () =>
+  createDefaultThemeConfig().base46Presets[CUSTOM_BASE46_PRESET_ID];
+
+const syncCustomBase46Editor = () => {
+  const preset =
+    config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] ?? getDefaultCustomBase46Preset();
+  customBase46LabelDraft.value = preset.label;
+  const documentForVariant =
+    preset[customBase46EditorVariant.value] ??
+    getDefaultCustomBase46Preset()[customBase46EditorVariant.value];
+  customBase46Draft.value = JSON.stringify(documentForVariant, null, 2);
+  customBase46Error.value = '';
+  customBase46Status.value = '';
+};
 
 // 自动保存防抖
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -790,6 +899,65 @@ const updateGeneral = <K extends keyof AppConfig['general']>(
 ) => {
   configStore.updateGeneral(key, value);
   autoSave();
+};
+
+const setThemePreset = (presetId: string) => {
+  config.value.general.themePresetId = presetId;
+  autoSave();
+  if (presetId === CUSTOM_BASE46_PRESET_ID) {
+    syncCustomBase46Editor();
+  }
+};
+
+const updateCustomBase46Draft = (value: string) => {
+  customBase46Draft.value = value;
+  customBase46Error.value = '';
+  customBase46Status.value = '';
+};
+
+const setCustomBase46EditorVariant = (variant: ThemeVariant) => {
+  customBase46EditorVariant.value = variant;
+  syncCustomBase46Editor();
+};
+
+const applyCustomBase46Variant = () => {
+  customBase46Error.value = '';
+  customBase46Status.value = '';
+
+  try {
+    const parsed = parseBase46ThemeDocument(JSON.parse(customBase46Draft.value));
+    if (parsed.type !== customBase46EditorVariant.value) {
+      throw new Error(
+        `The JSON document must declare "type": "${customBase46EditorVariant.value}".`
+      );
+    }
+
+    const currentPreset =
+      config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] ?? getDefaultCustomBase46Preset();
+    config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] = {
+      ...currentPreset,
+      label: customBase46LabelDraft.value.trim() || 'Custom Base46',
+      [customBase46EditorVariant.value]: parsed,
+    };
+    config.value.general.themePresetId = CUSTOM_BASE46_PRESET_ID;
+    autoSave();
+    customBase46Status.value = `${capitalizeWord(customBase46EditorVariant.value)} variant applied.`;
+  } catch (error) {
+    customBase46Error.value = getErrorMessage(error);
+  }
+};
+
+const restoreCustomBase46Editor = () => {
+  syncCustomBase46Editor();
+  customBase46Status.value = 'Restored the saved preset payload.';
+};
+
+const resetCustomBase46Preset = () => {
+  config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] = getDefaultCustomBase46Preset();
+  config.value.general.themePresetId = CUSTOM_BASE46_PRESET_ID;
+  autoSave();
+  syncCustomBase46Editor();
+  customBase46Status.value = 'Reset the custom preset to the bundled Base46 starter theme.';
 };
 
 const updateNetwork = (path: NetworkUpdatePath, value: boolean | string | number | null) => {
@@ -845,6 +1013,16 @@ const updateShellHighRiskPatterns = (value: string) => {
     .slice(0, 100);
   updateToolExecution('shellHighRiskPatterns', patterns);
 };
+
+watch(
+  () => currentThemePresetId.value,
+  presetId => {
+    if (presetId === CUSTOM_BASE46_PRESET_ID) {
+      syncCustomBase46Editor();
+    }
+  },
+  { immediate: true }
+);
 
 const resetSection = (section: keyof AppConfig) => {
   configStore.resetSection(section);
@@ -1060,6 +1238,33 @@ onMounted(async () => {
   background: var(--accent-color);
   color: white;
   border-color: var(--accent-color);
+}
+
+.theme-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.theme-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.theme-json-editor {
+  min-height: 320px;
+  line-height: 1.45;
+  font-family:
+    'SF Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, 'Liberation Mono',
+    monospace;
+}
+
+.success-text {
+  color: var(--success-color);
 }
 
 /* 滑动条 */

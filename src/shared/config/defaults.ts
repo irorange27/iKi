@@ -1,10 +1,12 @@
 import type { AppConfig } from '../types/config';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../constants/daemon';
+import { createDefaultThemeConfig } from '../theme/registry';
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   general: {
     language: 'en',
     theme: 'system',
+    themePresetId: 'iki-default',
     autoUpdate: true,
     minimizeToTray: false,
     closeToTray: false,
@@ -20,6 +22,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     messageBubblePaddingY: 12,
     messageGap: 18,
   },
+  themes: createDefaultThemeConfig(),
   network: {
     proxy: {
       enable: false,
@@ -163,6 +166,14 @@ export const mergeAppConfigWithBase = (
     ui: {
       ...base.ui,
       ...(rawConfig.ui ?? {}),
+    },
+    themes: {
+      ...base.themes,
+      ...(rawConfig.themes ?? {}),
+      base46Presets: {
+        ...base.themes.base46Presets,
+        ...((rawConfig.themes ?? {}).base46Presets ?? {}),
+      },
     },
     network: {
       ...base.network,
