@@ -21,12 +21,12 @@
       </button>
       <div class="flex gap-3">
         <button
-          class="flex-1 rounded-lg border bg-transparent px-6 py-3 text-base font-medium transition-colors btn-secondary"
+          class="flex-1 rounded-lg border bg-transparent px-6 py-3 text-white text-base font-small transition-colors btn-secondary"
         >
           Configure Provider
         </button>
         <button
-          class="flex-1 rounded-lg border bg-transparent px-6 py-3 text-base font-medium transition-colors btn-secondary"
+          class="flex-1 rounded-lg border bg-transparent px-6 py-3 text-white text-base font-small transition-colors btn-secondary"
           @click="openSettings"
         >
           Settings

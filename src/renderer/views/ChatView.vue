@@ -20,297 +20,460 @@
       </div>
 
       <!-- Main Area -->
-      <div class="chat-main-area flex flex-1 items-center justify-center overflow-y-auto" ref="messagesContainer">
+      <div
+        class="chat-main-area flex flex-1 items-center justify-center overflow-y-auto"
+        ref="messagesContainer"
+      >
         <WelcomeScreen v-if="showWelcome && chat.messages.length === 0" @new-chat="handleNewChat" />
 
         <!-- Messages List -->
-          <div v-else class="messages-area w-full h-full">
+        <div v-else class="messages-area w-full h-full">
           <div class="messages-container" @click="handleMarkdownClick">
-            <div v-for="(m, index) in chat.messages" :key="m.id ? m.id : index" class="message-wrapper" :class="m.role">
+            <div
+              v-for="(m, index) in chat.messages"
+              :key="m.id ? m.id : index"
+              class="message-wrapper"
+              :class="m.role"
+            >
               <div class="message-shell">
                 <div
-                  v-if="m.role === 'assistant' && hasUsageSummary(m)"
-                  class="tool-usage-summary"
+                  v-if="m.role === 'assistant' && hasReferenceSummary(m)"
+                  class="reference-summary"
                 >
-                  <span
-                    v-if="hasMemoryPart(m)"
-                    class="tool-usage-label"
+                  <button
+                    v-if="getContextReferenceCount(m) > 0"
+                    type="button"
+                    class="reference-summary-item"
+                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'context' }"
+                    :title="getContextReferenceTooltip(m)"
+                    @click.stop="toggleReferencePanel(m, 'context')"
                   >
-                    {{ getMemoryCountForMessage(m) }} memories
-                  </span>
-                  <span
-                    v-if="getUsedToolNames(m).length > 0"
-                    class="tool-usage-label"
+                    <Layers3 :size="14" class="reference-summary-icon" />
+                    context
+                  </button>
+                  <button
+                    v-if="getMemoryReferenceCount(m) > 0"
+                    type="button"
+                    class="reference-summary-item"
+                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'memory' }"
+                    :title="getMemoryReferenceTooltip(m)"
+                    @click.stop="toggleReferencePanel(m, 'memory')"
                   >
-                    Tools used
-                  </span>
-                  <span
-                    v-for="toolName in getUsedToolNames(m)"
-                    :key="toolName"
-                    class="tool-usage-pill"
+                    <Brain :size="14" class="reference-summary-icon" />
+                    {{ getMemoryReferenceCount(m) }} memories
+                  </button>
+                  <button
+                    v-if="getToolReferenceCount(m) > 0"
+                    type="button"
+                    class="reference-summary-item"
+                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'tools' }"
+                    :title="getToolReferenceTooltip(m)"
+                    @click.stop="toggleReferencePanel(m, 'tools')"
                   >
-                    {{ toolName }}
-                  </span>
+                    <Wrench :size="14" class="reference-summary-icon" />
+                    {{ getToolReferenceCount(m) }} tools
+                  </button>
+                  <button
+                    v-if="getSkillReferenceCount(m) > 0"
+                    type="button"
+                    class="reference-summary-item"
+                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'skills' }"
+                    :title="getSkillReferenceTooltip(m)"
+                    @click.stop="toggleReferencePanel(m, 'skills')"
+                  >
+                    <Sparkles :size="14" class="reference-summary-icon" />
+                    {{ getSkillReferenceCount(m) }} skills
+                  </button>
                 </div>
-                <div class="message-content">
-                  <div v-for="(part, partIndex) in m.parts" :key="getPartRenderKey(m.id || String(index), part, partIndex)"
-                    class="message-part">
-                  <div v-if="isStreamingTextPart(m as any, part)" class="message-text">
-                    {{ getTextPartContent(part) }}
-                  </div>
-                  <div v-else-if="isTextPart(part)" class="message-text markdown-content">
-                    <VueMarkdown :source="getTextPartContent(part)" :plugins="markdownPlugins" />
-                  </div>
-                  <div v-else-if="isMemoryPart(part)" class="memory-card">
-                    <div class="memory-card-header">
-                      <div class="memory-card-title">Memories</div>
-                      <div class="memory-card-count">{{ getMemoryResults(part).length }}</div>
-                    </div>
-                    <div v-if="getMemoryQuery(part)" class="memory-card-query">
-                      Query: {{ getMemoryQuery(part) }}
-                    </div>
-                    <ul v-if="getMemoryResults(part).length > 0" class="memory-card-list">
+                <div
+                  v-if="m.role === 'assistant' && getExpandedReferenceCategory(m)"
+                  class="reference-panel"
+                >
+                  <div v-if="getExpandedReferenceCategory(m) === 'tools'">
+                    <div class="reference-panel-label">Tools</div>
+                    <ul class="reference-panel-list">
                       <li
-                        v-for="entry in getMemoryResults(part)"
-                        :key="entry.id || entry.summary"
-                        class="memory-card-item"
+                        v-for="entry in getToolReferenceItems(m)"
+                        :key="entry.name"
+                        class="reference-panel-item"
                       >
-                        <div class="memory-card-meta">
-                          <span class="memory-card-score">
-                            Score {{ formatMemoryScore(entry.score) }}
-                          </span>
-                          <span v-if="entry.updated_at" class="memory-card-time">
-                            {{ formatShortTimestamp(entry.updated_at) }}
-                          </span>
-                        </div>
-                        <div class="memory-card-content">{{ entry.summary }}</div>
+                        <span class="reference-panel-item-name">{{ entry.name }}</span>
+                        <span class="reference-panel-item-meta">{{ entry.count }} calls</span>
                       </li>
                     </ul>
-                    <div v-else class="memory-card-empty">No memories found.</div>
                   </div>
-                  <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
-                    <div class="tool-approval-header">
-                      <svg class="tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span class="tool-approval-title">Tool Approval Request</span>
-                    </div>
-                    <div class="tool-approval-body">
-                      <div class="tool-name">
-                        {{ getToolName(part) }}
-                      </div>
-                      <div class="tool-args">
-                        <pre>{{ formatJson(getToolInput(part)) }}</pre>
-                      </div>
-                    </div>
-                    <div class="tool-approval-actions">
-                      <button class="approve-btn" @click="handleToolApproval(m as any, part as any, true)"
-                        :disabled="isApprovalProcessing(part)">
-                        Approve
-                      </button>
-                      <button class="reject-btn" @click="handleToolApproval(m as any, part as any, false)"
-                        :disabled="isApprovalProcessing(part)">
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    v-else-if="isToolResultPart(part)"
-                    class="tool-result-content"
-                    :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
-                  >
-                    <div class="tool-card-header">
-                      <span class="tool-card-tag tag-result">Tool Result</span>
-                      <div class="tool-card-lead">
-                        <component
-                          :is="getToolIconComponent(part)"
-                          :size="16"
-                          class="tool-card-lead-icon"
-                        />
-                        <span class="tool-card-title">{{ getToolTitle(part) }}</span>
-                        <span class="tool-card-tool">{{ getToolName(part) }}</span>
-                        <span v-if="getMcpServerLabel(part)" class="tool-card-server">
-                          MCP Server: {{ getMcpServerLabel(part) }}
-                        </span>
-                      </div>
-                      <div class="tool-card-meta">
-                        <span
-                          v-if="getToolStateLabel(part)"
-                          class="tool-state-pill"
-                          :class="getToolStatePillClass(part)"
-                        >
-                          <CheckCircle
-                            v-if="getToolStateKind(part) === 'success'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <XCircle
-                            v-else-if="getToolStateKind(part) === 'error'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <ShieldBan
-                            v-else-if="getToolStateKind(part) === 'denied'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <CircleHelp
-                            v-else-if="getToolStateKind(part) === 'pending'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <Loader2
-                            v-else-if="getToolStateKind(part) === 'running'"
-                            :size="14"
-                            class="tool-state-icon tool-icon-spin"
-                          />
-                          <span>{{ getToolStateLabel(part) }}</span>
-                        </span>
-                        <span v-if="getToolDurationLabel(part)" class="tool-duration">
-                          <Clock :size="14" class="tool-duration-icon" />
-                          <span>{{ getToolDurationLabel(part) }}</span>
-                        </span>
+                  <div v-else-if="getExpandedReferenceCategory(m) === 'skills'">
+                    <div class="reference-panel-label">Skills</div>
+                    <ul class="reference-panel-list">
+                      <li
+                        v-for="skill in getSkillReferenceItems(m)"
+                        :key="skill.id"
+                        class="reference-panel-item reference-panel-item-action"
+                      >
                         <button
-                          v-if="canToggleToolCollapse(part)"
                           type="button"
-                          class="tool-collapse-btn"
-                          :aria-label="isToolCollapsed(part) ? 'Expand tool details' : 'Collapse tool details'"
-                          @click.stop="toggleToolCollapse(m as any, part as any)"
+                          class="reference-panel-link"
+                          @click="openSkillReference(skill.id)"
                         >
-                          <ChevronDown
-                            :size="16"
-                            class="tool-collapse-icon"
-                            :class="{ 'is-expanded': !isToolCollapsed(part) }"
-                          />
+                          <span class="reference-panel-item-name">{{ skill.name }}</span>
+                          <span class="reference-panel-item-meta">{{ skill.sourceLabel }}</span>
+                          <span v-if="skill.description" class="reference-panel-item-description">
+                            {{ skill.description }}
+                          </span>
+                          <ExternalLink :size="13" class="reference-panel-link-icon" />
                         </button>
-                      </div>
+                      </li>
+                    </ul>
+                  </div>
+                  <div v-else-if="getExpandedReferenceCategory(m) === 'memory'">
+                    <div class="reference-panel-label">Memory</div>
+                    <div v-if="getMemoryReferenceQuery(m)" class="reference-panel-query">
+                      {{ getMemoryReferenceQuery(m) }}
                     </div>
-                    <div v-if="!isToolCollapsed(part)">
-                      <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
-                        <div class="tool-card-section-title">References</div>
-                        <ol class="tool-citations">
-                          <li v-for="citation in getWebSearchCitations(part)" :key="citation.url" class="tool-citation">
-                            <a :href="citation.url" target="_blank" rel="noopener noreferrer">
-                              {{ citation.title }}
-                            </a>
-                            <span v-if="citation.domain" class="tool-citation-domain">{{ citation.domain }}</span>
-                          </li>
-                        </ol>
-                      </div>
-                      <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-                        <div class="tool-card-section-title">{{ getToolInputDisplayTitle(part) }}</div>
-                        <pre class="tool-json-output">{{ formatJson(getToolInputDisplayValue(part)) }}</pre>
-                        <div v-if="getToolInputDisplayMetaText(part)" class="tool-input-meta">
-                          {{ getToolInputDisplayMetaText(part) }}
+                    <ul class="reference-panel-list">
+                      <li
+                        v-for="entry in getMemoryReferenceItems(m)"
+                        :key="entry.id || entry.summary"
+                        class="reference-panel-item"
+                      >
+                        <div class="reference-panel-item-row">
+                          <span v-if="entry.score !== null" class="reference-panel-score">
+                            {{ formatMemoryMatchScore(entry.score) }}
+                          </span>
+                          <span
+                            v-if="entry.sourceMessageCount !== null"
+                            class="reference-panel-item-meta"
+                          >
+                            {{ formatMemorySourceCount(entry.sourceMessageCount) }}
+                          </span>
+                          <span v-if="entry.updatedAt" class="reference-panel-item-meta">
+                            {{ formatShortTimestamp(entry.updatedAt) }}
+                          </span>
                         </div>
-                      </div>
-                      <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
-                        <div class="tool-card-section-title">Output</div>
-                        <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
-                      </div>
-                    </div>
-                    <div
-                      v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)"
-                      class="tool-card-footer"
-                    >
-                      <span class="tool-call-id">
-                        Call ID: <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
-                      </span>
-                    </div>
+                        <div class="reference-panel-item-description">
+                          {{ entry.summary }}
+                        </div>
+                        <div v-if="entry.tags.length > 0" class="reference-panel-tags">
+                          <span v-for="tag in entry.tags" :key="tag" class="reference-panel-tag">
+                            {{ tag }}
+                          </span>
+                        </div>
+                      </li>
+                    </ul>
                   </div>
-                  <div
-                    v-else-if="isToolCallPart(part)"
-                    class="tool-call-content"
-                    :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
-                  >
-                    <div class="tool-card-header">
-                      <span class="tool-card-tag tag-call">Tool Call</span>
-                      <div class="tool-card-lead">
-                        <component
-                          :is="getToolIconComponent(part)"
-                          :size="16"
-                          class="tool-card-lead-icon"
-                        />
-                        <span class="tool-card-title">{{ getToolTitle(part) }}</span>
-                        <span class="tool-card-tool">{{ getToolName(part) }}</span>
-                        <span v-if="getMcpServerLabel(part)" class="tool-card-server">
-                          MCP Server: {{ getMcpServerLabel(part) }}
-                        </span>
-                      </div>
-                      <div class="tool-card-meta">
-                        <span
-                          v-if="getToolStateLabel(part)"
-                          class="tool-state-pill"
-                          :class="getToolStatePillClass(part)"
-                        >
-                          <CheckCircle
-                            v-if="getToolStateKind(part) === 'success'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <XCircle
-                            v-else-if="getToolStateKind(part) === 'error'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <ShieldBan
-                            v-else-if="getToolStateKind(part) === 'denied'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <CircleHelp
-                            v-else-if="getToolStateKind(part) === 'pending'"
-                            :size="14"
-                            class="tool-state-icon"
-                          />
-                          <Loader2
-                            v-else-if="getToolStateKind(part) === 'running'"
-                            :size="14"
-                            class="tool-state-icon tool-icon-spin"
-                          />
-                          <span>{{ getToolStateLabel(part) }}</span>
-                        </span>
-                        <span v-if="getToolDurationLabel(part)" class="tool-duration">
-                          <Clock :size="14" class="tool-duration-icon" />
-                          <span>{{ getToolDurationLabel(part) }}</span>
-                        </span>
-                        <button
-                          v-if="canToggleToolCollapse(part)"
-                          type="button"
-                          class="tool-collapse-btn"
-                          :aria-label="isToolCollapsed(part) ? 'Expand tool details' : 'Collapse tool details'"
-                          @click.stop="toggleToolCollapse(m as any, part as any)"
-                        >
-                          <ChevronDown
-                            :size="16"
-                            class="tool-collapse-icon"
-                            :class="{ 'is-expanded': !isToolCollapsed(part) }"
-                          />
-                        </button>
-                      </div>
+                  <div v-else-if="getExpandedReferenceCategory(m) === 'context'">
+                    <div class="reference-panel-label">Context</div>
+                    <div class="reference-panel-query">
+                      {{ getContextReferenceHeadline(m) }}
                     </div>
-                    <div v-if="!isToolCollapsed(part)">
-                      <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-                        <div class="tool-card-section-title">Arguments</div>
-                        <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
-                      </div>
-                    </div>
-                    <div
-                      v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)"
-                      class="tool-card-footer"
-                    >
-                      <span class="tool-call-id">
-                        Call ID: <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
-                      </span>
-                    </div>
-                  </div>
-                  <div v-else class="tool-fallback-content">
-                    <pre class="tool-json-output">{{ formatJson(part) }}</pre>
+                    <ul class="reference-panel-list">
+                      <li
+                        v-for="entry in getContextReferenceItems(m)"
+                        :key="`${entry.kind}-${entry.status}`"
+                        class="reference-panel-item"
+                      >
+                        <div class="reference-panel-item-row">
+                          <span class="reference-panel-item-name">{{ entry.kind }}</span>
+                          <span class="reference-panel-item-meta">{{ entry.status }}</span>
+                          <span
+                            v-if="entry.estimatedTokens !== null"
+                            class="reference-panel-item-meta"
+                          >
+                            {{ entry.estimatedTokens }} tok
+                          </span>
+                          <span
+                            v-if="entry.sourceCount !== null"
+                            class="reference-panel-item-meta"
+                          >
+                            {{ entry.sourceCount }} src
+                          </span>
+                        </div>
+                        <div v-if="entry.reason" class="reference-panel-item-description">
+                          {{ entry.reason }}
+                        </div>
+                      </li>
+                    </ul>
                   </div>
                 </div>
+                <div class="message-content">
+                  <div
+                    v-for="(part, partIndex) in m.parts"
+                    :key="getPartRenderKey(m.id || String(index), part, partIndex)"
+                    class="message-part"
+                  >
+                    <div v-if="isStreamingTextPart(m as any, part)" class="message-text">
+                      {{ getTextPartContent(part) }}
+                    </div>
+                    <div v-else-if="isTextPart(part)" class="message-text markdown-content">
+                      <VueMarkdown :source="getTextPartContent(part)" :plugins="markdownPlugins" />
+                    </div>
+                    <div
+                      v-else-if="shouldHideReferencePart(part)"
+                      class="reference-part-hidden"
+                      aria-hidden="true"
+                    ></div>
+                    <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
+                      <div class="tool-approval-header">
+                        <svg
+                          class="tool-icon"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                          />
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                        </svg>
+                        <span class="tool-approval-title">Tool Approval Request</span>
+                      </div>
+                      <div class="tool-approval-body">
+                        <div class="tool-name">
+                          {{ getToolName(part) }}
+                        </div>
+                        <div class="tool-args">
+                          <pre>{{ formatJson(getToolInput(part)) }}</pre>
+                        </div>
+                      </div>
+                      <div class="tool-approval-actions">
+                        <button
+                          class="approve-btn"
+                          @click="handleToolApproval(m as any, part as any, true)"
+                          :disabled="isApprovalProcessing(part)"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          class="reject-btn"
+                          @click="handleToolApproval(m as any, part as any, false)"
+                          :disabled="isApprovalProcessing(part)"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      v-else-if="isToolResultPart(part)"
+                      class="tool-result-content"
+                      :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
+                    >
+                      <div class="tool-card-header">
+                        <span class="tool-card-tag tag-result">Tool Result</span>
+                        <div class="tool-card-lead">
+                          <component
+                            :is="getToolIconComponent(part)"
+                            :size="16"
+                            class="tool-card-lead-icon"
+                          />
+                          <span class="tool-card-title">{{ getToolTitle(part) }}</span>
+                          <span class="tool-card-tool">{{ getToolName(part) }}</span>
+                          <span v-if="getMcpServerLabel(part)" class="tool-card-server">
+                            MCP Server: {{ getMcpServerLabel(part) }}
+                          </span>
+                        </div>
+                        <div class="tool-card-meta">
+                          <span
+                            v-if="getToolStateLabel(part)"
+                            class="tool-state-pill"
+                            :class="getToolStatePillClass(part)"
+                          >
+                            <CheckCircle
+                              v-if="getToolStateKind(part) === 'success'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <XCircle
+                              v-else-if="getToolStateKind(part) === 'error'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <ShieldBan
+                              v-else-if="getToolStateKind(part) === 'denied'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <CircleHelp
+                              v-else-if="getToolStateKind(part) === 'pending'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <Loader2
+                              v-else-if="getToolStateKind(part) === 'running'"
+                              :size="14"
+                              class="tool-state-icon tool-icon-spin"
+                            />
+                            <span>{{ getToolStateLabel(part) }}</span>
+                          </span>
+                          <span v-if="getToolDurationLabel(part)" class="tool-duration">
+                            <Clock :size="14" class="tool-duration-icon" />
+                            <span>{{ getToolDurationLabel(part) }}</span>
+                          </span>
+                          <button
+                            v-if="canToggleToolCollapse(part)"
+                            type="button"
+                            class="tool-collapse-btn"
+                            :aria-label="
+                              isToolCollapsed(part)
+                                ? 'Expand tool details'
+                                : 'Collapse tool details'
+                            "
+                            @click.stop="toggleToolCollapse(m as any, part as any)"
+                          >
+                            <ChevronDown
+                              :size="16"
+                              class="tool-collapse-icon"
+                              :class="{ 'is-expanded': !isToolCollapsed(part) }"
+                            />
+                          </button>
+                        </div>
+                      </div>
+                      <div v-if="!isToolCollapsed(part)">
+                        <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
+                          <div class="tool-card-section-title">References</div>
+                          <ol class="tool-citations">
+                            <li
+                              v-for="citation in getWebSearchCitations(part)"
+                              :key="citation.url"
+                              class="tool-citation"
+                            >
+                              <a :href="citation.url" target="_blank" rel="noopener noreferrer">
+                                {{ citation.title }}
+                              </a>
+                              <span v-if="citation.domain" class="tool-citation-domain">{{
+                                citation.domain
+                              }}</span>
+                            </li>
+                          </ol>
+                        </div>
+                        <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+                          <div class="tool-card-section-title">
+                            {{ getToolInputDisplayTitle(part) }}
+                          </div>
+                          <pre class="tool-json-output">{{
+                            formatJson(getToolInputDisplayValue(part))
+                          }}</pre>
+                          <div v-if="getToolInputDisplayMetaText(part)" class="tool-input-meta">
+                            {{ getToolInputDisplayMetaText(part) }}
+                          </div>
+                        </div>
+                        <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
+                          <div class="tool-card-section-title">Output</div>
+                          <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
+                        </div>
+                      </div>
+                      <div
+                        v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)"
+                        class="tool-card-footer"
+                      >
+                        <span class="tool-call-id">
+                          Call ID:
+                          <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      v-else-if="isToolCallPart(part)"
+                      class="tool-call-content"
+                      :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
+                    >
+                      <div class="tool-card-header">
+                        <span class="tool-card-tag tag-call">Tool Call</span>
+                        <div class="tool-card-lead">
+                          <component
+                            :is="getToolIconComponent(part)"
+                            :size="16"
+                            class="tool-card-lead-icon"
+                          />
+                          <span class="tool-card-title">{{ getToolTitle(part) }}</span>
+                          <span class="tool-card-tool">{{ getToolName(part) }}</span>
+                          <span v-if="getMcpServerLabel(part)" class="tool-card-server">
+                            MCP Server: {{ getMcpServerLabel(part) }}
+                          </span>
+                        </div>
+                        <div class="tool-card-meta">
+                          <span
+                            v-if="getToolStateLabel(part)"
+                            class="tool-state-pill"
+                            :class="getToolStatePillClass(part)"
+                          >
+                            <CheckCircle
+                              v-if="getToolStateKind(part) === 'success'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <XCircle
+                              v-else-if="getToolStateKind(part) === 'error'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <ShieldBan
+                              v-else-if="getToolStateKind(part) === 'denied'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <CircleHelp
+                              v-else-if="getToolStateKind(part) === 'pending'"
+                              :size="14"
+                              class="tool-state-icon"
+                            />
+                            <Loader2
+                              v-else-if="getToolStateKind(part) === 'running'"
+                              :size="14"
+                              class="tool-state-icon tool-icon-spin"
+                            />
+                            <span>{{ getToolStateLabel(part) }}</span>
+                          </span>
+                          <span v-if="getToolDurationLabel(part)" class="tool-duration">
+                            <Clock :size="14" class="tool-duration-icon" />
+                            <span>{{ getToolDurationLabel(part) }}</span>
+                          </span>
+                          <button
+                            v-if="canToggleToolCollapse(part)"
+                            type="button"
+                            class="tool-collapse-btn"
+                            :aria-label="
+                              isToolCollapsed(part)
+                                ? 'Expand tool details'
+                                : 'Collapse tool details'
+                            "
+                            @click.stop="toggleToolCollapse(m as any, part as any)"
+                          >
+                            <ChevronDown
+                              :size="16"
+                              class="tool-collapse-icon"
+                              :class="{ 'is-expanded': !isToolCollapsed(part) }"
+                            />
+                          </button>
+                        </div>
+                      </div>
+                      <div v-if="!isToolCollapsed(part)">
+                        <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+                          <div class="tool-card-section-title">Arguments</div>
+                          <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
+                        </div>
+                      </div>
+                      <div
+                        v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)"
+                        class="tool-card-footer"
+                      >
+                        <span class="tool-call-id">
+                          Call ID:
+                          <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div v-else class="tool-fallback-content">
+                      <pre class="tool-json-output">{{ formatJson(part) }}</pre>
+                    </div>
+                  </div>
                 </div>
                 <div v-if="m.role === 'user'" class="message-actions">
                   <button
@@ -333,11 +496,10 @@
       <div class="composer-area">
         <div v-if="editingUserMessageId" class="edit-banner">
           <div class="edit-banner-text">
-            <strong>Editing a previous message.</strong> Resending will remove later messages in this thread.
+            <strong>Editing a previous message.</strong> Resending will remove later messages in
+            this thread.
           </div>
-          <button class="edit-banner-cancel" type="button" @click="cancelEditing">
-            Cancel
-          </button>
+          <button class="edit-banner-cancel" type="button" @click="cancelEditing">Cancel</button>
         </div>
         <ChatInput
           ref="chatInputRef"
@@ -359,14 +521,19 @@ import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
 import {
+  Brain,
   CheckCircle,
   ChevronDown,
   CircleHelp,
   Clock,
+  ExternalLink,
   FolderOpen,
+  Layers3,
   Loader2,
   Pencil,
   ShieldBan,
+  Sparkles,
+  Wrench,
   XCircle,
 } from 'lucide-vue-next';
 import {
@@ -385,21 +552,31 @@ import {
   getToolStateLabel,
   getToolStatePillClass,
   getToolTitle,
-  getUsedToolNames,
   getWebSearchCitations,
   hasDisplayValue,
   hasWebSearchCitations,
   isApprovalRequestedPart,
   isToolCallPart,
   isToolCollapsed,
-  isToolPart,
   isToolResultPart,
   toggleToolCollapse,
 } from '../modules/chat/ui_message_tool_parts';
+import {
+  getContextReferenceSummary,
+  getMemoryReferenceSummary,
+  getSkillReferenceSummary,
+  getToolReferenceSummary,
+  hasReferenceSummary,
+} from '../modules/chat/ui_message_references';
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import { createChatMessageStore } from '../modules/chat/chat_message_store';
 import { isTextPart } from '../modules/chat/ui_message_text';
-import { isObjectRecord } from '../../shared/utils/guards';
+import {
+  isContextReportPart,
+  isMemoryPart,
+  isObjectRecord,
+  isSkillUsagePart,
+} from '../../shared/chat/message_parts';
 import { useConfigStore } from '../store/config';
 import { useChatThreads } from '../composables/useChatThreads';
 import { useChatStreaming } from '../composables/useChatStreaming';
@@ -422,14 +599,6 @@ const persistence = createUiMessagePersistence({ electronAPI });
 const messageStore = createChatMessageStore(chat);
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-type MemoryPreviewEntry = {
-  id?: string;
-  summary: string;
-  score?: number;
-  updated_at?: string;
-  tags?: string | null;
-};
 
 type ToolSource = {
   kind?: 'builtin' | 'mcp';
@@ -476,62 +645,111 @@ const getMcpServerLabel = (part: unknown): string => {
   return source.name || source.id || '';
 };
 
-type MemoryPart = {
-  type: 'memory-retrieval';
-  query?: string;
-  results?: MemoryPreviewEntry[];
-};
-
-const isMemoryPart = (part: unknown): part is MemoryPart => {
-  if (!isObjectRecord(part)) return false;
-  const partType = typeof part.type === 'string' ? part.type : '';
-  return partType === 'memory-retrieval';
-};
-
-const getMemoryResults = (part: unknown): MemoryPreviewEntry[] => {
-  if (!isMemoryPart(part)) return [];
-  const results = Array.isArray(part.results) ? part.results : [];
-  return results.filter(
-    entry => isObjectRecord(entry) && typeof entry.summary === 'string'
-  ) as MemoryPreviewEntry[];
-};
-
-const getMemoryQuery = (part: unknown): string => {
-  if (!isMemoryPart(part)) return '';
-  return typeof part.query === 'string' ? part.query : '';
-};
-
-const formatMemoryScore = (value: unknown): string => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value.toFixed(3);
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed.toFixed(3);
-  }
-  return '0.000';
-};
-
 const formatShortTimestamp = (value: string): string => {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) return value;
   return new Date(parsed).toLocaleDateString();
 };
 
-const getMemoryPartForMessage = (message: UIMessage): MemoryPart | null => {
-  if (!Array.isArray(message.parts)) return null;
-  const part = message.parts.find(entry => isMemoryPart(entry));
-  return part ?? null;
+type ReferenceCategory = 'tools' | 'skills' | 'memory' | 'context';
+
+const expandedReferencePanels = ref<Record<string, ReferenceCategory | null>>({});
+
+const getReferenceMessageKey = (message: UIMessage): string => message.id || '';
+
+const getExpandedReferenceCategory = (message: UIMessage): ReferenceCategory | null => {
+  const key = getReferenceMessageKey(message);
+  return key ? (expandedReferencePanels.value[key] ?? null) : null;
 };
 
-const hasMemoryPart = (message: UIMessage): boolean => Boolean(getMemoryPartForMessage(message));
-
-const getMemoryCountForMessage = (message: UIMessage): number => {
-  const memoryPart = getMemoryPartForMessage(message);
-  if (!memoryPart) return 0;
-  return getMemoryResults(memoryPart).length;
+const toggleReferencePanel = (message: UIMessage, category: ReferenceCategory) => {
+  const key = getReferenceMessageKey(message);
+  if (!key) return;
+  expandedReferencePanels.value = {
+    ...expandedReferencePanels.value,
+    [key]: expandedReferencePanels.value[key] === category ? null : category,
+  };
 };
 
-const hasUsageSummary = (message: UIMessage): boolean =>
-  hasMemoryPart(message) || getUsedToolNames(message).length > 0;
+const getToolReferenceCount = (message: UIMessage): number =>
+  getToolReferenceSummary(message).count;
+
+const getToolReferenceItems = (message: UIMessage) => getToolReferenceSummary(message).items;
+
+const getToolReferenceTooltip = (message: UIMessage): string => {
+  const summary = getToolReferenceSummary(message);
+  return summary.names.length > 0
+    ? `Tools: ${summary.names.join(', ')}`
+    : 'Tools used in this reply';
+};
+
+const getSkillReferenceCount = (message: UIMessage): number =>
+  getSkillReferenceSummary(message).items.length;
+
+const getSkillReferenceItems = (message: UIMessage) => getSkillReferenceSummary(message).items;
+
+const getSkillReferenceTooltip = (message: UIMessage): string => {
+  const summary = getSkillReferenceSummary(message);
+  if (summary.items.length === 0) return 'No skills used';
+  return summary.items.map(skill => skill.name).join(', ');
+};
+
+const getMemoryReferenceCount = (message: UIMessage): number =>
+  getMemoryReferenceSummary(message).items.length;
+
+const getMemoryReferenceItems = (message: UIMessage) => getMemoryReferenceSummary(message).items;
+
+const getMemoryReferenceQuery = (message: UIMessage): string =>
+  getMemoryReferenceSummary(message).query;
+
+const getMemoryReferenceTooltip = (message: UIMessage): string => {
+  const summary = getMemoryReferenceSummary(message);
+  return summary.query ? `Memory query: ${summary.query}` : 'Memory references used in this reply';
+};
+
+const getContextReferenceCount = (message: UIMessage): number =>
+  getContextReferenceSummary(message).items.length;
+
+const getContextReferenceItems = (message: UIMessage) => getContextReferenceSummary(message).items;
+
+const getContextReferenceHeadline = (message: UIMessage): string => {
+  const summary = getContextReferenceSummary(message);
+  const parts: string[] = [];
+  if (summary.totalEstimatedTokens !== null) {
+    parts.push(`${summary.totalEstimatedTokens} estimated tokens`);
+  }
+  if (summary.retainedRecentMessages !== null) {
+    parts.push(`${summary.retainedRecentMessages} recent messages kept`);
+  }
+  if (summary.compactedMessages !== null && summary.compactedMessages > 0) {
+    parts.push(`${summary.compactedMessages} compacted`);
+  }
+  return parts.join(' · ') || 'Context assembly report';
+};
+
+const getContextReferenceTooltip = (message: UIMessage): string => {
+  const summary = getContextReferenceSummary(message);
+  if (summary.items.length === 0) return 'No context report';
+  return getContextReferenceHeadline(message);
+};
+
+const formatMemoryMatchScore = (score: number): string => `${score.toFixed(3)} match`;
+
+const formatMemorySourceCount = (count: number): string =>
+  `${count} source ${count === 1 ? 'message' : 'messages'}`;
+
+const openSkillReference = async (skillId: string) => {
+  try {
+    const result = await electronAPI?.skills?.openSkill?.(skillId);
+    if (result?.success) return;
+    console.warn('Failed to open skill:', result?.error || skillId);
+  } catch (error) {
+    console.warn('Failed to open skill:', error);
+  }
+};
+
+const shouldHideReferencePart = (part: unknown): boolean =>
+  isSkillUsagePart(part) || isMemoryPart(part) || isContextReportPart(part);
 
 const markdownPlugins = [markdownCodeBlockPlugin];
 
@@ -671,14 +889,14 @@ const cancelEditing = async () => {
 // Listen for model selection from ChatInput
 onMounted(async () => {
   // Initialize config store if not already initialized
-    if (!configStore.initialized) {
-      await configStore.initialize();
-    }
-    // Load threads on mount
-    await refreshThreads();
-    await loadToolSources();
+  if (!configStore.initialized) {
+    await configStore.initialize();
+  }
+  // Load threads on mount
+  await refreshThreads();
+  await loadToolSources();
 
-    electronAPI.chat.removeAllListeners();
+  electronAPI.chat.removeAllListeners();
   electronAPI.chat.onUiChunk((chunk: unknown) => {
     void streamController.handleUiChunk(chunk);
   });
@@ -745,110 +963,165 @@ onUnmounted(() => {
   position: relative;
 }
 
-.tool-usage-summary {
+.reference-summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
   margin-bottom: 8px;
 }
 
-.tool-usage-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.tool-usage-pill {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-}
-
-.memory-card {
-  background: var(--bg-secondary);
-  border: 1px dashed var(--border-color);
-  border-radius: 12px;
-  padding: 12px 14px;
-}
-
-.memory-card-header {
-  display: flex;
+.reference-summary-item {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--reference-inline-color, var(--text-secondary));
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--reference-inline-underline, rgba(127, 152, 170, 0.42));
+  text-underline-offset: 4px;
 }
 
-.memory-card-title {
+.reference-summary-item:hover,
+.reference-summary-item.is-active {
+  color: var(--reference-inline-hover, var(--reference-inline-color, var(--text-primary)));
+  text-decoration-color: var(
+    --reference-inline-underline,
+    rgba(127, 152, 170, 0.42)
+  );
+}
+
+.reference-summary-icon {
+  flex-shrink: 0;
+}
+
+.reference-panel {
+  margin-bottom: 12px;
+  padding: 10px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+}
+
+.reference-panel-label {
+  margin-bottom: 8px;
   font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
+  font-weight: 650;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.memory-card-count {
-  font-size: 11px;
-  color: var(--text-secondary);
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-}
-
-.memory-card-query {
-  margin-top: 6px;
+.reference-panel-query {
+  margin-bottom: 10px;
   font-size: 12px;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
-.memory-card-list {
+.reference-panel-list {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
   gap: 8px;
 }
 
-.memory-card-item {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 8px 10px;
+.reference-panel-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
 }
 
-.memory-card-meta {
+.reference-panel-item-action {
+  padding: 0;
+  overflow: hidden;
+}
+
+.reference-panel-link {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reference-panel-link:hover {
+  background: color-mix(in srgb, var(--accent-color) 5%, transparent);
+}
+
+.reference-panel-link-icon {
+  grid-column: 2 / 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--text-muted);
+}
+
+.reference-panel-item-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
 }
 
-.memory-card-score {
-  font-weight: 600;
-  color: var(--accent-color);
-}
-
-.memory-card-time {
-  margin-left: auto;
-}
-
-.memory-card-content {
+.reference-panel-item-name {
   font-size: 13px;
-  line-height: 1.5;
+  font-weight: 650;
   color: var(--text-primary);
 }
 
-.memory-card-empty {
-  margin-top: 8px;
-  font-size: 12px;
+.reference-panel-item-meta {
+  font-size: 11px;
   color: var(--text-muted);
+}
+
+.reference-panel-item-description {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.reference-panel-score {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-weight: 650;
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+
+.reference-panel-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reference-panel-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.reference-part-hidden {
+  display: none;
 }
 
 .message-wrapper.user .message-shell {
@@ -872,7 +1145,9 @@ onUnmounted(() => {
   opacity: 0;
   pointer-events: none;
   transform: translateY(4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
   z-index: 10;
 }
 
@@ -919,7 +1194,9 @@ onUnmounted(() => {
   opacity: 0;
   transform: translate(-50%, 4px);
   pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
 }
 
 .message-action-btn:hover::after {
@@ -972,11 +1249,11 @@ onUnmounted(() => {
 }
 
 .message-wrapper.user .message-content {
-  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-tertiary));
-  border: 1px solid color-mix(in srgb, var(--accent-color) 35%, var(--border-color));
-  border-radius: 12px;
+  background: var(--chat-user-bubble-background);
+  border: 1px solid var(--chat-user-bubble-border-color);
+  border-radius: var(--chat-user-bubble-radius);
   padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--chat-user-bubble-shadow);
 }
 
 .message-wrapper.assistant .message-content {
@@ -997,6 +1274,10 @@ onUnmounted(() => {
 
 .message-text.markdown-content {
   white-space: normal;
+}
+
+.message-wrapper.user .message-text {
+  color: var(--chat-user-bubble-text);
 }
 
 .message-part + .message-part {
@@ -1061,12 +1342,36 @@ onUnmounted(() => {
   color: var(--accent-color);
   text-decoration: none;
   border-bottom: 1px dashed color-mix(in srgb, var(--accent-color) 55%, transparent);
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .message-text.markdown-content :deep(a:hover) {
   color: var(--accent-hover);
   border-bottom-color: var(--accent-hover);
+}
+
+.message-wrapper.user .message-text.markdown-content :deep(a) {
+  color: var(--chat-user-bubble-text);
+  border-bottom-color: rgba(255, 255, 255, 0.45);
+}
+
+.message-wrapper.user .message-text.markdown-content :deep(a:hover) {
+  color: #ffffff;
+  border-bottom-color: rgba(255, 255, 255, 0.72);
+}
+
+.message-wrapper.user .message-text.markdown-content :deep(blockquote) {
+  border-left-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.message-wrapper.user .message-text.markdown-content :deep(code) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--chat-user-bubble-text);
 }
 
 .message-text.markdown-content :deep(hr) {
@@ -1250,7 +1555,6 @@ onUnmounted(() => {
 }
 
 @keyframes blink {
-
   0%,
   100% {
     opacity: 1;
@@ -1333,8 +1637,9 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   padding: 2px 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    'Courier New', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
 }
 
 .tool-card-server {
@@ -1444,7 +1749,10 @@ onUnmounted(() => {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .tool-collapse-btn:hover {
@@ -1488,8 +1796,9 @@ onUnmounted(() => {
 }
 
 .tool-call-id-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    'Courier New', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
@@ -1521,7 +1830,9 @@ onUnmounted(() => {
   color: var(--accent-color);
   text-decoration: none;
   border-bottom: 1px dashed color-mix(in srgb, var(--accent-color) 55%, transparent);
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .tool-citation a:hover {

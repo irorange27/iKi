@@ -789,6 +789,136 @@
         </div>
 
         <div class="settings-card">
+          <div class="card-title">Context Assembly</div>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="config.memory.context.enabled"
+              @change="
+                updateMemoryContext('enabled', ($event.target as HTMLInputElement).checked)
+              "
+            />
+            Enable Context Budgeting
+          </label>
+          <p class="card-help">
+            Compact long threads into a rolling summary plus recent turns, and bound skill / memory
+            context by estimated token budgets.
+          </p>
+
+          <template v-if="config.memory.context.enabled">
+            <label class="input-label">
+              <span>Recent Raw Messages</span>
+              <input
+                type="number"
+                min="2"
+                max="20"
+                :value="config.memory.context.recentMessageCount"
+                @input="
+                  updateMemoryContext(
+                    'recentMessageCount',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+            <label class="input-label">
+              <span>Recent History Budget (tokens)</span>
+              <input
+                type="number"
+                min="200"
+                max="12000"
+                step="100"
+                :value="config.memory.context.maxRecentTokens"
+                @input="
+                  updateMemoryContext(
+                    'maxRecentTokens',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+            <label class="input-label">
+              <span>Summary Trigger Messages</span>
+              <input
+                type="number"
+                min="4"
+                max="100"
+                :value="config.memory.context.summaryTriggerMessages"
+                @input="
+                  updateMemoryContext(
+                    'summaryTriggerMessages',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+            <label class="input-label">
+              <span>Recent Messages Excluded From Summary</span>
+              <input
+                type="number"
+                min="2"
+                max="20"
+                :value="config.memory.context.summaryRecentMessages"
+                @input="
+                  updateMemoryContext(
+                    'summaryRecentMessages',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+            <label class="input-label">
+              <span>Thread Summary Budget (tokens)</span>
+              <input
+                type="number"
+                min="100"
+                max="4000"
+                step="50"
+                :value="config.memory.context.maxSummaryTokens"
+                @input="
+                  updateMemoryContext(
+                    'maxSummaryTokens',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+            <label class="input-label">
+              <span>Memory Budget (tokens)</span>
+              <input
+                type="number"
+                min="100"
+                max="4000"
+                step="50"
+                :value="config.memory.context.maxMemoryTokens"
+                @input="
+                  updateMemoryContext(
+                    'maxMemoryTokens',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+            <label class="input-label">
+              <span>Skill Budget (tokens)</span>
+              <input
+                type="number"
+                min="100"
+                max="8000"
+                step="50"
+                :value="config.memory.context.maxSkillTokens"
+                @input="
+                  updateMemoryContext(
+                    'maxSkillTokens',
+                    parseInt(($event.target as HTMLInputElement).value || '0')
+                  )
+                "
+              />
+            </label>
+          </template>
+        </div>
+
+        <div class="settings-card">
           <div class="card-title">Emotion Context</div>
           <label class="checkbox-label">
             <input
@@ -2679,6 +2809,13 @@ const updateMemory = <K extends keyof AppConfig['memory']>(
   value: AppConfig['memory'][K]
 ) => {
   config.value.memory[key] = value;
+  autoSave();
+};
+const updateMemoryContext = <K extends keyof AppConfig['memory']['context']>(
+  key: K,
+  value: AppConfig['memory']['context'][K]
+) => {
+  config.value.memory.context[key] = value;
   autoSave();
 };
 const updateEmotion = <K extends keyof AppConfig['memory']['emotion']>(

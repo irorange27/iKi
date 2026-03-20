@@ -60,6 +60,13 @@ body,
   overflow: hidden;
 }
 
+.app-container {
+  /* Frameless light windows need an explicit shell edge to stay legible over other apps. */
+  box-sizing: border-box;
+  border: 1px solid var(--app-shell-border-color);
+  box-shadow: var(--app-shell-shadow);
+}
+
 /* 可拖拽区域 - 在 macOS 上 */
 .titlebar-drag-region {
   position: fixed;

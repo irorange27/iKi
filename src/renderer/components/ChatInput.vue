@@ -165,7 +165,7 @@
             </div>
 
             <button
-              class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
+              class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn speech-btn"
               :class="[
                 isRecording
                   ? 'text-danger'
@@ -173,7 +173,7 @@
                     ? 'text-accent'
                     : speechEngineAvailable
                       ? 'text-secondary'
-                      : 'text-muted',
+                      : 'text-muted speech-btn-unavailable',
                 isTranscribing ? 'is-transcribing' : '',
               ]"
               :disabled="!speechEngineAvailable || isLoading || isStopping || isTranscribing"
@@ -677,11 +677,10 @@ onMounted(async () => {
 }
 
 .chat-input-container {
-  border-color: rgba(112, 119, 138, 0.34);
-  background: linear-gradient(180deg, rgba(54, 58, 68, 0.96) 0%, rgba(46, 49, 57, 0.98) 100%);
-  box-shadow:
-    0 18px 36px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  border-color: var(--chat-composer-border-color);
+  background: var(--chat-composer-background);
+  box-shadow: var(--chat-composer-shadow);
+  backdrop-filter: blur(18px);
 }
 
 .chat-input-field {
@@ -692,8 +691,8 @@ onMounted(async () => {
 
 .composer-toolbar {
   padding: 10px 12px 12px;
-  border-top-color: rgba(112, 119, 138, 0.24);
-  background: rgba(255, 255, 255, 0.02);
+  border-top-color: var(--chat-composer-toolbar-border-color);
+  background: var(--chat-composer-toolbar-background);
 }
 
 .composer-toolbar-left,
@@ -717,9 +716,15 @@ button {
   transition: all 0.2s;
 }
 
+.icon-btn {
+  border: 1px solid transparent;
+  background: var(--chat-composer-control-background);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 .send-btn {
   background: rgba(96, 165, 250, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.18);
+  box-shadow: none;
 }
 
 .text-secondary {
@@ -740,11 +745,14 @@ button {
 
 .stop-btn:hover:not(:disabled) {
   background-color: rgba(239, 68, 68, 0.28);
+  border-color: rgba(239, 68, 68, 0.34);
   color: #ffffff;
 }
 
 .send-btn:hover:not(:disabled) {
   background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.3);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.14);
   color: #ffffff;
 }
 
@@ -757,8 +765,23 @@ button {
 }
 
 .icon-btn:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: var(--chat-composer-control-hover-background);
+  border-color: var(--chat-composer-control-hover-border-color);
   color: var(--text-primary);
+}
+
+.icon-btn:disabled {
+  opacity: 0.78;
+  border-color: transparent;
+  background: var(--chat-composer-control-disabled-background);
+}
+
+.speech-btn-unavailable {
+  color: color-mix(in srgb, var(--text-secondary) 68%, var(--text-muted));
+}
+
+.speech-btn-unavailable:disabled {
+  opacity: 0.9;
 }
 
 .speech-waveform {
@@ -826,7 +849,6 @@ button {
 }
 
 button:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
 }
 </style>
