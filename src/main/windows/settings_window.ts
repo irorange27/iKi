@@ -11,6 +11,7 @@ export const createSettingsWindow = (): BrowserWindow => {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#2a2d35',
+    // Start shadow-free until the renderer resolves the active theme and opts in for light mode.
     hasShadow: false,
     title: 'Settings',
     titleBarStyle: 'hiddenInset',

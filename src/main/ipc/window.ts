@@ -16,5 +16,10 @@ export const registerWindowIpc = (): void => {
     const win = BrowserWindow.fromWebContents(event.sender);
     win?.close();
   });
-};
 
+  ipcMain.on('window:set-shadow', (event, enabled: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || typeof win.setHasShadow !== 'function') return;
+    win.setHasShadow(Boolean(enabled));
+  });
+};

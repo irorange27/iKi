@@ -245,4 +245,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   openSettings: () => ipcRenderer.send('open-settings'),
   closeWindow: () => ipcRenderer.send('close-window'),
+  setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
 });
