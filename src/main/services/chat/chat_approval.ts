@@ -98,20 +98,21 @@ export const createChatApproval = (deps: {
     if (approvalIds.length === 0) return;
 
     if (session.recoveryContext) {
+      const recoveryContext = session.recoveryContext;
       chatToolApprovalDb.upsertChatToolApprovalSession({
-        session_id: session.recoveryContext.sessionId,
-        thread_id: session.recoveryContext.threadId,
-        assistant_message_id: session.recoveryContext.assistantMessageId,
-        provider_type: session.recoveryContext.providerType,
-        model: session.recoveryContext.model,
-        system_prompt: session.recoveryContext.systemPrompt,
-        enabled_tools: JSON.stringify(session.recoveryContext.enabledTools),
+        session_id: recoveryContext.sessionId,
+        thread_id: recoveryContext.threadId,
+        assistant_message_id: recoveryContext.assistantMessageId,
+        provider_type: recoveryContext.providerType,
+        model: recoveryContext.model,
+        system_prompt: recoveryContext.systemPrompt,
+        enabled_tools: JSON.stringify(recoveryContext.enabledTools),
       });
 
       chatToolApprovalDb.upsertChatToolApprovals(
         approvalRequests.map(request => ({
           approval_id: request.approvalId,
-          session_id: session.recoveryContext!.sessionId,
+          session_id: recoveryContext.sessionId,
           tool_call_id: request.toolCallId || null,
           tool_name: request.toolCall?.toolName || null,
           tool_args: request.toolCall ? JSON.stringify(request.toolCall.args ?? {}) : null,

@@ -26,7 +26,12 @@ import type { ApprovalRecoveryContext } from './chat_approval_types';
 import { createChatConversationRunner } from './chat_conversation_runner';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
-import type { ActiveStreamState, ChatTransportMessage, ChatWebContents } from './chat_types';
+import type {
+  ActiveStreamState,
+  ChatInputMessage,
+  ChatTransportMessage,
+  ChatWebContents,
+} from './chat_types';
 import {
   createUiChunkEmitter,
   getPromptFromMessage,
@@ -264,52 +269,94 @@ export const createChatStreaming = (deps: {
     return { success: true };
   };
 
-  const send = async (options: {
+  type ChatTurnOptions = {
     providerType: string;
     model: string;
     messages: ChatTransportMessage[];
-    tools?: string[]; // Optional specific tools to enable
+    tools?: string[];
     mcpServerIds?: string[];
-    skillIds?: string[]; // Optional skill ids to inject into system prompt
+    skillIds?: string[];
     skillMode?: 'manual' | 'auto';
     threadId?: string;
-  }) => {
+  };
+
+  type PreparedChatTurn = {
+    report: Awaited<ReturnType<typeof contextAssembler.assemble>>['report'];
+    usedSkills: Awaited<ReturnType<typeof contextAssembler.assemble>>['usedSkills'];
+    skillMode: Awaited<ReturnType<typeof contextAssembler.assemble>>['skillMode'];
+    finalMessages: ChatInputMessage[];
+    history: ChatInputMessage[];
+    prompt: string;
+    guardActive: boolean;
+    guardedTools: string[];
+    enableTools: boolean;
+  };
+
+  const prepareChatTurn = async (
+    options: ChatTurnOptions & {
+      onMemoryRetrieved?: Parameters<typeof contextAssembler.assemble>[0]['onMemoryRetrieved'];
+    }
+  ): Promise<PreparedChatTurn> => {
+    const modelMessages = await toModelInputMessages(options.messages);
+    const lastModelMessage = modelMessages[modelMessages.length - 1];
+    const realtimeContext = lastModelMessage
+      ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
+      : { message: '', state: null };
+    const assembledContext = await contextAssembler.assemble({
+      messages: modelMessages,
+      threadId: options.threadId,
+      skillIds: options.skillIds,
+      skillMode: options.skillMode,
+      realtimeAffectMessage: realtimeContext.message,
+      onMemoryRetrieved: options.onMemoryRetrieved,
+    });
+    const finalMessages = assembledContext.messages;
+
+    const affectStateForPolicy = realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
+    const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
+
+    const { resolvedTools, mode } = await resolveToolNames({
+      tools: options.tools,
+      mcpServerIds: options.mcpServerIds,
+      inputMessages: finalMessages,
+    });
+    const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
+
+    persistThreadRuntimeHints({
+      threadId: options.threadId ?? '',
+      providerType: options.providerType,
+      model: options.model,
+      tools: guardedTools,
+      toolMode: mode,
+      mcpServerIds: options.mcpServerIds,
+    });
+
+    if (!finalMessages || finalMessages.length === 0) {
+      throw new Error('No messages provided for chat turn');
+    }
+
+    const history = finalMessages.slice(0, -1);
+    const lastMessage = finalMessages[finalMessages.length - 1];
+    const prompt = getPromptFromMessage(lastMessage);
+
+    return {
+      report: assembledContext.report,
+      usedSkills: Array.isArray(assembledContext.usedSkills) ? assembledContext.usedSkills : [],
+      skillMode: assembledContext.skillMode,
+      finalMessages,
+      history,
+      prompt,
+      guardActive,
+      guardedTools,
+      enableTools: guardedTools.length > 0,
+    };
+  };
+
+  const send = async (options: ChatTurnOptions) => {
     try {
-      const modelMessages = await toModelInputMessages(options.messages);
-      const lastModelMessage = modelMessages[modelMessages.length - 1];
-      const realtimeContext = lastModelMessage
-        ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
-        : { message: '', state: null };
-      const assembledContext = await contextAssembler.assemble({
-        messages: modelMessages,
-        threadId: options.threadId,
-        skillIds: options.skillIds,
-        skillMode: options.skillMode,
-        realtimeAffectMessage: realtimeContext.message,
-      });
-      const finalMessages = assembledContext.messages;
+      const preparedTurn = await prepareChatTurn(options);
 
-      const affectStateForPolicy =
-        realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
-      const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
-
-      const { resolvedTools, mode } = await resolveToolNames({
-        tools: options.tools,
-        mcpServerIds: options.mcpServerIds,
-        inputMessages: finalMessages,
-      });
-      const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
-
-      persistThreadRuntimeHints({
-        threadId: options.threadId ?? '',
-        providerType: options.providerType,
-        model: options.model,
-        tools: guardedTools,
-        toolMode: mode,
-        mcpServerIds: options.mcpServerIds,
-      });
-
-      if (guardedTools.length > 0) {
+      if (preparedTurn.enableTools) {
         const runner = createChatConversationRunner({
           providerType: options.providerType,
           model: options.model,
@@ -319,22 +366,17 @@ export const createChatStreaming = (deps: {
         });
 
         // Register selected tools
-        for (const toolName of guardedTools) {
-          registerToolWithGuard(runner, toolName, guardActive);
+        for (const toolName of preparedTurn.guardedTools) {
+          registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
         }
 
-        // Separate user prompt from history
-        const history = finalMessages.slice(0, -1);
-        const lastMessage = finalMessages[finalMessages.length - 1];
-        const prompt = getPromptFromMessage(lastMessage);
-
-        if (!prompt.trim()) {
+        if (!preparedTurn.prompt.trim()) {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
         const result = await runner.generate({
-          history,
-          prompt,
+          history: preparedTurn.history,
+          prompt: preparedTurn.prompt,
         });
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
@@ -343,7 +385,7 @@ export const createChatStreaming = (deps: {
           usage: result.usage,
           source: 'chat.send.tools',
           metadata: {
-            contextTokens: assembledContext.report.totalEstimatedTokens,
+            contextTokens: preparedTurn.report.totalEstimatedTokens,
           },
         });
         return { success: true, text: result.response };
@@ -353,7 +395,7 @@ export const createChatStreaming = (deps: {
       const result = await llmFactory.generateChatWithUsage({
         providerType: options.providerType,
         modelId: options.model,
-        messages: toLlmChatMessages(finalMessages),
+        messages: toLlmChatMessages(preparedTurn.finalMessages),
       });
       deps.usage.recordUsageEvent({
         threadId: options.threadId,
@@ -362,7 +404,7 @@ export const createChatStreaming = (deps: {
         usage: result.usage,
         source: 'chat.send.llm',
         metadata: {
-          contextTokens: assembledContext.report.totalEstimatedTokens,
+          contextTokens: preparedTurn.report.totalEstimatedTokens,
         },
       });
       return { success: true, text: result.text };
@@ -371,19 +413,7 @@ export const createChatStreaming = (deps: {
     }
   };
 
-  const stream = async (
-    webContents: ChatWebContents,
-    options: {
-      providerType: string;
-      model: string;
-      messages: ChatTransportMessage[];
-      tools?: string[];
-      mcpServerIds?: string[];
-      skillIds?: string[];
-      skillMode?: 'manual' | 'auto';
-      threadId?: string;
-    }
-  ) => {
+  const stream = async (webContents: ChatWebContents, options: ChatTurnOptions) => {
     const senderId = webContents.id;
     const existingStream = deps.activeStreams.get(senderId);
     if (existingStream) {
@@ -400,17 +430,8 @@ export const createChatStreaming = (deps: {
     deps.activeStreams.set(senderId, streamState);
 
     try {
-      const modelMessages = await toModelInputMessages(options.messages);
-      const lastModelMessage = modelMessages[modelMessages.length - 1];
-      const realtimeContext = lastModelMessage
-        ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
-        : { message: '', state: null };
-      const assembledContext = await contextAssembler.assemble({
-        messages: modelMessages,
-        threadId: options.threadId,
-        skillIds: options.skillIds,
-        skillMode: options.skillMode,
-        realtimeAffectMessage: realtimeContext.message,
+      const preparedTurn = await prepareChatTurn({
+        ...options,
         onMemoryRetrieved: payload => {
           uiChunkEmitter.emitMemoryRetrieval({
             query: payload.query,
@@ -418,21 +439,12 @@ export const createChatStreaming = (deps: {
           });
         },
       });
-      const finalMessages = assembledContext.messages;
 
-      const affectStateForPolicy =
-        realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
-      const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
-
-      const normalizedUsedSkills = Array.isArray(assembledContext.usedSkills)
-        ? assembledContext.usedSkills
-        : [];
-
-      if (normalizedUsedSkills.length > 0) {
+      if (preparedTurn.usedSkills.length > 0) {
         webContents.send('chat:ui-chunk', {
           type: 'skill-usage',
-          mode: assembledContext.skillMode,
-          skills: normalizedUsedSkills.map(skill => ({
+          mode: preparedTurn.skillMode,
+          skills: preparedTurn.usedSkills.map(skill => ({
             id: skill.id,
             name: skill.name,
             ...(skill.description ? { description: skill.description } : {}),
@@ -441,34 +453,17 @@ export const createChatStreaming = (deps: {
         });
       }
 
-      uiChunkEmitter.emitContextReport(assembledContext.report);
+      uiChunkEmitter.emitContextReport(preparedTurn.report);
 
-      const { resolvedTools, mode } = await resolveToolNames({
-        tools: options.tools,
-        mcpServerIds: options.mcpServerIds,
-        inputMessages: finalMessages,
-      });
-      const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
-
-      persistThreadRuntimeHints({
-        threadId: options.threadId ?? '',
-        providerType: options.providerType,
-        model: options.model,
-        tools: guardedTools,
-        toolMode: mode,
-        mcpServerIds: options.mcpServerIds,
-      });
-
-      const enableTools = guardedTools.length > 0;
-      const systemPrompt = enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '';
-      const approvalContext = enableTools
+      const systemPrompt = preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '';
+      const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
             threadId: options.threadId,
             sessionId: uiChunkEmitter.messageId,
             providerType: options.providerType,
             model: options.model,
             systemPrompt,
-            enabledTools: guardedTools,
+            enabledTools: preparedTurn.guardedTools,
           })
         : undefined;
 
@@ -476,37 +471,29 @@ export const createChatStreaming = (deps: {
         providerType: options.providerType,
         model: options.model,
         systemPrompt,
-        enableTools,
+        enableTools: preparedTurn.enableTools,
         maxIterations: 5,
       });
 
-      if (enableTools) {
-        for (const toolName of guardedTools) {
+      if (preparedTurn.enableTools) {
+        for (const toolName of preparedTurn.guardedTools) {
           if (!defaultToolRegistry.get(toolName)) {
             console.warn(`[Main] Tool ${toolName} not found in registry`);
             continue;
           }
-          registerToolWithGuard(runner, toolName, guardActive);
+          registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
         }
       }
 
-      if (!finalMessages || finalMessages.length === 0) {
-        throw new Error('No messages provided for streaming');
-      }
-
-      const history = finalMessages.slice(0, -1);
-      const lastMessage = finalMessages[finalMessages.length - 1];
-      const prompt = getPromptFromMessage(lastMessage);
-
-      if (!prompt.trim()) {
+      if (!preparedTurn.prompt.trim()) {
         throw new Error('No user prompt provided for streaming');
       }
 
       const streamResult = await toolLoopRunner.stream({
         runner,
         webContents,
-        history,
-        prompt,
+        history: preparedTurn.history,
+        prompt: preparedTurn.prompt,
         approvalContext,
         shouldCancel: () => streamState.cancelled,
         onToolEvent: eventPart => {
@@ -536,7 +523,7 @@ export const createChatStreaming = (deps: {
           source: 'chat.stream',
           metadata: {
             awaitingApproval: streamResult.awaitingApproval,
-            contextTokens: assembledContext.report.totalEstimatedTokens,
+            contextTokens: preparedTurn.report.totalEstimatedTokens,
           },
         });
       }

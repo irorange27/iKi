@@ -1,5 +1,9 @@
 import { getAppConfig } from '../../../core/config';
-import { getWorkflowProfile, upsertWorkflowProfile, clearWorkflowProfiles } from '../../../core/db/workflow_profile';
+import {
+  getWorkflowProfile,
+  upsertWorkflowProfile,
+  clearWorkflowProfiles,
+} from '../../../core/db/workflow_profile';
 import { normalizeSkillIds } from '../../../core/skills';
 import type { WorkflowOptimizationConfig, WorkflowProfile } from '../../../shared/types/workflow';
 
@@ -202,11 +206,9 @@ export const recordAutoSkillSelection = (params: {
     config,
     availableSkillIds: availableSet,
   });
-  const prevPinned = profile.pinnedSkills;
   profile.pinnedSkills = nextPinned;
 
   upsertWorkflowProfile(normalizedThreadId, profile);
-
 };
 
 export const resetWorkflowOptimizationState = (): void => {
