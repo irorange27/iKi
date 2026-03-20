@@ -160,6 +160,7 @@ import { RefreshCw } from 'lucide-vue-next';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type { SkillSummary } from '../../../shared/types/skill';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -207,8 +208,8 @@ const resetWorkflowOptimization = async () => {
     if (!result?.success) {
       workflowResetError.value = result?.error || 'Failed to reset workflow data.';
     }
-  } catch (error: any) {
-    workflowResetError.value = `Failed to reset workflow data: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    workflowResetError.value = `Failed to reset workflow data: ${getErrorMessage(error)}`;
   } finally {
     workflowResetting.value = false;
   }
@@ -229,8 +230,8 @@ const refreshSkills = async () => {
   try {
     const list = await window.electronAPI.skills.list();
     skills.value = Array.isArray(list) ? list : [];
-  } catch (error: any) {
-    skillsError.value = `Failed to load skills: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    skillsError.value = `Failed to load skills: ${getErrorMessage(error)}`;
     skills.value = [];
   } finally {
     skillsLoading.value = false;
@@ -243,8 +244,8 @@ const openSkillsFolder = async (source?: 'user' | 'codex') => {
     if (result?.success === false) {
       skillsError.value = result?.error || 'Failed to open skills folder';
     }
-  } catch (error: any) {
-    skillsError.value = `Failed to open skills folder: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    skillsError.value = `Failed to open skills folder: ${getErrorMessage(error)}`;
   }
 };
 
@@ -254,8 +255,8 @@ const openSkillFolder = async (id: string) => {
     if (result?.success === false) {
       skillsError.value = result?.error || 'Failed to open skill folder';
     }
-  } catch (error: any) {
-    skillsError.value = `Failed to open skill folder: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    skillsError.value = `Failed to open skill folder: ${getErrorMessage(error)}`;
   }
 };
 
@@ -288,8 +289,8 @@ const toggleSkillContent = async (id: string) => {
       ...skillContentTruncated.value,
       [id]: Boolean(result?.truncated),
     };
-  } catch (error: any) {
-    skillsError.value = `Failed to read skill content: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    skillsError.value = `Failed to read skill content: ${getErrorMessage(error)}`;
   } finally {
     skillContentLoading.value = { ...skillContentLoading.value, [id]: false };
   }

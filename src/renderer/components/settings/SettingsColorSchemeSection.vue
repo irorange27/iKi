@@ -331,6 +331,17 @@
               </div>
             </template>
 
+            <div class="editor-footnote">
+              <div class="editor-footnote-divider" />
+              <p class="editor-footnote-copy">
+                {{
+                  editor.mode === 'simple'
+                    ? 'Switch to Advanced mode to fine-tune individual colors.'
+                    : 'Advanced mode edits the core palette while iKi derives the remaining Base46 fields for consistency.'
+                }}
+              </p>
+            </div>
+
             <p v-if="editor.error" class="error-text">{{ editor.error }}</p>
           </div>
 
@@ -361,7 +372,13 @@
                     <button class="preview-secondary-btn">Secondary</button>
                     <button class="preview-tertiary-btn">Delete</button>
                   </div>
-                  <div class="preview-code">const message = "Hello";</div>
+                  <div class="preview-code">
+                    <span class="code-keyword">const</span>
+                    <span class="code-variable">message</span>
+                    <span class="code-operator">=</span>
+                    <span class="code-string">"Hello"</span>
+                    <span class="code-punctuation">;</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -743,6 +760,7 @@ const previewStyle = computed<Record<string, string>>(() => {
     '--accent-contrast': palette.accentContrast,
     '--danger-color': palette.dangerColor,
     '--success-color': palette.successColor,
+    '--warning-color': palette.warningColor,
   };
 });
 
@@ -1034,18 +1052,19 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: rgba(8, 10, 18, 0.62);
-  backdrop-filter: blur(12px);
+  background: rgba(8, 10, 18, 0.24);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 24px;
+  padding: 56px 28px 28px;
 }
 
 .theme-modal {
-  width: min(1480px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  width: min(1340px, calc(100vw - 56px));
+  max-height: 100%;
+  overflow: hidden;
   border-radius: 30px;
   border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
   background:
@@ -1056,7 +1075,8 @@ watch(
     ),
     color-mix(in srgb, var(--bg-primary) 98%, transparent);
   box-shadow: 0 42px 80px rgba(0, 0, 0, 0.42);
-  padding: 28px 28px 22px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .theme-modal-header {
@@ -1064,7 +1084,7 @@ watch(
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 22px;
+  padding: 28px 30px 20px;
 }
 
 .theme-modal-title {
@@ -1089,9 +1109,12 @@ watch(
 
 .theme-modal-body {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 420px);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+  gap: 28px;
   align-items: start;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 30px 10px;
 }
 
 .theme-editor-column {
@@ -1106,6 +1129,22 @@ watch(
 
 .advanced-grid {
   margin-top: 8px;
+}
+
+.editor-footnote {
+  margin-top: 20px;
+}
+
+.editor-footnote-divider {
+  height: 1px;
+  background: color-mix(in srgb, var(--border-color) 92%, transparent);
+  margin-bottom: 16px;
+}
+
+.editor-footnote-copy {
+  color: var(--text-secondary);
+  font-size: 0.98em;
+  margin: 0;
 }
 
 .editor-mode-toggle {
@@ -1186,6 +1225,10 @@ watch(
 .preview-column {
   position: sticky;
   top: 0;
+  width: 100%;
+  max-width: 430px;
+  align-self: start;
+  justify-self: end;
 }
 
 .preview-title {
@@ -1195,6 +1238,7 @@ watch(
 }
 
 .preview-shell {
+  width: 100%;
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
   border-radius: 26px;
   overflow: hidden;
@@ -1242,8 +1286,8 @@ watch(
 
 .preview-body {
   display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
-  min-height: 360px;
+  grid-template-columns: 132px minmax(0, 1fr);
+  min-height: 332px;
 }
 
 .preview-sidebar {
@@ -1301,9 +1345,9 @@ watch(
 .preview-secondary-btn,
 .preview-tertiary-btn {
   border: none;
-  border-radius: 14px;
-  padding: 12px 18px;
-  font-size: 1em;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.98em;
   cursor: default;
 }
 
@@ -1319,7 +1363,7 @@ watch(
 }
 
 .preview-tertiary-btn {
-  background: color-mix(in srgb, var(--success-color) 76%, white 16%);
+  background: color-mix(in srgb, var(--accent-color) 48%, var(--success-color) 52%);
   color: #0a111a;
 }
 
@@ -1332,24 +1376,66 @@ watch(
   font-size: 0.95em;
 }
 
+.code-keyword {
+  color: color-mix(in srgb, var(--success-color) 84%, white 16%);
+}
+
+.code-variable {
+  color: color-mix(in srgb, var(--accent-color) 82%, white 18%);
+  margin-left: 8px;
+}
+
+.code-operator {
+  color: var(--text-secondary);
+  margin: 0 8px;
+}
+
+.code-string {
+  color: color-mix(in srgb, var(--warning-color) 74%, white 26%);
+}
+
+.code-punctuation {
+  color: var(--text-secondary);
+}
+
 .theme-modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 22px;
+  padding: 18px 30px 24px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 96%, transparent);
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 940px) {
   .theme-modal-body {
     grid-template-columns: 1fr;
   }
 
   .preview-column {
     position: static;
+    max-width: none;
+    justify-self: stretch;
   }
 }
 
 @media (max-width: 780px) {
+  .theme-modal-backdrop {
+    padding: 40px 16px 16px;
+  }
+
+  .theme-modal {
+    width: calc(100vw - 32px);
+    max-height: 100%;
+  }
+
+  .theme-modal-header,
+  .theme-modal-body,
+  .theme-modal-footer {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
   .theme-editor-grid,
   .preview-body {
     grid-template-columns: 1fr;

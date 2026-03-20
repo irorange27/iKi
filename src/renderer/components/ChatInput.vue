@@ -349,6 +349,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { Chat } from '@ai-sdk/vue';
 import type { Provider } from '../../shared/types/provider';
+import { getErrorMessage } from '../../shared/utils/errors';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { toUiMessages } from '../modules/chat/ui_message_convert';
 import { getProviderIconName } from '../modules/providers/provider_icons';
@@ -428,6 +429,14 @@ const parseStringArray = (value: unknown): string[] => {
 
   return resolved;
 };
+
+const isTextMessagePart = (part: unknown, expectedText: string): boolean =>
+  !!part &&
+  typeof part === 'object' &&
+  'type' in part &&
+  'text' in part &&
+  (part as { type?: unknown }).type === 'text' &&
+  (part as { text?: unknown }).text === expectedText;
 
 const getProviderDisplayName = (provider: Pick<Provider, 'name' | 'type'>) =>
   provider.name?.trim() || provider.type?.trim() || 'Provider';
@@ -842,7 +851,7 @@ const sendMessage = async () => {
       lastMessage &&
       lastMessage.role === 'user' &&
       Array.isArray(lastMessage.parts) &&
-      lastMessage.parts.find((p: any) => p && p.type === 'text' && p.text === userMessage);
+      lastMessage.parts.some((part: unknown) => isTextMessagePart(part, userMessage));
 
     // If user message is not in chat.messages yet, include it manually
     const messagesToConvert = userMessageInChat
@@ -889,10 +898,11 @@ const sendMessage = async () => {
 
     isLoading.value = false;
     isStopping.value = false;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to send message:', error);
     isLoading.value = false;
     isStopping.value = false;
+    console.warn('Chat send failed:', getErrorMessage(error));
     // Remove the user message if failed (it was already added to chat.messages in ChatView)
     // The error handler will clean up the state
   }

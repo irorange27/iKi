@@ -243,6 +243,7 @@ import type {
   WhisperNodeDownloadProgress,
   WhisperNodeModelInfo,
 } from '../../../shared/types/speech';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -374,11 +375,11 @@ const loadSpeechStatus = async () => {
   }
   try {
     speechStatus.value = await window.electronAPI.speech.getStatus();
-  } catch (error: any) {
+  } catch (error: unknown) {
     speechStatus.value = {
       available: false,
       enabled: false,
-      reason: error?.message || 'Speech service unavailable',
+      reason: getErrorMessage(error) || 'Speech service unavailable',
     };
   } finally {
     speechStatusLoading.value = false;
@@ -406,8 +407,8 @@ const loadWhisperModels = async () => {
   try {
     const models = await window.electronAPI.speech.listModels();
     whisperModels.value = Array.isArray(models) ? models : [];
-  } catch (error: any) {
-    whisperModelsError.value = `Failed to load models: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    whisperModelsError.value = `Failed to load models: ${getErrorMessage(error)}`;
   } finally {
     whisperModelsLoading.value = false;
   }
@@ -434,8 +435,8 @@ const downloadWhisperModel = async (modelName: string) => {
     }
     await loadWhisperModels();
     scheduleSpeechStatusRefresh();
-  } catch (error: any) {
-    whisperModelDownloadErrors.value[modelName] = error?.message || 'Download failed';
+  } catch (error: unknown) {
+    whisperModelDownloadErrors.value[modelName] = getErrorMessage(error) || 'Download failed';
     whisperModelStages.value[modelName] = 'error';
   }
 };

@@ -295,6 +295,7 @@ import type {
   McpServerSummary,
   McpTransport,
 } from '../../../shared/types/mcp';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -367,8 +368,8 @@ const loadServers = async (options?: { clearActionError?: boolean }) => {
     }
     const list = await window.electronAPI.mcp.list();
     servers.value = Array.isArray(list) ? list : [];
-  } catch (error: any) {
-    serversError.value = error?.message || 'Failed to load MCP servers.';
+  } catch (error: unknown) {
+    serversError.value = getErrorMessage(error) || 'Failed to load MCP servers.';
   } finally {
     serversLoading.value = false;
   }
@@ -544,8 +545,8 @@ const saveServer = async () => {
     }
     formOpen.value = false;
     await loadServers();
-  } catch (error: any) {
-    formError.value = error?.message || 'Failed to save MCP server.';
+  } catch (error: unknown) {
+    formError.value = getErrorMessage(error) || 'Failed to save MCP server.';
   } finally {
     formSaving.value = false;
   }
@@ -558,8 +559,8 @@ const deleteServer = async (server: McpServerSummary) => {
   actionError.value = '';
   try {
     await window.electronAPI.mcp.delete(server.id);
-  } catch (error: any) {
-    actionError.value = error?.message || 'Failed to delete MCP server.';
+  } catch (error: unknown) {
+    actionError.value = getErrorMessage(error) || 'Failed to delete MCP server.';
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });
@@ -572,8 +573,8 @@ const connectServer = async (server: McpServerSummary) => {
   actionError.value = '';
   try {
     await window.electronAPI.mcp.connect(server.id);
-  } catch (error: any) {
-    actionError.value = error?.message || 'Failed to connect MCP server.';
+  } catch (error: unknown) {
+    actionError.value = getErrorMessage(error) || 'Failed to connect MCP server.';
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });
@@ -586,8 +587,8 @@ const disconnectServer = async (server: McpServerSummary) => {
   actionError.value = '';
   try {
     await window.electronAPI.mcp.disconnect(server.id);
-  } catch (error: any) {
-    actionError.value = error?.message || 'Failed to disconnect MCP server.';
+  } catch (error: unknown) {
+    actionError.value = getErrorMessage(error) || 'Failed to disconnect MCP server.';
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });
@@ -600,8 +601,8 @@ const refreshTools = async (server: McpServerSummary) => {
   actionError.value = '';
   try {
     await window.electronAPI.mcp.refreshTools(server.id);
-  } catch (error: any) {
-    actionError.value = error?.message || 'Failed to refresh MCP tools.';
+  } catch (error: unknown) {
+    actionError.value = getErrorMessage(error) || 'Failed to refresh MCP tools.';
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });

@@ -129,6 +129,7 @@ import type {
   ChatUsagePeriod,
   ChatUsageSummary,
 } from '../../../shared/types/chat_usage';
+import { getErrorMessage } from '../../../shared/utils/errors';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -241,8 +242,8 @@ const loadUsageSummary = async () => {
 
   try {
     usageSummary.value = await window.electronAPI.chat.usage.summary(usagePeriod.value);
-  } catch (error: any) {
-    usageError.value = `Failed to load usage: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    usageError.value = `Failed to load usage: ${getErrorMessage(error)}`;
   } finally {
     usageLoading.value = false;
   }

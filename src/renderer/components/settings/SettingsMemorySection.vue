@@ -713,6 +713,7 @@ import type {
   LongMemorySearchResult,
   ShortMemoryEntry,
 } from '../../../shared/types/memory';
+import { getErrorMessage } from '../../../shared/utils/errors';
 import {
   formatDecimal,
   formatJson,
@@ -856,8 +857,8 @@ const loadMemoryThreads = async () => {
     } else {
       syncNewLongMemoryThread();
     }
-  } catch (error: any) {
-    memoryError.value = `Failed to load threads: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    memoryError.value = `Failed to load threads: ${getErrorMessage(error)}`;
   }
 };
 
@@ -907,8 +908,8 @@ const refreshMemory = async () => {
       editingLongMemorySummary.value = '';
       editingLongMemoryOriginal.value = '';
     }
-  } catch (error: any) {
-    const message = error?.message || 'Unknown error';
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
     memoryError.value = `Failed to load memory: ${message}`;
     affectStateError.value = `Failed to load affect state: ${message}`;
   } finally {
@@ -942,8 +943,8 @@ const runMemorySearch = async () => {
           }
         );
     memorySearchResults.value = Array.isArray(results) ? results : [];
-  } catch (error: any) {
-    memorySearchError.value = `Search failed: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    memorySearchError.value = `Search failed: ${getErrorMessage(error)}`;
   } finally {
     memorySearchLoading.value = false;
   }
@@ -977,8 +978,8 @@ const createLongMemory = async () => {
     if (hasMemoryQuery.value) {
       await runMemorySearch();
     }
-  } catch (error: any) {
-    memoryMutationError.value = `Failed to add memory: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    memoryMutationError.value = `Failed to add memory: ${getErrorMessage(error)}`;
   } finally {
     memoryMutationLoading.value = false;
   }
@@ -1018,8 +1019,8 @@ const saveLongMemoryEdit = async (entry: LongMemoryEntry) => {
       await runMemorySearch();
     }
     cancelEditLongMemory();
-  } catch (error: any) {
-    memoryMutationError.value = `Failed to update memory: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    memoryMutationError.value = `Failed to update memory: ${getErrorMessage(error)}`;
   } finally {
     memoryMutationLoading.value = false;
   }
@@ -1040,8 +1041,8 @@ const deleteLongMemoryEntry = async (entry: LongMemoryEntry) => {
     if (hasMemoryQuery.value) {
       await runMemorySearch();
     }
-  } catch (error: any) {
-    memoryMutationError.value = `Failed to delete memory: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    memoryMutationError.value = `Failed to delete memory: ${getErrorMessage(error)}`;
   } finally {
     memoryMutationLoading.value = false;
   }

@@ -260,12 +260,40 @@ import { ref, computed, onMounted } from 'vue';
 import LobeIcon from '../../components/Icon/LobeIcon.vue';
 import { BookOpen, Cog, RefreshCw, Save } from 'lucide-vue-next';
 import { BuiltInProvider } from '../../../shared/types/settings';
+import type { Provider } from '../../../shared/types/provider';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
+import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
 import { getProviderIconName } from '../../modules/providers/provider_icons';
 
-const providers = ref<any[]>([]);
-const editingProvider = ref<any>(null);
+type ProviderRecord = Provider & {
+  icon?: string | null;
+};
+
+type EditableProvider = Pick<
+  ProviderRecord,
+  'id' | 'name' | 'type' | 'api_key' | 'base_url' | 'enabled' | 'icon'
+> & {
+  models: string;
+  available_models: string;
+};
+
+type ProvidersElectronApi = {
+  chat: {
+    getModels: (providerType: string) => Promise<string[]>;
+  };
+  providers: {
+    list: () => Promise<ProviderRecord[]>;
+    add: (provider: Partial<ProviderRecord>) => Promise<unknown>;
+    update: (id: string, provider: Partial<ProviderRecord>) => Promise<unknown>;
+    delete: (id: string) => Promise<unknown>;
+  };
+};
+
+const electronAPI = (window as unknown as Window & { electronAPI: ProvidersElectronApi }).electronAPI;
+
+const providers = ref<ProviderRecord[]>([]);
+const editingProvider = ref<EditableProvider | null>(null);
 const showProviderEditor = ref(false);
 
 // New state for two-panel design
@@ -294,7 +322,7 @@ const fetchLatestModels = async () => {
 
   isFetchingModels.value = true;
   try {
-    const fetched = await (window as any).electronAPI.chat.getModels(selectedProviderId.value);
+    const fetched = await electronAPI.chat.getModels(selectedProviderId.value);
     if (fetched && fetched.length > 0) {
       dynamicModels.value[selectedProviderId.value] = fetched;
       // Preserve existing selected models that are still in the fetched list
@@ -387,7 +415,7 @@ const deselectAllModels = () => {
 };
 
 const loadProviders = async () => {
-  providers.value = await (window as any).electronAPI.providers.list();
+  providers.value = await electronAPI.providers.list();
 };
 
 const addModel = () => {
@@ -430,12 +458,12 @@ const filteredBuiltInProviders = computed(() => {
 // Computed: custom providers (not built-in)
 const customProviders = computed(() => {
   const custom = providers.value.filter(
-    (p: any) => !BUILTIN_PROVIDERS.some(bp => bp.id === p.type)
+    provider => !BUILTIN_PROVIDERS.some(builtInProvider => builtInProvider.id === provider.type)
   );
 
-  return [...custom].sort((a: any, b: any) => {
-    const aEnabled = a.enabled === true || a.enabled === 1;
-    const bEnabled = b.enabled === true || b.enabled === 1;
+  return [...custom].sort((a, b) => {
+    const aEnabled = a.enabled === true;
+    const bEnabled = b.enabled === true;
     if (aEnabled && !bEnabled) return -1;
     if (!aEnabled && bEnabled) return 1;
     return 0;
@@ -484,7 +512,7 @@ const selectedProviderConfig = computed(() => {
 // Computed: check if selected provider is active
 const isSelectedProviderActive = computed(() => {
   const config = selectedProviderConfig.value;
-  return config?.enabled === true || config?.enabled === 1;
+  return config?.enabled === true;
 });
 
 // Check if a built-in provider has been configured
@@ -495,7 +523,7 @@ const isProviderConfigured = (providerId: string) => {
 // Check if a provider is enabled
 const isProviderEnabled = (providerId: string) => {
   const config = providers.value.find(p => p.type === providerId || p.id === providerId);
-  return config?.enabled === true || config?.enabled === 1;
+  return config?.enabled === true;
 };
 
 // Select a provider to show details
@@ -537,17 +565,16 @@ const saveProviderConfig = async () => {
     return;
   }
 
+  const activeProviderId = selectedProviderId.value;
   const existingConfig = selectedProviderConfig.value;
 
   try {
     if (existingConfig) {
       // Update existing
-      const modelsToSave =
-        selectedModels.value[selectedProviderId.value!] || getSelectedModelsForProvider();
+      const modelsToSave = selectedModels.value[activeProviderId] || getSelectedModelsForProvider();
       const availableToSave =
-        dynamicModels.value[selectedProviderId.value!] ||
-        parseModelList(existingConfig.available_models);
-      await (window as any).electronAPI.providers.update(existingConfig.id, {
+        dynamicModels.value[activeProviderId] || parseModelList(existingConfig.available_models);
+      await electronAPI.providers.update(existingConfig.id, {
         api_key: providerFormData.value.api_key,
         base_url: providerFormData.value.base_url,
         enabled: true,
@@ -569,13 +596,13 @@ const saveProviderConfig = async () => {
         enabled: true,
         available_models: JSON.stringify(availableToSave),
       };
-      await (window as any).electronAPI.providers.add(newProvider);
+      await electronAPI.providers.add(newProvider);
     }
 
     showConfigForm.value = false;
     await loadProviders();
-  } catch (error) {
-    console.error('Error saving provider:', error);
+  } catch (error: unknown) {
+    console.error('Error saving provider:', getErrorMessage(error));
   }
 };
 
@@ -585,7 +612,7 @@ const removeProviderConfig = async () => {
   if (!config) return;
 
   if (confirm('Are you sure you want to remove this provider configuration?')) {
-    await (window as any).electronAPI.providers.delete(config.id);
+    await electronAPI.providers.delete(config.id);
     await loadProviders();
     showConfigForm.value = false;
   }
@@ -604,15 +631,6 @@ const addCustomProvider = () => {
     available_models: '[]',
   };
   showProviderEditor.value = true;
-};
-
-const editProvider = (provider: any) => {
-  editingProvider.value = { ...provider };
-  showProviderEditor.value = true;
-};
-
-const addNewProvider = () => {
-  addCustomProvider();
 };
 
 const saveProvider = async () => {
@@ -637,9 +655,9 @@ const saveProvider = async () => {
   };
 
   if (providers.value.some(p => p.id === editingProvider.value.id)) {
-    await (window as any).electronAPI.providers.update(editingProvider.value.id, providerData);
+    await electronAPI.providers.update(editingProvider.value.id, providerData);
   } else {
-    await (window as any).electronAPI.providers.add(providerData);
+    await electronAPI.providers.add(providerData);
   }
 
   showProviderEditor.value = false;
@@ -647,19 +665,6 @@ const saveProvider = async () => {
   await loadProviders();
 };
 
-const deleteProvider = async (id: string) => {
-  if (confirm('Are you sure you want to delete this provider?')) {
-    await (window as any).electronAPI.providers.delete(id);
-    await loadProviders();
-  }
-};
-
-const toggleProviderEnabled = async (provider: any) => {
-  await (window as any).electronAPI.providers.update(provider.id, {
-    enabled: !provider.enabled,
-  });
-  await loadProviders();
-};
 onMounted(() => {
   loadProviders();
 });

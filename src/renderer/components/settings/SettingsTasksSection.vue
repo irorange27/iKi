@@ -260,6 +260,7 @@ import {
   inferProactiveTaskToolMode,
   parseProactiveTaskTools,
 } from '../../../shared/types/tasks';
+import { getErrorMessage } from '../../../shared/utils/errors';
 import { formatTimestamp } from './settings_formatters';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -286,6 +287,9 @@ const taskRunLoading = ref<Record<string, boolean>>({});
 const taskThreads = ref<ChatThread[]>([]);
 
 const SAFE_TASK_TOOLS = SAFE_PROACTIVE_TASK_TOOLS;
+
+const isTaskPushPayload = (payload: unknown): payload is { type?: string } =>
+  typeof payload === 'object' && payload !== null && 'type' in payload;
 
 const taskForm = ref<{
   name: string;
@@ -355,8 +359,8 @@ const loadProactiveTasks = async () => {
   try {
     const list = await window.electronAPI.tasks.list();
     proactiveTasks.value = Array.isArray(list) ? list : [];
-  } catch (error: any) {
-    tasksError.value = `Failed to load tasks: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Failed to load tasks: ${getErrorMessage(error)}`;
     proactiveTasks.value = [];
   } finally {
     tasksLoading.value = false;
@@ -462,8 +466,8 @@ const createProactiveTask = async () => {
     taskForm.value.prompt = '';
     taskForm.value.thread_id = '';
     await loadProactiveTasks();
-  } catch (error: any) {
-    taskCreateError.value = `Failed to create task: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    taskCreateError.value = `Failed to create task: ${getErrorMessage(error)}`;
   } finally {
     taskCreateLoading.value = false;
   }
@@ -477,8 +481,8 @@ const runTaskNow = async (task: ProactiveTask) => {
     if (result?.success === false) {
       tasksError.value = result?.error || 'Task run failed.';
     }
-  } catch (error: any) {
-    tasksError.value = `Task run failed: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Task run failed: ${getErrorMessage(error)}`;
   } finally {
     taskRunLoading.value = { ...taskRunLoading.value, [task.id]: false };
     await loadProactiveTasks();
@@ -496,8 +500,8 @@ const deleteTask = async (task: ProactiveTask) => {
       return;
     }
     proactiveTasks.value = proactiveTasks.value.filter(item => item.id !== task.id);
-  } catch (error: any) {
-    tasksError.value = `Failed to delete task: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Failed to delete task: ${getErrorMessage(error)}`;
   }
 };
 
@@ -509,8 +513,8 @@ const toggleTaskEnabled = async (task: ProactiveTask, enabled: boolean) => {
       return;
     }
     await loadProactiveTasks();
-  } catch (error: any) {
-    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
   }
 };
 
@@ -522,8 +526,8 @@ const toggleTaskNotify = async (task: ProactiveTask, notify: boolean) => {
       return;
     }
     await loadProactiveTasks();
-  } catch (error: any) {
-    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
   }
 };
 
@@ -540,8 +544,8 @@ const updateTaskInterval = async (task: ProactiveTask, raw: string) => {
       return;
     }
     await loadProactiveTasks();
-  } catch (error: any) {
-    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
   }
 };
 
@@ -560,8 +564,8 @@ const updateTaskCron = async (task: ProactiveTask, raw: string) => {
       return;
     }
     await loadProactiveTasks();
-  } catch (error: any) {
-    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
   }
 };
 
@@ -576,8 +580,8 @@ const updateTaskTimezone = async (task: ProactiveTask, raw: string) => {
       return;
     }
     await loadProactiveTasks();
-  } catch (error: any) {
-    tasksError.value = `Failed to update task: ${error?.message || 'Unknown error'}`;
+  } catch (error: unknown) {
+    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
   }
 };
 
@@ -619,8 +623,8 @@ watch(
 onMounted(() => {
   try {
     window.electronAPI.tasks.removeAllListeners?.();
-    window.electronAPI.tasks.onPush((payload: any) => {
-      if (payload?.type === 'task-result') {
+    window.electronAPI.tasks.onPush((payload: unknown) => {
+      if (isTaskPushPayload(payload) && payload.type === 'task-result') {
         void loadProactiveTasks();
       }
     });

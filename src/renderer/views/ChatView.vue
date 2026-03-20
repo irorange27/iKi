@@ -540,10 +540,54 @@ import { useChatStreaming } from '../composables/useChatStreaming';
 import VueMarkdown from 'vue-markdown-render';
 import { markdownCodeBlockPlugin } from '../utils/markdown_code_block_plugin';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
+type ChatInputExpose = {
+  setDraftMessage: (
+    text: string,
+    options?: { focus?: boolean; select?: boolean }
+  ) => Promise<void> | void;
+};
 
-const electronAPI = window.electronAPI as any;
+type RendererElectronApi = {
+  chat: {
+    removeAllListeners: () => void;
+    onUiChunk: (callback: (chunk: unknown) => void) => void;
+    stopStream: () => Promise<unknown>;
+    approveTool: (
+      approvalId: string,
+      approved: boolean
+    ) => Promise<{ success?: boolean; error?: string }>;
+    threads: {
+      create: (thread: {
+        title: string;
+        model?: string | null;
+        metadata: string;
+      }) => Promise<{ id: string; title: string; model?: string }>;
+      get: (id: string) => Promise<{ id: string; title: string; model?: string } | null>;
+      update: (id: string, thread: Record<string, unknown>) => Promise<unknown>;
+    };
+    messages: {
+      list: (threadId: string) => Promise<Array<{ id: string; message: string }>>;
+      create: (input: Record<string, unknown>) => Promise<{ id?: string } | null>;
+      update: (id: string, input: Record<string, unknown>) => Promise<unknown>;
+      delete: (id: string) => Promise<unknown>;
+    };
+  };
+  toolModel: {
+    generateTitle: (conversationContent: string) => Promise<string>;
+  };
+  tools?: {
+    list?: () => Promise<unknown[]>;
+  };
+  skills?: {
+    openSkill?: (id: string) => Promise<{ success?: boolean; error?: string }>;
+  };
+  tasks?: {
+    removeAllListeners?: () => void;
+    onPush?: (callback: (payload: unknown) => void) => void;
+  };
+};
+
+const electronAPI = (window as unknown as Window & { electronAPI: RendererElectronApi }).electronAPI;
 
 const configStore = useConfigStore();
 
@@ -551,7 +595,7 @@ const configStore = useConfigStore();
 const chat = new Chat({});
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
-const chatInputRef = ref<any>(null);
+const chatInputRef = ref<ChatInputExpose | null>(null);
 const persistence = createUiMessagePersistence({ electronAPI });
 const messageStore = createChatMessageStore(chat);
 

@@ -9,8 +9,9 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps({
+defineProps({
   saved: Boolean,
 });
-const emit = defineEmits(['close', 'save']);
+
+defineEmits(['close', 'save']);
 </script>

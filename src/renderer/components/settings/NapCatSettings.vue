@@ -291,6 +291,7 @@ import {
   DEFAULT_DAEMON_HOST,
   DEFAULT_DAEMON_PORT,
 } from '../../../shared/constants/daemon';
+import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -490,9 +491,9 @@ const loadProviders = async () => {
     }
     const list = await window.electronAPI.providers.list();
     providers.value = Array.isArray(list) ? (list as Provider[]) : [];
-  } catch (error: any) {
+  } catch (error: unknown) {
     providers.value = [];
-    providersError.value = error?.message || 'Failed to load providers.';
+    providersError.value = getErrorMessage(error);
   } finally {
     providersLoading.value = false;
   }
@@ -502,9 +503,9 @@ const loadRuntimeInfo = async () => {
   runtimeInfoError.value = '';
   try {
     runtimeInfo.value = await configService.getRuntimeInfo();
-  } catch (error: any) {
+  } catch (error: unknown) {
     runtimeInfo.value = null;
-    runtimeInfoError.value = error?.message || 'Failed to load runtime info.';
+    runtimeInfoError.value = getErrorMessage(error);
   }
 };
 
@@ -514,9 +515,9 @@ const loadDaemonStatus = async () => {
   daemonStatusError.value = '';
   try {
     daemonStatus.value = await configService.getDaemonStatus();
-  } catch (error: any) {
+  } catch (error: unknown) {
     daemonStatus.value = null;
-    daemonStatusError.value = error?.message || 'Failed to load daemon status.';
+    daemonStatusError.value = getErrorMessage(error);
   } finally {
     daemonStatusLoading.value = false;
   }
@@ -528,9 +529,9 @@ const loadDaemonLogs = async () => {
   daemonLogsError.value = '';
   try {
     daemonLogs.value = await configService.getDaemonLogs(120);
-  } catch (error: any) {
+  } catch (error: unknown) {
     daemonLogs.value = null;
-    daemonLogsError.value = error?.message || 'Failed to load daemon logs.';
+    daemonLogsError.value = getErrorMessage(error);
   } finally {
     daemonLogsLoading.value = false;
   }
@@ -548,9 +549,9 @@ const handleDaemonControl = async (action: DaemonControlAction) => {
     daemonControlSuccess.value = result.success;
     daemonControlMessage.value = result.message;
     await loadDaemonLogs();
-  } catch (error: any) {
+  } catch (error: unknown) {
     daemonControlSuccess.value = false;
-    daemonControlMessage.value = error?.message || 'Failed to control daemon.';
+    daemonControlMessage.value = getErrorMessage(error);
   } finally {
     daemonControlLoading.value = false;
   }
