@@ -46,6 +46,7 @@
   --chat-composer-control-hover-border-color: rgba(152, 160, 180, 0.38);
   --chat-composer-control-disabled-background: rgba(255, 255, 255, 0.03);
   --chat-composer-control-disabled-border-color: rgba(112, 119, 138, 0.18);
+  --chat-composer-backdrop-filter: blur(18px);
   --chat-composer-shadow:
     0 18px 36px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -107,9 +108,11 @@
   --chat-composer-control-hover-border-color: rgba(184, 198, 214, 0.98);
   --chat-composer-control-disabled-background: rgba(248, 250, 252, 0.98);
   --chat-composer-control-disabled-border-color: rgba(226, 232, 240, 0.98);
+  --chat-composer-backdrop-filter: none;
   --chat-composer-shadow:
-    0 22px 40px rgba(148, 163, 184, 0.16),
-    0 8px 18px rgba(148, 163, 184, 0.1);
+    0 0 0 1px rgba(226, 232, 240, 0.65),
+    0 10px 24px rgba(148, 163, 184, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
   --chat-user-bubble-background: linear-gradient(180deg, #7ea7b1 0%, #769eaa 100%);
   --chat-user-bubble-border-color: rgba(106, 146, 156, 0.32);
   --chat-user-bubble-shadow: 0 12px 22px rgba(125, 166, 176, 0.18);

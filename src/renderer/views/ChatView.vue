@@ -1251,7 +1251,7 @@ onUnmounted(() => {
 .message-wrapper.user .message-content {
   background: var(--chat-user-bubble-background);
   border: 1px solid var(--chat-user-bubble-border-color);
-  border-radius: var(--chat-user-bubble-radius);
+  border-radius: var(--chat-user-bubble-radius, 28px);
   padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
   box-shadow: var(--chat-user-bubble-shadow);
 }

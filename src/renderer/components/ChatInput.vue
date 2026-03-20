@@ -678,9 +678,10 @@ onMounted(async () => {
 
 .chat-input-container {
   border-color: var(--chat-composer-border-color);
+  border-radius: 12px;
   background: var(--chat-composer-background);
   box-shadow: var(--chat-composer-shadow);
-  backdrop-filter: blur(18px);
+  backdrop-filter: var(--chat-composer-backdrop-filter);
 }
 
 .chat-input-field {

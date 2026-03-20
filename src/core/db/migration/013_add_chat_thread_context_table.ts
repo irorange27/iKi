@@ -1,24 +1,16 @@
 import { getDb } from '../database';
 import { Migration } from './runner';
+import {
+  CHAT_THREAD_CONTEXT_SCHEMA_SQL,
+  DROP_CHAT_THREAD_CONTEXT_SCHEMA_SQL,
+} from '../thread_context_schema';
 
 export const migration: Migration = {
   name: '013_add_chat_thread_context_table',
   up: () => {
-    getDb().exec(`
-      CREATE TABLE IF NOT EXISTS chat_thread_context (
-        thread_id TEXT PRIMARY KEY REFERENCES chat_threads(id) ON DELETE CASCADE,
-        summary TEXT NOT NULL,
-        covered_message_count INTEGER NOT NULL DEFAULT 0,
-        metadata TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_chat_thread_context_updated
-      ON chat_thread_context(updated_at);
-    `);
+    getDb().exec(CHAT_THREAD_CONTEXT_SCHEMA_SQL);
   },
   down: () => {
-    getDb().exec('DROP TABLE IF EXISTS chat_thread_context;');
+    getDb().exec(DROP_CHAT_THREAD_CONTEXT_SCHEMA_SQL);
   },
 };

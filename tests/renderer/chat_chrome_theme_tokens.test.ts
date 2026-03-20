@@ -15,6 +15,7 @@ describe('chat chrome theme tokens', () => {
     expect(variablesSource).toMatch(/--chat-composer-toolbar-background:/);
     expect(variablesSource).toMatch(/--chat-composer-control-background:/);
     expect(variablesSource).toMatch(/--chat-composer-control-disabled-background:/);
+    expect(variablesSource).toMatch(/--chat-composer-backdrop-filter:/);
     expect(variablesSource).toMatch(/--chat-user-bubble-background:/);
     expect(variablesSource).toMatch(/--chat-user-bubble-radius:/);
     expect(variablesSource).toMatch(
@@ -29,6 +30,9 @@ describe('chat chrome theme tokens', () => {
     expect(chatInputSource).toMatch(/border-color:\s*var\(--chat-composer-border-color\);/);
     expect(chatInputSource).toMatch(/background:\s*var\(--chat-composer-background\);/);
     expect(chatInputSource).toMatch(/box-shadow:\s*var\(--chat-composer-shadow\);/);
+    expect(chatInputSource).toMatch(
+      /backdrop-filter:\s*var\(--chat-composer-backdrop-filter\);/
+    );
     expect(chatInputSource).toMatch(
       /border-top-color:\s*var\(--chat-composer-toolbar-border-color\);/
     );

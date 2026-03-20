@@ -127,6 +127,38 @@ describe('tasks IPC', () => {
     expect(addProactiveTaskMock).not.toHaveBeenCalled();
   });
 
+  it('serializes create responses before returning them over IPC', async () => {
+    const handler = ipcHandlers.get('tasks:create');
+    if (!handler) throw new Error('tasks:create handler not registered');
+
+    const proxiedTask = new Proxy(
+      {
+        id: 'task_proxy',
+        name: 'Daily',
+        tools: ['web', 'fetch'],
+      },
+      {}
+    );
+    getProactiveTaskMock.mockReturnValue(proxiedTask as any);
+
+    const result = await handler(null, {
+      name: 'Daily',
+      prompt: 'Summarize',
+      provider_type: 'deepseek',
+      model: 'deepseek-chat',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      task: {
+        id: 'task_proxy',
+        name: 'Daily',
+        tools: ['web', 'fetch'],
+      },
+    });
+    expect(() => structuredClone(result)).not.toThrow();
+  });
+
   it('recomputes next_run_at when interval changes on an enabled task', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-18T10:00:00.000Z'));

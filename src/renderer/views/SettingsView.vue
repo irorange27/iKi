@@ -1960,7 +1960,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, toRaw } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   Cog,
@@ -3274,9 +3274,10 @@ const formatTaskSchedule = (task: ProactiveTask): string => {
 };
 
 const createProactiveTask = async () => {
+  const form = toRaw(taskForm.value);
   taskCreateError.value = '';
-  const name = taskForm.value.name.trim();
-  const prompt = taskForm.value.prompt.trim();
+  const name = form.name.trim();
+  const prompt = form.prompt.trim();
   if (!name) {
     taskCreateError.value = 'Task name is required.';
     return;
@@ -3285,43 +3286,44 @@ const createProactiveTask = async () => {
     taskCreateError.value = 'Task prompt is required.';
     return;
   }
-  if (taskForm.value.schedule_type === 'interval') {
-    if (!Number.isFinite(taskForm.value.interval_minutes) || taskForm.value.interval_minutes <= 0) {
+  if (form.schedule_type === 'interval') {
+    if (!Number.isFinite(form.interval_minutes) || form.interval_minutes <= 0) {
       taskCreateError.value = 'Interval must be a positive number (minutes).';
       return;
     }
-  } else if (!taskForm.value.cron_expression.trim()) {
+  } else if (!form.cron_expression.trim()) {
     taskCreateError.value = 'Cron expression is required.';
     return;
   }
-  if (!taskForm.value.provider_type) {
+  if (!form.provider_type) {
     taskCreateError.value = 'Please select a provider.';
     return;
   }
-  if (!taskForm.value.model) {
+  if (!form.model) {
     taskCreateError.value = 'Please select a model.';
     return;
   }
+
+  const selectedTools = Array.isArray(form.tools) ? [...form.tools] : [];
 
   taskCreateLoading.value = true;
   try {
     const result = await window.electronAPI.tasks.create({
       name,
       prompt,
-      provider_type: taskForm.value.provider_type,
-      model: taskForm.value.model,
-      interval_minutes: taskForm.value.interval_minutes,
-      schedule_type: taskForm.value.schedule_type,
-      cron_expression:
-        taskForm.value.schedule_type === 'cron' ? taskForm.value.cron_expression.trim() : null,
+      provider_type: form.provider_type,
+      model: form.model,
+      interval_minutes: form.interval_minutes,
+      schedule_type: form.schedule_type,
+      cron_expression: form.schedule_type === 'cron' ? form.cron_expression.trim() : null,
       schedule_timezone:
-        taskForm.value.schedule_type === 'cron' && taskForm.value.schedule_timezone.trim()
-          ? taskForm.value.schedule_timezone.trim()
+        form.schedule_type === 'cron' && form.schedule_timezone.trim()
+          ? form.schedule_timezone.trim()
           : null,
-      enabled: taskForm.value.enabled,
-      notify: taskForm.value.notify,
-      thread_id: taskForm.value.thread_id || null,
-      tools: taskForm.value.tools,
+      enabled: form.enabled,
+      notify: form.notify,
+      thread_id: form.thread_id || null,
+      tools: selectedTools,
     });
 
     if (result?.success === false) {
