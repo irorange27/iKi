@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
 import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
+import type { AppConfig } from '../../../shared/types/config';
 
 import {
   isContextReportPart,
@@ -60,6 +61,20 @@ export type ContextReferenceSummary = {
   compactedMessages: number | null;
   items: ContextReferenceItem[];
 };
+
+export type ContextUsageIndicator = {
+  usedTokens: number;
+  budgetTokens: number | null;
+  percent: number | null;
+  percentLabel: string;
+  tokenLabel: string;
+  tooltip: string;
+};
+
+type ContextBudgetConfig = Pick<
+  AppConfig['memory']['context'],
+  'maxRecentTokens' | 'maxSummaryTokens' | 'maxMemoryTokens' | 'maxSkillTokens'
+>;
 
 const getMessageParts = (message: unknown): unknown[] =>
   isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
@@ -278,11 +293,84 @@ export const getContextReferenceSummary = (message: UIMessage | unknown): Contex
   };
 };
 
+export const formatContextTokenCount = (tokens: number | null): string => {
+  if (tokens === null || !Number.isFinite(tokens)) return '';
+  return `${Math.max(0, Math.trunc(tokens)).toLocaleString()} tok`;
+};
+
+export const getContextBudgetTokens = (
+  config: Partial<ContextBudgetConfig> | null | undefined
+): number => {
+  if (!config) return 0;
+
+  return [
+    config.maxRecentTokens,
+    config.maxSummaryTokens,
+    config.maxMemoryTokens,
+    config.maxSkillTokens,
+  ].reduce((sum, value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      return sum;
+    }
+    return sum + Math.trunc(value);
+  }, 0);
+};
+
+export const buildContextUsageIndicator = (
+  summary: ContextReferenceSummary,
+  config: Partial<ContextBudgetConfig> | null | undefined
+): ContextUsageIndicator | null => {
+  if (summary.totalEstimatedTokens === null || !Number.isFinite(summary.totalEstimatedTokens)) {
+    return null;
+  }
+
+  const usedTokens = Math.max(0, Math.trunc(summary.totalEstimatedTokens));
+  const budgetTokens = getContextBudgetTokens(config);
+  const percent =
+    budgetTokens > 0
+      ? Math.min(999, Math.max(0, Math.round((usedTokens / budgetTokens) * 100)))
+      : null;
+  const percentLabel = percent === null ? '' : `${percent}%`;
+  const tokenLabel = formatContextTokenCount(usedTokens);
+
+  const detailLines = summary.items.map(item => {
+    const detailParts = [`${item.kind}: ${item.status}`];
+    if (item.estimatedTokens !== null) {
+      detailParts.push(formatContextTokenCount(item.estimatedTokens));
+    }
+    if (item.reason) {
+      detailParts.push(item.reason);
+    }
+    return detailParts.join(' · ');
+  });
+
+  const tooltipLines = [
+    budgetTokens > 0
+      ? `Context usage: ${tokenLabel} / ${budgetTokens.toLocaleString()} tok${percentLabel ? ` (${percentLabel})` : ''}`
+      : `Context usage: ${tokenLabel}`,
+    ...(summary.retainedRecentMessages !== null
+      ? [`Recent messages kept: ${Math.trunc(summary.retainedRecentMessages)}`]
+      : []),
+    ...(summary.compactedMessages !== null && summary.compactedMessages > 0
+      ? [`Compacted messages: ${Math.trunc(summary.compactedMessages)}`]
+      : []),
+    ...detailLines,
+  ];
+
+  return {
+    usedTokens,
+    budgetTokens: budgetTokens > 0 ? budgetTokens : null,
+    percent,
+    percentLabel,
+    tokenLabel,
+    tooltip: tooltipLines.join('\n'),
+  };
+};
+
 export const hasReferenceSummary = (message: UIMessage | unknown): boolean => {
   const toolSummary = getToolReferenceSummary(message);
   if (toolSummary.count > 0) return true;
   if (getSkillReferenceSummary(message).items.length > 0) return true;
   if (getMemoryReferenceSummary(message).items.length > 0) return true;
-  if (getContextReferenceSummary(message).items.length > 0) return true;
   return false;
 };

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildContextUsageIndicator,
+  formatContextTokenCount,
   getContextReferenceSummary,
+  getContextBudgetTokens,
   getMemoryReferenceSummary,
   getSkillReferenceSummary,
   getToolReferenceSummary,
@@ -181,5 +184,78 @@ describe('ui_message_references', () => {
         },
       ],
     });
+  });
+
+  it('formats total context token counts for compact UI labels', () => {
+    expect(formatContextTokenCount(640)).toBe('640 tok');
+    expect(formatContextTokenCount(12345.9)).toBe('12,345 tok');
+    expect(formatContextTokenCount(null)).toBe('');
+  });
+
+  it('builds a compact context-usage indicator with percent and tooltip details', () => {
+    const indicator = buildContextUsageIndicator(
+      {
+        totalEstimatedTokens: 640,
+        retainedRecentMessages: 6,
+        compactedMessages: 12,
+        items: [
+          {
+            kind: 'recent-history',
+            status: 'truncated',
+            estimatedTokens: 220,
+            charCount: 880,
+            reason: 'compacted older turns',
+            sourceCount: 6,
+          },
+        ],
+      },
+      {
+        maxRecentTokens: 2400,
+        maxSummaryTokens: 500,
+        maxMemoryTokens: 500,
+        maxSkillTokens: 1200,
+      }
+    );
+
+    expect(indicator).toEqual(
+      expect.objectContaining({
+        usedTokens: 640,
+        budgetTokens: 4600,
+        percent: 14,
+        percentLabel: '14%',
+        tokenLabel: '640 tok',
+      })
+    );
+    expect(indicator?.tooltip).toContain('Context usage: 640 tok / 4,600 tok (14%)');
+    expect(indicator?.tooltip).toContain(
+      'recent-history: truncated · 220 tok · compacted older turns'
+    );
+  });
+
+  it('does not treat context-only metadata as an expandable reference summary', () => {
+    expect(
+      hasReferenceSummary({
+        id: 'assistant_2',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'context-report',
+            totalEstimatedTokens: 640,
+            blocks: [{ kind: 'recent-history', status: 'included' }],
+          },
+        ],
+      } as never)
+    ).toBe(false);
+  });
+
+  it('sums the configured context budget buckets', () => {
+    expect(
+      getContextBudgetTokens({
+        maxRecentTokens: 2400,
+        maxSummaryTokens: 500,
+        maxMemoryTokens: 500,
+        maxSkillTokens: 1200,
+      })
+    ).toBe(4600);
   });
 });

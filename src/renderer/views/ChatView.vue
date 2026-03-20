@@ -41,17 +41,6 @@
                   class="reference-summary"
                 >
                   <button
-                    v-if="getContextReferenceCount(m) > 0"
-                    type="button"
-                    class="reference-summary-item"
-                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'context' }"
-                    :title="getContextReferenceTooltip(m)"
-                    @click.stop="toggleReferencePanel(m, 'context')"
-                  >
-                    <Layers3 :size="14" class="reference-summary-icon" />
-                    context
-                  </button>
-                  <button
                     v-if="getMemoryReferenceCount(m) > 0"
                     type="button"
                     class="reference-summary-item"
@@ -157,39 +146,6 @@
                           <span v-for="tag in entry.tags" :key="tag" class="reference-panel-tag">
                             {{ tag }}
                           </span>
-                        </div>
-                      </li>
-                    </ul>
-                  </div>
-                  <div v-else-if="getExpandedReferenceCategory(m) === 'context'">
-                    <div class="reference-panel-label">Context</div>
-                    <div class="reference-panel-query">
-                      {{ getContextReferenceHeadline(m) }}
-                    </div>
-                    <ul class="reference-panel-list">
-                      <li
-                        v-for="entry in getContextReferenceItems(m)"
-                        :key="`${entry.kind}-${entry.status}`"
-                        class="reference-panel-item"
-                      >
-                        <div class="reference-panel-item-row">
-                          <span class="reference-panel-item-name">{{ entry.kind }}</span>
-                          <span class="reference-panel-item-meta">{{ entry.status }}</span>
-                          <span
-                            v-if="entry.estimatedTokens !== null"
-                            class="reference-panel-item-meta"
-                          >
-                            {{ entry.estimatedTokens }} tok
-                          </span>
-                          <span
-                            v-if="entry.sourceCount !== null"
-                            class="reference-panel-item-meta"
-                          >
-                            {{ entry.sourceCount }} src
-                          </span>
-                        </div>
-                        <div v-if="entry.reason" class="reference-panel-item-description">
-                          {{ entry.reason }}
                         </div>
                       </li>
                     </ul>
@@ -505,6 +461,7 @@
           ref="chatInputRef"
           :chat="chat"
           :thread-id="currentThread?.id || ''"
+          :context-usage="composerContextUsage"
           @message-sent="handleMessageSent"
           @model-selected="handleModelSelected"
         />
@@ -516,7 +473,7 @@
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
-import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
@@ -528,7 +485,6 @@ import {
   Clock,
   ExternalLink,
   FolderOpen,
-  Layers3,
   Loader2,
   Pencil,
   ShieldBan,
@@ -562,6 +518,7 @@ import {
   toggleToolCollapse,
 } from '../modules/chat/ui_message_tool_parts';
 import {
+  buildContextUsageIndicator,
   getContextReferenceSummary,
   getMemoryReferenceSummary,
   getSkillReferenceSummary,
@@ -651,7 +608,7 @@ const formatShortTimestamp = (value: string): string => {
   return new Date(parsed).toLocaleDateString();
 };
 
-type ReferenceCategory = 'tools' | 'skills' | 'memory' | 'context';
+type ReferenceCategory = 'tools' | 'skills' | 'memory';
 
 const expandedReferencePanels = ref<Record<string, ReferenceCategory | null>>({});
 
@@ -707,31 +664,20 @@ const getMemoryReferenceTooltip = (message: UIMessage): string => {
   return summary.query ? `Memory query: ${summary.query}` : 'Memory references used in this reply';
 };
 
-const getContextReferenceCount = (message: UIMessage): number =>
-  getContextReferenceSummary(message).items.length;
+const composerContextUsage = computed(() => {
+  const messages = Array.isArray(chat.messages) ? [...chat.messages] : [];
 
-const getContextReferenceItems = (message: UIMessage) => getContextReferenceSummary(message).items;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== 'assistant') continue;
 
-const getContextReferenceHeadline = (message: UIMessage): string => {
-  const summary = getContextReferenceSummary(message);
-  const parts: string[] = [];
-  if (summary.totalEstimatedTokens !== null) {
-    parts.push(`${summary.totalEstimatedTokens} estimated tokens`);
+    const summary = getContextReferenceSummary(message);
+    const indicator = buildContextUsageIndicator(summary, configStore.config.memory.context);
+    if (indicator) return indicator;
   }
-  if (summary.retainedRecentMessages !== null) {
-    parts.push(`${summary.retainedRecentMessages} recent messages kept`);
-  }
-  if (summary.compactedMessages !== null && summary.compactedMessages > 0) {
-    parts.push(`${summary.compactedMessages} compacted`);
-  }
-  return parts.join(' · ') || 'Context assembly report';
-};
 
-const getContextReferenceTooltip = (message: UIMessage): string => {
-  const summary = getContextReferenceSummary(message);
-  if (summary.items.length === 0) return 'No context report';
-  return getContextReferenceHeadline(message);
-};
+  return null;
+});
 
 const formatMemoryMatchScore = (score: number): string => `${score.toFixed(3)} match`;
 

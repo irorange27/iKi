@@ -133,6 +133,36 @@
                 </div>
               </div>
             </div>
+            <div
+              v-if="contextUsage"
+              class="composer-context-indicator"
+              :title="contextUsage.tooltip"
+              aria-label="Context usage"
+            >
+              <svg
+                class="composer-context-icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.9"
+                  d="M5 14a7 7 0 1114 0"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.9"
+                  d="M12 14l3-3"
+                />
+              </svg>
+              <span class="composer-context-value">
+                {{ contextUsage.percentLabel || contextUsage.tokenLabel }}
+              </span>
+            </div>
           </div>
 
           <div class="composer-toolbar-right flex items-center gap-2">
@@ -264,6 +294,14 @@ const props = defineProps<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   chat?: Chat<any>;
   threadId?: string;
+  contextUsage?: {
+    usedTokens: number;
+    budgetTokens: number | null;
+    percent: number | null;
+    percentLabel: string;
+    tokenLabel: string;
+    tooltip: string;
+  } | null;
 }>();
 
 const inputRef = ref<HTMLInputElement | null>(null);
@@ -699,6 +737,30 @@ onMounted(async () => {
 .composer-toolbar-left,
 .composer-toolbar-right {
   gap: 10px;
+}
+
+.composer-context-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: var(--text-muted);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.composer-context-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.85;
+}
+
+.composer-context-value {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .text-primary {
