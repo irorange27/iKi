@@ -262,6 +262,7 @@ import { BookOpen, Cog, RefreshCw, Save } from 'lucide-vue-next';
 import { BuiltInProvider } from '../../../shared/types/settings';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
 import { parseModelList } from '../../../shared/utils/provider_models';
+import { getProviderIconName } from '../../modules/providers/provider_icons';
 
 const providers = ref<any[]>([]);
 const editingProvider = ref<any>(null);
@@ -278,21 +279,6 @@ const providerFormData = ref({
 const isFetchingModels = ref(false);
 const dynamicModels = ref<Record<string, string[]>>({});
 const selectedModels = ref<Record<string, string[]>>({});
-
-// Icon name mapping for builtin providers
-const getProviderIconName = (providerId: string): string => {
-  const iconMap: Record<string, string> = {
-    openai: 'openai',
-    anthropic: 'anthropic',
-    google: 'google',
-    deepseek: 'deepseek',
-    kimi: 'kimi', // Use spark icon for kimi
-    ollama: 'ollama', // Use chatglm icon for ollama
-    openrouter: 'openrouter', // Use openai icon for openrouter
-    azure: 'azure',
-  };
-  return iconMap[providerId] || providerId;
-};
 
 const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
 
@@ -698,7 +684,9 @@ onMounted(() => {
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: var(--font-size);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .input-label input:focus,
@@ -889,7 +877,11 @@ onMounted(() => {
   padding: 10px 12px;
   border-radius: 12px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
 }
@@ -919,7 +911,9 @@ onMounted(() => {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   flex-shrink: 0;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .provider-icon :deep(.lobe-icon) {
@@ -962,7 +956,6 @@ onMounted(() => {
   border-radius: 50%;
   background: var(--border-color);
 }
-
 
 /* 密度面板样式 */
 .section-header {

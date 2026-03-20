@@ -57,19 +57,29 @@
               v-model:mcp-server-ids="selectedMcpServerIds"
               v-model:mode="toolMode"
             />
-            <div class="relative">
+            <div ref="modelSelectorRef" class="relative">
               <button
-                class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-secondary icon-btn"
-                @click="showModelSelector = !showModelSelector"
+                class="model-selector-trigger icon-btn"
+                :class="{ 'model-selector-trigger-open': showModelSelector }"
+                @click="toggleModelSelector"
               >
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+                <span class="model-selector-trigger-icon">
+                  <LobeIcon
+                    v-if="selectedProvider"
+                    :name="selectedProviderIconName"
+                    :size="16"
+                    :fallback-text="selectedProviderFallbackText"
+                    class-name="model-selector-provider-icon"
                   />
-                </svg>
-                <span>{{ selectedModel || 'Select Model' }}</span>
+                  <span v-else class="model-selector-trigger-initials">
+                    {{ selectedProviderFallbackText }}
+                  </span>
+                </span>
+                <span class="model-selector-trigger-label">
+                  {{ selectedModel || 'Select Model' }}
+                </span>
                 <svg
-                  class="h-3 w-3 transition-transform"
+                  class="model-selector-trigger-chevron"
                   :class="{ 'rotate-180': showModelSelector }"
                   fill="none"
                   stroke="currentColor"
@@ -84,52 +94,113 @@
                 </svg>
               </button>
 
-              <!-- Model/Provider Selector Menu -->
-              <div
-                v-if="showModelSelector"
-                class="absolute bottom-full left-0 mb-2 w-64 rounded-xl border border-color bg-secondary shadow-xl z-50 overflow-hidden"
-              >
-                <div class="p-2 border-b border-color bg-tertiary">
-                  <span class="text-xs font-semibold text-muted uppercase tracking-wider"
-                    >Select AI Model</span
+              <div v-if="showModelSelector" class="model-selector-panel">
+                <div class="model-selector-search-shell">
+                  <svg
+                    class="model-selector-search-icon"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                  <input
+                    ref="modelSearchInputRef"
+                    v-model="modelSearchQuery"
+                    type="text"
+                    class="model-selector-search-input"
+                    placeholder="Search models..."
+                  />
                 </div>
-                <div class="max-h-64 overflow-y-auto p-1">
+
+                <div class="model-selector-scroll">
                   <div
                     v-if="availableProviders.length === 0"
-                    class="p-4 text-center text-sm text-muted"
+                    class="selector-empty-state model-selector-empty"
                   >
                     No providers configured.
                   </div>
-                  <div v-for="provider in availableProviders" :key="provider.id" class="mb-1">
-                    <div class="px-3 py-1 text-[10px] font-bold text-accent uppercase">
-                      {{ provider.name }}
-                    </div>
-                    <button
-                      v-for="model in parseModelList(provider.models)"
-                      :key="model"
-                      class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-hover flex items-center justify-between"
-                      :class="{
-                        'text-accent bg-hover/50':
-                          selectedModel === model && selectedProvider.id === provider.id,
-                      }"
-                      @click="selectProviderAndModel(provider, model)"
-                    >
-                      <span>{{ model }}</span>
-                      <svg
-                        v-if="selectedModel === model && selectedProvider.id === provider.id"
-                        class="h-4 w-4 text-accent"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fill-rule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clip-rule="evenodd"
-                        />
-                      </svg>
-                    </button>
+                  <div
+                    v-else-if="providerModelGroups.length === 0"
+                    class="selector-empty-state model-selector-empty"
+                  >
+                    No enabled provider exposes model metadata.
                   </div>
+                  <div
+                    v-else-if="filteredProviderGroups.length === 0"
+                    class="selector-empty-state model-selector-empty"
+                  >
+                    No models match "{{ modelSearchQuery.trim() }}".
+                  </div>
+                  <section
+                    v-for="group in filteredProviderGroups"
+                    :key="group.id"
+                    class="model-provider-group"
+                  >
+                    <header class="model-provider-header selector-section-title">
+                      <span class="model-provider-icon">
+                        <LobeIcon
+                          :name="group.iconName"
+                          :size="16"
+                          :fallback-text="group.fallbackText"
+                          class-name="model-selector-provider-icon"
+                        />
+                      </span>
+                      <div class="model-provider-copy">
+                        <span class="model-provider-name">{{ group.name }}</span>
+                        <span class="model-provider-type">{{ group.typeLabel }}</span>
+                      </div>
+                    </header>
+
+                    <button
+                      v-for="model in group.models"
+                      :key="`${group.id}:${model}`"
+                      class="model-option"
+                      :class="{
+                        'model-option-selected': isSelectedProviderModel(group.provider.id, model),
+                      }"
+                      @click="selectProviderAndModel(group.provider, model)"
+                    >
+                      <div class="model-option-main">
+                        <span
+                          class="model-option-check"
+                          :class="{
+                            'model-option-check-selected': isSelectedProviderModel(
+                              group.provider.id,
+                              model
+                            ),
+                          }"
+                        >
+                          <svg
+                            v-if="isSelectedProviderModel(group.provider.id, model)"
+                            class="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2.2"
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        </span>
+                        <div class="model-option-copy">
+                          <span class="model-option-name">{{ model }}</span>
+                          <span class="model-option-meta"
+                            >{{ group.name }} · {{ group.typeLabel }}</span
+                          >
+                        </div>
+                      </div>
+                      <span class="model-option-side">{{ group.typeLabel }}</span>
+                    </button>
+                  </section>
                 </div>
               </div>
             </div>
@@ -279,13 +350,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { Chat } from '@ai-sdk/vue';
+import type { Provider } from '../../shared/types/provider';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { toUiMessages } from '../modules/chat/ui_message_convert';
+import { getProviderIconName } from '../modules/providers/provider_icons';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import ToolSelector from './ToolSelector.vue';
 import SkillSelector from './SkillSelector.vue';
+import LobeIcon from './Icon/LobeIcon.vue';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const window: any;
@@ -305,17 +379,19 @@ const props = defineProps<{
 }>();
 
 const inputRef = ref<HTMLInputElement | null>(null);
+const modelSelectorRef = ref<HTMLElement | null>(null);
+const modelSearchInputRef = ref<HTMLInputElement | null>(null);
 const message = ref('');
 const isLoading = ref(false);
 const isStopping = ref(false);
-const selectedProvider = ref<any>(null);
+const selectedProvider = ref<Provider | null>(null);
 const selectedModel = ref('');
-const availableProviders = ref<any[]>([]);
-const availableModels = ref<string[]>([]);
+const availableProviders = ref<Provider[]>([]);
 const isProviderConfigured = ref(false);
 const isComposing = ref(false);
 const justEndedComposition = ref(false);
 const showModelSelector = ref(false);
+const modelSearchQuery = ref('');
 const selectedTools = ref<string[]>([]);
 const selectedMcpServerIds = ref<string[]>([]);
 const selectedSkillIds = ref<string[]>([]);
@@ -327,6 +403,17 @@ const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 type ThreadToolSelectionState = {
   mode?: 'manual' | 'auto';
   mcpServerIds: string[];
+};
+
+type ProviderModelGroup = {
+  id: string;
+  provider: Provider;
+  name: string;
+  typeLabel: string;
+  iconName: string;
+  fallbackText: string;
+  models: string[];
+  providerSearchText: string;
 };
 
 const parseStringArray = (value: unknown): string[] => {
@@ -345,6 +432,63 @@ const parseStringArray = (value: unknown): string[] => {
 
   return resolved;
 };
+
+const getProviderDisplayName = (provider: Pick<Provider, 'name' | 'type'>) =>
+  provider.name?.trim() || provider.type?.trim() || 'Provider';
+
+const getProviderFallbackText = (provider?: Pick<Provider, 'name' | 'type'> | null) => {
+  const source = provider ? getProviderDisplayName(provider) : 'AI';
+  const normalized = source
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 2)
+    .toUpperCase();
+  return normalized || 'AI';
+};
+
+const providerModelGroups = computed<ProviderModelGroup[]>(() =>
+  availableProviders.value
+    .map(provider => {
+      const name = getProviderDisplayName(provider);
+      const typeLabel = provider.type?.trim() || 'custom';
+
+      return {
+        id: provider.id,
+        provider,
+        name,
+        typeLabel,
+        iconName: getProviderIconName(typeLabel),
+        fallbackText: getProviderFallbackText(provider),
+        models: parseModelList(provider.models),
+        providerSearchText: `${name} ${typeLabel}`.toLowerCase(),
+      };
+    })
+    .filter(group => group.models.length > 0)
+);
+
+const filteredProviderGroups = computed<ProviderModelGroup[]>(() => {
+  const query = modelSearchQuery.value.trim().toLowerCase();
+  if (!query) return providerModelGroups.value;
+
+  return providerModelGroups.value
+    .map(group => {
+      const matchesProvider = group.providerSearchText.includes(query);
+      return {
+        ...group,
+        models: matchesProvider
+          ? group.models
+          : group.models.filter(model => model.toLowerCase().includes(query)),
+      };
+    })
+    .filter(group => group.models.length > 0);
+});
+
+const selectedProviderIconName = computed(() =>
+  selectedProvider.value ? getProviderIconName(selectedProvider.value.type || '') : 'openai'
+);
+
+const selectedProviderFallbackText = computed(() =>
+  getProviderFallbackText(selectedProvider.value)
+);
 
 const parseThreadToolSelectionState = (metadataRaw: unknown): ThreadToolSelectionState => {
   if (!metadataRaw || typeof metadataRaw !== 'object') {
@@ -458,33 +602,82 @@ const {
   stopVoiceInput,
 } = useSpeechInput({ inputRef, message });
 
+const closeModelSelector = () => {
+  showModelSelector.value = false;
+  modelSearchQuery.value = '';
+};
+
+const toggleModelSelector = async () => {
+  showModelSelector.value = !showModelSelector.value;
+  if (!showModelSelector.value) {
+    modelSearchQuery.value = '';
+    return;
+  }
+
+  await nextTick();
+  modelSearchInputRef.value?.focus();
+  modelSearchInputRef.value?.select();
+};
+
+const isSelectedProviderModel = (providerId: string, model: string) =>
+  selectedProvider.value?.id === providerId && selectedModel.value === model;
+
+const handleDocumentPointerDown = (event: MouseEvent) => {
+  if (!showModelSelector.value) return;
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  if (modelSelectorRef.value?.contains(target)) return;
+  closeModelSelector();
+};
+
+const handleDocumentKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !showModelSelector.value) return;
+  closeModelSelector();
+};
+
 const loadAvailableProviders = async () => {
   try {
     const providers = await window.electronAPI.providers.list();
-    availableProviders.value = providers.filter((p: any) => p.enabled);
+    const normalizedProviders = Array.isArray(providers)
+      ? (providers.filter((provider: Provider) => provider?.enabled) as Provider[])
+      : [];
 
-    if (availableProviders.value.length > 0) {
-      // Set default provider if none selected
-      if (!selectedProvider.value) {
-        selectedProvider.value = availableProviders.value[0];
-        const models = parseModelList(selectedProvider.value.models);
-        availableModels.value = models;
-        selectedModel.value = models[0] || '';
-      }
-      isProviderConfigured.value = true;
-    } else {
+    availableProviders.value = normalizedProviders;
+
+    if (normalizedProviders.length === 0) {
+      selectedProvider.value = null;
+      selectedModel.value = '';
       isProviderConfigured.value = false;
+      return;
     }
+
+    const previousProviderId = selectedProvider.value?.id;
+    const previousProvider = normalizedProviders.find(
+      provider => provider.id === previousProviderId
+    );
+    const previousProviderModels = previousProvider ? parseModelList(previousProvider.models) : [];
+    const nextSelectedProvider =
+      (previousProvider && previousProviderModels.length > 0 ? previousProvider : null) ||
+      normalizedProviders.find(provider => parseModelList(provider.models).length > 0) ||
+      previousProvider ||
+      normalizedProviders[0];
+    const availableProviderModels = parseModelList(nextSelectedProvider.models);
+
+    selectedProvider.value = nextSelectedProvider;
+    if (!availableProviderModels.includes(selectedModel.value)) {
+      selectedModel.value = availableProviderModels[0] || '';
+    }
+
+    isProviderConfigured.value = true;
   } catch (e) {
     console.error('Failed to load providers:', e);
   }
 };
 
-const selectProviderAndModel = (provider: any, model: string) => {
+const selectProviderAndModel = (provider: Provider, model: string) => {
   selectedProvider.value = provider;
-  availableModels.value = parseModelList(provider.models);
   selectedModel.value = model;
-  showModelSelector.value = false;
+  closeModelSelector();
   emit('model-selected', { provider, model });
 };
 
@@ -603,8 +796,14 @@ const sendMessage = async () => {
   const configured = await window.electronAPI.chat.isProviderConfigured(
     selectedProvider.value.type
   );
+  const selectedProviderName = getProviderDisplayName(selectedProvider.value);
   if (!configured) {
-    alert(`Please configure the ${selectedProvider.value.name} API key in Settings.`);
+    alert(`Please configure the ${selectedProviderName} API key in Settings.`);
+    return;
+  }
+
+  if (!selectedModel.value.trim()) {
+    alert(`Please add at least one model for ${selectedProviderName} in Settings.`);
     return;
   }
 
@@ -704,9 +903,16 @@ const sendMessage = async () => {
 };
 
 onMounted(async () => {
+  document.addEventListener('mousedown', handleDocumentPointerDown);
+  document.addEventListener('keydown', handleDocumentKeydown);
   await loadAvailableProviders();
   await loadSpeechStatus();
   await syncToolSelectionFromThread(props.threadId);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handleDocumentPointerDown);
+  document.removeEventListener('keydown', handleDocumentKeydown);
 });
 </script>
 <style scoped>
@@ -783,6 +989,287 @@ button {
   border: 1px solid transparent;
   background: var(--chat-composer-control-background);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.model-selector-trigger {
+  display: inline-flex;
+  max-width: min(220px, calc(100vw - 168px));
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 12px;
+  color: var(--text-secondary);
+}
+
+.model-selector-trigger-open {
+  border-color: color-mix(in srgb, var(--accent-color) 34%, var(--border-color));
+  background: color-mix(
+    in srgb,
+    rgba(var(--accent-rgb, 74, 158, 255), 0.18) 70%,
+    var(--chat-composer-control-background)
+  );
+  color: var(--text-primary);
+}
+
+.model-selector-trigger-icon {
+  display: inline-flex;
+  height: 20px;
+  width: 20px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(var(--accent-rgb, 74, 158, 255), 0.12);
+  color: var(--text-primary);
+}
+
+.model-selector-trigger-initials {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.model-selector-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.model-selector-trigger-chevron {
+  height: 14px;
+  width: 14px;
+  flex-shrink: 0;
+  opacity: 0.8;
+  transition: transform 0.18s ease;
+}
+
+.model-selector-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 60;
+  width: min(380px, calc(100vw - 32px));
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  box-shadow:
+    0 28px 56px rgba(0, 0, 0, 0.34),
+    0 12px 22px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(18px);
+}
+
+.model-selector-search-shell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-tertiary) 88%, transparent);
+}
+
+.model-selector-search-icon {
+  height: 18px;
+  width: 18px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.model-selector-search-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.model-selector-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.model-selector-scroll {
+  max-height: 26rem;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.model-selector-empty {
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+
+.model-provider-group {
+  padding: 4px 0 10px;
+}
+
+.model-provider-group + .model-provider-group {
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  padding-top: 14px;
+}
+
+.model-provider-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 6px;
+}
+
+.model-provider-icon {
+  display: inline-flex;
+  height: 16px;
+  width: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.model-provider-copy,
+.model-option-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.model-provider-copy {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-provider-name {
+  color: inherit;
+}
+
+.model-provider-type {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: color-mix(in srgb, var(--text-muted) 92%, var(--text-primary));
+}
+
+.model-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.model-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-hover) 88%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 78%, transparent);
+}
+
+.model-option-selected {
+  background: rgba(var(--accent-rgb, 74, 158, 255), 0.22);
+  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.model-option-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.model-option-check {
+  display: inline-flex;
+  height: 22px;
+  width: 22px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: rgba(255, 255, 255, 0.02);
+  color: transparent;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.model-option-check-selected {
+  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.44);
+  background: rgba(var(--accent-rgb, 74, 158, 255), 0.88);
+  color: #ffffff;
+}
+
+.model-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: inherit;
+}
+
+.model-option-meta {
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.model-option-side {
+  max-width: 88px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: color-mix(in srgb, var(--text-muted) 88%, var(--text-primary));
+}
+
+.model-selector-trigger-icon :deep(.lobe-icon),
+.model-selector-trigger-icon :deep(.lobe-icon-placeholder),
+.model-provider-icon :deep(.lobe-icon),
+.model-provider-icon :deep(.lobe-icon-placeholder) {
+  height: 16px;
+  width: 16px;
+}
+
+.model-selector-trigger-icon :deep(.lobe-icon-placeholder),
+.model-provider-icon :deep(.lobe-icon-placeholder) {
+  border-radius: 6px;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 700;
+  color: inherit;
 }
 
 .send-btn {
@@ -870,21 +1357,8 @@ button {
   transition: height 0.08s ease;
 }
 
-/* Specific overrides for badges */
 .bg-\[\#4a9eff\] {
   background-color: var(--accent-color);
-}
-
-.bg-secondary {
-  background-color: var(--bg-secondary);
-}
-
-.bg-tertiary {
-  background-color: var(--bg-tertiary);
-}
-
-.bg-hover\/50 {
-  background-color: rgba(var(--accent-rgb, 74, 158, 255), 0.1);
 }
 
 .rotate-180 {
@@ -899,16 +1373,6 @@ button {
   50% {
     opacity: 1;
   }
-}
-
-.max-h-64 {
-  max-height: 16rem;
-}
-
-.shadow-xl {
-  box-shadow:
-    0 24px 44px rgba(0, 0, 0, 0.3),
-    0 12px 18px rgba(0, 0, 0, 0.18);
 }
 
 button:disabled {
