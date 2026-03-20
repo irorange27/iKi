@@ -143,87 +143,6 @@
         </div>
 
         <div class="config-group">
-          <h3>Theme Mode</h3>
-          <div class="button-group">
-            <button
-              v-for="theme in themeOptions"
-              :key="theme"
-              :class="{ active: config.general.theme === theme }"
-              @click="updateGeneral('theme', theme)"
-            >
-              {{ theme.charAt(0).toUpperCase() + theme.slice(1) }}
-            </button>
-          </div>
-        </div>
-
-        <div class="config-group">
-          <h3>Theme Preset</h3>
-          <label class="input-label">
-            <span>Preset</span>
-            <select
-              :value="currentThemePresetId"
-              @change="setThemePreset(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="preset in themePresetOptions" :key="preset.id" :value="preset.id">
-                {{ preset.label }}
-              </option>
-            </select>
-          </label>
-          <p class="group-description">
-            Base46 presets compile into iKi's semantic desktop theme tokens. Theme mode still
-            controls light, dark, or system selection when the preset provides both variants.
-          </p>
-        </div>
-
-        <div v-if="currentThemePresetId === customBase46PresetId" class="config-group">
-          <h3>Custom Base46</h3>
-          <label class="input-label">
-            <span>Preset Label</span>
-            <input
-              :value="customBase46LabelDraft"
-              placeholder="Custom Base46"
-              @input="customBase46LabelDraft = ($event.target as HTMLInputElement).value"
-            />
-          </label>
-          <div class="theme-editor-toolbar">
-            <div class="button-group">
-              <button
-                v-for="variant in base46EditorVariants"
-                :key="variant"
-                :class="{ active: customBase46EditorVariant === variant }"
-                @click="setCustomBase46EditorVariant(variant)"
-              >
-                {{ capitalizeWord(variant) }}
-              </button>
-            </div>
-            <div class="theme-editor-actions">
-              <button class="secondary-btn" @click="restoreCustomBase46Editor">
-                Restore Saved
-              </button>
-              <button class="secondary-btn" @click="resetCustomBase46Preset">Reset Preset</button>
-              <button class="primary-btn" @click="applyCustomBase46Variant">
-                Apply {{ capitalizeWord(customBase46EditorVariant) }} Variant
-              </button>
-            </div>
-          </div>
-          <label class="input-label">
-            <span>{{ capitalizeWord(customBase46EditorVariant) }} Variant JSON</span>
-            <textarea
-              class="theme-json-editor"
-              rows="18"
-              :value="customBase46Draft"
-              @input="updateCustomBase46Draft(($event.target as HTMLTextAreaElement).value)"
-            />
-          </label>
-          <p class="group-description">
-            Paste a Base46-compatible JSON document here. The selected variant must declare
-            <code>"type": "{{ customBase46EditorVariant }}"</code>.
-          </p>
-          <p v-if="customBase46Error" class="error-text">{{ customBase46Error }}</p>
-          <p v-else-if="customBase46Status" class="success-text">{{ customBase46Status }}</p>
-        </div>
-
-        <div class="config-group">
           <h3>Startup Behavior</h3>
           <label
             v-for="key in [
@@ -263,6 +182,13 @@
         :active="activeSection === 'speech'"
         @config-change="autoSave"
         @reset="resetSection('speech')"
+      />
+
+      <SettingsColorSchemeSection
+        v-show="activeSection === 'colorScheme'"
+        :active="activeSection === 'colorScheme'"
+        @config-change="autoSave"
+        @reset="resetColorSchemeSection"
       />
 
       <!-- UI -->
@@ -415,7 +341,7 @@
               <input
                 type="text"
                 :value="config.network.proxy.host"
-                @input="updateNetwork('proxy.host', $event.target.value)"
+                @input="updateNetwork('proxy.host', getInputValue($event))"
               />
             </label>
 
@@ -424,12 +350,7 @@
               <input
                 type="number"
                 :value="config.network.proxy.port || ''"
-                @input="
-                  updateNetwork(
-                    'proxy.port',
-                    $event.target.value ? parseInt($event.target.value) : null
-                  )
-                "
+                @input="updateNetwork('proxy.port', parseOptionalInteger(getInputValue($event)))"
               />
             </label>
           </template>
@@ -447,7 +368,7 @@
             max="20000"
             step="500"
             :value="config.network.timeout"
-            @input="updateNetwork('timeout', parseInt($event.target.value))"
+            @input="updateNetwork('timeout', parseRequiredInteger(getInputValue($event)))"
           />
           <p class="slider-hint">Controls how long the app waits before timing out.</p>
 
@@ -461,7 +382,7 @@
             max="10"
             step="1"
             :value="config.network.retryAttempts"
-            @input="updateNetwork('retryAttempts', parseInt($event.target.value))"
+            @input="updateNetwork('retryAttempts', parseRequiredInteger(getInputValue($event)))"
           />
           <p class="slider-hint">Number of retries before a request fails.</p>
         </div>
@@ -499,7 +420,7 @@
             max="240"
             step="5"
             :value="config.security.sessionTimeout"
-            @input="updateSecurity('sessionTimeout', parseInt($event.target.value))"
+            @input="updateSecurity('sessionTimeout', parseRequiredInteger(getInputValue($event)))"
           />
           <p class="slider-hint">Shorter timeouts increase security.</p>
         </div>
@@ -510,7 +431,7 @@
             <input
               type="checkbox"
               :checked="config.security.enableLogging"
-              @change="updateSecurity('enableLogging', $event.target.checked)"
+              @change="updateSecurity('enableLogging', getCheckedValue($event))"
             />
             Enable Logging
           </label>
@@ -518,7 +439,7 @@
             >Level:
             <select
               :value="config.security.logLevel"
-              @change="updateSecurity('logLevel', $event.target.value)"
+              @change="updateSecurity('logLevel', getLogLevelValue($event))"
             >
               <option value="error">Error</option>
               <option value="warn">Warning</option>
@@ -557,7 +478,11 @@
         <div class="config-group">
           <label v-for="(value, key) in config.keybindings" :key="key" class="input-label">
             {{ formatLabel(key) }}:
-            <input type="text" :value="value" @input="updateKeybinding(key, $event.target.value)" />
+            <input
+              type="text"
+              :value="value"
+              @input="updateKeybinding(key, getInputValue($event))"
+            />
           </label>
         </div>
 
@@ -601,7 +526,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   Cog,
@@ -614,27 +539,22 @@ import {
   AlarmClock,
   Wand2,
   Plug,
+  SlidersHorizontal,
 } from 'lucide-vue-next';
 
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
 import NapCatSettings from '../components/settings/NapCatSettings.vue';
+import SettingsColorSchemeSection from '../components/settings/SettingsColorSchemeSection.vue';
 import SettingsSpeechSection from '../components/settings/SettingsSpeechSection.vue';
 import SettingsMemorySection from '../components/settings/SettingsMemorySection.vue';
 import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
 import { useConfigStore } from '../store/config';
+import { createDefaultAppConfig } from '../../shared/config/defaults';
 import type { AppConfig } from '../../shared/types/config';
 import type { Provider } from '../../shared/types/provider';
-import type { ThemeVariant } from '../../shared/theme/types';
-import { parseBase46ThemeDocument } from '../../shared/theme/base46_schema';
-import {
-  CUSTOM_BASE46_PRESET_ID,
-  DEFAULT_THEME_PRESET_ID,
-  createDefaultThemeConfig,
-  listThemePresetSummaries,
-} from '../../shared/theme/registry';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
 
@@ -653,12 +573,6 @@ const toolModelTestResult = ref<{
   status: 'success' | 'warning' | 'error';
   message: string;
 } | null>(null);
-const customBase46PresetId = CUSTOM_BASE46_PRESET_ID;
-const customBase46EditorVariant = ref<ThemeVariant>('dark');
-const customBase46LabelDraft = ref('Custom Base46');
-const customBase46Draft = ref('');
-const customBase46Error = ref('');
-const customBase46Status = ref('');
 
 type AvailableProvider = {
   id: string;
@@ -677,6 +591,25 @@ type NetworkUpdatePath =
 
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Unknown error';
+
+const getInputValue = (event: Event): string =>
+  (event.target as HTMLInputElement | null)?.value ?? '';
+
+const getSelectValue = (event: Event): string =>
+  (event.target as HTMLSelectElement | null)?.value ?? '';
+
+const getCheckedValue = (event: Event): boolean =>
+  (event.target as HTMLInputElement | null)?.checked ?? false;
+
+const parseRequiredInteger = (value: string): number => Number.parseInt(value || '0', 10);
+
+const parseOptionalInteger = (value: string): number | null =>
+  value ? Number.parseInt(value, 10) : null;
+
+const getLogLevelValue = (event: Event): AppConfig['security']['logLevel'] => {
+  const value = getSelectValue(event);
+  return value === 'debug' || value === 'info' || value === 'warn' ? value : 'error';
+};
 
 // Load providers
 const loadProviders = async () => {
@@ -800,7 +733,8 @@ const menuItems = [
   { key: 'usage', label: 'Usage', icon: BarChart3 },
   { key: 'skills', label: 'Skills', icon: Wand2 },
   { key: 'memory', label: 'Memory', icon: Brain },
-  { key: 'ui', label: 'Appearance', icon: Palette },
+  { key: 'ui', label: 'User Interface', icon: SlidersHorizontal },
+  { key: 'colorScheme', label: 'Color Scheme', icon: Palette },
   { key: 'speech', label: 'Speech', icon: Mic },
   { key: 'tasks', label: 'Tasks', icon: AlarmClock },
   // { key: "chat", label: "Chat", icon: MessageCircleMore },
@@ -823,40 +757,11 @@ const activeSectionMeta = computed(() => {
 const activeSectionLabel = computed(() => activeSectionMeta.value.label);
 const activeSectionIcon = computed(() => activeSectionMeta.value.icon);
 
-const themeOptions = ['light', 'dark', 'system'] as const;
-const base46EditorVariants = ['dark', 'light'] as const;
 const densityOptions = [
   { key: 'compact' as const, label: 'Compact' },
   { key: 'comfortable' as const, label: 'Comfortable' },
   { key: 'spacious' as const, label: 'Spacious' },
 ];
-const themePresetOptions = computed(() =>
-  listThemePresetSummaries(config.value.themes.base46Presets)
-);
-const currentThemePresetId = computed(() => {
-  const configuredId = config.value.general.themePresetId;
-  return themePresetOptions.value.some(preset => preset.id === configuredId)
-    ? configuredId
-    : DEFAULT_THEME_PRESET_ID;
-});
-
-const capitalizeWord = (value: string): string =>
-  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
-
-const getDefaultCustomBase46Preset = () =>
-  createDefaultThemeConfig().base46Presets[CUSTOM_BASE46_PRESET_ID];
-
-const syncCustomBase46Editor = () => {
-  const preset =
-    config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] ?? getDefaultCustomBase46Preset();
-  customBase46LabelDraft.value = preset.label;
-  const documentForVariant =
-    preset[customBase46EditorVariant.value] ??
-    getDefaultCustomBase46Preset()[customBase46EditorVariant.value];
-  customBase46Draft.value = JSON.stringify(documentForVariant, null, 2);
-  customBase46Error.value = '';
-  customBase46Status.value = '';
-};
 
 // 自动保存防抖
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -899,65 +804,6 @@ const updateGeneral = <K extends keyof AppConfig['general']>(
 ) => {
   configStore.updateGeneral(key, value);
   autoSave();
-};
-
-const setThemePreset = (presetId: string) => {
-  config.value.general.themePresetId = presetId;
-  autoSave();
-  if (presetId === CUSTOM_BASE46_PRESET_ID) {
-    syncCustomBase46Editor();
-  }
-};
-
-const updateCustomBase46Draft = (value: string) => {
-  customBase46Draft.value = value;
-  customBase46Error.value = '';
-  customBase46Status.value = '';
-};
-
-const setCustomBase46EditorVariant = (variant: ThemeVariant) => {
-  customBase46EditorVariant.value = variant;
-  syncCustomBase46Editor();
-};
-
-const applyCustomBase46Variant = () => {
-  customBase46Error.value = '';
-  customBase46Status.value = '';
-
-  try {
-    const parsed = parseBase46ThemeDocument(JSON.parse(customBase46Draft.value));
-    if (parsed.type !== customBase46EditorVariant.value) {
-      throw new Error(
-        `The JSON document must declare "type": "${customBase46EditorVariant.value}".`
-      );
-    }
-
-    const currentPreset =
-      config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] ?? getDefaultCustomBase46Preset();
-    config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] = {
-      ...currentPreset,
-      label: customBase46LabelDraft.value.trim() || 'Custom Base46',
-      [customBase46EditorVariant.value]: parsed,
-    };
-    config.value.general.themePresetId = CUSTOM_BASE46_PRESET_ID;
-    autoSave();
-    customBase46Status.value = `${capitalizeWord(customBase46EditorVariant.value)} variant applied.`;
-  } catch (error) {
-    customBase46Error.value = getErrorMessage(error);
-  }
-};
-
-const restoreCustomBase46Editor = () => {
-  syncCustomBase46Editor();
-  customBase46Status.value = 'Restored the saved preset payload.';
-};
-
-const resetCustomBase46Preset = () => {
-  config.value.themes.base46Presets[CUSTOM_BASE46_PRESET_ID] = getDefaultCustomBase46Preset();
-  config.value.general.themePresetId = CUSTOM_BASE46_PRESET_ID;
-  autoSave();
-  syncCustomBase46Editor();
-  customBase46Status.value = 'Reset the custom preset to the bundled Base46 starter theme.';
 };
 
 const updateNetwork = (path: NetworkUpdatePath, value: boolean | string | number | null) => {
@@ -1014,19 +860,17 @@ const updateShellHighRiskPatterns = (value: string) => {
   updateToolExecution('shellHighRiskPatterns', patterns);
 };
 
-watch(
-  () => currentThemePresetId.value,
-  presetId => {
-    if (presetId === CUSTOM_BASE46_PRESET_ID) {
-      syncCustomBase46Editor();
-    }
-  },
-  { immediate: true }
-);
-
 const resetSection = (section: keyof AppConfig) => {
   configStore.resetSection(section);
   saved.value = true;
+};
+
+const resetColorSchemeSection = () => {
+  const defaults = createDefaultAppConfig();
+  config.value.general.theme = defaults.general.theme;
+  config.value.general.themePresetId = defaults.general.themePresetId;
+  config.value.themes = defaults.themes;
+  autoSave();
 };
 
 const resetBridgeSection = () => {

@@ -18,6 +18,29 @@ export interface ThemeConfig {
   base46Presets: Record<string, Base46ThemePresetInput>;
 }
 
+export interface SimpleThemeSeed {
+  background: string;
+  text: string;
+  accent: string;
+  secondary: string;
+}
+
+export interface AdvancedThemeSeed extends SimpleThemeSeed {
+  surface: string;
+  surfaceAlt: string;
+  hover: string;
+  muted: string;
+  warning: string;
+  danger: string;
+}
+
+export interface ThemeQuickStartDefinition {
+  id: string;
+  label: string;
+  dark: SimpleThemeSeed;
+  light: SimpleThemeSeed;
+}
+
 export interface ThemeSlotPalette {
   colorScheme: ThemeVariant;
   bgPrimary: string;

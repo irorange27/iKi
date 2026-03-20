@@ -15,14 +15,18 @@ const Base30Schema = z
     one_bg: hexColor,
     one_bg2: hexColor,
     one_bg3: hexColor.optional(),
+    statusline_bg: hexColor.optional(),
+    lightbg: hexColor.optional(),
+
     grey: hexColor,
     grey_fg: hexColor.optional(),
     grey_fg2: hexColor.optional(),
     light_grey: hexColor,
+    line: hexColor,
+
     red: hexColor,
     baby_pink: hexColor.optional(),
     pink: hexColor.optional(),
-    line: hexColor,
     green: hexColor,
     vibrant_green: hexColor.optional(),
     nord_blue: hexColor.optional(),
@@ -30,14 +34,15 @@ const Base30Schema = z
     yellow: hexColor,
     sun: hexColor.optional(),
     purple: hexColor.optional(),
+    dark_purple: hexColor.optional(),
     teal: hexColor.optional(),
     orange: hexColor.optional(),
     cyan: hexColor.optional(),
-    statusline_bg: hexColor.optional(),
+
     pmenu_bg: hexColor.optional(),
     folder_bg: hexColor.optional(),
   })
-  .passthrough();
+  .loose();
 
 const Base16Schema = z
   .object({
@@ -58,7 +63,7 @@ const Base16Schema = z
     base0E: hexColor,
     base0F: hexColor,
   })
-  .passthrough();
+  .loose();
 
 export const Base46ThemeDocumentSchema = z
   .object({

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultAppConfig } from '../../src/shared/config/defaults';
+import { THEME_QUICK_STARTS } from '../../src/shared/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '../../src/shared/theme/theme_creator';
 
 describe('config effects window chrome sync', () => {
   beforeEach(() => {
@@ -98,10 +100,22 @@ describe('config effects window chrome sync', () => {
     const config = createDefaultAppConfig();
     config.general.theme = 'dark';
     config.general.themePresetId = 'custom-base46';
+
+    const quickStart = THEME_QUICK_STARTS.find(preset => preset.id === 'ocean');
+    if (!quickStart) {
+      throw new Error('Expected Ocean quick start to exist.');
+    }
+
+    config.themes.base46Presets['custom-base46'] = createBase46ThemePresetFromQuickStart({
+      ...quickStart,
+      label: 'Custom Base46',
+    });
+
     const customPreset = config.themes.base46Presets['custom-base46'];
     if (!customPreset?.dark) {
-      throw new Error('Expected bundled custom Base46 preset to include a dark variant.');
+      throw new Error('Expected generated custom preset to include a dark variant.');
     }
+
     customPreset.dark.base_30.blue = '#112233';
     customPreset.dark.base_16.base0D = '#445566';
 

@@ -1,7 +1,13 @@
-import type { Base46ThemePresetInput, ThemeConfig, ThemePreset, ThemeSlotPalette } from './types';
+import type {
+  Base46ThemePresetInput,
+  ThemeConfig,
+  ThemePreset,
+  ThemeQuickStartDefinition,
+  ThemeSlotPalette,
+} from './types';
+import { cloneBase46ThemePresetInput, createBase46ThemePresetFromQuickStart } from './theme_creator';
 
 export const DEFAULT_THEME_PRESET_ID = 'iki-default';
-export const CUSTOM_BASE46_PRESET_ID = 'custom-base46';
 
 const BUILTIN_DARK_THEME: ThemeSlotPalette = {
   colorScheme: 'dark',
@@ -143,144 +149,126 @@ export const BUILTIN_THEME_PRESET: ThemePreset = {
   },
 };
 
-const CUSTOM_BASE46_DARK = {
-  name: 'Custom Base46 Dark',
-  type: 'dark',
-  base_30: {
-    white: '#ffffff',
-    black: '#2a2d35',
-    darker_black: '#22272c',
-    black2: '#272b31',
-    one_bg: '#2e3036',
-    one_bg2: '#3a3d45',
-    one_bg3: '#4e5256',
-    grey: '#6b7280',
-    grey_fg: '#7c838d',
-    grey_fg2: '#8f96a2',
-    light_grey: '#9ca3af',
-    red: '#ef4444',
-    baby_pink: '#f87171',
-    pink: '#c678dd',
-    line: '#4e5256',
-    green: '#10b981',
-    vibrant_green: '#34d399',
-    nord_blue: '#5ba2dc',
-    blue: '#61afef',
-    yellow: '#f59e0b',
-    sun: '#e5c07b',
-    purple: '#c678dd',
-    teal: '#56b6c2',
-    orange: '#d19a66',
-    cyan: '#56b6c2',
-    statusline_bg: '#2e3036',
-    pmenu_bg: '#2e3036',
-    folder_bg: '#61afef',
-  },
-  base_16: {
-    base00: '#2a2d35',
-    base01: '#22272c',
-    base02: '#2e3036',
-    base03: '#4e5256',
-    base04: '#6b7280',
-    base05: '#9ca3af',
-    base06: '#d1d5db',
-    base07: '#ffffff',
-    base08: '#ef4444',
-    base09: '#d19a66',
-    base0A: '#f59e0b',
-    base0B: '#10b981',
-    base0C: '#56b6c2',
-    base0D: '#61afef',
-    base0E: '#c678dd',
-    base0F: '#be5046',
-  },
-} as const;
-
-const CUSTOM_BASE46_LIGHT = {
-  name: 'Custom Base46 Light',
-  type: 'light',
-  base_30: {
-    white: '#111827',
-    black: '#ffffff',
-    darker_black: '#f3f4f6',
-    black2: '#f8fafc',
-    one_bg: '#ffffff',
-    one_bg2: '#e5e7eb',
-    one_bg3: '#dbeafe',
-    grey: '#9ca3af',
-    grey_fg: '#6b7280',
-    grey_fg2: '#5b6471',
-    light_grey: '#4b5563',
-    red: '#ef4444',
-    baby_pink: '#f87171',
-    pink: '#c678dd',
-    line: '#e5e7eb',
-    green: '#10b981',
-    vibrant_green: '#34d399',
-    nord_blue: '#81a4aa',
-    blue: '#7299a0',
-    yellow: '#b45309',
-    sun: '#d97706',
-    purple: '#8b5cf6',
-    teal: '#0f766e',
-    orange: '#ea580c',
-    cyan: '#0ea5e9',
-    statusline_bg: '#f3f4f6',
-    pmenu_bg: '#ffffff',
-    folder_bg: '#7299a0',
-  },
-  base_16: {
-    base00: '#ffffff',
-    base01: '#f3f4f6',
-    base02: '#e5e7eb',
-    base03: '#d1d5db',
-    base04: '#9ca3af',
-    base05: '#4b5563',
-    base06: '#374151',
-    base07: '#111827',
-    base08: '#ef4444',
-    base09: '#ea580c',
-    base0A: '#b45309',
-    base0B: '#10b981',
-    base0C: '#0ea5e9',
-    base0D: '#7299a0',
-    base0E: '#8b5cf6',
-    base0F: '#c2410c',
-  },
-} as const;
-
-export const DEFAULT_CUSTOM_BASE46_PRESET: Base46ThemePresetInput = {
-  label: 'Custom Base46',
-  dark: {
-    ...CUSTOM_BASE46_DARK,
-    base_30: { ...CUSTOM_BASE46_DARK.base_30 },
-    base_16: { ...CUSTOM_BASE46_DARK.base_16 },
-  },
-  light: {
-    ...CUSTOM_BASE46_LIGHT,
-    base_30: { ...CUSTOM_BASE46_LIGHT.base_30 },
-    base_16: { ...CUSTOM_BASE46_LIGHT.base_16 },
-  },
-};
-
-export const createDefaultThemeConfig = (): ThemeConfig => ({
-  base46Presets: {
-    [CUSTOM_BASE46_PRESET_ID]: {
-      label: DEFAULT_CUSTOM_BASE46_PRESET.label,
-      dark: DEFAULT_CUSTOM_BASE46_PRESET.dark
-        ? {
-            ...DEFAULT_CUSTOM_BASE46_PRESET.dark,
-            base_30: { ...DEFAULT_CUSTOM_BASE46_PRESET.dark.base_30 },
-            base_16: { ...DEFAULT_CUSTOM_BASE46_PRESET.dark.base_16 },
-          }
-        : undefined,
-      light: DEFAULT_CUSTOM_BASE46_PRESET.light
-        ? {
-            ...DEFAULT_CUSTOM_BASE46_PRESET.light,
-            base_30: { ...DEFAULT_CUSTOM_BASE46_PRESET.light.base_30 },
-            base_16: { ...DEFAULT_CUSTOM_BASE46_PRESET.light.base_16 },
-          }
-        : undefined,
+export const THEME_QUICK_STARTS: ThemeQuickStartDefinition[] = [
+  {
+    id: 'ocean',
+    label: 'Ocean',
+    dark: {
+      background: '#1a1b26',
+      text: '#c0caf5',
+      accent: '#7aa2f7',
+      secondary: '#9ece6a',
+    },
+    light: {
+      background: '#f6f9ff',
+      text: '#1f2a44',
+      accent: '#4f7cff',
+      secondary: '#5eae77',
     },
   },
+  {
+    id: 'forest',
+    label: 'Forest',
+    dark: {
+      background: '#15241f',
+      text: '#d8f3dc',
+      accent: '#95d5b2',
+      secondary: '#74c69d',
+    },
+    light: {
+      background: '#f5fbf6',
+      text: '#1b4332',
+      accent: '#40916c',
+      secondary: '#74c69d',
+    },
+  },
+  {
+    id: 'sunset',
+    label: 'Sunset',
+    dark: {
+      background: '#211f2f',
+      text: '#fde2e4',
+      accent: '#f28482',
+      secondary: '#f6bd60',
+    },
+    light: {
+      background: '#fff8f5',
+      text: '#582f0e',
+      accent: '#e76f51',
+      secondary: '#f4a261',
+    },
+  },
+  {
+    id: 'nord',
+    label: 'Nord',
+    dark: {
+      background: '#2e3440',
+      text: '#d8dee9',
+      accent: '#88c0d0',
+      secondary: '#a3be8c',
+    },
+    light: {
+      background: '#f4f7fb',
+      text: '#2e3440',
+      accent: '#5e81ac',
+      secondary: '#81a1c1',
+    },
+  },
+  {
+    id: 'monokai',
+    label: 'Monokai',
+    dark: {
+      background: '#1e1f1c',
+      text: '#f8f8f2',
+      accent: '#66d9ef',
+      secondary: '#a6e22e',
+    },
+    light: {
+      background: '#fffef7',
+      text: '#272822',
+      accent: '#3f88c5',
+      secondary: '#7cb518',
+    },
+  },
+];
+
+const BUILTIN_GALLERY_THEME_DEFINITIONS = [
+  { id: 'aquarium', quickStartId: 'ocean', label: 'Aquarium' },
+  { id: 'ashes', quickStartId: 'sunset', label: 'Ashes' },
+  { id: 'ayu', quickStartId: 'monokai', label: 'Ayu' },
+  { id: 'nord', quickStartId: 'nord', label: 'Nord' },
+  { id: 'forest', quickStartId: 'forest', label: 'Forest' },
+] as const;
+
+const quickStartMap = new Map(THEME_QUICK_STARTS.map(definition => [definition.id, definition]));
+
+export const BUILTIN_BASE46_GALLERY_PRESETS: Record<string, Base46ThemePresetInput> =
+  Object.fromEntries(
+    BUILTIN_GALLERY_THEME_DEFINITIONS.map(definition => {
+      const quickStart = quickStartMap.get(definition.quickStartId);
+      if (!quickStart) {
+        throw new Error(`Missing quick start definition: ${definition.quickStartId}`);
+      }
+      return [
+        definition.id,
+        {
+          ...createBase46ThemePresetFromQuickStart({
+            ...quickStart,
+            label: definition.label,
+          }),
+        },
+      ];
+    })
+  );
+
+export const BUILTIN_BASE46_GALLERY_IDS = Object.keys(BUILTIN_BASE46_GALLERY_PRESETS);
+
+export const createDefaultThemeConfig = (): ThemeConfig => ({
+  base46Presets: {},
+});
+
+export const cloneThemeConfig = (config: ThemeConfig): ThemeConfig => ({
+  base46Presets: Object.fromEntries(
+    Object.entries(config.base46Presets).map(([id, preset]) => [id, cloneBase46ThemePresetInput(preset)])
+  ),
 });

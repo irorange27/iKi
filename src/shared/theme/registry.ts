@@ -1,6 +1,10 @@
 import { compileBase46ThemeDocument } from './base46_compile';
 import { parseBase46ThemePresetInput } from './base46_schema';
-import { BUILTIN_THEME_PRESET, DEFAULT_THEME_PRESET_ID } from './builtins';
+import {
+  BUILTIN_BASE46_GALLERY_PRESETS,
+  BUILTIN_THEME_PRESET,
+  DEFAULT_THEME_PRESET_ID,
+} from './builtins';
 import type {
   Base46ThemePresetInput,
   ResolvedThemeSelection,
@@ -19,7 +23,11 @@ const pickDefaultVariant = (
   return 'dark';
 };
 
-const compileBase46Preset = (id: string, input: Base46ThemePresetInput): ThemePreset => {
+const compileBase46Preset = (
+  id: string,
+  input: Base46ThemePresetInput,
+  source: ThemePreset['source'] = 'base46'
+): ThemePreset => {
   const parsed = parseBase46ThemePresetInput(input);
   const variants: ThemePreset['variants'] = {};
 
@@ -33,7 +41,7 @@ const compileBase46Preset = (id: string, input: Base46ThemePresetInput): ThemePr
   return {
     id,
     label: parsed.label,
-    source: 'base46',
+    source,
     variants,
     defaultVariant: pickDefaultVariant(variants),
   };
@@ -44,6 +52,10 @@ export const buildThemePresetRegistry = (
 ): Map<string, ThemePreset> => {
   const registry = new Map<string, ThemePreset>();
   registry.set(BUILTIN_THEME_PRESET.id, BUILTIN_THEME_PRESET);
+
+  for (const [id, input] of Object.entries(BUILTIN_BASE46_GALLERY_PRESETS)) {
+    registry.set(id, compileBase46Preset(id, input, 'builtin'));
+  }
 
   for (const [id, input] of Object.entries(base46Presets)) {
     try {
@@ -126,7 +138,8 @@ export const resolveThemeSelection = ({
 };
 
 export {
-  CUSTOM_BASE46_PRESET_ID,
   DEFAULT_THEME_PRESET_ID,
   createDefaultThemeConfig,
+  cloneThemeConfig,
+  THEME_QUICK_STARTS,
 } from './builtins';

@@ -4,19 +4,27 @@ import { createDefaultAppConfig } from '../../src/shared/config/defaults';
 import { normalizeAppConfig } from '../../src/shared/config/normalize';
 import { compileBase46ThemeDocument } from '../../src/shared/theme/base46_compile';
 import {
-  CUSTOM_BASE46_PRESET_ID,
+  DEFAULT_THEME_PRESET_ID,
+  THEME_QUICK_STARTS,
   createDefaultThemeConfig,
+  listThemePresetSummaries,
   resolveThemeSelection,
 } from '../../src/shared/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '../../src/shared/theme/theme_creator';
+
+const oceanQuickStart = THEME_QUICK_STARTS.find(preset => preset.id === 'ocean');
+
+if (!oceanQuickStart) {
+  throw new Error('Missing built-in Ocean quick start.');
+}
 
 describe('shared theme registry', () => {
-  it('adds a default theme preset id and bundled custom base46 starter preset to app config', () => {
+  it('adds a default theme preset id and starts with no custom presets', () => {
     const config = createDefaultAppConfig();
 
-    expect(config.general.themePresetId).toBe('iki-default');
-    expect(config.themes.base46Presets[CUSTOM_BASE46_PRESET_ID]?.label).toBe('Custom Base46');
-    expect(config.themes.base46Presets[CUSTOM_BASE46_PRESET_ID]?.dark?.type).toBe('dark');
-    expect(config.themes.base46Presets[CUSTOM_BASE46_PRESET_ID]?.light?.type).toBe('light');
+    expect(config.general.themePresetId).toBe(DEFAULT_THEME_PRESET_ID);
+    expect(config.themes).toEqual(createDefaultThemeConfig());
+    expect(config.themes.base46Presets).toEqual({});
   });
 
   it('normalizes legacy config without theme preset data onto the builtin preset', () => {
@@ -26,15 +34,27 @@ describe('shared theme registry', () => {
       },
     });
 
-    expect(config.general.themePresetId).toBe('iki-default');
-    expect(config.themes.base46Presets[CUSTOM_BASE46_PRESET_ID]).toBeDefined();
+    expect(config.general.themePresetId).toBe(DEFAULT_THEME_PRESET_ID);
+    expect(config.themes.base46Presets).toEqual({});
   });
 
-  it('compiles base46 documents into semantic desktop theme slots', () => {
-    const preset = createDefaultThemeConfig().base46Presets[CUSTOM_BASE46_PRESET_ID];
+  it('lists builtin gallery presets alongside the default preset', () => {
+    const summaries = listThemePresetSummaries();
+    const presetIds = summaries.map(summary => summary.id);
+
+    expect(presetIds).toContain(DEFAULT_THEME_PRESET_ID);
+    expect(presetIds).toContain('aquarium');
+    expect(presetIds).toContain('ashes');
+    expect(presetIds).toContain('ayu');
+    expect(summaries.find(summary => summary.id === 'aquarium')?.source).toBe('builtin');
+  });
+
+  it('compiles generated base46 quick starts into semantic desktop theme slots', () => {
+    const preset = createBase46ThemePresetFromQuickStart(oceanQuickStart);
     if (!preset.dark) {
-      throw new Error('Expected bundled custom Base46 preset to include a dark variant.');
+      throw new Error('Expected Ocean quick start to include a dark variant.');
     }
+
     const palette = compileBase46ThemeDocument(preset.dark);
 
     expect(palette.colorScheme).toBe('dark');
@@ -45,20 +65,22 @@ describe('shared theme registry', () => {
   });
 
   it('falls back to a preset default variant when the requested variant is unavailable', () => {
+    const preset = createBase46ThemePresetFromQuickStart(oceanQuickStart);
+
     const selection = resolveThemeSelection({
-      presetId: CUSTOM_BASE46_PRESET_ID,
+      presetId: 'custom-dark-only',
       themeMode: 'light',
       systemPrefersDark: false,
       base46Presets: {
-        [CUSTOM_BASE46_PRESET_ID]: {
+        'custom-dark-only': {
           label: 'Dark Only',
-          dark: createDefaultThemeConfig().base46Presets[CUSTOM_BASE46_PRESET_ID].dark,
+          dark: preset.dark,
         },
       },
     });
 
     expect(selection.requestedVariant).toBe('light');
     expect(selection.resolvedVariant).toBe('dark');
-    expect(selection.presetId).toBe(CUSTOM_BASE46_PRESET_ID);
+    expect(selection.presetId).toBe('custom-dark-only');
   });
 });
