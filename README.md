@@ -12,6 +12,9 @@ A local agent pet for AI provider orchestration.
 
 - Self-optimizing workflow (auto tool routing and auto-pinned skills).
 
+- Structured context assembly with rolling thread summaries, bounded memory / skill context, and
+  visible context reports per assistant turn.
+
 ## Getting Started
 
 1. Clone the repository:

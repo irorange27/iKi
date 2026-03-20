@@ -8,12 +8,18 @@ import {
 } from './ui_message_tool_parts';
 import type { ToolUiState, ToolUiStatePatch } from './tool_ui_state';
 import {
+  isContextReportPart,
   isDynamicToolPart,
   isMemoryPart,
   isObjectRecord,
+  isSkillUsagePart,
   isTextPart,
+  type ContextReportItem,
+  type ContextReportPart,
   type DynamicToolPart,
   type MemoryPart,
+  type SkillUsageEntry,
+  type SkillUsagePart,
   type TextPart,
   type UiMessagePart,
 } from '../../../shared/chat/message_parts';
@@ -74,7 +80,20 @@ export type StreamAction =
   | { type: 'text_delta'; delta: string }
   | { type: 'finalize_response'; fullText: string }
   | { type: 'tool_chunk'; chunk: UIMessageChunk }
-  | { type: 'memory_chunk'; chunk: { query?: unknown; results?: unknown } };
+  | {
+      type: 'skill_chunk';
+      chunk: { mode?: unknown; skills?: unknown };
+    }
+  | { type: 'memory_chunk'; chunk: { query?: unknown; results?: unknown } }
+  | {
+      type: 'context_chunk';
+      chunk: {
+        totalEstimatedTokens?: unknown;
+        retainedRecentMessages?: unknown;
+        compactedMessages?: unknown;
+        blocks?: unknown;
+      };
+    };
 
 export type ReduceResult = {
   state: StreamState;
@@ -163,8 +182,7 @@ const buildStreamingTextParts = (parts: UiMessagePart[], delta: string): UiMessa
   return nextParts;
 };
 
-const normalizeTextForToolDedup = (value: string): string =>
-  value.replace(/\s+/g, ' ').trim();
+const normalizeTextForToolDedup = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 const isToolLikePart = (part: UiMessagePart): boolean => {
   if (isDynamicToolPart(part)) return true;
@@ -640,9 +658,7 @@ export const reduceStream = (
         ...(existingToolPart || {}),
         type: 'dynamic-tool',
         toolCallId,
-        toolName:
-          chunkToolName ||
-          (existingToolPart ? existingToolPart.toolName : 'tool'),
+        toolName: chunkToolName || (existingToolPart ? existingToolPart.toolName : 'tool'),
       };
 
       const updatedPart = buildToolPartUpdate(nextPart, chunk, nextInputText);
@@ -696,7 +712,9 @@ export const reduceStream = (
 
   if (action.type === 'memory_chunk') {
     const results = Array.isArray(action.chunk.results)
-      ? action.chunk.results.filter(entry => isObjectRecord(entry) && typeof entry.summary === 'string')
+      ? action.chunk.results.filter(
+          entry => isObjectRecord(entry) && typeof entry.summary === 'string'
+        )
       : [];
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
@@ -713,6 +731,129 @@ export const reduceStream = (
         nextParts[existingIndex] = memoryPart;
       } else {
         nextParts.unshift(memoryPart);
+      }
+
+      return {
+        ...message,
+        parts: nextParts as UIMessage['parts'],
+      };
+    });
+
+    return {
+      state: updateResult.state,
+      messageOps: updateResult.messageOps,
+      effects: [{ type: 'scroll' }],
+    };
+  }
+
+  if (action.type === 'skill_chunk') {
+    const skills = Array.isArray(action.chunk.skills)
+      ? action.chunk.skills
+          .filter(
+            (entry): entry is SkillUsageEntry =>
+              isObjectRecord(entry) &&
+              typeof entry.id === 'string' &&
+              entry.id.trim().length > 0 &&
+              typeof entry.name === 'string' &&
+              entry.name.trim().length > 0
+          )
+          .map(entry => ({
+            id: entry.id.trim(),
+            name: entry.name.trim(),
+            ...(typeof entry.description === 'string' && entry.description.trim()
+              ? { description: entry.description.trim() }
+              : {}),
+            ...(entry.source === 'user' || entry.source === 'codex'
+              ? { source: entry.source }
+              : {}),
+          }))
+      : [];
+
+    if (skills.length === 0) {
+      return { state, messageOps: [], effects: [] };
+    }
+
+    const updateResult = updateAssistantMessage(state, ctx, message => {
+      const nextParts = [...(message.parts as UiMessagePart[])];
+      const existingIndex = nextParts.findIndex(part => isSkillUsagePart(part));
+
+      const skillPart: SkillUsagePart = {
+        type: 'skill-usage',
+        mode: action.chunk.mode === 'auto' ? 'auto' : 'manual',
+        skills,
+      };
+
+      if (existingIndex >= 0) {
+        nextParts[existingIndex] = skillPart;
+      } else {
+        nextParts.unshift(skillPart);
+      }
+
+      return {
+        ...message,
+        parts: nextParts as UIMessage['parts'],
+      };
+    });
+
+    return {
+      state: updateResult.state,
+      messageOps: updateResult.messageOps,
+      effects: [{ type: 'scroll' }],
+    };
+  }
+
+  if (action.type === 'context_chunk') {
+    const blocks = Array.isArray(action.chunk.blocks)
+      ? action.chunk.blocks
+          .filter(
+            (entry): entry is ContextReportItem =>
+              isObjectRecord(entry) &&
+              typeof entry.kind === 'string' &&
+              typeof entry.status === 'string'
+          )
+          .map(entry => ({
+            kind: entry.kind,
+            status: entry.status,
+            ...(typeof entry.estimatedTokens === 'number' && Number.isFinite(entry.estimatedTokens)
+              ? { estimatedTokens: Math.max(0, Math.trunc(entry.estimatedTokens)) }
+              : {}),
+            ...(typeof entry.charCount === 'number' && Number.isFinite(entry.charCount)
+              ? { charCount: Math.max(0, Math.trunc(entry.charCount)) }
+              : {}),
+            ...(typeof entry.reason === 'string' && entry.reason.trim()
+              ? { reason: entry.reason.trim() }
+              : {}),
+            ...(typeof entry.sourceCount === 'number' && Number.isFinite(entry.sourceCount)
+              ? { sourceCount: Math.max(0, Math.trunc(entry.sourceCount)) }
+              : {}),
+          }))
+      : [];
+
+    const updateResult = updateAssistantMessage(state, ctx, message => {
+      const nextParts = [...(message.parts as UiMessagePart[])];
+      const existingIndex = nextParts.findIndex(part => isContextReportPart(part));
+
+      const contextPart: ContextReportPart = {
+        type: 'context-report',
+        ...(typeof action.chunk.totalEstimatedTokens === 'number' &&
+        Number.isFinite(action.chunk.totalEstimatedTokens)
+          ? { totalEstimatedTokens: Math.max(0, Math.trunc(action.chunk.totalEstimatedTokens)) }
+          : {}),
+        ...(typeof action.chunk.retainedRecentMessages === 'number' &&
+        Number.isFinite(action.chunk.retainedRecentMessages)
+          ? { retainedRecentMessages: Math.max(0, Math.trunc(action.chunk.retainedRecentMessages)) }
+          : {}),
+        ...(typeof action.chunk.compactedMessages === 'number' &&
+        Number.isFinite(action.chunk.compactedMessages)
+          ? { compactedMessages: Math.max(0, Math.trunc(action.chunk.compactedMessages)) }
+          : {}),
+        blocks,
+      };
+
+      if (existingIndex >= 0) {
+        nextParts[existingIndex] = contextPart;
+      } else {
+        nextParts.unshift(contextPart);
       }
 
       return {

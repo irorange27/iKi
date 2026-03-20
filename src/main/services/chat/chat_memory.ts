@@ -19,12 +19,14 @@ type MemoryPreview = {
   summary: string;
   score: number;
   updated_at?: string;
-  tags?: string | null;
+  tags?: string[];
+  sourceMessageCount?: number;
 };
 
 type MemoryRetrievalPayload = {
   query: string;
   results: MemoryPreview[];
+  systemMessage: string;
 };
 
 const formatMemoryLine = (entry: { summary: string; score: number; updated_at?: string }) => {
@@ -40,6 +42,17 @@ const buildMemorySystemMessage = (
   if (!entries.length) return '';
   const lines = entries.map(formatMemoryLine);
   return ['Long-term memory (use only if relevant; ignore if unrelated):', ...lines].join('\n');
+};
+
+const parseJsonStringArray = (value: string | null | undefined): string[] => {
+  if (!value || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === 'string');
+  } catch {
+    return [];
+  }
 };
 
 const EMOTION_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -227,7 +240,11 @@ export const createChatMemory = () => {
     }
   };
 
-  const queueEmotionAnalysis = (params: { threadId: string; messageId: string; messageJson: string }) => {
+  const queueEmotionAnalysis = (params: {
+    threadId: string;
+    messageId: string;
+    messageJson: string;
+  }) => {
     const emotionConfig = getEmotionConfig();
     if (!emotionConfig?.enabled) return;
     const thread = chatThreadDb.getChatThread(params.threadId);
@@ -282,6 +299,65 @@ export const createChatMemory = () => {
     })();
   };
 
+  const buildMemoryPreview = (entry: {
+    id: string;
+    summary: string;
+    score: number;
+    updated_at?: string;
+    tags?: string | null;
+    source_message_ids?: string | null;
+  }): MemoryPreview => ({
+    id: entry.id,
+    summary: entry.summary,
+    score: entry.score,
+    updated_at: entry.updated_at,
+    tags: parseJsonStringArray(entry.tags),
+    sourceMessageCount: parseJsonStringArray(entry.source_message_ids).length || undefined,
+  });
+
+  const retrieveRelevantMemory = (
+    threadId: string,
+    query: string
+  ): MemoryRetrievalPayload | null => {
+    if (!threadId || !query.trim()) return null;
+    const memoryConfig = getMemoryConfig();
+    if (!memoryConfig?.enabled) return null;
+
+    const thread = chatThreadDb.getChatThread(threadId);
+    if (thread?.is_incognito) return null;
+
+    const limit = Math.max(1, Math.trunc(memoryConfig.maxRetrievalCount || 0));
+    const threshold = memoryConfig.similarThreshold;
+    const threadResults = memoryDb.searchLongMemory(threadId, query, {
+      limit,
+      threshold,
+    });
+    const clientResults = thread?.client_id
+      ? memoryDb.searchLongMemoryAcrossThreads(query, {
+          limit: Math.max(limit * 2, limit),
+          threshold,
+          clientId: thread.client_id,
+        })
+      : [];
+
+    const combined = [...threadResults, ...clientResults];
+    const deduped: typeof combined = [];
+    const seen = new Set<string>();
+
+    for (const entry of combined) {
+      if (!entry?.id || seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      deduped.push(entry);
+      if (deduped.length >= limit) break;
+    }
+
+    return {
+      query,
+      results: deduped.map(buildMemoryPreview),
+      systemMessage: deduped.length > 0 ? buildMemorySystemMessage(deduped) : '',
+    };
+  };
+
   const injectMemoryIntoMessages = (
     messages: ChatInputMessage[],
     threadId?: string,
@@ -291,37 +367,20 @@ export const createChatMemory = () => {
     }
   ): ChatInputMessage[] => {
     if (!threadId) return messages;
-    const memoryConfig = getMemoryConfig();
     const thread = chatThreadDb.getChatThread(threadId);
     if (thread?.is_incognito) return messages;
 
     const systemMessages: ChatInputMessage[] = [];
-    if (memoryConfig?.enabled) {
-      const lastMessage = messages[messages.length - 1];
-      const query = getPromptFromMessage(lastMessage);
-      if (query.trim()) {
-        const results = memoryDb.searchLongMemoryAcrossThreads(query, {
-          limit: memoryConfig.maxRetrievalCount,
-          threshold: memoryConfig.similarThreshold,
-        });
+    const lastMessage = messages[messages.length - 1];
+    const query = getPromptFromMessage(lastMessage);
+    const memoryPayload = query.trim() ? retrieveRelevantMemory(threadId, query) : null;
+    if (memoryPayload) {
+      if (options?.onRetrieved) {
+        options.onRetrieved(memoryPayload);
+      }
 
-        if (options?.onRetrieved) {
-          const preview: MemoryPreview[] = results.map(entry => ({
-            id: entry.id,
-            summary: entry.summary,
-            score: entry.score,
-            updated_at: entry.updated_at,
-            tags: entry.tags,
-          }));
-          options.onRetrieved({ query, results: preview });
-        }
-
-        if (results.length) {
-          const systemContent = buildMemorySystemMessage(results);
-          if (systemContent.trim()) {
-            systemMessages.push({ role: 'system', content: systemContent });
-          }
-        }
+      if (memoryPayload.systemMessage.trim()) {
+        systemMessages.push({ role: 'system', content: memoryPayload.systemMessage });
       }
     }
 
@@ -339,7 +398,11 @@ export const createChatMemory = () => {
     return [...messages.slice(0, headIndex), ...systemMessages, ...messages.slice(headIndex)];
   };
 
-  const onMessagePersisted = (params: { threadId: string; messageId: string; messageJson: string }) => {
+  const onMessagePersisted = (params: {
+    threadId: string;
+    messageId: string;
+    messageJson: string;
+  }) => {
     try {
       if (!params.threadId || !params.messageId || typeof params.messageJson !== 'string') return;
       const memoryConfig = getMemoryConfig();
@@ -369,7 +432,14 @@ export const createChatMemory = () => {
 
   const getAffectState = (threadId: string) => computeAffectStateForThread(threadId);
 
-  return { injectMemoryIntoMessages, onMessagePersisted, recordRealtimeEmotion, getAffectState };
+  return {
+    injectMemoryIntoMessages,
+    onMessagePersisted,
+    recordRealtimeEmotion,
+    getAffectState,
+    getAffectContextMessage,
+    retrieveRelevantMemory,
+  };
 };
 
 export type ChatMemory = ReturnType<typeof createChatMemory>;

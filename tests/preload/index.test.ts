@@ -93,4 +93,10 @@ describe('preload task IPC payload serialization', () => {
     expect(payload).not.toBe(updatesProxy);
     expect(payload.tools).not.toBe(toolsProxy);
   });
+
+  it('forwards window shadow updates over IPC', async () => {
+    exposedApi.setWindowShadow(true);
+
+    expect(sendMock).toHaveBeenCalledWith('window:set-shadow', true);
+  });
 });

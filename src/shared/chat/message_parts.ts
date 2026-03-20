@@ -1,4 +1,5 @@
 import { isObjectRecord } from '../utils/guards';
+import type { SkillSource } from '../types/skill';
 
 export { isObjectRecord };
 
@@ -14,6 +15,36 @@ export type MemoryPart = {
   type: 'memory-retrieval';
   query?: string;
   results?: MemoryResult[];
+};
+
+export type SkillUsageEntry = {
+  id: string;
+  name: string;
+  description?: string;
+  source?: SkillSource;
+};
+
+export type SkillUsagePart = {
+  type: 'skill-usage';
+  mode?: 'manual' | 'auto';
+  skills?: SkillUsageEntry[];
+};
+
+export type ContextReportItem = {
+  kind?: 'recent-history' | 'thread-summary' | 'memory' | 'affect' | 'skills';
+  status?: 'included' | 'truncated' | 'dropped';
+  estimatedTokens?: number;
+  charCount?: number;
+  reason?: string;
+  sourceCount?: number;
+};
+
+export type ContextReportPart = {
+  type: 'context-report';
+  totalEstimatedTokens?: number;
+  retainedRecentMessages?: number;
+  compactedMessages?: number;
+  blocks?: ContextReportItem[];
 };
 
 export type ToolApproval = {
@@ -109,13 +140,19 @@ export type ToolPart =
   | ToolApprovalRequestPart
   | ToolApprovalResponsePart;
 
-export type UiMessagePart = TextPart | MemoryPart | ToolPart;
+export type UiMessagePart = TextPart | MemoryPart | SkillUsagePart | ContextReportPart | ToolPart;
 
 export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
 
 export const isMemoryPart = (part: unknown): part is MemoryPart =>
   isObjectRecord(part) && part.type === 'memory-retrieval';
+
+export const isSkillUsagePart = (part: unknown): part is SkillUsagePart =>
+  isObjectRecord(part) && part.type === 'skill-usage';
+
+export const isContextReportPart = (part: unknown): part is ContextReportPart =>
+  isObjectRecord(part) && part.type === 'context-report';
 
 export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
   isObjectRecord(part) &&

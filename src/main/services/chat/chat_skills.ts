@@ -2,6 +2,7 @@ import * as chatThreadDb from '../../../core/db/chat_thread';
 import { buildSkillsSystemPrompt, listSkills, normalizeSkillIds } from '../../../core/skills';
 import { getToolModel } from '../../../core/provider/tool_model';
 import { selectSkillsWithAgent } from '../../../core/provider/skill_selection';
+import type { SkillSummary } from '../../../shared/types/skill';
 import type { ChatInputMessage } from './chat_types';
 import { toLlmChatMessages } from './chat_ui';
 import { getAutoPinnedSkillIds, recordAutoSkillSelection } from '../workflow/workflow_optimizer';
@@ -11,7 +12,11 @@ export const resolveSkillsSystemPrompt = async (params: {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
-}): Promise<{ skillsSystemPrompt: string }> => {
+}): Promise<{
+  skillsSystemPrompt: string;
+  usedSkills: SkillSummary[];
+  skillMode: 'manual' | 'auto';
+}> => {
   const skillMode = params.skillMode === 'auto' ? 'auto' : 'manual';
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
 
@@ -31,6 +36,7 @@ export const resolveSkillsSystemPrompt = async (params: {
   }
 
   let normalizedSkillIds = normalizeSkillIds(params.skillIds);
+  let availableSkills: SkillSummary[] = [];
 
   if (skillMode === 'manual') {
     // Manual mode: use explicit skills if provided, otherwise fall back to pinned thread skills.
@@ -50,7 +56,8 @@ export const resolveSkillsSystemPrompt = async (params: {
     }
   } else {
     // Auto mode: pick relevant skills per message using tool model, plus pinned thread skills.
-    const availableSkillCatalog = (await listSkills()).map(skill => ({
+    availableSkills = await listSkills();
+    const availableSkillCatalog = availableSkills.map(skill => ({
       id: skill.id,
       name: skill.name,
       description: skill.description,
@@ -81,8 +88,17 @@ export const resolveSkillsSystemPrompt = async (params: {
     normalizedSkillIds = Array.from(union);
   }
 
+  if (availableSkills.length === 0 && normalizedSkillIds.length > 0) {
+    availableSkills = await listSkills();
+  }
+
+  const skillsById = new Map(availableSkills.map(skill => [skill.id, skill] as const));
+  const usedSkills = normalizedSkillIds
+    .map(id => skillsById.get(id))
+    .filter((skill): skill is SkillSummary => Boolean(skill));
+
   const skillsSystemPrompt =
     normalizedSkillIds.length > 0 ? await buildSkillsSystemPrompt(normalizedSkillIds) : '';
 
-  return { skillsSystemPrompt };
+  return { skillsSystemPrompt, usedSkills, skillMode };
 };

@@ -60,6 +60,86 @@ const runReducer = (
 };
 
 describe('ui_stream_reducer', () => {
+  it('stores skill usage as a first-class assistant message part', () => {
+    const { messages } = runReducer(createInitialStreamState(), [
+      { type: 'begin_turn', threadId: 'thread_1', parentId: 'user_1' },
+      {
+        type: 'skill_chunk',
+        chunk: {
+          mode: 'auto',
+          skills: [
+            {
+              id: 'codex:.system/openai-docs',
+              name: 'openai-docs',
+              description: 'Official docs',
+              source: 'codex',
+            },
+          ],
+        },
+      },
+      { type: 'text_delta', delta: 'Response text' },
+      { type: 'finalize_response', fullText: 'Response text' },
+    ]);
+
+    expect(messages).toHaveLength(1);
+    const [assistant] = messages;
+    expect(assistant.parts[0]).toEqual({
+      type: 'skill-usage',
+      mode: 'auto',
+      skills: [
+        {
+          id: 'codex:.system/openai-docs',
+          name: 'openai-docs',
+          description: 'Official docs',
+          source: 'codex',
+        },
+      ],
+    });
+  });
+
+  it('stores context reports as a first-class assistant message part', () => {
+    const { messages } = runReducer(createInitialStreamState(), [
+      { type: 'begin_turn', threadId: 'thread_1', parentId: 'user_1' },
+      {
+        type: 'context_chunk',
+        chunk: {
+          totalEstimatedTokens: 320,
+          retainedRecentMessages: 5,
+          compactedMessages: 9,
+          blocks: [
+            {
+              kind: 'thread-summary',
+              status: 'included',
+              estimatedTokens: 120,
+              charCount: 480,
+              sourceCount: 9,
+            },
+          ],
+        },
+      },
+      { type: 'text_delta', delta: 'Response text' },
+      { type: 'finalize_response', fullText: 'Response text' },
+    ]);
+
+    expect(messages).toHaveLength(1);
+    const [assistant] = messages;
+    expect(assistant.parts[0]).toEqual({
+      type: 'context-report',
+      totalEstimatedTokens: 320,
+      retainedRecentMessages: 5,
+      compactedMessages: 9,
+      blocks: [
+        {
+          kind: 'thread-summary',
+          status: 'included',
+          estimatedTokens: 120,
+          charCount: 480,
+          sourceCount: 9,
+        },
+      ],
+    });
+  });
+
   it('removes duplicate text when identical content appears before and after a tool result', () => {
     const duplicateText =
       'Stopping playback now. Music has fully stopped. Do you want me to continue?';

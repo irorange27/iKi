@@ -51,6 +51,17 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     autoSummarize: false,
     maxRetrievalCount: 5,
     similarThreshold: 0.1,
+    context: {
+      enabled: true,
+      recentMessageCount: 10,
+      maxRecentTokens: 2400,
+      maxMessageTokens: 420,
+      summaryTriggerMessages: 14,
+      summaryRecentMessages: 6,
+      maxSummaryTokens: 500,
+      maxMemoryTokens: 500,
+      maxSkillTokens: 1200,
+    },
     emotion: {
       enabled: false,
       injectToSystemPrompt: true,
@@ -176,6 +187,10 @@ export const mergeAppConfigWithBase = (
     memory: {
       ...base.memory,
       ...(rawConfig.memory ?? {}),
+      context: {
+        ...base.memory.context,
+        ...((rawConfig.memory ?? {}).context ?? {}),
+      },
       emotion: {
         ...base.memory.emotion,
         ...((rawConfig.memory ?? {}).emotion ?? {}),

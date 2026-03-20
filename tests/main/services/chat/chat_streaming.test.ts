@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  dbPrepareMock,
+  dbGetMock,
+  dbAllMock,
+  dbRunMock,
   getAppConfigMock,
   shouldGuardToolsMock,
   generateChatWithUsageMock,
-  resolveSkillsSystemPromptMock,
+  assembleContextMock,
   createChatConversationRunnerMock,
   persistThreadRuntimeHintsMock,
   resolveToolNamesMock,
@@ -17,10 +21,17 @@ const {
   defaultToolRegistryGetMock,
   getErrorMessageMock,
 } = vi.hoisted(() => ({
+  dbPrepareMock: vi.fn(),
+  dbGetMock: vi.fn(),
+  dbAllMock: vi.fn(),
+  dbRunMock: vi.fn(),
   getAppConfigMock: vi.fn(() => ({
     memory: {
       enabled: false,
       autoSummarize: false,
+      context: {
+        enabled: true,
+      },
       emotion: {
         enabled: false,
         injectToSystemPrompt: false,
@@ -33,7 +44,7 @@ const {
   })),
   shouldGuardToolsMock: vi.fn(() => false),
   generateChatWithUsageMock: vi.fn(),
-  resolveSkillsSystemPromptMock: vi.fn(),
+  assembleContextMock: vi.fn(),
   createChatConversationRunnerMock: vi.fn(),
   persistThreadRuntimeHintsMock: vi.fn(),
   resolveToolNamesMock: vi.fn(),
@@ -51,6 +62,13 @@ const {
 
 vi.mock('../../../../src/core/config', () => ({
   getAppConfig: getAppConfigMock,
+}));
+
+vi.mock('../../../../src/core/db/database', () => ({
+  getDb: vi.fn(() => ({
+    prepare: dbPrepareMock,
+    transaction: vi.fn((fn: (...args: unknown[]) => unknown) => fn),
+  })),
 }));
 
 vi.mock('../../../../src/core/db/affect_state', () => ({
@@ -112,8 +130,10 @@ vi.mock('../../../../src/main/utils/errors', () => ({
   getErrorMessage: getErrorMessageMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_skills', () => ({
-  resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
+vi.mock('../../../../src/main/services/chat/chat_context', () => ({
+  createChatContextAssembler: vi.fn(() => ({
+    assemble: assembleContextMock,
+  })),
 }));
 
 vi.mock('../../../../src/main/services/chat/chat_conversation_runner', () => ({
@@ -149,7 +169,9 @@ const createDeps = () => {
   const memory = {
     injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
     getAffectState: vi.fn(() => null),
+    getAffectContextMessage: vi.fn(() => ''),
     recordRealtimeEmotion: vi.fn(),
+    retrieveRelevantMemory: vi.fn(() => null),
   };
 
   return {
@@ -172,8 +194,26 @@ const createDeps = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  dbPrepareMock.mockReturnValue({
+    get: dbGetMock,
+    all: dbAllMock,
+    run: dbRunMock,
+  });
+  dbGetMock.mockReturnValue(null);
+  dbAllMock.mockReturnValue([]);
+  dbRunMock.mockReturnValue({});
 
-  resolveSkillsSystemPromptMock.mockResolvedValue({ skillsSystemPrompt: '' });
+  assembleContextMock.mockImplementation(async (params: { messages: unknown[] }) => ({
+    messages: params.messages,
+    usedSkills: [],
+    skillMode: 'manual',
+    report: {
+      totalEstimatedTokens: 0,
+      retainedRecentMessages: Array.isArray(params.messages) ? params.messages.length : 0,
+      compactedMessages: 0,
+      blocks: [],
+    },
+  }));
   resolveToolNamesMock.mockResolvedValue({
     mode: 'manual',
     explicitTools: [],
@@ -217,6 +257,7 @@ beforeEach(() => {
     emitTextDelta: vi.fn(),
     emitToolEvent: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
+    emitContextReport: vi.fn(),
     finish: vi.fn(),
     abort: vi.fn(),
     error: vi.fn(),
@@ -224,6 +265,62 @@ beforeEach(() => {
 });
 
 describe('createChatStreaming', () => {
+  it('stream() emits skill usage citations before rendering the response', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      skillMode: 'auto',
+      usedSkills: [
+        {
+          id: 'codex:.system/openai-docs',
+          name: 'openai-docs',
+          description: 'Official docs guidance',
+          source: 'codex',
+        },
+      ],
+      report: {
+        totalEstimatedTokens: 120,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [{ kind: 'skills', status: 'included', estimatedTokens: 120, charCount: 480 }],
+      },
+    });
+
+    const { streaming } = createDeps();
+    const webContents = { id: 11, send: vi.fn() };
+
+    const result = await streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hello' }],
+      threadId: 'thread_skills',
+      skillMode: 'auto',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      awaitingApproval: false,
+      stopped: false,
+    });
+    expect(webContents.send).toHaveBeenCalledWith('chat:ui-chunk', {
+      type: 'skill-usage',
+      mode: 'auto',
+      skills: [
+        {
+          id: 'codex:.system/openai-docs',
+          name: 'openai-docs',
+          description: 'Official docs guidance',
+          source: 'codex',
+        },
+      ],
+    });
+    expect(createUiChunkEmitterMock.mock.results[0]?.value.emitContextReport).toHaveBeenCalledWith({
+      totalEstimatedTokens: 120,
+      retainedRecentMessages: 1,
+      compactedMessages: 0,
+      blocks: [{ kind: 'skills', status: 'included', estimatedTokens: 120, charCount: 480 }],
+    });
+  });
+
   it('send() uses plain llm generation when no tools are enabled', async () => {
     const { streaming } = createDeps();
 
@@ -237,6 +334,7 @@ describe('createChatStreaming', () => {
     expect(result).toEqual({ success: true, text: 'assistant result' });
     expect(generateChatWithUsageMock).toHaveBeenCalledTimes(1);
     expect(createChatConversationRunnerMock).not.toHaveBeenCalled();
+    expect(assembleContextMock).toHaveBeenCalledTimes(1);
     expect(persistThreadRuntimeHintsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         threadId: 'thread_1',
@@ -275,6 +373,7 @@ describe('createChatStreaming', () => {
     expect(result).toEqual({ success: true, text: 'tool path result' });
     expect(createChatConversationRunnerMock).toHaveBeenCalledTimes(1);
     expect(runner.registerTool).toHaveBeenCalledTimes(1);
+    expect(assembleContextMock).toHaveBeenCalledTimes(1);
     expect(runner.setModelMessages).toHaveBeenCalledWith([{ role: 'system', content: 'history' }]);
     expect(runner.generate).toHaveBeenCalledWith('use tool');
     expect(generateChatWithUsageMock).not.toHaveBeenCalled();
@@ -307,23 +406,26 @@ describe('createChatStreaming', () => {
       emitTextDelta: vi.fn(),
       emitToolEvent: vi.fn(),
       emitMemoryRetrieval: vi.fn(),
+      emitContextReport: vi.fn(),
       finish: vi.fn(),
       abort: vi.fn(),
       error: vi.fn(),
     };
     createUiChunkEmitterMock.mockReturnValue(uiChunkEmitter);
 
-    toolLoopStreamMock.mockImplementation(async (params: { onToolEvent?: (event: unknown) => void }) => {
-      params.onToolEvent?.({
-        type: 'tool-approval-request',
-        approvalId: 'approval_1',
-        toolCall: {
-          toolName: 'web',
-          args: { query: 'hello' },
-        },
-      });
-      return { awaitingApproval: true };
-    });
+    toolLoopStreamMock.mockImplementation(
+      async (params: { onToolEvent?: (event: unknown) => void }) => {
+        params.onToolEvent?.({
+          type: 'tool-approval-request',
+          approvalId: 'approval_1',
+          toolCall: {
+            toolName: 'web',
+            args: { query: 'hello' },
+          },
+        });
+        return { awaitingApproval: true };
+      }
+    );
 
     const { streaming, activeStreams, ensurePendingApprovalSession } = createDeps();
     const webContents = { id: 7, send: vi.fn() };

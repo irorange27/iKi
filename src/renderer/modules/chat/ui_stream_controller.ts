@@ -13,20 +13,16 @@ import {
   type StreamEffect,
   type StreamState,
 } from './ui_stream_reducer';
-import {
-  createToolApprovalService,
-  type ApprovalEvent,
-} from './tool_approval_service';
-import {
-  getToolUiState,
-  getToolUiStateMap,
-  updateToolUiState,
-} from './tool_ui_state';
+import { createToolApprovalService, type ApprovalEvent } from './tool_approval_service';
+import { getToolUiState, getToolUiStateMap, updateToolUiState } from './tool_ui_state';
 
 type ElectronAPI = {
   chat: {
     stopStream: () => Promise<unknown>;
-    approveTool: (approvalId: string, approved: boolean) => Promise<{ success?: boolean; error?: string }>;
+    approveTool: (
+      approvalId: string,
+      approved: boolean
+    ) => Promise<{ success?: boolean; error?: string }>;
   };
 };
 
@@ -34,6 +30,21 @@ const isMemoryRetrievalChunk = (
   chunk: Record<string, unknown>
 ): chunk is { type: 'memory-retrieval'; query?: unknown; results?: unknown } =>
   chunk.type === 'memory-retrieval';
+
+const isSkillUsageChunk = (
+  chunk: Record<string, unknown>
+): chunk is { type: 'skill-usage'; mode?: unknown; skills?: unknown } =>
+  chunk.type === 'skill-usage';
+
+const isContextReportChunk = (
+  chunk: Record<string, unknown>
+): chunk is {
+  type: 'context-report';
+  totalEstimatedTokens?: unknown;
+  retainedRecentMessages?: unknown;
+  compactedMessages?: unknown;
+  blocks?: unknown;
+} => chunk.type === 'context-report';
 
 export type ChatUiStreamController = ReturnType<typeof createChatUiStreamController>;
 
@@ -44,7 +55,10 @@ export const createChatUiStreamController = (deps: {
   createMessageId: () => string;
   scrollToBottom: () => void;
   getCurrentThreadId: () => string | null;
-  onAssistantMessagePersisted?: (params: { threadId: string; messagesSnapshot: UIMessage[] }) => Promise<void> | void;
+  onAssistantMessagePersisted?: (params: {
+    threadId: string;
+    messagesSnapshot: UIMessage[];
+  }) => Promise<void> | void;
 }) => {
   const initialState = createInitialStreamState();
   const activeAssistantMessageId = ref<string | null>(initialState.activeAssistantMessageId);
@@ -147,7 +161,11 @@ export const createChatUiStreamController = (deps: {
         const approvalStartedAt = Date.now();
         if (effect.payload.toolCallId) {
           const uiState = getToolUiState(effect.payload.toolCallId);
-          if (!uiState || typeof uiState.startedAt !== 'number' || !Number.isFinite(uiState.startedAt)) {
+          if (
+            !uiState ||
+            typeof uiState.startedAt !== 'number' ||
+            !Number.isFinite(uiState.startedAt)
+          ) {
             updateToolUiState(effect.payload.toolCallId, { startedAt: approvalStartedAt });
           }
         }
@@ -233,6 +251,16 @@ export const createChatUiStreamController = (deps: {
 
     if (isMemoryRetrievalChunk(chunk)) {
       await dispatch({ type: 'memory_chunk', chunk });
+      return;
+    }
+
+    if (isSkillUsageChunk(chunk)) {
+      await dispatch({ type: 'skill_chunk', chunk });
+      return;
+    }
+
+    if (isContextReportChunk(chunk)) {
+      await dispatch({ type: 'context_chunk', chunk });
       return;
     }
 

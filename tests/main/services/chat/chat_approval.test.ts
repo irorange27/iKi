@@ -26,6 +26,7 @@ vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
     emitTextDelta: vi.fn(),
     emitToolEvent: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
+    emitContextReport: vi.fn(),
     finish: vi.fn(),
     abort: vi.fn(),
     error: vi.fn(),

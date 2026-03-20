@@ -98,6 +98,17 @@ export interface AppConfig {
     autoSummarize: boolean;
     maxRetrievalCount: number;
     similarThreshold: number;
+    context: {
+      enabled: boolean;
+      recentMessageCount: number;
+      maxRecentTokens: number;
+      maxMessageTokens: number;
+      summaryTriggerMessages: number;
+      summaryRecentMessages: number;
+      maxSummaryTokens: number;
+      maxMemoryTokens: number;
+      maxSkillTokens: number;
+    };
     emotion: {
       enabled: boolean;
       injectToSystemPrompt: boolean;
