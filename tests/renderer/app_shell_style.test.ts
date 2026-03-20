@@ -36,11 +36,22 @@ describe('renderer app shell styles', () => {
 
     expect(chatSource).not.toMatch(/\bh-screen\b/);
     expect(chatSource).toMatch(/class="flex h-full min-h-0 app-background app-text"/);
-    expect(chatSource).toMatch(/class="flex min-h-0 flex-1 flex-col"/);
+    expect(chatSource).toMatch(/class="flex min-h-0 min-w-0 flex-1 flex-col"/);
     expect(settingsSource).not.toMatch(/height:\s*100vh/);
     expect(settingsSource).not.toMatch(/calc\(100vh/i);
     expect(settingsSource).toMatch(/\.settings-container\s*\{[\s\S]*height:\s*100%;/i);
     expect(settingsSource).toMatch(/\.settings-nav\s*\{[\s\S]*min-height:\s*0;/i);
     expect(settingsSource).toMatch(/\.settings-content\s*\{[\s\S]*min-height:\s*0;/i);
+  });
+
+  it('lets the chat column and tool cards shrink cleanly when the sidebar narrows content space', () => {
+    const chatSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
+
+    expect(chatSource).toMatch(/class="chat-main-area flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"/);
+    expect(chatSource).toMatch(/class="messages-area w-full h-full min-w-0"/);
+    expect(chatSource).toMatch(/\.messages-area\s*\{[\s\S]*min-width:\s*0;/i);
+    expect(chatSource).toMatch(/\.messages-container\s*\{[\s\S]*min-width:\s*0;/i);
+    expect(chatSource).toMatch(/\.tool-result-content,[\s\S]*\.tool-fallback-content\s*\{[\s\S]*width:\s*100%;[\s\S]*box-sizing:\s*border-box;[\s\S]*min-width:\s*0;/i);
+    expect(chatSource).toMatch(/\.tool-card-meta\s*\{[\s\S]*flex-wrap:\s*wrap;[\s\S]*min-width:\s*0;/i);
   });
 });

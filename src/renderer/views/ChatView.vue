@@ -8,7 +8,7 @@
     />
 
     <!-- Main Content -->
-    <div class="flex min-h-0 flex-1 flex-col">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <!-- Header -->
       <div class="flex items-center justify-center p-4">
         <div class="flex items-center gap-1 text-sm text-secondary">
@@ -21,13 +21,13 @@
 
       <!-- Main Area -->
       <div
-        class="chat-main-area flex min-h-0 flex-1 items-center justify-center overflow-y-auto"
+        class="chat-main-area flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"
         ref="messagesContainer"
       >
         <WelcomeScreen v-if="showWelcome && chat.messages.length === 0" @new-chat="handleNewChat" />
 
         <!-- Messages List -->
-        <div v-else class="messages-area w-full h-full">
+        <div v-else class="messages-area w-full h-full min-w-0">
           <div class="messages-container" @click="handleMarkdownClick">
             <div
               v-for="(m, index) in chat.messages"
@@ -889,15 +889,18 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .chat-main-area {
   padding: var(--chat-content-padding, 24px);
+  min-width: 0;
 }
 
 .messages-container {
   width: 100%;
   max-width: 860px;
+  min-width: 0;
   margin: 0 auto;
 }
 
@@ -907,6 +910,7 @@ onUnmounted(() => {
 
 .message-shell {
   position: relative;
+  min-width: 0;
 }
 
 .reference-summary {
@@ -1515,16 +1519,19 @@ onUnmounted(() => {
 .tool-call-content,
 .tool-result-content,
 .tool-fallback-content {
+  width: 100%;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
+  box-sizing: border-box;
   padding: 14px;
   max-width: 680px;
+  min-width: 0;
 }
 
 .tool-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 10px;
@@ -1553,6 +1560,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -1589,10 +1597,10 @@ onUnmounted(() => {
 }
 
 .tool-card-server {
-  display: block;
-  margin-top: 4px;
+  flex-basis: 100%;
   font-size: 11px;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .tool-card-meta {
@@ -1600,8 +1608,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0;
-  white-space: nowrap;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .tool-state-pill {
