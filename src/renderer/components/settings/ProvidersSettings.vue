@@ -79,7 +79,7 @@
           </div>
 
           <div class="provider-config-form" v-if="selectedProviderConfig || showConfigForm">
-            <div class="config-group">
+            <div class="provider-config-group">
               <label class="input-label"
                 >API Key
                 <input
@@ -162,12 +162,12 @@
               </button>
               <button
                 v-if="showConfigForm && !selectedProviderConfig"
-                class="secondary"
+                class="secondary-btn"
                 @click="showConfigForm = false"
               >
                 Cancel
               </button>
-              <button class="primary save-btn" @click="saveProviderConfig">
+              <button class="primary-btn save-btn" @click="saveProviderConfig">
                 <Save :size="16" />
                 <span>
                   {{ selectedProviderConfig ? 'Save Changes' : 'Save & Enable Provider' }}
@@ -178,7 +178,7 @@
 
           <div class="provider-enable-prompt" v-else>
             <p>This provider is not configured yet.</p>
-            <button class="primary enable-btn" @click="showConfigForm = true">
+            <button class="primary-btn enable-btn" @click="showConfigForm = true">
               <Cog :size="16" />
               Configure Provider
             </button>
@@ -208,7 +208,7 @@
           Custom Provider
         </h3>
 
-        <div class="config-group">
+        <div class="provider-config-group">
           <label class="input-label"
             >Name
             <input type="text" v-model="editingProvider.name" placeholder="e.g. My Local LLM" />
@@ -246,8 +246,8 @@
         </div>
 
         <div class="modal-footer">
-          <button class="secondary" @click="showProviderEditor = false">Cancel</button>
-          <button class="primary" @click="saveProvider">Save Provider</button>
+          <button class="secondary-btn" @click="showProviderEditor = false">Cancel</button>
+          <button class="primary-btn" @click="saveProvider">Save Provider</button>
         </div>
       </div>
     </div>
@@ -665,74 +665,9 @@ onMounted(() => {
 });
 </script>
 
+<style scoped src="./settings_shared.css"></style>
+
 <style scoped>
-.input-label {
-  display: block;
-  margin-bottom: 18px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.input-label input,
-.input-label select {
-  width: 100%;
-  padding: 10px 12px;
-  margin-top: 6px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: var(--font-size);
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
-}
-
-.input-label input:focus,
-.input-label select:focus {
-  outline: none;
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 20%, transparent);
-}
-
-.checkbox-label {
-  display: block;
-  margin-bottom: 12px;
-  cursor: pointer;
-}
-
-.checkbox-label input[type='checkbox'] {
-  margin-right: 8px;
-  accent-color: var(--accent-color);
-}
-
-/* 密度面板样式 */
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.add-btn {
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.add-btn:hover {
-  background: var(--accent-hover);
-}
-
 .action-btn {
   padding: 10px 16px;
   border-radius: 8px;
@@ -745,43 +680,12 @@ onMounted(() => {
   transition: all 0.2s;
 }
 
-.secondary-btn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-}
-
-.secondary-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent-color);
-}
-
 .config-section {
   max-width: 600px;
 }
 
-.config-group {
+.provider-config-group {
   margin-bottom: 32px;
-}
-
-.config-group h3 {
-  margin-bottom: 12px;
-  font-weight: 600;
-}
-
-.danger-btn {
-  background: transparent;
-  border: 1px solid #ef4444;
-  color: #ef4444;
-  padding: 10px 20px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.danger-btn:hover {
-  background: #ef4444;
-  color: white;
 }
 
 .models-chips {
@@ -800,29 +704,6 @@ onMounted(() => {
   font-family: monospace;
 }
 
-.providers-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.provider-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: all 0.2s;
-}
-
-.provider-card:hover {
-  border-color: var(--accent-color);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-/* New Two-Panel Providers Layout */
 .providers-section {
   max-width: none !important;
 }
@@ -955,55 +836,6 @@ onMounted(() => {
   height: 8px;
   border-radius: 50%;
   background: var(--border-color);
-}
-
-/* 密度面板样式 */
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.add-btn {
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.add-btn:hover {
-  background: var(--accent-hover);
-}
-
-.action-btn {
-  padding: 10px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s;
-}
-
-.secondary-btn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-}
-
-.secondary-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent-color);
 }
 
 .providers-divider {
@@ -1168,7 +1000,7 @@ onMounted(() => {
 }
 
 .icon-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
 }
 
 /* Modal Styles */
@@ -1218,9 +1050,9 @@ onMounted(() => {
 }
 
 .status-badge.active {
-  background: color-mix(in srgb, #22c55e 18%, transparent);
-  color: #22c55e;
-  border-color: color-mix(in srgb, #22c55e 40%, transparent);
+  background: color-mix(in srgb, var(--success-color) 18%, transparent);
+  color: var(--success-color);
+  border-color: color-mix(in srgb, var(--success-color) 40%, transparent);
 }
 
 .label-header {

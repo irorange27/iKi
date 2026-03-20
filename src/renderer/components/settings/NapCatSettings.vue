@@ -68,11 +68,7 @@
             @change="updateNapCat('providerType', ($event.target as HTMLSelectElement).value)"
           >
             <option value="">Auto-select first enabled provider</option>
-            <option
-              v-for="provider in providerOptions"
-              :key="provider.type"
-              :value="provider.type"
-            >
+            <option v-for="provider in providerOptions" :key="provider.type" :value="provider.type">
               {{ provider.label }}
             </option>
           </select>
@@ -129,7 +125,9 @@
       <div class="card-header">
         <div>
           <div class="card-title">Connection Summary</div>
-          <div class="card-subtitle">What NapCat needs to connect successfully. Auto-refreshes every 5s while open.</div>
+          <div class="card-subtitle">
+            What NapCat needs to connect successfully. Auto-refreshes every 5s while open.
+          </div>
         </div>
         <div class="card-actions">
           <button
@@ -183,7 +181,9 @@
         </div>
         <div class="summary-row">
           <span class="summary-label">Authentication</span>
-          <span>{{ napcat.accessToken.trim() ? 'Bearer token required' : 'No token required' }}</span>
+          <span>{{
+            napcat.accessToken.trim() ? 'Bearer token required' : 'No token required'
+          }}</span>
         </div>
         <div class="summary-row">
           <span class="summary-label">Provider</span>
@@ -203,7 +203,9 @@
       >
         {{ daemonControlMessage }}
       </p>
-      <p class="group-description">These controls manage the desktop-managed embedded daemon only.</p>
+      <p class="group-description">
+        These controls manage the desktop-managed embedded daemon only.
+      </p>
     </div>
 
     <div class="settings-card">
@@ -240,7 +242,9 @@
       <div class="card-header">
         <div>
           <div class="card-title">Recent Logs</div>
-          <div class="card-subtitle">Recent daemon and NapCat events for local debugging. Auto-refreshes every 5s while open.</div>
+          <div class="card-subtitle">
+            Recent daemon and NapCat events for local debugging. Auto-refreshes every 5s while open.
+          </div>
         </div>
         <div class="card-actions">
           <button class="reset-btn" type="button" @click="loadDaemonLogs">Refresh Logs</button>
@@ -282,7 +286,11 @@ import type {
   DaemonStatusInfo,
 } from '../../../shared/types/config';
 import type { Provider } from '../../../shared/types/provider';
-import { buildNapCatWsUrl, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../../../shared/constants/daemon';
+import {
+  buildNapCatWsUrl,
+  DEFAULT_DAEMON_HOST,
+  DEFAULT_DAEMON_PORT,
+} from '../../../shared/constants/daemon';
 import { parseModelList } from '../../../shared/utils/provider_models';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -431,19 +439,11 @@ const daemonLogText = computed(() => {
 });
 
 const localWsUrl = computed(() =>
-  buildNapCatWsUrl(
-    activeDaemonHost.value,
-    activeDaemonPort.value,
-    accessToken.value
-  )
+  buildNapCatWsUrl(activeDaemonHost.value, activeDaemonPort.value, accessToken.value)
 );
 
 const dockerWsUrl = computed(() =>
-  buildNapCatWsUrl(
-    'host.docker.internal',
-    activeDaemonPort.value,
-    accessToken.value
-  )
+  buildNapCatWsUrl('host.docker.internal', activeDaemonPort.value, accessToken.value)
 );
 
 const updateNapCat = <K extends keyof AppConfig['bridges']['napcat']>(
@@ -594,6 +594,8 @@ onUnmounted(() => {
 });
 </script>
 
+<style scoped src="./settings_shared.css"></style>
+
 <style scoped>
 .bridges-section {
   display: flex;
@@ -603,10 +605,8 @@ onUnmounted(() => {
 
 .config-group,
 .settings-card {
-  border: 1px solid var(--border-color);
-  border-radius: 18px;
-  background: var(--bg-primary);
-  padding: 20px 22px;
+  margin-bottom: 0;
+  box-shadow: none;
 }
 
 .config-inline {
@@ -620,6 +620,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   margin-top: 14px;
+  margin-bottom: 0;
 }
 
 .input-label {
@@ -627,71 +628,24 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   margin-top: 14px;
+  margin-bottom: 0;
 }
 
 .input-label input,
 .input-label select,
 .input-label textarea {
-  width: 100%;
-  border: 1px solid var(--border-color);
+  margin-top: 0;
   border-radius: 12px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  padding: 10px 12px;
   font: inherit;
 }
 
-.input-label input::placeholder,
-.input-label textarea::placeholder {
-  color: var(--text-secondary);
-}
-
-.input-label input:focus,
-.input-label select:focus,
-.input-label textarea:focus {
-  outline: none;
-  border-color: var(--accent-color);
-}
-
-.input-label textarea {
-  resize: vertical;
-}
-
-.input-help,
-.group-description,
-.card-subtitle {
-  color: var(--text-secondary);
+.checkbox-label input[type='checkbox'] {
+  margin-right: 0;
 }
 
 .warning-text,
 .error-text {
   margin-top: 12px;
-}
-
-.warning-text {
-  color: #d18a32;
-}
-
-.error-text {
-  color: #cc5a5a;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.card-title {
-  font-weight: 600;
 }
 
 .summary-list {
@@ -739,30 +693,17 @@ onUnmounted(() => {
   align-items: center;
   border-radius: 999px;
   padding: 4px 10px;
-  background: rgba(204, 90, 90, 0.18);
-  color: #cc5a5a;
+  background: color-mix(in srgb, var(--danger-color) 18%, var(--bg-primary));
+  color: var(--danger-color);
 }
 
 .status-chip.active {
-  background: rgba(70, 150, 90, 0.18);
-  color: #57b56f;
+  background: color-mix(in srgb, var(--success-color) 18%, var(--bg-primary));
+  color: var(--success-color);
 }
 
 .config-actions {
   display: flex;
   justify-content: flex-end;
-}
-
-.reset-btn {
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-primary);
-  padding: 10px 16px;
-  cursor: pointer;
-}
-
-.checkbox-label input[type='checkbox'] {
-  accent-color: var(--accent-color);
 }
 </style>

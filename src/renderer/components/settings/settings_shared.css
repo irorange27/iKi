@@ -8,7 +8,7 @@
 .config-group {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 18px;
+  border-radius: var(--surface-radius);
   padding: 20px 22px;
   margin-bottom: 24px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
@@ -22,19 +22,38 @@
 .input-label {
   display: block;
   margin-bottom: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .input-label input,
 .input-label select,
 .input-label textarea {
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   margin-top: 6px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--control-radius-sm);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: var(--font-size);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.input-label input::placeholder,
+.input-label textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+.input-label input:focus,
+.input-label select:focus,
+.input-label textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
 }
 
 .input-label textarea {
@@ -49,6 +68,13 @@
   margin-top: 6px;
   color: var(--text-secondary);
   font-size: 0.85em;
+}
+
+.input-help,
+.card-help,
+.card-subtitle,
+.group-description {
+  color: var(--text-secondary);
 }
 
 .checkbox-label {
@@ -67,7 +93,7 @@
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -81,9 +107,74 @@
   -webkit-appearance: none;
 }
 
-.secondary-btn:hover {
+.secondary-btn:hover:not(:disabled) {
   background: var(--bg-hover);
   border-color: var(--accent-color);
+}
+
+.secondary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.primary-btn {
+  background: var(--accent-color);
+  border: 1px solid var(--accent-color);
+  color: var(--accent-contrast);
+  padding: 10px 18px;
+  border-radius: var(--control-radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--font-size);
+  line-height: 1;
+  min-height: 38px;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.primary-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.danger-btn {
+  background: transparent;
+  border: 1px solid var(--danger-color);
+  color: var(--danger-color);
+  padding: 8px 14px;
+  border-radius: var(--control-radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--font-size);
+  line-height: 1;
+  min-height: 36px;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.danger-btn:hover:not(:disabled) {
+  background: var(--danger-color);
+  color: var(--accent-contrast);
 }
 
 .config-actions {
@@ -95,12 +186,16 @@
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: var(--pill-radius);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.reset-btn:hover {
+.reset-btn:hover:not(:disabled) {
   background: var(--bg-hover);
 }
 
@@ -121,20 +216,37 @@ input[type='range'] {
   font-weight: 600;
 }
 
-.group-description {
-  color: var(--text-secondary);
-  font-size: 0.95em;
-  margin-bottom: 16px;
-}
-
 .card-title {
   font-size: 1.1em;
   font-weight: 600;
   margin-bottom: 12px;
 }
 
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card-subtitle {
+  font-size: 0.9em;
+  margin-top: 4px;
+}
+
+.card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.group-description {
+  font-size: 0.95em;
+  margin-bottom: 16px;
+}
+
 .card-help {
-  color: var(--text-secondary);
   font-size: 0.93em;
   margin: 8px 0 16px;
 }
@@ -163,7 +275,12 @@ input[type='range'] {
 }
 
 .warning-text {
-  color: #fbbf24;
+  color: var(--warning-color);
+  font-size: 12px;
+}
+
+.error-text {
+  color: var(--danger-color);
   font-size: 12px;
 }
 

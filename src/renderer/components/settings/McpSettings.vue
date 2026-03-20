@@ -3,8 +3,8 @@
     <div class="config-group">
       <h3>MCP (Model Context Protocol)</h3>
       <p class="group-description">
-        Connect external tool servers and expose their tools in iKi. Remote servers are disabled
-        by default and require explicit opt-in.
+        Connect external tool servers and expose their tools in iKi. Remote servers are disabled by
+        default and require explicit opt-in.
       </p>
       <label class="checkbox-label">
         <input
@@ -89,9 +89,7 @@
       <div class="card-header">
         <div>
           <div class="card-title">Servers</div>
-          <div class="card-subtitle">
-            {{ servers.length }} configured
-          </div>
+          <div class="card-subtitle">{{ servers.length }} configured</div>
         </div>
         <div class="card-actions">
           <button class="secondary-btn" @click="loadServers" :disabled="serversLoading">
@@ -104,9 +102,7 @@
 
       <div v-if="serversLoading" class="empty-state">Loading MCP servers...</div>
       <div v-else-if="serversError" class="error-text">{{ serversError }}</div>
-      <div v-else-if="servers.length === 0" class="empty-state">
-        No MCP servers configured yet.
-      </div>
+      <div v-else-if="servers.length === 0" class="empty-state">No MCP servers configured yet.</div>
       <div v-else class="server-list">
         <div v-for="server in servers" :key="server.id" class="server-row">
           <div class="server-main">
@@ -220,11 +216,7 @@
         </label>
         <label class="input-label">
           <span>Tool allowlist (one per line)</span>
-          <textarea
-            v-model="form.toolAllowlist"
-            rows="4"
-            placeholder="tool_one&#10;tool_two"
-          />
+          <textarea v-model="form.toolAllowlist" rows="4" placeholder="tool_one&#10;tool_two" />
         </label>
       </div>
 
@@ -673,163 +665,18 @@ watch(
 );
 </script>
 
+<style scoped src="./settings_shared.css"></style>
+
 <style scoped>
 .config-section {
   max-width: 860px;
   padding-top: 8px;
 }
 
-.config-group,
-.settings-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 18px;
-  padding: 20px 22px;
-  margin-bottom: 24px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
-}
-
-.config-group h3 {
-  margin-bottom: 10px;
-  font-size: 1.02em;
-  font-weight: 600;
-}
-
-.group-description {
-  color: var(--text-secondary);
-  font-size: 0.95em;
-  margin-bottom: 16px;
-}
-
-.warning-text {
-  color: var(--warning-color, #f59e0b);
-}
-
-.input-label {
-  display: block;
-  margin-bottom: 16px;
-}
-
-.input-label input,
-.input-label select,
-.input-label textarea {
-  width: 100%;
-  padding: 8px 12px;
-  margin-top: 6px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: var(--font-size);
-}
-
-.input-label textarea {
-  resize: vertical;
-  min-height: 92px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
-}
-
-.checkbox-label {
-  display: block;
-  margin-bottom: 12px;
-  cursor: pointer;
-}
-
-.checkbox-label input[type='checkbox'] {
-  margin-right: 8px;
-  accent-color: var(--accent-color);
-}
-
 .config-inline {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-}
-
-.card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.card-title {
-  font-weight: 600;
-  font-size: 1.05em;
-}
-
-.card-subtitle {
-  color: var(--text-secondary);
-  font-size: 0.9em;
-  margin-top: 4px;
-}
-
-.card-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.secondary-btn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 8px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: var(--font-size);
-  line-height: 1;
-  min-height: 36px;
-  transition: all 0.2s;
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.secondary-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--accent-color);
-}
-
-.secondary-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.primary-btn {
-  background: var(--accent-color);
-  border: none;
-  color: white;
-  padding: 10px 18px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: var(--font-size);
-  min-height: 38px;
-}
-
-.primary-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.danger-btn {
-  background: transparent;
-  border: 1px solid var(--danger-color, #ef4444);
-  color: var(--danger-color, #ef4444);
-  padding: 8px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  min-height: 36px;
-}
-
-.danger-btn:hover {
-  background: var(--danger-color, #ef4444);
-  color: white;
 }
 
 .server-list {
@@ -885,18 +732,18 @@ watch(
 }
 
 .status-connected {
-  color: var(--success-color, #22c55e);
-  border-color: color-mix(in srgb, var(--success-color, #22c55e) 40%, var(--border-color));
+  color: var(--success-color);
+  border-color: color-mix(in srgb, var(--success-color) 40%, var(--border-color));
 }
 
 .status-connecting {
-  color: var(--warning-color, #f59e0b);
-  border-color: color-mix(in srgb, var(--warning-color, #f59e0b) 40%, var(--border-color));
+  color: var(--warning-color);
+  border-color: color-mix(in srgb, var(--warning-color) 40%, var(--border-color));
 }
 
 .status-error {
-  color: var(--danger-color, #ef4444);
-  border-color: color-mix(in srgb, var(--danger-color, #ef4444) 40%, var(--border-color));
+  color: var(--danger-color);
+  border-color: color-mix(in srgb, var(--danger-color) 40%, var(--border-color));
 }
 
 .status-disconnected,
@@ -939,11 +786,6 @@ watch(
 .empty-state {
   color: var(--text-secondary);
   padding: 12px 4px;
-}
-
-.error-text {
-  color: var(--danger-color, #ef4444);
-  margin-top: 10px;
 }
 
 @media (max-width: 840px) {

@@ -32,8 +32,6 @@ useAppConfig();
 </script>
 
 <style>
-@import './assets/styles/variables.css';
-
 html,
 body,
 #app,
