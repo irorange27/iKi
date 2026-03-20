@@ -48,14 +48,19 @@ A local agent pet for AI provider orchestration.
 - PR title must follow semantic format (CI enforced)
 - Architecture-impacting code changes should include docs/changelog updates when the repository
   keeps those artifacts in version control
-- CI quality gate runs `npm run -s ci:quality` (`lint` + `tsc` + tests with coverage)
-- Coverage thresholds are enforced in `vitest.config.mts` for regression prevention
+- CI quality gate runs `npm run -s ci:quality` (`eslint --ext .ts,.tsx .` + `tsc` + tests with
+  coverage)
+- Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; they
+  are intentionally modest and should be ratcheted upward over time
+- Vue SFC-specific lint/type checks are not yet part of the default CI quality gate
 
 ## Release Flow
 
 - Conventional Commits remain required for history hygiene, but release intent is manual
-- `release-build` runs automatically on `package.json` version updates in `main`
-  and on GitHub Release publish
-- release-build first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds
-- release-build outputs are uploaded to workflow artifacts per OS, then published once to release assets
-- curated product notes continue in `changelogs/`
+- Curated product notes live in `changelogs/`; there is no `release-please` or machine-generated
+  root `CHANGELOG.md` flow
+- `release-build` runs automatically on `package.json` version updates in `main` and on GitHub
+  Release publish
+- `release-build` first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds
+- `release-build` outputs are uploaded to workflow artifacts per OS, then published once to
+  release assets
