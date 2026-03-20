@@ -21,14 +21,13 @@ import { defaultToolRegistry } from '../../../core/tools';
 import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
-import { resolveSkillsSystemPrompt } from './chat_skills';
+import { createChatContextAssembler } from './chat_context';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
 import { createChatConversationRunner } from './chat_conversation_runner';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
 import type {
   ActiveStreamState,
-  ChatInputMessage,
   ChatTransportMessage,
   ChatWebContents,
 } from './chat_types';
@@ -77,6 +76,9 @@ export const createChatStreaming = (deps: {
   const toolLoopRunner = createToolLoopRunner({
     registerApprovalBatch: deps.approvals.registerApprovalBatch,
   });
+  const contextAssembler = createChatContextAssembler({
+    memory: deps.memory,
+  });
 
   const getMemoryConfig = () => getAppConfig()?.memory || null;
   const getEmotionConfig = () => getAppConfig()?.memory?.emotion || null;
@@ -84,20 +86,6 @@ export const createChatStreaming = (deps: {
   const canStoreShortMemory = () => {
     const memoryConfig = getMemoryConfig();
     return Boolean(memoryConfig?.enabled || memoryConfig?.autoSummarize);
-  };
-
-  const insertSystemMessage = (
-    messages: ChatInputMessage[],
-    content: string
-  ): ChatInputMessage[] => {
-    if (!content.trim()) return messages;
-    const insertIndex = messages.findIndex(message => message.role !== 'system');
-    const headIndex = insertIndex === -1 ? messages.length : insertIndex;
-    return [
-      ...messages.slice(0, headIndex),
-      { role: 'system', content },
-      ...messages.slice(headIndex),
-    ];
   };
 
   const buildRealtimeAffectContext = async (
@@ -296,23 +284,18 @@ export const createChatStreaming = (deps: {
       const realtimeContext = lastModelMessage
         ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
         : { message: '', state: null };
-      const inputMessages = deps.memory.injectMemoryIntoMessages(modelMessages, options.threadId, {
-        skipAffect: Boolean(realtimeContext.message),
+      const assembledContext = await contextAssembler.assemble({
+        messages: modelMessages,
+        threadId: options.threadId,
+        skillIds: options.skillIds,
+        skillMode: options.skillMode,
+        realtimeAffectMessage: realtimeContext.message,
       });
-      const finalMessages = realtimeContext.message
-        ? insertSystemMessage(inputMessages, realtimeContext.message)
-        : inputMessages;
+      const finalMessages = assembledContext.messages;
 
       const affectStateForPolicy =
         realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
       const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
-
-      const { skillsSystemPrompt } = await resolveSkillsSystemPrompt({
-        inputMessages: finalMessages,
-        threadId: options.threadId,
-        skillIds: options.skillIds,
-        skillMode: options.skillMode,
-      });
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
@@ -334,7 +317,7 @@ export const createChatStreaming = (deps: {
         const runner = createChatConversationRunner({
           providerType: options.providerType,
           model: options.model,
-          systemPrompt: [TOOL_AGENT_SYSTEM_PROMPT, skillsSystemPrompt].filter(Boolean).join('\n\n'),
+          systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
           enableTools: true,
           maxIterations: 5,
         });
@@ -361,6 +344,9 @@ export const createChatStreaming = (deps: {
           model: options.model,
           usage: result.usage,
           source: 'chat.send.tools',
+          metadata: {
+            contextTokens: assembledContext.report.totalEstimatedTokens,
+          },
         });
         return { success: true, text: result.response };
       }
@@ -370,7 +356,6 @@ export const createChatStreaming = (deps: {
         providerType: options.providerType,
         modelId: options.model,
         messages: toLlmChatMessages(finalMessages),
-        extraSystemPrompt: skillsSystemPrompt,
       });
       deps.usage.recordUsageEvent({
         threadId: options.threadId,
@@ -378,6 +363,9 @@ export const createChatStreaming = (deps: {
         model: options.model,
         usage: result.usage,
         source: 'chat.send.llm',
+        metadata: {
+          contextTokens: assembledContext.report.totalEstimatedTokens,
+        },
       });
       return { success: true, text: result.text };
     } catch (error: unknown) {
@@ -419,26 +407,43 @@ export const createChatStreaming = (deps: {
       const realtimeContext = lastModelMessage
         ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
         : { message: '', state: null };
-      const inputMessages = deps.memory.injectMemoryIntoMessages(modelMessages, options.threadId, {
-        onRetrieved: payload => {
-          uiChunkEmitter.emitMemoryRetrieval(payload);
+      const assembledContext = await contextAssembler.assemble({
+        messages: modelMessages,
+        threadId: options.threadId,
+        skillIds: options.skillIds,
+        skillMode: options.skillMode,
+        realtimeAffectMessage: realtimeContext.message,
+        onMemoryRetrieved: payload => {
+          uiChunkEmitter.emitMemoryRetrieval({
+            query: payload.query,
+            results: payload.results,
+          });
         },
-        skipAffect: Boolean(realtimeContext.message),
       });
-      const finalMessages = realtimeContext.message
-        ? insertSystemMessage(inputMessages, realtimeContext.message)
-        : inputMessages;
+      const finalMessages = assembledContext.messages;
 
       const affectStateForPolicy =
         realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
       const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
 
-      const { skillsSystemPrompt } = await resolveSkillsSystemPrompt({
-        inputMessages: finalMessages,
-        threadId: options.threadId,
-        skillIds: options.skillIds,
-        skillMode: options.skillMode,
-      });
+      const normalizedUsedSkills = Array.isArray(assembledContext.usedSkills)
+        ? assembledContext.usedSkills
+        : [];
+
+      if (normalizedUsedSkills.length > 0) {
+        webContents.send('chat:ui-chunk', {
+          type: 'skill-usage',
+          mode: assembledContext.skillMode,
+          skills: normalizedUsedSkills.map(skill => ({
+            id: skill.id,
+            name: skill.name,
+            ...(skill.description ? { description: skill.description } : {}),
+            ...(skill.source ? { source: skill.source } : {}),
+          })),
+        });
+      }
+
+      uiChunkEmitter.emitContextReport(assembledContext.report);
 
       const { resolvedTools, mode } = await resolveToolNames({
         tools: options.tools,
@@ -457,9 +462,7 @@ export const createChatStreaming = (deps: {
       });
 
       const enableTools = guardedTools.length > 0;
-      const systemPrompt = [enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '', skillsSystemPrompt]
-        .filter(Boolean)
-        .join('\n\n');
+      const systemPrompt = enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '';
       const approvalContext = enableTools
         ? createApprovalRecoveryContext({
             threadId: options.threadId,
@@ -535,6 +538,7 @@ export const createChatStreaming = (deps: {
           source: 'chat.stream',
           metadata: {
             awaitingApproval: streamResult.awaitingApproval,
+            contextTokens: assembledContext.report.totalEstimatedTokens,
           },
         });
       }

@@ -10,11 +10,19 @@ import { getMcpManager } from '../../core/mcp';
 import { normalizeAppConfig } from '../../shared/config/normalize';
 import type {
   AppConfig,
+  DaemonControlAction,
+  DaemonControlResult,
   ConfigRuntimeInfo,
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from '../../shared/types/config';
-import { applyDesktopDaemonConfigUpdate } from '../services/daemon/daemon_lifecycle';
+import {
+  applyDesktopDaemonConfigUpdate,
+  isDesktopDaemonEmbeddedRunning,
+  restartDesktopDaemon,
+  startDesktopDaemon,
+  stopDesktopDaemon,
+} from '../services/daemon/daemon_lifecycle';
 import {
   buildNapCatWsUrl,
   DEFAULT_DAEMON_HOST,
@@ -177,6 +185,60 @@ const getDaemonLogs = (limit = 120): DaemonLogsInfo => {
   return readRecentDaemonLogs(normalizedLimit, userDataPath);
 };
 
+const controlDesktopDaemon = async (action: DaemonControlAction): Promise<DaemonControlResult> => {
+  if (action === 'start') {
+    await startDesktopDaemon({ ignoreAutostartEnv: true });
+  } else if (action === 'restart') {
+    await restartDesktopDaemon();
+  } else {
+    stopDesktopDaemon();
+  }
+
+  const status = await getDaemonStatus();
+  const embeddedRunning = isDesktopDaemonEmbeddedRunning();
+
+  if (action === 'stop') {
+    if (!status.online) {
+      return {
+        success: true,
+        action,
+        message: 'Desktop-managed daemon stopped.',
+        status,
+        embeddedRunning,
+      };
+    }
+
+    return {
+      success: false,
+      action,
+      message: 'Embedded daemon stopped, but another daemon is still responding on this port.',
+      status,
+      embeddedRunning,
+    };
+  }
+
+  if (status.online) {
+    return {
+      success: true,
+      action,
+      message:
+        action === 'start'
+          ? `Daemon is online at ${status.host}:${status.port}.`
+          : `Daemon restarted and is online at ${status.host}:${status.port}.`,
+      status,
+      embeddedRunning,
+    };
+  }
+
+  return {
+    success: false,
+    action,
+    message: 'Daemon did not become healthy. Check Recent Logs for details.',
+    status,
+    embeddedRunning,
+  };
+};
+
 const saveConfig = (config: unknown): AppConfig => {
   const normalized = normalizeAppConfig(config);
   setConfig('app_config', normalized);
@@ -259,6 +321,13 @@ export const registerConfigIpc = (): void => {
 
   ipcMain.handle('config:get-daemon-logs', (_event, limit?: number) => {
     return getDaemonLogs(limit);
+  });
+
+  ipcMain.handle('config:control-daemon', async (_event, action: DaemonControlAction) => {
+    if (action !== 'start' && action !== 'restart' && action !== 'stop') {
+      throw new Error(`Unsupported daemon action: ${String(action)}`);
+    }
+    return controlDesktopDaemon(action);
   });
 
   ipcMain.handle('config:set', async (_event, config) => {

@@ -12,6 +12,7 @@ import { migration as migration009AffectStates } from './009_add_affect_states_t
 import { migration as migration010ProactiveCron } from './010_add_proactive_tasks_cron';
 import { migration as migration011ChatToolApprovals } from './011_add_chat_tool_approval_tables';
 import { migration as migration012ChatUsage } from './012_add_chat_usage_table';
+import { migration as migration013ThreadContext } from './013_add_chat_thread_context_table';
 
 // Register all migrations here
 const migrations = [
@@ -28,6 +29,7 @@ const migrations = [
   migration010ProactiveCron,
   migration011ChatToolApprovals,
   migration012ChatUsage,
+  migration013ThreadContext,
   // Add more migrations here as needed
 ];
 

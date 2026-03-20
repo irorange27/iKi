@@ -1,6 +1,17 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { ipcHandlers, getPathMock, readFileSyncMock, httpGetMock, readRecentDaemonLogsMock } = vi.hoisted(() => ({
+const {
+  ipcHandlers,
+  getPathMock,
+  readFileSyncMock,
+  httpGetMock,
+  readRecentDaemonLogsMock,
+  applyDesktopDaemonConfigUpdateMock,
+  isDesktopDaemonEmbeddedRunningMock,
+  restartDesktopDaemonMock,
+  startDesktopDaemonMock,
+  stopDesktopDaemonMock,
+} = vi.hoisted(() => ({
   ipcHandlers: new Map<string, (...args: any[]) => any>(),
   getPathMock: vi.fn((name: string) => {
     if (name === 'userData') return '/tmp/iki-user-data';
@@ -23,6 +34,11 @@ const { ipcHandlers, getPathMock, readFileSyncMock, httpGetMock, readRecentDaemo
       },
     ],
   })),
+  applyDesktopDaemonConfigUpdateMock: vi.fn(),
+  isDesktopDaemonEmbeddedRunningMock: vi.fn(() => true),
+  restartDesktopDaemonMock: vi.fn(),
+  startDesktopDaemonMock: vi.fn(),
+  stopDesktopDaemonMock: vi.fn(() => true),
 }));
 
 vi.mock('electron', () => ({
@@ -79,6 +95,14 @@ vi.mock('../../../src/core/daemon_logs', () => ({
   readRecentDaemonLogs: readRecentDaemonLogsMock,
 }));
 
+vi.mock('../../../src/main/services/daemon/daemon_lifecycle', () => ({
+  applyDesktopDaemonConfigUpdate: applyDesktopDaemonConfigUpdateMock,
+  isDesktopDaemonEmbeddedRunning: isDesktopDaemonEmbeddedRunningMock,
+  restartDesktopDaemon: restartDesktopDaemonMock,
+  startDesktopDaemon: startDesktopDaemonMock,
+  stopDesktopDaemon: stopDesktopDaemonMock,
+}));
+
 vi.mock('../../../src/core/mcp', () => ({
   getMcpManager: vi.fn(() => ({
     disconnectAll: vi.fn(),
@@ -96,6 +120,10 @@ import { registerConfigIpc } from '../../../src/main/ipc/config';
 
 beforeAll(() => {
   registerConfigIpc();
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
 });
 
 describe('config IPC', () => {
@@ -175,6 +203,51 @@ describe('config IPC', () => {
           message: 'log tail 50',
         },
       ],
+    });
+  });
+
+  it('controls the desktop-managed daemon and returns updated status', async () => {
+    httpGetMock.mockImplementation((_options: unknown, callback: (response: any) => void) => {
+      const response = {
+        statusCode: 200,
+        setEncoding: vi.fn(),
+        on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          if (event === 'data') {
+            handler('{"status":"ok","host":"0.0.0.0","port":6131,"uptime":99}');
+          }
+          if (event === 'end') {
+            handler();
+          }
+          return response;
+        }),
+      };
+
+      callback(response);
+      return {
+        on: vi.fn().mockReturnThis(),
+        destroy: vi.fn(),
+      };
+    });
+
+    const handler = ipcHandlers.get('config:control-daemon');
+    if (!handler) throw new Error('config:control-daemon handler not registered');
+
+    const result = await handler(null, 'restart');
+
+    expect(restartDesktopDaemonMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      success: true,
+      action: 'restart',
+      message: 'Daemon restarted and is online at 0.0.0.0:6131.',
+      status: {
+        online: true,
+        host: '0.0.0.0',
+        port: 6131,
+        status: 'ok',
+        source: 'health',
+        uptimeSeconds: 99,
+      },
+      embeddedRunning: true,
     });
   });
 });

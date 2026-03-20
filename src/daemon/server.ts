@@ -922,6 +922,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
   });
 
   const shutdown = () => {
+    napcatBridge.dispose();
     server.close();
     wss.close();
   };

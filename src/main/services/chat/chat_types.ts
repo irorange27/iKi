@@ -1,5 +1,6 @@
 import type { ModelMessage, UIMessage } from 'ai';
 import type { ConversationRunnerStreamEvent } from '../../../core/agent';
+import type { ContextReportItem } from '../../../shared/chat/message_parts';
 
 export type ChatWebContents = {
   id: number;
@@ -30,6 +31,12 @@ export type UiChunkEmitter = {
   emitMemoryRetrieval: (payload: {
     query: string;
     results: Array<Record<string, unknown>>;
+  }) => void;
+  emitContextReport: (payload: {
+    totalEstimatedTokens: number;
+    retainedRecentMessages: number;
+    compactedMessages: number;
+    blocks: ContextReportItem[];
   }) => void;
   finish: () => void;
   abort: () => void;

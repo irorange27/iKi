@@ -33,3 +33,12 @@ export interface AffectStateEntry {
   created_at: string;
   updated_at: string;
 }
+
+export interface ThreadContextEntry {
+  thread_id: string;
+  summary: string;
+  covered_message_count: number;
+  metadata: string | null;
+  created_at: string;
+  updated_at: string;
+}

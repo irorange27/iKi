@@ -9,10 +9,26 @@ type LegacyMediaQueryList = MediaQueryList & {
   removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
 };
 
+type WindowWithChromeApi = Window & {
+  electronAPI?: {
+    setWindowShadow?: (enabled: boolean) => void;
+  };
+};
+
+let lastNativeWindowShadow: boolean | null = null;
+
 const resolveTheme = (theme: AppConfig['general']['theme']): 'light' | 'dark' => {
   if (theme !== 'system') return theme;
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'light';
   return window.matchMedia(SYSTEM_THEME_QUERY).matches ? 'dark' : 'light';
+};
+
+const syncNativeWindowShadow = (resolvedTheme: 'light' | 'dark') => {
+  if (typeof window === 'undefined') return;
+  const nextShadowState = resolvedTheme === 'light';
+  if (lastNativeWindowShadow === nextShadowState) return;
+  lastNativeWindowShadow = nextShadowState;
+  (window as WindowWithChromeApi).electronAPI?.setWindowShadow?.(nextShadowState);
 };
 
 export const applyCssVariables = (config: AppConfig) => {
@@ -37,6 +53,7 @@ export const applyCssVariables = (config: AppConfig) => {
   root.style.setProperty('--chat-message-gap', `${messageGap}px`);
   root.setAttribute('data-density', density);
   root.setAttribute('data-theme', resolvedTheme);
+  syncNativeWindowShadow(resolvedTheme);
 };
 
 export const useConfigEffects = () => {

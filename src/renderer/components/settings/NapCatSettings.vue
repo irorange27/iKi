@@ -129,9 +129,33 @@
       <div class="card-header">
         <div>
           <div class="card-title">Connection Summary</div>
-          <div class="card-subtitle">What NapCat needs to connect successfully</div>
+          <div class="card-subtitle">What NapCat needs to connect successfully. Auto-refreshes every 5s while open.</div>
         </div>
         <div class="card-actions">
+          <button
+            class="reset-btn"
+            type="button"
+            :disabled="daemonControlLoading"
+            @click="handleDaemonControl('start')"
+          >
+            Start
+          </button>
+          <button
+            class="reset-btn"
+            type="button"
+            :disabled="daemonControlLoading"
+            @click="handleDaemonControl('restart')"
+          >
+            Restart
+          </button>
+          <button
+            class="reset-btn"
+            type="button"
+            :disabled="daemonControlLoading"
+            @click="handleDaemonControl('stop')"
+          >
+            Stop
+          </button>
           <button class="reset-btn" type="button" @click="loadDaemonStatus">Refresh Status</button>
         </div>
       </div>
@@ -172,6 +196,14 @@
       </div>
 
       <p class="group-description">{{ daemonStatusDetail }}</p>
+      <p
+        v-if="daemonControlMessage"
+        class="group-description"
+        :class="daemonControlSuccess === false ? 'error-text' : ''"
+      >
+        {{ daemonControlMessage }}
+      </p>
+      <p class="group-description">These controls manage the desktop-managed embedded daemon only.</p>
     </div>
 
     <div class="settings-card">
@@ -208,7 +240,7 @@
       <div class="card-header">
         <div>
           <div class="card-title">Recent Logs</div>
-          <div class="card-subtitle">Recent daemon and NapCat events for local debugging</div>
+          <div class="card-subtitle">Recent daemon and NapCat events for local debugging. Auto-refreshes every 5s while open.</div>
         </div>
         <div class="card-actions">
           <button class="reset-btn" type="button" @click="loadDaemonLogs">Refresh Logs</button>
@@ -237,7 +269,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { configService } from '../../services/config_service';
@@ -245,6 +277,7 @@ import { useConfigStore } from '../../store/config';
 import type {
   AppConfig,
   ConfigRuntimeInfo,
+  DaemonControlAction,
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from '../../../shared/types/config';
@@ -270,6 +303,8 @@ type ProviderOption = {
   duplicateCount: number;
 };
 
+const MONITORING_POLL_MS = 5000;
+
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
 
@@ -284,6 +319,10 @@ const daemonStatusError = ref('');
 const daemonLogs = ref<DaemonLogsInfo | null>(null);
 const daemonLogsLoading = ref(false);
 const daemonLogsError = ref('');
+const daemonControlLoading = ref(false);
+const daemonControlMessage = ref('');
+const daemonControlSuccess = ref<boolean | null>(null);
+let monitoringPollTimer: ReturnType<typeof setInterval> | null = null;
 
 const napcat = computed(() => config.value.bridges.napcat);
 const accessToken = computed(() => napcat.value.accessToken.trim());
@@ -470,6 +509,7 @@ const loadRuntimeInfo = async () => {
 };
 
 const loadDaemonStatus = async () => {
+  if (daemonStatusLoading.value) return;
   daemonStatusLoading.value = true;
   daemonStatusError.value = '';
   try {
@@ -483,6 +523,7 @@ const loadDaemonStatus = async () => {
 };
 
 const loadDaemonLogs = async () => {
+  if (daemonLogsLoading.value) return;
   daemonLogsLoading.value = true;
   daemonLogsError.value = '';
   try {
@@ -495,18 +536,62 @@ const loadDaemonLogs = async () => {
   }
 };
 
+const handleDaemonControl = async (action: DaemonControlAction) => {
+  if (daemonControlLoading.value) return;
+  daemonControlLoading.value = true;
+  daemonControlMessage.value = '';
+  daemonControlSuccess.value = null;
+
+  try {
+    const result = await configService.controlDaemon(action);
+    daemonStatus.value = result.status;
+    daemonControlSuccess.value = result.success;
+    daemonControlMessage.value = result.message;
+    await loadDaemonLogs();
+  } catch (error: any) {
+    daemonControlSuccess.value = false;
+    daemonControlMessage.value = error?.message || 'Failed to control daemon.';
+  } finally {
+    daemonControlLoading.value = false;
+  }
+};
+
+const refreshMonitoring = () => {
+  void loadDaemonStatus();
+  void loadDaemonLogs();
+};
+
+const stopMonitoringPoll = () => {
+  if (monitoringPollTimer === null) return;
+  clearInterval(monitoringPollTimer);
+  monitoringPollTimer = null;
+};
+
+const startMonitoringPoll = () => {
+  if (monitoringPollTimer !== null) return;
+  monitoringPollTimer = setInterval(() => {
+    refreshMonitoring();
+  }, MONITORING_POLL_MS);
+};
+
 watch(
   () => props.active,
   active => {
     if (active) {
       void loadProviders();
       void loadRuntimeInfo();
-      void loadDaemonStatus();
-      void loadDaemonLogs();
+      refreshMonitoring();
+      startMonitoringPoll();
+      return;
     }
+    stopMonitoringPoll();
   },
   { immediate: true }
 );
+
+onUnmounted(() => {
+  stopMonitoringPoll();
+});
 </script>
 
 <style scoped>

@@ -174,4 +174,19 @@ describe('daemon lifecycle', () => {
 
     expect(startDaemonServerMock).not.toHaveBeenCalled();
   });
+
+  it('allows manual start to bypass IKI_DAEMON_AUTOSTART=false', async () => {
+    process.env.IKI_DAEMON_AUTOSTART = 'false';
+    mockHealthOffline();
+    const { startDesktopDaemon } = await import(
+      '../../../../src/main/services/daemon/daemon_lifecycle'
+    );
+
+    const started = startDesktopDaemon({ ignoreAutostartEnv: true });
+    await vi.runAllTimersAsync();
+    await started;
+
+    expect(startDaemonServerMock).toHaveBeenCalledTimes(1);
+    expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '0.0.0.0', port: 6127 });
+  });
 });

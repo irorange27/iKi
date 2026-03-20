@@ -12,6 +12,9 @@ A local agent pet for AI provider orchestration.
 
 - Self-optimizing workflow (auto tool routing and auto-pinned skills).
 
+- Structured context assembly with rolling thread summaries, bounded memory / skill context, and
+  visible context reports per assistant turn.
+
 ## Getting Started
 
 1. Clone the repository:
@@ -40,7 +43,8 @@ A local agent pet for AI provider orchestration.
 - Commit message lint (recent history): `npm run commit:check`
 - Local hooks are managed by Husky and installed through `npm install` (`prepare`)
 - PR title must follow semantic format (CI enforced)
-- Architecture-impacting code changes must include docs/changelog updates (CI enforced)
+- Architecture-impacting code changes should include docs/changelog updates when the repository
+  keeps those artifacts in version control
 - CI quality gate runs `npm run -s ci:quality` (`lint` + `tsc` + tests with coverage)
 - Coverage thresholds are enforced in `vitest.config.mts` for regression prevention
 
@@ -52,7 +56,7 @@ A local agent pet for AI provider orchestration.
   (`package.json` / `.release-please-manifest.json`) and on GitHub Release publish
 - release-build first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds
 - release-build outputs are uploaded to workflow artifacts per OS, then published once to release assets
-- machine-generated release notes live in `CHANGELOG.md`
+- root `CHANGELOG.md` is the machine-generated release log managed by `release-please`
 - curated product notes continue in `changelogs/`
 - `release-please` uses `RELEASE_PLEASE_TOKEN` when present (recommended PAT)
 - if `RELEASE_PLEASE_TOKEN` is omitted, it falls back to `GITHUB_TOKEN`; ensure

@@ -85,6 +85,19 @@ const MemorySchema = z
     autoSummarize: booleanField(DEFAULT_APP_CONFIG.memory.autoSummarize),
     maxRetrievalCount: numberField(DEFAULT_APP_CONFIG.memory.maxRetrievalCount),
     similarThreshold: numberField(DEFAULT_APP_CONFIG.memory.similarThreshold),
+    context: z
+      .object({
+        enabled: booleanField(DEFAULT_APP_CONFIG.memory.context.enabled),
+        recentMessageCount: intField(DEFAULT_APP_CONFIG.memory.context.recentMessageCount),
+        maxRecentTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxRecentTokens),
+        maxMessageTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxMessageTokens),
+        summaryTriggerMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryTriggerMessages),
+        summaryRecentMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryRecentMessages),
+        maxSummaryTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxSummaryTokens),
+        maxMemoryTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxMemoryTokens),
+        maxSkillTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxSkillTokens),
+      })
+      .catch(DEFAULT_APP_CONFIG.memory.context),
     emotion: z
       .object({
         enabled: booleanField(DEFAULT_APP_CONFIG.memory.emotion.enabled),

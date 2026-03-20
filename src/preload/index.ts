@@ -1,11 +1,18 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppConfig, ConfigRuntimeInfo, DaemonLogsInfo, DaemonStatusInfo } from '../shared/types/config';
+import {
+  AppConfig,
+  ConfigRuntimeInfo,
+  DaemonControlAction,
+  DaemonControlResult,
+  DaemonLogsInfo,
+  DaemonStatusInfo,
+} from '../shared/types/config';
 import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
-import type { AffectStateEntry, LongMemorySearchResult } from '../shared/types/memory';
+import type { AffectStateEntry } from '../shared/types/memory';
 import type { ProactiveTask } from '../shared/types/tasks';
 import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
 import type {
@@ -16,6 +23,7 @@ import type {
   WhisperNodeDownloadResult,
   WhisperNodeModelInfo,
 } from '../shared/types/speech';
+import { toIpcSerializable } from '../shared/utils/ipc_serialization';
 
 type ProviderInput = Partial<Provider> &
   Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
@@ -42,14 +50,6 @@ type LongMemoryInput = {
 type ProactiveTaskInput = Partial<ProactiveTask> &
   Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model'>;
 
-const toIpcSerializable = <T>(value: T): T => {
-  try {
-    return JSON.parse(JSON.stringify(value)) as T;
-  } catch {
-    return value;
-  }
-};
-
 contextBridge.exposeInMainWorld('electronAPI', {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('config:get-daemon-status'),
     getDaemonLogs: (limit?: number): Promise<DaemonLogsInfo> =>
       ipcRenderer.invoke('config:get-daemon-logs', limit),
+    controlDaemon: (action: DaemonControlAction): Promise<DaemonControlResult> =>
+      ipcRenderer.invoke('config:control-daemon', action),
     set: (config: AppConfig) => ipcRenderer.invoke('config:set', config),
     onUpdated: (callback: (config: AppConfig) => void) => {
       ipcRenderer.on('config:updated', (_event, config) => {
@@ -236,4 +238,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   openSettings: () => ipcRenderer.send('open-settings'),
   closeWindow: () => ipcRenderer.send('close-window'),
+  setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
 });

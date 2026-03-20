@@ -3,8 +3,10 @@ import { convertToModelMessages, validateUIMessages, type UIMessageChunk } from 
 import { extractTextFromModelMessageContent } from '../../../core/agent/model_messages';
 import { defaultToolRegistry } from '../../../core/tools';
 import type {
+  ContextReportItem,
   DynamicToolPart,
   DynamicToolState,
+  SkillUsageEntry,
   TextPart,
   UiMessagePart,
 } from '../../../shared/chat/message_parts';
@@ -220,6 +222,12 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             if (partType === 'memory-retrieval') {
               return null;
             }
+            if (partType === 'skill-usage') {
+              return null;
+            }
+            if (partType === 'context-report') {
+              return null;
+            }
             if (partType === 'text' && typeof partRecord.text === 'string') {
               const textPart: TextPart = {
                 type: 'text',
@@ -300,6 +308,97 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
             );
           } else {
             normalized.results = [];
+          }
+          nextParts.push(normalized);
+          continue;
+        }
+
+        if (part.type === 'skill-usage') {
+          const normalized: Record<string, unknown> = {
+            type: 'skill-usage',
+          };
+          if (part.mode === 'manual' || part.mode === 'auto') {
+            normalized.mode = part.mode;
+          }
+          if (Array.isArray(part.skills)) {
+            normalized.skills = part.skills
+              .filter(
+                (entry): entry is SkillUsageEntry =>
+                  isObjectRecord(entry) &&
+                  typeof entry.id === 'string' &&
+                  entry.id.trim().length > 0 &&
+                  typeof entry.name === 'string' &&
+                  entry.name.trim().length > 0
+              )
+              .map(entry => ({
+                id: entry.id.trim(),
+                name: entry.name.trim(),
+                ...(typeof entry.description === 'string' && entry.description.trim()
+                  ? { description: entry.description.trim() }
+                  : {}),
+                ...(entry.source === 'user' || entry.source === 'codex'
+                  ? { source: entry.source }
+                  : {}),
+              }));
+          } else {
+            normalized.skills = [];
+          }
+          nextParts.push(normalized);
+          continue;
+        }
+
+        if (part.type === 'context-report') {
+          const normalized: Record<string, unknown> = {
+            type: 'context-report',
+          };
+          if (
+            typeof part.totalEstimatedTokens === 'number' &&
+            Number.isFinite(part.totalEstimatedTokens)
+          ) {
+            normalized.totalEstimatedTokens = Math.max(0, Math.trunc(part.totalEstimatedTokens));
+          }
+          if (
+            typeof part.retainedRecentMessages === 'number' &&
+            Number.isFinite(part.retainedRecentMessages)
+          ) {
+            normalized.retainedRecentMessages = Math.max(
+              0,
+              Math.trunc(part.retainedRecentMessages)
+            );
+          }
+          if (
+            typeof part.compactedMessages === 'number' &&
+            Number.isFinite(part.compactedMessages)
+          ) {
+            normalized.compactedMessages = Math.max(0, Math.trunc(part.compactedMessages));
+          }
+          if (Array.isArray(part.blocks)) {
+            normalized.blocks = part.blocks
+              .filter(
+                (entry): entry is ContextReportItem =>
+                  isObjectRecord(entry) &&
+                  typeof entry.kind === 'string' &&
+                  typeof entry.status === 'string'
+              )
+              .map(entry => ({
+                kind: entry.kind,
+                status: entry.status,
+                ...(typeof entry.estimatedTokens === 'number' &&
+                Number.isFinite(entry.estimatedTokens)
+                  ? { estimatedTokens: Math.max(0, Math.trunc(entry.estimatedTokens)) }
+                  : {}),
+                ...(typeof entry.charCount === 'number' && Number.isFinite(entry.charCount)
+                  ? { charCount: Math.max(0, Math.trunc(entry.charCount)) }
+                  : {}),
+                ...(typeof entry.reason === 'string' && entry.reason.trim()
+                  ? { reason: entry.reason.trim() }
+                  : {}),
+                ...(typeof entry.sourceCount === 'number' && Number.isFinite(entry.sourceCount)
+                  ? { sourceCount: Math.max(0, Math.trunc(entry.sourceCount)) }
+                  : {}),
+              }));
+          } else {
+            normalized.blocks = [];
           }
           nextParts.push(normalized);
         }
@@ -426,6 +525,13 @@ export const createUiChunkEmitter = (
     chunk:
       | UIMessageChunk
       | { type: 'memory-retrieval'; query?: string; results?: Array<Record<string, unknown>> }
+      | {
+          type: 'context-report';
+          totalEstimatedTokens?: number;
+          retainedRecentMessages?: number;
+          compactedMessages?: number;
+          blocks?: ContextReportItem[];
+        }
   ) => {
     webContents.send('chat:ui-chunk', chunk);
   };
@@ -469,6 +575,20 @@ export const createUiChunkEmitter = (
         type: 'memory-retrieval',
         query: payload?.query ?? '',
         results: Array.isArray(payload?.results) ? payload.results : [],
+      });
+    },
+    emitContextReport: payload => {
+      if (terminated) return;
+      ensureStarted();
+      emitChunk({
+        type: 'context-report',
+        totalEstimatedTokens:
+          typeof payload?.totalEstimatedTokens === 'number' ? payload.totalEstimatedTokens : 0,
+        retainedRecentMessages:
+          typeof payload?.retainedRecentMessages === 'number' ? payload.retainedRecentMessages : 0,
+        compactedMessages:
+          typeof payload?.compactedMessages === 'number' ? payload.compactedMessages : 0,
+        blocks: Array.isArray(payload?.blocks) ? payload.blocks : [],
       });
     },
     finish: () => {

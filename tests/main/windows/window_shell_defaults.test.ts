@@ -6,7 +6,7 @@ const MAIN_WINDOW_PATH = resolve(process.cwd(), 'src/main/windows/main_window.ts
 const SETTINGS_WINDOW_PATH = resolve(process.cwd(), 'src/main/windows/settings_window.ts');
 
 describe('window shell defaults', () => {
-  it('sets explicit shell colors and disables native effects that create white edge halos', () => {
+  it('boots frameless windows with explicit shell colors and defers shadow opt-in to the renderer', () => {
     const mainSource = readFileSync(MAIN_WINDOW_PATH, 'utf8');
     const settingsSource = readFileSync(SETTINGS_WINDOW_PATH, 'utf8');
 

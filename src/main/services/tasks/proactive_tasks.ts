@@ -2,6 +2,7 @@ import { BrowserWindow, Notification, app } from 'electron';
 
 import * as tasksDb from '../../../core/db/tasks';
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import { deliverBridgeThreadMessage } from '../../../daemon/bridge_dispatch';
 import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
@@ -235,6 +236,87 @@ export const runProactiveTask = async (taskId: string, options?: { reason?: 'sch
     }
 
     const outputText = typeof result.text === 'string' ? result.text : '';
+    const messageText = [
+      `### ⏰ ${task.name}`,
+      `Run: ${new Date(startedAt).toLocaleString()}`,
+      '',
+      outputText.trim() ? outputText : '_No output._',
+    ].join('\n');
+
+    const bridgeDelivery = await deliverBridgeThreadMessage({
+      threadId,
+      text: messageText,
+    });
+
+    if (bridgeDelivery.handled && !bridgeDelivery.delivered) {
+      const deliveryError = `Failed to deliver ${bridgeDelivery.source || 'bridge'} message: ${
+        bridgeDelivery.error || 'Unknown error'
+      }`;
+
+      tasksDb.updateProactiveTask(taskId, {
+        last_run_at: startedAt,
+        next_run_at: nextRunAt,
+        last_status: 'error',
+        last_output: outputText,
+        last_error: deliveryError,
+      });
+
+      const failedDeliveryText = [
+        `### ⏰ ${task.name} (Delivery Failed)`,
+        `Run: ${new Date(startedAt).toLocaleString()}`,
+        '',
+        'Generated output:',
+        outputText.trim() ? outputText : '_No output._',
+        '',
+        'Error:',
+        '```',
+        deliveryError,
+        '```',
+      ].join('\n');
+
+      const failedDeliveryMessage = {
+        id: createRuntimeId('msg'),
+        role: 'assistant',
+        parts: [{ type: 'text', text: failedDeliveryText }],
+      };
+
+      chatService.createMessage({
+        id: failedDeliveryMessage.id,
+        thread_id: threadId,
+        parent_id: null,
+        depth: 0,
+        message: JSON.stringify(failedDeliveryMessage),
+        timestamp: startedAt,
+        metadata: JSON.stringify({
+          format: 'ai-ui-message-v1',
+          source: 'proactive-task',
+          taskId: task.id,
+          kind: 'error',
+          stage: 'bridge-delivery',
+          reason: options?.reason || 'schedule',
+        }),
+      });
+
+      chatThreadDb.touchChatThread(threadId);
+
+      if (task.notify) {
+        showDesktopNotification({
+          title: `Task failed: ${task.name}`,
+          body: deliveryError.slice(0, 180),
+        });
+      }
+
+      sendPushEventToRenderers({
+        type: 'task-result',
+        taskId: task.id,
+        threadId,
+        status: 'error',
+        runAt: startedAt,
+        message: failedDeliveryMessage,
+      });
+
+      return { success: false, error: deliveryError };
+    }
 
     tasksDb.updateProactiveTask(taskId, {
       last_run_at: startedAt,
@@ -243,13 +325,6 @@ export const runProactiveTask = async (taskId: string, options?: { reason?: 'sch
       last_output: outputText,
       last_error: null,
     });
-
-    const messageText = [
-      `### ⏰ ${task.name}`,
-      `Run: ${new Date(startedAt).toLocaleString()}`,
-      '',
-      outputText.trim() ? outputText : '_No output._',
-    ].join('\n');
 
     const uiMessage = {
       id: createRuntimeId('msg'),

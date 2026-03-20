@@ -27,6 +27,10 @@ vi.mock('../../../../src/core/db/chat_thread', () => ({
   touchChatThread: vi.fn(),
 }));
 
+vi.mock('../../../../src/daemon/bridge_dispatch', () => ({
+  deliverBridgeThreadMessage: vi.fn(),
+}));
+
 vi.mock('../../../../src/main/services/chat/chat_service', () => ({
   chatService: {
     getThread: vi.fn(),
@@ -42,6 +46,7 @@ import type { ProactiveTask } from '../../../../src/shared/types/tasks';
 import { runProactiveTask } from '../../../../src/main/services/tasks/proactive_tasks';
 import * as tasksDb from '../../../../src/core/db/tasks';
 import * as chatThreadDb from '../../../../src/core/db/chat_thread';
+import { deliverBridgeThreadMessage } from '../../../../src/daemon/bridge_dispatch';
 import { chatService } from '../../../../src/main/services/chat/chat_service';
 
 const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
@@ -78,6 +83,7 @@ describe('runProactiveTask', () => {
   const getProactiveTaskMock = vi.mocked(tasksDb.getProactiveTask);
   const updateProactiveTaskMock = vi.mocked(tasksDb.updateProactiveTask);
   const touchChatThreadMock = vi.mocked(chatThreadDb.touchChatThread);
+  const deliverBridgeThreadMessageMock = vi.mocked(deliverBridgeThreadMessage);
   const chatServiceMock = chatService as unknown as {
     getThread: ReturnType<typeof vi.fn>;
     createThread: ReturnType<typeof vi.fn>;
@@ -87,6 +93,10 @@ describe('runProactiveTask', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    deliverBridgeThreadMessageMock.mockResolvedValue({
+      handled: false,
+      delivered: false,
+    });
   });
 
   afterEach(() => {
@@ -226,6 +236,74 @@ describe('runProactiveTask', () => {
       call => call[1]?.last_status === 'success'
     )?.[1];
     expect(successUpdate?.next_run_at).toBe('2026-03-18T00:05:00.000Z');
+  });
+
+  it('delivers successful task output through bridge-owned threads', async () => {
+    getProactiveTaskMock.mockReturnValue(
+      baseTask({
+        thread_id: 'napcat_10001_private_20002',
+      })
+    );
+    chatServiceMock.getThread.mockReturnValue({
+      id: 'napcat_10001_private_20002',
+    });
+    chatServiceMock.send.mockResolvedValue({ success: true, text: 'Bridge hello.' });
+    deliverBridgeThreadMessageMock.mockResolvedValue({
+      handled: true,
+      delivered: true,
+      source: 'napcat',
+    });
+
+    const result = await runProactiveTask('task_1', { reason: 'manual' });
+
+    expect(result).toEqual({ success: true });
+    expect(deliverBridgeThreadMessageMock).toHaveBeenCalledWith({
+      threadId: 'napcat_10001_private_20002',
+      text: expect.stringContaining('Bridge hello.'),
+    });
+  });
+
+  it('marks the run as failed when bridge delivery fails', async () => {
+    getProactiveTaskMock.mockReturnValue(
+      baseTask({
+        thread_id: 'napcat_10001_private_20002',
+      })
+    );
+    chatServiceMock.getThread.mockReturnValue({
+      id: 'napcat_10001_private_20002',
+    });
+    chatServiceMock.send.mockResolvedValue({ success: true, text: 'Bridge hello.' });
+    deliverBridgeThreadMessageMock.mockResolvedValue({
+      handled: true,
+      delivered: false,
+      source: 'napcat',
+      error: 'NapCat bridge is not connected',
+    });
+
+    const result = await runProactiveTask('task_1', { reason: 'manual' });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Failed to deliver napcat message: NapCat bridge is not connected',
+    });
+
+    const errorUpdate = updateProactiveTaskMock.mock.calls.find(
+      call => call[1]?.last_status === 'error'
+    )?.[1];
+    expect(errorUpdate).toMatchObject({
+      last_status: 'error',
+      last_output: 'Bridge hello.',
+      last_error: 'Failed to deliver napcat message: NapCat bridge is not connected',
+    });
+
+    const messageMetaRaw = chatServiceMock.createMessage.mock.calls.at(-1)?.[0]?.metadata;
+    const messageMeta = messageMetaRaw ? JSON.parse(messageMetaRaw) : null;
+    expect(messageMeta).toMatchObject({
+      source: 'proactive-task',
+      kind: 'error',
+      stage: 'bridge-delivery',
+      reason: 'manual',
+    });
   });
 
   it('rejects overlapping runs while a task is already in flight', async () => {

@@ -26,7 +26,10 @@ const SKIP_DIRS = new Set([
 ]);
 
 const normalizeIdPath = (value: string): string =>
-  value.replaceAll(path.sep, '/').replace(/^\.\/+/, '').trim();
+  value
+    .replaceAll(path.sep, '/')
+    .replace(/^\.\/+/, '')
+    .trim();
 
 const getCodexHome = (): string => {
   const env = process.env.CODEX_HOME;
@@ -54,7 +57,92 @@ export const getSkillRootsForUi = (): Array<{ source: SkillSource; path: string 
   return getSkillRootsInternal().map(root => ({ source: root.source, path: root.root }));
 };
 
-const extractTitleAndDescription = (
+const normalizeSummaryText = (value: string): string => value.replace(/\s+/g, ' ').trim();
+
+const extractFrontmatter = (raw: string): { metadata: string; body: string } | null => {
+  const normalized = raw.startsWith('\uFEFF') ? raw.slice(1) : raw;
+  const match = normalized.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/);
+  if (!match) return null;
+  return {
+    metadata: match[1] || '',
+    body: normalized.slice(match[0].length),
+  };
+};
+
+const parseQuotedFrontmatterValue = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === 'string' ? parsed : trimmed.slice(1, -1);
+    } catch {
+      return trimmed.slice(1, -1);
+    }
+  }
+
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/''/g, "'");
+  }
+
+  return trimmed;
+};
+
+const parseSkillFrontmatter = (raw: string): { name: string; description: string } => {
+  const lines = raw.split(/\r?\n/);
+  let name = '';
+  let description = '';
+
+  const assignField = (key: 'name' | 'description', value: string) => {
+    const normalized = normalizeSummaryText(value);
+    if (!normalized) return;
+    if (key === 'name' && !name) name = normalized;
+    if (key === 'description' && !description) description = normalized;
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] || '';
+    if (!line || /^\s/.test(line)) continue;
+
+    const match = line.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+    if (!match) continue;
+
+    const [, keyRaw, remainderRaw] = match;
+    const key = keyRaw === 'name' || keyRaw === 'description' ? keyRaw : null;
+    if (!key) continue;
+
+    const remainder = remainderRaw.trim();
+    if (/^[>|][-+0-9]*$/.test(remainder)) {
+      const blockLines: string[] = [];
+      let blockIndent: number | null = null;
+      let nextIndex = i + 1;
+
+      for (; nextIndex < lines.length; nextIndex += 1) {
+        const nextLine = lines[nextIndex] || '';
+        if (!nextLine.trim()) {
+          if (blockIndent !== null) blockLines.push('');
+          continue;
+        }
+
+        const indent = nextLine.match(/^[ \t]*/)?.[0].length ?? 0;
+        if (indent === 0) break;
+        if (blockIndent === null) blockIndent = indent;
+        blockLines.push(nextLine.slice(Math.min(indent, blockIndent)).trimEnd());
+      }
+
+      assignField(key, blockLines.join(remainder.startsWith('|') ? '\n' : ' '));
+      i = nextIndex - 1;
+      continue;
+    }
+
+    assignField(key, parseQuotedFrontmatterValue(remainder));
+  }
+
+  return { name, description };
+};
+
+const extractMarkdownTitleAndDescription = (
   raw: string
 ): { title: string; description: string } => {
   const lines = raw.split(/\r?\n/);
@@ -71,12 +159,25 @@ const extractTitleAndDescription = (
     }
 
     if (!description && !line.startsWith('#')) {
-      description = line.replace(/\s+/g, ' ').trim();
+      description = normalizeSummaryText(line);
       break;
     }
   }
 
   return { title, description };
+};
+
+const extractTitleAndDescription = (raw: string): { title: string; description: string } => {
+  const frontmatter = extractFrontmatter(raw);
+  const markdown = extractMarkdownTitleAndDescription(frontmatter?.body || raw);
+  const metadata = frontmatter
+    ? parseSkillFrontmatter(frontmatter.metadata)
+    : { name: '', description: '' };
+
+  return {
+    title: markdown.title || metadata.name,
+    description: metadata.description || markdown.description,
+  };
 };
 
 const safeReadTextFile = async (filePath: string): Promise<string> => {
@@ -87,11 +188,7 @@ const safeReadTextFile = async (filePath: string): Promise<string> => {
   }
 };
 
-const walkForSkillFiles = async (
-  dir: string,
-  depth: number,
-  out: string[]
-): Promise<void> => {
+const walkForSkillFiles = async (dir: string, depth: number, out: string[]): Promise<void> => {
   if (depth > MAX_SCAN_DEPTH) return;
 
   let entries: Array<import('node:fs').Dirent> = [];
@@ -224,9 +321,10 @@ export const readSkillContent = async (
   const record = await getSkillRecordById(id);
   if (!record) return null;
   const raw = await safeReadTextFile(record.filePath);
-  const maxChars = typeof options?.maxChars === 'number' && Number.isFinite(options.maxChars)
-    ? Math.max(200, Math.trunc(options.maxChars))
-    : 20000;
+  const maxChars =
+    typeof options?.maxChars === 'number' && Number.isFinite(options.maxChars)
+      ? Math.max(200, Math.trunc(options.maxChars))
+      : 20000;
   const truncated = truncateText(raw, maxChars);
   return {
     id: record.id,
