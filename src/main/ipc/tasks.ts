@@ -1,7 +1,13 @@
 import { ipcMain } from 'electron';
 
 import * as tasksDb from '../../core/db/tasks';
-import type { ProactiveTask } from '../../shared/types/tasks';
+import {
+  filterSafeProactiveTaskTools,
+  inferProactiveTaskToolMode,
+  normalizeProactiveTaskToolMode,
+  parseProactiveTaskTools,
+  type ProactiveTask,
+} from '../../shared/types/tasks';
 import { isObjectRecord } from '../../shared/utils/guards';
 import { toIpcSerializable } from '../../shared/utils/ipc_serialization';
 import { getErrorMessage } from '../utils/errors';
@@ -30,27 +36,29 @@ const computeNextRunAtFromNow = (
   now: Date
 ) => computeNextRunAt(schedule, now.toISOString());
 
-const normalizeToolsJson = (raw: unknown): string | null => {
-  if (!raw) return null;
-  if (Array.isArray(raw)) {
-    const tools = raw
-      .filter((t): t is string => typeof t === 'string')
-      .map(t => t.trim())
-      .filter(Boolean);
-    return tools.length > 0 ? JSON.stringify(tools) : null;
+const normalizeToolsInput = (raw: unknown): string[] | null => {
+  if (raw === null || typeof raw === 'undefined') return null;
+  return parseProactiveTaskTools(raw);
+};
+
+const serializeTools = (tools: string[] | null): string | null =>
+  tools === null ? null : JSON.stringify(tools);
+
+const validateManualTools = (tools: string[]) => {
+  const safeTools = filterSafeProactiveTaskTools(tools);
+  const invalidTools = tools.filter(
+    tool => !safeTools.includes(tool as (typeof safeTools)[number])
+  );
+
+  if (invalidTools.length > 0) {
+    throw new Error(`Unsupported proactive task tools: ${invalidTools.join(', ')}`);
   }
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    // If it's already JSON we trust it; otherwise treat as a single tool name.
-    if (trimmed.startsWith('[')) return trimmed;
-    return JSON.stringify([trimmed]);
-  }
-  return null;
+
+  return safeTools;
 };
 
 const normalizeTaskInput = (input: unknown): Partial<ProactiveTask> =>
-  (isObjectRecord(input) ? (input as Partial<ProactiveTask>) : {});
+  isObjectRecord(input) ? (input as Partial<ProactiveTask>) : {};
 
 export const registerTasksIpc = (): void => {
   if (tasksIpcRegistered) return;
@@ -78,7 +86,13 @@ export const registerTasksIpc = (): void => {
       const interval_minutes = clampIntervalMinutes(taskInput.interval_minutes);
       const cron_expression = normalizeCronExpression(taskInput.cron_expression);
       const schedule_timezone = normalizeScheduleTimezone(taskInput.schedule_timezone);
-      const tools = normalizeToolsJson(taskInput.tools);
+      const normalizedTools = normalizeToolsInput(taskInput.tools);
+      const tool_mode = normalizeProactiveTaskToolMode(
+        taskInput.tool_mode,
+        inferProactiveTaskToolMode(taskInput)
+      );
+      const tools =
+        normalizedTools === null ? null : serializeTools(validateManualTools(normalizedTools));
       const thread_id =
         typeof taskInput.thread_id === 'string' && taskInput.thread_id.trim()
           ? taskInput.thread_id.trim()
@@ -88,6 +102,9 @@ export const registerTasksIpc = (): void => {
       if (!prompt) throw new Error('Task prompt is required');
       if (!provider_type) throw new Error('Task provider_type is required');
       if (!model) throw new Error('Task model is required');
+      if (tool_mode === 'manual' && (!normalizedTools || normalizedTools.length === 0)) {
+        throw new Error('Manual tool mode requires at least one safe tool');
+      }
 
       if (schedule_type === 'cron') {
         if (!cron_expression) throw new Error('Cron expression is required');
@@ -109,6 +126,7 @@ export const registerTasksIpc = (): void => {
         interval_minutes,
         cron_expression,
         schedule_timezone,
+        tool_mode,
         tools,
         thread_id,
         // First run is scheduled from "now".
@@ -141,12 +159,39 @@ export const registerTasksIpc = (): void => {
       const scheduleType = hasScheduleType
         ? normalizeScheduleType(taskUpdates.schedule_type)
         : normalizeScheduleType(existing.schedule_type);
-      const hasCronExpression = Object.prototype.hasOwnProperty.call(taskUpdates, 'cron_expression');
-      const hasScheduleTimezone = Object.prototype.hasOwnProperty.call(taskUpdates, 'schedule_timezone');
+      const hasCronExpression = Object.prototype.hasOwnProperty.call(
+        taskUpdates,
+        'cron_expression'
+      );
+      const hasScheduleTimezone = Object.prototype.hasOwnProperty.call(
+        taskUpdates,
+        'schedule_timezone'
+      );
       const hasIntervalMinutes = typeof taskUpdates.interval_minutes !== 'undefined';
+      const hasToolMode = Object.prototype.hasOwnProperty.call(taskUpdates, 'tool_mode');
+      const hasTools = Object.prototype.hasOwnProperty.call(taskUpdates, 'tools');
 
-      if (typeof taskUpdates.tools !== 'undefined') {
-        nextUpdates.tools = normalizeToolsJson(taskUpdates.tools);
+      const existingToolMode = inferProactiveTaskToolMode(existing);
+      const normalizedExistingTools = parseProactiveTaskTools(existing.tools);
+      const normalizedUpdatedTools = hasTools ? normalizeToolsInput(taskUpdates.tools) : null;
+      const nextToolMode = hasToolMode
+        ? normalizeProactiveTaskToolMode(taskUpdates.tool_mode, existingToolMode)
+        : hasTools
+          ? inferProactiveTaskToolMode({ tools: normalizedUpdatedTools })
+          : existingToolMode;
+      const nextToolsArray =
+        normalizedUpdatedTools !== null ? normalizedUpdatedTools : normalizedExistingTools;
+
+      if (hasTools) {
+        nextUpdates.tools = serializeTools(validateManualTools(nextToolsArray));
+      }
+
+      if (hasToolMode || hasTools) {
+        nextUpdates.tool_mode = nextToolMode;
+      }
+
+      if (nextToolMode === 'manual' && nextToolsArray.length === 0) {
+        throw new Error('Manual tool mode requires at least one safe tool');
       }
 
       if (hasScheduleType) {
@@ -177,7 +222,10 @@ export const registerTasksIpc = (): void => {
       const scheduleTimezone =
         (hasScheduleTimezone ? nextUpdates.schedule_timezone : existing.schedule_timezone) ?? null;
 
-      if (scheduleType === 'interval' && (hasScheduleType || hasCronExpression || hasScheduleTimezone)) {
+      if (
+        scheduleType === 'interval' &&
+        (hasScheduleType || hasCronExpression || hasScheduleTimezone)
+      ) {
         nextUpdates.cron_expression = null;
         nextUpdates.schedule_timezone = null;
       }

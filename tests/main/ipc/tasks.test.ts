@@ -78,6 +78,7 @@ describe('tasks IPC', () => {
     expect(params.schedule_type).toBe('interval');
     expect(params.cron_expression).toBeNull();
     expect(params.schedule_timezone).toBeNull();
+    expect(params.tool_mode).toBe('manual');
     expect(params.tools).toBe('["web","fetch"]');
     expect(params.thread_id).toBeNull();
     expect(params.next_run_at).toBe('2026-03-18T12:01:00.000Z');
@@ -176,8 +177,31 @@ describe('tasks IPC', () => {
 
     const params = updateProactiveTaskMock.mock.calls[0][1] as Record<string, unknown>;
     expect(params.interval_minutes).toBe(90);
+    expect(params.tool_mode).toBe('manual');
     expect(params.tools).toBe('["web"]');
     expect(params.next_run_at).toBe('2026-03-18T11:30:00.000Z');
+  });
+
+  it('supports explicitly disabling tools for proactive tasks', async () => {
+    const handler = ipcHandlers.get('tasks:create');
+    if (!handler) throw new Error('tasks:create handler not registered');
+
+    getProactiveTaskMock.mockReturnValue({ id: 'task_disabled' } as any);
+
+    const result = await handler(null, {
+      name: 'No Tools',
+      prompt: 'Summarize without tools',
+      provider_type: 'openai',
+      model: 'gpt-4',
+      tool_mode: 'disabled',
+      tools: [],
+    });
+
+    expect(result).toEqual({ success: true, task: { id: 'task_disabled' } });
+
+    const params = addProactiveTaskMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.tool_mode).toBe('disabled');
+    expect(params.tools).toBe('[]');
   });
 
   it('recomputes next_run_at when cron expression changes', async () => {

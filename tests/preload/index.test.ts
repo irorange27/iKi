@@ -48,6 +48,7 @@ describe('preload task IPC payload serialization', () => {
         prompt: 'Summarize',
         provider_type: 'deepseek',
         model: 'deepseek-chat',
+        tool_mode: 'manual',
         tools: toolsProxy,
       },
       {}
@@ -63,6 +64,7 @@ describe('preload task IPC payload serialization', () => {
       prompt: 'Summarize',
       provider_type: 'deepseek',
       model: 'deepseek-chat',
+      tool_mode: 'manual',
       tools: ['web', 'fetch'],
     });
     expect(payload).not.toBe(taskProxy);
@@ -76,6 +78,7 @@ describe('preload task IPC payload serialization', () => {
     const updatesProxy = new Proxy(
       {
         enabled: true,
+        tool_mode: 'disabled',
         tools: toolsProxy,
       },
       {}
@@ -89,6 +92,7 @@ describe('preload task IPC payload serialization', () => {
     expect(id).toBe('task_1');
     expect(payload).toEqual({
       enabled: true,
+      tool_mode: 'disabled',
       tools: ['web'],
     });
     expect(payload).not.toBe(updatesProxy);
@@ -96,13 +100,16 @@ describe('preload task IPC payload serialization', () => {
   });
 
   it('sanitizes Vue reactive task payloads so Electron can structured-clone them', async () => {
-    invokeMock.mockImplementation(async (_channel: string, payload: unknown) => structuredClone(payload));
+    invokeMock.mockImplementation(async (_channel: string, payload: unknown) =>
+      structuredClone(payload)
+    );
 
     const taskForm = ref({
       name: 'Daily',
       prompt: 'Summarize',
       provider_type: 'deepseek',
       model: 'deepseek-chat',
+      tool_mode: 'manual',
       tools: ['web', 'fetch'],
     });
 
@@ -111,6 +118,7 @@ describe('preload task IPC payload serialization', () => {
       prompt: taskForm.value.prompt,
       provider_type: taskForm.value.provider_type,
       model: taskForm.value.model,
+      tool_mode: taskForm.value.tool_mode,
       tools: taskForm.value.tools,
     });
 
@@ -123,6 +131,7 @@ describe('preload task IPC payload serialization', () => {
       prompt: 'Summarize',
       provider_type: 'deepseek',
       model: 'deepseek-chat',
+      tool_mode: 'manual',
       tools: ['web', 'fetch'],
     });
     expect(payload.tools).not.toBe(taskForm.value.tools);

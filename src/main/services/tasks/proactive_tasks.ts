@@ -3,6 +3,12 @@ import { BrowserWindow, Notification, app } from 'electron';
 import * as tasksDb from '../../../core/db/tasks';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import { deliverBridgeThreadMessage } from '../../../daemon/bridge_dispatch';
+import {
+  filterSafeProactiveTaskTools,
+  inferProactiveTaskToolMode,
+  parseProactiveTaskTools,
+  type ProactiveTask,
+} from '../../../shared/types/tasks';
 import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
@@ -15,27 +21,75 @@ const taskInFlight = new Set<string>();
 
 const nowIso = () => new Date().toISOString();
 
-const safeParseTools = (raw: unknown): string[] => {
-  if (Array.isArray(raw)) {
-    return raw.filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
-  }
-  if (typeof raw === 'string' && raw.trim()) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
-      }
-    } catch {
-      return [];
-    }
-  }
-  return [];
+const PROACTIVE_TASK_AGENT_SYSTEM_PROMPT = [
+  'You are executing a scheduled proactive task for the user.',
+  'Act autonomously and complete the task without asking the user follow-up questions.',
+  'When the task depends on current information, proactively use the available tools to verify freshness instead of relying on stale model knowledge.',
+  'Prefer concise, high-signal updates that emphasize material changes, concrete dates, and actionable conclusions.',
+  'Avoid repeating unchanged background from prior runs. If nothing important changed, say so plainly.',
+  'When you cite current information, include source links or source names when practical.',
+].join('\n');
+
+const clipText = (value: string | null | undefined, maxChars: number): string => {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
 };
 
-const SAFE_PROACTIVE_TOOLS = new Set<string>(['web', 'fetch', 'read_file', 'list_dir']);
+const formatTaskSchedule = (task: {
+  schedule_type?: string;
+  interval_minutes: number;
+  cron_expression?: string | null;
+  schedule_timezone?: string | null;
+}): string =>
+  task.schedule_type === 'cron'
+    ? `${task.cron_expression || 'cron'}${task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)'}`
+    : `every ${clampIntervalMinutes(task.interval_minutes)} minute(s)`;
 
-const filterSafeTools = (tools: string[]): string[] =>
-  tools.filter(toolName => SAFE_PROACTIVE_TOOLS.has(toolName));
+const formatTaskToolStrategy = (task: Pick<ProactiveTask, 'tool_mode' | 'tools'>): string => {
+  const toolMode = inferProactiveTaskToolMode(task);
+  if (toolMode === 'auto')
+    return 'Agent decides automatically using the safe built-in tool catalog.';
+  if (toolMode === 'disabled') return 'Tools disabled; run as plain model reasoning only.';
+
+  const tools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
+  return tools.length > 0
+    ? `Manual safe tools: ${tools.join(', ')}`
+    : 'Manual tool mode configured, but no safe tools remain enabled.';
+};
+
+const buildProactiveTaskPrompt = (
+  task: ProactiveTask,
+  params: { startedAt: string; reason: 'schedule' | 'manual' }
+): string => {
+  const previousRunAt = task.last_run_at?.trim();
+  const previousOutput = clipText(task.last_output, 1200);
+  const previousError = clipText(task.last_error, 500);
+
+  const sections = [
+    `Task name: ${task.name}`,
+    `Run reason: ${params.reason}`,
+    `Current run time (ISO): ${params.startedAt}`,
+    `Schedule: ${formatTaskSchedule(task)}`,
+    `Tool strategy: ${formatTaskToolStrategy(task)}`,
+    previousRunAt ? `Previous run time (ISO): ${previousRunAt}` : 'Previous run time (ISO): none',
+    task.last_status ? `Previous run status: ${task.last_status}` : '',
+    previousError ? `Previous run error:\n${previousError}` : '',
+    previousOutput ? `Previous run output excerpt:\n${previousOutput}` : '',
+    `Objective:\n${task.prompt}`,
+    [
+      'Execution instructions:',
+      '- Complete the task now without asking the user follow-up questions.',
+      '- Use tools proactively when they materially improve freshness or correctness.',
+      '- Prioritize deltas, newly relevant developments, and decisions the user may need to make.',
+      '- Keep the final answer concise and avoid repeating unchanged context.',
+    ].join('\n'),
+  ];
+
+  return sections.filter(Boolean).join('\n\n');
+};
 
 const createRuntimeId = (prefix: string) =>
   `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -73,8 +127,11 @@ const ensureTaskThread = async (task: {
   interval_minutes: number;
   cron_expression?: string | null;
   schedule_timezone?: string | null;
+  tool_mode: ProactiveTask['tool_mode'];
+  tools?: string | null;
 }): Promise<string> => {
-  const existingThreadId = typeof task.thread_id === 'string' && task.thread_id.trim() ? task.thread_id.trim() : '';
+  const existingThreadId =
+    typeof task.thread_id === 'string' && task.thread_id.trim() ? task.thread_id.trim() : '';
   if (existingThreadId) {
     const existing = chatService.getThread(existingThreadId);
     if (existing) return existingThreadId;
@@ -96,17 +153,11 @@ const ensureTaskThread = async (task: {
   tasksDb.updateProactiveTask(task.id, { thread_id: threadId });
 
   // Write a "pinned" intro message so the thread explains what it is.
-  const scheduleLine =
-    task.schedule_type === 'cron'
-      ? `**Schedule:** ${task.cron_expression || 'cron'}${
-          task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)'
-        }`
-      : `**Schedule:** every ${clampIntervalMinutes(task.interval_minutes)} minute(s)`;
-
   const introText = [
     `### ⏰ Proactive Task Created`,
     `**Name:** ${task.name}`,
-    scheduleLine,
+    `**Schedule:** ${formatTaskSchedule(task)}`,
+    `**Tool Strategy:** ${formatTaskToolStrategy(task)}`,
     '',
     '**Prompt:**',
     task.prompt,
@@ -125,13 +176,21 @@ const ensureTaskThread = async (task: {
     depth: 0,
     message: JSON.stringify(introUiMessage),
     timestamp: nowIso(),
-    metadata: JSON.stringify({ format: 'ai-ui-message-v1', source: 'proactive-task', taskId: task.id, kind: 'intro' }),
+    metadata: JSON.stringify({
+      format: 'ai-ui-message-v1',
+      source: 'proactive-task',
+      taskId: task.id,
+      kind: 'intro',
+    }),
   });
 
   return threadId;
 };
 
-export const runProactiveTask = async (taskId: string, options?: { reason?: 'schedule' | 'manual' }) => {
+export const runProactiveTask = async (
+  taskId: string,
+  options?: { reason?: 'schedule' | 'manual' }
+) => {
   const task = tasksDb.getProactiveTask(taskId);
   if (!task) return { success: false, error: 'Task not found' };
   if (!task.enabled && options?.reason !== 'manual') {
@@ -159,15 +218,31 @@ export const runProactiveTask = async (taskId: string, options?: { reason?: 'sch
       interval_minutes: task.interval_minutes,
       cron_expression: task.cron_expression ?? null,
       schedule_timezone: task.schedule_timezone ?? null,
+      tool_mode: task.tool_mode,
+      tools: task.tools ?? null,
     });
 
-    const selectedTools = filterSafeTools(safeParseTools(task.tools));
+    const toolMode = inferProactiveTaskToolMode(task);
+    const selectedTools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
 
     const result = await chatService.send({
       providerType: task.provider_type,
       model: task.model,
-      messages: [{ role: 'user', content: task.prompt }],
-      ...(selectedTools.length > 0 ? { tools: selectedTools } : {}),
+      messages: [
+        { role: 'system', content: PROACTIVE_TASK_AGENT_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: buildProactiveTaskPrompt(task, {
+            startedAt,
+            reason: options?.reason || 'schedule',
+          }),
+        },
+      ],
+      ...(toolMode === 'manual'
+        ? { tools: selectedTools }
+        : toolMode === 'disabled'
+          ? { tools: [] }
+          : {}),
       threadId,
     });
 

@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import type { ProactiveTask } from '../../shared/types/tasks';
+import { inferProactiveTaskToolMode, type ProactiveTask } from '../../shared/types/tasks';
 
 type ProactiveTaskRow = Omit<ProactiveTask, 'enabled' | 'notify'> & {
   enabled: number | boolean;
@@ -12,6 +12,7 @@ const normalizeRow = (row: ProactiveTaskRow): ProactiveTask => ({
   ...row,
   enabled: Boolean(row.enabled),
   notify: Boolean(row.notify),
+  tool_mode: inferProactiveTaskToolMode(row),
 });
 
 export const getProactiveTasks = (): ProactiveTask[] => {
@@ -22,9 +23,9 @@ export const getProactiveTasks = (): ProactiveTask[] => {
 };
 
 export const getProactiveTask = (id: string): ProactiveTask | null => {
-  const row = getDb()
-    .prepare('SELECT * FROM proactive_tasks WHERE id = ?')
-    .get(id) as ProactiveTaskRow | undefined;
+  const row = getDb().prepare('SELECT * FROM proactive_tasks WHERE id = ?').get(id) as
+    | ProactiveTaskRow
+    | undefined;
   if (!row) return null;
   return normalizeRow(row);
 };
@@ -71,6 +72,7 @@ export const addProactiveTask = (
       enabled,
       provider_type,
       model,
+      tool_mode,
       tools,
       thread_id,
       notify,
@@ -92,6 +94,7 @@ export const addProactiveTask = (
       @enabled,
       @provider_type,
       @model,
+      @tool_mode,
       @tools,
       @thread_id,
       @notify,
@@ -116,6 +119,7 @@ export const addProactiveTask = (
     enabled: task.enabled ? 1 : 0,
     provider_type: task.provider_type,
     model: task.model,
+    tool_mode: task.tool_mode || 'auto',
     tools: task.tools ?? null,
     thread_id: task.thread_id ?? null,
     notify: task.notify === false ? 0 : 1,

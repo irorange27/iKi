@@ -58,6 +58,7 @@ const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
   enabled: true,
   provider_type: 'openai',
   model: 'gpt-4',
+  tool_mode: 'auto',
   tools: null,
   thread_id: null,
   notify: true,
@@ -69,7 +70,7 @@ const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
   ...overrides,
 });
 
-const createDeferred = <T,>() => {
+const createDeferred = <T>() => {
   let resolve: (value: T) => void = () => undefined;
   let reject: (error: unknown) => void = () => undefined;
   const promise = new Promise<T>((res, rej) => {
@@ -121,6 +122,7 @@ describe('runProactiveTask', () => {
 
     getProactiveTaskMock.mockReturnValue(
       baseTask({
+        tool_mode: 'manual',
         tools: JSON.stringify(['web', 'fetch', 'shell', 'read_file', 'list_dir', '']),
       })
     );
@@ -139,6 +141,14 @@ describe('runProactiveTask', () => {
     const toolCall = chatServiceMock.send.mock.calls[0][0];
     expect(toolCall.tools).toEqual(['web', 'fetch', 'read_file', 'list_dir']);
     expect(toolCall.threadId).toBe('thread_1');
+    expect(toolCall.messages[0]).toMatchObject({
+      role: 'system',
+    });
+    expect(toolCall.messages[1]).toMatchObject({
+      role: 'user',
+    });
+    expect(toolCall.messages[1].content).toContain('Objective:\nSummarize the latest updates.');
+    expect(toolCall.messages[1].content).toContain('Tool strategy: Manual safe tools');
 
     const threadUpdate = updateProactiveTaskMock.mock.calls.find(call => call[1]?.thread_id)?.[1];
     expect(threadUpdate?.thread_id).toBe('thread_1');
@@ -171,6 +181,25 @@ describe('runProactiveTask', () => {
       })
     );
     expect(vi.mocked(Notification)).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes an explicit empty tool list when task tools are disabled', async () => {
+    getProactiveTaskMock.mockReturnValue(
+      baseTask({
+        tool_mode: 'disabled',
+      })
+    );
+    chatServiceMock.getThread.mockReturnValue(null);
+    chatServiceMock.createThread.mockReturnValue({ id: 'thread_disabled' });
+    chatServiceMock.send.mockResolvedValue({ success: true, text: 'No tools.' });
+
+    await runProactiveTask('task_1', { reason: 'manual' });
+
+    const toolCall = chatServiceMock.send.mock.calls[0][0];
+    expect(toolCall.tools).toEqual([]);
+    expect(toolCall.messages[1].content).toContain(
+      'Tool strategy: Tools disabled; run as plain model reasoning only.'
+    );
   });
 
   it('records failures and notifies when the task run fails', async () => {

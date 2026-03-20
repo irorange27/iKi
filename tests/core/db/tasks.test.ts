@@ -44,6 +44,7 @@ describe('addProactiveTask', () => {
     expect(params.interval_minutes).toBe(60);
     expect(params.cron_expression).toBeNull();
     expect(params.schedule_timezone).toBeNull();
+    expect(params.tool_mode).toBe('auto');
     expect(params.enabled).toBe(0);
     expect(params.notify).toBe(1);
     expect(params.last_status).toBe('idle');

@@ -794,9 +794,7 @@
             <input
               type="checkbox"
               :checked="config.memory.context.enabled"
-              @change="
-                updateMemoryContext('enabled', ($event.target as HTMLInputElement).checked)
-              "
+              @change="updateMemoryContext('enabled', ($event.target as HTMLInputElement).checked)"
             />
             Enable Context Budgeting
           </label>
@@ -1516,7 +1514,19 @@
             </select>
           </label>
 
-          <div class="task-tools">
+          <label class="input-label">
+            <span>Tool Strategy</span>
+            <select v-model="taskForm.tool_mode">
+              <option value="auto">Auto (agent decides)</option>
+              <option value="manual">Manual safe allowlist</option>
+              <option value="disabled">Disabled</option>
+            </select>
+            <div class="input-hint">
+              Auto lets the task agent decide when to use safe built-in tools for freshness.
+            </div>
+          </label>
+
+          <div v-if="taskForm.tool_mode === 'manual'" class="task-tools">
             <div class="task-tools-title">Allowed Tools (safe)</div>
             <div class="task-tools-grid">
               <label v-for="tool in SAFE_TASK_TOOLS" :key="tool" class="checkbox-label">
@@ -1529,6 +1539,13 @@
               </label>
             </div>
           </div>
+          <p v-else class="input-hint">
+            {{
+              taskForm.tool_mode === 'disabled'
+                ? 'This task will run without any tools.'
+                : 'This task may autonomously use safe built-in tools when current information matters.'
+            }}
+          </p>
 
           <label class="checkbox-label">
             <input type="checkbox" v-model="taskForm.enabled" />
@@ -1635,6 +1652,11 @@
               <div class="task-item-schedule">
                 <span class="task-meta-label">Schedule:</span>
                 {{ formatTaskSchedule(task) }}
+              </div>
+
+              <div class="task-item-schedule">
+                <span class="task-meta-label">Tool Strategy:</span>
+                {{ formatTaskToolStrategy(task) }}
               </div>
 
               <div class="task-item-times">
@@ -1988,7 +2010,15 @@ import type {
   AffectStateEntry,
 } from '../../shared/types/memory';
 import type { SkillSummary } from '../../shared/types/skill';
-import type { ProactiveTask } from '../../shared/types/tasks';
+import {
+  SAFE_PROACTIVE_TASK_TOOLS,
+  filterSafeProactiveTaskTools,
+  inferProactiveTaskToolMode,
+  parseProactiveTaskTools,
+  type ProactiveTask,
+  type ProactiveTaskToolMode,
+  type SafeProactiveTaskTool,
+} from '../../shared/types/tasks';
 import type {
   ChatUsagePeriod,
   ChatUsageSummary,
@@ -2152,8 +2182,7 @@ const taskCreateError = ref('');
 const taskRunLoading = ref<Record<string, boolean>>({});
 const taskThreads = ref<ChatThread[]>([]);
 
-const SAFE_TASK_TOOLS = ['web', 'fetch', 'read_file', 'list_dir'] as const;
-type SafeTaskTool = (typeof SAFE_TASK_TOOLS)[number];
+const SAFE_TASK_TOOLS = SAFE_PROACTIVE_TASK_TOOLS;
 
 const taskForm = ref<{
   name: string;
@@ -2167,7 +2196,8 @@ const taskForm = ref<{
   provider_type: string;
   model: string;
   thread_id: string;
-  tools: SafeTaskTool[];
+  tool_mode: ProactiveTaskToolMode;
+  tools: SafeProactiveTaskTool[];
 }>({
   name: '',
   prompt: '',
@@ -2180,6 +2210,7 @@ const taskForm = ref<{
   provider_type: '',
   model: '',
   thread_id: '',
+  tool_mode: 'auto',
   tools: ['web', 'fetch'],
 });
 
@@ -3253,7 +3284,7 @@ const refreshTasks = async () => {
   await Promise.all([loadProactiveTasks(), loadTaskThreads()]);
 };
 
-const toggleTaskTool = (tool: SafeTaskTool, checked: boolean) => {
+const toggleTaskTool = (tool: SafeProactiveTaskTool, checked: boolean) => {
   const existing = taskForm.value.tools;
   if (checked) {
     if (!existing.includes(tool)) {
@@ -3271,6 +3302,14 @@ const formatTaskSchedule = (task: ProactiveTask): string => {
     return `${cron}${tz}`;
   }
   return `Every ${task.interval_minutes} min`;
+};
+
+const formatTaskToolStrategy = (task: ProactiveTask): string => {
+  const toolMode = inferProactiveTaskToolMode(task);
+  if (toolMode === 'auto') return 'Auto safe tools';
+  if (toolMode === 'disabled') return 'Disabled';
+  const tools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
+  return tools.length > 0 ? `Manual: ${tools.join(', ')}` : 'Manual (no safe tools)';
 };
 
 const createProactiveTask = async () => {
@@ -3305,6 +3344,10 @@ const createProactiveTask = async () => {
   }
 
   const selectedTools = Array.isArray(form.tools) ? [...form.tools] : [];
+  if (form.tool_mode === 'manual' && selectedTools.length === 0) {
+    taskCreateError.value = 'Select at least one safe tool or choose Auto/Disabled.';
+    return;
+  }
 
   taskCreateLoading.value = true;
   try {
@@ -3323,6 +3366,7 @@ const createProactiveTask = async () => {
       enabled: form.enabled,
       notify: form.notify,
       thread_id: form.thread_id || null,
+      tool_mode: form.tool_mode,
       tools: selectedTools,
     });
 
