@@ -54,7 +54,9 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
   });
   const speechEngineAvailable = computed(() => speechEngine.value !== 'none');
   const speechStatusLabel = computed(() => speechError.value);
-  const speechStatusToneClass = computed(() => (speechError.value ? 'text-danger' : 'text-muted'));
+  const speechStatusToneClass = computed(() =>
+    speechError.value ? 'ui-text-danger' : 'ui-text-muted'
+  );
 
   const loadSpeechStatus = async () => {
     if (!window?.electronAPI?.speech?.getStatus) {

@@ -56,23 +56,23 @@
   }
 
   .app-text,
-  .text-primary {
+  .ui-text-primary {
     color: var(--text-primary);
   }
 
-  .text-secondary {
+  .ui-text-secondary {
     color: var(--text-secondary);
   }
 
-  .text-muted {
+  .ui-text-muted {
     color: var(--text-muted);
   }
 
-  .text-accent {
+  .ui-text-accent {
     color: var(--accent-color);
   }
 
-  .text-danger {
+  .ui-text-danger {
     color: var(--danger-color);
   }
 

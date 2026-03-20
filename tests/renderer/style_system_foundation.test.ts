@@ -99,11 +99,16 @@ describe('renderer style system foundation', () => {
     const globalsSource = readFileSync(GLOBALS_CSS_PATH, 'utf8');
 
     expect(globalsSource).toMatch(/\.app-background\s*\{/);
-    expect(globalsSource).toMatch(/\.app-text,\s*[\r\n]+\s*\.text-primary\s*\{/);
-    expect(globalsSource).toMatch(/\.text-secondary\s*\{/);
-    expect(globalsSource).toMatch(/\.text-muted\s*\{/);
-    expect(globalsSource).toMatch(/\.text-accent\s*\{/);
-    expect(globalsSource).toMatch(/\.text-danger\s*\{/);
+    expect(globalsSource).toMatch(/\.app-text,\s*[\r\n]+\s*\.ui-text-primary\s*\{/);
+    expect(globalsSource).toMatch(/\.ui-text-secondary\s*\{/);
+    expect(globalsSource).toMatch(/\.ui-text-muted\s*\{/);
+    expect(globalsSource).toMatch(/\.ui-text-accent\s*\{/);
+    expect(globalsSource).toMatch(/\.ui-text-danger\s*\{/);
+    expect(globalsSource).not.toMatch(/\.text-primary\s*\{/);
+    expect(globalsSource).not.toMatch(/\.text-secondary\s*\{/);
+    expect(globalsSource).not.toMatch(/\.text-muted\s*\{/);
+    expect(globalsSource).not.toMatch(/\.text-accent\s*\{/);
+    expect(globalsSource).not.toMatch(/\.text-danger\s*\{/);
     expect(globalsSource).toMatch(/\.composer-control-btn\s*\{/);
     expect(globalsSource).toMatch(/\.icon-btn:hover\s*\{/);
     expect(globalsSource).toMatch(/\.selector-badge\s*\{/);
@@ -116,6 +121,11 @@ describe('renderer style system foundation', () => {
     const welcomeScreenSource = readFileSync(WELCOME_SCREEN_VUE_PATH, 'utf8');
     const chatViewSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
 
+    expect(chatInputSource).toMatch(/ui-text-primary/);
+    expect(chatInputSource).toMatch(/ui-text-secondary/);
+    expect(chatInputSource).toMatch(/ui-text-accent/);
+    expect(chatInputSource).toMatch(/ui-text-danger/);
+    expect(chatInputSource).toMatch(/ui-text-muted/);
     expect(chatInputSource).toMatch(/composer-icon-btn/);
     expect(chatInputSource).toMatch(/composer-attach-btn/);
     expect(chatInputSource).toMatch(/selector-badge/);
@@ -128,6 +138,10 @@ describe('renderer style system foundation', () => {
     expect(chatInputSource).not.toMatch(/color:\s*#ffffff;/);
     expect(chatInputSource).not.toMatch(/model-selector-trigger composer-icon-btn/);
 
+    expect(toolSelectorSource).toMatch(/ui-text-primary/);
+    expect(toolSelectorSource).toMatch(/ui-text-secondary/);
+    expect(toolSelectorSource).toMatch(/ui-text-muted/);
+    expect(toolSelectorSource).toMatch(/ui-text-accent/);
     expect(toolSelectorSource).not.toMatch(/\.text-primary\s*\{/);
     expect(toolSelectorSource).not.toMatch(/\.text-secondary\s*\{/);
     expect(toolSelectorSource).not.toMatch(/\.text-muted\s*\{/);
@@ -138,6 +152,10 @@ describe('renderer style system foundation', () => {
     expect(toolSelectorSource).toMatch(/status-success-color/);
     expect(toolSelectorSource).toMatch(/status-danger-color/);
 
+    expect(skillSelectorSource).toMatch(/ui-text-primary/);
+    expect(skillSelectorSource).toMatch(/ui-text-secondary/);
+    expect(skillSelectorSource).toMatch(/ui-text-muted/);
+    expect(skillSelectorSource).toMatch(/ui-text-accent/);
     expect(skillSelectorSource).not.toMatch(/\.text-primary\s*\{/);
     expect(skillSelectorSource).not.toMatch(/\.text-secondary\s*\{/);
     expect(skillSelectorSource).not.toMatch(/\.text-muted\s*\{/);
@@ -146,12 +164,16 @@ describe('renderer style system foundation', () => {
     expect(skillSelectorSource).toMatch(/composer-control-btn/);
     expect(skillSelectorSource).toMatch(/composer-selector-trigger/);
 
+    expect(welcomeScreenSource).toMatch(/ui-text-primary/);
+    expect(welcomeScreenSource).toMatch(/ui-text-secondary/);
+    expect(welcomeScreenSource).toMatch(/ui-text-muted/);
     expect(welcomeScreenSource).not.toMatch(/\.text-primary\s*\{/);
     expect(welcomeScreenSource).not.toMatch(/\.text-secondary\s*\{/);
     expect(welcomeScreenSource).not.toMatch(/\.text-muted\s*\{/);
 
     expect(chatViewSource).not.toMatch(/\.app-background\s*\{/);
     expect(chatViewSource).not.toMatch(/\.app-text\s*\{/);
+    expect(chatViewSource).toMatch(/ui-text-secondary/);
     expect(chatViewSource).not.toMatch(/\.text-secondary\s*\{/);
     expect(chatViewSource).not.toMatch(/\.text-muted\s*\{/);
   });

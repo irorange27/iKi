@@ -69,7 +69,7 @@
     <!-- Sidebar Footer -->
     <div v-if="sidebar.isExpanded.value" class="relative p-3 mt-auto flex">
       <button
-        class="sidebar-settings-btn icon-btn flex h-8 w-8 items-center justify-center rounded-lg text-secondary"
+        class="sidebar-settings-btn icon-btn ui-text-secondary flex h-8 w-8 items-center justify-center rounded-lg"
         @click="openSettings"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

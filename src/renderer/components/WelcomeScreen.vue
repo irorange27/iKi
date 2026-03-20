@@ -6,10 +6,10 @@
       </div> -->
 
     <!-- Title -->
-    <h1 class="font-serif text-5xl font-normal text-primary">iKi</h1>
+    <h1 class="ui-text-primary font-serif text-5xl font-normal">iKi</h1>
 
     <!-- Subtitle -->
-    <p class="text-secondary">An elegant desktop for AI provider orchestration</p>
+    <p class="ui-text-secondary">An elegant desktop for AI provider orchestration</p>
 
     <!-- Buttons -->
     <div class="flex w-full flex-col gap-3">
@@ -35,7 +35,7 @@
     </div>
 
     <!-- Info Text -->
-    <p class="text-sm text-muted">Please configure at least one AI provider to start chatting</p>
+    <p class="ui-text-muted text-sm">Please configure at least one AI provider to start chatting</p>
   </div>
 </template>
 

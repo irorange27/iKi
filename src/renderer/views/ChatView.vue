@@ -11,7 +11,7 @@
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <!-- Header -->
       <div class="flex items-center justify-center p-4">
-        <div class="flex items-center gap-1 text-sm text-secondary">
+        <div class="ui-text-secondary flex items-center gap-1 text-sm">
           <span>{{ chat.messages.length }} messages</span>
           <span v-if="currentThread">·</span>
           <FolderOpen v-if="currentThread" :size="12" />
@@ -924,10 +924,7 @@ onUnmounted(() => {
 .reference-summary-item:hover,
 .reference-summary-item.is-active {
   color: var(--reference-inline-hover, var(--reference-inline-color, var(--text-primary)));
-  text-decoration-color: var(
-    --reference-inline-underline,
-    rgba(127, 152, 170, 0.42)
-  );
+  text-decoration-color: var(--reference-inline-underline, rgba(127, 152, 170, 0.42));
 }
 
 .reference-summary-icon {

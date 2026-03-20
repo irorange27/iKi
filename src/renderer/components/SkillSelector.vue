@@ -1,8 +1,8 @@
 <template>
   <div class="relative" @mouseenter="openSkillSelector" @mouseleave="scheduleCloseSkillSelector">
     <button
-      class="composer-control-btn composer-selector-trigger relative flex h-10 w-10 items-center justify-center rounded-[14px] text-secondary"
-      :class="{ 'text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
+      class="composer-control-btn composer-selector-trigger ui-text-secondary relative flex h-10 w-10 items-center justify-center rounded-[14px]"
+      :class="{ 'ui-text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
       @click="showSkillSelector = !showSkillSelector"
       @mouseenter="openSkillSelector"
       @mouseleave="scheduleCloseSkillSelector"
@@ -28,9 +28,9 @@
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between">
-          <span class="selector-panel-title text-primary">Skills</span>
+          <span class="selector-panel-title ui-text-primary">Skills</span>
         </div>
-        <div class="selector-panel-description text-muted">
+        <div class="selector-panel-description ui-text-muted">
           Inject reusable instructions (workflows, best practices) into the next response. Skills
           are loaded from your local filesystem.
         </div>
@@ -51,7 +51,7 @@
             Clear
           </button>
         </div>
-        <div v-if="isAutoSkillMode" class="mt-2 text-xs text-accent leading-snug">
+        <div v-if="isAutoSkillMode" class="ui-text-accent mt-2 text-xs leading-snug">
           iKi will automatically pick relevant skills based on your message.
         </div>
       </div>

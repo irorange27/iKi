@@ -7,7 +7,7 @@
           v-model="message"
           type="text"
           placeholder="Type a message..."
-          class="chat-input-field w-full border-0 bg-transparent px-4 py-6 text-primary placeholder-muted focus:outline-none"
+          class="chat-input-field ui-text-primary w-full border-0 bg-transparent px-4 py-6 placeholder-muted focus:outline-none"
           @keydown.enter="handleEnter"
           @compositionstart="handleCompositionStart"
           @compositionend="handleCompositionEnd"
@@ -20,7 +20,7 @@
           <div class="composer-toolbar-left flex items-center gap-2">
             <!-- file upload -->
             <button
-              class="composer-attach-btn flex h-8 w-8 items-center justify-center text-secondary"
+              class="composer-attach-btn ui-text-secondary flex h-8 w-8 items-center justify-center"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -33,7 +33,7 @@
             </button>
             <!-- workspace choose -->
             <button
-              class="composer-icon-btn composer-selection-btn relative flex h-10 w-10 items-center justify-center rounded-[14px] text-accent"
+              class="composer-icon-btn composer-selection-btn ui-text-accent relative flex h-10 w-10 items-center justify-center rounded-[14px]"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -234,7 +234,7 @@
               </span>
             </div>
             <button
-              class="composer-icon-btn h-8 w-8 rounded-lg text-secondary flex items-center justify-center"
+              class="composer-icon-btn ui-text-secondary h-8 w-8 rounded-lg flex items-center justify-center"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -265,12 +265,12 @@
               class="composer-icon-btn speech-btn h-8 w-8 rounded-lg flex items-center justify-center"
               :class="[
                 isRecording
-                  ? 'text-danger'
+                  ? 'ui-text-danger'
                   : isTranscribing
-                    ? 'text-accent'
+                    ? 'ui-text-accent'
                     : speechEngineAvailable
-                      ? 'text-secondary'
-                      : 'text-muted speech-btn-unavailable',
+                      ? 'ui-text-secondary'
+                      : 'ui-text-muted speech-btn-unavailable',
                 isTranscribing ? 'is-transcribing' : '',
               ]"
               :disabled="!speechEngineAvailable || isLoading || isStopping || isTranscribing"
@@ -313,7 +313,7 @@
             <button
               class="composer-icon-btn send-btn h-8 w-8 rounded-lg flex items-center justify-center"
               :class="[
-                isLoading ? 'text-danger stop-btn' : 'text-accent',
+                isLoading ? 'ui-text-danger stop-btn' : 'ui-text-accent',
                 isStopping ? 'is-stopping' : '',
               ]"
               :aria-label="isLoading ? 'Stop generation' : 'Send message'"

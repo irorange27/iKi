@@ -1,9 +1,9 @@
 <template>
   <div class="relative" @mouseenter="openToolSelector" @mouseleave="scheduleCloseToolSelector">
     <button
-      class="composer-control-btn composer-selector-trigger relative flex h-10 w-10 items-center justify-center rounded-[14px] text-secondary"
+      class="composer-control-btn composer-selector-trigger ui-text-secondary relative flex h-10 w-10 items-center justify-center rounded-[14px]"
       :class="{
-        'text-accent':
+        'ui-text-accent':
           isAutoToolMode || selectedTools.length > 0 || selectedMcpServerIds.length > 0,
       }"
       @click="showToolSelector = !showToolSelector"
@@ -34,9 +34,9 @@
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between">
-          <span class="selector-panel-title text-primary">Tools</span>
+          <span class="selector-panel-title ui-text-primary">Tools</span>
         </div>
-        <div class="selector-panel-description text-muted">
+        <div class="selector-panel-description ui-text-muted">
           Allow iKi to use built-in tools for the next response. Safe MCP tools from enabled servers
           can also be considered.
         </div>
@@ -62,7 +62,7 @@
           </button>
         </div>
 
-        <div v-if="isAutoToolMode" class="mt-2 text-xs leading-snug text-accent">
+        <div v-if="isAutoToolMode" class="ui-text-accent mt-2 text-xs leading-snug">
           Auto only considers built-in tools plus safe tools from the MCP servers enabled below.
         </div>
       </div>
@@ -111,7 +111,7 @@
           <div class="selector-subsection-header">
             <button type="button" class="selector-section-toggle" @click="toggleMcpSection">
               <svg
-                class="h-4 w-4 text-secondary"
+                class="ui-text-secondary h-4 w-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -123,7 +123,7 @@
                   d="M8 7V5a2 2 0 114 0v2m4 0h1a2 2 0 012 2v2a2 2 0 01-2 2h-1m-8-6H7a2 2 0 00-2 2v2a2 2 0 002 2h1m8 0v2a2 2 0 11-4 0v-2m-4 0v2a2 2 0 104 0v-2"
                 />
               </svg>
-              <span class="text-sm font-semibold text-primary">MCP Servers</span>
+              <span class="ui-text-primary text-sm font-semibold">MCP Servers</span>
               <svg
                 class="selector-chevron h-4 w-4"
                 :class="{ expanded: isMcpSectionExpanded }"
@@ -158,7 +158,7 @@
           </div>
 
           <template v-if="isMcpSectionExpanded">
-            <div class="selector-subsection-description text-muted">
+            <div class="selector-subsection-description ui-text-muted">
               Enable MCP servers for this conversation. Manual mode exposes all tools from enabled
               servers. Auto mode only considers their safe tools.
             </div>
