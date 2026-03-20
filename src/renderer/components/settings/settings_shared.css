@@ -86,6 +86,24 @@
   border-color: var(--accent-color);
 }
 
+.config-actions {
+  display: flex;
+}
+
+.reset-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.reset-btn:hover {
+  background: var(--bg-hover);
+}
+
 .config-group input[type='range'],
 input[type='range'] {
   width: 100%;

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen app-background app-text">
+  <div class="flex h-full min-h-0 app-background app-text">
     <Sidebar
       ref="sidebarRef"
       @thread-selected="selectThread"
@@ -8,7 +8,7 @@
     />
 
     <!-- Main Content -->
-    <div class="flex flex-1 flex-col">
+    <div class="flex min-h-0 flex-1 flex-col">
       <!-- Header -->
       <div class="flex items-center justify-center p-4">
         <div class="flex items-center gap-1 text-sm text-secondary">
@@ -21,7 +21,7 @@
 
       <!-- Main Area -->
       <div
-        class="chat-main-area flex flex-1 items-center justify-center overflow-y-auto"
+        class="chat-main-area flex min-h-0 flex-1 items-center justify-center overflow-y-auto"
         ref="messagesContainer"
       >
         <WelcomeScreen v-if="showWelcome && chat.messages.length === 0" @new-chat="handleNewChat" />
