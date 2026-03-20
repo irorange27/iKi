@@ -244,4 +244,71 @@ describe('chat_context assembler', () => {
       })
     );
   });
+
+  it('reuses the shared affect and skills path when memory retrieval is unavailable', async () => {
+    resolveSkillsSystemPromptMock.mockResolvedValue({
+      skillsSystemPrompt: 'Use the writing skill.',
+      usedSkills: [
+        {
+          id: 'skill_writer',
+          name: 'Writer',
+          description: 'Drafts polished copy.',
+          source: 'user',
+        },
+      ],
+      skillMode: 'auto',
+    });
+
+    const assembler = createChatContextAssembler({
+      memory: {
+        retrieveRelevantMemory: vi.fn(() => null),
+        getAffectContextMessage: vi.fn(() => 'Current affect: focused and calm.'),
+      } as never,
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_4',
+      messages: [
+        { role: 'assistant', content: 'Existing assistant context.' },
+        { role: 'user', content: 'Please draft a concise reply.' },
+      ],
+      skillMode: 'auto',
+    });
+
+    expect(result.messages.slice(0, 2)).toEqual([
+      {
+        role: 'system',
+        content: 'Current affect: focused and calm.',
+      },
+      {
+        role: 'system',
+        content: 'Use the writing skill.',
+      },
+    ]);
+    expect(result.usedSkills).toEqual([
+      expect.objectContaining({
+        id: 'skill_writer',
+        name: 'Writer',
+      }),
+    ]);
+    expect(result.skillMode).toBe('auto');
+    expect(result.report.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'memory',
+          status: 'dropped',
+          reason: 'no relevant memory retrieved',
+        }),
+        expect.objectContaining({
+          kind: 'affect',
+          status: 'included',
+        }),
+        expect.objectContaining({
+          kind: 'skills',
+          status: 'included',
+          sourceCount: 1,
+        }),
+      ])
+    );
+  });
 });
