@@ -1,5 +1,3 @@
-import { tool, jsonSchema } from 'ai';
-
 import { getAppConfig, setAppConfig } from '../config';
 import {
   AgentConfigSchema,
@@ -14,6 +12,12 @@ import {
   type AgentHookContext,
   type PartialAgentConfig,
 } from './types';
+import {
+  buildAiToolSet,
+  getDefaultAgentConfig,
+  loadAgentConfig,
+  validateAgentConfig,
+} from './ai_sdk_runtime';
 
 import { ToolRegistry } from '../tools/base';
 import { logger } from '../logger';
@@ -42,34 +46,7 @@ export abstract class BaseAgent {
    * Uses Zod for validation and type safety
    */
   protected loadConfig(overrideConfig?: PartialAgentConfig): AgentConfig {
-    try {
-      const appConfig = getAppConfig();
-      const agentConfig = appConfig?.agent || this.getDefaultConfig();
-
-      // Merge configs
-      const mergedConfig = {
-        ...agentConfig,
-        ...overrideConfig,
-      };
-
-      // Validate and parse with Zod (using defaults for missing fields)
-      return AgentConfigSchema.parse(mergedConfig);
-    } catch (error) {
-      logger.error('Failed to load agent config:', error);
-      try {
-        // Try to parse with defaults
-        const defaultConfig = this.getDefaultConfig();
-        const mergedConfig = {
-          ...defaultConfig,
-          ...overrideConfig,
-        };
-        return AgentConfigSchema.parse(mergedConfig);
-      } catch (parseError) {
-        logger.error('Failed to parse agent config:', parseError);
-        // Return default config as fallback
-        return this.getDefaultConfig();
-      }
-    }
+    return loadAgentConfig(overrideConfig);
   }
 
   /**
@@ -78,17 +55,7 @@ export abstract class BaseAgent {
    * Uses Zod schema defaults for type safety
    */
   protected getDefaultConfig(): AgentConfig {
-    return AgentConfigSchema.parse({
-      enabled: false,
-      systemPrompt: 'You are a helpful AI assistant. You are capable, autonomous, and helpful.',
-      providerType: '',
-      model: '',
-      temperature: 0.1,
-      maxTokens: 2000,
-      maxIterations: 10,
-      enableTools: false,
-      enableMemory: false,
-    });
+    return getDefaultAgentConfig();
   }
 
   /**
@@ -259,87 +226,7 @@ export abstract class BaseAgent {
    * Can be overridden by subclasses for custom tool building logic
    */
   protected buildTools(): Record<string, unknown> | undefined {
-    if (!this.config.enableTools || this.toolRegistry.getAll().length === 0) {
-      logger.debug('buildTools: tools disabled or no tools registered');
-      return undefined;
-    }
-
-    const tools: Record<string, unknown> = {};
-    const registeredTools = this.toolRegistry.getAll();
-    logger.debug(`buildTools: building tools for ${registeredTools.length} registered tools`);
-
-    for (const t of registeredTools) {
-      // AI SDK v6 uses inputSchema instead of parameters
-      // Prefer using paramSchema (Zod schema) directly - AI SDK v6 can handle Zod schemas natively
-      if (t.paramSchema) {
-        try {
-          // Use inputSchema with Zod schema - this is the correct way for AI SDK v6
-          const toolDef = tool({
-            description: t.description,
-            inputSchema: t.paramSchema,
-            ...(t.outputSchema ? { outputSchema: jsonSchema(t.outputSchema as object) } : {}),
-            needsApproval: t.needsApproval,
-            execute: t.handler,
-          } as unknown as Parameters<typeof tool>[0]);
-
-          const toolDefWithExecute = toolDef as unknown as { execute?: unknown };
-
-          logger.debug(`Tool ${t.name} built successfully with Zod schema`, {
-            toolName: t.name,
-            hasExecute: typeof toolDefWithExecute.execute === 'function',
-          });
-
-          tools[t.name] = toolDef;
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
-          const stack = error instanceof Error ? error.stack : undefined;
-          logger.error(`Failed to build tool ${t.name} with Zod schema`, {
-            error: message,
-            stack,
-          });
-          throw error;
-        }
-      } else if (t.parameters) {
-        // Fallback: use pre-defined JSON Schema
-        // Note: AI SDK v6's inputSchema expects Zod schema, but we can try passing JSON Schema directly
-        try {
-          // For JSON Schema, we need to wrap it with jsonSchema() and use inputSchema
-          const toolDef = tool({
-            description: t.description,
-            inputSchema: jsonSchema(t.parameters as object),
-            ...(t.outputSchema ? { outputSchema: jsonSchema(t.outputSchema as object) } : {}),
-            needsApproval: t.needsApproval,
-            execute: t.handler,
-          } as unknown as Parameters<typeof tool>[0]);
-
-          const toolDefWithExecute = toolDef as unknown as { execute?: unknown };
-
-          logger.debug(`Tool ${t.name} built successfully with JSON Schema`, {
-            toolName: t.name,
-            hasExecute: typeof toolDefWithExecute.execute === 'function',
-          });
-
-          tools[t.name] = toolDef;
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
-          const stack = error instanceof Error ? error.stack : undefined;
-          logger.error(`Failed to build tool ${t.name} with JSON Schema`, {
-            error: message,
-            stack,
-            parameters: JSON.stringify(t.parameters, null, 2),
-          });
-          throw error;
-        }
-      } else {
-        logger.warn(`Tool ${t.name} has neither parameters nor paramSchema`);
-      }
-    }
-
-    logger.debug(`buildTools: built ${Object.keys(tools).length} tools`, {
-      toolNames: Object.keys(tools),
-    });
-
-    return Object.keys(tools).length > 0 ? tools : undefined;
+    return buildAiToolSet(this.config, this.toolRegistry.getAll());
   }
 
   /**
@@ -412,23 +299,7 @@ export abstract class BaseAgent {
    * Can be overridden by subclasses for custom validation
    */
   protected validateConfig(): void {
-    // Validate config structure with Zod
-    try {
-      AgentConfigSchema.parse(this.config);
-    } catch (error) {
-      throw new Error(
-        `Invalid agent configuration: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
-
-    // Business logic validation
-    if (!this.config.enabled) {
-      throw new Error('Agent is not enabled');
-    }
-
-    if (!this.config.providerType || !this.config.model) {
-      throw new Error('Agent provider and model must be configured');
-    }
+    validateAgentConfig(this.config);
   }
 
   /**

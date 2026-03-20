@@ -7,9 +7,14 @@ import {
   type ToolSet,
 } from 'ai';
 
-import { createModel, getFullSystemPrompt } from './provider/llm/factory';
+import { createModel } from './provider/llm/factory';
 import { BaseAgent } from './agent/base';
 import type { AgentResult, ToolApprovalRequest as AgentToolApprovalRequest } from './agent/types';
+import {
+  buildPromptContext,
+  collectApprovalRequests,
+  collectToolCalls,
+} from './agent/ai_sdk_runtime';
 import { logger } from './logger';
 import { normalizeLanguageModelUsage } from './provider/llm/usage';
 
@@ -36,20 +41,6 @@ export class SimpleAgent extends BaseAgent {
     );
   }
 
-  private static isApprovalRequestPart(value: unknown): value is {
-    type: 'tool-approval-request';
-    approvalId: string;
-    toolCall: { toolName: string; toolCallId?: string; input?: unknown };
-  } {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      (value as { type?: unknown }).type === 'tool-approval-request' &&
-      typeof (value as { approvalId?: unknown }).approvalId === 'string' &&
-      typeof (value as { toolCall?: { toolName?: unknown } }).toolCall?.toolName === 'string'
-    );
-  }
-
   private static normalizeToolArgs(input: unknown): Record<string, unknown> {
     if (input === undefined) return {};
     if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
@@ -58,40 +49,8 @@ export class SimpleAgent extends BaseAgent {
     return { value: input };
   }
 
-  private static mapApprovalRequest(part: {
-    approvalId: string;
-    toolCall: { toolName: string; toolCallId?: string; input?: unknown };
-  }): AgentToolApprovalRequest {
-    return {
-      approvalId: part.approvalId,
-      toolCallId: part.toolCall.toolCallId,
-      toolCall: {
-        toolName: part.toolCall.toolName,
-        args: SimpleAgent.normalizeToolArgs(part.toolCall.input),
-      },
-    };
-  }
-
   private buildPromptContext(): { systemPrompt: string; messages: ModelMessage[] } {
-    const builtMessages = this.buildMessages() as ModelMessage[];
-    const systemParts: string[] = [getFullSystemPrompt(this.config.providerType)];
-
-    for (const message of builtMessages) {
-      if (
-        message &&
-        typeof message === 'object' &&
-        message.role === 'system' &&
-        typeof message.content === 'string' &&
-        message.content.trim()
-      ) {
-        systemParts.push(message.content.trim());
-      }
-    }
-
-    return {
-      systemPrompt: systemParts.join('\n\n'),
-      messages: builtMessages.filter(message => message?.role !== 'system'),
-    };
+    return buildPromptContext(this.config, this.buildMessages() as ModelMessage[]);
   }
 
   private static extractAssistantText(content: unknown): string {
@@ -249,12 +208,7 @@ export class SimpleAgent extends BaseAgent {
       });
 
       // Check for tool approval requests in the result content
-      const toolApprovalRequests: AgentToolApprovalRequest[] = [];
-      for (const part of result.content) {
-        if (SimpleAgent.isApprovalRequestPart(part)) {
-          toolApprovalRequests.push(SimpleAgent.mapApprovalRequest(part));
-        }
-      }
+      const toolApprovalRequests = collectApprovalRequests(result.content);
 
       this.syncMessagesFromResponse(result.response.messages);
 
@@ -272,25 +226,11 @@ export class SimpleAgent extends BaseAgent {
         };
       }
 
-      // Collect all tool calls from steps
-      const allToolCalls: Array<{ toolName: string; input?: unknown; args?: unknown }> = [];
-      if (result.steps) {
-        for (const step of result.steps) {
-          if (step.toolCalls) {
-            allToolCalls.push(...step.toolCalls.filter(SimpleAgent.isToolCall));
-          }
-        }
-      }
+      const allToolCalls = collectToolCalls(result.steps, result.toolCalls);
 
       const agentResult: AgentResult = {
         response: result.text,
-        toolCalls:
-          allToolCalls.length > 0
-            ? allToolCalls.map(tc => ({
-                toolName: tc.toolName,
-                args: SimpleAgent.normalizeToolArgs(tc.input),
-              }))
-            : undefined,
+        toolCalls: allToolCalls,
         usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
         iterations: result.steps ? result.steps.length : 1,
       };
@@ -405,12 +345,7 @@ export class SimpleAgent extends BaseAgent {
       const contentParts = await result.content;
       const totalUsage = normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage));
 
-      const approvalRequests: AgentToolApprovalRequest[] = [];
-      for (const part of contentParts) {
-        if (SimpleAgent.isApprovalRequestPart(part)) {
-          approvalRequests.push(SimpleAgent.mapApprovalRequest(part));
-        }
-      }
+      const approvalRequests = collectApprovalRequests(contentParts);
 
       this.syncMessagesFromResponse(responseObj.messages);
 
