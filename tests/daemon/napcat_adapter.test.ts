@@ -420,4 +420,42 @@ describe('createNapCatReverseBridge', () => {
       Promise<void>);
     await outboundPromise;
   });
+
+  it('rejects proactive bridge sends when NapCat returns a failed action response', async () => {
+    getAppConfigMock.mockReturnValue(
+      createConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+      })
+    );
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    const { bridge, ws } = connectBridge(chatService);
+
+    const outboundPromise = bridge.sendThreadMessage({
+      thread: {
+        id: 'napcat_10001_private_20002',
+        title: 'QQ User 20002',
+        metadata: JSON.stringify({
+          source: 'napcat',
+          message_type: 'private',
+          user_id: '20002',
+        }),
+      } as never,
+      text: 'scheduled hello',
+    });
+
+    await Promise.resolve();
+
+    const outbound = JSON.parse(ws.sent[0]);
+    await (ws.emitMessage(
+      JSON.stringify({ status: 'failed', retcode: 100, echo: outbound.echo })
+    ) as Promise<void>);
+
+    await expect(outboundPromise).rejects.toThrow(
+      'NapCat action send_private_msg failed (status=failed, retcode=100)'
+    );
+  });
 });

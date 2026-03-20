@@ -76,6 +76,7 @@ type NapCatThreadTarget = {
 };
 
 type PendingAction = {
+  action: string;
   resolve: (value: NapCatActionResponse) => void;
   reject: (reason?: unknown) => void;
   timeout: NodeJS.Timeout;
@@ -85,6 +86,33 @@ const DEFAULT_SYSTEM_PROMPT = [
   'You are iKi, responding to QQ messages via NapCat.',
   'Keep replies concise and helpful.',
 ].join(' ');
+
+const isSuccessfulActionResponse = (payload: NapCatActionResponse): boolean => {
+  if (typeof payload.retcode === 'number') {
+    if (payload.retcode !== 0) return false;
+  } else {
+    return false;
+  }
+
+  if (typeof payload.status === 'string' && payload.status.trim()) {
+    return payload.status.trim().toLowerCase() === 'ok';
+  }
+
+  return true;
+};
+
+const buildActionFailureMessage = (action: string, payload: NapCatActionResponse): string => {
+  const status =
+    typeof payload.status === 'string' && payload.status.trim()
+      ? payload.status.trim()
+      : 'unknown';
+  const retcode =
+    typeof payload.retcode === 'number' && Number.isFinite(payload.retcode)
+      ? String(payload.retcode)
+      : 'unknown';
+
+  return `NapCat action ${action} failed (status=${status}, retcode=${retcode})`;
+};
 
 const parseToken = (req: http.IncomingMessage): string | null => {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
@@ -346,7 +374,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
         reject(new Error('NapCat action timeout'));
       }, 10000);
 
-      pendingActions.set(echo, { resolve, reject, timeout });
+      pendingActions.set(echo, { action, resolve, reject, timeout });
       ws.send(JSON.stringify({ action, params, echo }));
     });
 
@@ -409,7 +437,13 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     if (!pending) return true;
     clearTimeout(pending.timeout);
     pendingActions.delete(echo);
-    pending.resolve(payload);
+
+    if (isSuccessfulActionResponse(payload)) {
+      pending.resolve(payload);
+      return true;
+    }
+
+    pending.reject(new Error(buildActionFailureMessage(pending.action, payload)));
     return true;
   };
 
