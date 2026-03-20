@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+type RequestEvent = 'error' | 'timeout';
+type HealthResponseEvent = 'data' | 'end';
+type HealthResponseMock = {
+  statusCode: number;
+  setEncoding: ReturnType<typeof vi.fn>;
+  on: (event: HealthResponseEvent, handler: (...args: unknown[]) => void) => HealthResponseMock;
+};
+
 const {
   requestMock,
   spawnMock,
@@ -58,10 +66,8 @@ vi.mock('../../../../src/core/daemon_logs', () => ({
   },
 }));
 
-type RequestEvent = 'error' | 'timeout';
-
 const mockHealthOffline = () => {
-  requestMock.mockImplementation((_options: unknown, _callback: unknown) => {
+  requestMock.mockImplementation(() => {
     const listeners: Partial<Record<RequestEvent, (...args: unknown[]) => void>> = {};
     const req = {
       on: vi.fn((event: RequestEvent, handler: (...args: unknown[]) => void) => {
@@ -78,15 +84,16 @@ const mockHealthOffline = () => {
 };
 
 const mockHealthOnline = (host = '0.0.0.0', port = 6127) => {
-  requestMock.mockImplementation((_options: unknown, callback: (response: any) => void) => {
+  requestMock.mockImplementation(
+    (_options: unknown, callback: (response: HealthResponseMock) => void) => {
     const req = {
       on: vi.fn(() => req),
       destroy: vi.fn(),
       end: vi.fn(() => {
-        const response = {
+        const response: HealthResponseMock = {
           statusCode: 200,
           setEncoding: vi.fn(),
-          on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+          on: (event, handler) => {
             if (event === 'data') {
               handler(JSON.stringify({ status: 'ok', host, port }));
             }
@@ -94,13 +101,14 @@ const mockHealthOnline = (host = '0.0.0.0', port = 6127) => {
               handler();
             }
             return response;
-          }),
+          },
         };
         callback(response);
       }),
     };
     return req;
-  });
+    }
+  );
 };
 
 const setupDaemonServerReturn = () => {

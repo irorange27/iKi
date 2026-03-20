@@ -152,7 +152,10 @@ describe('buildAffectSystemMessage', () => {
     );
 
     expect(state).not.toBeNull();
-    const message = buildAffectSystemMessage(state!);
+    if (!state) {
+      throw new Error('Expected affect state to be present.');
+    }
+    const message = buildAffectSystemMessage(state);
     expect(message).toContain('primary=anger');
     expect(message).toContain('confidence');
   });

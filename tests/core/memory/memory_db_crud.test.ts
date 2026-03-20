@@ -10,8 +10,10 @@ vi.mock('../../../src/core/config', () => ({
 
 import { getDb } from '../../../src/core/db/database';
 import { deleteLongMemory, updateLongMemory } from '../../../src/core/db/memory';
+import type { LongMemoryEntry } from '../../../src/core/db/memory';
 
 const getDbMock = vi.mocked(getDb);
+type LongMemoryUpdate = Partial<LongMemoryEntry>;
 
 const setupDb = () => {
   const runMock = vi.fn((params?: unknown) => params ?? { changes: 1 });
@@ -35,7 +37,7 @@ describe('updateLongMemory', () => {
   it('returns null when there are no updatable fields', () => {
     const { prepareMock } = setupDb();
 
-    const result = updateLongMemory('mem_1', { id: 'mem_1' } as any);
+    const result = updateLongMemory('mem_1', { id: 'mem_1' } as LongMemoryUpdate);
 
     expect(result).toBeNull();
     expect(prepareMock).not.toHaveBeenCalled();
@@ -66,7 +68,7 @@ describe('updateLongMemory', () => {
   it('does not update embedding when summary is absent', () => {
     const { runMock } = setupDb();
 
-    updateLongMemory('mem_3', { tags: '["preference"]' } as any);
+    updateLongMemory('mem_3', { tags: '["preference"]' } as LongMemoryUpdate);
 
     const params = runMock.mock.calls[0][0] as Record<string, unknown>;
     expect(params.tags).toBe('["preference"]');

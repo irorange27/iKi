@@ -1,7 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+type IpcListener = (...args: unknown[]) => void;
+
 const { ipcHandlers, fromWebContentsMock, closeMock, setHasShadowMock } = vi.hoisted(() => ({
-  ipcHandlers: new Map<string, (...args: any[]) => void>(),
+  ipcHandlers: new Map<string, IpcListener>(),
   fromWebContentsMock: vi.fn(),
   closeMock: vi.fn(),
   setHasShadowMock: vi.fn(),
@@ -12,7 +14,7 @@ vi.mock('electron', () => ({
     fromWebContents: fromWebContentsMock,
   },
   ipcMain: {
-    on: vi.fn((channel: string, handler: (...args: any[]) => void) => {
+    on: vi.fn((channel: string, handler: IpcListener) => {
       ipcHandlers.set(channel, handler);
     }),
   },

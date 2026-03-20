@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const ipcHandlers = new Map<string, (...args: any[]) => any>();
+type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
+
+const ipcHandlers = new Map<string, IpcHandler>();
 
 const manager = {
   listServers: vi.fn(),
@@ -14,7 +16,7 @@ const manager = {
 
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: vi.fn((channel: string, handler: (...args: any[]) => any) => {
+    handle: vi.fn((channel: string, handler: IpcHandler) => {
       ipcHandlers.set(channel, handler);
     }),
   },

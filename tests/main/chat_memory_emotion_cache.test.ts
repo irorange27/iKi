@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDefaultAppConfig } from '../../src/shared/config/defaults';
+import type { ChatThread } from '../../src/shared/types/chat';
 
 vi.mock('../../src/core/config', () => ({
   getAppConfig: vi.fn(),
@@ -44,28 +46,43 @@ const getAppConfigMock = vi.mocked(getAppConfig);
 const getChatThreadMock = vi.mocked(getChatThread);
 const analyzeEmotionMock = vi.mocked(analyzeEmotionWithAgent);
 
+const createThread = (overrides: Partial<ChatThread> = {}): ChatThread => ({
+  id: 'thread_1',
+  title: 'Thread 1',
+  is_generating: false,
+  metadata: '{}',
+  created_at: '2026-03-18T00:00:00.000Z',
+  updated_at: '2026-03-18T00:00:00.000Z',
+  is_favorited: 0,
+  is_incognito: 0,
+  enable_artifacts: 0,
+  ...overrides,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
-  getAppConfigMock.mockReturnValue({
-    memory: {
-      enabled: false,
-      autoSummarize: false,
-      maxRetrievalCount: 5,
-      similarThreshold: 0.1,
-      emotion: {
-        enabled: true,
-        injectToSystemPrompt: true,
-        realtimeAnalysis: true,
-        minConfidence: 0,
-        minSampleCount: 1,
-        windowSize: 3,
-        halfLifeMinutes: 60,
-        maxAgeMinutes: 180,
-        includeNeutral: false,
-      },
+  const config = createDefaultAppConfig();
+  config.memory = {
+    ...config.memory,
+    enabled: false,
+    autoSummarize: false,
+    maxRetrievalCount: 5,
+    similarThreshold: 0.1,
+    emotion: {
+      ...config.memory.emotion,
+      enabled: true,
+      injectToSystemPrompt: true,
+      realtimeAnalysis: true,
+      minConfidence: 0,
+      minSampleCount: 1,
+      windowSize: 3,
+      halfLifeMinutes: 60,
+      maxAgeMinutes: 180,
+      includeNeutral: false,
     },
-  } as any);
-  getChatThreadMock.mockReturnValue({ is_incognito: false } as any);
+  };
+  getAppConfigMock.mockReturnValue(config);
+  getChatThreadMock.mockReturnValue(createThread({ is_incognito: 0 }));
   vi.mocked(memoryDb.extractTextFromMessageJson).mockReturnValue({
     role: 'user',
     content: 'Hello there',

@@ -1,5 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
+type HttpResponseEvent = 'data' | 'end';
+type HttpResponseMock = {
+  statusCode: number;
+  setEncoding: ReturnType<typeof vi.fn>;
+  on: (event: HttpResponseEvent, handler: (...args: unknown[]) => void) => HttpResponseMock;
+};
+
 const {
   ipcHandlers,
   getPathMock,
@@ -12,7 +20,7 @@ const {
   startDesktopDaemonMock,
   stopDesktopDaemonMock,
 } = vi.hoisted(() => ({
-  ipcHandlers: new Map<string, (...args: any[]) => any>(),
+  ipcHandlers: new Map<string, IpcHandler>(),
   getPathMock: vi.fn((name: string) => {
     if (name === 'userData') return '/tmp/iki-user-data';
     return '/tmp/unknown';
@@ -49,7 +57,7 @@ vi.mock('electron', () => ({
     getAllWindows: vi.fn(() => []),
   },
   ipcMain: {
-    handle: vi.fn((channel: string, handler: (...args: any[]) => any) => {
+    handle: vi.fn((channel: string, handler: IpcHandler) => {
       ipcHandlers.set(channel, handler);
     }),
   },
@@ -126,6 +134,39 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const installHealthResponse = (uptimeSeconds: number) => {
+  httpGetMock.mockImplementation(
+    (_options: unknown, callback: (response: HttpResponseMock) => void) => {
+      const response: HttpResponseMock = {
+        statusCode: 200,
+        setEncoding: vi.fn(),
+        on: (event, handler) => {
+          if (event === 'data') {
+            handler(
+              JSON.stringify({
+                status: 'ok',
+                host: '0.0.0.0',
+                port: 6131,
+                uptime: uptimeSeconds,
+              })
+            );
+          }
+          if (event === 'end') {
+            handler();
+          }
+          return response;
+        },
+      };
+
+      callback(response);
+      return {
+        on: vi.fn().mockReturnThis(),
+        destroy: vi.fn(),
+      };
+    }
+  );
+};
+
 describe('config IPC', () => {
   it('returns runtime info for daemon and NapCat settings', async () => {
     const handler = ipcHandlers.get('config:get-runtime-info');
@@ -149,27 +190,7 @@ describe('config IPC', () => {
   });
 
   it('returns online daemon status from the local health endpoint', async () => {
-    httpGetMock.mockImplementation((_options: unknown, callback: (response: any) => void) => {
-      const response = {
-        statusCode: 200,
-        setEncoding: vi.fn(),
-        on: vi.fn((event: string, handler: (...args: any[]) => void) => {
-          if (event === 'data') {
-            handler('{"status":"ok","host":"0.0.0.0","port":6131,"uptime":42}');
-          }
-          if (event === 'end') {
-            handler();
-          }
-          return response;
-        }),
-      };
-
-      callback(response);
-      return {
-        on: vi.fn().mockReturnThis(),
-        destroy: vi.fn(),
-      };
-    });
+    installHealthResponse(42);
 
     const handler = ipcHandlers.get('config:get-daemon-status');
     if (!handler) throw new Error('config:get-daemon-status handler not registered');
@@ -207,27 +228,7 @@ describe('config IPC', () => {
   });
 
   it('controls the desktop-managed daemon and returns updated status', async () => {
-    httpGetMock.mockImplementation((_options: unknown, callback: (response: any) => void) => {
-      const response = {
-        statusCode: 200,
-        setEncoding: vi.fn(),
-        on: vi.fn((event: string, handler: (...args: any[]) => void) => {
-          if (event === 'data') {
-            handler('{"status":"ok","host":"0.0.0.0","port":6131,"uptime":99}');
-          }
-          if (event === 'end') {
-            handler();
-          }
-          return response;
-        }),
-      };
-
-      callback(response);
-      return {
-        on: vi.fn().mockReturnThis(),
-        destroy: vi.fn(),
-      };
-    });
+    installHealthResponse(99);
 
     const handler = ipcHandlers.get('config:control-daemon');
     if (!handler) throw new Error('config:control-daemon handler not registered');

@@ -4,6 +4,8 @@ vi.mock('../../../src/core/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
+import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
+import type { AppConfig } from '../../../src/shared/types/config';
 import { getAppConfig } from '../../../src/core/config';
 import {
   fetchWithTimeout,
@@ -14,9 +16,15 @@ import {
 const getAppConfigMock = vi.mocked(getAppConfig);
 const ORIGINAL_ENV = { ...process.env };
 
+const mockConfig = (configure?: (config: AppConfig) => void) => {
+  const config = createDefaultAppConfig();
+  configure?.(config);
+  getAppConfigMock.mockReturnValue(config);
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  getAppConfigMock.mockReturnValue({} as any);
+  mockConfig();
   process.env = { ...ORIGINAL_ENV };
 });
 
@@ -27,18 +35,26 @@ afterEach(() => {
 
 describe('network config helpers', () => {
   it('clamps timeout to allowed range', () => {
-    getAppConfigMock.mockReturnValue({ network: { timeout: 999999 } } as any);
+    mockConfig(config => {
+      config.network.timeout = 999999;
+    });
     expect(getNetworkTimeoutMs()).toBe(60_000);
 
-    getAppConfigMock.mockReturnValue({ network: { timeout: 100 } } as any);
+    mockConfig(config => {
+      config.network.timeout = 100;
+    });
     expect(getNetworkTimeoutMs()).toBe(1_000);
   });
 
   it('clamps retry attempts to allowed range', () => {
-    getAppConfigMock.mockReturnValue({ network: { retryAttempts: 99 } } as any);
+    mockConfig(config => {
+      config.network.retryAttempts = 99;
+    });
     expect(getNetworkRetryAttempts()).toBe(10);
 
-    getAppConfigMock.mockReturnValue({ network: { retryAttempts: -3 } } as any);
+    mockConfig(config => {
+      config.network.retryAttempts = -3;
+    });
     expect(getNetworkRetryAttempts()).toBe(0);
   });
 });
@@ -99,18 +115,16 @@ describe('fetchWithTimeout', () => {
   });
 
   it('applies proxy environment variables when proxy is configured', async () => {
-    getAppConfigMock.mockReturnValue({
-      network: {
-        proxy: {
-          enable: true,
-          type: 'http',
-          host: '127.0.0.1',
-          port: 8080,
-          username: 'u',
-          password: 'p',
-        },
-      },
-    } as any);
+    mockConfig(config => {
+      config.network.proxy = {
+        enable: true,
+        type: 'http',
+        host: '127.0.0.1',
+        port: 8080,
+        username: 'u',
+        password: 'p',
+      };
+    });
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok', { status: 200 })));
 

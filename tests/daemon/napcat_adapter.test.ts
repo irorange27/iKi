@@ -107,6 +107,13 @@ const connectBridge = (chatService: ReturnType<typeof createChatServiceMock>) =>
   };
 };
 
+const expectSocket = (socket: FakeBridgeSocket | null | undefined): FakeBridgeSocket => {
+  if (!socket) {
+    throw new Error('Expected NapCat bridge socket to be available.');
+  }
+  return socket;
+};
+
 describe('createNapCatReverseBridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -217,11 +224,12 @@ describe('createNapCatReverseBridge', () => {
     chatService.send.mockResolvedValue({ success: true, text: 'hello from iki' });
 
     const { handled, ws } = connectBridge(chatService);
+    const socket = expectSocket(ws);
 
     expect(handled).toBe(true);
-    expect(ws).toBeTruthy();
+    expect(socket).toBeTruthy();
 
-    const inbound = ws!.emitMessage(
+    const inbound = socket.emitMessage(
       JSON.stringify({
         post_type: 'message',
         message_type: 'private',
@@ -250,7 +258,7 @@ describe('createNapCatReverseBridge', () => {
       })
     );
 
-    const outbound = JSON.parse(ws!.sent[0]);
+    const outbound = JSON.parse(socket.sent[0]);
     expect(outbound).toMatchObject({
       action: 'send_private_msg',
       params: {
@@ -259,7 +267,7 @@ describe('createNapCatReverseBridge', () => {
       },
     });
 
-    await (ws!.emitMessage(
+    await (socket.emitMessage(
       JSON.stringify({
         status: 'ok',
         retcode: 0,
@@ -298,7 +306,8 @@ describe('createNapCatReverseBridge', () => {
     chatService.listMessages.mockReturnValue([]);
 
     const { ws } = connectBridge(chatService);
-    await (ws!.emitMessage(
+    const socket = expectSocket(ws);
+    await (socket.emitMessage(
       JSON.stringify({
         post_type: 'message',
         message_type: 'group',
@@ -313,7 +322,7 @@ describe('createNapCatReverseBridge', () => {
     expect(chatService.createThread).not.toHaveBeenCalled();
     expect(chatService.createMessage).not.toHaveBeenCalled();
     expect(chatService.send).not.toHaveBeenCalled();
-    expect(ws!.sent).toEqual([]);
+    expect(socket.sent).toEqual([]);
   });
 
   it('uses environment fallback for model and tools when persisted values are empty', async () => {
@@ -352,7 +361,8 @@ describe('createNapCatReverseBridge', () => {
     chatService.send.mockResolvedValue({ success: true, text: 'fallback ok' });
 
     const { ws } = connectBridge(chatService);
-    const inbound = ws!.emitMessage(
+    const socket = expectSocket(ws);
+    const inbound = socket.emitMessage(
       JSON.stringify({
         post_type: 'message',
         message_type: 'private',
@@ -373,8 +383,8 @@ describe('createNapCatReverseBridge', () => {
       })
     );
 
-    const outbound = JSON.parse(ws!.sent[0]);
-    await (ws!.emitMessage(JSON.stringify({ status: 'ok', retcode: 0, echo: outbound.echo })) as
+    const outbound = JSON.parse(socket.sent[0]);
+    await (socket.emitMessage(JSON.stringify({ status: 'ok', retcode: 0, echo: outbound.echo })) as
       Promise<void>);
     await inbound;
   });

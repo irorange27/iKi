@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ProactiveTask } from '../../../src/shared/types/tasks';
 
 vi.mock('../../../src/core/db/database', () => ({
   getDb: vi.fn(),
@@ -8,6 +9,7 @@ import { getDb } from '../../../src/core/db/database';
 import { addProactiveTask, updateProactiveTask } from '../../../src/core/db/tasks';
 
 const getDbMock = vi.mocked(getDb);
+type TaskUpdate = Partial<ProactiveTask>;
 
 const setupDb = () => {
   const runMock = vi.fn((params?: unknown) => params ?? { changes: 1 });
@@ -58,7 +60,7 @@ describe('updateProactiveTask', () => {
   it('returns null when there are no update fields', () => {
     const { prepareMock } = setupDb();
 
-    const result = updateProactiveTask('task_2', { id: 'task_2' } as any);
+    const result = updateProactiveTask('task_2', { id: 'task_2' } as TaskUpdate);
 
     expect(result).toBeNull();
     expect(prepareMock).not.toHaveBeenCalled();

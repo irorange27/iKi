@@ -6,7 +6,15 @@ const onMock = vi.fn();
 const removeAllListenersMock = vi.fn();
 const sendMock = vi.fn();
 
-let exposedApi: any = null;
+type ExposedApi = {
+  tasks: {
+    create: (task: unknown) => Promise<unknown>;
+    update: (id: string, updates: unknown) => Promise<unknown>;
+  };
+  setWindowShadow: (enabled: boolean) => void;
+};
+
+let exposedApi: ExposedApi | null = null;
 
 vi.mock('electron', () => ({
   contextBridge: {

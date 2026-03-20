@@ -1,10 +1,13 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ProactiveTask } from '../../../src/shared/types/tasks';
 
-const ipcHandlers = new Map<string, (...args: any[]) => any>();
+type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
+
+const ipcHandlers = new Map<string, IpcHandler>();
 
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: vi.fn((channel: string, handler: (...args: any[]) => any) => {
+    handle: vi.fn((channel: string, handler: IpcHandler) => {
       ipcHandlers.set(channel, handler);
     }),
   },
@@ -32,6 +35,31 @@ const updateProactiveTaskMock = vi.mocked(tasksDb.updateProactiveTask);
 const deleteProactiveTaskMock = vi.mocked(tasksDb.deleteProactiveTask);
 const runProactiveTaskMock = vi.mocked(runProactiveTask);
 
+const createStoredTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
+  id: 'task_default',
+  name: 'Daily',
+  prompt: 'Summarize',
+  schedule_type: 'interval',
+  interval_minutes: 60,
+  cron_expression: null,
+  schedule_timezone: null,
+  enabled: true,
+  provider_type: 'openai',
+  model: 'gpt-4',
+  tool_mode: 'auto',
+  tools: null,
+  thread_id: null,
+  notify: true,
+  last_run_at: null,
+  next_run_at: null,
+  last_status: 'idle',
+  last_output: null,
+  last_error: null,
+  created_at: '2026-03-18T00:00:00.000Z',
+  updated_at: '2026-03-18T00:00:00.000Z',
+  ...overrides,
+});
+
 beforeAll(() => {
   registerTasksIpc();
 });
@@ -52,8 +80,8 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:create');
     if (!handler) throw new Error('tasks:create handler not registered');
 
-    const createdTask = { id: 'task_created' };
-    getProactiveTaskMock.mockReturnValue(createdTask as any);
+    const createdTask = createStoredTask({ id: 'task_created' });
+    getProactiveTaskMock.mockReturnValue(createdTask);
 
     const result = await handler(null, {
       name: '  Daily  ',
@@ -93,7 +121,7 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:create');
     if (!handler) throw new Error('tasks:create handler not registered');
 
-    getProactiveTaskMock.mockReturnValue({ id: 'task_cron' } as any);
+    getProactiveTaskMock.mockReturnValue(createStoredTask({ id: 'task_cron' }));
 
     const result = await handler(null, {
       name: 'Cron Task',
@@ -105,7 +133,10 @@ describe('tasks IPC', () => {
       schedule_timezone: 'UTC',
     });
 
-    expect(result).toEqual({ success: true, task: { id: 'task_cron' } });
+    expect(result).toEqual({
+      success: true,
+      task: expect.objectContaining({ id: 'task_cron' }),
+    });
 
     const params = addProactiveTaskMock.mock.calls[0][0] as Record<string, unknown>;
     expect(params.schedule_type).toBe('cron');
@@ -134,13 +165,12 @@ describe('tasks IPC', () => {
 
     const proxiedTask = new Proxy(
       {
-        id: 'task_proxy',
-        name: 'Daily',
+        ...createStoredTask({ id: 'task_proxy', name: 'Daily' }),
         tools: ['web', 'fetch'],
       },
       {}
     );
-    getProactiveTaskMock.mockReturnValue(proxiedTask as any);
+    getProactiveTaskMock.mockReturnValue(proxiedTask as unknown as ProactiveTask);
 
     const result = await handler(null, {
       name: 'Daily',
@@ -151,11 +181,11 @@ describe('tasks IPC', () => {
 
     expect(result).toEqual({
       success: true,
-      task: {
+      task: expect.objectContaining({
         id: 'task_proxy',
         name: 'Daily',
         tools: ['web', 'fetch'],
-      },
+      }),
     });
     expect(() => structuredClone(result)).not.toThrow();
   });
@@ -167,11 +197,13 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:update');
     if (!handler) throw new Error('tasks:update handler not registered');
 
-    getProactiveTaskMock.mockReturnValue({
-      id: 'task_1',
-      enabled: true,
-      interval_minutes: 30,
-    } as any);
+    getProactiveTaskMock.mockReturnValue(
+      createStoredTask({
+        id: 'task_1',
+        enabled: true,
+        interval_minutes: 30,
+      })
+    );
 
     await handler(null, 'task_1', { interval_minutes: 90, tools: 'web' });
 
@@ -186,7 +218,7 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:create');
     if (!handler) throw new Error('tasks:create handler not registered');
 
-    getProactiveTaskMock.mockReturnValue({ id: 'task_disabled' } as any);
+    getProactiveTaskMock.mockReturnValue(createStoredTask({ id: 'task_disabled' }));
 
     const result = await handler(null, {
       name: 'No Tools',
@@ -197,7 +229,10 @@ describe('tasks IPC', () => {
       tools: [],
     });
 
-    expect(result).toEqual({ success: true, task: { id: 'task_disabled' } });
+    expect(result).toEqual({
+      success: true,
+      task: expect.objectContaining({ id: 'task_disabled' }),
+    });
 
     const params = addProactiveTaskMock.mock.calls[0][0] as Record<string, unknown>;
     expect(params.tool_mode).toBe('disabled');
@@ -211,14 +246,16 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:update');
     if (!handler) throw new Error('tasks:update handler not registered');
 
-    getProactiveTaskMock.mockReturnValue({
-      id: 'task_cron',
-      enabled: true,
-      interval_minutes: 60,
-      schedule_type: 'cron',
-      cron_expression: '0 5 * * *',
-      schedule_timezone: 'UTC',
-    } as any);
+    getProactiveTaskMock.mockReturnValue(
+      createStoredTask({
+        id: 'task_cron',
+        enabled: true,
+        interval_minutes: 60,
+        schedule_type: 'cron',
+        cron_expression: '0 5 * * *',
+        schedule_timezone: 'UTC',
+      })
+    );
 
     await handler(null, 'task_cron', { cron_expression: '0 6 * * *' });
 
@@ -234,11 +271,13 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:update');
     if (!handler) throw new Error('tasks:update handler not registered');
 
-    getProactiveTaskMock.mockReturnValue({
-      id: 'task_2',
-      enabled: false,
-      interval_minutes: 45,
-    } as any);
+    getProactiveTaskMock.mockReturnValue(
+      createStoredTask({
+        id: 'task_2',
+        enabled: false,
+        interval_minutes: 45,
+      })
+    );
 
     await handler(null, 'task_2', { enabled: true });
 
@@ -263,7 +302,9 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:delete');
     if (!handler) throw new Error('tasks:delete handler not registered');
 
-    deleteProactiveTaskMock.mockReturnValue({ changes: 1 } as any);
+    deleteProactiveTaskMock.mockReturnValue(
+      { changes: 1 } as unknown as ReturnType<typeof tasksDb.deleteProactiveTask>
+    );
 
     const result = await handler(null, 'task_4');
 

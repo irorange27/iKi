@@ -125,6 +125,10 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
 import { McpManager } from '../../../src/core/mcp/manager';
 import type { McpServer } from '../../../src/shared/types/mcp';
 
+type TransportBuilder = {
+  buildTransport(server: McpServer): Promise<unknown>;
+};
+
 const createRemoteServer = (transport: McpServer['transport']): McpServer => ({
   id: 'server_remote',
   name: 'Remote MCP',
@@ -135,6 +139,9 @@ const createRemoteServer = (transport: McpServer['transport']): McpServer => ({
   created_at: '2026-03-19T00:00:00.000Z',
   updated_at: '2026-03-19T00:00:00.000Z',
 });
+
+const buildTransport = (manager: McpManager, server: McpServer) =>
+  (manager as unknown as TransportBuilder).buildTransport(server);
 
 describe('McpManager transport construction', () => {
   beforeEach(() => {
@@ -156,7 +163,7 @@ describe('McpManager transport construction', () => {
   it('uses redirect:error for streamable HTTP transports', async () => {
     const manager = new McpManager();
 
-    await (manager as any).buildTransport(createRemoteServer('streamable-http'));
+    await buildTransport(manager, createRemoteServer('streamable-http'));
 
     expect(streamableTransportInstances).toHaveLength(1);
     expect(streamableTransportInstances[0]?.options).toEqual({
@@ -170,7 +177,7 @@ describe('McpManager transport construction', () => {
   it('uses redirect:error and forwards headers for SSE transports', async () => {
     const manager = new McpManager();
 
-    await (manager as any).buildTransport(createRemoteServer('sse'));
+    await buildTransport(manager, createRemoteServer('sse'));
 
     expect(sseTransportInstances).toHaveLength(1);
     expect(sseTransportInstances[0]?.options).toMatchObject({
@@ -199,7 +206,7 @@ describe('McpManager transport construction', () => {
 
     const manager = new McpManager();
 
-    await expect((manager as any).buildTransport(createRemoteServer('streamable-http'))).rejects.toThrow(
+    await expect(buildTransport(manager, createRemoteServer('streamable-http'))).rejects.toThrow(
       /remote mcp servers are disabled/i
     );
   });
