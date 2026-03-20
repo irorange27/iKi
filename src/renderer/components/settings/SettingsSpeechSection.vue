@@ -501,7 +501,7 @@ const getWhisperProgressClass = (
   model: WhisperNodeModelInfo,
   stage: WhisperDownloadStage
 ): string => {
-  const classes = [stage];
+  const classes: string[] = [stage];
   if (stage === 'compiling' || (stage === 'downloading' && !hasWhisperProgress(model))) {
     classes.push('is-indeterminate');
   }

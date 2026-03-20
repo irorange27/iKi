@@ -48,11 +48,12 @@ A local agent pet for AI provider orchestration.
 - PR title must follow semantic format (CI enforced)
 - Architecture-impacting code changes should include docs/changelog updates when the repository
   keeps those artifacts in version control
-- CI quality gate runs `npm run -s ci:quality` (`eslint --ext .ts,.tsx .` + `tsc` + tests with
-  coverage)
+- CI quality gate runs `npm run -s ci:quality` (`eslint --ext .ts,.tsx,.vue .` + `tsc` +
+  `vue-tsc --noEmit` + tests with coverage)
 - Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; they
   are intentionally modest and should be ratcheted upward over time
-- Vue SFC-specific lint/type checks are not yet part of the default CI quality gate
+- Renderer component tests now run in Vitest with Vue SFC transform and `happy-dom`
+- Quick renderer-only regression pass: `npm run -s test:renderer`
 
 ## Release Flow
 

@@ -253,25 +253,37 @@ const startResize = (e: StartResizeEvent) => {
     sidebar.setWidth(newWidth);
   };
 
+  const handleMouseMove = (moveEvent: MouseEvent) => {
+    handleMove(moveEvent);
+  };
+
+  const handleTouchMove = (moveEvent: TouchEvent) => {
+    handleMove(moveEvent);
+  };
+
   const handleEnd = () => {
-    document.removeEventListener('mousemove', handleMove as EventListener);
+    document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleEnd);
-    document.removeEventListener('touchmove', handleMove as EventListener);
+    document.removeEventListener('touchmove', handleTouchMove);
     document.removeEventListener('touchend', handleEnd);
   };
 
   // 统一监听鼠标和触摸事件
-  document.addEventListener('mousemove', handleMove as EventListener);
+  document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('mouseup', handleEnd);
-  document.addEventListener('touchmove', handleMove as EventListener, {
+  document.addEventListener('touchmove', handleTouchMove, {
     passive: false,
   });
   document.addEventListener('touchend', handleEnd);
 };
 
 const openSettings = () => {
-  // @ts-ignore
-  window.electronAPI?.openSettings();
+  const chromeWindow = window as Window & {
+    electronAPI?: {
+      openSettings?: () => void;
+    };
+  };
+  chromeWindow.electronAPI?.openSettings?.();
 };
 </script>
 

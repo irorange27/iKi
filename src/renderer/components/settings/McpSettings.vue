@@ -92,7 +92,7 @@
           <div class="card-subtitle">{{ servers.length }} configured</div>
         </div>
         <div class="card-actions">
-          <button class="secondary-btn" @click="loadServers" :disabled="serversLoading">
+          <button class="secondary-btn" @click="() => loadServers()" :disabled="serversLoading">
             <RefreshCw :size="14" :class="{ 'animate-spin': serversLoading }" />
             {{ serversLoading ? 'Loading' : 'Refresh' }}
           </button>

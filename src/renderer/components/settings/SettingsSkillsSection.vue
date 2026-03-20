@@ -7,11 +7,17 @@
           <div class="skills-subtitle">{{ filteredSkills.length }} skill(s) available</div>
         </div>
         <div class="skills-toolbar-actions">
-          <button class="secondary-btn skills-btn" @click="refreshSkills" :disabled="skillsLoading">
+          <button
+            class="secondary-btn skills-btn"
+            @click="() => refreshSkills()"
+            :disabled="skillsLoading"
+          >
             <RefreshCw :size="14" :class="{ 'animate-spin': skillsLoading }" />
             {{ skillsLoading ? 'Refreshing...' : 'Refresh' }}
           </button>
-          <button class="secondary-btn skills-btn" @click="openSkillsFolder">Open Folder</button>
+          <button class="secondary-btn skills-btn" @click="() => openSkillsFolder()">
+            Open Folder
+          </button>
         </div>
       </div>
 

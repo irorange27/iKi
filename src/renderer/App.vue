@@ -14,18 +14,30 @@ import { useAppConfig } from './composables/useAppConfig';
 import { createSidebar } from './composables/useSidebar';
 import { useTheme } from './composables/useTheme';
 
-const sidebar = createSidebar();
+type WindowChromeApi = Window & {
+  electronAPI?: {
+    closeWindow?: () => void;
+  };
+};
+
+createSidebar();
 useTheme();
 const currentHash = ref(window.location.hash);
 const updateHash = () => {
   currentHash.value = window.location.hash;
 };
-window.addEventListener('hashchange', updateHash);
+
+onMounted(() => {
+  window.addEventListener('hashchange', updateHash);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('hashchange', updateHash);
+});
 
 const isSettings = computed(() => currentHash.value.includes('settings'));
 const closeSettings = () => {
-  // @ts-ignore
-  window.electronAPI?.closeWindow();
+  (window as WindowChromeApi).electronAPI?.closeWindow?.();
 };
 
 useAppConfig();

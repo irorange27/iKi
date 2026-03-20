@@ -127,21 +127,21 @@ const selectedSkillIds = computed(() => props.skillIds);
 
 const normalizeSkills = (input: unknown): SkillSummary[] => {
   if (!Array.isArray(input)) return [];
-  return input
-    .map((skill: unknown) => {
-      if (!skill || typeof skill !== 'object') return null;
-      const { id, name, description, source, path } = skill as SkillSummary;
-      if (typeof id !== 'string' || id.trim().length === 0) return null;
-      if (typeof name !== 'string' || name.trim().length === 0) return null;
-      return {
-        id,
-        name,
-        description: typeof description === 'string' ? description : '',
-        source: source === 'codex' || source === 'user' ? source : 'user',
-        path: typeof path === 'string' ? path : undefined,
-      };
-    })
-    .filter((skill): skill is SkillSummary => Boolean(skill));
+  const normalized: SkillSummary[] = [];
+  for (const skill of input) {
+    if (!skill || typeof skill !== 'object') continue;
+    const { id, name, description, source, path } = skill as SkillSummary;
+    if (typeof id !== 'string' || id.trim().length === 0) continue;
+    if (typeof name !== 'string' || name.trim().length === 0) continue;
+    normalized.push({
+      id,
+      name,
+      description: typeof description === 'string' ? description : '',
+      source: source === 'codex' || source === 'user' ? source : 'user',
+      path: typeof path === 'string' ? path : undefined,
+    });
+  }
+  return normalized;
 };
 
 const loadAvailableSkills = async () => {

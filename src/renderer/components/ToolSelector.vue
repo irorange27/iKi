@@ -294,27 +294,27 @@ const normalizeStringArray = (input: unknown): string[] => {
 const normalizeTools = (input: unknown): ToolSummary[] => {
   if (!Array.isArray(input)) return [];
 
-  return input
-    .map((tool: unknown) => {
-      if (!tool || typeof tool !== 'object') return null;
-      const name = (tool as { name?: unknown }).name;
-      const description = (tool as { description?: unknown }).description;
-      const displayName = (tool as { displayName?: unknown }).displayName;
-      const autoAllowed = (tool as { autoAllowed?: unknown }).autoAllowed;
-      const source = (tool as { source?: unknown }).source;
+  const normalized: ToolSummary[] = [];
+  for (const tool of input) {
+    if (!tool || typeof tool !== 'object') continue;
+    const name = (tool as { name?: unknown }).name;
+    const description = (tool as { description?: unknown }).description;
+    const displayName = (tool as { displayName?: unknown }).displayName;
+    const autoAllowed = (tool as { autoAllowed?: unknown }).autoAllowed;
+    const source = (tool as { source?: unknown }).source;
 
-      if (typeof name !== 'string' || name.trim().length === 0) return null;
+    if (typeof name !== 'string' || name.trim().length === 0) continue;
 
-      return {
-        name: name.trim(),
-        description: typeof description === 'string' ? description : '',
-        displayName: typeof displayName === 'string' ? displayName : undefined,
-        autoAllowed: autoAllowed === true,
-        source:
-          source && typeof source === 'object' ? (source as ToolSummary['source']) : undefined,
-      };
-    })
-    .filter((tool): tool is ToolSummary => Boolean(tool));
+    normalized.push({
+      name: name.trim(),
+      description: typeof description === 'string' ? description : '',
+      displayName: typeof displayName === 'string' ? displayName : undefined,
+      autoAllowed: autoAllowed === true,
+      source:
+        source && typeof source === 'object' ? (source as ToolSummary['source']) : undefined,
+    });
+  }
+  return normalized;
 };
 
 const normalizeMcpServers = (input: unknown): McpServerSummary[] => {
