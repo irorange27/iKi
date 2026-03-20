@@ -26,11 +26,7 @@ import type { ApprovalRecoveryContext } from './chat_approval_types';
 import { createChatConversationRunner } from './chat_conversation_runner';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
-import type {
-  ActiveStreamState,
-  ChatTransportMessage,
-  ChatWebContents,
-} from './chat_types';
+import type { ActiveStreamState, ChatTransportMessage, ChatWebContents } from './chat_types';
 import {
   createUiChunkEmitter,
   getPromptFromMessage,
@@ -336,8 +332,10 @@ export const createChatStreaming = (deps: {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        runner.setModelMessages(history);
-        const result = await runner.generate(prompt);
+        const result = await runner.generate({
+          history,
+          prompt,
+        });
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -504,10 +502,10 @@ export const createChatStreaming = (deps: {
         throw new Error('No user prompt provided for streaming');
       }
 
-      runner.setModelMessages(history);
       const streamResult = await toolLoopRunner.stream({
         runner,
         webContents,
+        history,
         prompt,
         approvalContext,
         shouldCancel: () => streamState.cancelled,

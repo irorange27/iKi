@@ -1,4 +1,4 @@
-import type { ToolApprovalResponse } from 'ai';
+import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import type { ConversationRunner } from '../../../core/agent';
 import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
@@ -18,6 +18,7 @@ type PendingApprovalSession = {
   runner: ConversationRunner;
   webContents: ChatWebContents;
   recoveryContext?: ApprovalRecoveryContext;
+  history?: ModelMessage[];
   pendingApprovalIds: Set<string>;
   collectedApprovalResponses: Map<string, ToolApprovalResponse>;
 };
@@ -211,8 +212,6 @@ export const createChatApproval = (deps: {
       if (tool) runner.registerTool(tool);
     }
 
-    runner.setModelMessages(inputMessages);
-
     const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
     const collectedApprovalResponses = new Map<string, ToolApprovalResponse>();
     for (const record of activeApprovals) {
@@ -234,6 +233,7 @@ export const createChatApproval = (deps: {
       sessionId: approvalSession.session_id,
       runner,
       webContents,
+      history: inputMessages,
       recoveryContext: {
         sessionId: approvalSession.session_id,
         threadId: approvalSession.thread_id,
@@ -343,6 +343,7 @@ export const createChatApproval = (deps: {
       const streamResult = await toolLoopRunner.stream({
         runner: session.runner,
         webContents: session.webContents,
+        history: session.history,
         prompt: '',
         approvalResponses: Array.from(session.collectedApprovalResponses.values()),
         approvalContext: nextApprovalContext,

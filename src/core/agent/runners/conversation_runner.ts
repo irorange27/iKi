@@ -13,14 +13,20 @@ export type ConversationRunnerStreamOptions = {
   abortSignal?: AbortSignal;
 };
 
+export type ConversationRunnerRequest = {
+  prompt: string;
+  history?: ModelMessage[];
+};
+
+export type ConversationRunnerGenerateRequest = ConversationRunnerRequest;
+
+export type ConversationRunnerStreamRequest = ConversationRunnerRequest &
+  ConversationRunnerStreamOptions;
+
 export interface ConversationRunner {
   registerTool(tool: AgentTool): void;
-  setModelMessages(messages: ModelMessage[]): void;
-  generate(prompt: string): Promise<AgentResult>;
-  stream(
-    prompt: string,
-    options?: ConversationRunnerStreamOptions
-  ): AsyncGenerator<string, AgentResult, unknown>;
+  generate(request: ConversationRunnerGenerateRequest): Promise<AgentResult>;
+  stream(request: ConversationRunnerStreamRequest): AsyncGenerator<string, AgentResult, unknown>;
 }
 
 export type ConversationRunnerFactory = (config?: PartialAgentConfig) => ConversationRunner;

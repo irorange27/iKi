@@ -16,6 +16,7 @@ beforeEach(() => {
 describe('SimpleConversationRunner', () => {
   it('creates a SimpleAgent with the provided config and delegates methods', async () => {
     const registerTool = vi.fn();
+    const reset = vi.fn();
     const setMessages = vi.fn();
     const generate = vi.fn().mockResolvedValue({ response: 'done', iterations: 1 });
     const stream = vi.fn().mockReturnValue(
@@ -25,16 +26,15 @@ describe('SimpleConversationRunner', () => {
       })()
     );
 
-    SimpleAgentMock.mockImplementation(
-      function MockSimpleAgent() {
-        return {
-          registerTool,
-          setMessages,
-          generate,
-          stream,
-        } as unknown as InstanceType<typeof SimpleAgent>;
-      } as unknown as (...args: unknown[]) => InstanceType<typeof SimpleAgent>
-    );
+    SimpleAgentMock.mockImplementation(function MockSimpleAgent() {
+      return {
+        registerTool,
+        reset,
+        setMessages,
+        generate,
+        stream,
+      } as unknown as InstanceType<typeof SimpleAgent>;
+    } as unknown as (...args: unknown[]) => InstanceType<typeof SimpleAgent>);
 
     const runner = createSimpleConversationRunner({
       enabled: true,
@@ -53,9 +53,13 @@ describe('SimpleConversationRunner', () => {
     const messages = [{ role: 'system' as const, content: 'hello' }];
 
     runner.registerTool(tool);
-    runner.setModelMessages(messages);
-    await expect(runner.generate('prompt')).resolves.toEqual({ response: 'done', iterations: 1 });
-    const generator = runner.stream('prompt', {
+    await expect(runner.generate({ history: messages, prompt: 'prompt' })).resolves.toEqual({
+      response: 'done',
+      iterations: 1,
+    });
+    const generator = runner.stream({
+      history: messages,
+      prompt: 'prompt',
       approvalResponses: [],
       onStreamPart: vi.fn(),
       abortSignal: new AbortController().signal,
@@ -70,6 +74,7 @@ describe('SimpleConversationRunner', () => {
       enableTools: true,
     });
     expect(registerTool).toHaveBeenCalledWith(tool);
+    expect(reset).toHaveBeenCalledTimes(2);
     expect(setMessages).toHaveBeenCalledWith([
       expect.objectContaining({
         role: 'system',

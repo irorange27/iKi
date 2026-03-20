@@ -3,7 +3,11 @@ import type { ModelMessage } from 'ai';
 import { SimpleAgent } from '../../iki_simple_agent';
 import { convertModelMessagesToAgentMessages } from '../model_messages';
 import type { AgentResult, AgentTool, PartialAgentConfig } from '../types';
-import type { ConversationRunner, ConversationRunnerStreamOptions } from './conversation_runner';
+import type {
+  ConversationRunner,
+  ConversationRunnerGenerateRequest,
+  ConversationRunnerStreamRequest,
+} from './conversation_runner';
 
 export class SimpleConversationRunner implements ConversationRunner {
   private readonly agent: SimpleAgent;
@@ -16,23 +20,27 @@ export class SimpleConversationRunner implements ConversationRunner {
     this.agent.registerTool(tool);
   }
 
-  setModelMessages(messages: ModelMessage[]): void {
-    this.agent.setMessages(convertModelMessagesToAgentMessages(messages));
+  private loadHistory(messages?: ModelMessage[]): void {
+    if (messages === undefined) return;
+
+    this.agent.reset();
+    if (messages.length > 0) {
+      this.agent.setMessages(convertModelMessagesToAgentMessages(messages));
+    }
   }
 
-  generate(prompt: string): Promise<AgentResult> {
-    return this.agent.generate(prompt);
+  generate(request: ConversationRunnerGenerateRequest): Promise<AgentResult> {
+    this.loadHistory(request.history);
+    return this.agent.generate(request.prompt);
   }
 
-  stream(
-    prompt: string,
-    options: ConversationRunnerStreamOptions = {}
-  ): AsyncGenerator<string, AgentResult, unknown> {
+  stream(request: ConversationRunnerStreamRequest): AsyncGenerator<string, AgentResult, unknown> {
+    this.loadHistory(request.history);
     return this.agent.stream(
-      prompt,
-      options.approvalResponses,
-      options.onStreamPart,
-      options.abortSignal
+      request.prompt,
+      request.approvalResponses,
+      request.onStreamPart,
+      request.abortSignal
     );
   }
 }

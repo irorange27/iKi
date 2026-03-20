@@ -15,7 +15,6 @@ const createConversationRunner = (stream: AsyncGenerator<string, AgentResult, un
   ({
     generate: vi.fn(),
     registerTool: vi.fn(),
-    setMessages: vi.fn(),
     stream: vi.fn().mockReturnValue(stream),
   }) as unknown as ConversationRunner;
 
@@ -56,6 +55,7 @@ describe('tool loop runner', () => {
     const result = await runner.stream({
       runner: conversationRunner,
       webContents,
+      history: [{ role: 'system', content: 'history' }],
       prompt: 'hi',
       uiChunkEmitter,
     });
@@ -98,6 +98,7 @@ describe('tool loop runner', () => {
     const result = await runner.stream({
       runner: conversationRunner,
       webContents,
+      history: [{ role: 'system', content: 'history' }],
       prompt: 'go',
       uiChunkEmitter,
     });
@@ -125,6 +126,7 @@ describe('tool loop runner', () => {
     const result = await runner.stream({
       runner: conversationRunner,
       webContents,
+      history: [{ role: 'system', content: 'history' }],
       prompt: 'hi',
       uiChunkEmitter,
       shouldCancel: () => {
@@ -140,5 +142,12 @@ describe('tool loop runner', () => {
     expect(uiChunkEmitter.abort).toHaveBeenCalledTimes(1);
     expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
     expect(registerApprovalBatch).not.toHaveBeenCalled();
+    expect(conversationRunner.stream).toHaveBeenCalledWith({
+      history: [{ role: 'system', content: 'history' }],
+      prompt: 'hi',
+      approvalResponses: undefined,
+      onStreamPart: undefined,
+      abortSignal: undefined,
+    });
   });
 });

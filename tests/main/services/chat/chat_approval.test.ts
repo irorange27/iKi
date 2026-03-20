@@ -145,7 +145,6 @@ describe('createChatApproval', () => {
 
     const runner = {
       registerTool: vi.fn(),
-      setModelMessages: vi.fn(),
     };
     createChatConversationRunnerMock.mockReturnValue(runner as never);
     defaultToolRegistryGetMock.mockReturnValue({
@@ -233,12 +232,6 @@ describe('createChatApproval', () => {
       maxIterations: 5,
     });
     expect(runner.registerTool).toHaveBeenCalledTimes(1);
-    expect(runner.setModelMessages).toHaveBeenCalledWith([
-      expect.objectContaining({
-        role: 'user',
-        parts: [{ type: 'text', text: 'hello' }],
-      }),
-    ]);
     expect(answerChatToolApprovalMock).toHaveBeenCalledWith(
       'approval_1',
       'approved',
@@ -249,6 +242,12 @@ describe('createChatApproval', () => {
       expect.objectContaining({
         runner,
         prompt: '',
+        history: [
+          expect.objectContaining({
+            role: 'user',
+            parts: [{ type: 'text', text: 'hello' }],
+          }),
+        ],
         approvalResponses: [
           expect.objectContaining({
             approvalId: 'approval_1',

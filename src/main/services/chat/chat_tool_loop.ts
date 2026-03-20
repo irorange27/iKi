@@ -1,4 +1,4 @@
-import type { ToolApprovalResponse } from 'ai';
+import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import type { ConversationRunner, AgentResult, ToolApprovalRequest } from '../../../core/agent';
 import { getErrorMessage } from '../../utils/errors';
@@ -17,6 +17,7 @@ export type RegisterApprovalBatch = (
 export type ToolLoopStreamParams = {
   runner: ConversationRunner;
   webContents: ChatWebContents;
+  history?: ModelMessage[];
   prompt: string;
   approvalResponses?: ToolApprovalResponse[];
   shouldCancel?: () => boolean;
@@ -49,7 +50,9 @@ export const createToolLoopRunner = (deps: {
 const streamToolLoop = async (
   params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch }
 ) => {
-  const generator = params.runner.stream(params.prompt, {
+  const generator = params.runner.stream({
+    history: params.history,
+    prompt: params.prompt,
     approvalResponses: params.approvalResponses,
     onStreamPart: params.onToolEvent,
     abortSignal: params.abortSignal,

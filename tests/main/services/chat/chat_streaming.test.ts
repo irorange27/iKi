@@ -235,7 +235,6 @@ beforeEach(() => {
 
   const defaultRunner = {
     registerTool: vi.fn(),
-    setModelMessages: vi.fn(),
     generate: vi.fn().mockResolvedValue({ response: 'tool result', iterations: 1 }),
   };
   createChatConversationRunnerMock.mockReturnValue(defaultRunner);
@@ -356,7 +355,6 @@ describe('createChatStreaming', () => {
 
     const runner = {
       registerTool: vi.fn(),
-      setModelMessages: vi.fn(),
       generate: vi.fn().mockResolvedValue({ response: 'tool path result', iterations: 1 }),
     };
     createChatConversationRunnerMock.mockReturnValue(runner);
@@ -374,8 +372,10 @@ describe('createChatStreaming', () => {
     expect(createChatConversationRunnerMock).toHaveBeenCalledTimes(1);
     expect(runner.registerTool).toHaveBeenCalledTimes(1);
     expect(assembleContextMock).toHaveBeenCalledTimes(1);
-    expect(runner.setModelMessages).toHaveBeenCalledWith([{ role: 'system', content: 'history' }]);
-    expect(runner.generate).toHaveBeenCalledWith('use tool');
+    expect(runner.generate).toHaveBeenCalledWith({
+      history: [{ role: 'system', content: 'history' }],
+      prompt: 'use tool',
+    });
     expect(generateChatWithUsageMock).not.toHaveBeenCalled();
     expect(recordUsageEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -397,7 +397,6 @@ describe('createChatStreaming', () => {
 
     const runner = {
       registerTool: vi.fn(),
-      setModelMessages: vi.fn(),
     };
     createChatConversationRunnerMock.mockReturnValue(runner);
 
@@ -451,6 +450,13 @@ describe('createChatStreaming', () => {
           threadId: 'thread_3',
           enabledTools: ['web'],
         }),
+      })
+    );
+    expect(toolLoopStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runner,
+        history: [{ role: 'system', content: 'history' }],
+        prompt: 'stream tool',
       })
     );
     expect(uiChunkEmitter.emitToolEvent).toHaveBeenCalledTimes(1);

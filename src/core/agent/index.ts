@@ -20,7 +20,10 @@ export type {
 export type {
   ConversationRunner,
   ConversationRunnerFactory,
+  ConversationRunnerGenerateRequest,
+  ConversationRunnerRequest,
   ConversationRunnerStreamEvent,
+  ConversationRunnerStreamRequest,
   ConversationRunnerStreamOptions,
 } from './runners/conversation_runner';
 
