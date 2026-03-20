@@ -21,16 +21,6 @@ export const AgentConfigSchema = z.object({
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
-// Agent Message Schema
-export const AgentMessageSchema = z.object({
-  role: z.enum(['user', 'assistant', 'system', 'tool']),
-  content: z.string(),
-  timestamp: z.string().optional(),
-  metadata: z.record(z.string(), z.any()).optional(),
-});
-
-export type AgentMessage = z.infer<typeof AgentMessageSchema>;
-
 // Agent Tool Schema
 // Note: handler function type and paramSchema are defined separately due to Zod limitations
 export const AgentToolSchema = z.object({
@@ -58,15 +48,6 @@ export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> &
   handler: (args: unknown) => Promise<unknown>;
   paramSchema?: z.ZodTypeAny;
 };
-
-// Agent State Schema
-export const AgentStateSchema = z.object({
-  messages: z.array(AgentMessageSchema),
-  iteration: z.number().int().nonnegative(),
-  history: z.array(z.string()),
-});
-
-export type AgentState = z.infer<typeof AgentStateSchema>;
 
 // Tool Call Result Schema
 export const ToolCallSchema = z.object({
@@ -112,19 +93,6 @@ export const AgentResultSchema = z.object({
 });
 
 export type AgentResult = z.infer<typeof AgentResultSchema>;
-
-// Agent Hook Context Schema
-export const AgentHookContextSchema = z.object({
-  agent: z.any(), // BaseAgent instance
-  prompt: z.string(),
-  iteration: z.number().int().nonnegative(),
-  state: AgentStateSchema,
-});
-
-export type AgentHookContext = z.infer<typeof AgentHookContextSchema>;
-
-// Agent Hook Type
-export type AgentHook = (context: AgentHookContext) => Promise<void> | void;
 
 // Partial Agent Config Schema (for updates)
 export const PartialAgentConfigSchema = AgentConfigSchema.partial();
