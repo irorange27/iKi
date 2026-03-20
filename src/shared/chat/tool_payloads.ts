@@ -1,18 +1,26 @@
 import { z } from 'zod';
 
 import {
+  DeleteTodoListInputSchemaUi,
+  DeleteTodoListOutputSchema,
   DeleteFileInputSchemaUi,
   DeleteFileOutputSchema,
   FetchToolInputSchemaUi,
   FetchToolOutputSchema,
+  ListTodoListsInputSchemaUi,
+  ListTodoListsOutputSchema,
   ListDirInputSchemaUi,
   ListDirOutputSchema,
+  ReadTodoListInputSchemaUi,
+  ReadTodoListOutputSchema,
   ReadFileInputSchemaUi,
   ReadFileOutputSchema,
   ShellToolInputSchemaUi,
   ShellToolOutputSchema,
   WebToolInputSchemaUi,
   WebToolOutputSchema,
+  WriteTodoListInputSchemaUi,
+  WriteTodoListOutputSchema,
   WriteFileInputSchemaUi,
   WriteFileOutputSchema,
 } from '../../core/tools/schemas';
@@ -26,6 +34,10 @@ export type ReadFileToolInput = z.infer<typeof ReadFileInputSchemaUi>;
 export type WriteFileToolInput = z.infer<typeof WriteFileInputSchemaUi>;
 export type ListDirToolInput = z.infer<typeof ListDirInputSchemaUi>;
 export type DeleteFileToolInput = z.infer<typeof DeleteFileInputSchemaUi>;
+export type ListTodoListsToolInput = z.infer<typeof ListTodoListsInputSchemaUi>;
+export type ReadTodoListToolInput = z.infer<typeof ReadTodoListInputSchemaUi>;
+export type WriteTodoListToolInput = z.infer<typeof WriteTodoListInputSchemaUi>;
+export type DeleteTodoListToolInput = z.infer<typeof DeleteTodoListInputSchemaUi>;
 
 export type WebToolOutput = z.infer<typeof WebToolOutputSchema>;
 export type FetchToolOutput = z.infer<typeof FetchToolOutputSchema>;
@@ -34,8 +46,23 @@ export type ReadFileToolOutput = z.infer<typeof ReadFileOutputSchema>;
 export type WriteFileToolOutput = z.infer<typeof WriteFileOutputSchema>;
 export type ListDirToolOutput = z.infer<typeof ListDirOutputSchema>;
 export type DeleteFileToolOutput = z.infer<typeof DeleteFileOutputSchema>;
+export type ListTodoListsToolOutput = z.infer<typeof ListTodoListsOutputSchema>;
+export type ReadTodoListToolOutput = z.infer<typeof ReadTodoListOutputSchema>;
+export type WriteTodoListToolOutput = z.infer<typeof WriteTodoListOutputSchema>;
+export type DeleteTodoListToolOutput = z.infer<typeof DeleteTodoListOutputSchema>;
 
-type ToolKind = 'web' | 'fetch' | 'shell' | 'read_file' | 'write_file' | 'list_dir' | 'delete_file';
+type ToolKind =
+  | 'web'
+  | 'fetch'
+  | 'shell'
+  | 'read_file'
+  | 'write_file'
+  | 'list_dir'
+  | 'delete_file'
+  | 'list_todo_lists'
+  | 'read_todo_list'
+  | 'write_todo_list'
+  | 'delete_todo_list';
 
 export type ParsedToolInput =
   | { kind: 'web'; input: WebToolInput }
@@ -45,6 +72,10 @@ export type ParsedToolInput =
   | { kind: 'write_file'; input: WriteFileToolInput }
   | { kind: 'list_dir'; input: ListDirToolInput }
   | { kind: 'delete_file'; input: DeleteFileToolInput }
+  | { kind: 'list_todo_lists'; input: ListTodoListsToolInput }
+  | { kind: 'read_todo_list'; input: ReadTodoListToolInput }
+  | { kind: 'write_todo_list'; input: WriteTodoListToolInput }
+  | { kind: 'delete_todo_list'; input: DeleteTodoListToolInput }
   | { kind: 'unknown'; input: unknown };
 
 export type ParsedToolOutput =
@@ -55,6 +86,10 @@ export type ParsedToolOutput =
   | { kind: 'write_file'; output: WriteFileToolOutput }
   | { kind: 'list_dir'; output: ListDirToolOutput }
   | { kind: 'delete_file'; output: DeleteFileToolOutput }
+  | { kind: 'list_todo_lists'; output: ListTodoListsToolOutput }
+  | { kind: 'read_todo_list'; output: ReadTodoListToolOutput }
+  | { kind: 'write_todo_list'; output: WriteTodoListToolOutput }
+  | { kind: 'delete_todo_list'; output: DeleteTodoListToolOutput }
   | { kind: 'unknown'; output: unknown };
 
 const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny }> = {
@@ -65,6 +100,10 @@ const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny
   write_file: { input: WriteFileInputSchemaUi, output: WriteFileOutputSchema },
   list_dir: { input: ListDirInputSchemaUi, output: ListDirOutputSchema },
   delete_file: { input: DeleteFileInputSchemaUi, output: DeleteFileOutputSchema },
+  list_todo_lists: { input: ListTodoListsInputSchemaUi, output: ListTodoListsOutputSchema },
+  read_todo_list: { input: ReadTodoListInputSchemaUi, output: ReadTodoListOutputSchema },
+  write_todo_list: { input: WriteTodoListInputSchemaUi, output: WriteTodoListOutputSchema },
+  delete_todo_list: { input: DeleteTodoListInputSchemaUi, output: DeleteTodoListOutputSchema },
 };
 
 const TOOL_ALIASES: Record<string, ToolKind> = {

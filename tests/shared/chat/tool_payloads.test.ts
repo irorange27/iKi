@@ -16,6 +16,18 @@ describe('parseToolInput', () => {
     const parsed = parseToolInput('fetch', 'not json');
     expect(parsed).toEqual({ kind: 'unknown', input: 'not json' });
   });
+
+  it('parses todo tool payloads from JSON', () => {
+    const parsed = parseToolInput(
+      'write_todo_list',
+      '{"title":"Today","items":[{"content":"Ship feature","completed":false}]}'
+    );
+
+    expect(parsed.kind).toBe('write_todo_list');
+    if (parsed.kind !== 'write_todo_list') throw new Error('Expected todo tool payload');
+    expect(parsed.input.title).toBe('Today');
+    expect(parsed.input.items?.[0]?.content).toBe('Ship feature');
+  });
 });
 
 describe('parseToolOutput', () => {
@@ -30,5 +42,17 @@ describe('parseToolOutput', () => {
   it('returns unknown for unsupported tools', () => {
     const parsed = parseToolOutput('nope', { ok: true });
     expect(parsed).toEqual({ kind: 'unknown', output: { ok: true } });
+  });
+
+  it('parses todo tool outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'read_todo_list',
+      '{"list":{"id":"todo_1","title":"Today","items":[{"content":"Ship feature","status":"pending"}]}}'
+    );
+
+    expect(parsed.kind).toBe('read_todo_list');
+    if (parsed.kind !== 'read_todo_list') throw new Error('Expected read_todo_list payload');
+    expect(parsed.output.list?.title).toBe('Today');
+    expect(parsed.output.list?.items?.[0]?.status).toBe('pending');
   });
 });

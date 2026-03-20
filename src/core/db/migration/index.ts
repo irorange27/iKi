@@ -14,6 +14,7 @@ import { migration as migration011ChatToolApprovals } from './011_add_chat_tool_
 import { migration as migration012ChatUsage } from './012_add_chat_usage_table';
 import { migration as migration013ThreadContext } from './013_add_chat_thread_context_table';
 import { migration as migration014ProactiveTaskToolMode } from './014_add_proactive_task_tool_mode';
+import { migration as migration015TodoLists } from './015_add_todo_lists_table';
 
 // Register all migrations here
 const migrations = [
@@ -32,6 +33,7 @@ const migrations = [
   migration012ChatUsage,
   migration013ThreadContext,
   migration014ProactiveTaskToolMode,
+  migration015TodoLists,
   // Add more migrations here as needed
 ];
 

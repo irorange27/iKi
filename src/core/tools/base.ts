@@ -46,6 +46,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   abstract needsApproval?: ApprovalPolicy;
   abstract description: string;
   abstract paramSchema: P;
+  displayName?: string;
   outputSchema?: Record<string, unknown>;
 
   /**
@@ -94,7 +95,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       paramSchema: this.paramSchema,
       needsApproval: this.needsApproval ?? false,
       autoAllowed: false,
-      displayName: this.name,
+      displayName: this.displayName ?? this.name,
       source: { kind: 'builtin' },
       handler: (args: unknown) => this.execute(args),
     };

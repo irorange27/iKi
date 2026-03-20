@@ -38,7 +38,13 @@ const normalizeMcpServerIds = (serverIds: unknown[]): string[] => {
   return resolved;
 };
 
-const AUTO_BUILTIN_TOOL_ALLOWLIST = new Set<string>(['web', 'fetch']);
+const AUTO_BUILTIN_TOOL_ALLOWLIST = new Set<string>([
+  'web',
+  'fetch',
+  'list_todo_lists',
+  'read_todo_list',
+  'write_todo_list',
+]);
 
 const isMcpToolFromAllowedServer = (
   tool: Pick<ToolMetadata, 'source'>,

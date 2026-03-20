@@ -7,6 +7,8 @@ export const MIN_FETCH_MAX_CHARS = 500;
 export const MAX_FETCH_MAX_CHARS = 80000;
 export const DEFAULT_SHELL_TIMEOUT_MS = 30000;
 export const DEFAULT_FILE_ENCODING = 'utf-8';
+export const DEFAULT_TODO_LIST_LIMIT = 20;
+export const MAX_TODO_LIST_LIMIT = 100;
 
 const toolCallDescriptionField = z
   .string()
@@ -50,6 +52,17 @@ const listDirInputFields = {
 const deleteFileInputFields = {
   path: z.string().describe('Absolute path or workspace-relative path to the file to delete'),
 };
+
+const todoListLookupInputFields = {
+  id: z.string().describe('Todo list id'),
+  title: z.string().describe('Todo list title'),
+};
+
+const todoListItemInputSchema = z.object({
+  content: z.string().min(1).describe('Todo item text'),
+  notes: z.string().describe('Optional notes for the todo item').optional(),
+  completed: z.boolean().describe('Whether the item is already completed').optional(),
+});
 
 export const WebToolInputSchema = z.object({
   query: webInputFields.query,
@@ -144,12 +157,145 @@ export const DeleteFileInputSchema = z.object({
   description: toolCallDescriptionField,
 });
 
+export const ListTodoListsInputSchema = z.object({
+  query: z.string().trim().describe('Optional search text for matching todo lists').optional(),
+  limit: z.number().int().describe('Maximum number of todo lists to return').optional().default(
+    DEFAULT_TODO_LIST_LIMIT
+  ),
+  description: toolCallDescriptionField,
+});
+
+export const ListTodoListsInputSchemaUi = z
+  .object({
+    query: z.string().optional(),
+    limit: z.number().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const ReadTodoListInputSchema = z
+  .object({
+    id: todoListLookupInputFields.id.optional(),
+    title: todoListLookupInputFields.title.optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
+    if (!hasId && !hasTitle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or title is required',
+      });
+    }
+  });
+
+export const ReadTodoListInputSchemaUi = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const WriteTodoListInputSchema = z
+  .object({
+    id: todoListLookupInputFields.id.optional(),
+    title: todoListLookupInputFields.title.optional(),
+    summary: z.string().describe('Optional short summary of the todo list').optional(),
+    items: z
+      .array(todoListItemInputSchema)
+      .describe('Todo items to store in order')
+      .optional()
+      .default([]),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
+    if (!hasId && !hasTitle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['title'],
+        message: 'Either id or title is required',
+      });
+    }
+  });
+
+export const WriteTodoListInputSchemaUi = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    summary: z.string().optional(),
+    items: z.array(todoListItemInputSchema).optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const DeleteTodoListInputSchema = z
+  .object({
+    id: todoListLookupInputFields.id.optional(),
+    title: todoListLookupInputFields.title.optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
+    if (!hasId && !hasTitle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or title is required',
+      });
+    }
+  });
+
+export const DeleteTodoListInputSchemaUi = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
 export const DeleteFileInputSchemaUi = z
   .object({
     path: deleteFileInputFields.path.optional(),
     description: toolCallDescriptionField,
   })
   .passthrough();
+
+const TodoItemOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    list_id: z.string().optional(),
+    content: z.string().optional(),
+    notes: z.string().nullable().optional(),
+    status: z.enum(['pending', 'completed']).optional(),
+    sort_order: z.number().optional(),
+    completed_at: z.string().nullable().optional(),
+    created_at: z.string().optional(),
+    updated_at: z.string().optional(),
+  })
+  .passthrough();
+
+const TodoListSummaryOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    summary: z.string().nullable().optional(),
+    item_count: z.number().optional(),
+    completed_count: z.number().optional(),
+    pending_count: z.number().optional(),
+    created_at: z.string().optional(),
+    updated_at: z.string().optional(),
+  })
+  .passthrough();
+
+const TodoListOutputSchema = TodoListSummaryOutputSchema.extend({
+  items: z.array(TodoItemOutputSchema).optional(),
+}).passthrough();
 
 export const WebToolOutputSchema = z
   .object({
@@ -224,5 +370,33 @@ export const DeleteFileOutputSchema = z
   .object({
     path: z.string().optional(),
     deleted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const ListTodoListsOutputSchema = z
+  .object({
+    lists: z.array(TodoListSummaryOutputSchema).optional(),
+    resultCount: z.number().optional(),
+  })
+  .passthrough();
+
+export const ReadTodoListOutputSchema = z
+  .object({
+    list: TodoListOutputSchema.optional(),
+  })
+  .passthrough();
+
+export const WriteTodoListOutputSchema = z
+  .object({
+    action: z.enum(['created', 'updated']).optional(),
+    list: TodoListOutputSchema.optional(),
+  })
+  .passthrough();
+
+export const DeleteTodoListOutputSchema = z
+  .object({
+    deleted: z.boolean().optional(),
+    listId: z.string().nullable().optional(),
+    title: z.string().nullable().optional(),
   })
   .passthrough();

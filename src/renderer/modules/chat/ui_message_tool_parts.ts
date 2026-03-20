@@ -5,6 +5,7 @@ import {
   FilePenLine,
   FileText,
   Folder,
+  ListTodo,
   Search,
   Terminal,
   Trash2,
@@ -217,6 +218,10 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   write_file: FilePenLine,
   list_dir: Folder,
   delete_file: Trash2,
+  list_todo_lists: ListTodo,
+  read_todo_list: ListTodo,
+  write_todo_list: ListTodo,
+  delete_todo_list: Trash2,
 };
 
 export const getToolIconComponent = (part: unknown): Component => {
@@ -285,6 +290,26 @@ export const getToolTitle = (part: unknown): string => {
       if (typeof input.path === 'string' && input.path.trim()) {
         return getPathBasename(input.path);
       }
+    }
+
+    if (
+      toolKey === 'read_todo_list' ||
+      toolKey === 'write_todo_list' ||
+      toolKey === 'delete_todo_list'
+    ) {
+      if (typeof input.title === 'string' && input.title.trim()) {
+        return normalizeSingleLineText(input.title);
+      }
+      if (typeof input.id === 'string' && input.id.trim()) {
+        return normalizeSingleLineText(input.id);
+      }
+    }
+
+    if (toolKey === 'list_todo_lists') {
+      if (typeof input.query === 'string' && input.query.trim()) {
+        return normalizeSingleLineText(input.query);
+      }
+      return 'Todo lists';
     }
   }
 
@@ -376,6 +401,38 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
         title: 'Path',
         value: input.path.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
+        isPrimary: true,
+      };
+    }
+
+    if (toolKey === 'list_todo_lists') {
+      const query = typeof input.query === 'string' ? input.query.trim() : '';
+      const meta: string[] = [];
+      if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
+        meta.push(`limit: ${Math.trunc(input.limit)}`);
+      }
+
+      return {
+        title: 'Query',
+        value: query || 'All todo lists',
+        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
+        isPrimary: true,
+      };
+    }
+
+    if (
+      (toolKey === 'read_todo_list' ||
+        toolKey === 'write_todo_list' ||
+        toolKey === 'delete_todo_list') &&
+      ((typeof input.title === 'string' && input.title.trim()) ||
+        (typeof input.id === 'string' && input.id.trim()))
+    ) {
+      return {
+        title: 'Todo List',
+        value:
+          (typeof input.title === 'string' && input.title.trim()) ||
+          (typeof input.id === 'string' && input.id.trim()) ||
+          '',
         isPrimary: true,
       };
     }

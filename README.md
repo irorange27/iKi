@@ -15,6 +15,9 @@ A local agent pet for AI provider orchestration.
 - Structured context assembly with rolling thread summaries, bounded memory / skill context, and
   visible context reports per assistant turn.
 
+- Persistent ToDoList tools so iKi can create, read, and maintain local structured checklists
+  instead of scattering todos across chat text or ad hoc files.
+
 ## Getting Started
 
 1. Clone the repository:

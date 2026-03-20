@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DeleteTodoListInputSchema,
   DeleteFileInputSchema,
   FetchToolInputSchema,
+  ListTodoListsInputSchema,
   ListDirInputSchema,
+  ReadTodoListInputSchema,
   ReadFileInputSchema,
   ShellToolInputSchema,
   WebToolInputSchema,
+  WriteTodoListInputSchema,
   WriteFileInputSchema,
 } from '../../../src/core/tools/schemas';
 
@@ -61,5 +65,34 @@ describe('tool input schemas', () => {
         description: 'Remove temporary artifact file.',
       }).description
     ).toBe('Remove temporary artifact file.');
+
+    expect(
+      ListTodoListsInputSchema.parse({
+        query: 'today',
+        description: 'Find the right persistent checklist.',
+      }).description
+    ).toBe('Find the right persistent checklist.');
+
+    expect(
+      ReadTodoListInputSchema.parse({
+        title: 'Today',
+        description: 'Inspect the existing todo list before editing it.',
+      }).description
+    ).toBe('Inspect the existing todo list before editing it.');
+
+    expect(
+      WriteTodoListInputSchema.parse({
+        title: 'Today',
+        items: [{ content: 'Ship feature' }],
+        description: 'Persist the new checklist for later use.',
+      }).description
+    ).toBe('Persist the new checklist for later use.');
+
+    expect(
+      DeleteTodoListInputSchema.parse({
+        title: 'Old List',
+        description: 'Remove a stale checklist the user no longer wants.',
+      }).description
+    ).toBe('Remove a stale checklist the user no longer wants.');
   });
 });

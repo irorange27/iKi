@@ -3,7 +3,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createTool, defaultToolRegistry } from '../../../../src/core/tools';
 import { resolveToolNames } from '../../../../src/main/services/chat/chat_tools';
 
-const TEST_TOOL_NAMES = ['web', 'fetch', 'mcp_alpha_safe', 'mcp_beta_unsafe', 'manual_only'];
+const TEST_TOOL_NAMES = [
+  'web',
+  'fetch',
+  'mcp_alpha_safe',
+  'mcp_beta_unsafe',
+  'manual_only',
+  'list_todo_lists',
+  'read_todo_list',
+  'write_todo_list',
+];
 
 const registerTool = (options: {
   name: string;
@@ -88,5 +97,22 @@ describe('resolveToolNames', () => {
     expect(result.mode).toBe('auto');
     expect(result.explicitTools).toEqual([]);
     expect(result.resolvedTools).toEqual(['web', 'fetch', 'mcp_alpha_safe']);
+  });
+
+  it('includes todo list tools in auto mode for normal chat turns', async () => {
+    registerTool({ name: 'list_todo_lists', source: { kind: 'builtin' } });
+    registerTool({ name: 'read_todo_list', source: { kind: 'builtin' } });
+    registerTool({ name: 'write_todo_list', source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual([
+      'list_todo_lists',
+      'read_todo_list',
+      'write_todo_list',
+    ]);
   });
 });
