@@ -20,7 +20,7 @@
           <div class="composer-toolbar-left flex items-center gap-2">
             <!-- file upload -->
             <button
-              class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
+              class="composer-attach-btn flex h-8 w-8 items-center justify-center text-secondary"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -33,7 +33,7 @@
             </button>
             <!-- workspace choose -->
             <button
-              class="relative h-8 w-8 rounded-lg text-accent flex items-center justify-center icon-btn"
+              class="composer-icon-btn composer-selection-btn relative flex h-10 w-10 items-center justify-center rounded-[14px] text-accent"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -43,11 +43,7 @@
                   d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                 />
               </svg>
-              <span
-                class="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#4a9eff] text-[9px] text-white"
-              >
-                1
-              </span>
+              <span class="selector-badge">1</span>
             </button>
             <!-- skill choose -->
             <SkillSelector v-model:skill-ids="selectedSkillIds" v-model:mode="skillMode" />
@@ -59,7 +55,7 @@
             />
             <div ref="modelSelectorRef" class="relative">
               <button
-                class="model-selector-trigger icon-btn"
+                class="model-selector-trigger"
                 :class="{ 'model-selector-trigger-open': showModelSelector }"
                 @click="toggleModelSelector"
               >
@@ -204,6 +200,9 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <div class="composer-toolbar-right flex items-center gap-2">
             <div
               v-if="contextUsage"
               class="composer-context-indicator"
@@ -234,11 +233,8 @@
                 {{ contextUsage.percentLabel || contextUsage.tokenLabel }}
               </span>
             </div>
-          </div>
-
-          <div class="composer-toolbar-right flex items-center gap-2">
             <button
-              class="h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
+              class="composer-icon-btn h-8 w-8 rounded-lg text-secondary flex items-center justify-center"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -266,7 +262,7 @@
             </div>
 
             <button
-              class="h-8 w-8 rounded-lg flex items-center justify-center icon-btn speech-btn"
+              class="composer-icon-btn speech-btn h-8 w-8 rounded-lg flex items-center justify-center"
               :class="[
                 isRecording
                   ? 'text-danger'
@@ -315,7 +311,7 @@
               {{ speechStatusLabel }}
             </span>
             <button
-              class="send-btn h-8 w-8 rounded-lg flex items-center justify-center icon-btn"
+              class="composer-icon-btn send-btn h-8 w-8 rounded-lg flex items-center justify-center"
               :class="[
                 isLoading ? 'text-danger stop-btn' : 'text-accent',
                 isStopping ? 'is-stopping' : '',
@@ -940,18 +936,19 @@ onUnmounted(() => {
   background: var(--chat-composer-toolbar-background);
 }
 
-.composer-toolbar-left,
+.composer-toolbar-left {
+  gap: 8px;
+  min-width: 0;
+}
+
 .composer-toolbar-right {
-  gap: 10px;
+  gap: 14px;
 }
 
 .composer-context-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 12px;
+  gap: 6px;
   color: var(--text-muted);
   user-select: none;
   white-space: nowrap;
@@ -969,10 +966,6 @@ onUnmounted(() => {
   letter-spacing: 0.01em;
 }
 
-.text-primary {
-  color: var(--text-primary);
-}
-
 .placeholder-muted::placeholder {
   color: var(--text-muted);
 }
@@ -985,43 +978,60 @@ button {
   transition: all 0.2s;
 }
 
-.icon-btn {
-  border: 1px solid transparent;
+.composer-attach-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.composer-attach-btn:hover {
+  color: var(--text-primary);
+}
+
+.composer-icon-btn {
+  border: 1px solid var(--chat-composer-control-border-color);
   background: var(--chat-composer-control-background);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+.composer-selection-btn {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
 .model-selector-trigger {
   display: inline-flex;
-  max-width: min(220px, calc(100vw - 168px));
+  max-width: min(220px, calc(100vw - 192px));
+  height: 40px;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px 5px 6px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 0 2px 0 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-secondary);
 }
 
+.model-selector-trigger:hover {
+  color: var(--text-primary);
+}
+
 .model-selector-trigger-open {
-  border-color: color-mix(in srgb, var(--accent-color) 34%, var(--border-color));
-  background: color-mix(
-    in srgb,
-    rgba(var(--accent-rgb, 74, 158, 255), 0.18) 70%,
-    var(--chat-composer-control-background)
-  );
   color: var(--text-primary);
 }
 
 .model-selector-trigger-icon {
   display: inline-flex;
-  height: 20px;
-  width: 20px;
+  height: 18px;
+  width: 18px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 8px;
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.12);
-  color: var(--text-primary);
+  border-radius: 0;
+  background: transparent;
+  color: currentColor;
 }
 
 .model-selector-trigger-initials {
@@ -1035,16 +1045,16 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 650;
   line-height: 1.2;
 }
 
 .model-selector-trigger-chevron {
-  height: 14px;
-  width: 14px;
+  height: 16px;
+  width: 16px;
   flex-shrink: 0;
-  opacity: 0.8;
+  opacity: 0.7;
   transition: transform 0.18s ease;
 }
 
@@ -1220,7 +1230,7 @@ button {
 .model-option-check-selected {
   border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.44);
   background: rgba(var(--accent-rgb, 74, 158, 255), 0.88);
-  color: #ffffff;
+  color: var(--accent-contrast);
 }
 
 .model-option-name {
@@ -1273,37 +1283,25 @@ button {
 }
 
 .send-btn {
-  background: rgba(96, 165, 250, 0.14);
+  background: var(--chat-composer-send-background);
   box-shadow: none;
 }
 
-.text-secondary {
-  color: var(--text-secondary);
-}
-
-.text-accent {
-  color: var(--accent-color);
-}
-
-.text-danger {
-  color: var(--danger-color);
-}
-
 .stop-btn {
-  background-color: rgba(239, 68, 68, 0.18);
+  background-color: var(--chat-composer-stop-background);
 }
 
 .stop-btn:hover:not(:disabled) {
-  background-color: rgba(239, 68, 68, 0.28);
-  border-color: rgba(239, 68, 68, 0.34);
-  color: #ffffff;
+  background-color: var(--chat-composer-stop-hover-background);
+  border-color: var(--chat-composer-stop-hover-border-color);
+  color: var(--chat-composer-action-foreground);
 }
 
 .send-btn:hover:not(:disabled) {
-  background: rgba(96, 165, 250, 0.22);
-  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.3);
-  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.14);
-  color: #ffffff;
+  background: var(--chat-composer-send-hover-background);
+  border-color: var(--chat-composer-send-hover-border-color);
+  box-shadow: var(--chat-composer-send-hover-shadow);
+  color: var(--chat-composer-action-foreground);
 }
 
 .is-stopping {
@@ -1314,15 +1312,15 @@ button {
   animation: micPulse 1.2s ease-in-out infinite;
 }
 
-.icon-btn:hover {
+.composer-icon-btn:hover {
   background-color: var(--chat-composer-control-hover-background);
   border-color: var(--chat-composer-control-hover-border-color);
   color: var(--text-primary);
 }
 
-.icon-btn:disabled {
+.composer-icon-btn:disabled {
   opacity: 0.78;
-  border-color: transparent;
+  border-color: var(--chat-composer-control-disabled-border-color);
   background: var(--chat-composer-control-disabled-background);
 }
 
@@ -1355,10 +1353,6 @@ button {
   border-radius: 999px;
   background-color: currentColor;
   transition: height 0.08s ease;
-}
-
-.bg-\[\#4a9eff\] {
-  background-color: var(--accent-color);
 }
 
 .rotate-180 {

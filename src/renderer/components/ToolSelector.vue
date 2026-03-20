@@ -1,7 +1,7 @@
 <template>
   <div class="relative" @mouseenter="openToolSelector" @mouseleave="scheduleCloseToolSelector">
     <button
-      class="relative flex h-8 w-8 items-center justify-center rounded-lg text-secondary icon-btn"
+      class="composer-control-btn composer-selector-trigger relative flex h-10 w-10 items-center justify-center rounded-[14px] text-secondary"
       :class="{
         'text-accent':
           isAutoToolMode || selectedTools.length > 0 || selectedMcpServerIds.length > 0,
@@ -608,27 +608,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.text-primary {
-  color: var(--text-primary);
-}
-
-.text-secondary {
-  color: var(--text-secondary);
-}
-
-.text-muted {
-  color: var(--text-muted);
-}
-
-.text-accent {
-  color: var(--accent-color);
-}
-
-.icon-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
-
 .selector-subsection {
   margin-top: 8px;
   border-top: 1px solid var(--border-color);
@@ -669,11 +648,11 @@ onUnmounted(() => {
 }
 
 .status-connected {
-  color: #34d399;
+  color: var(--status-success-color);
 }
 
 .status-error {
-  color: #f87171;
+  color: var(--status-danger-color);
 }
 
 .status-idle {

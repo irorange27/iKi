@@ -1,7 +1,7 @@
 <template>
   <div class="relative" @mouseenter="openSkillSelector" @mouseleave="scheduleCloseSkillSelector">
     <button
-      class="relative h-8 w-8 rounded-lg text-secondary flex items-center justify-center icon-btn"
+      class="composer-control-btn composer-selector-trigger relative flex h-10 w-10 items-center justify-center rounded-[14px] text-secondary"
       :class="{ 'text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
       @click="showSkillSelector = !showSkillSelector"
       @mouseenter="openSkillSelector"
@@ -212,27 +212,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.text-primary {
-  color: var(--text-primary);
-}
-
-.text-secondary {
-  color: var(--text-secondary);
-}
-
-.text-muted {
-  color: var(--text-muted);
-}
-
-.text-accent {
-  color: var(--accent-color);
-}
-
-.icon-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
-
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

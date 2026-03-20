@@ -49,16 +49,6 @@ const openSettings = () => {
 </script>
 
 <style scoped>
-.text-primary {
-  color: var(--text-primary);
-}
-.text-secondary {
-  color: var(--text-secondary);
-}
-.text-muted {
-  color: var(--text-muted);
-}
-
 .btn-primary {
   background-color: var(--accent-color);
 }

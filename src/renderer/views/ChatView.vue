@@ -868,22 +868,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.app-background {
-  background-color: var(--bg-primary);
-}
-
-.app-text {
-  color: var(--text-primary);
-}
-
-.text-secondary {
-  color: var(--text-secondary);
-}
-
-.text-muted {
-  color: var(--text-muted);
-}
-
 /* Messages styles */
 .messages-area {
   display: flex;

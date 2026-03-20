@@ -2,7 +2,7 @@ import { BrowserWindow, app } from 'electron';
 import path from 'node:path';
 
 import { maybeOpenDevTools } from './devtools_policy';
-import { getRendererDevServerUrl, getRendererProdHtmlPath } from './renderer';
+import { loadRendererEntry } from './renderer';
 
 export const createMainWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
@@ -23,12 +23,7 @@ export const createMainWindow = (): BrowserWindow => {
     },
   });
 
-  if (!app.isPackaged) {
-    mainWindow.loadURL(getRendererDevServerUrl());
-  } else {
-    const indexPath = getRendererProdHtmlPath();
-    mainWindow.loadFile(indexPath);
-  }
+  void loadRendererEntry(mainWindow, { isPackaged: app.isPackaged });
 
   maybeOpenDevTools(mainWindow.webContents, {
     isPackaged: app.isPackaged,

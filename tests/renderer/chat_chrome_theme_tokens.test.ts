@@ -30,26 +30,26 @@ describe('chat chrome theme tokens', () => {
     expect(chatInputSource).toMatch(/border-color:\s*var\(--chat-composer-border-color\);/);
     expect(chatInputSource).toMatch(/background:\s*var\(--chat-composer-background\);/);
     expect(chatInputSource).toMatch(/box-shadow:\s*var\(--chat-composer-shadow\);/);
-    expect(chatInputSource).toMatch(
-      /backdrop-filter:\s*var\(--chat-composer-backdrop-filter\);/
-    );
+    expect(chatInputSource).toMatch(/backdrop-filter:\s*var\(--chat-composer-backdrop-filter\);/);
     expect(chatInputSource).toMatch(
       /border-top-color:\s*var\(--chat-composer-toolbar-border-color\);/
     );
     expect(chatInputSource).toMatch(/background:\s*var\(--chat-composer-toolbar-background\);/);
-    expect(chatInputSource).toMatch(/border:\s*1px solid transparent;/);
+    expect(chatInputSource).toMatch(
+      /border:\s*1px solid var\(--chat-composer-control-border-color\);/
+    );
     expect(chatInputSource).toMatch(/background:\s*var\(--chat-composer-control-background\);/);
     expect(chatInputSource).toMatch(
       /border-color:\s*var\(--chat-composer-control-hover-border-color\);/
     );
-    expect(chatInputSource).toMatch(/border-color:\s*transparent;/);
+    expect(chatInputSource).toMatch(
+      /border-color:\s*var\(--chat-composer-control-disabled-border-color\);/
+    );
     expect(chatInputSource).toMatch(/speech-btn-unavailable/);
 
     expect(chatViewSource).toMatch(/background:\s*var\(--chat-user-bubble-background\);/);
     expect(chatViewSource).toMatch(/border:\s*1px solid var\(--chat-user-bubble-border-color\);/);
-    expect(chatViewSource).toMatch(
-      /border-radius:\s*var\(--chat-user-bubble-radius,\s*28px\);/
-    );
+    expect(chatViewSource).toMatch(/border-radius:\s*var\(--chat-user-bubble-radius,\s*28px\);/);
     expect(chatViewSource).toMatch(/color:\s*var\(--chat-user-bubble-text\);/);
   });
 });

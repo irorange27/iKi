@@ -1,20 +1,12 @@
 <template>
-  <!-- class="fixed left-0 top-0 bottom-0 w-48 m-1 pt-12 h-full 
-  min-w-48 z-50 border-2 rounded-lg border-[#fff]" -->
   <div
-    class="sidebar relative flex flex-col top-1 bottom-1 transition-all rounded-lg duration-300 ease-in-out"
+    class="sidebar-shell app-text relative flex flex-col top-1 bottom-1 transition-all rounded-lg duration-300 ease-in-out"
     :class="{
       'm-1 border-2': !sidebar.isCollapsed.value,
-      'm-0 border-0': sidebar.isCollapsed.value,
+      'm-0 border-0 sidebar-shell-collapsed': sidebar.isCollapsed.value,
     }"
     :style="{
-      width: sidebar.isCollapsed.value ? '0px' : sidebar.width.value + 'px',
-      minWidth: sidebar.isCollapsed.value ? '0px' : '200px',
-      backgroundColor: sidebar.isCollapsed.value ? 'transparent' : 'var(--bg-secondary)',
-      color: 'var(--text-primary)',
-      borderColor: 'var(--border-color)',
-      marginBottom: sidebar.isCollapsed.value ? '0px' : 'var(--chat-composer-padding, 10px)',
-      overflow: sidebar.isCollapsed.value ? 'visible' : 'hidden',
+      width: sidebar.isCollapsed.value ? '0px' : `${sidebar.width.value}px`,
     }"
   >
     <!-- Toggle Button Container -->
@@ -26,15 +18,15 @@
         'flex pl-20 p-2 max-h-12 flex-shrink-0': !sidebar.isCollapsed.value,
       }"
     >
-      <button class="tool-btn" @click="sidebar.toggle" aria-label="Toggle sidebar">
+      <button class="sidebar-tool-btn icon-btn" @click="sidebar.toggle" aria-label="Toggle sidebar">
         <PanelLeftDashed :size="18" />
       </button>
 
-      <button class="tool-btn" aria-label="Search">
+      <button class="sidebar-tool-btn icon-btn" aria-label="Search">
         <Search :size="18" />
       </button>
 
-      <button class="tool-btn" aria-label="New chat" @click="handleNewChat">
+      <button class="sidebar-tool-btn icon-btn" aria-label="New chat" @click="handleNewChat">
         <SquarePen :size="18" />
       </button>
     </div>
@@ -63,13 +55,13 @@
       </div>
       <!-- draggable handle -->
       <div
-        class="resize-handle absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-blue-400/50 transition-colors z-10 group"
+        class="resize-handle absolute top-0 right-0 z-10 h-full w-1 cursor-col-resize transition-colors group"
         @mousedown="startResize"
         @touchstart="startResize"
       >
         <!-- Visual Indicator -->
         <div
-          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-gray-400/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          class="resize-handle-indicator absolute top-1/2 left-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100"
         ></div>
       </div>
     </div>
@@ -77,7 +69,7 @@
     <!-- Sidebar Footer -->
     <div v-if="sidebar.isExpanded.value" class="relative p-3 mt-auto flex">
       <button
-        class="h-8 w-8 rounded-lg text-gray-400 hover:text-white flex items-center justify-center settings-btn"
+        class="sidebar-settings-btn icon-btn flex h-8 w-8 items-center justify-center rounded-lg text-secondary"
         @click="openSettings"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -284,40 +276,49 @@ const openSettings = () => {
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  gap: 3px;
+.sidebar-shell {
+  min-width: 210px;
+  margin-bottom: var(--chat-composer-padding, 10px);
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
 }
 
-.tool-btn {
-  width: 24px;
-  height: 24px;
+.sidebar-shell-collapsed {
+  min-width: 0;
+  margin-bottom: 0;
+  overflow: visible;
+  background-color: transparent;
+}
+
+.sidebar-tool-btn,
+.sidebar-settings-btn {
   background: none;
   border: none;
-  border-radius: 0px;
-  padding-top: 0px;
+  border-radius: 6px;
+  padding-top: 0;
   color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
   -webkit-app-region: no-drag;
 }
 
-.settings-btn:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.tool-btn:hover {
-  color: var(--text-primary);
-  background-color: var(--bg-hover);
-  border-radius: 6px;
+.sidebar-tool-btn {
+  width: 24px;
+  height: 24px;
 }
 
 .resize-handle {
   -webkit-app-region: no-drag;
+}
+
+.resize-handle-indicator {
+  background-color: var(--sidebar-resize-indicator-color);
 }
 
 .resize-handle:hover {
@@ -376,7 +377,7 @@ const openSettings = () => {
 }
 
 .chat-delete-btn:hover:not(:disabled) {
-  color: #f87171;
+  color: var(--status-danger-color);
   background-color: var(--bg-hover);
 }
 

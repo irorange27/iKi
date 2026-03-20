@@ -36,10 +36,12 @@
   --reference-inline-underline: rgba(142, 171, 196, 0.45);
   --success-color: #10b981;
   --success-rgb: 16, 185, 129;
+  --status-success-color: #34d399;
   --warning-color: #f59e0b;
   --warning-rgb: 245, 158, 11;
   --danger-color: #ef4444;
   --danger-rgb: 239, 68, 68;
+  --status-danger-color: #f87171;
   --chart-1: oklch(65.67% 0.0439 209.79);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -69,6 +71,17 @@
   --chat-composer-control-hover-border-color: rgba(152, 160, 180, 0.38);
   --chat-composer-control-disabled-background: rgba(255, 255, 255, 0.03);
   --chat-composer-control-disabled-border-color: rgba(112, 119, 138, 0.18);
+  --chat-composer-send-background: rgba(96, 165, 250, 0.14);
+  --chat-composer-send-hover-background: rgba(96, 165, 250, 0.22);
+  --chat-composer-send-hover-border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.3);
+  --chat-composer-send-hover-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.14);
+  --chat-composer-stop-background: rgba(239, 68, 68, 0.18);
+  --chat-composer-stop-hover-background: rgba(239, 68, 68, 0.28);
+  --chat-composer-stop-hover-border-color: rgba(239, 68, 68, 0.34);
+  --chat-composer-action-foreground: #ffffff;
+  --composer-workspace-badge-background: #4a9eff;
+  --composer-workspace-badge-foreground: #ffffff;
+  --sidebar-resize-indicator-color: rgba(156, 163, 175, 0.5);
   --chat-composer-backdrop-filter: blur(18px);
   --chat-composer-shadow: 0 18px 36px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   --chat-user-bubble-background: #2f3643;
@@ -145,6 +158,17 @@
   --chat-composer-control-hover-border-color: rgba(184, 198, 214, 0.98);
   --chat-composer-control-disabled-background: rgba(248, 250, 252, 0.98);
   --chat-composer-control-disabled-border-color: rgba(226, 232, 240, 0.98);
+  --chat-composer-send-background: rgba(96, 165, 250, 0.14);
+  --chat-composer-send-hover-background: rgba(96, 165, 250, 0.22);
+  --chat-composer-send-hover-border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.3);
+  --chat-composer-send-hover-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.14);
+  --chat-composer-stop-background: rgba(239, 68, 68, 0.18);
+  --chat-composer-stop-hover-background: rgba(239, 68, 68, 0.28);
+  --chat-composer-stop-hover-border-color: rgba(239, 68, 68, 0.34);
+  --chat-composer-action-foreground: #ffffff;
+  --composer-workspace-badge-background: #4a9eff;
+  --composer-workspace-badge-foreground: #ffffff;
+  --sidebar-resize-indicator-color: rgba(156, 163, 175, 0.5);
   --chat-composer-backdrop-filter: none;
   --chat-composer-shadow:
     0 0 0 1px rgba(226, 232, 240, 0.65), 0 10px 24px rgba(148, 163, 184, 0.1),

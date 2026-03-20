@@ -10,7 +10,10 @@ describe('sidebar/composer spacing alignment', () => {
     const sidebarSource = readFileSync(SIDEBAR_VUE_PATH, 'utf8');
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
 
-    expect(sidebarSource).toMatch(/marginBottom:\s*sidebar\.isCollapsed\.value\s*\?\s*'0px'\s*:\s*'var\(--chat-composer-padding,\s*10px\)'/);
+    expect(sidebarSource).toMatch(
+      /\.sidebar-shell\s*\{[\s\S]*margin-bottom:\s*var\(--chat-composer-padding,\s*10px\);/
+    );
+    expect(sidebarSource).toMatch(/\.sidebar-shell-collapsed\s*\{[\s\S]*margin-bottom:\s*0;/);
     expect(chatInputSource).toMatch(/padding:\s*var\(--chat-composer-padding,\s*10px\);/);
   });
 });

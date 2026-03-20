@@ -979,30 +979,6 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
-.provider-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.icon-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 1.2em;
-  padding: 4px;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.icon-btn:hover {
-  background: var(--bg-hover);
-}
-
-.icon-btn.delete:hover {
-  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
-}
-
 /* Modal Styles */
 .modal-overlay {
   position: fixed;

@@ -2,7 +2,7 @@ import { BrowserWindow, app } from 'electron';
 import path from 'node:path';
 
 import { maybeOpenDevTools } from './devtools_policy';
-import { getRendererDevServerUrl, getRendererProdHtmlPath } from './renderer';
+import { loadRendererEntry } from './renderer';
 
 export const createSettingsWindow = (): BrowserWindow => {
   const settingsWindow = new BrowserWindow({
@@ -23,15 +23,10 @@ export const createSettingsWindow = (): BrowserWindow => {
     },
   });
 
-  if (!app.isPackaged) {
-    const devUrl = getRendererDevServerUrl();
-    const url = devUrl.endsWith('/') ? devUrl : `${devUrl}/`;
-    settingsWindow.loadURL(`${url}#settings`);
-  } else {
-    settingsWindow.loadFile(getRendererProdHtmlPath(), {
-      hash: 'settings',
-    });
-  }
+  void loadRendererEntry(settingsWindow, {
+    isPackaged: app.isPackaged,
+    hash: 'settings',
+  });
 
   maybeOpenDevTools(
     settingsWindow.webContents,
