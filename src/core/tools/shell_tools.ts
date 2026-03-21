@@ -110,9 +110,9 @@ const isHighRiskShellCommand = (command: string, customPatterns: string[] = []):
 };
 
 export class ShellExecutionTool extends BaseTool {
-  name = 'shell';
-  type = 'function';
-  needsApproval = (input: unknown) => {
+  override name = 'shell';
+  override type = 'function';
+  override needsApproval = (input: unknown) => {
     if (typeof input !== 'object' || input === null) return true;
     const command = (input as { command?: unknown }).command;
     if (typeof command !== 'string') return true;
@@ -122,12 +122,12 @@ export class ShellExecutionTool extends BaseTool {
     if (shellApprovalConfig.shellApprovalMode === 'never') return false;
     return isHighRiskShellCommand(command, shellApprovalConfig.shellHighRiskPatterns);
   };
-  description =
+  override description =
     'Execute a shell command on the local system. Use this for system operations, installing packages, or running scripts. BE CAREFUL with destructive commands.';
 
-  paramSchema = ShellToolInputSchema;
+  override paramSchema = ShellToolInputSchema;
 
-  protected async handler(args: z.infer<typeof this.paramSchema>) {
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
     try {
       const cwd = await resolveShellWorkingDirectory(args.cwd);
       const { stdout, stderr } = await execAsync(args.command, {

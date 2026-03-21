@@ -235,16 +235,16 @@ const parseBingRssResults = (xml: string, limit: number): Array<{ title: string;
 };
 
 export class WebSearchTool extends BaseTool {
-  name = 'web';
-  type = 'function';
-  autoAllowed = true;
-  needsApproval = false;
-  description =
+  override name = 'web';
+  override type = 'function';
+  override autoAllowed = true;
+  override needsApproval = false;
+  override description =
     'Search the web for recent/public information and return a short list of relevant results.';
 
-  paramSchema = WebToolInputSchema;
+  override paramSchema = WebToolInputSchema;
 
-  protected async handler(args: z.infer<typeof this.paramSchema>) {
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const limit = Math.min(
       MAX_SEARCH_RESULT_LIMIT,
       Math.max(1, Math.trunc(args.limit || DEFAULT_SEARCH_RESULT_LIMIT))
@@ -350,16 +350,16 @@ export class WebSearchTool extends BaseTool {
 }
 
 export class FetchTool extends BaseTool {
-  name = 'fetch';
-  type = 'function';
-  autoAllowed = true;
-  needsApproval = false;
-  description =
+  override name = 'fetch';
+  override type = 'function';
+  override autoAllowed = true;
+  override needsApproval = false;
+  override description =
     'Fetch a webpage or text URL and return clean text content (with status and metadata).';
 
-  paramSchema = FetchToolInputSchema;
+  override paramSchema = FetchToolInputSchema;
 
-  protected async handler(args: z.infer<typeof this.paramSchema>) {
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const parsedUrl = ensureHttpUrl(args.url);
     const maxChars = Math.min(
       MAX_FETCH_MAX_CHARS,

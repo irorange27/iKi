@@ -52,15 +52,15 @@ const listDirEntries = async (
 };
 
 export class ReadFileTool extends BaseTool {
-  name = 'read_file';
-  type = 'function';
-  autoAllowed = true;
-  needsApproval = true;
-  description = 'Read the content of a file from the local filesystem.';
+  override name = 'read_file';
+  override type = 'function';
+  override autoAllowed = true;
+  override needsApproval = true;
+  override description = 'Read the content of a file from the local filesystem.';
 
-  paramSchema = ReadFileInputSchema;
+  override paramSchema = ReadFileInputSchema;
 
-  protected async handler(args: z.infer<typeof this.paramSchema>) {
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveReadableWorkspacePath(args.path);
 
     const content = await fs.readFile(absolutePath, { encoding: args.encoding as BufferEncoding });
@@ -72,14 +72,14 @@ export class ReadFileTool extends BaseTool {
  * Tool for writing file content
  */
 export class WriteFileTool extends BaseTool {
-  name = 'write_file';
-  type = 'function';
-  autoAllowed = true;
-  description = 'Write or overwrite content to a file on the local filesystem.';
-  needsApproval = true;
-  paramSchema = WriteFileInputSchema;
+  override name = 'write_file';
+  override type = 'function';
+  override autoAllowed = true;
+  override description = 'Write or overwrite content to a file on the local filesystem.';
+  override needsApproval = true;
+  override paramSchema = WriteFileInputSchema;
 
-  protected async handler(args: z.infer<typeof this.paramSchema>) {
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveWritableWorkspacePath(args.path);
 
     // Ensure directory exists
@@ -94,14 +94,14 @@ export class WriteFileTool extends BaseTool {
  * Tool for listing directory contents
  */
 export class ListDirTool extends BaseTool {
-  name = 'list_dir';
-  type = 'function';
-  autoAllowed = true;
-  description = 'List the contents of a directory on the local filesystem.';
-  needsApproval = false;
-  paramSchema = ListDirInputSchema;
+  override name = 'list_dir';
+  override type = 'function';
+  override autoAllowed = true;
+  override description = 'List the contents of a directory on the local filesystem.';
+  override needsApproval = false;
+  override paramSchema = ListDirInputSchema;
 
-  protected async handler(args: z.infer<typeof this.paramSchema>) {
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveReadableWorkspacePath(args.path);
     return listDirEntries(absolutePath, Boolean(args.recursive));
   }
@@ -111,14 +111,14 @@ export class ListDirTool extends BaseTool {
  * Tool for deleting a file
  */
 export class DeleteFileTool extends BaseTool {
-  name = 'delete_file';
-  type = 'function';
-  needsApproval = true;
-  description = 'Delete a file from the local filesystem. BE CAREFUL with this tool.';
+  override name = 'delete_file';
+  override type = 'function';
+  override needsApproval = true;
+  override description = 'Delete a file from the local filesystem. BE CAREFUL with this tool.';
 
-  paramSchema = DeleteFileInputSchema;
+  override paramSchema = DeleteFileInputSchema;
 
-  protected async handler(args: z.infer<typeof this.paramSchema>) {
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveDeleteWorkspacePath(args.path);
 
     await fs.unlink(absolutePath);

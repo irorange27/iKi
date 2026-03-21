@@ -1,25 +1,18 @@
 import { defineConfig } from 'vite';
-
-const externalDeps = [
-  'better-sqlite3',
-  'whisper-node',
-  'ffmpeg-static',
-  'shelljs',
-  'readline-sync',
-];
+import { VITE_EXTERNAL_RUNTIME_DEPS } from './src/build/runtime_packaging';
 
 // https://vitejs.dev/config
 export default defineConfig({
   optimizeDeps: {
-    exclude: externalDeps,
+    exclude: [...VITE_EXTERNAL_RUNTIME_DEPS],
   },
   ssr: {
-    external: externalDeps,
+    external: [...VITE_EXTERNAL_RUNTIME_DEPS],
   },
   build: {
     sourcemap: true,
     rollupOptions: {
-      external: externalDeps,
+      external: [...VITE_EXTERNAL_RUNTIME_DEPS],
     },
   },
 });

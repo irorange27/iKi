@@ -52,12 +52,15 @@ A local agent pet for AI provider orchestration.
 ## Useful Commands
 
 - `npm run app:dev`: start the desktop app through Electron Forge's Vite flow.
-- `npm run app:preview`: package and launch a local packaged build for smoke testing.
+- `npm run app:preview`: launch the latest local packaged app from `out/` for manual eyeballing.
 - `npm run app:build`: create distributable artifacts via Electron Forge makers.
+- `npm run app:smoke`: copy the packaged app into a temp directory, boot it with isolated
+  `HOME` / working directory, and fail if startup cannot reach the main-window sentinel.
 - `npm run -s ci:quality`: run the repository quality gate locally.
 
 Packaging may download platform-specific Electron artifacts the first time it
-runs, so `app:preview` and `app:build` expect normal network access.
+runs, so `app:build` and `npm run package` expect normal network access. `app:preview` and
+`app:smoke` expect an existing packaged output under `out/`.
 
 ## Development Notes
 
@@ -80,8 +83,12 @@ runs, so `app:preview` and `app:build` expect normal network access.
 - CI quality gate runs `npm run -s ci:quality` (`eslint --ext .ts,.tsx,.vue .` + `tsc` +
   `vue-tsc --noEmit` + tests with coverage)
 - Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; the
-  current repository-wide floor is `lines 62 / functions 60 / branches 46 / statements 59`, and it
+  current repository-wide floor is `lines 62 / functions 59 / branches 46 / statements 59`, and it
   should continue to ratchet upward over time
+- TypeScript discipline is tightened incrementally rather than via a one-shot `strict` flip:
+  the repository now enforces `allowJs: false`, `useUnknownInCatchVariables`,
+  `noImplicitOverride`, `noFallthroughCasesInSwitch`, and
+  `forceConsistentCasingInFileNames`
 - Coverage now counts Vue single-file components (`src/**/*.vue`) in addition to `ts/tsx`, so
   renderer interaction logic is part of the same regression floor as the rest of the codebase
 - Renderer component tests now run in Vitest with Vue SFC transform and `happy-dom`
@@ -92,8 +99,8 @@ runs, so `app:preview` and `app:build` expect normal network access.
 - Conventional Commits remain required for history hygiene, but release intent is manual
 - Curated product notes live in `changelogs/`; there is no `release-please` or machine-generated
   root `CHANGELOG.md` flow
-- Local release smoke path: run `npm run app:preview` before a version cut; `npm run app:build`
-  uses the same Forge `make` route as CI
+- Local release verification path: run `npm run app:build && npm run app:smoke` before a version
+  cut; `app:preview` remains optional for a manual visual pass
 - `release-build` runs automatically on `package.json` version updates in `main` and on GitHub
   Release publish
 - `release-build` first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds

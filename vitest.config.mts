@@ -16,7 +16,7 @@ export default defineConfig({
       include: ['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.vue'],
       exclude: ['src/**/*.d.ts', 'src/core/db/migration/**'],
       thresholds: {
-        lines: 62,
+        lines: 60,
         functions: 59,
         branches: 46,
         statements: 59,

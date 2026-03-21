@@ -27,10 +27,10 @@ export const AgentToolSchema = z.object({
   name: z.string().min(1),
   type: z.string().default('function'),
   description: z.string(),
-  parameters: z.record(z.string(), z.any()), // JSON Schema format for LLM
-  outputSchema: z.record(z.string(), z.any()).optional(),
-  paramSchema: z.any().optional(), // Optional Zod schema (z.ZodTypeAny) for parameter validation
-  needsApproval: z.any().optional().default(false),
+  parameters: z.record(z.string(), z.unknown()), // JSON Schema format for LLM
+  outputSchema: z.record(z.string(), z.unknown()).optional(),
+  paramSchema: z.unknown().optional(), // Optional Zod schema (z.ZodTypeAny) for parameter validation
+  needsApproval: z.unknown().optional().default(false),
   autoAllowed: z.boolean().optional(),
   displayName: z.string().optional(),
   source: z
@@ -40,7 +40,7 @@ export const AgentToolSchema = z.object({
       name: z.string().optional(),
     })
     .optional(),
-  handler: z.any(), // Function type: (args: Record<string, any>) => Promise<any>
+  handler: z.unknown(), // Function type: (args: Record<string, unknown>) => Promise<unknown>
 });
 
 export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> & {
@@ -52,8 +52,8 @@ export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> &
 // Tool Call Result Schema
 export const ToolCallSchema = z.object({
   toolName: z.string(),
-  args: z.record(z.string(), z.any()),
-  result: z.any().optional(),
+  args: z.record(z.string(), z.unknown()),
+  result: z.unknown().optional(),
 });
 
 // Tool Approval Request Schema
@@ -63,7 +63,7 @@ export const ToolApprovalRequestSchema = z.object({
   toolCall: z
     .object({
       toolName: z.string(),
-      args: z.record(z.string(), z.any()),
+      args: z.record(z.string(), z.unknown()),
     })
     .optional(),
 });
