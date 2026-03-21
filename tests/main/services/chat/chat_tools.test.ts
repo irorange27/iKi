@@ -6,15 +6,18 @@ import { resolveToolNames } from '../../../../src/main/services/chat/chat_tools'
 const TEST_TOOL_NAMES = [
   'web',
   'fetch',
+  'shell',
   'list_dir',
   'read_file',
   'write_file',
+  'delete_file',
   'mcp_alpha_safe',
   'mcp_beta_unsafe',
   'manual_only',
   'list_todo_lists',
   'read_todo_list',
   'write_todo_list',
+  'delete_todo_list',
 ];
 
 const registerTool = (options: {
@@ -78,7 +81,7 @@ describe('resolveToolNames', () => {
     expect(result.resolvedTools).toEqual(['manual_only']);
   });
 
-  it('includes only safe MCP tools from enabled servers in auto mode', async () => {
+  it('includes enabled MCP tools in auto mode unless they explicitly opt out', async () => {
     registerTool({ name: 'web', autoAllowed: true, source: { kind: 'builtin' } });
     registerTool({ name: 'fetch', autoAllowed: true, source: { kind: 'builtin' } });
     registerTool({
@@ -102,10 +105,12 @@ describe('resolveToolNames', () => {
     expect(result.resolvedTools).toEqual(['web', 'fetch', 'mcp_alpha_safe']);
   });
 
-  it('uses builtin autoAllowed metadata instead of a hard-coded builtin allowlist', async () => {
-    registerTool({ name: 'list_dir', autoAllowed: true, source: { kind: 'builtin' } });
-    registerTool({ name: 'read_file', autoAllowed: true, source: { kind: 'builtin' } });
-    registerTool({ name: 'write_file', autoAllowed: true, source: { kind: 'builtin' } });
+  it('defaults built-in tools to auto mode unless they explicitly opt out', async () => {
+    registerTool({ name: 'shell', source: { kind: 'builtin' } });
+    registerTool({ name: 'list_dir', source: { kind: 'builtin' } });
+    registerTool({ name: 'read_file', source: { kind: 'builtin' } });
+    registerTool({ name: 'write_file', source: { kind: 'builtin' } });
+    registerTool({ name: 'delete_file', source: { kind: 'builtin' } });
     registerTool({ name: 'manual_only', autoAllowed: false, source: { kind: 'builtin' } });
 
     const result = await resolveToolNames({
@@ -113,13 +118,20 @@ describe('resolveToolNames', () => {
     });
 
     expect(result.mode).toBe('auto');
-    expect(result.resolvedTools).toEqual(['list_dir', 'read_file', 'write_file']);
+    expect(result.resolvedTools).toEqual([
+      'shell',
+      'list_dir',
+      'read_file',
+      'write_file',
+      'delete_file',
+    ]);
   });
 
   it('includes todo list tools in auto mode for normal chat turns', async () => {
-    registerTool({ name: 'list_todo_lists', autoAllowed: true, source: { kind: 'builtin' } });
-    registerTool({ name: 'read_todo_list', autoAllowed: true, source: { kind: 'builtin' } });
-    registerTool({ name: 'write_todo_list', autoAllowed: true, source: { kind: 'builtin' } });
+    registerTool({ name: 'list_todo_lists', source: { kind: 'builtin' } });
+    registerTool({ name: 'read_todo_list', source: { kind: 'builtin' } });
+    registerTool({ name: 'write_todo_list', source: { kind: 'builtin' } });
+    registerTool({ name: 'delete_todo_list', source: { kind: 'builtin' } });
 
     const result = await resolveToolNames({
       inputMessages: [],
@@ -130,6 +142,7 @@ describe('resolveToolNames', () => {
       'list_todo_lists',
       'read_todo_list',
       'write_todo_list',
+      'delete_todo_list',
     ]);
   });
 });

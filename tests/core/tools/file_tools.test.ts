@@ -95,10 +95,10 @@ describe('file tools workspace boundaries', () => {
     await expect(fs.access(outsideFile)).rejects.toThrow();
   });
 
-  it('publishes auto-mode metadata for non-destructive file workflow tools only', () => {
+  it('publishes auto-mode metadata for all file tools by default', () => {
     expect(new ListDirTool().toAgentTool().autoAllowed).toBe(true);
     expect(new ReadFileTool().toAgentTool().autoAllowed).toBe(true);
     expect(new WriteFileTool().toAgentTool().autoAllowed).toBe(true);
-    expect(new DeleteFileTool().toAgentTool().autoAllowed).toBe(false);
+    expect(new DeleteFileTool().toAgentTool().autoAllowed).toBe(true);
   });
 });

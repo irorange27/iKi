@@ -113,10 +113,10 @@ describe('todo tools', () => {
     await expect(tool.execute({ title: 'Missing' })).rejects.toThrow(/not found/i);
   });
 
-  it('publishes auto-mode metadata for list/read/write todo tools but not delete', () => {
+  it('publishes auto-mode metadata for all todo tools by default', () => {
     expect(new ListTodoListsTool().toAgentTool().autoAllowed).toBe(true);
     expect(new ReadTodoListTool().toAgentTool().autoAllowed).toBe(true);
     expect(new WriteTodoListTool().toAgentTool().autoAllowed).toBe(true);
-    expect(new DeleteTodoListTool().toAgentTool().autoAllowed).toBe(false);
+    expect(new DeleteTodoListTool().toAgentTool().autoAllowed).toBe(true);
   });
 });
