@@ -6,6 +6,8 @@ import * as lifeReflectionDb from '../../../core/db/life_reflection';
 import type {
   LifeEpisodeRecord,
   LifeEventType,
+  LifeOwnerMode,
+  LifeOwnerModeStatus,
   LifeOverview,
   LifePushPayload,
   LifeSnapshot,
@@ -39,6 +41,8 @@ type LifeRuntimeEvent = {
   threadId?: string | null;
   clientId?: string | null;
   triggerRef?: string | null;
+  ownerMode?: LifeOwnerMode | null;
+  ownerModeNote?: string | null;
   persistAsLastEvent?: boolean;
 };
 
@@ -81,6 +85,24 @@ const uniqueStrings = (values: Array<string | null | undefined>): string[] => {
   return next;
 };
 
+const getExpectedActivityForOwnerMode = (
+  ownerMode: LifeOwnerMode | null | undefined
+): LifeStateRecord['current_activity'] | null => {
+  if (ownerMode === 'sleep') return 'sleep';
+  if (ownerMode === 'focus') return 'focused_work';
+  if (ownerMode === 'available') return 'companion_idle';
+  return null;
+};
+
+const getOwnerModeStatus = (params: {
+  ownerMode: LifeOwnerMode | null | undefined;
+  currentActivity: LifeStateRecord['current_activity'];
+}): LifeOwnerModeStatus => {
+  const expectedActivity = getExpectedActivityForOwnerMode(params.ownerMode);
+  if (!expectedActivity) return 'none';
+  return params.currentActivity === expectedActivity ? 'applied' : 'deferred';
+};
+
 const collectTaskSignals = (atIso: string, runningTaskIds: string[]) => {
   const dueTasks = tasksDb.listDueProactiveTasks(atIso);
   const enabledTasks = tasksDb.getProactiveTasks().filter(task => task.enabled);
@@ -116,6 +138,16 @@ const applyRuntimeEventToEnvelope = (
     next.lastTaskStatus = event.type === 'task-failed' ? 'error' : 'success';
   }
 
+  if (event.type === 'owner-mode-set') {
+    next.ownerMode = event.ownerMode || null;
+    next.ownerModeSetAt = atIso;
+    next.ownerModeNote = event.ownerModeNote?.trim() || null;
+  } else if (event.type === 'owner-mode-cleared') {
+    next.ownerMode = null;
+    next.ownerModeSetAt = null;
+    next.ownerModeNote = null;
+  }
+
   if (event.persistAsLastEvent !== false) {
     next.lastEventType = event.type;
   }
@@ -135,16 +167,21 @@ const buildEpisodeSummary = (params: {
   decision: ReturnType<typeof chooseLifeActivity>;
   taskSignals: ReturnType<typeof collectTaskSignals>;
   taskId?: string | null;
-  atIso: string;
 }): string => {
   const { activity, transitionReason } = params.decision;
 
   switch (activity) {
     case 'sleep':
+      if (transitionReason === 'owner-mode-sleep') {
+        return 'Sleeping because the owner explicitly set sleep mode.';
+      }
       return 'Asleep during the scheduled sleep window.';
     case 'wake_transition':
       return 'Waking up and reorienting for the day.';
     case 'focused_work':
+      if (transitionReason === 'owner-mode-focus') {
+        return 'Holding a focused mode because the owner explicitly requested focus.';
+      }
       return params.taskId
         ? `Focused on proactive task ${params.taskId}.`
         : 'Focused on an active commitment.';
@@ -156,6 +193,9 @@ const buildEpisodeSummary = (params: {
       return 'Recovering after sustained activity.';
     case 'companion_idle':
     default:
+      if (transitionReason === 'owner-mode-available') {
+        return 'Staying available because the owner explicitly requested availability.';
+      }
       return transitionReason === 'idle-available'
         ? 'Available and monitoring for user activity.'
         : 'Available between commitments.';
@@ -166,6 +206,7 @@ const buildEpisodeSnapshotJson = (params: {
   decision: ReturnType<typeof chooseLifeActivity>;
   taskSignals: ReturnType<typeof collectTaskSignals>;
   budgets: Pick<LifeStateRecord, 'energy' | 'focus_budget' | 'social_availability'>;
+  ownerMode?: LifeOwnerMode | null;
 }): string =>
   JSON.stringify({
     dayPhase: params.decision.dayPhase,
@@ -173,6 +214,7 @@ const buildEpisodeSnapshotJson = (params: {
     runningTaskIds: params.taskSignals.runningTaskIds,
     dueTaskCount: params.taskSignals.dueTaskCount,
     nextDueAt: params.taskSignals.nextDueAt,
+    ownerMode: params.ownerMode || null,
     energy: clampUnit(params.budgets.energy, DEFAULT_BUDGETS.energy),
     focusBudget: clampUnit(params.budgets.focus_budget, DEFAULT_BUDGETS.focus_budget),
     socialAvailability: clampUnit(
@@ -183,6 +225,10 @@ const buildEpisodeSnapshotJson = (params: {
 
 const buildSnapshot = (state: LifeStateRecord, currentEpisode: LifeEpisodeRecord | null): LifeSnapshot => {
   const envelope = parseLifeStateEnvelope(state.state_json);
+  const ownerModeStatus = getOwnerModeStatus({
+    ownerMode: envelope.ownerMode,
+    currentActivity: state.current_activity,
+  });
   return {
     state,
     derived: {
@@ -190,6 +236,10 @@ const buildSnapshot = (state: LifeStateRecord, currentEpisode: LifeEpisodeRecord
       lastTransitionReason: envelope.lastTransitionReason,
       lastEventType: envelope.lastEventType,
       runningTaskIds: envelope.runningTaskIds || [],
+      ownerMode: envelope.ownerMode || null,
+      ownerModeSetAt: envelope.ownerModeSetAt || null,
+      ownerModeNote: envelope.ownerModeNote || null,
+      ownerModeStatus,
     },
     currentEpisode,
   };
@@ -199,6 +249,7 @@ const shouldStartNewEpisode = (params: {
   currentEpisode: LifeEpisodeRecord | null;
   nextActivity: LifeStateRecord['current_activity'];
   nextPresence: LifeStateRecord['presence'];
+  nextTransitionReason: string;
   taskId?: string | null;
   threadId?: string | null;
 }): boolean => {
@@ -207,6 +258,7 @@ const shouldStartNewEpisode = (params: {
   if (currentEpisode.ended_at) return true;
   if (currentEpisode.activity_type !== params.nextActivity) return true;
   if (currentEpisode.presence !== params.nextPresence) return true;
+  if (currentEpisode.transition_reason !== params.nextTransitionReason) return true;
   if ((currentEpisode.task_id || null) !== (params.taskId || null)) return true;
   if ((currentEpisode.thread_id || null) !== (params.threadId || null)) return true;
   return false;
@@ -232,6 +284,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
       now,
       sleepWindow,
       tasks: taskSignals,
+      ownerMode: nextEnvelopeBase.ownerMode || null,
     });
     const nextEnvelope: LifeStateEnvelope = {
       ...nextEnvelopeBase,
@@ -250,7 +303,6 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
           decision,
           taskSignals,
           taskId: event.taskId,
-          atIso,
         }),
         trigger_type: event.type,
         trigger_ref: event.triggerRef || event.taskId || decision.transitionReason,
@@ -261,6 +313,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
           decision,
           taskSignals,
           budgets: DEFAULT_BUDGETS,
+          ownerMode: nextEnvelope.ownerMode,
         }),
       });
 
@@ -303,6 +356,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
         currentEpisode,
         nextActivity: decision.activity,
         nextPresence: decision.presence,
+        nextTransitionReason: decision.transitionReason,
         taskId: event.taskId ?? null,
         threadId: event.threadId ?? null,
       })
@@ -323,7 +377,6 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
           decision,
           taskSignals,
           taskId: event.taskId,
-          atIso,
         }),
         trigger_type: event.type,
         trigger_ref: event.triggerRef || event.taskId || decision.transitionReason,
@@ -334,6 +387,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
           decision,
           taskSignals,
           budgets: driftedBudgets,
+          ownerMode: nextEnvelope.ownerMode,
         }),
       });
       semanticChange = true;
@@ -416,6 +470,21 @@ export const stopLifeRuntime = () => {
 export const recordLifeRuntimeEvent = (event: LifeRuntimeEvent): LifeSnapshot | null =>
   reconcileLifeState(event);
 
+export const setLifeOwnerMode = (
+  ownerMode: LifeOwnerMode,
+  ownerModeNote?: string | null
+): LifeSnapshot | null =>
+  reconcileLifeState({
+    type: 'owner-mode-set',
+    ownerMode,
+    ownerModeNote: ownerModeNote ?? null,
+  });
+
+export const clearLifeOwnerMode = (): LifeSnapshot | null =>
+  reconcileLifeState({
+    type: 'owner-mode-cleared',
+  });
+
 export const getLifeOverview = (limit = 10): LifeOverview => {
   const snapshot = reconcileLifeState({
     type: 'manual-refresh',
@@ -459,6 +528,10 @@ export const getLifeContextMessage = (): string => {
     `- Presence: ${snapshot.state.presence}`,
     `- Activity: ${snapshot.state.current_activity}`,
     `- Day phase: ${snapshot.derived.dayPhase}`,
+    snapshot.derived.ownerMode
+      ? `- Owner mode: ${snapshot.derived.ownerMode} (${snapshot.derived.ownerModeStatus})`
+      : '',
+    snapshot.derived.ownerModeNote ? `- Owner mode note: ${snapshot.derived.ownerModeNote}` : '',
     `- Energy: ${formatPercent(snapshot.state.energy)}`,
     `- Focus budget: ${formatPercent(snapshot.state.focus_budget)}`,
     `- Social availability: ${formatPercent(snapshot.state.social_availability)}`,

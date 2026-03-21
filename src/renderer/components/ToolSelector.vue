@@ -37,8 +37,8 @@
           <span class="selector-panel-title ui-text-primary">Tools</span>
         </div>
         <div class="selector-panel-description ui-text-muted">
-          Allow iKi to use built-in tools for the next response. Auto mode considers built-in tools
-          marked for automatic routing plus safe MCP tools from enabled servers.
+          Allow iKi to use built-in tools for the next response. Auto mode considers all built-in
+          tools plus all tools from enabled MCP servers.
         </div>
 
         <div class="selector-panel-toolbar">
@@ -63,8 +63,7 @@
         </div>
 
         <div v-if="isAutoToolMode" class="ui-text-accent mt-2 text-xs leading-snug">
-          Auto only considers built-in tools eligible for automatic routing plus safe tools from
-          the MCP servers enabled below.
+          Auto considers all built-in tools plus all tools from the MCP servers enabled below.
         </div>
       </div>
 
@@ -161,7 +160,7 @@
           <template v-if="isMcpSectionExpanded">
             <div class="selector-subsection-description ui-text-muted">
               Enable MCP servers for this conversation. Manual mode exposes all tools from enabled
-              servers. Auto mode only considers their safe tools.
+              servers. Auto mode also considers all tools from enabled servers.
             </div>
 
             <div class="selector-panel-toolbar">

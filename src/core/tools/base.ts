@@ -47,7 +47,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   abstract description: string;
   abstract paramSchema: P;
   displayName?: string;
-  autoAllowed = false;
+  autoAllowed = true;
   outputSchema?: Record<string, unknown>;
 
   /**
@@ -176,7 +176,8 @@ export class ToolRegistry {
       displayName: t.displayName,
       source: t.source,
       autoAllowed: t.autoAllowed === true,
-      needsApproval: typeof t.needsApproval === 'boolean' ? t.needsApproval : undefined,
+      needsApproval:
+        typeof t.needsApproval === 'boolean' ? t.needsApproval : t.needsApproval ? true : undefined,
     }));
   }
 }
@@ -202,7 +203,7 @@ export function createTool<P extends z.ZodTypeAny>(options: {
     ...options,
     parameters,
     needsApproval: options.needsApproval ?? false,
-    autoAllowed: options.autoAllowed === true,
+    autoAllowed: options.autoAllowed !== false,
     paramSchema: options.paramSchema as unknown as AgentTool['paramSchema'],
     displayName: options.displayName ?? options.name,
     source: options.source ?? { kind: 'builtin' },

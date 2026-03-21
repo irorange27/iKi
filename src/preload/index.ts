@@ -13,7 +13,7 @@ import type { Provider } from '../shared/types/provider';
 import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
-import type { LifeOverview, LifeSnapshot } from '../shared/types/life';
+import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from '../shared/types/life';
 import type { ProactiveTask } from '../shared/types/tasks';
 import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
 import type {
@@ -160,6 +160,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getOverview: (limit?: number): Promise<LifeOverview> =>
       ipcRenderer.invoke('life:get-overview', limit),
     refresh: (): Promise<LifeSnapshot | null> => ipcRenderer.invoke('life:refresh'),
+    setOwnerMode: (mode: LifeOwnerMode, note?: string | null): Promise<LifeSnapshot | null> =>
+      ipcRenderer.invoke('life:set-owner-mode', mode, note),
+    clearOwnerMode: (): Promise<LifeSnapshot | null> => ipcRenderer.invoke('life:clear-owner-mode'),
     onPush: (callback: (payload: unknown) => void) => {
       ipcRenderer.on('life:push', (_event, payload) => callback(payload));
     },

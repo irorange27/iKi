@@ -95,7 +95,7 @@ export const resolveToolNames = async (params: {
     : null;
   const mode: ToolResolveMode = hasExplicitToolsParam ? 'manual' : 'auto';
 
-  // Default behavior: only expose tools explicitly marked autoAllowed in auto mode.
+  // Default behavior: expose every tool that has not explicitly opted out of auto mode.
   // Explicit empty array disables tools.
   if (mode === 'manual') {
     return {

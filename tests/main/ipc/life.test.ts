@@ -15,16 +15,22 @@ vi.mock('electron', () => ({
 vi.mock('../../../src/main/services/life/life_runtime', () => ({
   getLifeOverview: vi.fn(),
   refreshLifeRuntime: vi.fn(),
+  setLifeOwnerMode: vi.fn(),
+  clearLifeOwnerMode: vi.fn(),
 }));
 
 import { registerLifeIpc } from '../../../src/main/ipc/life';
 import {
+  clearLifeOwnerMode,
   getLifeOverview,
   refreshLifeRuntime,
+  setLifeOwnerMode,
 } from '../../../src/main/services/life/life_runtime';
 
+const clearLifeOwnerModeMock = vi.mocked(clearLifeOwnerMode);
 const getLifeOverviewMock = vi.mocked(getLifeOverview);
 const refreshLifeRuntimeMock = vi.mocked(refreshLifeRuntime);
+const setLifeOwnerModeMock = vi.mocked(setLifeOwnerMode);
 
 beforeAll(() => {
   registerLifeIpc();
@@ -64,6 +70,30 @@ describe('life IPC', () => {
     const result = await handler(null);
 
     expect(refreshLifeRuntimeMock).toHaveBeenCalledWith();
+    expect(result).toBeNull();
+  });
+
+  it('sets an explicit owner mode through IPC', async () => {
+    const handler = ipcHandlers.get('life:set-owner-mode');
+    if (!handler) throw new Error('life:set-owner-mode handler not registered');
+
+    setLifeOwnerModeMock.mockReturnValue(null);
+
+    const result = await handler(null, 'focus', null);
+
+    expect(setLifeOwnerModeMock).toHaveBeenCalledWith('focus', null);
+    expect(result).toBeNull();
+  });
+
+  it('clears the owner mode through IPC', async () => {
+    const handler = ipcHandlers.get('life:clear-owner-mode');
+    if (!handler) throw new Error('life:clear-owner-mode handler not registered');
+
+    clearLifeOwnerModeMock.mockReturnValue(null);
+
+    const result = await handler(null);
+
+    expect(clearLifeOwnerModeMock).toHaveBeenCalledWith();
     expect(result).toBeNull();
   });
 });

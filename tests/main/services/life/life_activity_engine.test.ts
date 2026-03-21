@@ -63,6 +63,48 @@ describe('life_activity_engine', () => {
     );
   });
 
+  it('applies explicit owner mode when no task lock is active', () => {
+    const decision = chooseLifeActivity({
+      now: localDate(2, 0),
+      sleepWindow: DEFAULT_SLEEP_WINDOW,
+      tasks: {
+        runningTaskIds: [],
+        dueTaskCount: 0,
+        nextDueAt: null,
+      },
+      ownerMode: 'available',
+    });
+
+    expect(decision).toEqual(
+      expect.objectContaining({
+        activity: 'companion_idle',
+        presence: 'available',
+        transitionReason: 'owner-mode-available',
+      })
+    );
+  });
+
+  it('keeps a running task lock above conflicting owner mode', () => {
+    const decision = chooseLifeActivity({
+      now: localDate(14, 0),
+      sleepWindow: DEFAULT_SLEEP_WINDOW,
+      tasks: {
+        runningTaskIds: ['task_1'],
+        dueTaskCount: 0,
+        nextDueAt: null,
+      },
+      ownerMode: 'sleep',
+    });
+
+    expect(decision).toEqual(
+      expect.objectContaining({
+        activity: 'focused_work',
+        presence: 'focused',
+        transitionReason: 'task-running',
+      })
+    );
+  });
+
   it('otherwise falls back to honest idle availability', () => {
     const decision = chooseLifeActivity({
       now: localDate(16, 0),
@@ -115,21 +157,27 @@ describe('life_activity_engine', () => {
     const serialized = serializeLifeStateEnvelope({
       dayPhase: 'day',
       lastTransitionReason: 'idle-available',
-      lastEventType: 'tick',
+      lastEventType: 'owner-mode-set',
       runningTaskIds: ['task_1'],
       lastTaskFinishedAt: '2026-03-21T12:00:00.000Z',
       lastTaskThreadId: 'thread_1',
       lastTaskStatus: 'success',
+      ownerMode: 'focus',
+      ownerModeSetAt: '2026-03-21T12:05:00.000Z',
+      ownerModeNote: 'deep work',
     });
 
     expect(parseLifeStateEnvelope(serialized)).toEqual({
       dayPhase: 'day',
       lastTransitionReason: 'idle-available',
-      lastEventType: 'tick',
+      lastEventType: 'owner-mode-set',
       runningTaskIds: ['task_1'],
       lastTaskFinishedAt: '2026-03-21T12:00:00.000Z',
       lastTaskThreadId: 'thread_1',
       lastTaskStatus: 'success',
+      ownerMode: 'focus',
+      ownerModeSetAt: '2026-03-21T12:05:00.000Z',
+      ownerModeNote: 'deep work',
     });
   });
 });

@@ -2,12 +2,13 @@ import type {
   LifeActivity,
   LifeActivityDecision,
   LifeDayPhase,
+  LifeOwnerMode,
   LifeSignalInput,
   LifeSleepWindow,
   LifeStateEnvelope,
 } from '../../../shared/types/life';
 
-export const LIFE_POLICY_VERSION = 'life-kernel-v1';
+export const LIFE_POLICY_VERSION = 'life-kernel-v2';
 export const DEFAULT_SLEEP_WINDOW: LifeSleepWindow = {
   startHour: 1,
   endHour: 9,
@@ -21,6 +22,9 @@ const clampHour = (value: number, fallback: number): number => {
   if (normalized < 0 || normalized > 23) return fallback;
   return normalized;
 };
+
+const normalizeOwnerMode = (value: unknown): LifeOwnerMode | null =>
+  value === 'sleep' || value === 'focus' || value === 'available' ? value : null;
 
 const minutesBetween = (from: Date, to: Date): number =>
   Math.max(0, Math.floor((to.getTime() - from.getTime()) / 60_000));
@@ -55,7 +59,9 @@ export const parseLifeStateEnvelope = (raw: string | null | undefined): LifeStat
         parsed.lastEventType === 'manual-refresh' ||
         parsed.lastEventType === 'task-started' ||
         parsed.lastEventType === 'task-finished' ||
-        parsed.lastEventType === 'task-failed'
+        parsed.lastEventType === 'task-failed' ||
+        parsed.lastEventType === 'owner-mode-set' ||
+        parsed.lastEventType === 'owner-mode-cleared'
           ? parsed.lastEventType
           : undefined,
       runningTaskIds: Array.isArray(parsed.runningTaskIds)
@@ -69,6 +75,9 @@ export const parseLifeStateEnvelope = (raw: string | null | undefined): LifeStat
         parsed.lastTaskStatus === 'success' || parsed.lastTaskStatus === 'error'
           ? parsed.lastTaskStatus
           : null,
+      ownerMode: normalizeOwnerMode(parsed.ownerMode),
+      ownerModeSetAt: typeof parsed.ownerModeSetAt === 'string' ? parsed.ownerModeSetAt : null,
+      ownerModeNote: typeof parsed.ownerModeNote === 'string' ? parsed.ownerModeNote : null,
     };
   } catch {
     return {};
@@ -86,6 +95,9 @@ export const serializeLifeStateEnvelope = (value: LifeStateEnvelope): string =>
     ...(value.lastTaskFinishedAt ? { lastTaskFinishedAt: value.lastTaskFinishedAt } : {}),
     ...(value.lastTaskThreadId ? { lastTaskThreadId: value.lastTaskThreadId } : {}),
     ...(value.lastTaskStatus ? { lastTaskStatus: value.lastTaskStatus } : {}),
+    ...(value.ownerMode ? { ownerMode: value.ownerMode } : {}),
+    ...(value.ownerModeSetAt ? { ownerModeSetAt: value.ownerModeSetAt } : {}),
+    ...(value.ownerModeNote ? { ownerModeNote: value.ownerModeNote } : {}),
   });
 
 const isWithinSleepWindow = (date: Date, sleepWindow: LifeSleepWindow): boolean => {
@@ -141,6 +153,36 @@ export const chooseLifeActivity = (params: LifeSignalInput): LifeActivityDecisio
       dayPhase,
       transitionReason: 'task-running',
       reviewMinutes: 15,
+    };
+  }
+
+  if (params.ownerMode === 'sleep') {
+    return {
+      activity: 'sleep',
+      presence: 'sleeping',
+      dayPhase,
+      transitionReason: 'owner-mode-sleep',
+      reviewMinutes: 20,
+    };
+  }
+
+  if (params.ownerMode === 'focus') {
+    return {
+      activity: 'focused_work',
+      presence: 'focused',
+      dayPhase,
+      transitionReason: 'owner-mode-focus',
+      reviewMinutes: 15,
+    };
+  }
+
+  if (params.ownerMode === 'available') {
+    return {
+      activity: 'companion_idle',
+      presence: 'available',
+      dayPhase,
+      transitionReason: 'owner-mode-available',
+      reviewMinutes: 20,
     };
   }
 

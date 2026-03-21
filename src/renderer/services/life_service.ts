@@ -1,8 +1,15 @@
-import type { LifeOverview, LifePushPayload, LifeSnapshot } from '../../shared/types/life';
+import type {
+  LifeOverview,
+  LifeOwnerMode,
+  LifePushPayload,
+  LifeSnapshot,
+} from '../../shared/types/life';
 
 type ElectronLifeApi = {
   getOverview?: (limit?: number) => Promise<LifeOverview>;
   refresh?: () => Promise<LifeSnapshot | null>;
+  setOwnerMode?: (mode: LifeOwnerMode, note?: string | null) => Promise<LifeSnapshot | null>;
+  clearOwnerMode?: () => Promise<LifeSnapshot | null>;
   onPush?: (callback: (payload: LifePushPayload | unknown) => void) => void;
   removeAllListeners?: () => void;
 };
@@ -38,6 +45,20 @@ export const lifeService = {
       throw new Error('window.electronAPI.life.refresh is missing');
     }
     return api.refresh();
+  },
+  async setOwnerMode(mode: LifeOwnerMode, note?: string | null): Promise<LifeSnapshot | null> {
+    const api = getLifeApi();
+    if (!api?.setOwnerMode) {
+      throw new Error('window.electronAPI.life.setOwnerMode is missing');
+    }
+    return api.setOwnerMode(mode, note);
+  },
+  async clearOwnerMode(): Promise<LifeSnapshot | null> {
+    const api = getLifeApi();
+    if (!api?.clearOwnerMode) {
+      throw new Error('window.electronAPI.life.clearOwnerMode is missing');
+    }
+    return api.clearOwnerMode();
   },
   onPush(callback: (payload: LifePushPayload | unknown) => void): () => void {
     const api = getLifeApi();

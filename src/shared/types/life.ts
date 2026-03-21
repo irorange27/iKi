@@ -16,13 +16,18 @@ export type LifePresence =
 
 export type LifeDayPhase = 'night' | 'wake' | 'day' | 'evening';
 
+export type LifeOwnerMode = 'sleep' | 'focus' | 'available';
+export type LifeOwnerModeStatus = 'none' | 'applied' | 'deferred';
+
 export type LifeEventType =
   | 'runtime-start'
   | 'tick'
   | 'manual-refresh'
   | 'task-started'
   | 'task-finished'
-  | 'task-failed';
+  | 'task-failed'
+  | 'owner-mode-set'
+  | 'owner-mode-cleared';
 
 export type LifeReflectionPeriodType = 'hour' | 'day';
 
@@ -87,6 +92,9 @@ export interface LifeStateEnvelope {
   lastTaskFinishedAt?: string | null;
   lastTaskThreadId?: string | null;
   lastTaskStatus?: 'success' | 'error' | null;
+  ownerMode?: LifeOwnerMode | null;
+  ownerModeSetAt?: string | null;
+  ownerModeNote?: string | null;
 }
 
 export interface LifeTaskSignal {
@@ -99,6 +107,7 @@ export interface LifeSignalInput {
   now: Date;
   sleepWindow: LifeSleepWindow;
   tasks: LifeTaskSignal;
+  ownerMode?: LifeOwnerMode | null;
 }
 
 export interface LifeActivityDecision {
@@ -116,6 +125,10 @@ export interface LifeSnapshot {
     lastTransitionReason?: string;
     lastEventType?: LifeEventType;
     runningTaskIds: string[];
+    ownerMode?: LifeOwnerMode | null;
+    ownerModeSetAt?: string | null;
+    ownerModeNote?: string | null;
+    ownerModeStatus: LifeOwnerModeStatus;
   };
   currentEpisode: LifeEpisodeRecord | null;
 }

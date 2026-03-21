@@ -211,4 +211,75 @@ describe('life_runtime', () => {
     expect(runDueHourlyLifeReflectionsMock).toHaveBeenCalled();
     expect(runDueDailyLifeReflectionsMock).toHaveBeenCalled();
   });
+
+  it('stores owner mode and applies it after a running task lock clears', async () => {
+    const { recordLifeRuntimeEvent, setLifeOwnerMode, getLifeContextMessage } = await import(
+      '../../../../src/main/services/life/life_runtime'
+    );
+
+    const startedAt = localDate(14, 0);
+    vi.setSystemTime(startedAt);
+    recordLifeRuntimeEvent({
+      type: 'runtime-start',
+      at: toLocalTimestamp(startedAt),
+    });
+
+    const focusedAt = localDate(14, 5);
+    vi.setSystemTime(focusedAt);
+    recordLifeRuntimeEvent({
+      type: 'task-started',
+      at: toLocalTimestamp(focusedAt),
+      taskId: 'task_1',
+      threadId: 'thread_1',
+    });
+
+    const deferred = setLifeOwnerMode('sleep');
+    expect(deferred?.state.current_activity).toBe('focused_work');
+    expect(deferred?.derived.ownerMode).toBe('sleep');
+    expect(deferred?.derived.ownerModeStatus).toBe('deferred');
+
+    const settledAt = localDate(14, 20);
+    vi.setSystemTime(settledAt);
+    const settled = recordLifeRuntimeEvent({
+      type: 'task-finished',
+      at: toLocalTimestamp(settledAt),
+      taskId: 'task_1',
+      threadId: 'thread_1',
+    });
+
+    expect(settled?.state.current_activity).toBe('sleep');
+    expect(settled?.state.presence).toBe('sleeping');
+    expect(settled?.derived.ownerMode).toBe('sleep');
+    expect(settled?.derived.ownerModeStatus).toBe('applied');
+    expect(getLifeContextMessage()).toContain('Owner mode: sleep (applied)');
+  });
+
+  it('clears owner mode and opens a new semantic episode even when presence stays available', async () => {
+    const { recordLifeRuntimeEvent, setLifeOwnerMode, clearLifeOwnerMode, getLifeOverview } =
+      await import('../../../../src/main/services/life/life_runtime');
+
+    const startedAt = localDate(14, 0);
+    vi.setSystemTime(startedAt);
+    recordLifeRuntimeEvent({
+      type: 'runtime-start',
+      at: toLocalTimestamp(startedAt),
+    });
+
+    const overrideAt = localDate(14, 3);
+    vi.setSystemTime(overrideAt);
+    const overridden = setLifeOwnerMode('available');
+    expect(overridden?.derived.ownerMode).toBe('available');
+    expect(overridden?.derived.ownerModeStatus).toBe('applied');
+
+    const clearAt = localDate(14, 6);
+    vi.setSystemTime(clearAt);
+    const cleared = clearLifeOwnerMode();
+
+    expect(cleared?.derived.ownerModeStatus).toBe('none');
+    expect(cleared?.currentEpisode?.transition_reason).toBe('idle-available');
+
+    const overview = getLifeOverview(5);
+    expect(overview.recentEpisodes.length).toBeGreaterThanOrEqual(3);
+    expect(overview.recentEpisodes.some(entry => entry.transition_reason === 'owner-mode-available')).toBe(true);
+  });
 });

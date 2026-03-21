@@ -1,6 +1,72 @@
 <template>
   <section class="config-section">
     <div class="settings-card">
+      <div class="card-title">Owner Controls</div>
+      <p class="card-help">
+        Explicit mode controls override the normal day rhythm, but never lie about a currently
+        running task. If a task is active, the requested mode is kept and applied as soon as the
+        task lock clears.
+      </p>
+
+      <p v-if="controlErrorText" class="tasks-error">{{ controlErrorText }}</p>
+
+      <div class="life-summary-block">
+        <div class="life-summary-label">Current owner mode</div>
+        <div class="life-summary-text">
+          {{ ownerModeLabel }}
+          <span v-if="snapshot?.derived.ownerMode" class="task-meta-label">
+            ({{ snapshot?.derived.ownerModeStatus }})
+          </span>
+        </div>
+        <div class="life-meta-lines">
+          <div v-if="snapshot?.derived.ownerModeSetAt">
+            <span class="task-meta-label">Set:</span>
+            {{ formatTimestamp(snapshot.derived.ownerModeSetAt) }}
+          </div>
+          <div v-if="snapshot?.derived.ownerModeStatus === 'deferred'">
+            <span class="task-meta-label">Deferred:</span>
+            Waiting for the current task lock to clear before the requested mode can fully apply.
+          </div>
+        </div>
+      </div>
+
+      <div class="life-control-grid">
+        <button
+          class="secondary-btn"
+          :class="{ 'secondary-btn-active': !snapshot?.derived.ownerMode }"
+          :disabled="loading || controlLoading"
+          @click="clearOwnerMode"
+        >
+          {{ controlLoading && pendingMode === null ? 'Applying...' : 'Auto' }}
+        </button>
+        <button
+          class="secondary-btn"
+          :class="{ 'secondary-btn-active': snapshot?.derived.ownerMode === 'sleep' }"
+          :disabled="loading || controlLoading"
+          @click="setOwnerMode('sleep')"
+        >
+          {{ controlLoading && pendingMode === 'sleep' ? 'Applying...' : 'Sleep Now' }}
+        </button>
+        <button
+          class="secondary-btn"
+          :class="{ 'secondary-btn-active': snapshot?.derived.ownerMode === 'focus' }"
+          :disabled="loading || controlLoading"
+          @click="setOwnerMode('focus')"
+        >
+          {{ controlLoading && pendingMode === 'focus' ? 'Applying...' : 'Focus' }}
+        </button>
+        <button
+          class="secondary-btn"
+          :class="{ 'secondary-btn-active': snapshot?.derived.ownerMode === 'available' }"
+          :disabled="loading || controlLoading"
+          @click="setOwnerMode('available')"
+        >
+          {{ controlLoading && pendingMode === 'available' ? 'Applying...' : 'Stay Available' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-card">
       <div class="card-title">Current Presence</div>
       <p class="card-help">
         Read-only view of iKi's daemon-owned life state. This should reflect one shared presence
@@ -24,6 +90,9 @@
           <span class="life-chip life-chip-primary">{{ snapshot.state.presence }}</span>
           <span class="life-chip">{{ snapshot.state.current_activity }}</span>
           <span class="life-chip">{{ snapshot.derived.dayPhase }}</span>
+          <span v-if="snapshot.derived.ownerMode" class="life-chip">
+            owner: {{ snapshot.derived.ownerMode }} ({{ snapshot.derived.ownerModeStatus }})
+          </span>
         </div>
 
         <div class="life-grid">
@@ -159,7 +228,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
-import type { LifeOverview, LifePushPayload, LifeSnapshot } from '../../../shared/types/life';
+import type {
+  LifeOverview,
+  LifeOwnerMode,
+  LifePushPayload,
+  LifeSnapshot,
+} from '../../../shared/types/life';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { lifeService } from '../../services/life_service';
 import { formatTimestamp } from './settings_formatters';
@@ -169,8 +243,11 @@ const props = defineProps<{
 }>();
 
 const loading = ref(false);
+const controlLoading = ref(false);
 const errorText = ref('');
+const controlErrorText = ref('');
 const overview = ref<LifeOverview | null>(null);
+const pendingMode = ref<LifeOwnerMode | null | undefined>(undefined);
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let removePushListener: (() => void) | null = null;
@@ -178,6 +255,13 @@ let removePushListener: (() => void) | null = null;
 const snapshot = computed<LifeSnapshot | null>(() => overview.value?.snapshot ?? null);
 const recentEpisodes = computed(() => overview.value?.recentEpisodes ?? []);
 const recentReflections = computed(() => overview.value?.recentReflections ?? []);
+const ownerModeLabel = computed(() => {
+  const mode = snapshot.value?.derived.ownerMode;
+  if (!mode) return 'Auto';
+  if (mode === 'sleep') return 'Sleep';
+  if (mode === 'focus') return 'Focus';
+  return 'Stay Available';
+});
 
 const formatPercent = (value: number): string => `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 const parseList = (raw: string | null | undefined): string[] => {
@@ -219,6 +303,36 @@ const forceRefresh = async () => {
     errorText.value = getErrorMessage(error);
   } finally {
     loading.value = false;
+  }
+};
+
+const setOwnerMode = async (mode: LifeOwnerMode) => {
+  controlLoading.value = true;
+  controlErrorText.value = '';
+  pendingMode.value = mode;
+  try {
+    await lifeService.setOwnerMode(mode);
+    overview.value = await lifeService.getOverview(8);
+  } catch (error: unknown) {
+    controlErrorText.value = getErrorMessage(error);
+  } finally {
+    controlLoading.value = false;
+    pendingMode.value = undefined;
+  }
+};
+
+const clearOwnerMode = async () => {
+  controlLoading.value = true;
+  controlErrorText.value = '';
+  pendingMode.value = null;
+  try {
+    await lifeService.clearOwnerMode();
+    overview.value = await lifeService.getOverview(8);
+  } catch (error: unknown) {
+    controlErrorText.value = getErrorMessage(error);
+  } finally {
+    controlLoading.value = false;
+    pendingMode.value = undefined;
   }
 };
 
@@ -302,6 +416,12 @@ onUnmounted(() => {
   margin-bottom: 14px;
 }
 
+.life-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
 .life-stat {
   display: flex;
   flex-direction: column;
@@ -370,6 +490,11 @@ onUnmounted(() => {
   gap: 6px;
   margin-top: 6px;
   line-height: 1.4;
+}
+
+.secondary-btn-active {
+  border-color: color-mix(in srgb, var(--color-accent-primary) 34%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent-primary) 14%, var(--color-surface-elevated));
 }
 
 @media (max-width: 720px) {
