@@ -15,10 +15,12 @@ import type { ChatMemory } from './chat_memory';
 import { resolveSkillsSystemPrompt } from './chat_skills';
 import { getPromptFromMessage } from './chat_ui';
 import { getIdentityContextMessage } from '../identity/identity_service';
+import { getLifeContextMessage } from '../life/life_runtime';
 
 export type ContextBlockKind =
   | 'recent-history'
   | 'identity'
+  | 'life-state'
   | 'thread-summary'
   | 'memory'
   | 'affect'
@@ -84,6 +86,11 @@ type SummaryContext = {
 };
 
 type IdentityContext = {
+  systemMessage: string;
+  block: ContextReportBlock;
+};
+
+type LifeStateContext = {
   systemMessage: string;
   block: ContextReportBlock;
 };
@@ -425,6 +432,25 @@ const buildIdentityContext = (contextConfig: ContextConfig): IdentityContext => 
   };
 };
 
+const buildLifeStateContext = (contextConfig: ContextConfig): LifeStateContext => {
+  const lifeClip = clipTextToTokenBudget(getLifeContextMessage(), contextConfig.maxLifeStateTokens);
+
+  return {
+    systemMessage: lifeClip.text,
+    block: {
+      kind: 'life-state',
+      status: lifeClip.text ? (lifeClip.truncated ? 'truncated' : 'included') : 'dropped',
+      estimatedTokens: estimateTokens(lifeClip.text),
+      charCount: lifeClip.text.length,
+      ...(lifeClip.text
+        ? lifeClip.truncated
+          ? { reason: 'life-state block clipped to context budget' }
+          : {}
+        : { reason: 'no life state available' }),
+    },
+  };
+};
+
 const toMemoryDisplayEntry = (result: Record<string, unknown>) => ({
   summary: typeof result.summary === 'string' ? result.summary : '',
   score: typeof result.score === 'number' ? result.score : Number(result.score || 0),
@@ -618,6 +644,9 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
     const identityContext = buildIdentityContext(contextConfig);
     blocks.push(identityContext.block);
 
+    const lifeStateContext = buildLifeStateContext(contextConfig);
+    blocks.push(lifeStateContext.block);
+
     const threadSummary = params.threadId
       ? await ensureThreadSummary(params.threadId, contextConfig)
       : null;
@@ -641,7 +670,12 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
 
     const baseMessages = insertSystemMessages(
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
-      [identityContext.systemMessage, summaryContext.systemMessage, memoryContext.systemMessage]
+      [
+        identityContext.systemMessage,
+        lifeStateContext.systemMessage,
+        summaryContext.systemMessage,
+        memoryContext.systemMessage,
+      ]
     );
 
     const affectMessage = resolveAffectMessage(params, deps.memory);

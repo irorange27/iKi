@@ -107,6 +107,7 @@ export interface AppConfig {
       maxRecentTokens: number;
       maxMessageTokens: number;
       maxIdentityTokens: number;
+      maxLifeStateTokens: number;
       summaryTriggerMessages: number;
       summaryRecentMessages: number;
       maxSummaryTokens: number;

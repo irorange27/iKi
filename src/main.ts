@@ -10,7 +10,10 @@ import {
   startDesktopDaemon,
   stopDesktopDaemon,
 } from './main/services/daemon/daemon_lifecycle';
-import { startProactiveTaskScheduler } from './main/services/tasks/proactive_tasks';
+import {
+  startBackgroundRuntime,
+  stopBackgroundRuntime,
+} from './main/services/runtime/background_runtime';
 import { createMainWindow } from './main/windows/main_window';
 
 const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
@@ -36,6 +39,7 @@ if (isDaemonMode) {
   const host = process.env.IKI_DAEMON_HOST?.trim() || undefined;
 
   startDaemonServer({ port, host });
+  startBackgroundRuntime();
 } else {
   setPlatformInfo({
     userDataPath: app.getPath('userData'),
@@ -70,12 +74,13 @@ if (isDaemonMode) {
   // initialization and is ready to create browser windows.
   // Some APIs can only be used after this event occurs.
   app.on('ready', () => {
-    startProactiveTaskScheduler();
+    startBackgroundRuntime();
     void startDesktopDaemon();
     createMainWindow();
   });
 
   app.on('before-quit', () => {
+    stopBackgroundRuntime();
     stopDesktopDaemon();
   });
 

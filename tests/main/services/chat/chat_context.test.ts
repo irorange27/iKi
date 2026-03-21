@@ -10,6 +10,7 @@ const {
   generateThreadSummaryMock,
   resolveSkillsSystemPromptMock,
   getIdentityContextMessageMock,
+  getLifeContextMessageMock,
 } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
   getChatMessagesMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   generateThreadSummaryMock: vi.fn(),
   resolveSkillsSystemPromptMock: vi.fn(),
   getIdentityContextMessageMock: vi.fn(),
+  getLifeContextMessageMock: vi.fn(),
 }));
 
 vi.mock('../../../../src/core/config', () => ({
@@ -52,6 +54,10 @@ vi.mock('../../../../src/main/services/identity/identity_service', () => ({
   getIdentityContextMessage: getIdentityContextMessageMock,
 }));
 
+vi.mock('../../../../src/main/services/life/life_runtime', () => ({
+  getLifeContextMessage: getLifeContextMessageMock,
+}));
+
 import { createChatContextAssembler } from '../../../../src/main/services/chat/chat_context';
 
 const baseConfig = {
@@ -62,6 +68,7 @@ const baseConfig = {
       maxRecentTokens: 4000,
       maxMessageTokens: 200,
       maxIdentityTokens: 120,
+      maxLifeStateTokens: 120,
       summaryTriggerMessages: 5,
       summaryRecentMessages: 2,
       maxSummaryTokens: 300,
@@ -91,6 +98,8 @@ beforeEach(() => {
     skillMode: 'manual',
   });
   getIdentityContextMessageMock.mockReturnValue('');
+  getLifeContextMessageMock.mockReturnValue('');
+  getLifeContextMessageMock.mockReturnValue('');
 });
 
 describe('chat_context assembler', () => {
@@ -345,6 +354,37 @@ describe('chat_context assembler', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'identity',
+          status: 'included',
+        }),
+      ])
+    );
+  });
+
+  it('injects the current life-state block through the shared context pipeline', async () => {
+    getLifeContextMessageMock.mockReturnValue(
+      'Current life state for iKi:\n- Presence: focused\n- Activity: focused_work'
+    );
+
+    const assembler = createChatContextAssembler({
+      memory: {
+        retrieveRelevantMemory: vi.fn(() => null),
+        getAffectContextMessage: vi.fn(() => ''),
+      } as never,
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_life',
+      messages: [{ role: 'user', content: 'What are you occupied with?' }],
+    });
+
+    expect(result.messages[0]).toEqual({
+      role: 'system',
+      content: 'Current life state for iKi:\n- Presence: focused\n- Activity: focused_work',
+    });
+    expect(result.report.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'life-state',
           status: 'included',
         }),
       ])

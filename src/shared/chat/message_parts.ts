@@ -31,7 +31,14 @@ export type SkillUsagePart = {
 };
 
 export type ContextReportItem = {
-  kind?: 'recent-history' | 'identity' | 'thread-summary' | 'memory' | 'affect' | 'skills';
+  kind?:
+    | 'recent-history'
+    | 'identity'
+    | 'life-state'
+    | 'thread-summary'
+    | 'memory'
+    | 'affect'
+    | 'skills';
   status?: 'included' | 'truncated' | 'dropped';
   estimatedTokens?: number;
   charCount?: number;

@@ -12,6 +12,7 @@ import {
 import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
+import { recordLifeRuntimeEvent } from '../life/life_runtime';
 
 const SCHEDULER_TICK_MS = 30_000;
 
@@ -202,13 +203,14 @@ export const runProactiveTask = async (
 
   taskInFlight.add(taskId);
   const startedAt = nowIso();
+  let threadId: string | null = null;
   tasksDb.updateProactiveTask(taskId, {
     last_status: 'running',
     last_error: null,
   });
 
   try {
-    const threadId = await ensureTaskThread({
+    threadId = await ensureTaskThread({
       id: task.id,
       name: task.name,
       model: task.model,
@@ -220,6 +222,14 @@ export const runProactiveTask = async (
       schedule_timezone: task.schedule_timezone ?? null,
       tool_mode: task.tool_mode,
       tools: task.tools ?? null,
+    });
+
+    recordLifeRuntimeEvent({
+      type: 'task-started',
+      at: startedAt,
+      taskId: task.id,
+      threadId,
+      triggerRef: options?.reason || 'schedule',
     });
 
     const toolMode = inferProactiveTaskToolMode(task);
@@ -307,6 +317,14 @@ export const runProactiveTask = async (
         message: uiMessage,
       });
 
+      recordLifeRuntimeEvent({
+        type: 'task-failed',
+        at: nowIso(),
+        taskId: task.id,
+        threadId,
+        triggerRef: options?.reason || 'schedule',
+      });
+
       return { success: false, error: errorText };
     }
 
@@ -390,6 +408,14 @@ export const runProactiveTask = async (
         message: failedDeliveryMessage,
       });
 
+      recordLifeRuntimeEvent({
+        type: 'task-failed',
+        at: nowIso(),
+        taskId: task.id,
+        threadId,
+        triggerRef: 'bridge-delivery',
+      });
+
       return { success: false, error: deliveryError };
     }
 
@@ -441,6 +467,14 @@ export const runProactiveTask = async (
       message: uiMessage,
     });
 
+    recordLifeRuntimeEvent({
+      type: 'task-finished',
+      at: nowIso(),
+      taskId: task.id,
+      threadId,
+      triggerRef: options?.reason || 'schedule',
+    });
+
     return { success: true };
   } catch (error) {
     const errorText = getErrorMessage(error);
@@ -450,6 +484,13 @@ export const runProactiveTask = async (
       next_run_at: nextRunAt,
       last_status: 'error',
       last_error: errorText,
+    });
+    recordLifeRuntimeEvent({
+      type: 'task-failed',
+      at: nowIso(),
+      taskId: task.id,
+      threadId,
+      triggerRef: options?.reason || 'schedule',
     });
     return { success: false, error: errorText };
   } finally {

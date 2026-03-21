@@ -43,7 +43,7 @@ const DEFAULT_IDENTITY_PROFILE = {
     'Sound grounded, thoughtful, and warm without becoming theatrical or roleplay-heavy.',
 } as const;
 
-const ensureActiveIdentityProfile = (): IdentityProfile | null => {
+export const getOrCreateActiveIdentityProfile = (): IdentityProfile | null => {
   const existing = getActiveIdentityProfile();
   if (existing) return existing;
 
@@ -77,7 +77,7 @@ export const buildIdentitySystemMessage = (profile: IdentityProfile): string => 
 };
 
 export const getIdentityContextMessage = (): string => {
-  const profile = ensureActiveIdentityProfile();
+  const profile = getOrCreateActiveIdentityProfile();
   if (!profile) return '';
   return buildIdentitySystemMessage(profile);
 };

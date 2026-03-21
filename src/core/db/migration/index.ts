@@ -16,6 +16,7 @@ import { migration as migration013ThreadContext } from './013_add_chat_thread_co
 import { migration as migration014ProactiveTaskToolMode } from './014_add_proactive_task_tool_mode';
 import { migration as migration015TodoLists } from './015_add_todo_lists_table';
 import { migration as migration016IdentityProfiles } from './016_add_identity_profiles_table';
+import { migration as migration017LifeRuntime } from './017_add_life_runtime_tables';
 
 // Register all migrations here
 const migrations = [
@@ -36,6 +37,7 @@ const migrations = [
   migration014ProactiveTaskToolMode,
   migration015TodoLists,
   migration016IdentityProfiles,
+  migration017LifeRuntime,
   // Add more migrations here as needed
 ];
 

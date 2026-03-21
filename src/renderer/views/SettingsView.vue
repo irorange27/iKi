@@ -496,6 +496,8 @@
         @reset="resetSection('memory')"
       />
 
+      <SettingsLifeSection v-show="activeSection === 'life'" :active="activeSection === 'life'" />
+
       <SettingsTasksSection
         v-show="activeSection === 'tasks'"
         :active="activeSection === 'tasks'"
@@ -533,6 +535,7 @@ import {
   Palette,
   Mic,
   Brain,
+  Activity,
   Bot,
   BarChart3,
   RefreshCw,
@@ -548,6 +551,7 @@ import NapCatSettings from '../components/settings/NapCatSettings.vue';
 import SettingsColorSchemeSection from '../components/settings/SettingsColorSchemeSection.vue';
 import SettingsSpeechSection from '../components/settings/SettingsSpeechSection.vue';
 import SettingsMemorySection from '../components/settings/SettingsMemorySection.vue';
+import SettingsLifeSection from '../components/settings/SettingsLifeSection.vue';
 import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
@@ -733,6 +737,7 @@ const menuItems = [
   { key: 'usage', label: 'Usage', icon: BarChart3 },
   { key: 'skills', label: 'Skills', icon: Wand2 },
   { key: 'memory', label: 'Memory', icon: Brain },
+  { key: 'life', label: 'Life', icon: Activity },
   { key: 'ui', label: 'User Interface', icon: SlidersHorizontal },
   { key: 'colorScheme', label: 'Color Scheme', icon: Palette },
   { key: 'speech', label: 'Speech', icon: Mic },

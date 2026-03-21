@@ -21,7 +21,7 @@ describe('identity db helpers', () => {
       name: 'iKi Core',
       active: 1,
     });
-    const prepareMock = vi.fn((sql: string) => ({
+    const prepareMock = vi.fn(() => ({
       run: runMock,
       get: getMock,
       all: vi.fn(),

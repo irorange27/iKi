@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => {
   const NotificationMock = Object.assign(
-    vi.fn().mockImplementation(() => ({ show: vi.fn() })),
+    vi.fn(function NotificationCtor(this: { show: ReturnType<typeof vi.fn> }) {
+      this.show = vi.fn();
+    }),
     { isSupported: vi.fn(() => true) }
   );
 
@@ -31,6 +33,10 @@ vi.mock('../../../../src/daemon/bridge_dispatch', () => ({
   deliverBridgeThreadMessage: vi.fn(),
 }));
 
+vi.mock('../../../../src/main/services/life/life_runtime', () => ({
+  recordLifeRuntimeEvent: vi.fn(),
+}));
+
 vi.mock('../../../../src/main/services/chat/chat_service', () => ({
   chatService: {
     getThread: vi.fn(),
@@ -48,6 +54,7 @@ import * as tasksDb from '../../../../src/core/db/tasks';
 import * as chatThreadDb from '../../../../src/core/db/chat_thread';
 import { deliverBridgeThreadMessage } from '../../../../src/daemon/bridge_dispatch';
 import { chatService } from '../../../../src/main/services/chat/chat_service';
+import { recordLifeRuntimeEvent } from '../../../../src/main/services/life/life_runtime';
 
 const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
   id: 'task_1',
@@ -85,6 +92,7 @@ describe('runProactiveTask', () => {
   const updateProactiveTaskMock = vi.mocked(tasksDb.updateProactiveTask);
   const touchChatThreadMock = vi.mocked(chatThreadDb.touchChatThread);
   const deliverBridgeThreadMessageMock = vi.mocked(deliverBridgeThreadMessage);
+  const recordLifeRuntimeEventMock = vi.mocked(recordLifeRuntimeEvent);
   const chatServiceMock = chatService as unknown as {
     getThread: ReturnType<typeof vi.fn>;
     createThread: ReturnType<typeof vi.fn>;
@@ -171,6 +179,20 @@ describe('runProactiveTask', () => {
     });
 
     expect(touchChatThreadMock).toHaveBeenCalledWith('thread_1');
+    expect(recordLifeRuntimeEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'task-started',
+        taskId: 'task_1',
+        threadId: 'thread_1',
+      })
+    );
+    expect(recordLifeRuntimeEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'task-finished',
+        taskId: 'task_1',
+        threadId: 'thread_1',
+      })
+    );
     expect(sendMock).toHaveBeenCalledWith(
       'tasks:push',
       expect.objectContaining({
@@ -231,6 +253,13 @@ describe('runProactiveTask', () => {
       kind: 'error',
       reason: 'manual',
     });
+    expect(recordLifeRuntimeEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'task-failed',
+        taskId: 'task_1',
+        threadId: 'thread_2',
+      })
+    );
 
     expect(sendMock).toHaveBeenCalledWith(
       'tasks:push',
