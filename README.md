@@ -56,6 +56,8 @@ A local agent pet for AI provider orchestration.
   `vue-tsc --noEmit` + tests with coverage)
 - Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; they
   are intentionally modest and should be ratcheted upward over time
+- Coverage now counts Vue single-file components (`src/**/*.vue`) in addition to `ts/tsx`, so
+  renderer interaction logic is part of the same regression floor as the rest of the codebase
 - Renderer component tests now run in Vitest with Vue SFC transform and `happy-dom`
 - Quick renderer-only regression pass: `npm run -s test:renderer`
 
