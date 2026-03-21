@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
+import { expectConsoleErrorMatching } from '../../setup/error_log_guard';
 import type { Provider } from '../../../src/shared/types/provider';
 import type { Workspace } from '../../../src/shared/types/chat';
 
@@ -549,6 +550,7 @@ describe('ChatInput', () => {
       type: 'openai',
       models: '["gpt-4.1"]',
     });
+    const configuredError = new Error('ipc failed');
     const alertSpy = vi.fn();
     Object.defineProperty(window, 'alert', {
       configurable: true,
@@ -557,10 +559,17 @@ describe('ChatInput', () => {
 
     const { wrapper, stream, prepareMessageSend } = await mountChatInput({
       providers: [provider],
-      configuredError: new Error('ipc failed'),
+      configuredError,
     });
 
     await wrapper.find('.chat-input-field').setValue('Need help with the repo');
+    expectConsoleErrorMatching(
+      args =>
+        args[0] === 'Failed to verify provider configuration:' &&
+        args[1] instanceof Error &&
+        args[1].message === configuredError.message,
+      'console.error(Failed to verify provider configuration:, Error: ipc failed)'
+    );
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 

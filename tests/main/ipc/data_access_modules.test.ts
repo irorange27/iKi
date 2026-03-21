@@ -1,5 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { expectConsoleErrorArgs } from '../../setup/error_log_guard';
+
 type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
 const { ipcHandlers, ipcHandleMock } = vi.hoisted(() => ({
@@ -195,7 +197,6 @@ describe('data access IPC modules', () => {
   });
 
   it('forwards provider IPC handlers and rethrows write errors after logging', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     getProvidersMock.mockReturnValue([{ id: 'provider_1' } as never]);
     getProviderMock.mockReturnValue({ id: 'provider_1', name: 'OpenAI' } as never);
     addProviderMock.mockReturnValue({ id: 'provider_new' } as never);
@@ -219,19 +220,19 @@ describe('data access IPC modules', () => {
     addProviderMock.mockImplementationOnce(() => {
       throw addError;
     });
+    expectConsoleErrorArgs('[Main] providers:add error:', addError);
     expect(() => ipcHandlers.get('providers:add')?.(null, { id: 'provider_bad' })).toThrow(
       'add failed'
     );
-    expect(consoleErrorSpy).toHaveBeenCalledWith('[Main] providers:add error:', addError);
 
     const updateError = new Error('update failed');
     updateProviderMock.mockImplementationOnce(() => {
       throw updateError;
     });
+    expectConsoleErrorArgs('[Main] providers:update error:', updateError);
     expect(() =>
       ipcHandlers.get('providers:update')?.(null, 'provider_1', { enabled: false })
     ).toThrow('update failed');
-    expect(consoleErrorSpy).toHaveBeenCalledWith('[Main] providers:update error:', updateError);
   });
 
   it('creates workspace records with normalized defaults and forwards remaining workspace handlers', async () => {

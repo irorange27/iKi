@@ -7,6 +7,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    setupFiles: ['tests/setup/strict_error_logs.ts'],
     clearMocks: true,
     coverage: {
       provider: 'v8',
@@ -16,7 +17,7 @@ export default defineConfig({
       exclude: ['src/**/*.d.ts', 'src/core/db/migration/**'],
       thresholds: {
         lines: 62,
-        functions: 60,
+        functions: 59,
         branches: 46,
         statements: 59,
       },

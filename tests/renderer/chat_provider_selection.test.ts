@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { expectConsoleErrorArgs } from '../setup/error_log_guard';
 import type { Provider } from '../../src/shared/types/provider';
 import {
   resolveProviderSelection,
@@ -153,8 +154,9 @@ describe('chat provider selection', () => {
     });
 
     const providerList = vi.fn(async () => [openai]);
+    const configuredError = new Error('ipc failed');
     const isProviderConfigured = vi.fn(async () => {
-      throw new Error('ipc failed');
+      throw configuredError;
     });
     const selection = useChatProviderSelection({
       electronAPI: {
@@ -168,6 +170,7 @@ describe('chat provider selection', () => {
     });
 
     await selection.loadAvailableProviders();
+    expectConsoleErrorArgs('Failed to verify provider configuration:', configuredError);
     const result = await selection.ensureProviderReady();
 
     expect(providerList).toHaveBeenCalledTimes(1);
