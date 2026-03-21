@@ -1,0 +1,118 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import type { Provider } from '../../src/shared/types/provider';
+import {
+  resolveProviderSelection,
+  useChatProviderSelection,
+} from '../../src/renderer/composables/useChatProviderSelection';
+
+const buildProvider = (
+  overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type'>
+): Provider => ({
+  id: overrides.id,
+  name: overrides.name,
+  type: overrides.type,
+  api_key: overrides.api_key ?? '',
+  models: overrides.models ?? '[]',
+  base_url: overrides.base_url,
+  enabled: overrides.enabled ?? true,
+  created_at: overrides.created_at ?? '2026-03-22T00:00:00.000Z',
+  updated_at: overrides.updated_at ?? '2026-03-22T00:00:00.000Z',
+  available_models: overrides.available_models ?? '[]',
+  api_version: overrides.api_version,
+  is_response_api: overrides.is_response_api,
+  acp_command: overrides.acp_command,
+  acp_args: overrides.acp_args,
+  acp_mcp_server_ids: overrides.acp_mcp_server_ids,
+  acp_auth_method_id: overrides.acp_auth_method_id,
+  acp_api_provider_id: overrides.acp_api_provider_id,
+  acp_model_mapping: overrides.acp_model_mapping,
+});
+
+describe('chat provider selection', () => {
+  it('keeps the previous enabled provider and model when still available', () => {
+    const openai = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1","gpt-4o"]',
+    });
+    const deepseek = buildProvider({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      type: 'deepseek',
+      models: '["deepseek-chat"]',
+    });
+
+    expect(
+      resolveProviderSelection({
+        providers: [openai, deepseek],
+        currentProvider: openai,
+        currentModel: 'gpt-4o',
+      })
+    ).toEqual({
+      availableProviders: [openai, deepseek],
+      selectedProvider: openai,
+      selectedModel: 'gpt-4o',
+    });
+  });
+
+  it('falls back to the next enabled provider with models when the current provider is unusable', () => {
+    const current = buildProvider({
+      id: 'empty',
+      name: 'Empty',
+      type: 'openai',
+      models: '[]',
+    });
+    const deepseek = buildProvider({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      type: 'deepseek',
+      models: '["deepseek-chat"]',
+    });
+
+    expect(
+      resolveProviderSelection({
+        providers: [current, deepseek],
+        currentProvider: current,
+        currentModel: 'missing-model',
+      })
+    ).toEqual({
+      availableProviders: [current, deepseek],
+      selectedProvider: deepseek,
+      selectedModel: 'deepseek-chat',
+    });
+  });
+
+  it('surfaces provider configuration failures before send', async () => {
+    const openai = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const providerList = vi.fn(async () => [openai]);
+    const isProviderConfigured = vi.fn(async () => false);
+    const selection = useChatProviderSelection({
+      electronAPI: {
+        providers: {
+          list: providerList,
+        },
+        chat: {
+          isProviderConfigured,
+        },
+      } as never,
+    });
+
+    await selection.loadAvailableProviders();
+    const result = await selection.ensureProviderReady();
+
+    expect(providerList).toHaveBeenCalledTimes(1);
+    expect(isProviderConfigured).toHaveBeenCalledWith('openai');
+    expect(result).toEqual({
+      ok: false,
+      message: 'Please configure the OpenAI API key in Settings.',
+    });
+  });
+});

@@ -1,6 +1,9 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import type { ChatThread } from '../../../shared/types/chat';
-import { isObjectRecord } from '../../../shared/chat/tool_parts';
+import {
+  buildThreadRuntimeMetadata,
+  normalizeStringArray,
+} from '../../../shared/chat/thread_runtime_hints';
 
 export const persistThreadRuntimeHints = (params: {
   threadId: string;
@@ -15,44 +18,20 @@ export const persistThreadRuntimeHints = (params: {
 
   try {
     const thread = chatThreadDb.getChatThread(normalizedThreadId);
-    let parsedMetadata: unknown = {};
-    try {
-      parsedMetadata =
-        thread?.metadata && thread.metadata.trim().length > 0 ? JSON.parse(thread.metadata) : {};
-    } catch {
-      parsedMetadata = {};
-    }
-
-    const metadataRecord = isObjectRecord(parsedMetadata) ? parsedMetadata : {};
-    const nextLlm = isObjectRecord(metadataRecord.llm) ? metadataRecord.llm : {};
-    const nextToolSelection = isObjectRecord(metadataRecord.toolSelection)
-      ? metadataRecord.toolSelection
-      : {};
-    const normalizedMcpServerIds = Array.isArray(params.mcpServerIds)
-      ? params.mcpServerIds
-          .filter((serverId): serverId is string => typeof serverId === 'string')
-          .map(serverId => serverId.trim())
-          .filter(Boolean)
-      : [];
+    const normalizedTools = normalizeStringArray(params.tools);
 
     const update: Partial<ChatThread> = {
       model: params.model || thread?.model || null,
-      tools: params.tools.length > 0 ? JSON.stringify(params.tools) : null,
-      metadata: JSON.stringify({
-        ...metadataRecord,
-        llm: {
-          ...(nextLlm as Record<string, unknown>),
+      tools: normalizedTools.length > 0 ? JSON.stringify(normalizedTools) : null,
+      metadata: JSON.stringify(
+        buildThreadRuntimeMetadata({
+          existingMetadata: thread?.metadata,
           providerType: params.providerType,
           model: params.model,
-          updatedAt: new Date().toISOString(),
-        },
-        toolSelection: {
-          ...(nextToolSelection as Record<string, unknown>),
-          mode: params.toolMode,
-          mcpServerIds: normalizedMcpServerIds,
-          updatedAt: new Date().toISOString(),
-        },
-      }),
+          toolMode: params.toolMode,
+          mcpServerIds: params.mcpServerIds,
+        })
+      ),
     };
     chatThreadDb.updateChatThread(normalizedThreadId, update);
   } catch (error) {
