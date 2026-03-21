@@ -8,6 +8,10 @@ const CHAT_MESSAGE_ITEM_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/chat/ChatMessageItem.vue'
 );
+const CHAT_MESSAGE_PARTS_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/chat/ChatMessageParts.vue'
+);
 
 describe('chat chrome theme tokens', () => {
   it('defines dedicated composer and user bubble tokens with light-theme overrides', () => {
@@ -33,6 +37,7 @@ describe('chat chrome theme tokens', () => {
   it('routes composer and outgoing bubble styles through semantic theme vars', () => {
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
     const chatMessageItemSource = readFileSync(CHAT_MESSAGE_ITEM_VUE_PATH, 'utf8');
+    const chatMessagePartsSource = readFileSync(CHAT_MESSAGE_PARTS_VUE_PATH, 'utf8');
 
     expect(chatInputSource).toMatch(/border-color:\s*var\(--chat-composer-border-color\);/);
     expect(chatInputSource).toMatch(/background:\s*var\(--chat-composer-background\);/);
@@ -61,6 +66,6 @@ describe('chat chrome theme tokens', () => {
     expect(chatMessageItemSource).toMatch(
       /border-radius:\s*var\(--chat-user-bubble-radius,\s*28px\);/
     );
-    expect(chatMessageItemSource).toMatch(/color:\s*var\(--chat-user-bubble-text\);/);
+    expect(chatMessagePartsSource).toMatch(/color:\s*var\(--chat-user-bubble-text\);/);
   });
 });

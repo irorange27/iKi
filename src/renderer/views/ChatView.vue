@@ -71,15 +71,12 @@
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
-import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { computed, ref, nextTick } from 'vue';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import { FolderOpen } from 'lucide-vue-next';
-import {
-  getToolName,
-} from '../modules/chat/ui_message_tool_parts';
 import {
   buildContextUsageIndicator,
   getContextReferenceSummary,
@@ -87,9 +84,12 @@ import {
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import { createChatMessageStore } from '../modules/chat/chat_message_store';
 import type { ElectronApi } from '../../shared/types/electron_api';
+import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';
+import { useMarkdownCopy } from '../composables/useMarkdownCopy';
 import { useChatThreads } from '../composables/useChatThreads';
 import { useChatStreaming } from '../composables/useChatStreaming';
+import { useToolMetadata } from '../composables/useToolMetadata';
 
 type ChatInputExpose = {
   setDraftMessage: (
@@ -110,53 +110,12 @@ const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
 const persistence = createUiMessagePersistence({ electronAPI });
 const messageStore = createChatMessageStore(chat);
+const { handleMarkdownClick } = useMarkdownCopy();
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-type ToolSource = {
-  kind?: 'builtin' | 'mcp';
-  id?: string;
-  name?: string;
-};
-
-const toolSourceMap = ref<Map<string, ToolSource>>(new Map());
-const toolSourceLoading = ref(false);
-
-const loadToolSources = async () => {
-  if (toolSourceLoading.value) return;
-  toolSourceLoading.value = true;
-  try {
-    if (!electronAPI?.tools?.list) return;
-    const list = await electronAPI.tools.list();
-    if (!Array.isArray(list)) return;
-    const next = new Map<string, ToolSource>();
-    for (const item of list) {
-      if (!item || typeof item !== 'object') continue;
-      const name = (item as { name?: unknown }).name;
-      if (typeof name !== 'string' || !name.trim()) continue;
-      const source = (item as { source?: unknown }).source;
-      if (source && typeof source === 'object') {
-        next.set(name, source as ToolSource);
-      }
-    }
-    toolSourceMap.value = next;
-  } catch (error) {
-    console.warn('Failed to load tool metadata:', error);
-  } finally {
-    toolSourceLoading.value = false;
-  }
-};
-
-const getMcpServerLabel = (part: unknown): string => {
-  const toolName = getToolName(part);
-  if (!toolName) return '';
-  const source = toolSourceMap.value.get(toolName);
-  if (!source && (toolName.startsWith('mcp_') || toolName.startsWith('mcp:'))) {
-    void loadToolSources();
-  }
-  if (source?.kind !== 'mcp') return '';
-  return source.name || source.id || '';
-};
+const { loadToolSources, getMcpServerLabel, openSkillReference } = useToolMetadata({
+  electronAPI,
+});
 
 const composerContextUsage = computed(() => {
   const messages = Array.isArray(chat.messages) ? [...chat.messages] : [];
@@ -173,66 +132,12 @@ const composerContextUsage = computed(() => {
   return null;
 });
 
-const openSkillReference = async (skillId: string) => {
-  try {
-    const result = await electronAPI?.skills?.openSkill?.(skillId);
-    if (result?.success) return;
-    console.warn('Failed to open skill:', result?.error || skillId);
-  } catch (error) {
-    console.warn('Failed to open skill:', error);
-  }
-};
-
 const handleToolApprovalEvent = (payload: {
   approved: boolean;
   message: UIMessage;
   part: unknown;
 }) => {
   void handleToolApproval(payload.message, payload.part, payload.approved);
-};
-
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
-  if (!text) return false;
-
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      const copied = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      return copied;
-    } catch {
-      return false;
-    }
-  }
-};
-
-const handleMarkdownClick = async (event: MouseEvent) => {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-
-  const copyButton = target.closest('.md-code-copy-btn') as HTMLButtonElement | null;
-  if (!copyButton) return;
-
-  const codeElement = copyButton.closest('.md-code-block')?.querySelector('pre code');
-  const codeText = codeElement?.textContent ?? '';
-  if (!codeText.trim()) return;
-
-  const copied = await copyTextToClipboard(codeText);
-  if (!copied) return;
-
-  copyButton.dataset.copied = 'true';
-  window.setTimeout(() => {
-    delete copyButton.dataset.copied;
-  }, 1200);
 };
 
 const scrollToBottom = () => {
@@ -306,38 +211,13 @@ const cancelEditing = async () => {
   await streaming.cancelEditing(clearDraft);
 };
 
-// Listen for model selection from ChatInput
-onMounted(async () => {
-  // Initialize config store if not already initialized
-  if (!configStore.initialized) {
-    await configStore.initialize();
-  }
-  // Load threads on mount
-  await refreshThreads();
-  await loadToolSources();
-
-  electronAPI.chat.removeAllListeners();
-  electronAPI.chat.onUiChunk((chunk: unknown) => {
-    void streamController.handleUiChunk(chunk);
-  });
-
-  try {
-    electronAPI.tasks?.removeAllListeners?.();
-    electronAPI.tasks?.onPush?.((payload: unknown) => {
-      void handleTaskPush(payload);
-    });
-  } catch {
-    // Ignore missing tasks IPC in older builds.
-  }
-});
-
-onUnmounted(() => {
-  electronAPI.chat.removeAllListeners();
-  try {
-    electronAPI.tasks?.removeAllListeners?.();
-  } catch {
-    // ignore
-  }
+useChatViewLifecycle({
+  configStore,
+  refreshThreads,
+  loadToolSources,
+  electronAPI,
+  streamController,
+  handleTaskPush,
 });
 </script>
 
@@ -360,15 +240,6 @@ onUnmounted(() => {
   max-width: 860px;
   min-width: 0;
   margin: 0 auto;
-}
-
-.message-wrapper {
-  margin-bottom: var(--chat-message-gap, 18px);
-}
-
-.message-shell {
-  position: relative;
-  min-width: 0;
 }
 
 .composer-area {
@@ -418,24 +289,6 @@ onUnmounted(() => {
 
   .messages-container {
     max-width: 100%;
-  }
-}
-
-.typing-cursor {
-  display: inline-block;
-  color: var(--accent-color);
-  animation: blink 1s infinite;
-  margin-left: 2px;
-}
-
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.3;
   }
 }
 
