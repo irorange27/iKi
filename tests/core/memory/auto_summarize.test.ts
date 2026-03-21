@@ -65,6 +65,19 @@ describe('generateLongMemorySummary', () => {
     expect(result).toBeNull();
   });
 
+  it('treats empty fenced output as no summary instead of storing the raw fence', async () => {
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: '```text\n   \n```' }),
+    });
+
+    const result = await generateLongMemorySummary([
+      makeEntry({ content: 'The user likes tea and keeps a daily habit log.' }),
+    ]);
+
+    expect(result).toBeNull();
+  });
+
   it('sanitizes summary text and returns source message ids', async () => {
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
     createSimplePromptTextGeneratorMock.mockReturnValue({

@@ -36,8 +36,8 @@ const sanitizeSummary = (raw: string) => {
   let value = raw.trim();
 
   const fencedMatch = value.match(/```(?:\w+)?\s*([\s\S]*?)\s*```/i);
-  if (fencedMatch && fencedMatch[1]) {
-    value = fencedMatch[1].trim();
+  if (fencedMatch) {
+    value = (fencedMatch[1] ?? '').trim();
   }
 
   value = value.replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
