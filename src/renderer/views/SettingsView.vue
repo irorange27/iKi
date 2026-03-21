@@ -40,7 +40,7 @@
             tasks while using more capable models for conversation.
           </p>
           <div class="tool-model-selector">
-            <label class="input-label">
+            <div class="input-label">
               <div class="label-header">
                 <span>Select Tool Model</span>
                 <button
@@ -53,23 +53,14 @@
                   {{ isTestingModel ? 'Testing...' : 'Test' }}
                 </button>
               </div>
-              <select
-                :value="config.toolModel.model"
-                @change="updateToolModel('model', ($event.target as HTMLSelectElement).value)"
+              <SettingsSelect
                 class="tool-model-select"
-              >
-                <option value="">Auto-detect (Recommended)</option>
-                <optgroup
-                  v-for="provider in availableProvidersWithModels"
-                  :key="provider.id"
-                  :label="provider.name"
-                >
-                  <option v-for="model in provider.models" :key="model" :value="model">
-                    {{ model }}
-                  </option>
-                </optgroup>
-              </select>
-            </label>
+                :model-value="config.toolModel.model"
+                :options="toolModelSelectOptions"
+                aria-label="Select Tool Model"
+                @update:model-value="updateToolModelSelection"
+              />
+            </div>
             <div v-if="toolModelTestResult" class="test-result" :class="toolModelTestResult.status">
               <span v-if="toolModelTestResult.status === 'success'">✅</span>
               <span v-else-if="toolModelTestResult.status === 'warning'">⚠️</span>
@@ -98,23 +89,16 @@
           <p class="group-description">
             Configure when shell commands require manual approval before execution.
           </p>
-          <label class="input-label">
+          <div class="input-label">
             <span>Approval Mode</span>
-            <select
-              :value="config.toolExecution.shellApprovalMode"
-              @change="
-                updateToolExecution(
-                  'shellApprovalMode',
-                  ($event.target as HTMLSelectElement)
-                    .value as AppConfig['toolExecution']['shellApprovalMode']
-                )
-              "
-            >
-              <option value="high-risk">Only High-risk Commands (Recommended)</option>
-              <option value="always">Always Require Approval</option>
-              <option value="never">Never Require Approval</option>
-            </select>
-          </label>
+            <SettingsSelect
+              class="general-shell-approval-select"
+              :model-value="config.toolExecution.shellApprovalMode"
+              :options="shellApprovalModeOptions"
+              aria-label="Shell Tool Approval Mode"
+              @update:model-value="updateShellApprovalMode"
+            />
+          </div>
           <label class="input-label">
             <span>Custom High-risk Regex (one per line)</span>
             <textarea
@@ -131,15 +115,16 @@
 
         <div class="config-group">
           <h3>Language</h3>
-          <label class="input-label">
-            <select
-              :value="config.general.language"
-              @change="updateGeneral('language', ($event.target as HTMLSelectElement).value)"
-            >
-              <option value="en">English</option>
-              <option value="zh-CN">简体中文</option>
-            </select>
-          </label>
+          <div class="input-label">
+            <span>Language</span>
+            <SettingsSelect
+              class="general-language-select"
+              :model-value="config.general.language"
+              :options="languageOptions"
+              aria-label="Language"
+              @update:model-value="updateLanguageSelection"
+            />
+          </div>
         </div>
 
         <div class="config-group">
@@ -324,17 +309,16 @@
           </label>
 
           <template v-if="config.network.proxy.enable">
-            <label class="input-label"
-              >Type
-              <select
-                :value="config.network.proxy.type"
-                @change="updateNetwork('proxy.type', ($event.target as HTMLSelectElement).value)"
-              >
-                <option value="http">HTTP</option>
-                <option value="https">HTTPS</option>
-                <option value="socks5">SOCKS5</option>
-              </select>
-            </label>
+            <div class="input-label">
+              <span>Type</span>
+              <SettingsSelect
+                class="network-proxy-type-select"
+                :model-value="config.network.proxy.type"
+                :options="proxyTypeOptions"
+                aria-label="Proxy Type"
+                @update:model-value="updateProxyTypeSelection"
+              />
+            </div>
 
             <label class="input-label"
               >Host
@@ -435,18 +419,16 @@
             />
             Enable Logging
           </label>
-          <label v-if="config.security.enableLogging" class="input-label"
-            >Level:
-            <select
-              :value="config.security.logLevel"
-              @change="updateSecurity('logLevel', getLogLevelValue($event))"
-            >
-              <option value="error">Error</option>
-              <option value="warn">Warning</option>
-              <option value="info">Info</option>
-              <option value="debug">Debug</option>
-            </select>
-          </label>
+          <div v-if="config.security.enableLogging" class="input-label">
+            <span>Level</span>
+            <SettingsSelect
+              class="security-log-level-select"
+              :model-value="config.security.logLevel"
+              :options="securityLogLevelOptions"
+              aria-label="Logging Level"
+              @update:model-value="updateSecurityLogLevelSelection"
+            />
+          </div>
         </div>
 
         <button class="reset-btn" @click="resetSection('security')">Reset Security</button>
@@ -555,6 +537,7 @@ import SettingsLifeSection from '../components/settings/SettingsLifeSection.vue'
 import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
+import SettingsSelect from '../components/settings/SettingsSelect.vue';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '../../shared/config/defaults';
 import type { AppConfig } from '../../shared/types/config';
@@ -599,9 +582,6 @@ const getErrorMessage = (error: unknown): string =>
 const getInputValue = (event: Event): string =>
   (event.target as HTMLInputElement | null)?.value ?? '';
 
-const getSelectValue = (event: Event): string =>
-  (event.target as HTMLSelectElement | null)?.value ?? '';
-
 const getCheckedValue = (event: Event): boolean =>
   (event.target as HTMLInputElement | null)?.checked ?? false;
 
@@ -609,11 +589,6 @@ const parseRequiredInteger = (value: string): number => Number.parseInt(value ||
 
 const parseOptionalInteger = (value: string): number | null =>
   value ? Number.parseInt(value, 10) : null;
-
-const getLogLevelValue = (event: Event): AppConfig['security']['logLevel'] => {
-  const value = getSelectValue(event);
-  return value === 'debug' || value === 'info' || value === 'warn' ? value : 'error';
-};
 
 // Load providers
 const loadProviders = async () => {
@@ -647,6 +622,41 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
     })
     .filter(provider => provider.models.length > 0);
 });
+
+const toolModelSelectOptions = computed(() => [
+  { value: '', label: 'Auto-detect (Recommended)' },
+  ...availableProvidersWithModels.value.map(provider => ({
+    label: provider.name,
+    options: provider.models.map(model => ({
+      value: model,
+      label: model,
+    })),
+  })),
+]);
+
+const shellApprovalModeOptions = [
+  { value: 'high-risk', label: 'Only High-risk Commands (Recommended)' },
+  { value: 'always', label: 'Always Require Approval' },
+  { value: 'never', label: 'Never Require Approval' },
+];
+
+const languageOptions = [
+  { value: 'en', label: 'English' },
+  { value: 'zh-CN', label: '简体中文' },
+];
+
+const proxyTypeOptions = [
+  { value: 'http', label: 'HTTP' },
+  { value: 'https', label: 'HTTPS' },
+  { value: 'socks5', label: 'SOCKS5' },
+];
+
+const securityLogLevelOptions = [
+  { value: 'error', label: 'Error' },
+  { value: 'warn', label: 'Warning' },
+  { value: 'info', label: 'Info' },
+  { value: 'debug', label: 'Debug' },
+];
 
 // Computed: Get selected tool model
 const selectedToolModel = computed(() => {
@@ -721,12 +731,22 @@ const updateToolModel = <K extends keyof AppConfig['toolModel']>(
   autoSave();
 };
 
+const updateToolModelSelection = (value: string) => {
+  updateToolModel('model', value);
+};
+
 const updateToolExecution = <K extends keyof AppConfig['toolExecution']>(
   key: K,
   value: AppConfig['toolExecution'][K]
 ) => {
   config.value.toolExecution[key] = value;
   autoSave();
+};
+
+const updateShellApprovalMode = (value: string) => {
+  if (value === 'high-risk' || value === 'always' || value === 'never') {
+    updateToolExecution('shellApprovalMode', value);
+  }
 };
 
 const menuItems = [
@@ -811,6 +831,12 @@ const updateGeneral = <K extends keyof AppConfig['general']>(
   autoSave();
 };
 
+const updateLanguageSelection = (value: string) => {
+  if (value === 'en' || value === 'zh-CN') {
+    updateGeneral('language', value);
+  }
+};
+
 const updateNetwork = (path: NetworkUpdatePath, value: boolean | string | number | null) => {
   switch (path) {
     case 'proxy.enable':
@@ -834,12 +860,25 @@ const updateNetwork = (path: NetworkUpdatePath, value: boolean | string | number
   }
   autoSave();
 };
+
+const updateProxyTypeSelection = (value: string) => {
+  if (value === 'http' || value === 'https' || value === 'socks5') {
+    updateNetwork('proxy.type', value);
+  }
+};
+
 const updateSecurity = <K extends keyof AppConfig['security']>(
   key: K,
   value: AppConfig['security'][K]
 ) => {
   config.value.security[key] = value;
   autoSave();
+};
+
+const updateSecurityLogLevelSelection = (value: string) => {
+  if (value === 'debug' || value === 'info' || value === 'warn' || value === 'error') {
+    updateSecurity('logLevel', value);
+  }
 };
 const updateAdvanced = <K extends keyof AppConfig['advanced']>(
   key: K,
@@ -1282,9 +1321,16 @@ onMounted(async () => {
   margin-top: 12px;
 }
 
-.tool-model-select {
-  font-family: monospace;
+.tool-model-select :deep(.settings-select-trigger-value),
+.tool-model-select :deep(.settings-select-option-label) {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   font-size: 13px;
+}
+
+.tool-model-select :deep(.settings-select-group-label) {
+  font-size: 12px;
 }
 
 .label-header {

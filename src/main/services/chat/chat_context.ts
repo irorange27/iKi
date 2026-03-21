@@ -17,10 +17,12 @@ import { getPromptFromMessage } from './chat_ui';
 import { getIdentityContextMessage } from '../identity/identity_service';
 import { getLifeContextMessage } from '../life/life_runtime';
 import { getRecentLifeReflectionContextMessage } from '../life/life_reflection';
+import { getRelationshipContextMessage } from '../relationship/relationship_service';
 
 export type ContextBlockKind =
   | 'recent-history'
   | 'identity'
+  | 'relationship'
   | 'life-state'
   | 'recent-reflection'
   | 'thread-summary'
@@ -93,6 +95,11 @@ type IdentityContext = {
 };
 
 type LifeStateContext = {
+  systemMessage: string;
+  block: ContextReportBlock;
+};
+
+type RelationshipContext = {
   systemMessage: string;
   block: ContextReportBlock;
 };
@@ -439,6 +446,35 @@ const buildIdentityContext = (contextConfig: ContextConfig): IdentityContext => 
   };
 };
 
+const buildRelationshipContext = (
+  threadId: string | undefined,
+  contextConfig: ContextConfig
+): RelationshipContext => {
+  const relationshipClip = clipTextToTokenBudget(
+    getRelationshipContextMessage(threadId),
+    contextConfig.maxRelationshipTokens
+  );
+
+  return {
+    systemMessage: relationshipClip.text,
+    block: {
+      kind: 'relationship',
+      status: relationshipClip.text
+        ? relationshipClip.truncated
+          ? 'truncated'
+          : 'included'
+        : 'dropped',
+      estimatedTokens: estimateTokens(relationshipClip.text),
+      charCount: relationshipClip.text.length,
+      ...(relationshipClip.text
+        ? relationshipClip.truncated
+          ? { reason: 'relationship block clipped to context budget' }
+          : {}
+        : { reason: threadId ? 'no relationship state available' : 'no active thread scope available' }),
+    },
+  };
+};
+
 const buildLifeStateContext = (contextConfig: ContextConfig): LifeStateContext => {
   const lifeClip = clipTextToTokenBudget(getLifeContextMessage(), contextConfig.maxLifeStateTokens);
 
@@ -673,6 +709,9 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
     const identityContext = buildIdentityContext(contextConfig);
     blocks.push(identityContext.block);
 
+    const relationshipContext = buildRelationshipContext(params.threadId, contextConfig);
+    blocks.push(relationshipContext.block);
+
     const lifeStateContext = buildLifeStateContext(contextConfig);
     blocks.push(lifeStateContext.block);
 
@@ -704,6 +743,7 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
       [
         identityContext.systemMessage,
+        relationshipContext.systemMessage,
         lifeStateContext.systemMessage,
         reflectionContext.systemMessage,
         summaryContext.systemMessage,

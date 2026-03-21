@@ -111,6 +111,7 @@ const MemorySchema = z
         maxRecentTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxRecentTokens),
         maxMessageTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxMessageTokens),
         maxIdentityTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxIdentityTokens),
+        maxRelationshipTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxRelationshipTokens),
         maxLifeStateTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxLifeStateTokens),
         maxReflectionTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxReflectionTokens),
         summaryTriggerMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryTriggerMessages),

@@ -3,6 +3,7 @@ import * as chatThreadDb from '../../../core/db/chat_thread';
 import type { ChatMessage, ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/utils/guards';
 import { getErrorMessage } from '../../utils/errors';
+import { touchThreadRelationshipState } from '../relationship/relationship_service';
 import type { ChatMemory } from './chat_memory';
 import { sanitizeUiMessageJsonForStorage } from './chat_ui';
 
@@ -65,6 +66,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
       // Keep thread ordering consistent with recent activity.
       if (message.thread_id) {
         chatThreadDb.touchChatThread(message.thread_id);
+        touchThreadRelationshipState(message.thread_id, timestamp);
       }
     } catch (error: unknown) {
       const errorCode =
@@ -130,6 +132,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
 
       if (threadId) {
         chatThreadDb.touchChatThread(threadId);
+        touchThreadRelationshipState(threadId);
       }
     } catch (error) {
       console.warn('[Memory][Main] short memory update failed:', getErrorMessage(error));

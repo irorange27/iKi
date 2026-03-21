@@ -10,6 +10,7 @@ const {
   generateThreadSummaryMock,
   resolveSkillsSystemPromptMock,
   getIdentityContextMessageMock,
+  getRelationshipContextMessageMock,
   getLifeContextMessageMock,
   getRecentLifeReflectionContextMessageMock,
 } = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const {
   generateThreadSummaryMock: vi.fn(),
   resolveSkillsSystemPromptMock: vi.fn(),
   getIdentityContextMessageMock: vi.fn(),
+  getRelationshipContextMessageMock: vi.fn(),
   getLifeContextMessageMock: vi.fn(),
   getRecentLifeReflectionContextMessageMock: vi.fn(),
 }));
@@ -56,6 +58,10 @@ vi.mock('../../../../src/main/services/identity/identity_service', () => ({
   getIdentityContextMessage: getIdentityContextMessageMock,
 }));
 
+vi.mock('../../../../src/main/services/relationship/relationship_service', () => ({
+  getRelationshipContextMessage: getRelationshipContextMessageMock,
+}));
+
 vi.mock('../../../../src/main/services/life/life_runtime', () => ({
   getLifeContextMessage: getLifeContextMessageMock,
 }));
@@ -74,6 +80,7 @@ const baseConfig = {
       maxRecentTokens: 4000,
       maxMessageTokens: 200,
       maxIdentityTokens: 120,
+      maxRelationshipTokens: 120,
       maxLifeStateTokens: 120,
       maxReflectionTokens: 120,
       summaryTriggerMessages: 5,
@@ -105,6 +112,7 @@ beforeEach(() => {
     skillMode: 'manual',
   });
   getIdentityContextMessageMock.mockReturnValue('');
+  getRelationshipContextMessageMock.mockReturnValue('');
   getLifeContextMessageMock.mockReturnValue('');
   getRecentLifeReflectionContextMessageMock.mockReturnValue('');
   getLifeContextMessageMock.mockReturnValue('');
@@ -362,6 +370,38 @@ describe('chat_context assembler', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'identity',
+          status: 'included',
+        }),
+      ])
+    );
+  });
+
+  it('injects thread relationship context as a dedicated bounded block', async () => {
+    getRelationshipContextMessageMock.mockReturnValue(
+      'Relationship context for iKi:\n- Current thread: QQ Group 30003\n- Thread relationship: shared group context.'
+    );
+
+    const assembler = createChatContextAssembler({
+      memory: {
+        retrieveRelevantMemory: vi.fn(() => null),
+        getAffectContextMessage: vi.fn(() => ''),
+      } as never,
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_group',
+      messages: [{ role: 'user', content: 'summarize the discussion' }],
+    });
+
+    expect(result.messages).toContainEqual({
+      role: 'system',
+      content:
+        'Relationship context for iKi:\n- Current thread: QQ Group 30003\n- Thread relationship: shared group context.',
+    });
+    expect(result.report.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'relationship',
           status: 'included',
         }),
       ])

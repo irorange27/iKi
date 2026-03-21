@@ -5,6 +5,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
 import SettingsLifeSection from '../../../src/renderer/components/settings/SettingsLifeSection.vue';
 import type { LifeOverview, LifePushPayload } from '../../../src/shared/types/life';
+import type { RelationshipOverview } from '../../../src/shared/types/relationship';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {
@@ -77,8 +78,23 @@ const buildOverview = (overrides?: Partial<LifeOverview>): LifeOverview => ({
   ...overrides,
 });
 
-const mountSettingsLifeSection = async (overview: LifeOverview) => {
+const buildRelationshipOverview = (
+  overrides?: Partial<RelationshipOverview>
+): RelationshipOverview => ({
+  owner: {
+    owner_label: 'Nina',
+    relationship_to_owner: 'trusted personal AI companion',
+  },
+  recentStates: [],
+  ...overrides,
+});
+
+const mountSettingsLifeSection = async (
+  overview: LifeOverview,
+  relationshipOverview: RelationshipOverview = buildRelationshipOverview()
+) => {
   const getOverview = vi.fn(async () => overview);
+  const getRelationshipOverview = vi.fn(async () => relationshipOverview);
   const refresh = vi.fn(async () => overview.snapshot);
   const setOwnerMode = vi.fn(async () => overview.snapshot);
   const clearOwnerMode = vi.fn(async () => overview.snapshot);
@@ -96,6 +112,9 @@ const mountSettingsLifeSection = async (overview: LifeOverview) => {
       onPush,
       removeAllListeners,
     },
+    relationship: {
+      getOverview: getRelationshipOverview,
+    },
   });
 
   const wrapper = mount(SettingsLifeSection, {
@@ -109,6 +128,7 @@ const mountSettingsLifeSection = async (overview: LifeOverview) => {
   return {
     wrapper,
     getOverview,
+    getRelationshipOverview,
     refresh,
     setOwnerMode,
     clearOwnerMode,
@@ -172,5 +192,43 @@ describe('SettingsLifeSection', () => {
     expect(wrapper.text()).toContain('Sleep');
     expect(wrapper.text()).toContain('deferred');
     expect(wrapper.text()).toContain('Waiting for the current task lock to clear');
+  });
+
+  it('renders owner baseline and recent thread relationship states', async () => {
+    const { wrapper } = await mountSettingsLifeSection(
+      buildOverview(),
+      buildRelationshipOverview({
+        owner: {
+          owner_label: 'Nina',
+          relationship_to_owner: 'co-evolving personal intelligence partner',
+        },
+        recentStates: [
+          {
+            id: 'rel_1',
+            profile_id: 'identity_1',
+            scope_type: 'thread',
+            scope_id: 'thread_group_1',
+            source_kind: 'napcat-group',
+            subject_label: 'Project Group',
+            relationship_summary:
+              'Group thread for shared project coordination; do not assume one speaker represents the whole group.',
+            preferred_address: 'Keep replies concise and legible for multiple participants.',
+            boundaries_json: JSON.stringify(['Do not expose private owner context to the group.']),
+            notes_json: JSON.stringify(['Recurring collaboration thread for release planning.']),
+            metadata: '{}',
+            last_interaction_at: '2026-03-21T14:10:00.000Z',
+            created_at: '2026-03-21T14:00:00.000Z',
+            updated_at: '2026-03-21T14:10:00.000Z',
+          },
+        ],
+      })
+    );
+
+    expect(wrapper.text()).toContain('Relationship Memory');
+    expect(wrapper.text()).toContain('Nina: co-evolving personal intelligence partner');
+    expect(wrapper.text()).toContain('Project Group');
+    expect(wrapper.text()).toContain('QQ group');
+    expect(wrapper.text()).toContain('Do not expose private owner context to the group.');
+    expect(wrapper.text()).toContain('Recurring collaboration thread for release planning.');
   });
 });

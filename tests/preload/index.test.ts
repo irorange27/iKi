@@ -7,6 +7,9 @@ const removeAllListenersMock = vi.fn();
 const sendMock = vi.fn();
 
 type ExposedApi = {
+  relationship: {
+    getOverview: (limit?: number) => Promise<unknown>;
+  };
   tasks: {
     create: (task: unknown) => Promise<unknown>;
     update: (id: string, updates: unknown) => Promise<unknown>;
@@ -149,5 +152,13 @@ describe('preload task IPC payload serialization', () => {
     exposedApi.setWindowShadow(true);
 
     expect(sendMock).toHaveBeenCalledWith('window:set-shadow', true);
+  });
+
+  it('forwards relationship overview reads over IPC', async () => {
+    invokeMock.mockResolvedValue({ owner: { owner_label: 'Nina', relationship_to_owner: 'owner' } });
+
+    await exposedApi.relationship.getOverview(5);
+
+    expect(invokeMock).toHaveBeenCalledWith('relationship:get-overview', 5);
   });
 });

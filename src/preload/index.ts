@@ -14,6 +14,7 @@ import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/ty
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
 import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from '../shared/types/life';
+import type { RelationshipOverview } from '../shared/types/relationship';
 import type { ProactiveTask } from '../shared/types/tasks';
 import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
 import type {
@@ -169,6 +170,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('life:push');
     },
+  },
+  relationship: {
+    getOverview: (limit?: number): Promise<RelationshipOverview> =>
+      ipcRenderer.invoke('relationship:get-overview', limit),
   },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),

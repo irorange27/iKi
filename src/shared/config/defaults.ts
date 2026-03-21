@@ -60,6 +60,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       maxRecentTokens: 2400,
       maxMessageTokens: 420,
       maxIdentityTokens: 320,
+      maxRelationshipTokens: 220,
       maxLifeStateTokens: 220,
       maxReflectionTokens: 240,
       summaryTriggerMessages: 14,

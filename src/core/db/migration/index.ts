@@ -18,6 +18,7 @@ import { migration as migration015TodoLists } from './015_add_todo_lists_table';
 import { migration as migration016IdentityProfiles } from './016_add_identity_profiles_table';
 import { migration as migration017LifeRuntime } from './017_add_life_runtime_tables';
 import { migration as migration018LifeReflections } from './018_add_life_reflections_table';
+import { migration as migration019RelationshipStates } from './019_add_relationship_states_table';
 
 // Register all migrations here
 const migrations = [
@@ -40,6 +41,7 @@ const migrations = [
   migration016IdentityProfiles,
   migration017LifeRuntime,
   migration018LifeReflections,
+  migration019RelationshipStates,
   // Add more migrations here as needed
 ];
 
