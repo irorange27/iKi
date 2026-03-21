@@ -79,8 +79,9 @@ runs, so `app:preview` and `app:build` expect normal network access.
   keeps those artifacts in version control
 - CI quality gate runs `npm run -s ci:quality` (`eslint --ext .ts,.tsx,.vue .` + `tsc` +
   `vue-tsc --noEmit` + tests with coverage)
-- Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; they
-  are intentionally modest and should be ratcheted upward over time
+- Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; the
+  current repository-wide floor is `lines 62 / functions 60 / branches 46 / statements 59`, and it
+  should continue to ratchet upward over time
 - Coverage now counts Vue single-file components (`src/**/*.vue`) in addition to `ts/tsx`, so
   renderer interaction logic is part of the same regression floor as the rest of the codebase
 - Renderer component tests now run in Vitest with Vue SFC transform and `happy-dom`
