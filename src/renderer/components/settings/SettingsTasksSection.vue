@@ -651,13 +651,6 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.task-form-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
 .task-tools {
   border: 1px solid var(--border-color);
   border-radius: 14px;
@@ -677,19 +670,6 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 12px;
-}
-
-.tasks-empty {
-  color: var(--text-secondary);
-  font-size: 0.95em;
-  padding: 10px 2px;
-}
-
-.tasks-error {
-  color: var(--danger-color);
-  font-size: 0.95em;
-  margin: 10px 0 0;
-  white-space: pre-wrap;
 }
 
 .tasks-list {
@@ -712,54 +692,8 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.task-item-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
 .task-name {
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   max-width: 520px;
-}
-
-.task-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
-  color: var(--text-primary);
-}
-
-.task-status.status-running {
-  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
-}
-
-.task-status.status-success {
-  background: color-mix(in srgb, var(--success-color, var(--accent-color)) 16%, var(--bg-primary));
-  border-color: color-mix(
-    in srgb,
-    var(--success-color, var(--accent-color)) 35%,
-    var(--border-color)
-  );
-}
-
-.task-status.status-error {
-  background: color-mix(in srgb, var(--danger-color) 14%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
 }
 
 .task-item-actions {
@@ -812,12 +746,6 @@ onUnmounted(() => {
   margin-top: 10px;
   color: var(--text-secondary);
   font-size: 0.9em;
-}
-
-.task-meta-label {
-  color: var(--text-muted);
-  font-weight: 600;
-  margin-right: 6px;
 }
 
 .task-error-block {

@@ -135,6 +135,90 @@
     </div>
 
     <div class="settings-card">
+      <div class="card-title">Relationship Memory</div>
+      <p class="card-help">
+        Structured relationship state keeps owner baseline and thread-level context separate from
+        generic long memory. This is the persistent social frame iKi should carry across access
+        layers.
+      </p>
+
+      <p v-if="relationshipErrorText" class="tasks-error">{{ relationshipErrorText }}</p>
+      <template v-else-if="relationshipOverview">
+        <div class="life-summary-block">
+          <div class="life-summary-label">Owner baseline</div>
+          <div class="life-summary-text">
+            {{ relationshipOverview.owner.owner_label }}: {{
+              relationshipOverview.owner.relationship_to_owner
+            }}
+          </div>
+        </div>
+
+        <div v-if="recentRelationshipStates.length === 0" class="tasks-empty">
+          No thread relationship states yet.
+        </div>
+        <div v-else class="life-episode-list">
+          <div
+            v-for="state in recentRelationshipStates"
+            :key="state.id"
+            class="life-episode-item"
+          >
+            <div class="life-episode-head">
+              <div class="task-item-title relationship-title">
+                <span class="task-name">{{ state.subject_label || state.scope_id }}</span>
+                <span class="life-chip">{{ formatRelationshipSource(state.source_kind) }}</span>
+              </div>
+              <div class="life-episode-time">
+                {{
+                  state.last_interaction_at
+                    ? formatTimestamp(state.last_interaction_at)
+                    : 'No interaction yet'
+                }}
+              </div>
+            </div>
+
+            <div class="life-episode-body">
+              <div>{{ state.relationship_summary }}</div>
+            </div>
+
+            <div v-if="state.preferred_address" class="life-meta-lines">
+              <div>
+                <span class="task-meta-label">Preferred address:</span>
+                {{ state.preferred_address }}
+              </div>
+            </div>
+
+            <div v-if="parseList(state.boundaries_json).length > 0" class="life-summary-block mini-block">
+              <div class="life-summary-label">Boundaries</div>
+              <div class="life-list">
+                <div v-for="item in parseList(state.boundaries_json)" :key="item">{{ item }}</div>
+              </div>
+            </div>
+
+            <div v-if="parseList(state.notes_json).length > 0" class="life-summary-block mini-block">
+              <div class="life-summary-label">Notes</div>
+              <div class="life-list">
+                <div v-for="item in parseList(state.notes_json)" :key="item">{{ item }}</div>
+              </div>
+            </div>
+
+            <div class="life-meta-lines">
+              <div>
+                <span class="task-meta-label">Thread:</span>
+                {{ state.scope_id }}
+              </div>
+              <div>
+                <span class="task-meta-label">Updated:</span>
+                {{ formatTimestamp(state.updated_at) }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div v-else-if="loading" class="tasks-empty">Loading...</div>
+      <div v-else class="tasks-empty">Relationship memory has not produced any state yet.</div>
+    </div>
+
+    <div class="settings-card">
       <div class="card-title">Recent Episodes</div>
       <p class="card-help">
         The recent trajectory log should explain what iKi has been occupied with, without inventing
@@ -234,8 +318,10 @@ import type {
   LifePushPayload,
   LifeSnapshot,
 } from '../../../shared/types/life';
+import type { RelationshipOverview, RelationshipSourceKind } from '../../../shared/types/relationship';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { lifeService } from '../../services/life_service';
+import { relationshipService } from '../../services/relationship_service';
 import { formatTimestamp } from './settings_formatters';
 
 const props = defineProps<{
@@ -246,15 +332,19 @@ const loading = ref(false);
 const controlLoading = ref(false);
 const errorText = ref('');
 const controlErrorText = ref('');
-const overview = ref<LifeOverview | null>(null);
+const relationshipErrorText = ref('');
+const lifeOverview = ref<LifeOverview | null>(null);
+const relationshipOverview = ref<RelationshipOverview | null>(null);
 const pendingMode = ref<LifeOwnerMode | null | undefined>(undefined);
+const overviewLimit = 8;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let removePushListener: (() => void) | null = null;
 
-const snapshot = computed<LifeSnapshot | null>(() => overview.value?.snapshot ?? null);
-const recentEpisodes = computed(() => overview.value?.recentEpisodes ?? []);
-const recentReflections = computed(() => overview.value?.recentReflections ?? []);
+const snapshot = computed<LifeSnapshot | null>(() => lifeOverview.value?.snapshot ?? null);
+const recentEpisodes = computed(() => lifeOverview.value?.recentEpisodes ?? []);
+const recentReflections = computed(() => lifeOverview.value?.recentReflections ?? []);
+const recentRelationshipStates = computed(() => relationshipOverview.value?.recentStates ?? []);
 const ownerModeLabel = computed(() => {
   const mode = snapshot.value?.derived.ownerMode;
   if (!mode) return 'Auto';
@@ -276,34 +366,58 @@ const parseList = (raw: string | null | undefined): string[] => {
   }
 };
 
-const loadOverview = async (limit = 8) => {
-  loading.value = true;
-  errorText.value = '';
-  try {
-    overview.value = await lifeService.getOverview(limit);
-  } catch (error: unknown) {
-    errorText.value = getErrorMessage(error);
-    overview.value = null;
-  } finally {
-    loading.value = false;
+const formatRelationshipSource = (sourceKind: RelationshipSourceKind): string => {
+  if (sourceKind === 'desktop-owner-thread') return 'Desktop owner';
+  if (sourceKind === 'napcat-private') return 'QQ private';
+  if (sourceKind === 'napcat-group') return 'QQ group';
+  if (sourceKind === 'external-client-thread') return 'External client';
+  return 'Unknown';
+};
+
+const loadState = async (limit = overviewLimit, options?: { showLoading?: boolean }) => {
+  const showLoading = options?.showLoading ?? true;
+  if (showLoading) {
+    loading.value = true;
   }
+  errorText.value = '';
+  relationshipErrorText.value = '';
+
+  const [lifeResult, relationshipResult] = await Promise.allSettled([
+    lifeService.getOverview(limit),
+    relationshipService.getOverview(limit),
+  ]);
+
+  if (lifeResult.status === 'fulfilled') {
+    lifeOverview.value = lifeResult.value;
+  } else {
+    errorText.value = getErrorMessage(lifeResult.reason);
+    lifeOverview.value = null;
+  }
+
+  if (relationshipResult.status === 'fulfilled') {
+    relationshipOverview.value = relationshipResult.value;
+  } else {
+    relationshipErrorText.value = getErrorMessage(relationshipResult.reason);
+    relationshipOverview.value = null;
+  }
+
+  loading.value = false;
 };
 
 const refreshOverview = async () => {
-  await loadOverview(8);
+  await loadState();
 };
 
 const forceRefresh = async () => {
   loading.value = true;
   errorText.value = '';
+  relationshipErrorText.value = '';
   try {
     await lifeService.refresh();
-    overview.value = await lifeService.getOverview(8);
   } catch (error: unknown) {
     errorText.value = getErrorMessage(error);
-  } finally {
-    loading.value = false;
   }
+  await loadState(overviewLimit, { showLoading: false });
 };
 
 const setOwnerMode = async (mode: LifeOwnerMode) => {
@@ -312,7 +426,7 @@ const setOwnerMode = async (mode: LifeOwnerMode) => {
   pendingMode.value = mode;
   try {
     await lifeService.setOwnerMode(mode);
-    overview.value = await lifeService.getOverview(8);
+    await loadState(overviewLimit, { showLoading: false });
   } catch (error: unknown) {
     controlErrorText.value = getErrorMessage(error);
   } finally {
@@ -327,7 +441,7 @@ const clearOwnerMode = async () => {
   pendingMode.value = null;
   try {
     await lifeService.clearOwnerMode();
-    overview.value = await lifeService.getOverview(8);
+    await loadState(overviewLimit, { showLoading: false });
   } catch (error: unknown) {
     controlErrorText.value = getErrorMessage(error);
   } finally {
@@ -345,19 +459,19 @@ const restartPolling = () => {
   if (!props.active) return;
 
   pollTimer = setInterval(() => {
-    void loadOverview(8);
+    void loadState(overviewLimit, { showLoading: false });
   }, 30_000);
 };
 
 const handleLifePush = (payload: LifePushPayload | unknown) => {
   if (!props.active) return;
   if (!payload || typeof payload !== 'object') {
-    void loadOverview(8);
+    void loadState(overviewLimit, { showLoading: false });
     return;
   }
   const record = payload as Partial<LifePushPayload>;
   if (record.type === 'life-state') {
-    void loadOverview(8);
+    void loadState(overviewLimit, { showLoading: false });
   }
 };
 
@@ -366,7 +480,7 @@ watch(
   active => {
     restartPolling();
     if (active) {
-      void loadOverview(8);
+      void loadState();
     }
   },
   { immediate: true }
@@ -385,6 +499,8 @@ onUnmounted(() => {
 });
 </script>
 
+<style scoped src="./settings_shared.css"></style>
+
 <style scoped>
 .life-status-row {
   display: flex;
@@ -398,15 +514,15 @@ onUnmounted(() => {
   align-items: center;
   padding: 6px 12px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface-elevated) 84%, transparent);
-  border: 1px solid var(--color-border);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   font-size: 12px;
   text-transform: capitalize;
 }
 
 .life-chip-primary {
-  background: color-mix(in srgb, var(--color-accent-primary) 14%, var(--color-surface-elevated));
-  border-color: color-mix(in srgb, var(--color-accent-primary) 32%, var(--color-border));
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--accent-color) 32%, var(--border-color));
 }
 
 .life-grid {
@@ -428,23 +544,23 @@ onUnmounted(() => {
   gap: 4px;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-surface-elevated) 88%, transparent);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .life-stat-label,
 .life-summary-label,
 .life-episode-time {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .life-summary-block,
 .life-episode-item {
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-surface-elevated) 88%, transparent);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .life-summary-block {
@@ -463,7 +579,7 @@ onUnmounted(() => {
 .life-meta-lines {
   display: grid;
   gap: 6px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -493,8 +609,14 @@ onUnmounted(() => {
 }
 
 .secondary-btn-active {
-  border-color: color-mix(in srgb, var(--color-accent-primary) 34%, var(--color-border));
-  background: color-mix(in srgb, var(--color-accent-primary) 14%, var(--color-surface-elevated));
+  border-color: color-mix(in srgb, var(--accent-color) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
+}
+
+.relationship-title {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 @media (max-width: 720px) {

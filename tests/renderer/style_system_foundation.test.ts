@@ -21,6 +21,19 @@ const PROVIDERS_SETTINGS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/ProvidersSettings.vue'
 );
+const SETTINGS_LIFE_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsLifeSection.vue'
+);
+const SETTINGS_SELECT_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsSelect.vue'
+);
+const SETTINGS_USAGE_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsUsageSection.vue'
+);
+const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/SettingsView.vue');
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
 const TOOL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ToolSelector.vue');
 const SKILL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/SkillSelector.vue');
@@ -68,16 +81,37 @@ describe('renderer style system foundation', () => {
     expect(sharedSource).toMatch(/\.input-label select,/);
     expect(sharedSource).toMatch(/\.warning-text\s*\{/);
     expect(sharedSource).toMatch(/\.error-text\s*\{/);
+    expect(sharedSource).toMatch(/\.tasks-empty\s*\{/);
+    expect(sharedSource).toMatch(/\.task-status\s*\{/);
+    expect(sharedSource).toMatch(/\.task-meta-label\s*\{/);
   });
 
-  it('migrates MCP, NapCat, and Providers settings onto shared primitives and canonical tokens', () => {
+  it('uses a shared custom settings select for dropdowns that need app-controlled expanded styling', () => {
+    const settingsSelectSource = readFileSync(SETTINGS_SELECT_VUE_PATH, 'utf8');
+    const usageSource = readFileSync(SETTINGS_USAGE_VUE_PATH, 'utf8');
+    const settingsViewSource = readFileSync(SETTINGS_VIEW_VUE_PATH, 'utf8');
+
+    expect(settingsSelectSource).toMatch(/class="settings-select-trigger"/);
+    expect(settingsSelectSource).toMatch(/class="settings-select-panel"/);
+    expect(settingsSelectSource).toMatch(/settings-select-group-label/);
+    expect(settingsSelectSource).toMatch(/aria-haspopup="listbox"/);
+    expect(usageSource).toMatch(/<SettingsSelect/);
+    expect(usageSource).not.toMatch(/<select v-model="usagePeriod"/);
+    expect(settingsViewSource).toMatch(/import SettingsSelect from/);
+    expect(settingsViewSource).toMatch(/toolModelSelectOptions/);
+    expect(settingsViewSource).not.toMatch(/<select/);
+  });
+
+  it('migrates MCP, NapCat, Providers, and Life settings onto shared primitives and canonical tokens', () => {
     const mcpSource = readFileSync(MCP_SETTINGS_VUE_PATH, 'utf8');
     const napcatSource = readFileSync(NAPCAT_SETTINGS_VUE_PATH, 'utf8');
     const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+    const lifeSource = readFileSync(SETTINGS_LIFE_VUE_PATH, 'utf8');
 
     expect(mcpSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
     expect(napcatSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
     expect(providersSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
+    expect(lifeSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
 
     expect(mcpSource).not.toMatch(/\.secondary-btn\s*\{/);
     expect(mcpSource).not.toMatch(/var\(--warning-color,\s*#/);
@@ -95,6 +129,10 @@ describe('renderer style system foundation', () => {
     expect(providersSource).not.toMatch(/#ef4444/);
     expect(providersSource).not.toMatch(/#22c55e/);
     expect(providersSource).not.toMatch(/\.icon-btn\s*\{/);
+
+    expect(lifeSource).not.toMatch(/--color-surface-elevated/);
+    expect(lifeSource).not.toMatch(/--color-accent-primary/);
+    expect(lifeSource).not.toMatch(/--color-text-secondary/);
   });
 
   it('centralizes app-shell text and selector affordances in globals.css', () => {
