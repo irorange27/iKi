@@ -39,10 +39,11 @@
             placeholder="127.0.0.1"
             @input="updateDaemonHost(($event.target as HTMLInputElement).value)"
           />
-          <small class="input-help">
-            Use <code>0.0.0.0</code> to listen on all interfaces for LAN/Docker access.
-          </small>
-        </label>
+        <small class="input-help">
+          Defaults to <code>127.0.0.1</code>. Use <code>0.0.0.0</code> only when you intentionally
+          need LAN/Docker access.
+        </small>
+      </label>
 
         <label class="input-label">
           <span>Daemon Port</span>

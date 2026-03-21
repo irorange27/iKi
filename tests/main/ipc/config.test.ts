@@ -26,7 +26,7 @@ const {
     return '/tmp/unknown';
   }),
   readFileSyncMock: vi.fn((filePath: string) => {
-    if (filePath.endsWith('/daemon.host')) return '0.0.0.0';
+    if (filePath.endsWith('/daemon.host')) return '127.0.0.1';
     if (filePath.endsWith('/daemon.port')) return '6131';
     throw new Error(`Unexpected file read: ${filePath}`);
   }),
@@ -145,7 +145,7 @@ const installHealthResponse = (uptimeSeconds: number) => {
             handler(
               JSON.stringify({
                 status: 'ok',
-                host: '0.0.0.0',
+                host: '127.0.0.1',
                 port: 6131,
                 uptime: uptimeSeconds,
               })
@@ -178,12 +178,12 @@ describe('config IPC', () => {
       userDataPath: '/tmp/iki-user-data',
       dbPath: '/tmp/iki-user-data/iKi_v0.db',
       daemon: {
-        defaultHost: '0.0.0.0',
+        defaultHost: '127.0.0.1',
         defaultPort: 6127,
-        configuredHost: '0.0.0.0',
+        configuredHost: '127.0.0.1',
         configuredPort: 6127,
         napcatWsPath: '/onebot/v11/ws',
-        localNapCatWsUrl: 'ws://0.0.0.0:6127/onebot/v11/ws',
+        localNapCatWsUrl: 'ws://127.0.0.1:6127/onebot/v11/ws',
         dockerNapCatWsUrl: 'ws://host.docker.internal:6127/onebot/v11/ws',
       },
     });
@@ -199,7 +199,7 @@ describe('config IPC', () => {
 
     expect(result).toEqual({
       online: true,
-      host: '0.0.0.0',
+      host: '127.0.0.1',
       port: 6131,
       status: 'ok',
       source: 'health',
@@ -239,10 +239,10 @@ describe('config IPC', () => {
     expect(result).toEqual({
       success: true,
       action: 'restart',
-      message: 'Daemon restarted and is online at 0.0.0.0:6131.',
+      message: 'Daemon restarted and is online at 127.0.0.1:6131.',
       status: {
         online: true,
-        host: '0.0.0.0',
+        host: '127.0.0.1',
         port: 6131,
         status: 'ok',
         source: 'health',

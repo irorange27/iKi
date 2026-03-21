@@ -20,6 +20,7 @@ import {
   type AppClient,
 } from '../core/db/app_clients';
 import { createNapCatReverseBridge } from './napcat_adapter';
+import { readOrCreateBootstrapToken, rotateBootstrapToken } from './bootstrap_token';
 import {
   DEFAULT_ALLOWED_TOOLS,
   readRequestedMcpServerIds,
@@ -121,20 +122,6 @@ const ensureUserDataDir = () => {
   const userDataPath = getUserDataPath();
   fs.mkdirSync(userDataPath, { recursive: true });
   return userDataPath;
-};
-
-const readOrCreateBootstrapToken = (userDataPath: string): string => {
-  const tokenPath = path.join(userDataPath, 'daemon.token');
-  try {
-    const existing = fs.readFileSync(tokenPath, 'utf8').trim();
-    if (existing) return existing;
-  } catch {
-    // fall through to generate
-  }
-
-  const token = `iki_bootstrap_${Math.random().toString(36).slice(2, 10)}${Date.now()}`;
-  fs.writeFileSync(tokenPath, token, { encoding: 'utf8' });
-  return token;
 };
 
 const writePortFile = (userDataPath: string, port: number) => {
@@ -270,7 +257,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
   });
 
   const userDataPath = ensureUserDataDir();
-  const bootstrapToken = readOrCreateBootstrapToken(userDataPath);
+  let bootstrapToken = readOrCreateBootstrapToken(userDataPath);
   const port = Number.isFinite(options?.port) ? Number(options?.port) : DEFAULT_DAEMON_PORT;
   const host = options?.host?.trim() || DEFAULT_DAEMON_HOST;
 
@@ -335,6 +322,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         if (isFirstClient) {
           chatThreadDb.assignClientToLegacyThreads(created.client.id);
         }
+        // Treat the setup token as single-use so local bootstrap is not a standing credential.
+        bootstrapToken = rotateBootstrapToken(userDataPath);
         writeJson(res, 200, {
           success: true,
           client_id: created.client.id,

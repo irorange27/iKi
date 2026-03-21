@@ -10,21 +10,45 @@ import {
   WriteFileInputSchema,
 } from './schemas';
 
-const resolveWorkspaceRoots = (): string[] => {
-  const roots: string[] = [];
+type WorkspaceRoot = {
+  resolvedPath: string;
+  realPath: string;
+};
+
+const resolveRootRealPath = async (root: string): Promise<string> => {
+  try {
+    return await fs.realpath(root);
+  } catch {
+    return root;
+  }
+};
+
+const resolveWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
+  const candidateRoots: string[] = [];
   const workspaces = getVisibleWorkspaces();
   for (const workspace of workspaces) {
     const rawPath = typeof workspace.path === 'string' ? workspace.path.trim() : '';
     if (!rawPath) continue;
-    roots.push(path.resolve(rawPath));
+    candidateRoots.push(path.resolve(rawPath));
   }
 
   const cwdRoot = path.resolve(process.cwd());
-  if (!roots.includes(cwdRoot)) {
-    roots.push(cwdRoot);
+  if (!candidateRoots.includes(cwdRoot)) {
+    candidateRoots.push(cwdRoot);
   }
 
-  return roots.length > 0 ? roots : [cwdRoot];
+  const roots: WorkspaceRoot[] = [];
+  const seen = new Set<string>();
+
+  for (const candidateRoot of candidateRoots.length > 0 ? candidateRoots : [cwdRoot]) {
+    const realPath = await resolveRootRealPath(candidateRoot);
+    const key = `${candidateRoot}\0${realPath}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    roots.push({ resolvedPath: candidateRoot, realPath });
+  }
+
+  return roots;
 };
 
 const isPathWithinRoot = (root: string, candidate: string): boolean => {
@@ -32,19 +56,82 @@ const isPathWithinRoot = (root: string, candidate: string): boolean => {
   return !(relativePath.startsWith('..') || path.isAbsolute(relativePath));
 };
 
-const resolvePathWithinWorkspace = (inputPath: string) => {
-  const roots = resolveWorkspaceRoots();
-  const primaryRoot = roots[0];
-  const absolutePath = path.resolve(
+const formatWorkspaceRoots = (roots: WorkspaceRoot[]): string =>
+  roots.map(root => root.resolvedPath).join(', ');
+
+const resolveAbsoluteWorkspacePath = (inputPath: string, primaryRoot: string): string =>
+  path.resolve(
     path.isAbsolute(inputPath) ? inputPath : path.join(primaryRoot, inputPath)
   );
 
-  if (!roots.some(root => isPathWithinRoot(root, absolutePath))) {
+const ensurePathWithinWorkspaceRoots = (
+  inputPath: string,
+  actualPath: string,
+  roots: WorkspaceRoot[]
+) => {
+  if (!roots.some(root => isPathWithinRoot(root.realPath, actualPath))) {
     throw new Error(
-      `Path "${inputPath}" is outside workspace roots: ${roots.join(', ')}`
+      `Path "${inputPath}" is outside workspace roots: ${formatWorkspaceRoots(roots)}`
     );
   }
+};
 
+const tryRealpath = async (targetPath: string): Promise<string | null> => {
+  try {
+    return await fs.realpath(targetPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return null;
+    throw error;
+  }
+};
+
+const resolveExistingAncestorRealPath = async (targetPath: string): Promise<string> => {
+  let currentPath = path.resolve(targetPath);
+  let parentPath = '';
+
+  while (currentPath !== parentPath) {
+    const realPath = await tryRealpath(currentPath);
+    if (realPath) return realPath;
+
+    parentPath = path.dirname(currentPath);
+    currentPath = parentPath;
+  }
+
+  throw new Error(`Path "${targetPath}" does not have an existing ancestor`);
+};
+
+const resolveReadableWorkspacePath = async (inputPath: string): Promise<string> => {
+  const roots = await resolveWorkspaceRoots();
+  const primaryRoot = roots[0]?.resolvedPath ?? path.resolve(process.cwd());
+  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
+  const actualPath = await fs.realpath(absolutePath);
+  ensurePathWithinWorkspaceRoots(inputPath, actualPath, roots);
+  return absolutePath;
+};
+
+const resolveWritableWorkspacePath = async (inputPath: string): Promise<string> => {
+  const roots = await resolveWorkspaceRoots();
+  const primaryRoot = roots[0]?.resolvedPath ?? path.resolve(process.cwd());
+  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
+
+  const existingTargetRealPath = await tryRealpath(absolutePath);
+  if (existingTargetRealPath) {
+    ensurePathWithinWorkspaceRoots(inputPath, existingTargetRealPath, roots);
+    return absolutePath;
+  }
+
+  const existingAncestorRealPath = await resolveExistingAncestorRealPath(path.dirname(absolutePath));
+  ensurePathWithinWorkspaceRoots(inputPath, existingAncestorRealPath, roots);
+  return absolutePath;
+};
+
+const resolveDeleteWorkspacePath = async (inputPath: string): Promise<string> => {
+  const roots = await resolveWorkspaceRoots();
+  const primaryRoot = roots[0]?.resolvedPath ?? path.resolve(process.cwd());
+  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
+  const parentRealPath = await resolveExistingAncestorRealPath(path.dirname(absolutePath));
+  ensurePathWithinWorkspaceRoots(inputPath, parentRealPath, roots);
   return absolutePath;
 };
 
@@ -94,7 +181,7 @@ export class ReadFileTool extends BaseTool {
   paramSchema = ReadFileInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = resolvePathWithinWorkspace(args.path);
+    const absolutePath = await resolveReadableWorkspacePath(args.path);
 
     const content = await fs.readFile(absolutePath, { encoding: args.encoding as BufferEncoding });
     return { path: absolutePath, content };
@@ -112,7 +199,7 @@ export class WriteFileTool extends BaseTool {
   paramSchema = WriteFileInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = resolvePathWithinWorkspace(args.path);
+    const absolutePath = await resolveWritableWorkspacePath(args.path);
 
     // Ensure directory exists
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
@@ -133,7 +220,7 @@ export class ListDirTool extends BaseTool {
   paramSchema = ListDirInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = resolvePathWithinWorkspace(args.path);
+    const absolutePath = await resolveReadableWorkspacePath(args.path);
     return listDirEntries(absolutePath, Boolean(args.recursive));
   }
 }
@@ -150,7 +237,7 @@ export class DeleteFileTool extends BaseTool {
   paramSchema = DeleteFileInputSchema;
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = resolvePathWithinWorkspace(args.path);
+    const absolutePath = await resolveDeleteWorkspacePath(args.path);
 
     await fs.unlink(absolutePath);
     return { path: absolutePath, deleted: true };

@@ -39,6 +39,10 @@ A local agent pet for AI provider orchestration.
 - DevTools no longer auto-open by default in development.
 - To opt in to auto-open DevTools (for main/settings windows), run with
   `IKI_AUTO_OPEN_DEVTOOLS=true`.
+- The desktop-managed daemon binds to `127.0.0.1` by default. Only switch to
+  `0.0.0.0` when you intentionally need LAN or Docker access.
+- The daemon bootstrap registration token (`daemon.token`) is rotated after each
+  successful client registration; treat it as a one-time local setup credential.
 
 ## Commit Governance
 

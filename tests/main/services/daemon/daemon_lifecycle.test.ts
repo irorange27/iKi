@@ -23,7 +23,7 @@ const {
   startDaemonServerMock: vi.fn(),
   getAppConfigMock: vi.fn(() => ({
     daemon: {
-      host: '0.0.0.0',
+      host: '127.0.0.1',
       port: 6127,
     },
   })),
@@ -83,7 +83,7 @@ const mockHealthOffline = () => {
   });
 };
 
-const mockHealthOnline = (host = '0.0.0.0', port = 6127) => {
+const mockHealthOnline = (host = '127.0.0.1', port = 6127) => {
   requestMock.mockImplementation(
     (_options: unknown, callback: (response: HealthResponseMock) => void) => {
     const req = {
@@ -119,7 +119,7 @@ const setupDaemonServerReturn = () => {
     wss: {
       close: vi.fn(),
     },
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     port: 6127,
   });
 };
@@ -150,12 +150,12 @@ describe('daemon lifecycle', () => {
     await started;
 
     expect(startDaemonServerMock).toHaveBeenCalledTimes(1);
-    expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '0.0.0.0', port: 6127 });
+    expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '127.0.0.1', port: 6127 });
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it('skips embedded startup when an existing daemon is already healthy on the configured binding', async () => {
-    mockHealthOnline('0.0.0.0', 6127);
+    mockHealthOnline('127.0.0.1', 6127);
     const { startDesktopDaemon } = await import(
       '../../../../src/main/services/daemon/daemon_lifecycle'
     );
@@ -165,7 +165,7 @@ describe('daemon lifecycle', () => {
     expect(startDaemonServerMock).not.toHaveBeenCalled();
     expect(daemonLogInfoMock).toHaveBeenCalledWith(
       'daemon-lifecycle',
-      'Existing daemon detected on 0.0.0.0:6127, skipping embedded startup.',
+      'Existing daemon detected on 127.0.0.1:6127, skipping embedded startup.',
       undefined,
       '/tmp/iki-user-data'
     );
@@ -195,6 +195,6 @@ describe('daemon lifecycle', () => {
     await started;
 
     expect(startDaemonServerMock).toHaveBeenCalledTimes(1);
-    expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '0.0.0.0', port: 6127 });
+    expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '127.0.0.1', port: 6127 });
   });
 });

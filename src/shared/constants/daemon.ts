@@ -1,4 +1,4 @@
-export const DEFAULT_DAEMON_HOST = '0.0.0.0';
+export const DEFAULT_DAEMON_HOST = '127.0.0.1';
 export const DEFAULT_DAEMON_PORT = 6127;
 export const NAPCAT_REVERSE_WS_PATH = '/onebot/v11/ws';
 

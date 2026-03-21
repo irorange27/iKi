@@ -8,6 +8,15 @@ const DEFAULT_NETWORK_RETRY_ATTEMPTS = 0;
 const MIN_NETWORK_RETRY_ATTEMPTS = 0;
 const MAX_NETWORK_RETRY_ATTEMPTS = 10;
 
+const managedProxyEnvState: {
+  active: boolean;
+  currentProxyUrl?: string;
+  previousHttpProxy?: string;
+  previousHttpsProxy?: string;
+} = {
+  active: false,
+};
+
 const getNetworkConfig = (): AppConfig['network'] | null => {
   return getAppConfig()?.network ?? null;
 };
@@ -57,11 +66,48 @@ const buildProxyUrl = (): string | null => {
   return `${protocol}://${auth}${host}:${port}`;
 };
 
+const restoreManagedProxyEnv = () => {
+  if (!managedProxyEnvState.active) return;
+
+  if (managedProxyEnvState.previousHttpProxy === undefined) {
+    delete process.env.HTTP_PROXY;
+  } else {
+    process.env.HTTP_PROXY = managedProxyEnvState.previousHttpProxy;
+  }
+
+  if (managedProxyEnvState.previousHttpsProxy === undefined) {
+    delete process.env.HTTPS_PROXY;
+  } else {
+    process.env.HTTPS_PROXY = managedProxyEnvState.previousHttpsProxy;
+  }
+
+  managedProxyEnvState.active = false;
+  delete managedProxyEnvState.currentProxyUrl;
+  delete managedProxyEnvState.previousHttpProxy;
+  delete managedProxyEnvState.previousHttpsProxy;
+};
+
 const applyProxyEnv = () => {
   const proxyUrl = buildProxyUrl();
-  if (!proxyUrl) return;
+  if (!proxyUrl) {
+    restoreManagedProxyEnv();
+    return;
+  }
+
+  const envMatchesManagedProxy =
+    managedProxyEnvState.active &&
+    process.env.HTTP_PROXY === managedProxyEnvState.currentProxyUrl &&
+    process.env.HTTPS_PROXY === managedProxyEnvState.currentProxyUrl;
+
+  if (!envMatchesManagedProxy) {
+    managedProxyEnvState.previousHttpProxy = process.env.HTTP_PROXY;
+    managedProxyEnvState.previousHttpsProxy = process.env.HTTPS_PROXY;
+  }
+
   process.env.HTTP_PROXY = proxyUrl;
   process.env.HTTPS_PROXY = proxyUrl;
+  managedProxyEnvState.active = true;
+  managedProxyEnvState.currentProxyUrl = proxyUrl;
 };
 
 const sleep = async (ms: number): Promise<void> => {

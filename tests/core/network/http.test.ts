@@ -133,4 +133,35 @@ describe('fetchWithTimeout', () => {
     expect(process.env.HTTP_PROXY).toBe('http://u:p@127.0.0.1:8080');
     expect(process.env.HTTPS_PROXY).toBe('http://u:p@127.0.0.1:8080');
   });
+
+  it('restores pre-existing proxy environment variables when app proxy is disabled', async () => {
+    process.env.HTTP_PROXY = 'http://system-proxy:9000';
+    process.env.HTTPS_PROXY = 'https://system-proxy:9443';
+
+    mockConfig(config => {
+      config.network.proxy = {
+        enable: true,
+        type: 'http',
+        host: '127.0.0.1',
+        port: 8080,
+      };
+    });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok', { status: 200 })));
+
+    await fetchWithTimeout('https://example.com');
+    expect(process.env.HTTP_PROXY).toBe('http://127.0.0.1:8080');
+    expect(process.env.HTTPS_PROXY).toBe('http://127.0.0.1:8080');
+
+    mockConfig(config => {
+      config.network.proxy.enable = false;
+      config.network.proxy.host = '';
+      config.network.proxy.port = null;
+    });
+
+    await fetchWithTimeout('https://example.com');
+
+    expect(process.env.HTTP_PROXY).toBe('http://system-proxy:9000');
+    expect(process.env.HTTPS_PROXY).toBe('https://system-proxy:9443');
+  });
 });

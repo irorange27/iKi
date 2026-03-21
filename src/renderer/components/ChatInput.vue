@@ -348,6 +348,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { Chat } from '@ai-sdk/vue';
+import type { UIMessage } from 'ai';
 import type { Provider } from '../../shared/types/provider';
 import { getErrorMessage } from '../../shared/utils/errors';
 import { parseModelList } from '../../shared/utils/provider_models';
@@ -358,12 +359,68 @@ import ToolSelector from './ToolSelector.vue';
 import SkillSelector from './SkillSelector.vue';
 import LobeIcon from './Icon/LobeIcon.vue';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
+type ChatInputThreadRecord = {
+  id: string;
+  metadata?: string | null;
+  model?: string | null;
+  title: string;
+  tools?: string | null;
+};
+
+type ChatInputToolMetadata = {
+  name?: string;
+  source?: {
+    id?: string;
+    kind?: 'builtin' | 'mcp';
+  } | null;
+};
+
+type ChatInputStreamResult = {
+  error?: string;
+  success?: boolean;
+};
+
+type ChatInputElectronApi = {
+  chat: {
+    isProviderConfigured: (providerType: string) => Promise<boolean>;
+    stopStream: () => Promise<ChatInputStreamResult>;
+    stream: (options: {
+      providerType: string;
+      model: string;
+      messages: Array<Record<string, unknown>>;
+      tools?: string[];
+      mcpServerIds?: string[];
+      skillIds?: string[];
+      skillMode?: 'manual' | 'auto';
+      threadId?: string;
+    }) => Promise<ChatInputStreamResult>;
+    threads: {
+      get: (id: string) => Promise<ChatInputThreadRecord | null>;
+    };
+  };
+  providers: {
+    list: () => Promise<Provider[]>;
+  };
+  tools: {
+    list: () => Promise<ChatInputToolMetadata[]>;
+  };
+};
+
+const electronAPI = (window as unknown as Window & { electronAPI: ChatInputElectronApi }).electronAPI;
+const emit = defineEmits<{
+  (
+    event: 'message-sent',
+    content: string,
+    model?: string,
+    tools?: string[],
+    mcpServerIds?: string[],
+    onReady?: () => void
+  ): void;
+  (event: 'model-selected', payload: { model: string; provider: Provider }): void;
+}>();
 
 const props = defineProps<{
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  chat?: Chat<any>;
+  chat?: Chat<UIMessage>;
   threadId?: string;
   contextUsage?: {
     usedTokens: number;
@@ -520,7 +577,7 @@ const deriveMcpServerIdsFromToolNames = async (toolNames: string[]): Promise<str
   if (normalizedToolNames.size === 0) return [];
 
   try {
-    const tools = await window.electronAPI.tools.list();
+    const tools = await electronAPI.tools.list();
     if (!Array.isArray(tools)) return [];
 
     const resolvedServerIds = new Set<string>();
@@ -555,7 +612,7 @@ const syncToolSelectionFromThread = async (threadId?: string) => {
   if (!normalizedThreadId || isLoading.value) return;
 
   try {
-    const thread = await window.electronAPI.chat.threads.get(normalizedThreadId);
+    const thread = await electronAPI.chat.threads.get(normalizedThreadId);
     if (!thread) return;
 
     const persistedTools = parseStringArray(
@@ -642,7 +699,7 @@ const handleDocumentKeydown = (event: KeyboardEvent) => {
 
 const loadAvailableProviders = async () => {
   try {
-    const providers = await window.electronAPI.providers.list();
+    const providers = await electronAPI.providers.list();
     const normalizedProviders = Array.isArray(providers)
       ? (providers.filter((provider: Provider) => provider?.enabled) as Provider[])
       : [];
@@ -699,9 +756,6 @@ watch(
   }
 );
 
-// Emit events to parent
-const emit = defineEmits(['message-sent', 'model-selected']);
-
 const setDraftMessage = async (
   nextValue: string,
   options?: { focus?: boolean; select?: boolean }
@@ -727,9 +781,7 @@ const checkProviderStatus = async () => {
     return;
   }
   try {
-    isProviderConfigured.value = await window.electronAPI.chat.isProviderConfigured(
-      selectedProvider.value.type
-    );
+    isProviderConfigured.value = await electronAPI.chat.isProviderConfigured(selectedProvider.value.type);
   } catch (e) {
     console.error('Failed to check provider status:', e);
     isProviderConfigured.value = false;
@@ -742,7 +794,7 @@ const stopStreaming = async () => {
   isStopping.value = true;
 
   try {
-    const result = await window.electronAPI.chat.stopStream();
+    const result = await electronAPI.chat.stopStream();
     if (!result?.success) {
       console.warn('Stop stream request failed:', result?.error || 'Unknown error');
       isLoading.value = false;
@@ -798,9 +850,7 @@ const sendMessage = async () => {
   }
 
   // Re-check provider status each time
-  const configured = await window.electronAPI.chat.isProviderConfigured(
-    selectedProvider.value.type
-  );
+  const configured = await electronAPI.chat.isProviderConfigured(selectedProvider.value.type);
   const selectedProviderName = getProviderDisplayName(selectedProvider.value);
   if (!configured) {
     alert(`Please configure the ${selectedProviderName} API key in Settings.`);
@@ -875,7 +925,7 @@ const sendMessage = async () => {
     const transportMessages = JSON.parse(JSON.stringify(uiMessages));
 
     // Start streaming via IPC
-    const streamResult = await window.electronAPI.chat.stream({
+    const streamResult = await electronAPI.chat.stream({
       providerType: selectedProvider.value.type,
       model: selectedModel.value,
       messages: transportMessages,
