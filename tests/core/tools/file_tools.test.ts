@@ -11,7 +11,12 @@ vi.mock('../../../src/core/db/workspaces', () => ({
   getVisibleWorkspaces: getVisibleWorkspacesMock,
 }));
 
-import { ReadFileTool, WriteFileTool } from '../../../src/core/tools/file_tools';
+import {
+  DeleteFileTool,
+  ListDirTool,
+  ReadFileTool,
+  WriteFileTool,
+} from '../../../src/core/tools/file_tools';
 
 const createWorkspace = (workspacePath: string) => ({
   id: 'workspace_1',
@@ -88,5 +93,12 @@ describe('file tools workspace boundaries', () => {
     ).rejects.toThrow(/outside workspace roots/i);
 
     await expect(fs.access(outsideFile)).rejects.toThrow();
+  });
+
+  it('publishes auto-mode metadata for non-destructive file workflow tools only', () => {
+    expect(new ListDirTool().toAgentTool().autoAllowed).toBe(true);
+    expect(new ReadFileTool().toAgentTool().autoAllowed).toBe(true);
+    expect(new WriteFileTool().toAgentTool().autoAllowed).toBe(true);
+    expect(new DeleteFileTool().toAgentTool().autoAllowed).toBe(false);
   });
 });

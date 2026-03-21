@@ -34,6 +34,7 @@ export class ListTodoListsTool extends BaseTool {
   name = 'list_todo_lists';
   displayName = 'List Todo Lists';
   type = 'function';
+  autoAllowed = true;
   needsApproval = false;
   description =
     'List persistent todo lists with summary counts so you can find the right checklist to inspect or update.';
@@ -57,6 +58,7 @@ export class ReadTodoListTool extends BaseTool {
   name = 'read_todo_list';
   displayName = 'Read Todo List';
   type = 'function';
+  autoAllowed = true;
   needsApproval = false;
   description = 'Read a persistent todo list and all of its items by id or title.';
 
@@ -76,6 +78,7 @@ export class WriteTodoListTool extends BaseTool {
   name = 'write_todo_list';
   displayName = 'Write Todo List';
   type = 'function';
+  autoAllowed = true;
   needsApproval = true;
   description =
     'Create or replace a persistent structured todo list. Prefer this over writing ad hoc todo files when the user wants a maintained checklist.';

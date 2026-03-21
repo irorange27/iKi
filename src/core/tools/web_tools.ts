@@ -237,6 +237,7 @@ const parseBingRssResults = (xml: string, limit: number): Array<{ title: string;
 export class WebSearchTool extends BaseTool {
   name = 'web';
   type = 'function';
+  autoAllowed = true;
   needsApproval = false;
   description =
     'Search the web for recent/public information and return a short list of relevant results.';
@@ -351,6 +352,7 @@ export class WebSearchTool extends BaseTool {
 export class FetchTool extends BaseTool {
   name = 'fetch';
   type = 'function';
+  autoAllowed = true;
   needsApproval = false;
   description =
     'Fetch a webpage or text URL and return clean text content (with status and metadata).';

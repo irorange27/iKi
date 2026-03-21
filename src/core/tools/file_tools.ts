@@ -175,6 +175,7 @@ const listDirEntries = async (
 export class ReadFileTool extends BaseTool {
   name = 'read_file';
   type = 'function';
+  autoAllowed = true;
   needsApproval = true;
   description = 'Read the content of a file from the local filesystem.';
 
@@ -194,6 +195,7 @@ export class ReadFileTool extends BaseTool {
 export class WriteFileTool extends BaseTool {
   name = 'write_file';
   type = 'function';
+  autoAllowed = true;
   description = 'Write or overwrite content to a file on the local filesystem.';
   needsApproval = true;
   paramSchema = WriteFileInputSchema;
@@ -215,6 +217,7 @@ export class WriteFileTool extends BaseTool {
 export class ListDirTool extends BaseTool {
   name = 'list_dir';
   type = 'function';
+  autoAllowed = true;
   description = 'List the contents of a directory on the local filesystem.';
   needsApproval = false;
   paramSchema = ListDirInputSchema;

@@ -10,21 +10,30 @@ export type ToolSelectionMessage = SelectionMessage;
 
 export type ToolCatalogItem = {
   name: string;
+  displayName?: string;
   description?: string;
+  needsApproval?: boolean;
+  source?: {
+    kind?: 'builtin' | 'mcp';
+    name?: string;
+  };
 };
 
 const MAX_INPUT_CHARS = 4500;
 const MAX_MESSAGES = 16;
-const MAX_OUTPUT_TOKENS = 240;
-const MAX_TOOLS_SELECTED = 4;
+const MAX_OUTPUT_TOKENS = 280;
+const MAX_TOOLS_SELECTED = 6;
 const MAX_CATALOG_ITEMS = 40;
 
 const SYSTEM_PROMPT =
   'You are a tool router for an AI assistant.\n' +
-  'Your job: pick the minimal set of tools that would materially improve the next response.\n' +
+  'Your job: pick the smallest set of tools the assistant is likely to need for the current turn.\n' +
   'Rules:\n' +
   '- Output ONLY valid JSON.\n' +
   '- Prefer using NO tools when possible.\n' +
+  '- Prefer 1-3 tools; only exceed that when a multi-step workflow clearly needs it.\n' +
+  '- If a task likely needs sequential tool use in one turn (for example list -> read -> write), include each needed tool.\n' +
+  '- Prefer tools that do not require approval unless approval-gated tools are clearly necessary.\n' +
   '- Return a JSON array of tool names. Example: ["web","fetch"].\n' +
   '- If no tool is needed, return [].\n' +
   '- Never invent tool names not present in the catalog.\n' +
@@ -84,7 +93,17 @@ const buildToolCatalogText = (tools: ToolCatalogItem[]) => {
   const sliced = tools.slice(0, MAX_CATALOG_ITEMS);
   const lines = sliced.map(tool => {
     const desc = normalizeWhitespace(tool.description || '');
-    return `- ${tool.name}${desc ? `: ${desc}` : ''}`;
+    const displayName =
+      typeof tool.displayName === 'string' && tool.displayName.trim() && tool.displayName !== tool.name
+        ? normalizeWhitespace(tool.displayName)
+        : '';
+    const sourceLabel =
+      tool.source?.kind === 'mcp'
+        ? `mcp${tool.source.name ? `:${normalizeWhitespace(tool.source.name)}` : ''}`
+        : 'builtin';
+    const approvalLabel = tool.needsApproval ? 'approval-required' : 'no-approval';
+    const metadata = [sourceLabel, approvalLabel].join('; ');
+    return `- ${tool.name}${displayName ? ` (${displayName})` : ''} [${metadata}]${desc ? `: ${desc}` : ''}`;
   });
   return lines.join('\n');
 };

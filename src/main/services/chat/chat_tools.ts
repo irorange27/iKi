@@ -38,14 +38,6 @@ const normalizeMcpServerIds = (serverIds: unknown[]): string[] => {
   return resolved;
 };
 
-const AUTO_BUILTIN_TOOL_ALLOWLIST = new Set<string>([
-  'web',
-  'fetch',
-  'list_todo_lists',
-  'read_todo_list',
-  'write_todo_list',
-]);
-
 const isMcpToolFromAllowedServer = (
   tool: Pick<ToolMetadata, 'source'>,
   allowedServerIds: Set<string> | null
@@ -64,11 +56,14 @@ const getAutoToolCatalog = (allowedMcpServerIds: Set<string> | null) =>
       if (tool.source?.kind === 'mcp') {
         return tool.autoAllowed === true && isMcpToolFromAllowedServer(tool, allowedMcpServerIds);
       }
-      return AUTO_BUILTIN_TOOL_ALLOWLIST.has(tool.name);
+      return tool.autoAllowed === true;
     })
     .map(tool => ({
       name: tool.name,
+      displayName: tool.displayName,
       description: tool.description,
+      needsApproval: tool.needsApproval === true,
+      source: tool.source,
     }));
 
 const getAutoToolNames = (allowedMcpServerIds: Set<string> | null): string[] =>
@@ -100,7 +95,7 @@ export const resolveToolNames = async (params: {
     : null;
   const mode: ToolResolveMode = hasExplicitToolsParam ? 'manual' : 'auto';
 
-  // Default behavior: only expose low-risk tools in auto mode.
+  // Default behavior: only expose tools explicitly marked autoAllowed in auto mode.
   // Explicit empty array disables tools.
   if (mode === 'manual') {
     return {
