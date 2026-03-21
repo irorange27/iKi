@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   generateTextMock,
+  getAppConfigMock,
   jsonSchemaMock,
+  loggerErrorMock,
   stepCountIsMock,
   streamTextMock,
   toolMock,
@@ -10,7 +12,9 @@ const {
   getFullSystemPromptMock,
 } = vi.hoisted(() => ({
   generateTextMock: vi.fn(),
+  getAppConfigMock: vi.fn(),
   jsonSchemaMock: vi.fn((schema: unknown) => schema),
+  loggerErrorMock: vi.fn(),
   stepCountIsMock: vi.fn((count: number) => ({ type: 'step-count', count })),
   streamTextMock: vi.fn(),
   toolMock: vi.fn((definition: unknown) => definition),
@@ -31,6 +35,19 @@ vi.mock('../../../../src/core/provider/llm/factory', () => ({
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
+vi.mock('../../../../src/core/config', () => ({
+  getAppConfig: getAppConfigMock,
+}));
+
+vi.mock('../../../../src/core/logger', () => ({
+  logger: {
+    error: loggerErrorMock,
+    warn: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
 import { createSimpleConversationRunner } from '../../../../src/core/agent';
 
 const createAsyncIterable = <T>(values: T[]) =>
@@ -44,6 +61,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   createModelMock.mockReturnValue('mock-model');
   getFullSystemPromptMock.mockReturnValue('persona prompt');
+  getAppConfigMock.mockImplementation(() => {
+    throw new Error('app config should not be loaded');
+  });
 });
 
 describe('SimpleConversationRunner', () => {
@@ -173,6 +193,8 @@ describe('SimpleConversationRunner', () => {
         },
       })
     );
+    expect(getAppConfigMock).not.toHaveBeenCalled();
+    expect(loggerErrorMock).not.toHaveBeenCalled();
   });
 
   it('reuses persisted history for approval continuation without requiring explicit history', async () => {
@@ -352,5 +374,7 @@ describe('SimpleConversationRunner', () => {
         stopWhen: { type: 'step-count', count: 2 },
       })
     );
+    expect(getAppConfigMock).not.toHaveBeenCalled();
+    expect(loggerErrorMock).not.toHaveBeenCalled();
   });
 });

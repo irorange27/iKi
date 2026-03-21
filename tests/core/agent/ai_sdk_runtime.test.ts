@@ -1,11 +1,29 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-const { getFullSystemPromptMock } = vi.hoisted(() => ({
-  getFullSystemPromptMock: vi.fn(),
-}));
+const { getFullSystemPromptMock, getAppConfigMock, loggerErrorMock, loggerWarnMock } = vi.hoisted(
+  () => ({
+    getFullSystemPromptMock: vi.fn(),
+    getAppConfigMock: vi.fn(),
+    loggerErrorMock: vi.fn(),
+    loggerWarnMock: vi.fn(),
+  })
+);
 
 vi.mock('../../../src/core/provider/llm/factory', () => ({
   getFullSystemPrompt: getFullSystemPromptMock,
+}));
+
+vi.mock('../../../src/core/config', () => ({
+  getAppConfig: getAppConfigMock,
+}));
+
+vi.mock('../../../src/core/logger', () => ({
+  logger: {
+    error: loggerErrorMock,
+    warn: loggerWarnMock,
+    debug: vi.fn(),
+    info: vi.fn(),
+  },
 }));
 
 import {
@@ -15,6 +33,8 @@ import {
   buildPromptContext,
   cloneModelMessages,
   collectApprovalRequests,
+  getDefaultAgentConfig,
+  loadAgentConfig,
 } from '../../../src/core/agent/ai_sdk_runtime';
 
 beforeEach(() => {
@@ -103,5 +123,72 @@ describe('ai_sdk_runtime', () => {
         },
       },
     ]);
+  });
+
+  it('uses explicit runtime overrides without touching app config', () => {
+    getAppConfigMock.mockImplementation(() => {
+      throw new Error('app config should not be loaded');
+    });
+
+    expect(
+      loadAgentConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'runtime prompt',
+        enableTools: false,
+      })
+    ).toEqual({
+      ...getDefaultAgentConfig(),
+      enabled: true,
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      systemPrompt: 'runtime prompt',
+      enableTools: false,
+    });
+
+    expect(getAppConfigMock).not.toHaveBeenCalled();
+    expect(loggerErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('loads app config only when no explicit runtime override is provided', () => {
+    getAppConfigMock.mockReturnValue({
+      agent: {
+        enabled: true,
+        providerType: 'deepseek',
+        model: 'deepseek-chat',
+        systemPrompt: 'stored prompt',
+        temperature: 0.3,
+        maxTokens: 512,
+        maxIterations: 4,
+        enableTools: true,
+        enableMemory: true,
+      },
+    });
+
+    expect(loadAgentConfig()).toEqual({
+      enabled: true,
+      providerType: 'deepseek',
+      model: 'deepseek-chat',
+      systemPrompt: 'stored prompt',
+      temperature: 0.3,
+      maxTokens: 512,
+      maxIterations: 4,
+      enableTools: true,
+      enableMemory: true,
+    });
+
+    expect(getAppConfigMock).toHaveBeenCalledTimes(1);
+    expect(loggerErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to defaults and logs when app config loading fails', () => {
+    const error = new Error('db unavailable');
+    getAppConfigMock.mockImplementation(() => {
+      throw error;
+    });
+
+    expect(loadAgentConfig()).toEqual(getDefaultAgentConfig());
+    expect(loggerErrorMock).toHaveBeenCalledWith('Failed to load agent config:', error);
   });
 });

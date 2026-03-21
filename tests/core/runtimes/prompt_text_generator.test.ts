@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { generateTextMock, createModelMock, getFullSystemPromptMock } = vi.hoisted(() => ({
-  generateTextMock: vi.fn(),
-  createModelMock: vi.fn(),
-  getFullSystemPromptMock: vi.fn(),
-}));
+const { generateTextMock, createModelMock, getFullSystemPromptMock, getAppConfigMock } =
+  vi.hoisted(() => ({
+    generateTextMock: vi.fn(),
+    createModelMock: vi.fn(),
+    getFullSystemPromptMock: vi.fn(),
+    getAppConfigMock: vi.fn(),
+  }));
 
 vi.mock('ai', () => ({
   generateText: generateTextMock,
@@ -15,12 +17,19 @@ vi.mock('../../../src/core/provider/llm/factory', () => ({
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
+vi.mock('../../../src/core/config', () => ({
+  getAppConfig: getAppConfigMock,
+}));
+
 import { createSimplePromptTextGenerator } from '../../../src/core/runtimes/prompt_text_generator';
 
 beforeEach(() => {
   vi.clearAllMocks();
   createModelMock.mockReturnValue('mock-model');
   getFullSystemPromptMock.mockReturnValue('persona prompt');
+  getAppConfigMock.mockImplementation(() => {
+    throw new Error('app config should not be loaded');
+  });
 });
 
 describe('SimplePromptTextGenerator', () => {
@@ -49,5 +58,6 @@ describe('SimplePromptTextGenerator', () => {
       temperature: 0.4,
       maxOutputTokens: 256,
     });
+    expect(getAppConfigMock).not.toHaveBeenCalled();
   });
 });

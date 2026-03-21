@@ -25,23 +25,37 @@ export const getDefaultAgentConfig = (): AgentConfig =>
     enableMemory: false,
   });
 
-export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfig => {
+const getAgentConfigBase = (overrideConfig?: PartialAgentConfig): PartialAgentConfig => {
+  if (overrideConfig) {
+    return getDefaultAgentConfig();
+  }
+
   try {
     const appConfig = getAppConfig();
-    const agentConfig = appConfig?.agent || getDefaultAgentConfig();
+    return appConfig?.agent || getDefaultAgentConfig();
+  } catch (error) {
+    logger.error('Failed to load agent config:', error);
+    return getDefaultAgentConfig();
+  }
+};
+
+export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfig => {
+  const baseConfig = getAgentConfigBase(overrideConfig);
+
+  try {
     return AgentConfigSchema.parse({
-      ...agentConfig,
+      ...baseConfig,
       ...overrideConfig,
     });
   } catch (error) {
-    logger.error('Failed to load agent config:', error);
+    logger.error('Failed to parse agent config:', error);
     try {
       return AgentConfigSchema.parse({
         ...getDefaultAgentConfig(),
         ...overrideConfig,
       });
     } catch (parseError) {
-      logger.error('Failed to parse agent config:', parseError);
+      logger.error('Failed to parse fallback agent config:', parseError);
       return getDefaultAgentConfig();
     }
   }
