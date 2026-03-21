@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultAppConfig } from '../../src/shared/config/defaults';
 import { normalizeAppConfig } from '../../src/shared/config/normalize';
 import { compileBase46ThemeDocument } from '../../src/shared/theme/base46_compile';
+import { parseBase46ThemePresetInput } from '../../src/shared/theme/base46_schema';
+import { BUILTIN_BASE46_DEFAULT_PRESET } from '../../src/shared/theme/builtins';
 import {
   DEFAULT_THEME_PRESET_ID,
   THEME_QUICK_STARTS,
@@ -47,6 +49,10 @@ describe('shared theme registry', () => {
     expect(presetIds).toContain('ashes');
     expect(presetIds).toContain('ayu');
     expect(summaries.find(summary => summary.id === 'aquarium')?.source).toBe('builtin');
+  });
+
+  it('keeps the builtin default preset valid under the same strict base46 schema as imported presets', () => {
+    expect(() => parseBase46ThemePresetInput(BUILTIN_BASE46_DEFAULT_PRESET)).not.toThrow();
   });
 
   it('compiles generated base46 quick starts into semantic desktop theme slots', () => {

@@ -33,6 +33,10 @@ const SETTINGS_USAGE_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsUsageSection.vue'
 );
+const SETTINGS_COLOR_SCHEME_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsColorSchemeSection.vue'
+);
 const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/SettingsView.vue');
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
 const TOOL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ToolSelector.vue');
@@ -110,6 +114,7 @@ describe('renderer style system foundation', () => {
     const napcatSource = readFileSync(NAPCAT_SETTINGS_VUE_PATH, 'utf8');
     const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
     const lifeSource = readFileSync(SETTINGS_LIFE_VUE_PATH, 'utf8');
+    const colorSchemeSource = readFileSync(SETTINGS_COLOR_SCHEME_VUE_PATH, 'utf8');
 
     expect(mcpSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
     expect(napcatSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
@@ -132,10 +137,23 @@ describe('renderer style system foundation', () => {
     expect(providersSource).not.toMatch(/#ef4444/);
     expect(providersSource).not.toMatch(/#22c55e/);
     expect(providersSource).not.toMatch(/\.icon-btn\s*\{/);
+    expect(providersSource).toMatch(/surface-inset-highlight/);
+    expect(providersSource).toMatch(/surface-shadow-lg/);
+    expect(providersSource).not.toMatch(/var\(--accent-rgb,\s*0,\s*0,\s*0\)/);
 
     expect(lifeSource).not.toMatch(/--color-surface-elevated/);
     expect(lifeSource).not.toMatch(/--color-accent-primary/);
     expect(lifeSource).not.toMatch(/--color-text-secondary/);
+
+    expect(colorSchemeSource).toMatch(/surface-shadow-md/);
+    expect(colorSchemeSource).toMatch(/surface-shadow-lg/);
+    expect(colorSchemeSource).toMatch(/danger-color/);
+    expect(colorSchemeSource).toMatch(/warning-color/);
+    expect(colorSchemeSource).toMatch(/success-color/);
+    expect(colorSchemeSource).not.toMatch(/rgba\(var\(--accent-rgb,\s*96,\s*165,\s*250\)/);
+    expect(colorSchemeSource).not.toMatch(/background:\s*#ef4444/);
+    expect(colorSchemeSource).not.toMatch(/background:\s*#f59e0b/);
+    expect(colorSchemeSource).not.toMatch(/background:\s*#22c55e/);
   });
 
   it('centralizes app-shell text and selector affordances in globals.css', () => {
@@ -179,6 +197,7 @@ describe('renderer style system foundation', () => {
     expect(chatInputSource).not.toMatch(/rgba\(96,\s*165,\s*250/);
     expect(chatInputSource).not.toMatch(/rgba\(239,\s*68,\s*68/);
     expect(chatInputSource).not.toMatch(/color:\s*#ffffff;/);
+    expect(chatInputSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
     expect(chatInputSource).not.toMatch(/model-selector-trigger composer-icon-btn/);
 
     expect(toolSelectorSource).toMatch(/ui-text-primary/);
@@ -219,6 +238,15 @@ describe('renderer style system foundation', () => {
     expect(chatViewSource).toMatch(/ui-text-secondary/);
     expect(chatViewSource).not.toMatch(/\.text-secondary\s*\{/);
     expect(chatViewSource).not.toMatch(/\.text-muted\s*\{/);
+    expect(chatViewSource).not.toMatch(/var\(--reference-inline-underline,\s*rgba\(/);
+  });
+
+  it('avoids literal color fallbacks in shared accent and status affordances now that theme tokens are canonical', () => {
+    const globalsSource = readFileSync(GLOBALS_CSS_PATH, 'utf8');
+    const sharedSource = readFileSync(SETTINGS_SHARED_CSS_PATH, 'utf8');
+
+    expect(globalsSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
+    expect(sharedSource).not.toMatch(/var\(--success-color,\s*var\(--accent-color\)\)/);
   });
 
   it('removes hardcoded sidebar chrome colors in favor of shared primitives and tokens', () => {

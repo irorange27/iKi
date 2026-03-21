@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultAppConfig } from '../../src/shared/config/defaults';
-import { THEME_QUICK_STARTS } from '../../src/shared/theme/registry';
+import { resolveThemeSelection, THEME_QUICK_STARTS } from '../../src/shared/theme/registry';
 import { createBase46ThemePresetFromQuickStart } from '../../src/shared/theme/theme_creator';
 
 describe('config effects window chrome sync', () => {
@@ -37,6 +37,12 @@ describe('config effects window chrome sync', () => {
     const { applyCssVariables } = await import('../../src/renderer/composables/useConfigEffects');
     const config = createDefaultAppConfig();
     config.general.theme = 'light';
+    const expectedSelection = resolveThemeSelection({
+      presetId: config.general.themePresetId,
+      themeMode: config.general.theme,
+      systemPrefersDark: false,
+      base46Presets: config.themes.base46Presets,
+    });
 
     applyCssVariables(config);
     applyCssVariables(config);
@@ -46,7 +52,7 @@ describe('config effects window chrome sync', () => {
     expect(setPropertyMock).toHaveBeenCalledWith('--theme-bg-primary', '#ffffff');
     expect(setPropertyMock).toHaveBeenCalledWith(
       '--theme-surface-shadow-md',
-      '0 8px 20px rgba(148, 163, 184, 0.12)'
+      expectedSelection.palette.surfaceShadowMd
     );
     expect(setWindowShadowMock).toHaveBeenCalledTimes(1);
     expect(setWindowShadowMock).toHaveBeenCalledWith(true);

@@ -100,9 +100,7 @@
   }
 
   .composer-selector-trigger {
-    box-shadow:
-      var(--surface-inset-highlight),
-      var(--surface-shadow-md);
+    box-shadow: var(--surface-inset-highlight), var(--surface-shadow-md);
   }
 
   .icon-btn:hover {
@@ -176,8 +174,8 @@
   }
 
   .selector-mode-btn.active {
-    background: rgba(var(--accent-rgb, 74, 158, 255), 0.18);
-    border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.35);
+    background: rgba(var(--accent-rgb), 0.18);
+    border-color: rgba(var(--accent-rgb), 0.35);
     color: var(--text-primary);
   }
 
@@ -254,7 +252,7 @@
   }
 
   .selector-item-selected {
-    background: rgba(var(--accent-rgb, 74, 158, 255), 0.1);
+    background: rgba(var(--accent-rgb), 0.1);
     color: var(--accent-color);
   }
 

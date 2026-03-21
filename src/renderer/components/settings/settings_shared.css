@@ -308,12 +308,8 @@ input[type='range'] {
 }
 
 .task-status.status-success {
-  background: color-mix(in srgb, var(--success-color, var(--accent-color)) 16%, var(--bg-primary));
-  border-color: color-mix(
-    in srgb,
-    var(--success-color, var(--accent-color)) 35%,
-    var(--border-color)
-  );
+  background: color-mix(in srgb, var(--success-color) 16%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--success-color) 35%, var(--border-color));
 }
 
 .task-status.status-error {

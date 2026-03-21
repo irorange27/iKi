@@ -872,7 +872,7 @@ watch(
 .mode-pill.active {
   background: var(--bg-primary);
   color: var(--text-primary);
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--surface-shadow-md);
 }
 
 .mode-meta {
@@ -932,11 +932,7 @@ watch(
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(
-      circle at top left,
-      rgba(var(--accent-rgb, 96, 165, 250), 0.06),
-      transparent 42%
-    ),
+    radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.06), transparent 42%),
     color-mix(in srgb, var(--bg-secondary) 92%, transparent);
 }
 
@@ -976,14 +972,14 @@ watch(
 .preset-card:hover {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--accent-color) 42%, var(--border-color));
-  box-shadow: 0 18px 26px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--surface-shadow-md);
 }
 
 .preset-card.selected {
   border-color: var(--accent-color);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent-color) 32%, transparent),
-    0 18px 30px rgba(var(--accent-rgb, 96, 165, 250), 0.15);
+    0 18px 30px rgba(var(--accent-rgb), 0.15);
 }
 
 .preset-card-top {
@@ -1003,8 +999,8 @@ watch(
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  box-shadow: var(--surface-inset-highlight);
 }
 
 .preset-check {
@@ -1068,13 +1064,9 @@ watch(
   border-radius: 30px;
   border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
   background:
-    radial-gradient(
-      circle at top left,
-      rgba(var(--accent-rgb, 96, 165, 250), 0.08),
-      transparent 34%
-    ),
+    radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.08), transparent 34%),
     color-mix(in srgb, var(--bg-primary) 98%, transparent);
-  box-shadow: 0 42px 80px rgba(0, 0, 0, 0.42);
+  box-shadow: var(--surface-shadow-lg);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
@@ -1177,7 +1169,7 @@ watch(
 .editor-mode-btn.active {
   background: var(--bg-primary);
   color: var(--text-primary);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--surface-shadow-md);
 }
 
 .editor-help {
@@ -1219,7 +1211,7 @@ watch(
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
 }
 
 .preview-column {
@@ -1244,7 +1236,7 @@ watch(
   overflow: hidden;
   background: var(--bg-secondary);
   color: var(--text-primary);
-  box-shadow: 0 24px 42px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--surface-shadow-lg);
 }
 
 .preview-window-bar {
@@ -1268,15 +1260,15 @@ watch(
 }
 
 .dot-red {
-  background: #ef4444;
+  background: var(--danger-color);
 }
 
 .dot-yellow {
-  background: #f59e0b;
+  background: var(--warning-color);
 }
 
 .dot-green {
-  background: #22c55e;
+  background: var(--success-color);
 }
 
 .preview-window-name {
@@ -1364,7 +1356,7 @@ watch(
 
 .preview-tertiary-btn {
   background: color-mix(in srgb, var(--accent-color) 48%, var(--success-color) 52%);
-  color: #0a111a;
+  color: color-mix(in srgb, var(--text-primary) 88%, var(--bg-primary));
 }
 
 .preview-code {

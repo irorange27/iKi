@@ -359,54 +359,7 @@ import ToolSelector from './ToolSelector.vue';
 import SkillSelector from './SkillSelector.vue';
 import LobeIcon from './Icon/LobeIcon.vue';
 
-type ChatInputThreadRecord = {
-  id: string;
-  metadata?: string | null;
-  model?: string | null;
-  title: string;
-  tools?: string | null;
-};
-
-type ChatInputToolMetadata = {
-  name?: string;
-  source?: {
-    id?: string;
-    kind?: 'builtin' | 'mcp';
-  } | null;
-};
-
-type ChatInputStreamResult = {
-  error?: string;
-  success?: boolean;
-};
-
-type ChatInputElectronApi = {
-  chat: {
-    isProviderConfigured: (providerType: string) => Promise<boolean>;
-    stopStream: () => Promise<ChatInputStreamResult>;
-    stream: (options: {
-      providerType: string;
-      model: string;
-      messages: Array<Record<string, unknown>>;
-      tools?: string[];
-      mcpServerIds?: string[];
-      skillIds?: string[];
-      skillMode?: 'manual' | 'auto';
-      threadId?: string;
-    }) => Promise<ChatInputStreamResult>;
-    threads: {
-      get: (id: string) => Promise<ChatInputThreadRecord | null>;
-    };
-  };
-  providers: {
-    list: () => Promise<Provider[]>;
-  };
-  tools: {
-    list: () => Promise<ChatInputToolMetadata[]>;
-  };
-};
-
-const electronAPI = (window as unknown as Window & { electronAPI: ChatInputElectronApi }).electronAPI;
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const emit = defineEmits<{
   (
     event: 'message-sent',
@@ -1254,8 +1207,8 @@ button {
 }
 
 .model-option-selected {
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.22);
-  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.34);
+  background: rgba(var(--accent-rgb), 0.22);
+  border-color: rgba(var(--accent-rgb), 0.34);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chat-composer-action-foreground) 5%, transparent);
 }
 
@@ -1286,8 +1239,8 @@ button {
 }
 
 .model-option-check-selected {
-  border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.44);
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.88);
+  border-color: rgba(var(--accent-rgb), 0.44);
+  background: rgba(var(--accent-rgb), 0.88);
   color: var(--accent-contrast);
 }
 
@@ -1399,10 +1352,10 @@ button {
   width: 32px;
   padding: 6px 5px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--accent-rgb, 74, 158, 255), 0.35);
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.18);
   color: var(--accent-color);
-  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb, 74, 158, 255), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.08);
 }
 
 .speech-waveform-bar {

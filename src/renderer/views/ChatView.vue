@@ -253,6 +253,7 @@ import {
   isObjectRecord,
   isSkillUsagePart,
 } from '../../shared/chat/message_parts';
+import type { ElectronApi } from '../../shared/types/electron_api';
 import { useConfigStore } from '../store/config';
 import { useChatThreads } from '../composables/useChatThreads';
 import { useChatStreaming } from '../composables/useChatStreaming';
@@ -266,47 +267,7 @@ type ChatInputExpose = {
   ) => Promise<void> | void;
 };
 
-type RendererElectronApi = {
-  chat: {
-    removeAllListeners: () => void;
-    onUiChunk: (callback: (chunk: unknown) => void) => void;
-    stopStream: () => Promise<unknown>;
-    approveTool: (
-      approvalId: string,
-      approved: boolean
-    ) => Promise<{ success?: boolean; error?: string }>;
-    threads: {
-      create: (thread: {
-        title: string;
-        model?: string | null;
-        metadata: string;
-      }) => Promise<{ id: string; title: string; model?: string }>;
-      get: (id: string) => Promise<{ id: string; title: string; model?: string } | null>;
-      update: (id: string, thread: Record<string, unknown>) => Promise<unknown>;
-    };
-    messages: {
-      list: (threadId: string) => Promise<Array<{ id: string; message: string }>>;
-      create: (input: Record<string, unknown>) => Promise<{ id?: string } | null>;
-      update: (id: string, input: Record<string, unknown>) => Promise<unknown>;
-      delete: (id: string) => Promise<unknown>;
-    };
-  };
-  toolModel: {
-    generateTitle: (conversationContent: string) => Promise<string>;
-  };
-  tools?: {
-    list?: () => Promise<unknown[]>;
-  };
-  skills?: {
-    openSkill?: (id: string) => Promise<{ success?: boolean; error?: string }>;
-  };
-  tasks?: {
-    removeAllListeners?: () => void;
-    onPush?: (callback: (payload: unknown) => void) => void;
-  };
-};
-
-const electronAPI = (window as unknown as Window & { electronAPI: RendererElectronApi }).electronAPI;
+const electronAPI = window.electronAPI as ElectronApi;
 
 const configStore = useConfigStore();
 
@@ -686,17 +647,17 @@ onUnmounted(() => {
   background: transparent;
   cursor: pointer;
   font-size: 13px;
-  color: var(--reference-inline-color, var(--text-secondary));
+  color: var(--reference-inline-color);
   text-decoration: underline;
   text-decoration-style: dotted;
-  text-decoration-color: var(--reference-inline-underline, rgba(127, 152, 170, 0.42));
+  text-decoration-color: var(--reference-inline-underline);
   text-underline-offset: 4px;
 }
 
 .reference-summary-item:hover,
 .reference-summary-item.is-active {
-  color: var(--reference-inline-hover, var(--reference-inline-color, var(--text-primary)));
-  text-decoration-color: var(--reference-inline-underline, rgba(127, 152, 170, 0.42));
+  color: var(--reference-inline-hover);
+  text-decoration-color: var(--reference-inline-underline);
 }
 
 .reference-summary-icon {

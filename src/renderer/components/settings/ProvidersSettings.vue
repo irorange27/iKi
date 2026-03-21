@@ -278,19 +278,7 @@ type EditableProvider = Pick<
   available_models: string;
 };
 
-type ProvidersElectronApi = {
-  chat: {
-    getModels: (providerType: string) => Promise<string[]>;
-  };
-  providers: {
-    list: () => Promise<ProviderRecord[]>;
-    add: (provider: Partial<ProviderRecord>) => Promise<unknown>;
-    update: (id: string, provider: Partial<ProviderRecord>) => Promise<unknown>;
-    delete: (id: string) => Promise<unknown>;
-  };
-};
-
-const electronAPI = (window as unknown as Window & { electronAPI: ProvidersElectronApi }).electronAPI;
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 const providers = ref<ProviderRecord[]>([]);
 const editingProvider = ref<EditableProvider | null>(null);
@@ -858,7 +846,7 @@ onMounted(() => {
   border: 1px solid var(--border-color);
   border-radius: 18px;
   padding: 24px 28px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--surface-inset-highlight);
 }
 
 .provider-header {
@@ -924,7 +912,7 @@ onMounted(() => {
 
 .enable-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(var(--accent-rgb, 0, 0, 0), 0.2);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.2);
 }
 
 .enable-btn:active {
@@ -1006,7 +994,7 @@ onMounted(() => {
   padding: 32px;
   width: 100%;
   max-width: 500px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--surface-shadow-lg);
 }
 
 .provider-editor h3 {
