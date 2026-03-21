@@ -54,14 +54,33 @@ describe('shared theme registry', () => {
     if (!preset.dark) {
       throw new Error('Expected Ocean quick start to include a dark variant.');
     }
+    if (!preset.light) {
+      throw new Error('Expected Ocean quick start to include a light variant.');
+    }
 
-    const palette = compileBase46ThemeDocument(preset.dark);
+    const darkPalette = compileBase46ThemeDocument(preset.dark);
+    const lightPalette = compileBase46ThemeDocument(preset.light);
 
-    expect(palette.colorScheme).toBe('dark');
-    expect(palette.bgPrimary).toBe(preset.dark.base_30.black);
-    expect(palette.accentColor).toBe(preset.dark.base_30.blue);
-    expect(palette.chatComposerSendBackground).toMatch(/^rgba\(/);
-    expect(palette.chatUserBubbleRadius).toBe('28px 10px 28px 28px');
+    expect(darkPalette.colorScheme).toBe('dark');
+    expect(darkPalette.bgPrimary).toBe(preset.dark.base_30.black);
+    expect(darkPalette.accentColor).toBe(preset.dark.base_30.blue);
+    expect(darkPalette.chatComposerSendBackground).toMatch(/^rgba\(/);
+    expect(darkPalette.chatUserBubbleRadius).toBe('28px 10px 28px 28px');
+    expect(lightPalette.colorScheme).toBe('light');
+    expect(lightPalette.bgPrimary).toBe(preset.light.base_30.black);
+    expect(lightPalette.accentColor).toBe(preset.light.base_30.blue);
+    expect(lightPalette.chatUserBubbleRadius).toBe('28px 10px 28px 28px');
+  });
+
+  it('keeps the builtin light preset outgoing bubble radius aligned with dark mode', () => {
+    const selection = resolveThemeSelection({
+      presetId: DEFAULT_THEME_PRESET_ID,
+      themeMode: 'light',
+      systemPrefersDark: false,
+    });
+
+    expect(selection.resolvedVariant).toBe('light');
+    expect(selection.palette.chatUserBubbleRadius).toBe('28px 10px 28px 28px');
   });
 
   it('falls back to a preset default variant when the requested variant is unavailable', () => {

@@ -98,7 +98,7 @@ export const compileBase46ThemeDocument = (theme: Base46ThemeDocument): ThemeSlo
     ? `0 12px 22px ${withAlpha(mixHexColors(accentColor, bgSecondary, 0.6), 0.18)}`
     : `0 10px 22px ${withAlpha(mixHexColors(bgPrimary, FALLBACK_DARK_SHADOW, 0.75), 0.24)}`;
   const chatUserBubbleText = isLight ? accentContrast : textPrimary;
-  const chatUserBubbleRadius = isLight ? '28px' : '28px 10px 28px 28px';
+  const chatUserBubbleRadius = '28px 10px 28px 28px';
 
   return {
     colorScheme: theme.type,

@@ -22,6 +22,9 @@ describe('chat chrome theme tokens', () => {
     expect(variablesSource).toMatch(
       /\[data-theme='light'\][\s\S]*--theme-chat-composer-background:[\s\S]*--theme-chat-user-bubble-background:/i
     );
+    expect(variablesSource).toMatch(
+      /\[data-theme='light'\][\s\S]*--theme-chat-user-bubble-radius:\s*28px 10px 28px 28px;/i
+    );
   });
 
   it('routes composer and outgoing bubble styles through semantic theme vars', () => {

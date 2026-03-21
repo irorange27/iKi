@@ -239,7 +239,7 @@
   --theme-chat-user-bubble-border-color: rgba(106, 146, 156, 0.32);
   --theme-chat-user-bubble-shadow: 0 12px 22px rgba(125, 166, 176, 0.18);
   --theme-chat-user-bubble-text: #ffffff;
-  --theme-chat-user-bubble-radius: 28px;
+  --theme-chat-user-bubble-radius: 28px 10px 28px 28px;
 }
 
 [data-theme='dark'] {

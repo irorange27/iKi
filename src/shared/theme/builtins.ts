@@ -135,7 +135,7 @@ const BUILTIN_LIGHT_THEME: ThemeSlotPalette = {
   chatUserBubbleBorderColor: 'rgba(106, 146, 156, 0.32)',
   chatUserBubbleShadow: '0 12px 22px rgba(125, 166, 176, 0.18)',
   chatUserBubbleText: '#ffffff',
-  chatUserBubbleRadius: '28px',
+  chatUserBubbleRadius: '28px 10px 28px 28px',
 };
 
 export const BUILTIN_THEME_PRESET: ThemePreset = {
