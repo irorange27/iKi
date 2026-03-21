@@ -118,6 +118,9 @@ const ensureNapCatClient = (): string => {
   return created.client.id;
 };
 
+const isFirstUserClientRegistration = (systemClientId: string): boolean =>
+  !listAppClients().some(client => client.id !== systemClientId);
+
 const ensureUserDataDir = () => {
   const userDataPath = getUserDataPath();
   fs.mkdirSync(userDataPath, { recursive: true });
@@ -311,7 +314,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       }
 
       try {
-        const isFirstClient = listAppClients().length === 0;
+        const isFirstClient = isFirstUserClientRegistration(napcatClientId);
         const body = (await parseJsonBody(req)) as Record<string, unknown>;
         const name =
           typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'iKi Client';
