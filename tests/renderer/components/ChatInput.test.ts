@@ -5,6 +5,16 @@ import { flushPromises, mount } from '@vue/test-utils';
 
 import type { Provider } from '../../../src/shared/types/provider';
 
+const createDeferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
@@ -83,6 +93,7 @@ const createElectronApi = (options?: {
 const mountChatInput = async (options?: {
   providers?: Provider[];
   configured?: boolean;
+  configuredError?: Error;
   thread?: {
     id: string;
     title: string;
@@ -91,19 +102,59 @@ const mountChatInput = async (options?: {
     model?: string | null;
     is_incognito?: number;
   } | null;
+  messages?: unknown[];
+  prepareMessageSend?: (payload: {
+    content: string;
+    model?: string;
+    tools?: string[];
+    mcpServerIds?: string[];
+  }) => Promise<
+    | {
+        threadId: string;
+        messagesSnapshot: unknown[];
+      }
+    | null
+  >;
   props?: Record<string, unknown>;
 }) => {
   const { api, stream } = createElectronApi(options);
   setElectronApi(api);
   vi.resetModules();
 
+  const prepareMessageSend = vi.fn(async (payload: {
+    content: string;
+    model?: string;
+    tools?: string[];
+    mcpServerIds?: string[];
+  }) => {
+    if (options?.prepareMessageSend) {
+      return await options.prepareMessageSend(payload);
+    }
+
+    const baseMessages = Array.isArray(options?.messages) ? options.messages : [];
+    return {
+      threadId:
+        options?.thread?.id ||
+        (typeof options?.props?.threadId === 'string' ? options.props.threadId : 'thread_prepared'),
+      messagesSnapshot: [
+        ...baseMessages,
+        {
+          id: `user_${baseMessages.length + 1}`,
+          role: 'user',
+          parts: [{ type: 'text', text: payload.content }],
+        },
+      ],
+    };
+  });
+
+  const mountProps = { ...(options?.props ?? {}) };
+  delete mountProps.chat;
+
   const ChatInput = (await import('../../../src/renderer/components/ChatInput.vue')).default;
   const wrapper = mount(ChatInput, {
     props: {
-      chat: {
-        messages: [],
-      },
-      ...options?.props,
+      ...mountProps,
+      prepareMessageSend,
     },
     global: {
       stubs: {
@@ -116,7 +167,7 @@ const mountChatInput = async (options?: {
 
   await flushPromises();
 
-  return { wrapper, api, stream };
+  return { wrapper, api, stream, prepareMessageSend };
 };
 
 describe('ChatInput', () => {
@@ -180,7 +231,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1","gpt-4o"]',
     });
 
-    const { wrapper, stream } = await mountChatInput({
+    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
       providers: [deepseek, openai],
       thread: {
         id: 'thread_1',
@@ -197,13 +248,12 @@ describe('ChatInput', () => {
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    const emitted = wrapper.emitted('message-sent');
-    expect(emitted).toHaveLength(1);
-    expect(emitted?.[0]?.[1]).toBe('gpt-4o');
-
-    const onReady = emitted?.[0]?.[4] as (() => void) | undefined;
-    onReady?.();
-    await flushPromises();
+    expect(prepareMessageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'Use the saved model',
+        model: 'gpt-4o',
+      })
+    );
 
     expect(stream).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -221,34 +271,29 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, stream } = await mountChatInput({
+    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
       providers: [provider],
-      props: {
-        chat: {
-          messages: [
-            {
-              id: 'assistant_1',
-              role: 'assistant',
-              parts: [{ type: 'text', text: 'How can I help?' }],
-            },
-          ],
+      messages: [
+        {
+          id: 'assistant_1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'How can I help?' }],
         },
-      },
+      ],
     });
 
     await wrapper.find('.chat-input-field').setValue('Need help with the repo');
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    const emitted = wrapper.emitted('message-sent');
-    expect(emitted).toHaveLength(1);
-    expect(emitted?.[0]?.[0]).toBe('Need help with the repo');
-    expect(emitted?.[0]?.[1]).toBe('gpt-4.1');
-
-    const onReady = emitted?.[0]?.[4] as (() => void) | undefined;
-    expect(typeof onReady).toBe('function');
-    onReady?.();
-    await flushPromises();
+    expect(prepareMessageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'Need help with the repo',
+        model: 'gpt-4.1',
+        tools: [],
+        mcpServerIds: [],
+      })
+    );
 
     expect(stream).toHaveBeenCalledTimes(1);
     expect(stream).toHaveBeenCalledWith(
@@ -278,7 +323,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, api, stream } = await mountChatInput({
+    const { wrapper, api, stream, prepareMessageSend } = await mountChatInput({
       providers: [provider],
       thread: {
         id: 'thread_1',
@@ -303,14 +348,12 @@ describe('ChatInput', () => {
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    const emitted = wrapper.emitted('message-sent');
-    expect(emitted).toHaveLength(1);
-    expect(emitted?.[0]?.[2]).toEqual(['web', 'mcp_lookup']);
-    expect(emitted?.[0]?.[3]).toEqual(['docs_server']);
-
-    const onReady = emitted?.[0]?.[4] as (() => void) | undefined;
-    onReady?.();
-    await flushPromises();
+    expect(prepareMessageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: ['web', 'mcp_lookup'],
+        mcpServerIds: ['docs_server'],
+      })
+    );
 
     expect(stream).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -349,6 +392,48 @@ describe('ChatInput', () => {
     expect(wrapper.emitted('incognito-changed')).toEqual([[true], [false]]);
   });
 
+  it('waits for the send-preparation promise before starting IPC streaming', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+    const deferred = createDeferred<{
+      threadId: string;
+      messagesSnapshot: unknown[];
+    }>();
+
+    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
+      providers: [provider],
+      prepareMessageSend: () => deferred.promise,
+      props: {
+        threadId: 'thread_1',
+      },
+    });
+
+    await wrapper.find('.chat-input-field').setValue('Wait until prepared');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(prepareMessageSend).toHaveBeenCalledTimes(1);
+    expect(stream).not.toHaveBeenCalled();
+
+    deferred.resolve({
+      threadId: 'thread_1',
+      messagesSnapshot: [
+        {
+          id: 'user_1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Wait until prepared' }],
+        },
+      ],
+    });
+    await flushPromises();
+
+    expect(stream).toHaveBeenCalledTimes(1);
+  });
+
   it('alerts and aborts send when provider verification throws', async () => {
     const provider = buildProvider({
       id: 'openai',
@@ -362,7 +447,7 @@ describe('ChatInput', () => {
       value: alertSpy,
     });
 
-    const { wrapper, stream } = await mountChatInput({
+    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
       providers: [provider],
       configuredError: new Error('ipc failed'),
     });
@@ -371,7 +456,7 @@ describe('ChatInput', () => {
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    expect(wrapper.emitted('message-sent')).toBeUndefined();
+    expect(prepareMessageSend).not.toHaveBeenCalled();
     expect(stream).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith(
       'Failed to verify the OpenAI provider configuration. Please try again.'

@@ -98,7 +98,7 @@
               :aria-label="incognitoAriaLabel"
               :aria-pressed="props.isIncognito"
               :title="incognitoTooltip"
-              :disabled="isLoading || isStopping"
+              :disabled="isPreparingSend || isLoading || isStopping"
               @click="toggleIncognitoMode"
             >
               <svg
@@ -164,7 +164,13 @@
                       : 'ui-text-muted speech-btn-unavailable',
                 isTranscribing ? 'is-transcribing' : '',
               ]"
-              :disabled="!speechEngineAvailable || isLoading || isStopping || isTranscribing"
+              :disabled="
+                !speechEngineAvailable ||
+                isPreparingSend ||
+                isLoading ||
+                isStopping ||
+                isTranscribing
+              "
               :aria-label="isRecording ? 'Stop voice input' : 'Start voice input'"
               @click="toggleVoiceInput"
             >
@@ -209,7 +215,7 @@
               ]"
               :aria-label="isLoading ? 'Stop generation' : 'Send message'"
               @click="isLoading ? stopStreaming() : sendMessage()"
-              :disabled="isStopping || isRecording || isTranscribing"
+              :disabled="isPreparingSend || isStopping || isRecording || isTranscribing"
             >
               <svg
                 v-if="isLoading"
@@ -238,12 +244,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, computed } from 'vue';
-import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
 import type { Provider } from '../../shared/types/provider';
 import { getErrorMessage } from '../../shared/utils/errors';
-import { toUiMessages } from '../modules/chat/ui_message_convert';
-import { isTextPart } from '../modules/chat/ui_message_text';
 import { useChatProviderSelection } from '../composables/useChatProviderSelection';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
@@ -253,23 +256,26 @@ import SkillSelector from './SkillSelector.vue';
 
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const emit = defineEmits<{
-  (
-    event: 'message-sent',
-    content: string,
-    model?: string,
-    tools?: string[],
-    mcpServerIds?: string[],
-    onReady?: () => void
-  ): void;
   (event: 'incognito-changed', value: boolean): void;
   (event: 'model-selected', payload: { model: string; provider: Provider }): void;
 }>();
 
 const props = defineProps<{
-  chat?: Chat<UIMessage>;
   threadId?: string;
   activeModel?: string;
   isIncognito?: boolean;
+  prepareMessageSend?: (payload: {
+    content: string;
+    model?: string;
+    tools?: string[];
+    mcpServerIds?: string[];
+  }) => Promise<
+    | {
+        threadId: string;
+        messagesSnapshot: UIMessage[];
+      }
+    | null
+  >;
   contextUsage?: {
     usedTokens: number;
     budgetTokens: number | null;
@@ -282,6 +288,7 @@ const props = defineProps<{
 
 const inputRef = ref<HTMLInputElement | null>(null);
 const message = ref('');
+const isPreparingSend = ref(false);
 const isLoading = ref(false);
 const isStopping = ref(false);
 const isComposing = ref(false);
@@ -297,6 +304,7 @@ const incognitoTooltip = computed(() =>
     ? 'Incognito is on. Memory is disabled for this chat.'
     : 'Incognito is off. Memory is enabled for this chat.'
 );
+const isBusy = computed(() => isPreparingSend.value || isLoading.value);
 
 const {
   selectedProvider,
@@ -319,7 +327,7 @@ const {
   resolveSelectedMcpServerIds,
 } = useThreadToolSelection({
   electronAPI,
-  isLoading,
+  isLoading: isBusy,
 });
 
 const {
@@ -341,15 +349,15 @@ const handleProviderModelSelect = (payload: { provider: Provider; model: string 
 };
 
 const toggleIncognitoMode = () => {
-  if (isLoading.value || isStopping.value) return;
+  if (isBusy.value || isStopping.value) return;
   emit('incognito-changed', !props.isIncognito);
 };
 
 watch(
-  () => [props.threadId, isLoading.value] as const,
-  async ([threadId, loading], [previousThreadId, previousLoading]) => {
-    if (loading) return;
-    if (threadId === previousThreadId && previousLoading === loading) return;
+  () => [props.threadId, isBusy.value] as const,
+  async ([threadId, busy], [previousThreadId, previousBusy]) => {
+    if (busy) return;
+    if (threadId === previousThreadId && previousBusy === busy) return;
     await syncToolSelectionFromThread(threadId);
   }
 );
@@ -434,7 +442,7 @@ const sendMessage = async () => {
     stopVoiceInput();
     return;
   }
-  if (!message.value.trim() || isLoading.value) return;
+  if (!message.value.trim() || isPreparingSend.value || isLoading.value) return;
 
   const providerReady = await ensureProviderReady();
   if (providerReady.ok === false) {
@@ -445,64 +453,43 @@ const sendMessage = async () => {
   const userMessage = message.value.trim();
   const resolvedMcpServerIds = await resolveSelectedMcpServerIds();
   selectedMcpServerIds.value = resolvedMcpServerIds;
+  isPreparingSend.value = true;
+
+  let preparedMessageSend: { threadId: string; messagesSnapshot: UIMessage[] } | null = null;
+  try {
+    if (!props.prepareMessageSend) {
+      console.error('Missing prepareMessageSend handler');
+    } else {
+      preparedMessageSend = await props.prepareMessageSend({
+        content: userMessage,
+        model: providerReady.model,
+        tools: selectedTools.value,
+        mcpServerIds: resolvedMcpServerIds,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to prepare message send:', error);
+  } finally {
+    isPreparingSend.value = false;
+  }
+
+  if (!preparedMessageSend) {
+    alert('Failed to prepare the message. Please try again.');
+    return;
+  }
+
   message.value = '';
   isLoading.value = true;
   isStopping.value = false;
 
-  // Emit message-sent and wait for ChatView to finish thread/message setup.
-  await new Promise<void>(resolve => {
-    let resolved = false;
-    const done = () => {
-      if (resolved) return;
-      resolved = true;
-      resolve();
-    };
-
-    emit(
-      'message-sent',
-      userMessage,
-      providerReady.model,
-      selectedTools.value,
-      resolvedMcpServerIds,
-      done
-    );
-    window.setTimeout(done, 1500);
-  });
-
   try {
-    // Convert chat.messages to AI SDK model messages for IPC
-    // Note: The user message may not be in chat.messages yet (it's added in ChatView.handleMessageSent)
-    // So we need to include it manually if it's not there
-    const rawMessages = props.chat?.messages || [];
+    const transportMessages = JSON.parse(JSON.stringify(preparedMessageSend.messagesSnapshot));
 
-    // Check if the last message is the user message we just sent
-    const lastMessage = rawMessages[rawMessages.length - 1];
-    const userMessageInChat =
-      lastMessage &&
-      lastMessage.role === 'user' &&
-      Array.isArray(lastMessage.parts) &&
-      lastMessage.parts.some((part: unknown) => isTextPart(part) && part.text === userMessage);
-
-    // If user message is not in chat.messages yet, include it manually
-    const messagesToConvert = userMessageInChat
-      ? rawMessages
-      : [
-          ...rawMessages,
-          {
-            role: 'user',
-            parts: [{ type: 'text', text: userMessage }],
-          },
-        ];
-
-    const uiMessages = toUiMessages(messagesToConvert);
-
-    if (uiMessages.length === 0) {
+    if (!Array.isArray(transportMessages) || transportMessages.length === 0) {
       console.warn('No valid messages to send');
       isLoading.value = false;
       return;
     }
-
-    const transportMessages = JSON.parse(JSON.stringify(uiMessages));
 
     // Start streaming via IPC
     const streamResult = await electronAPI.chat.stream({
@@ -519,7 +506,7 @@ const sendMessage = async () => {
       skillIds: isAutoSkillMode.value
         ? undefined
         : JSON.parse(JSON.stringify(selectedSkillIds.value)),
-      threadId: props.threadId,
+      threadId: preparedMessageSend.threadId,
     });
 
     if (streamResult?.success === false) {

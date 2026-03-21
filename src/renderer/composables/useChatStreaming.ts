@@ -12,6 +12,18 @@ import {
 import type { ElectronApi } from '../../shared/types/electron_api';
 import type { ChatThread } from './useChatThreads';
 
+export type PreparedMessageSend = {
+  threadId: string;
+  messagesSnapshot: UIMessage[];
+};
+
+type PrepareMessageSendPayload = {
+  content: string;
+  model?: string;
+  tools?: string[];
+  mcpServerIds?: string[];
+};
+
 export const useChatStreaming = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   messageStore: ChatMessageStore;
@@ -114,95 +126,95 @@ export const useChatStreaming = (deps: {
     await clearDraftMessage();
   };
 
-  const handleMessageSent = async (
-    content: string,
-    model?: string,
-    tools?: string[],
-    _mcpServerIds?: string[],
-    onReady?: () => void
-  ) => {
-    try {
-      const pendingEditMessageId = editingUserMessageId.value;
+  const prepareMessageSend = async (
+    payload: PrepareMessageSendPayload
+  ): Promise<PreparedMessageSend | null> => {
+    const { content, model, tools } = payload;
+    const pendingEditMessageId = editingUserMessageId.value;
 
-      if (!deps.currentThread.value) {
-        const thread = await deps.createNewThread(model || deps.currentModel.value);
-        if (!thread) {
-          console.error('Failed to create thread');
-          return;
-        }
-        resetStreamState();
-        resetEditing();
+    if (!deps.currentThread.value) {
+      const thread = await deps.createNewThread(model || deps.currentModel.value);
+      if (!thread) {
+        console.error('Failed to create thread');
+        return null;
       }
+      resetStreamState();
+      resetEditing();
+    }
 
-      if (!deps.currentThread.value) {
-        console.error('No thread available');
-        return;
-      }
+    if (!deps.currentThread.value) {
+      console.error('No thread available');
+      return null;
+    }
 
-      if (model && deps.currentThread.value.model !== model) {
-        await deps.electronAPI.chat.threads.update(deps.currentThread.value.id, { model });
-        deps.currentThread.value.model = model;
-        deps.currentModel.value = model;
-      }
+    if (model && deps.currentThread.value.model !== model) {
+      await deps.electronAPI.chat.threads.update(deps.currentThread.value.id, { model });
+      deps.currentThread.value.model = model;
+      deps.currentModel.value = model;
+    }
 
-      if (tools) {
-        deps.selectedTools.value = tools;
-      }
+    if (tools) {
+      deps.selectedTools.value = tools;
+    }
 
-      deps.showWelcome.value = false;
+    deps.showWelcome.value = false;
 
-      if (pendingEditMessageId && deps.currentThread.value) {
-        await streamController.stopActiveStreamIfNeeded();
+    if (pendingEditMessageId && deps.currentThread.value) {
+      await streamController.stopActiveStreamIfNeeded();
 
-        const messageIndex = deps.messageStore.findIndexById(pendingEditMessageId);
+      const messageIndex = deps.messageStore.findIndexById(pendingEditMessageId);
 
-        if (messageIndex >= 0) {
-          const currentUserMessage = deps.messageStore.getAt(messageIndex) as UIMessage;
-          const updatedUserMessage: UIMessage = {
-            ...currentUserMessage,
-            parts: upsertTextIntoMessageParts(currentUserMessage.parts, content),
-          };
+      if (messageIndex >= 0) {
+        const currentUserMessage = deps.messageStore.getAt(messageIndex) as UIMessage;
+        const updatedUserMessage: UIMessage = {
+          ...currentUserMessage,
+          parts: upsertTextIntoMessageParts(currentUserMessage.parts, content),
+        };
 
-          deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
-          await upsertUiMessage(
-            updatedUserMessage,
-            undefined,
-            'user-message-edit',
-            deps.currentThread.value.id
-          );
-          await truncateConversationAfterIndex(messageIndex);
+        deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
+        await upsertUiMessage(
+          updatedUserMessage,
+          undefined,
+          'user-message-edit',
+          deps.currentThread.value.id
+        );
+        await truncateConversationAfterIndex(messageIndex);
 
-          streamController.beginTurn({
-            threadId: deps.currentThread.value.id,
-            parentId: updatedUserMessage.id,
-          });
-
-          editingUserMessageId.value = null;
-          deps.scrollToBottom();
-          return;
-        }
+        streamController.beginTurn({
+          threadId: deps.currentThread.value.id,
+          parentId: updatedUserMessage.id,
+        });
 
         editingUserMessageId.value = null;
+        deps.scrollToBottom();
+        return {
+          threadId: deps.currentThread.value.id,
+          messagesSnapshot: deps.messageStore.snapshot(),
+        };
       }
 
-      const userMessage: UIMessage = {
-        id: deps.createMessageId(),
-        role: 'user',
-        parts: [{ type: 'text', text: content, state: 'done' }],
-      };
-
-      deps.messageStore.append(userMessage);
-      const threadId = deps.currentThread.value.id;
-      streamController.beginTurn({
-        threadId,
-        parentId: userMessage.id,
-      });
-      await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
-
-      deps.scrollToBottom();
-    } finally {
-      onReady?.();
+      editingUserMessageId.value = null;
     }
+
+    const userMessage: UIMessage = {
+      id: deps.createMessageId(),
+      role: 'user',
+      parts: [{ type: 'text', text: content, state: 'done' }],
+    };
+
+    deps.messageStore.append(userMessage);
+    const threadId = deps.currentThread.value.id;
+    streamController.beginTurn({
+      threadId,
+      parentId: userMessage.id,
+    });
+    await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
+
+    deps.scrollToBottom();
+    return {
+      threadId,
+      messagesSnapshot: deps.messageStore.snapshot(),
+    };
   };
 
   return {
@@ -210,7 +222,7 @@ export const useChatStreaming = (deps: {
     editingUserMessageId,
     isApprovalProcessing: streamController.isApprovalProcessing,
     handleToolApproval: streamController.handleToolApproval,
-    handleMessageSent,
+    prepareMessageSend,
     beginEditMessage,
     cancelEditing,
     selectThread,

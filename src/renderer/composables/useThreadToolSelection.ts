@@ -16,6 +16,12 @@ export const useThreadToolSelection = (deps: {
   const toolMode = ref<'manual' | 'auto'>('auto');
   const isAutoToolMode = computed(() => toolMode.value === 'auto');
 
+  const resetToolSelection = () => {
+    selectedTools.value = [];
+    selectedMcpServerIds.value = [];
+    toolMode.value = 'auto';
+  };
+
   const deriveMcpServerIdsFromToolNames = async (toolNames: string[]): Promise<string[]> => {
     const normalizedToolNames = new Set(normalizeStringArray(toolNames));
     if (normalizedToolNames.size === 0) return [];
@@ -55,11 +61,18 @@ export const useThreadToolSelection = (deps: {
 
   const syncToolSelectionFromThread = async (threadId?: string) => {
     const normalizedThreadId = typeof threadId === 'string' ? threadId.trim() : '';
-    if (!normalizedThreadId || deps.isLoading.value) return;
+    if (!normalizedThreadId) {
+      resetToolSelection();
+      return;
+    }
+    if (deps.isLoading.value) return;
 
     try {
       const thread = await deps.electronAPI.chat.threads.get(normalizedThreadId);
-      if (!thread) return;
+      if (!thread) {
+        resetToolSelection();
+        return;
+      }
 
       const persistedTools = parseThreadToolNames(thread.tools);
       const selectionState = parseThreadToolSelectionState(thread.metadata);
@@ -73,13 +86,14 @@ export const useThreadToolSelection = (deps: {
         selectionState.mode === 'auto' ||
         selectionState.mode === 'manual';
 
-      if (!hasPersistedSelection) return;
+      if (!hasPersistedSelection) {
+        resetToolSelection();
+        return;
+      }
 
       selectedTools.value = persistedTools;
       selectedMcpServerIds.value = resolvedMcpServerIds;
-      if (selectionState.mode) {
-        toolMode.value = selectionState.mode;
-      }
+      toolMode.value = selectionState.mode ?? 'auto';
     } catch (error) {
       console.error('Failed to sync tool selection from thread:', error);
     }
@@ -90,6 +104,7 @@ export const useThreadToolSelection = (deps: {
     selectedMcpServerIds,
     toolMode,
     isAutoToolMode,
+    resetToolSelection,
     syncToolSelectionFromThread,
     resolveSelectedMcpServerIds,
   };

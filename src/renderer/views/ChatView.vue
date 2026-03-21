@@ -57,12 +57,11 @@
         </div>
         <ChatInput
           ref="chatInputRef"
-          :chat="chat"
           :thread-id="currentThread?.id || ''"
           :active-model="currentModel"
           :is-incognito="isIncognito"
           :context-usage="composerContextUsage"
-          @message-sent="handleMessageSent"
+          :prepare-message-send="prepareMessageSend"
           @incognito-changed="handleIncognitoChanged"
           @model-selected="handleModelSelected"
         />
@@ -201,7 +200,7 @@ const streamController = streaming.streamController;
 const editingUserMessageId = streaming.editingUserMessageId;
 const isApprovalProcessing = streaming.isApprovalProcessing;
 const handleToolApproval = streaming.handleToolApproval;
-const handleMessageSent = streaming.handleMessageSent;
+const prepareMessageSend = streaming.prepareMessageSend;
 const selectThread = streaming.selectThread;
 const handleThreadDeleted = streaming.handleThreadDeleted;
 const handleNewChat = streaming.handleNewChat;
