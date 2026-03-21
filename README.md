@@ -69,6 +69,8 @@ existing packaged output under `out/`.
   `0.0.0.0` when you intentionally need LAN or Docker access.
 - The daemon bootstrap registration token (`daemon.token`) is rotated after each
   successful client registration; treat it as a one-time local setup credential.
+- Downloaded `whisper-node` models are stored under iKi's user-data directory,
+  not inside the packaged app bundle.
 
 ## Commit Governance
 
@@ -99,8 +101,13 @@ existing packaged output under `out/`.
   root `CHANGELOG.md` flow
 - Local release verification path: run `npm run app:build` before a version cut; `app:preview`
   remains available for a manual visual pass
-- `release-build` runs automatically on `package.json` version updates in `main` and on GitHub
-  Release publish
-- `release-build` first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds
-- `release-build` outputs are uploaded to workflow artifacts per OS, then published once to
-  release assets
+- CI/CD release builds are tag-driven: push `vX.Y.Z` after `package.json` and
+  `changelogs/vX.Y.Z.md` are in sync
+- `release-build` first runs the full repository gate (`npm run -s ci:quality`) on Ubuntu before
+  any matrix packaging starts
+- `release-build` then runs `npm run -s app:build` on macOS, Windows, and Linux, uploading maker
+  outputs as workflow artifacts per OS
+- Tag builds automatically create or update a draft GitHub Release whose body comes from the
+  curated `changelogs/vX.Y.Z.md` file and whose assets include a `SHA256SUMS.txt` manifest
+- `workflow_dispatch` remains available for CI build-only verification of any branch, tag, or SHA
+  without publishing a release

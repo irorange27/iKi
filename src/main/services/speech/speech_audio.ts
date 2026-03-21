@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -23,12 +23,20 @@ const runFfmpeg = async (args: string[], ffmpegPath: string): Promise<void> => {
   });
 };
 
+const resolvePackagedExecutablePath = (candidatePath: string): string => {
+  const asarSegment = `${path.sep}app.asar${path.sep}`;
+  if (!candidatePath.includes(asarSegment)) return candidatePath;
+
+  const unpackedPath = candidatePath.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`);
+  return existsSync(unpackedPath) ? unpackedPath : candidatePath;
+};
+
 const resolveFfmpegPath = (): string | null => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ffmpegStatic = require('ffmpeg-static') as unknown;
     if (typeof ffmpegStatic === 'string' && ffmpegStatic.trim()) {
-      return ffmpegStatic;
+      return resolvePackagedExecutablePath(ffmpegStatic);
     }
   } catch {
     // ignore

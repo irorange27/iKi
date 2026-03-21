@@ -1,8 +1,9 @@
 import { promises as fs, existsSync, statSync, createWriteStream } from 'node:fs';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import type { AppConfig } from '../../../shared/types/config';
+import { getUserDataPath } from '../../../core/platform';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -23,8 +24,6 @@ import {
   resolveAvailableFfmpegPath,
   writeTempFile,
 } from './speech_audio';
-
-type WhisperNodeTranscribe = (filePath: string, options?: unknown) => Promise<unknown>;
 
 const nodeRequire = createRequire(__filename);
 
@@ -50,20 +49,79 @@ const getWhisperNodeRoot = () => {
   }
 };
 
-const getWhisperCppRoot = () => path.join(getWhisperNodeRoot(), 'lib', 'whisper.cpp');
-
-const getWhisperModelsDir = () => path.join(getWhisperCppRoot(), 'models');
-
 const getWhisperMainBinaryName = () => (process.platform === 'win32' ? 'main.exe' : 'main');
 
-const getWhisperMainBinaryPath = () => path.join(getWhisperCppRoot(), getWhisperMainBinaryName());
+const resolvePackagedResourcePath = (candidatePath: string): string => {
+  const asarSegment = `${path.sep}app.asar${path.sep}`;
+  if (!candidatePath.includes(asarSegment)) return candidatePath;
+
+  const unpackedPath = candidatePath.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`);
+  return existsSync(unpackedPath) ? unpackedPath : candidatePath;
+};
+
+const getWhisperBundledCppRoot = () => path.join(getWhisperNodeRoot(), 'lib', 'whisper.cpp');
+
+const getWhisperManagedRoot = () => path.join(getUserDataPath(), 'speech', 'whisper-node');
+
+const getWhisperManagedModelsDir = () => path.join(getWhisperManagedRoot(), 'models');
+
+const getWhisperBundledModelsDir = () => path.join(getWhisperBundledCppRoot(), 'models');
+
+const getWhisperMainBinaryPath = () =>
+  resolvePackagedResourcePath(path.join(getWhisperBundledCppRoot(), getWhisperMainBinaryName()));
+
+const getWhisperCppRoot = () => path.dirname(getWhisperMainBinaryPath());
 
 const resolveWhisperModelSpec = (modelName: string) => WHISPER_NODE_MODEL_MAP.get(modelName);
+
+const resolveManagedWhisperModelPath = (fileName: string) =>
+  path.join(getWhisperManagedModelsDir(), fileName);
+
+const resolveBundledWhisperModelPath = (fileName: string) =>
+  resolvePackagedResourcePath(path.join(getWhisperBundledModelsDir(), fileName));
+
+const resolveInstalledWhisperModelPath = (fileName: string): string => {
+  const managedPath = resolveManagedWhisperModelPath(fileName);
+  if (existsSync(managedPath)) return managedPath;
+  return resolveBundledWhisperModelPath(fileName);
+};
+
+const getWhisperBuildRoot = () => getWhisperBundledCppRoot();
+
+const canBuildWhisperCppFromSource = (): boolean => {
+  const buildRoot = getWhisperBuildRoot();
+  const asarSegment = `${path.sep}app.asar${path.sep}`;
+  return !buildRoot.includes(asarSegment) && existsSync(path.join(buildRoot, 'Makefile'));
+};
+
+const resolveConfiguredWhisperModel = (
+  config: AppConfig['speech'],
+  requestedModel?: string
+): { model: string; path: string | null; expectedBytes: number | null } => {
+  const explicitModelPath = config.modelPath?.trim();
+  if (explicitModelPath) {
+    return {
+      model: explicitModelPath,
+      path: explicitModelPath,
+      expectedBytes: null,
+    };
+  }
+
+  const modelName = resolveWhisperNodeModelName(requestedModel ?? config.model);
+  const mappedPath = resolveWhisperModelPath(modelName);
+  const customPath = resolveCustomWhisperModelPath(modelName);
+
+  return {
+    model: modelName,
+    path: mappedPath || customPath,
+    expectedBytes: mappedPath ? getExpectedModelBytes(modelName) : null,
+  };
+};
 
 const resolveWhisperModelPath = (modelName: string): string | null => {
   const spec = resolveWhisperModelSpec(modelName);
   if (!spec) return null;
-  return path.join(getWhisperModelsDir(), spec.fileName);
+  return resolveInstalledWhisperModelPath(spec.fileName);
 };
 
 const resolveCustomWhisperModelPath = (modelName: string): string | null => {
@@ -72,12 +130,25 @@ const resolveCustomWhisperModelPath = (modelName: string): string | null => {
   const candidates = new Set<string>();
   candidates.add(trimmed);
   if (!path.isAbsolute(trimmed)) {
-    candidates.add(path.join(getWhisperModelsDir(), trimmed));
+    candidates.add(path.join(getWhisperManagedModelsDir(), trimmed));
+    candidates.add(resolvePackagedResourcePath(path.join(getWhisperBundledModelsDir(), trimmed)));
   }
-  candidates.add(path.join(getWhisperModelsDir(), `ggml-${trimmed}.bin`));
-  candidates.add(path.join(getWhisperModelsDir(), `${trimmed}.bin`));
-  candidates.add(path.join(getWhisperModelsDir(), `ggml-${trimmed}.gguf`));
-  candidates.add(path.join(getWhisperModelsDir(), `${trimmed}.gguf`));
+  candidates.add(path.join(getWhisperManagedModelsDir(), `ggml-${trimmed}.bin`));
+  candidates.add(path.join(getWhisperManagedModelsDir(), `${trimmed}.bin`));
+  candidates.add(path.join(getWhisperManagedModelsDir(), `ggml-${trimmed}.gguf`));
+  candidates.add(path.join(getWhisperManagedModelsDir(), `${trimmed}.gguf`));
+  candidates.add(
+    resolvePackagedResourcePath(path.join(getWhisperBundledModelsDir(), `ggml-${trimmed}.bin`))
+  );
+  candidates.add(
+    resolvePackagedResourcePath(path.join(getWhisperBundledModelsDir(), `${trimmed}.bin`))
+  );
+  candidates.add(
+    resolvePackagedResourcePath(path.join(getWhisperBundledModelsDir(), `ggml-${trimmed}.gguf`))
+  );
+  candidates.add(
+    resolvePackagedResourcePath(path.join(getWhisperBundledModelsDir(), `${trimmed}.gguf`))
+  );
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
       return candidate;
@@ -113,45 +184,6 @@ const checkWhisperModelFile = (
       valid: false,
       reason: error instanceof Error ? error.message : 'Model file invalid',
     };
-  }
-};
-
-const resolveNodeBinaryFromPath = (): string | null => {
-  const command = process.platform === 'win32' ? 'where' : 'which';
-  try {
-    const result = spawnSync(command, ['node'], { encoding: 'utf8' });
-    if (result.status === 0) {
-      const output = String(result.stdout ?? '');
-      const first = output.split(/\r?\n/).find(line => line.trim().length > 0);
-      if (first && existsSync(first.trim())) return first.trim();
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-};
-
-const configureShelljsExecPath = () => {
-  try {
-    const shelljs = nodeRequire('shelljs') as { config?: { execPath?: string } };
-    if (!shelljs?.config) return;
-    if (shelljs.config.execPath && shelljs.config.execPath.trim()) return;
-    let execPath = '';
-    if (process.execPath && /node(\.exe)?$/i.test(process.execPath)) {
-      execPath = process.execPath;
-    }
-    if (!execPath) {
-      execPath = resolveNodeBinaryFromPath() || '';
-    }
-    if (!execPath && process.versions.electron) {
-      process.env.ELECTRON_RUN_AS_NODE = process.env.ELECTRON_RUN_AS_NODE || '1';
-      execPath = process.execPath;
-    }
-    if (execPath) {
-      shelljs.config.execPath = execPath;
-    }
-  } catch {
-    // ignore
   }
 };
 
@@ -210,7 +242,12 @@ const runCommand = async (
 const ensureWhisperCppReady = async () => {
   const mainBinaryPath = getWhisperMainBinaryPath();
   if (existsSync(mainBinaryPath)) return;
-  const whisperRoot = getWhisperCppRoot();
+  const whisperRoot = getWhisperBuildRoot();
+  if (!canBuildWhisperCppFromSource()) {
+    throw new Error(
+      'whisper.cpp executable not available. Rebuild the app so the unpacked binary is included.'
+    );
+  }
   try {
     await runCommand('make', [], { cwd: whisperRoot, shell: true });
   } catch (error: unknown) {
@@ -308,7 +345,7 @@ const downloadWhisperModelFromUrl = async (
 
 const isWhisperNodeInstalled = (): boolean => {
   try {
-    require.resolve('whisper-node');
+    nodeRequire.resolve('whisper-node/package.json');
     return true;
   } catch {
     return false;
@@ -324,6 +361,14 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
       reason: 'whisper-node not installed',
     };
   }
+  if (!existsSync(getWhisperMainBinaryPath())) {
+    return {
+      available: false,
+      enabled: true,
+      providerType: 'whisper-node',
+      reason: 'whisper.cpp executable not available',
+    };
+  }
   if (config.modelPath && config.modelPath.trim() && !existsSync(config.modelPath.trim())) {
     return {
       available: false,
@@ -333,9 +378,8 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
     };
   }
   if (!config.modelPath || !config.modelPath.trim()) {
-    const modelName = resolveWhisperNodeModelName(config.model);
-    const modelPath = resolveWhisperModelPath(modelName);
-    const resolvedPath = modelPath || resolveCustomWhisperModelPath(modelName);
+    const resolvedModel = resolveConfiguredWhisperModel(config);
+    const resolvedPath = resolvedModel.path;
     if (!resolvedPath) {
       return {
         available: false,
@@ -352,8 +396,7 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
         reason: 'Model not downloaded',
       };
     }
-    const expectedBytes = modelPath ? getExpectedModelBytes(modelName) : null;
-    const check = checkWhisperModelFile(resolvedPath, expectedBytes);
+    const check = checkWhisperModelFile(resolvedPath, resolvedModel.expectedBytes);
     if (!check.valid) {
       return {
         available: false,
@@ -387,18 +430,17 @@ export const getWhisperNodeStatus = (config: AppConfig['speech']): SpeechStatus 
     available: true,
     enabled: true,
     providerType: 'whisper-node',
-    model: resolveWhisperNodeModelName(config.model),
+    model: resolveConfiguredWhisperModel(config).model,
     language: config.language || undefined,
     prompt: config.prompt || undefined,
   };
 };
 
 export const listWhisperNodeModels = (): WhisperNodeModelInfo[] => {
-  const modelsDir = getWhisperModelsDir();
   return WHISPER_NODE_MODELS.map(model => ({
     ...model,
     ...(() => {
-      const modelPath = path.join(modelsDir, model.fileName);
+      const modelPath = resolveInstalledWhisperModelPath(model.fileName);
       const expectedBytes = Math.round(model.sizeMB * 1024 * 1024);
       const hasFile = existsSync(modelPath);
       const check = checkWhisperModelFile(modelPath, expectedBytes);
@@ -420,7 +462,6 @@ export const downloadWhisperNodeModel = async (
   modelName: string,
   onProgress?: (payload: WhisperNodeDownloadProgress) => void
 ): Promise<WhisperNodeDownloadResult> => {
-  configureShelljsExecPath();
   if (!isWhisperNodeInstalled()) {
     onProgress?.({ model: modelName, stage: 'error', message: 'whisper-node not installed' });
     return { model: modelName, success: false, error: 'whisper-node not installed' };
@@ -431,8 +472,7 @@ export const downloadWhisperNodeModel = async (
     return { model: modelName, success: false, error: 'Unknown whisper-node model' };
   }
 
-  const modelsDir = getWhisperModelsDir();
-  const modelPath = path.join(modelsDir, spec.fileName);
+  const modelPath = resolveManagedWhisperModelPath(spec.fileName);
   const expectedBytes = Math.round(spec.sizeMB * 1024 * 1024);
   if (existsSync(modelPath)) {
     const check = checkWhisperModelFile(modelPath, expectedBytes);
@@ -442,13 +482,14 @@ export const downloadWhisperNodeModel = async (
       } catch {
         // ignore delete errors
       }
+    } else {
+      onProgress?.({ model: modelName, stage: 'done', message: 'Model ready' });
+      return { model: modelName, success: true };
     }
   }
-  const scriptName =
-    process.platform === 'win32' ? 'download-ggml-model.cmd' : 'download-ggml-model.sh';
-  const scriptPath = path.join(modelsDir, scriptName);
-
   try {
+    onProgress?.({ model: modelName, stage: 'compiling', message: 'Preparing whisper.cpp...' });
+    await ensureWhisperCppReady();
     onProgress?.({ model: modelName, stage: 'downloading', message: 'Downloading model...' });
 
     const urls = resolveWhisperDownloadUrls(getSpeechConfig(), modelName);
@@ -474,26 +515,10 @@ export const downloadWhisperNodeModel = async (
     }
 
     if (lastError) {
-      if (existsSync(scriptPath)) {
-        onProgress?.({
-          model: modelName,
-          stage: 'downloading',
-          message: 'Falling back to shell downloader...',
-        });
-        await runCommand(scriptPath, [modelName], { cwd: modelsDir, shell: true });
-      } else {
-        const hint = getSpeechConfig().downloadBaseUrl
-          ? 'Check the download base URL.'
-          : 'Configure a download mirror in Settings > Speech.';
-        throw new Error(`${lastError.message}. ${hint}`);
-      }
-    }
-
-    const whisperRoot = getWhisperCppRoot();
-    const mainBinary = getWhisperMainBinaryName();
-    if (!existsSync(path.join(whisperRoot, mainBinary))) {
-      onProgress?.({ model: modelName, stage: 'compiling', message: 'Compiling whisper.cpp...' });
-      await runCommand('make', [], { cwd: whisperRoot, shell: true });
+      const hint = getSpeechConfig().downloadBaseUrl
+        ? 'Check the download base URL.'
+        : 'Configure a download mirror in Settings > Speech.';
+      throw new Error(`${lastError.message}. ${hint}`);
     }
 
     const finalCheck = checkWhisperModelFile(modelPath, expectedBytes);
@@ -526,26 +551,6 @@ export const downloadWhisperNodeModel = async (
   }
 };
 
-const parseWhisperNodeOutput = (result: unknown): string => {
-  if (typeof result === 'string') return result.trim();
-  if (Array.isArray(result)) {
-    return result
-      .map(item => {
-        if (!item || typeof item !== 'object' || !('speech' in item)) return '';
-        const speech = (item as { speech?: unknown }).speech;
-        return typeof speech === 'string' ? speech : '';
-      })
-      .filter((text: string) => text.trim().length > 0)
-      .join(' ')
-      .trim();
-  }
-  if (result && typeof result === 'object' && 'text' in result) {
-    const text = (result as { text?: unknown }).text;
-    return typeof text === 'string' ? text.trim() : '';
-  }
-  return '';
-};
-
 export const transcribeWithWhisperNode = async (
   config: AppConfig['speech'],
   input: SpeechTranscriptionInput
@@ -555,56 +560,43 @@ export const transcribeWithWhisperNode = async (
     throw new Error('ffmpeg not available');
   }
   await ensureWhisperCppReady();
-  configureShelljsExecPath();
   const extension = getAudioExtension(input.mimeType);
   const buffer = Buffer.from(input.audioBase64, 'base64');
   const inputPath = await writeTempFile(buffer, extension);
   let wavPath = '';
+  let outputPath = '';
   try {
     wavPath = await convertToWav(inputPath, ffmpegPath);
-    const whisperModule = nodeRequire('whisper-node') as unknown;
-    const whisper =
-      typeof whisperModule === 'function'
-        ? (whisperModule as WhisperNodeTranscribe)
-        : (whisperModule as { default?: WhisperNodeTranscribe }).default;
-    if (typeof whisper !== 'function') {
-      throw new Error('whisper-node not available');
-    }
-
-    const modelPath = config.modelPath?.trim();
-    const modelName = resolveWhisperNodeModelName(config.model);
+    const resolvedModel = resolveConfiguredWhisperModel(config, input.model);
     const languageInput = input.language || config.language || '';
     const language = normalizeWhisperLanguage(languageInput);
-    const mappedPath = resolveWhisperModelPath(modelName);
-    const customPath = resolveCustomWhisperModelPath(modelName);
-    const effectivePath = modelPath || mappedPath || customPath;
+    const effectivePath = resolvedModel.path;
     if (!effectivePath) {
       throw new Error('Unknown whisper-node model. Use a custom model path.');
     }
-    const expectedBytes = modelPath || !mappedPath ? null : getExpectedModelBytes(modelName);
-    const check = checkWhisperModelFile(effectivePath, expectedBytes);
+    const check = checkWhisperModelFile(effectivePath, resolvedModel.expectedBytes);
     if (!check.valid) {
       throw new Error(check.reason || 'Model file invalid');
     }
-    const whisperOptions: Record<string, unknown> = {
-      word_timestamps: true,
-      language,
-    };
-    const options: Record<string, unknown> = {
-      whisperOptions,
-    };
-    options.modelPath = effectivePath;
 
-    const result = await whisper(wavPath, options);
-    if (!result) {
-      throw new Error('whisper-node returned empty result');
+    outputPath = `${wavPath}_whisper`;
+    const args = ['-m', effectivePath, '-f', wavPath, '-otxt', '-nt', '-of', outputPath];
+    if (language) {
+      args.push('-l', language);
     }
-    const text = parseWhisperNodeOutput(result);
+    const prompt = (input.prompt || config.prompt || '').trim();
+    if (prompt) {
+      args.push('--prompt', prompt);
+    }
+
+    await runCommand(getWhisperMainBinaryPath(), args, { cwd: getWhisperCppRoot() });
+    const transcriptPath = `${outputPath}.txt`;
+    const text = (await fs.readFile(transcriptPath, 'utf8')).trim();
 
     return {
       text,
       providerType: 'whisper-node',
-      model: modelPath || modelName,
+      model: resolvedModel.model,
     };
   } finally {
     try {
@@ -615,6 +607,13 @@ export const transcribeWithWhisperNode = async (
     if (wavPath) {
       try {
         await fs.unlink(wavPath);
+      } catch {
+        // ignore
+      }
+    }
+    if (outputPath) {
+      try {
+        await fs.unlink(`${outputPath}.txt`);
       } catch {
         // ignore
       }

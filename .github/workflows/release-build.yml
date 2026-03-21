@@ -2,43 +2,95 @@ name: Release Build
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - package.json
-  release:
-    types:
-      - published
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build (branch, tag, or SHA)
+        required: false
+        default: main
 
 permissions:
   contents: write
 
+env:
+  NODE_VERSION: "20"
+
 concurrency:
-  group: release-build-${{ github.event.release.tag_name || github.ref_name || github.run_id }}
+  group: release-build-${{ github.workflow }}-${{ github.event.inputs.ref || github.ref }}
   cancel-in-progress: false
 
 jobs:
-  preflight:
-    name: Preflight (lockfile sync)
+  verify:
+    name: Verify release candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    outputs:
+      checkout_ref: ${{ steps.meta.outputs.checkout_ref }}
+      should_publish: ${{ steps.meta.outputs.should_publish }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      release_version: ${{ steps.meta.outputs.release_version }}
+      changelog_path: ${{ steps.meta.outputs.changelog_path }}
     steps:
+      - name: Derive release metadata
+        id: meta
+        shell: bash
+        run: |
+          checkout_ref="${{ github.event.inputs.ref || github.ref }}"
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            release_tag="${{ github.ref_name }}"
+            release_version="${release_tag#v}"
+            changelog_path="changelogs/${release_tag}.md"
+
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+            echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+            echo "changelog_path=$changelog_path" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "release_tag=" >> "$GITHUB_OUTPUT"
+            echo "release_version=" >> "$GITHUB_OUTPUT"
+            echo "changelog_path=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.checkout_ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Verify lockfile with npm ci
-        run: npm ci --ignore-scripts
+      - name: Validate release metadata
+        if: steps.meta.outputs.should_publish == 'true'
+        shell: bash
+        run: |
+          if [[ ! -f "${{ steps.meta.outputs.changelog_path }}" ]]; then
+            echo "Missing curated release notes at ${{ steps.meta.outputs.changelog_path }}"
+            exit 1
+          fi
+
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "$package_version" != "${{ steps.meta.outputs.release_version }}" ]]; then
+            echo "package.json version ($package_version) does not match tag ${{ steps.meta.outputs.release_tag }}"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run release quality gate
+        run: npm run -s ci:quality
 
   build:
     name: Build (${{ matrix.label }})
-    needs: preflight
+    needs: verify
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -55,42 +107,52 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.checkout_ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build distributables
-        run: npm run make
+        run: npm run -s app:build
         env:
           CI: "1"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: make-${{ matrix.label }}
+          name: release-${{ matrix.label }}
           path: |
             out/make/**/*
-            out/iki-*/**/*
           if-no-files-found: error
+          retention-days: 14
 
   publish:
-    name: Publish release assets
-    if: github.event_name == 'release'
-    needs: build
+    name: Create draft release
+    if: needs.verify.outputs.should_publish == 'true'
+    needs:
+      - verify
+      - build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.checkout_ref }}
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: make-*
+          pattern: release-*
           path: release-artifacts
+          merge-multiple: true
 
       - name: Verify downloaded files
         run: |
@@ -99,10 +161,21 @@ jobs:
             exit 1
           fi
 
-      - name: Upload assets to release
+      - name: Generate SHA256 manifest
+        shell: bash
+        run: |
+          cd release-artifacts
+          find . -type f ! -name 'SHA256SUMS.txt' -print0 \
+            | sort -z \
+            | xargs -0 shasum -a 256 > SHA256SUMS.txt
+
+      - name: Upload assets to draft release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ needs.verify.outputs.release_tag }}
+          name: iki ${{ needs.verify.outputs.release_tag }}
+          body_path: ${{ needs.verify.outputs.changelog_path }}
+          draft: true
           files: |
             release-artifacts/**/*
           fail_on_unmatched_files: true

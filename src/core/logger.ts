@@ -1,4 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import winston from 'winston';
+import { getUserDataPath } from './platform';
 
 // Define log format
 const { combine, timestamp, printf, colorize, json, errors } = winston.format;
@@ -21,6 +25,45 @@ const consoleFormat = printf(({ level, message, timestamp, ...metadata }) => {
   return msg;
 });
 
+const resolveLogDirectory = (): string | null => {
+  const candidates = [
+    process.env.IKI_LOG_DIR,
+    path.join(getUserDataPath(), 'logs'),
+    path.resolve(process.cwd(), 'logs'),
+    path.join(os.tmpdir(), 'iki-logs'),
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue;
+    try {
+      fs.mkdirSync(candidate, { recursive: true });
+      return candidate;
+    } catch {
+      // try the next fallback
+    }
+  }
+
+  return null;
+};
+
+const logDirectory = resolveLogDirectory();
+
+const fileTransports = logDirectory
+  ? [
+      new winston.transports.File({
+        filename: path.join(logDirectory, 'combined.log'),
+        maxsize: 5242880,
+        maxFiles: 5,
+      }),
+      new winston.transports.File({
+        filename: path.join(logDirectory, 'error.log'),
+        level: 'error',
+        maxsize: 5242880,
+        maxFiles: 5,
+      }),
+    ]
+  : [];
+
 // Create the logger instance
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'debug',
@@ -34,18 +77,7 @@ export const logger = winston.createLogger({
     new winston.transports.Console({
       format: combine(colorize(), timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), consoleFormat),
     }),
-    // File transport for persistent logs
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
+    ...fileTransports,
   ],
 });
 
