@@ -9,9 +9,16 @@ const { ipcHandlers, ipcHandleMock } = vi.hoisted(() => ({
   }),
 }));
 
+const { showOpenDialogMock } = vi.hoisted(() => ({
+  showOpenDialogMock: vi.fn(),
+}));
+
 vi.mock('electron', () => ({
   ipcMain: {
     handle: ipcHandleMock,
+  },
+  dialog: {
+    showOpenDialog: showOpenDialogMock,
   },
 }));
 
@@ -239,6 +246,10 @@ describe('data access IPC modules', () => {
     updateWorkspaceMock.mockReturnValue({ success: true } as never);
     deleteWorkspaceMock.mockReturnValue({ success: true } as never);
     toggleWorkspaceVisibilityMock.mockReturnValue({ success: true } as never);
+    showOpenDialogMock.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/tmp/chosen'],
+    });
 
     expect(await ipcHandlers.get('workspaces:list')?.(null)).toEqual([{ id: 'workspace_1' }]);
     expect(await ipcHandlers.get('workspaces:get')?.(null, 'workspace_1')).toEqual({
@@ -251,6 +262,15 @@ describe('data access IPC modules', () => {
     expect(await ipcHandlers.get('workspaces:getVisible')?.(null)).toEqual([
       { id: 'workspace_visible' },
     ]);
+    expect(await ipcHandlers.get('workspaces:pickDirectory')?.(null)).toEqual({
+      id: 'workspace_path',
+      name: 'Workspace',
+    });
+    expect(showOpenDialogMock).toHaveBeenCalledWith({
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Choose workspace folder',
+      buttonLabel: 'Use as Workspace',
+    });
 
     const created = await ipcHandlers.get('workspaces:create')?.(null, {
       path: '/tmp/demo',

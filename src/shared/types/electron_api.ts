@@ -202,6 +202,7 @@ export interface ElectronApi {
     get: (id: string) => Promise<Workspace | null>;
     getByPath: (path: string) => Promise<Workspace | null>;
     getVisible: () => Promise<Workspace[]>;
+    pickDirectory: () => Promise<Workspace | null>;
     create: (workspace: WorkspaceInput) => Promise<unknown>;
     update: (id: string, workspace: WorkspaceInput) => Promise<unknown>;
     delete: (id: string) => Promise<unknown>;

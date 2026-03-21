@@ -241,6 +241,7 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.workspaces.get('workspace_1');
     await exposedApi.workspaces.getByPath('/tmp');
     await exposedApi.workspaces.getVisible();
+    await exposedApi.workspaces.pickDirectory();
     await exposedApi.workspaces.create({ id: 'workspace_1', path: '/tmp', name: 'tmp' });
     await exposedApi.workspaces.update('workspace_1', { name: 'tmp-2' });
     await exposedApi.workspaces.delete('workspace_1');
@@ -340,6 +341,7 @@ describe('preload task IPC payload serialization', () => {
         'workspaces:get',
         'workspaces:getByPath',
         'workspaces:getVisible',
+        'workspaces:pickDirectory',
         'workspaces:create',
         'workspaces:update',
         'workspaces:delete',

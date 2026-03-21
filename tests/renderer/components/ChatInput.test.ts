@@ -61,6 +61,7 @@ const buildWorkspace = (
 const createElectronApi = (options?: {
   providers?: Provider[];
   workspaces?: Workspace[];
+  pickedWorkspace?: Workspace | null;
   configured?: boolean;
   configuredError?: Error;
   thread?: {
@@ -98,6 +99,7 @@ const createElectronApi = (options?: {
         get: vi.fn(async (id: string) =>
           (options?.workspaces ?? []).find(workspace => workspace.id === id) ?? null
         ),
+        pickDirectory: vi.fn(async () => options?.pickedWorkspace ?? null),
       },
       tools: {
         list: vi.fn(async () => []),
@@ -466,6 +468,36 @@ describe('ChatInput', () => {
 
     const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
     expect(workspaceTrigger.classes()).toContain('ui-text-accent');
+  });
+
+  it('can add a workspace directly from the workspace selector panel', async () => {
+    const pickedWorkspace = buildWorkspace({
+      id: 'workspace_new',
+      name: 'Repo',
+      path: '/tmp/repo',
+    });
+
+    const { wrapper, api } = await mountChatInput({
+      workspaces: [],
+      pickedWorkspace,
+    });
+
+    await wrapper.find('.workspace-selector-trigger').trigger('click');
+    await flushPromises();
+
+    const addFolderButton = wrapper
+      .findAll('button')
+      .find(button => button.text().includes('Add Folder'));
+    expect(addFolderButton).toBeDefined();
+    if (!addFolderButton) {
+      throw new Error('Expected Add Folder button to be rendered');
+    }
+
+    await addFolderButton.trigger('click');
+    await flushPromises();
+
+    expect(api.workspaces.pickDirectory).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('workspace-changed')).toEqual([['workspace_new']]);
   });
 
   it('waits for the send-preparation promise before starting IPC streaming', async () => {

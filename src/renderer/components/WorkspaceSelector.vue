@@ -35,21 +35,30 @@
       <div class="selector-panel-header">
         <div class="flex items-center justify-between gap-3">
           <span class="selector-panel-title ui-text-primary">Workspace</span>
-          <button
-            class="selector-icon-btn workspace-selector-refresh flex h-8 w-8 items-center justify-center rounded-[10px]"
-            :disabled="loadingWorkspaces"
-            title="Refresh workspaces"
-            @click.stop="loadWorkspaces"
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0A8.003 8.003 0 015.17 15m14.249 0H15"
-              />
-            </svg>
-          </button>
+          <div class="workspace-selector-header-actions">
+            <button
+              class="selector-action-btn workspace-selector-add"
+              :disabled="loadingWorkspaces || isPickingDirectory"
+              @click.stop="pickWorkspaceDirectory"
+            >
+              {{ isPickingDirectory ? 'Adding...' : 'Add Folder' }}
+            </button>
+            <button
+              class="selector-icon-btn workspace-selector-refresh flex h-8 w-8 items-center justify-center rounded-[10px]"
+              :disabled="loadingWorkspaces || isPickingDirectory"
+              title="Refresh workspaces"
+              @click.stop="loadWorkspaces"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0A8.003 8.003 0 015.17 15m14.249 0H15"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="selector-panel-description ui-text-muted">
           Bind this thread to one workspace root. Relative file paths and the default shell working
@@ -149,6 +158,7 @@ const electronAPI = window.electronAPI;
 
 const showWorkspaceSelector = ref(false);
 const loadingWorkspaces = ref(false);
+const isPickingDirectory = ref(false);
 const workspaceLoadError = ref('');
 const availableWorkspaces = ref<Workspace[]>([]);
 const workspaceSelectorCloseTimer = ref<number | null>(null);
@@ -271,6 +281,24 @@ const selectWorkspace = (workspaceId: string | null) => {
   showWorkspaceSelector.value = false;
 };
 
+const pickWorkspaceDirectory = async () => {
+  isPickingDirectory.value = true;
+  workspaceLoadError.value = '';
+
+  try {
+    const workspace = normalizeWorkspace(await electronAPI?.workspaces?.pickDirectory?.());
+    await loadWorkspaces();
+    if (workspace?.id) {
+      emit('update:selectedWorkspaceId', workspace.id);
+      showWorkspaceSelector.value = false;
+    }
+  } catch (error) {
+    workspaceLoadError.value = `Failed to add workspace: ${getErrorMessage(error)}`;
+  } finally {
+    isPickingDirectory.value = false;
+  }
+};
+
 watch(selectedWorkspaceId, () => {
   void loadWorkspaces();
 });
@@ -294,6 +322,16 @@ onUnmounted(() => {
 
 .workspace-selector-refresh {
   flex-shrink: 0;
+}
+
+.workspace-selector-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-selector-add {
+  white-space: nowrap;
 }
 
 button:disabled {

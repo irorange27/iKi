@@ -148,6 +148,7 @@ const electronApi: ElectronApi = {
     get: (id: string) => ipcRenderer.invoke('workspaces:get', id),
     getByPath: (path: string) => ipcRenderer.invoke('workspaces:getByPath', path),
     getVisible: () => ipcRenderer.invoke('workspaces:getVisible'),
+    pickDirectory: () => ipcRenderer.invoke('workspaces:pickDirectory'),
     create: (workspace: WorkspaceInput) => ipcRenderer.invoke('workspaces:create', workspace),
     update: (id: string, workspace: WorkspaceInput) =>
       ipcRenderer.invoke('workspaces:update', id, workspace),
