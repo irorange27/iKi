@@ -53,6 +53,10 @@ const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/Settin
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
 const TOOL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ToolSelector.vue');
 const SKILL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/SkillSelector.vue');
+const WORKSPACE_SELECTOR_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/WorkspaceSelector.vue'
+);
 const WELCOME_SCREEN_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/WelcomeScreen.vue');
 const CHAT_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/ChatView.vue');
 const SIDEBAR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/Sidebar.vue');
@@ -212,6 +216,7 @@ describe('renderer style system foundation', () => {
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
     const toolSelectorSource = readFileSync(TOOL_SELECTOR_VUE_PATH, 'utf8');
     const skillSelectorSource = readFileSync(SKILL_SELECTOR_VUE_PATH, 'utf8');
+    const workspaceSelectorSource = readFileSync(WORKSPACE_SELECTOR_VUE_PATH, 'utf8');
     const welcomeScreenSource = readFileSync(WELCOME_SCREEN_VUE_PATH, 'utf8');
     const chatViewSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
 
@@ -221,8 +226,7 @@ describe('renderer style system foundation', () => {
     expect(chatInputSource).toMatch(/ui-text-danger/);
     expect(chatInputSource).toMatch(/ui-text-muted/);
     expect(chatInputSource).toMatch(/composer-icon-btn/);
-    expect(chatInputSource).toMatch(/composer-attach-btn/);
-    expect(chatInputSource).toMatch(/selector-badge/);
+    expect(chatInputSource).toMatch(/<WorkspaceSelector/);
     expect(chatInputSource).toMatch(/--chat-composer-send-background/);
     expect(chatInputSource).toMatch(/--chat-composer-stop-background/);
     expect(chatInputSource).not.toMatch(/bg-\[#4a9eff\]/);
@@ -232,6 +236,10 @@ describe('renderer style system foundation', () => {
     expect(chatInputSource).not.toMatch(/color:\s*#ffffff;/);
     expect(chatInputSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
     expect(chatInputSource).not.toMatch(/model-selector-trigger composer-icon-btn/);
+    expect(workspaceSelectorSource).toMatch(/selector-badge/);
+    expect(workspaceSelectorSource).toMatch(/composer-control-btn/);
+    expect(workspaceSelectorSource).toMatch(/ui-text-secondary/);
+    expect(workspaceSelectorSource).toMatch(/ui-text-accent/);
 
     expect(toolSelectorSource).toMatch(/ui-text-primary/);
     expect(toolSelectorSource).toMatch(/ui-text-secondary/);

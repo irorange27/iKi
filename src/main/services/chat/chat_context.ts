@@ -10,6 +10,7 @@ import {
   type ThreadSummaryMessage,
 } from '../../../core/context/thread_summary';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
+import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
 import type { ChatInputMessage } from './chat_types';
 import type { ChatMemory } from './chat_memory';
 import { resolveSkillsSystemPrompt } from './chat_skills';
@@ -424,11 +425,14 @@ const buildThreadSummaryContext = (
   };
 };
 
-const buildIdentityContext = (contextConfig: ContextConfig): IdentityContext => {
-  const identityClip = clipTextToTokenBudget(
-    getIdentityContextMessage(),
-    contextConfig.maxIdentityTokens
-  );
+const buildIdentityContext = (
+  threadId: string | undefined,
+  contextConfig: ContextConfig
+): IdentityContext => {
+  const identityMessage = getIdentityContextMessage().trim();
+  const workspaceMessage = buildThreadWorkspaceSystemMessage(threadId).trim();
+  const combinedMessage = [identityMessage, workspaceMessage].filter(Boolean).join('\n\n');
+  const identityClip = clipTextToTokenBudget(combinedMessage, contextConfig.maxIdentityTokens);
 
   return {
     systemMessage: identityClip.text,
@@ -441,7 +445,7 @@ const buildIdentityContext = (contextConfig: ContextConfig): IdentityContext => 
         ? identityClip.truncated
           ? { reason: 'identity block clipped to context budget' }
           : {}
-        : { reason: 'no active identity profile available' }),
+        : { reason: 'no active identity profile or workspace scope available' }),
     },
   };
 };
@@ -706,7 +710,7 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
     const recentHistory = selectRecentHistory(params.messages, contextConfig);
     blocks.push(recentHistory.block);
 
-    const identityContext = buildIdentityContext(contextConfig);
+    const identityContext = buildIdentityContext(params.threadId, contextConfig);
     blocks.push(identityContext.block);
 
     const relationshipContext = buildRelationshipContext(params.threadId, contextConfig);

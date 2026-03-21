@@ -18,34 +18,10 @@
           class="composer-toolbar flex items-center justify-between border-t border-color px-3 py-2"
         >
           <div class="composer-toolbar-left flex items-center gap-2">
-            <!-- file upload -->
-            <button
-              class="composer-attach-btn ui-text-secondary flex h-8 w-8 items-center justify-center"
-            >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                />
-              </svg>
-            </button>
-            <!-- workspace choose -->
-            <button
-              class="composer-icon-btn composer-selection-btn ui-text-accent relative flex h-10 w-10 items-center justify-center rounded-[14px]"
-            >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                />
-              </svg>
-              <span class="selector-badge">1</span>
-            </button>
-            <!-- skill choose -->
+            <WorkspaceSelector
+              :selected-workspace-id="props.selectedWorkspaceId ?? null"
+              @update:selected-workspace-id="handleWorkspaceChanged"
+            />
             <SkillSelector v-model:skill-ids="selectedSkillIds" v-model:mode="skillMode" />
             <!-- tool choose -->
             <ToolSelector
@@ -253,17 +229,20 @@ import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import ChatModelSelector from './ChatModelSelector.vue';
 import ToolSelector from './ToolSelector.vue';
 import SkillSelector from './SkillSelector.vue';
+import WorkspaceSelector from './WorkspaceSelector.vue';
 
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const emit = defineEmits<{
   (event: 'incognito-changed', value: boolean): void;
   (event: 'model-selected', payload: { model: string; provider: Provider }): void;
+  (event: 'workspace-changed', value: string | null): void;
 }>();
 
 const props = defineProps<{
   threadId?: string;
   activeModel?: string;
   isIncognito?: boolean;
+  selectedWorkspaceId?: string | null;
   prepareMessageSend?: (payload: {
     content: string;
     model?: string;
@@ -346,6 +325,10 @@ const {
 const handleProviderModelSelect = (payload: { provider: Provider; model: string }) => {
   selectProviderModel(payload);
   emit('model-selected', payload);
+};
+
+const handleWorkspaceChanged = (workspaceId: string | null) => {
+  emit('workspace-changed', workspaceId);
 };
 
 const toggleIncognitoMode = () => {
@@ -598,26 +581,10 @@ button {
   transition: all 0.2s;
 }
 
-.composer-attach-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.composer-attach-btn:hover {
-  color: var(--text-primary);
-}
-
 .composer-icon-btn {
   border: 1px solid var(--chat-composer-control-border-color);
   background: var(--chat-composer-control-background);
   box-shadow: var(--surface-inset-highlight);
-}
-
-.composer-selection-btn {
-  box-shadow:
-    var(--surface-inset-highlight),
-    var(--surface-shadow-md);
 }
 
 .send-btn {

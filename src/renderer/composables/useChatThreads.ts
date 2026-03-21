@@ -29,6 +29,7 @@ export const useChatThreads = (deps: {
   const currentThread = ref<ChatThread | null>(null);
   const currentModel = ref<string>('');
   const isIncognito = ref(false);
+  const selectedWorkspaceId = ref<string | null>(null);
   const selectedTools = ref<string[]>([]);
   const showWelcome = ref(true);
 
@@ -36,6 +37,14 @@ export const useChatThreads = (deps: {
 
   const syncIncognitoState = (thread: ChatThread | null) => {
     isIncognito.value = Boolean(thread?.is_incognito);
+  };
+
+  const syncWorkspaceState = (thread: ChatThread | null) => {
+    const workspaceId =
+      typeof thread?.workspace_id === 'string' && thread.workspace_id.trim().length > 0
+        ? thread.workspace_id.trim()
+        : null;
+    selectedWorkspaceId.value = workspaceId;
   };
 
   const refreshThreads = async () => {
@@ -147,10 +156,12 @@ export const useChatThreads = (deps: {
         model: model || null,
         metadata: JSON.stringify({}),
         is_incognito: isIncognito.value ? 1 : 0,
+        workspace_id: selectedWorkspaceId.value,
       });
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
       syncIncognitoState(thread);
+      syncWorkspaceState(thread);
       deps.messageStore.clear();
       deps.persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
@@ -208,6 +219,7 @@ export const useChatThreads = (deps: {
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : '';
       syncIncognitoState(thread);
+      syncWorkspaceState(thread);
       showWelcome.value = false;
       await loadThreadMessages(threadId);
 
@@ -225,6 +237,7 @@ export const useChatThreads = (deps: {
     currentThread.value = null;
     currentModel.value = '';
     isIncognito.value = false;
+    selectedWorkspaceId.value = null;
     deps.messageStore.clear();
     deps.persistence.resetPersistedMessageIds();
     resetToolUiStateMap();
@@ -271,6 +284,32 @@ export const useChatThreads = (deps: {
     }
   };
 
+  const setWorkspace = async (nextValue: string | null) => {
+    const normalizedValue =
+      typeof nextValue === 'string' && nextValue.trim().length > 0 ? nextValue.trim() : null;
+    const previousValue = selectedWorkspaceId.value;
+    const activeThread = currentThread.value;
+
+    selectedWorkspaceId.value = normalizedValue;
+    if (activeThread) {
+      activeThread.workspace_id = normalizedValue ?? undefined;
+    }
+
+    if (!activeThread) return;
+
+    try {
+      await deps.electronAPI.chat.threads.update(activeThread.id, {
+        workspace_id: normalizedValue,
+      });
+    } catch (error) {
+      console.error('Failed to update thread workspace state:', error);
+      selectedWorkspaceId.value = previousValue;
+      if (currentThread.value?.id === activeThread.id) {
+        currentThread.value.workspace_id = previousValue ?? undefined;
+      }
+    }
+  };
+
   const handleTaskPush = async (payload: unknown) => {
     if (!isObjectRecord(payload)) return;
     if (payload.type !== 'task-result') return;
@@ -299,6 +338,7 @@ export const useChatThreads = (deps: {
     currentThread,
     currentModel,
     isIncognito,
+    selectedWorkspaceId,
     selectedTools,
     showWelcome,
     getCurrentThreadId,
@@ -311,6 +351,7 @@ export const useChatThreads = (deps: {
     handleNewChat,
     handleModelSelected,
     setIncognito,
+    setWorkspace,
     handleAssistantMessagePersisted,
     handleTaskPush,
   };

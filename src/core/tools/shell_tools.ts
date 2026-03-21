@@ -5,6 +5,7 @@ import { BaseTool } from './base';
 import type { AppConfig } from '../../shared/types/config';
 import { getAppConfig } from '../config';
 import { ShellToolInputSchema } from './schemas';
+import { resolveShellWorkingDirectory } from './workspace_paths';
 
 const execAsync = promisify(exec);
 const invalidCustomShellPatterns = new Set<string>();
@@ -128,8 +129,9 @@ export class ShellExecutionTool extends BaseTool {
 
   protected async handler(args: z.infer<typeof this.paramSchema>) {
     try {
+      const cwd = await resolveShellWorkingDirectory(args.cwd);
       const { stdout, stderr } = await execAsync(args.command, {
-        cwd: args.cwd || process.cwd(),
+        cwd,
         timeout: args.timeout,
       });
 

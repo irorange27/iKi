@@ -18,14 +18,34 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
         : `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const title =
       typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat';
+    const normalizedString = (value: unknown): string | null => {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    };
+
+    const normalizeFlag = (value: unknown): number => {
+      if (typeof value === 'number') return value ? 1 : 0;
+      return value ? 1 : 0;
+    };
+
     chatThreadDb.addChatThread({
       id: threadId,
       title,
-      model: thread.model || null,
+      model: normalizedString(thread.model),
+      reasoning_effort: normalizedString(thread.reasoning_effort) || 'medium',
       metadata:
         typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
       is_generating: false,
-      client_id: typeof thread.client_id === 'string' ? thread.client_id : null,
+      client_id: normalizedString(thread.client_id),
+      prompt_app_id: normalizedString(thread.prompt_app_id),
+      tools: normalizedString(thread.tools),
+      is_favorited: normalizeFlag(thread.is_favorited),
+      is_incognito: normalizeFlag(thread.is_incognito),
+      workspace_id: normalizedString(thread.workspace_id),
+      enable_artifacts: normalizeFlag(thread.enable_artifacts),
+      artifact_workspace_id: normalizedString(thread.artifact_workspace_id),
+      skill_ids: normalizedString(thread.skill_ids),
     });
     return chatThreadDb.getChatThread(threadId);
   };

@@ -39,6 +39,10 @@ const createHarness = (initialThreads: ChatThread[] = []) => {
           : input.is_incognito
             ? 1
             : 0,
+      workspace_id:
+        typeof input.workspace_id === 'string' && input.workspace_id.trim().length > 0
+          ? input.workspace_id
+          : undefined,
     });
     threadsById.set(thread.id, thread);
     return thread;
@@ -138,6 +142,35 @@ describe('useChatThreads', () => {
     expect(state.isIncognito.value).toBe(false);
   });
 
+  it('keeps draft workspace state before thread creation and persists it into the new thread', async () => {
+    const { state, createThread, updateThread } = createHarness();
+
+    await state.setWorkspace('workspace_alpha');
+
+    expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
+    expect(updateThread).not.toHaveBeenCalled();
+
+    const createdThread = await state.createNewThread('gpt-4.1');
+
+    expect(createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-4.1',
+        workspace_id: 'workspace_alpha',
+      })
+    );
+    expect(createdThread?.workspace_id).toBe('workspace_alpha');
+    expect(state.currentThread.value?.workspace_id).toBe('workspace_alpha');
+    expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
+
+    await state.setWorkspace(null);
+
+    expect(updateThread).toHaveBeenCalledWith(createdThread?.id, {
+      workspace_id: null,
+    });
+    expect(state.currentThread.value?.workspace_id).toBeUndefined();
+    expect(state.selectedWorkspaceId.value).toBeNull();
+  });
+
   it('syncs the composer incognito state from the selected thread', async () => {
     const privateThread = createStoredThread({
       id: 'thread_private',
@@ -181,5 +214,25 @@ describe('useChatThreads', () => {
 
     await state.selectThread(openaiThread.id);
     expect(state.currentModel.value).toBe('gpt-4o');
+  });
+
+  it('syncs the composer workspace state from the selected thread', async () => {
+    const docsThread = createStoredThread({
+      id: 'thread_docs',
+      title: 'Docs thread',
+      workspace_id: 'workspace_docs',
+    });
+    const unscopedThread = createStoredThread({
+      id: 'thread_general',
+      title: 'General thread',
+      workspace_id: undefined,
+    });
+    const { state } = createHarness([docsThread, unscopedThread]);
+
+    await state.selectThread(docsThread.id);
+    expect(state.selectedWorkspaceId.value).toBe('workspace_docs');
+
+    await state.selectThread(unscopedThread.id);
+    expect(state.selectedWorkspaceId.value).toBeNull();
   });
 });

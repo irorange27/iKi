@@ -4,6 +4,7 @@ import type { ConversationRunner } from '../../../core/agent';
 import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
 import { defaultToolRegistry } from '../../../core/tools';
+import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_approval';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatMemory } from './chat_memory';
@@ -341,31 +342,35 @@ export const createChatApproval = (deps: {
     deps.activeStreams.set(resumedSenderId, streamState);
 
     try {
-      const streamResult = await toolLoopRunner.stream({
-        runner: session.runner,
-        webContents: session.webContents,
-        history: session.history,
-        prompt: '',
-        approvalResponses: Array.from(session.collectedApprovalResponses.values()),
-        approvalContext: nextApprovalContext,
-        shouldCancel: () => streamState.cancelled,
-        onToolEvent: eventPart => {
-          if (
-            eventPart.type === 'tool-approval-request' &&
-            typeof eventPart.approvalId === 'string' &&
-            eventPart.approvalId.length > 0
-          ) {
-            ensurePendingApprovalSession(eventPart.approvalId, {
-              runner: session.runner,
-              webContents: session.webContents,
-              recoveryContext: nextApprovalContext,
-            });
-          }
-          uiChunkEmitter.emitToolEvent(eventPart);
-        },
-        abortSignal: streamState.abortController.signal,
-        uiChunkEmitter,
-      });
+      const streamResult = await runWithToolRuntimeContext(
+        { threadId: nextApprovalContext?.threadId || session.recoveryContext?.threadId },
+        async () =>
+          await toolLoopRunner.stream({
+            runner: session.runner,
+            webContents: session.webContents,
+            history: session.history,
+            prompt: '',
+            approvalResponses: Array.from(session.collectedApprovalResponses.values()),
+            approvalContext: nextApprovalContext,
+            shouldCancel: () => streamState.cancelled,
+            onToolEvent: eventPart => {
+              if (
+                eventPart.type === 'tool-approval-request' &&
+                typeof eventPart.approvalId === 'string' &&
+                eventPart.approvalId.length > 0
+              ) {
+                ensurePendingApprovalSession(eventPart.approvalId, {
+                  runner: session.runner,
+                  webContents: session.webContents,
+                  recoveryContext: nextApprovalContext,
+                });
+              }
+              uiChunkEmitter.emitToolEvent(eventPart);
+            },
+            abortSignal: streamState.abortController.signal,
+            uiChunkEmitter,
+          })
+      );
       if (!streamResult.cancelled && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.threadId,

@@ -60,10 +60,12 @@
           :thread-id="currentThread?.id || ''"
           :active-model="currentModel"
           :is-incognito="isIncognito"
+          :selected-workspace-id="selectedWorkspaceId"
           :context-usage="composerContextUsage"
           :prepare-message-send="prepareMessageSend"
           @incognito-changed="handleIncognitoChanged"
           @model-selected="handleModelSelected"
+          @workspace-changed="handleWorkspaceChanged"
         />
       </div>
     </div>
@@ -154,6 +156,7 @@ const {
   currentThread,
   currentModel,
   isIncognito,
+  selectedWorkspaceId,
   selectedTools,
   showWelcome,
   refreshThreads,
@@ -163,6 +166,7 @@ const {
   handleNewChat: handleNewChatBase,
   handleModelSelected,
   setIncognito,
+  setWorkspace,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
   handleTaskPush,
@@ -176,6 +180,10 @@ const {
 
 const handleIncognitoChanged = async (nextValue: boolean) => {
   await setIncognito(nextValue);
+};
+
+const handleWorkspaceChanged = async (nextValue: string | null) => {
+  await setWorkspace(nextValue);
 };
 
 const streaming = useChatStreaming({

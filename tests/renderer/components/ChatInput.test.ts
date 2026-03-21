@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 import type { Provider } from '../../../src/shared/types/provider';
+import type { Workspace } from '../../../src/shared/types/chat';
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -45,8 +46,21 @@ const buildProvider = (
   acp_model_mapping: overrides.acp_model_mapping,
 });
 
+const buildWorkspace = (
+  overrides: Partial<Workspace> & Pick<Workspace, 'id' | 'name' | 'path'>
+): Workspace => ({
+  id: overrides.id,
+  name: overrides.name,
+  path: overrides.path,
+  is_temporary: overrides.is_temporary ?? 0,
+  show_in_list: overrides.show_in_list ?? 1,
+  created_at: overrides.created_at ?? '2026-03-21T00:00:00.000Z',
+  updated_at: overrides.updated_at ?? '2026-03-21T00:00:00.000Z',
+});
+
 const createElectronApi = (options?: {
   providers?: Provider[];
+  workspaces?: Workspace[];
   configured?: boolean;
   configuredError?: Error;
   thread?: {
@@ -78,6 +92,12 @@ const createElectronApi = (options?: {
       },
       providers: {
         list: vi.fn(async () => options?.providers ?? []),
+      },
+      workspaces: {
+        getVisible: vi.fn(async () => options?.workspaces ?? []),
+        get: vi.fn(async (id: string) =>
+          (options?.workspaces ?? []).find(workspace => workspace.id === id) ?? null
+        ),
       },
       tools: {
         list: vi.fn(async () => []),
@@ -390,6 +410,62 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(wrapper.emitted('incognito-changed')).toEqual([[true], [false]]);
+  });
+
+  it('shows the selected workspace and emits explicit workspace change requests', async () => {
+    const docsWorkspace = buildWorkspace({
+      id: 'workspace_docs',
+      name: 'Docs',
+      path: '/tmp/docs',
+    });
+    const appWorkspace = buildWorkspace({
+      id: 'workspace_app',
+      name: 'App',
+      path: '/tmp/app',
+    });
+
+    const { wrapper } = await mountChatInput({
+      workspaces: [docsWorkspace, appWorkspace],
+      props: {
+        selectedWorkspaceId: 'workspace_docs',
+      },
+    });
+
+    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
+    expect(workspaceTrigger.exists()).toBe(true);
+    expect(workspaceTrigger.attributes('title')).toContain('Docs');
+    expect(workspaceTrigger.classes()).toContain('w-10');
+    expect(workspaceTrigger.find('.selector-badge').text()).toBe('1');
+
+    await workspaceTrigger.trigger('click');
+    await flushPromises();
+
+    const workspaceItems = wrapper.findAll('.selector-item');
+    const appOption = workspaceItems.find(option => option.text().includes('App'));
+    expect(appOption).toBeDefined();
+    if (!appOption) {
+      throw new Error('Expected App workspace option to be rendered');
+    }
+
+    await appOption.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('workspace-changed')).toEqual([['workspace_app']]);
+  });
+
+  it('uses the same accent visual state as the other selector buttons when workspaces are available', async () => {
+    const docsWorkspace = buildWorkspace({
+      id: 'workspace_docs',
+      name: 'Docs',
+      path: '/tmp/docs',
+    });
+
+    const { wrapper } = await mountChatInput({
+      workspaces: [docsWorkspace],
+    });
+
+    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
+    expect(workspaceTrigger.classes()).toContain('ui-text-accent');
   });
 
   it('waits for the send-preparation promise before starting IPC streaming', async () => {

@@ -18,6 +18,7 @@ import * as deepseekProvider from '../../../core/provider/llm/deepseek';
 import * as kimiProvider from '../../../core/provider/llm/kimi';
 import * as openaiProvider from '../../../core/provider/llm/openai';
 import { defaultToolRegistry } from '../../../core/tools';
+import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
@@ -374,10 +375,14 @@ export const createChatStreaming = (deps: {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        const result = await runner.generate({
-          history: preparedTurn.history,
-          prompt: preparedTurn.prompt,
-        });
+        const result = await runWithToolRuntimeContext(
+          { threadId: options.threadId },
+          async () =>
+            await runner.generate({
+              history: preparedTurn.history,
+              prompt: preparedTurn.prompt,
+            })
+        );
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -489,30 +494,34 @@ export const createChatStreaming = (deps: {
         throw new Error('No user prompt provided for streaming');
       }
 
-      const streamResult = await toolLoopRunner.stream({
-        runner,
-        webContents,
-        history: preparedTurn.history,
-        prompt: preparedTurn.prompt,
-        approvalContext,
-        shouldCancel: () => streamState.cancelled,
-        onToolEvent: eventPart => {
-          if (
-            eventPart.type === 'tool-approval-request' &&
-            typeof eventPart.approvalId === 'string' &&
-            eventPart.approvalId.length > 0
-          ) {
-            deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
-              runner,
-              webContents,
-              recoveryContext: approvalContext,
-            });
-          }
-          uiChunkEmitter.emitToolEvent(eventPart);
-        },
-        abortSignal: streamState.abortController.signal,
-        uiChunkEmitter,
-      });
+      const streamResult = await runWithToolRuntimeContext(
+        { threadId: options.threadId },
+        async () =>
+          await toolLoopRunner.stream({
+            runner,
+            webContents,
+            history: preparedTurn.history,
+            prompt: preparedTurn.prompt,
+            approvalContext,
+            shouldCancel: () => streamState.cancelled,
+            onToolEvent: eventPart => {
+              if (
+                eventPart.type === 'tool-approval-request' &&
+                typeof eventPart.approvalId === 'string' &&
+                eventPart.approvalId.length > 0
+              ) {
+                deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
+                  runner,
+                  webContents,
+                  recoveryContext: approvalContext,
+                });
+              }
+              uiChunkEmitter.emitToolEvent(eventPart);
+            },
+            abortSignal: streamState.abortController.signal,
+            uiChunkEmitter,
+          })
+      );
       if (!streamResult.cancelled) {
         deps.usage.recordUsageEvent({
           threadId: options.threadId,

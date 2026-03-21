@@ -11,4 +11,4 @@ export const TOOL_AGENT_SYSTEM_PROMPT =
   '- Keep reasoning private; do not reveal chain-of-thought or reflection text.\n' +
   '- For each tool call, include a `description` field in the tool arguments: one short sentence explaining why you are calling the tool.\n' +
   '- Be conservative with destructive actions (writing/deleting files, risky shell commands).\n' +
-  '- When using file paths, stay within the workspace.\n';
+  '- When a workspace is selected for the thread, keep filesystem and shell actions inside that workspace.\n';
