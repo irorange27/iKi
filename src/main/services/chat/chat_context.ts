@@ -14,8 +14,15 @@ import type { ChatInputMessage } from './chat_types';
 import type { ChatMemory } from './chat_memory';
 import { resolveSkillsSystemPrompt } from './chat_skills';
 import { getPromptFromMessage } from './chat_ui';
+import { getIdentityContextMessage } from '../identity/identity_service';
 
-export type ContextBlockKind = 'recent-history' | 'thread-summary' | 'memory' | 'affect' | 'skills';
+export type ContextBlockKind =
+  | 'recent-history'
+  | 'identity'
+  | 'thread-summary'
+  | 'memory'
+  | 'affect'
+  | 'skills';
 
 export type ContextBlockStatus = 'included' | 'truncated' | 'dropped';
 
@@ -72,6 +79,11 @@ type RecentHistoryContext = {
 };
 
 type SummaryContext = {
+  systemMessage: string;
+  block: ContextReportBlock;
+};
+
+type IdentityContext = {
   systemMessage: string;
   block: ContextReportBlock;
 };
@@ -391,6 +403,28 @@ const buildThreadSummaryContext = (
   };
 };
 
+const buildIdentityContext = (contextConfig: ContextConfig): IdentityContext => {
+  const identityClip = clipTextToTokenBudget(
+    getIdentityContextMessage(),
+    contextConfig.maxIdentityTokens
+  );
+
+  return {
+    systemMessage: identityClip.text,
+    block: {
+      kind: 'identity',
+      status: identityClip.text ? (identityClip.truncated ? 'truncated' : 'included') : 'dropped',
+      estimatedTokens: estimateTokens(identityClip.text),
+      charCount: identityClip.text.length,
+      ...(identityClip.text
+        ? identityClip.truncated
+          ? { reason: 'identity block clipped to context budget' }
+          : {}
+        : { reason: 'no active identity profile available' }),
+    },
+  };
+};
+
 const toMemoryDisplayEntry = (result: Record<string, unknown>) => ({
   summary: typeof result.summary === 'string' ? result.summary : '',
   score: typeof result.score === 'number' ? result.score : Number(result.score || 0),
@@ -581,6 +615,9 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
     const recentHistory = selectRecentHistory(params.messages, contextConfig);
     blocks.push(recentHistory.block);
 
+    const identityContext = buildIdentityContext(contextConfig);
+    blocks.push(identityContext.block);
+
     const threadSummary = params.threadId
       ? await ensureThreadSummary(params.threadId, contextConfig)
       : null;
@@ -604,7 +641,7 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
 
     const baseMessages = insertSystemMessages(
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
-      [summaryContext.systemMessage, memoryContext.systemMessage]
+      [identityContext.systemMessage, summaryContext.systemMessage, memoryContext.systemMessage]
     );
 
     const affectMessage = resolveAffectMessage(params, deps.memory);

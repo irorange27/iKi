@@ -59,6 +59,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       recentMessageCount: 10,
       maxRecentTokens: 2400,
       maxMessageTokens: 420,
+      maxIdentityTokens: 320,
       summaryTriggerMessages: 14,
       summaryRecentMessages: 6,
       maxSummaryTokens: 500,

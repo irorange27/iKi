@@ -73,7 +73,7 @@ export type ContextUsageIndicator = {
 
 type ContextBudgetConfig = Pick<
   AppConfig['memory']['context'],
-  'maxRecentTokens' | 'maxSummaryTokens' | 'maxMemoryTokens' | 'maxSkillTokens'
+  'maxRecentTokens' | 'maxIdentityTokens' | 'maxSummaryTokens' | 'maxMemoryTokens' | 'maxSkillTokens'
 >;
 
 const getMessageParts = (message: unknown): unknown[] =>
@@ -305,6 +305,7 @@ export const getContextBudgetTokens = (
 
   return [
     config.maxRecentTokens,
+    config.maxIdentityTokens,
     config.maxSummaryTokens,
     config.maxMemoryTokens,
     config.maxSkillTokens,

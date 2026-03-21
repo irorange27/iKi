@@ -9,6 +9,7 @@ const {
   extractTextFromMessageJsonMock,
   generateThreadSummaryMock,
   resolveSkillsSystemPromptMock,
+  getIdentityContextMessageMock,
 } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
   getChatMessagesMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   extractTextFromMessageJsonMock: vi.fn(),
   generateThreadSummaryMock: vi.fn(),
   resolveSkillsSystemPromptMock: vi.fn(),
+  getIdentityContextMessageMock: vi.fn(),
 }));
 
 vi.mock('../../../../src/core/config', () => ({
@@ -46,6 +48,10 @@ vi.mock('../../../../src/main/services/chat/chat_skills', () => ({
   resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
 }));
 
+vi.mock('../../../../src/main/services/identity/identity_service', () => ({
+  getIdentityContextMessage: getIdentityContextMessageMock,
+}));
+
 import { createChatContextAssembler } from '../../../../src/main/services/chat/chat_context';
 
 const baseConfig = {
@@ -55,6 +61,7 @@ const baseConfig = {
       recentMessageCount: 3,
       maxRecentTokens: 4000,
       maxMessageTokens: 200,
+      maxIdentityTokens: 120,
       summaryTriggerMessages: 5,
       summaryRecentMessages: 2,
       maxSummaryTokens: 300,
@@ -83,6 +90,7 @@ beforeEach(() => {
     usedSkills: [],
     skillMode: 'manual',
   });
+  getIdentityContextMessageMock.mockReturnValue('');
 });
 
 describe('chat_context assembler', () => {
@@ -307,6 +315,37 @@ describe('chat_context assembler', () => {
           kind: 'skills',
           status: 'included',
           sourceCount: 1,
+        }),
+      ])
+    );
+  });
+
+  it('injects the active identity block through the shared context pipeline', async () => {
+    getIdentityContextMessageMock.mockReturnValue(
+      'Identity profile for iKi:\n- Core role: grounded personal AI companion.'
+    );
+
+    const assembler = createChatContextAssembler({
+      memory: {
+        retrieveRelevantMemory: vi.fn(() => null),
+        getAffectContextMessage: vi.fn(() => ''),
+      } as never,
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_identity',
+      messages: [{ role: 'user', content: 'What should we focus on next?' }],
+    });
+
+    expect(result.messages[0]).toEqual({
+      role: 'system',
+      content: 'Identity profile for iKi:\n- Core role: grounded personal AI companion.',
+    });
+    expect(result.report.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'identity',
+          status: 'included',
         }),
       ])
     );
