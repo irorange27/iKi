@@ -4,12 +4,17 @@ import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDeb } from '@electron-forge/maker-deb';
 import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { createVitePackagingIgnore } from './src/build/runtime_packaging';
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Vite only packages `/.vite` by default. The main bundle still resolves a
+    // small set of runtime externals, so those packages must travel with the app.
+    ignore: createVitePackagingIgnore(__dirname),
   },
   rebuildConfig: {},
   makers: [
@@ -19,6 +24,7 @@ const config: ForgeConfig = {
     new MakerDeb({}),
   ],
   plugins: [
+    new AutoUnpackNativesPlugin(),
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
       // If you are familiar with Vite configuration, it will look really familiar.

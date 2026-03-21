@@ -54,13 +54,11 @@ A local agent pet for AI provider orchestration.
 - `npm run app:dev`: start the desktop app through Electron Forge's Vite flow.
 - `npm run app:preview`: launch the latest local packaged app from `out/` for manual eyeballing.
 - `npm run app:build`: create distributable artifacts via Electron Forge makers.
-- `npm run app:smoke`: copy the packaged app into a temp directory, boot it with isolated
-  `HOME` / working directory, and fail if startup cannot reach the main-window sentinel.
 - `npm run -s ci:quality`: run the repository quality gate locally.
 
 Packaging may download platform-specific Electron artifacts the first time it
-runs, so `app:build` and `npm run package` expect normal network access. `app:preview` and
-`app:smoke` expect an existing packaged output under `out/`.
+runs, so `app:build` and `npm run package` expect normal network access. `app:preview` expects an
+existing packaged output under `out/`.
 
 ## Development Notes
 
@@ -99,8 +97,8 @@ runs, so `app:build` and `npm run package` expect normal network access. `app:pr
 - Conventional Commits remain required for history hygiene, but release intent is manual
 - Curated product notes live in `changelogs/`; there is no `release-please` or machine-generated
   root `CHANGELOG.md` flow
-- Local release verification path: run `npm run app:build && npm run app:smoke` before a version
-  cut; `app:preview` remains optional for a manual visual pass
+- Local release verification path: run `npm run app:build` before a version cut; `app:preview`
+  remains available for a manual visual pass
 - `release-build` runs automatically on `package.json` version updates in `main` and on GitHub
   Release publish
 - `release-build` first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds
