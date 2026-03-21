@@ -90,6 +90,33 @@ export const listLifeReflections = (params: {
   return rows;
 };
 
+export const listLifeReflectionsInWindow = (params: {
+  profileId: string;
+  periodType: LifeReflectionPeriodType;
+  periodStart: string;
+  periodEnd: string;
+}): LifeReflectionRecord[] => {
+  const profileId = params.profileId?.trim();
+  const periodStart = params.periodStart?.trim();
+  const periodEnd = params.periodEnd?.trim();
+  if (!profileId || !periodStart || !periodEnd) return [];
+
+  const rows = getDb()
+    .prepare(
+      `
+      SELECT * FROM life_reflections
+      WHERE profile_id = ?
+        AND period_type = ?
+        AND period_start >= ?
+        AND period_end <= ?
+      ORDER BY period_start ASC, created_at ASC
+    `
+    )
+    .all(profileId, params.periodType, periodStart, periodEnd) as LifeReflectionRecord[];
+
+  return rows;
+};
+
 export const addLifeReflection = (entry: {
   id?: string;
   profile_id: string;

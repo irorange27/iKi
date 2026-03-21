@@ -7,12 +7,14 @@ const {
   getProactiveTasksMock,
   listLifeReflectionsMock,
   runDueHourlyLifeReflectionsMock,
+  runDueDailyLifeReflectionsMock,
 } = vi.hoisted(() => ({
   getOrCreateActiveIdentityProfileMock: vi.fn(),
   listDueProactiveTasksMock: vi.fn(),
   getProactiveTasksMock: vi.fn(),
   listLifeReflectionsMock: vi.fn(),
   runDueHourlyLifeReflectionsMock: vi.fn(),
+  runDueDailyLifeReflectionsMock: vi.fn(),
 }));
 
 let currentState: LifeStateRecord | null = null;
@@ -96,6 +98,7 @@ vi.mock('../../../../src/core/db/life_reflection', () => ({
 
 vi.mock('../../../../src/main/services/life/life_reflection', () => ({
   runDueHourlyLifeReflections: runDueHourlyLifeReflectionsMock,
+  runDueDailyLifeReflections: runDueDailyLifeReflectionsMock,
 }));
 
 describe('life_runtime', () => {
@@ -122,6 +125,7 @@ describe('life_runtime', () => {
     getProactiveTasksMock.mockReturnValue([]);
     listLifeReflectionsMock.mockReturnValue([]);
     runDueHourlyLifeReflectionsMock.mockResolvedValue([]);
+    runDueDailyLifeReflectionsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -188,5 +192,23 @@ describe('life_runtime', () => {
     const overview = getLifeOverview(5);
     expect(overview.recentEpisodes.length).toBeGreaterThanOrEqual(2);
     expect(overview.recentEpisodes[0].activity_type).toBe(settled?.state.current_activity);
+  });
+
+  it('runs hourly and daily reflection backfill during refresh', async () => {
+    const { recordLifeRuntimeEvent, refreshLifeRuntime } = await import(
+      '../../../../src/main/services/life/life_runtime'
+    );
+
+    const startedAt = localDate(14, 0);
+    vi.setSystemTime(startedAt);
+    recordLifeRuntimeEvent({
+      type: 'runtime-start',
+      at: toLocalTimestamp(startedAt),
+    });
+
+    await refreshLifeRuntime();
+
+    expect(runDueHourlyLifeReflectionsMock).toHaveBeenCalled();
+    expect(runDueDailyLifeReflectionsMock).toHaveBeenCalled();
   });
 });

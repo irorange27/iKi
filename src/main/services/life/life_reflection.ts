@@ -1,22 +1,32 @@
 import * as lifeDb from '../../../core/db/life';
 import * as lifeReflectionDb from '../../../core/db/life_reflection';
 import * as memoryDb from '../../../core/db/memory';
+import * as tasksDb from '../../../core/db/tasks';
+import * as todosDb from '../../../core/db/todos';
 import { getToolModel, type ToolModelConfig } from '../../../core/provider/tool_model';
 import { createSimplePromptTextGenerator } from '../../../core/runtimes/prompt_text_generator';
 import type {
   LifeEpisodeRecord,
-  LifeReflectionRecord,
   LifeReflectionPeriodType,
+  LifeReflectionRecord,
+  LifeSleepWindow,
 } from '../../../shared/types/life';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
+import { DEFAULT_SLEEP_WINDOW, normalizeSleepWindow } from './life_activity_engine';
 
 const MAX_HOURLY_BACKLOG_WINDOWS = 3;
+const MAX_DAILY_BACKLOG_WINDOWS = 2;
 const MAX_EPISODE_LINES = 16;
+const MAX_REFLECTION_LINES = 8;
+const MAX_TODO_LINES = 5;
+const MAX_TASK_LINES = 5;
 const MAX_PROMPT_CHARS = 7000;
 const MAX_SUMMARY_CHARS = 320;
 const MAX_LIST_ITEM_CHARS = 180;
-const MEMORY_TAGS = ['life-reflection', 'hourly-reflection'];
 const HOURLY_PERIOD_TYPE: LifeReflectionPeriodType = 'hour';
+const DAILY_PERIOD_TYPE: LifeReflectionPeriodType = 'day';
+const HOURLY_MEMORY_TAGS = ['life-reflection', 'hourly-reflection'];
+const DAILY_MEMORY_TAGS = ['life-reflection', 'daily-reflection'];
 
 type ReflectionModelOutput = {
   summary: string;
@@ -36,7 +46,29 @@ type GeneratedLifeReflection = {
   wroteMemory: boolean;
 };
 
-const SYSTEM_PROMPT = [
+type ReflectionSourceBundle = {
+  episodes: LifeEpisodeRecord[];
+  hourlyReflections?: LifeReflectionRecord[];
+  todoLines?: string[];
+  taskLines?: string[];
+};
+
+type GenerateReflectionParams = {
+  periodType: LifeReflectionPeriodType;
+  profileId: string;
+  profileName: string;
+  ownerName: string;
+  periodStart: string;
+  periodEnd: string;
+  prompt: string;
+  toolModel: ToolModelConfig;
+  systemPrompt: string;
+  maxTokens: number;
+  memoryTags: string[];
+  memoryEpisodes: LifeEpisodeRecord[];
+};
+
+const HOURLY_SYSTEM_PROMPT = [
   'You write factual hourly reflections for iKi, a local AI companion with a structured life runtime.',
   'Summarize only what the persisted episode trajectory supports.',
   'Focus on semantic activity, commitments, state drift, and what should matter next.',
@@ -44,6 +76,17 @@ const SYSTEM_PROMPT = [
   'Output strict JSON only with this exact shape:',
   '{"summary":"string","insights":["string"],"next_focus":["string"],"memory_candidate":"string|null","memory_confidence":"none|low|medium|high"}',
   'Use memory_candidate only for durable, future-useful facts or patterns. Otherwise set it to null and confidence to "none".',
+].join('\n');
+
+const DAILY_SYSTEM_PROMPT = [
+  'You write factual daily reflections and next-day planning notes for iKi, a local AI companion with a structured life runtime.',
+  'Summarize only what the persisted trajectory, hourly reflections, todo lists, and proactive commitments support.',
+  'Focus on the day arc, repeated patterns, unresolved commitments, and the most valuable next-day priorities.',
+  'Do not invent embodiment, fake emotions, or theatrical narrative.',
+  'Output strict JSON only with this exact shape:',
+  '{"summary":"string","insights":["string"],"next_focus":["string"],"memory_candidate":"string|null","memory_confidence":"none|low|medium|high"}',
+  'Use next_focus for tomorrow-facing priorities.',
+  'Use memory_candidate only for durable patterns worth long-term memory; otherwise use null and "none".',
 ].join('\n');
 
 const normalizeWhitespace = (value: string): string =>
@@ -58,6 +101,26 @@ const clipText = (value: string, maxChars: number): string => {
   const trimmed = normalizeWhitespace(value);
   if (trimmed.length <= maxChars) return trimmed;
   return `${trimmed.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+};
+
+const toEpoch = (value: string | null | undefined): number | null => {
+  if (!value?.trim()) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const isOnOrBefore = (value: string | null | undefined, cutoffIso: string): boolean => {
+  const valueTime = toEpoch(value);
+  const cutoffTime = toEpoch(cutoffIso);
+  if (valueTime === null || cutoffTime === null) return false;
+  return valueTime <= cutoffTime;
+};
+
+const sampleHeadTail = <T>(items: T[], maxItems: number): T[] => {
+  if (items.length <= maxItems) return items;
+  const headCount = Math.ceil(maxItems / 2);
+  const tailCount = Math.floor(maxItems / 2);
+  return [...items.slice(0, headCount), ...items.slice(items.length - tailCount)];
 };
 
 const parseJsonStringArray = (value: string | null | undefined): string[] => {
@@ -139,6 +202,12 @@ const shiftHours = (date: Date, hours: number): Date => {
   return next;
 };
 
+const shiftDays = (date: Date, days: number): Date => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
 const buildHourlyWindows = (now: Date, limit = MAX_HOURLY_BACKLOG_WINDOWS): ReflectionWindow[] => {
   const closedHourEnd = floorToHour(now);
   const windows: ReflectionWindow[] = [];
@@ -150,16 +219,46 @@ const buildHourlyWindows = (now: Date, limit = MAX_HOURLY_BACKLOG_WINDOWS): Refl
   return windows;
 };
 
+const getSemanticDayBoundaryAtOrBefore = (date: Date, anchorHour: number): Date => {
+  const boundary = new Date(date);
+  boundary.setMinutes(0, 0, 0);
+  boundary.setHours(anchorHour, 0, 0, 0);
+  if (date.getTime() < boundary.getTime()) {
+    boundary.setDate(boundary.getDate() - 1);
+  }
+  return boundary;
+};
+
+const buildDailyWindows = (
+  now: Date,
+  sleepWindow: LifeSleepWindow,
+  limit = MAX_DAILY_BACKLOG_WINDOWS
+): ReflectionWindow[] => {
+  const closedDayEnd = getSemanticDayBoundaryAtOrBefore(now, sleepWindow.startHour);
+  const windows: ReflectionWindow[] = [];
+  for (let index = limit; index >= 1; index -= 1) {
+    const end = shiftDays(closedDayEnd, -(index - 1));
+    const start = shiftDays(end, -1);
+    windows.push({ start, end });
+  }
+  return windows;
+};
+
+const formatHourMinute = (value: string | null | undefined): string => {
+  if (!value?.trim()) return 'unknown';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().slice(11, 16);
+};
+
+const formatDateTime = (value: string | null | undefined): string => {
+  if (!value?.trim()) return 'unknown';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().slice(0, 16).replace('T', ' ');
+};
+
 const formatEpisodeLine = (episode: LifeEpisodeRecord): string => {
-  const startedAt = new Date(episode.started_at);
-  const endedAt = episode.ended_at ? new Date(episode.ended_at) : null;
-  const startedText = Number.isNaN(startedAt.getTime())
-    ? episode.started_at
-    : startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const endedText =
-    endedAt && !Number.isNaN(endedAt.getTime())
-      ? endedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : episode.ended_at || 'open';
   const refs = [
     episode.task_id ? `task=${episode.task_id}` : '',
     episode.thread_id ? `thread=${episode.thread_id}` : '',
@@ -169,7 +268,7 @@ const formatEpisodeLine = (episode: LifeEpisodeRecord): string => {
     .join(', ');
 
   return [
-    `${startedText} -> ${endedText}`,
+    `${formatHourMinute(episode.started_at)} -> ${episode.ended_at ? formatHourMinute(episode.ended_at) : 'open'}`,
     `${episode.activity_type} / ${episode.presence}`,
     clipText(episode.summary || episode.transition_reason, 180),
     refs ? `[${refs}]` : '',
@@ -178,10 +277,106 @@ const formatEpisodeLine = (episode: LifeEpisodeRecord): string => {
     .join(' | ');
 };
 
-const buildEpisodesTranscript = (episodes: LifeEpisodeRecord[]): string => {
-  const lines = episodes.slice(0, MAX_EPISODE_LINES).map(formatEpisodeLine);
+const buildEpisodesTranscript = (
+  episodes: LifeEpisodeRecord[],
+  maxLines = MAX_EPISODE_LINES
+): string => {
+  const lines = sampleHeadTail(episodes, maxLines).map(formatEpisodeLine);
   return clipText(lines.join('\n'), MAX_PROMPT_CHARS);
 };
+
+const buildReflectionLines = (
+  reflections: LifeReflectionRecord[],
+  maxLines = MAX_REFLECTION_LINES
+): string[] =>
+  sampleHeadTail(reflections, maxLines).map(reflection => {
+    const insight = parseJsonStringArray(reflection.insights_json)[0];
+    const plan = parseJsonStringArray(reflection.plan_json)[0];
+    return clipText(
+      [
+        `${formatDateTime(reflection.period_start)} -> ${formatDateTime(reflection.period_end)}`,
+        clipText(reflection.summary, 180),
+        insight ? `insight=${insight}` : '',
+        plan ? `next=${plan}` : '',
+      ]
+        .filter(Boolean)
+        .join(' | '),
+      260
+    );
+  });
+
+const buildPendingTodoLines = (windowEnd: string): string[] => {
+  const lists = todosDb
+    .listTodoLists({ limit: MAX_TODO_LINES * 2 })
+    .filter(list => isOnOrBefore(list.created_at, windowEnd))
+    .slice(0, MAX_TODO_LINES);
+
+  return lists
+    .map(list => {
+      const detail = todosDb.getTodoListById(list.id);
+      const visibleItems =
+        detail?.items.filter(item => isOnOrBefore(item.created_at, windowEnd)) ?? [];
+      const pendingVisibleItems = visibleItems.filter(
+        item => !item.completed_at || !isOnOrBefore(item.completed_at, windowEnd)
+      );
+      const pendingItems = pendingVisibleItems
+        .slice(0, 2)
+        .map(item => clipText(item.content, 60));
+      if (pendingItems.length === 0) return '';
+
+      const completedCount = visibleItems.length - pendingVisibleItems.length;
+      const safeSummary = isOnOrBefore(list.updated_at, windowEnd) && list.summary
+        ? clipText(list.summary, 90)
+        : '';
+
+      return clipText(
+        [
+          `${list.title} (${pendingVisibleItems.length} pending, ${Math.max(0, completedCount)} completed)`,
+          safeSummary,
+          pendingItems.length > 0 ? `next=${pendingItems.join('; ')}` : '',
+        ]
+          .filter(Boolean)
+          .join(' | '),
+        240
+      );
+    })
+    .filter(Boolean);
+};
+
+const sortTasksForPlanning = (taskA: { next_run_at?: string | null }, taskB: { next_run_at?: string | null }) => {
+  const timeA = taskA.next_run_at ? new Date(taskA.next_run_at).getTime() : Number.NEGATIVE_INFINITY;
+  const timeB = taskB.next_run_at ? new Date(taskB.next_run_at).getTime() : Number.NEGATIVE_INFINITY;
+  const normalizedA = Number.isFinite(timeA) ? timeA : Number.MAX_SAFE_INTEGER;
+  const normalizedB = Number.isFinite(timeB) ? timeB : Number.MAX_SAFE_INTEGER;
+  return normalizedA - normalizedB;
+};
+
+const buildProactiveTaskLines = (windowEnd: string): string[] =>
+  tasksDb
+    .getProactiveTasks()
+    .filter(task => task.enabled && isOnOrBefore(task.created_at, windowEnd))
+    .sort(sortTasksForPlanning)
+    .slice(0, MAX_TASK_LINES)
+    .map(task =>
+      clipText(
+        [
+          task.name,
+          isOnOrBefore(task.updated_at, windowEnd) ? `status=${task.last_status || 'idle'}` : '',
+          isOnOrBefore(task.updated_at, windowEnd) && task.next_run_at
+            ? `next=${formatDateTime(task.next_run_at)}`
+            : '',
+          task.thread_id ? `thread=${task.thread_id}` : '',
+          isOnOrBefore(task.updated_at, windowEnd) &&
+          task.last_status === 'error' &&
+          task.last_error
+            ? `error=${clipText(task.last_error, 80)}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' | '),
+        240
+      )
+    );
 
 const isMeaningfulHourlyWindow = (episodes: LifeEpisodeRecord[]): boolean => {
   if (episodes.length === 0) return false;
@@ -191,7 +386,17 @@ const isMeaningfulHourlyWindow = (episodes: LifeEpisodeRecord[]): boolean => {
   );
 };
 
-const buildReflectionPrompt = (params: {
+const isMeaningfulDailyWindow = (bundle: ReflectionSourceBundle): boolean => {
+  if (bundle.hourlyReflections && bundle.hourlyReflections.length > 0) return true;
+  if (isMeaningfulHourlyWindow(bundle.episodes)) return true;
+  if ((bundle.todoLines?.length || 0) > 0) return true;
+  if ((bundle.taskLines?.length || 0) > 0) return true;
+  return false;
+};
+
+const buildSection = (title: string, body: string): string => `${title}:\n${body}`;
+
+const buildHourlyReflectionPrompt = (params: {
   episodes: LifeEpisodeRecord[];
   periodStart: string;
   periodEnd: string;
@@ -202,7 +407,7 @@ const buildReflectionPrompt = (params: {
     `Profile: ${params.profileName}`,
     `Owner label: ${params.ownerName || 'the user'}`,
     `Reflection window (ISO): ${params.periodStart} -> ${params.periodEnd}`,
-    `Episode trajectory:\n${buildEpisodesTranscript(params.episodes)}`,
+    buildSection('Episode trajectory', buildEpisodesTranscript(params.episodes)),
     [
       'Write an hourly reflection from this trajectory.',
       'Prefer compact factual language.',
@@ -210,7 +415,52 @@ const buildReflectionPrompt = (params: {
       'Only propose a memory_candidate when the hour revealed something durable enough to remember later.',
     ].join('\n'),
   ];
+
   return sections.join('\n\n');
+};
+
+const buildDailyReflectionPrompt = (params: {
+  profileName: string;
+  ownerName: string;
+  periodStart: string;
+  periodEnd: string;
+  bundle: ReflectionSourceBundle;
+}): string => {
+  const sections = [
+    `Profile: ${params.profileName}`,
+    `Owner label: ${params.ownerName || 'the user'}`,
+    `Reflection window (semantic day): ${params.periodStart} -> ${params.periodEnd}`,
+  ];
+
+  if (params.bundle.episodes.length > 0) {
+    sections.push(buildSection('Episode trajectory', buildEpisodesTranscript(params.bundle.episodes)));
+  }
+
+  const reflectionLines = buildReflectionLines(params.bundle.hourlyReflections || []);
+  if (reflectionLines.length > 0) {
+    sections.push(buildSection('Hourly reflections', reflectionLines.join('\n')));
+  }
+
+  if ((params.bundle.todoLines?.length || 0) > 0) {
+    sections.push(buildSection('Pending todo commitments', (params.bundle.todoLines || []).join('\n')));
+  }
+
+  if ((params.bundle.taskLines?.length || 0) > 0) {
+    sections.push(
+      buildSection('Proactive commitments', (params.bundle.taskLines || []).join('\n'))
+    );
+  }
+
+  sections.push(
+    [
+      'Write a daily reflection and next-day plan from this evidence.',
+      'Prefer compact factual language.',
+      'Summarize the day arc, repeated patterns, unresolved commitments, and tomorrow-facing priorities.',
+      'Only propose a memory_candidate when the day revealed a durable stable pattern worth retaining.',
+    ].join('\n')
+  );
+
+  return clipText(sections.join('\n\n'), MAX_PROMPT_CHARS);
 };
 
 const resolveSingleThreadForMemoryWriteback = (episodes: LifeEpisodeRecord[]): string | null => {
@@ -253,6 +503,7 @@ const writeReflectionMemory = (params: {
   reflection: ReflectionModelOutput;
   episodes: LifeEpisodeRecord[];
   model: ToolModelConfig;
+  memoryTags: string[];
 }): boolean => {
   const target = shouldWriteReflectionMemory({
     reflection: params.reflection,
@@ -263,7 +514,7 @@ const writeReflectionMemory = (params: {
   const result = memoryDb.addLongMemory({
     thread_id: target.threadId,
     summary: target.summary,
-    tags: MEMORY_TAGS,
+    tags: params.memoryTags,
     metadata: {
       source: 'life-reflection',
       reflectionId: params.reflectionRecord.id,
@@ -275,44 +526,31 @@ const writeReflectionMemory = (params: {
   return Boolean(result);
 };
 
-const generateReflectionForWindow = async (params: {
-  profileId: string;
-  profileName: string;
-  ownerName: string;
-  periodStart: string;
-  periodEnd: string;
-  episodes: LifeEpisodeRecord[];
-  toolModel: ToolModelConfig;
-}): Promise<GeneratedLifeReflection | null> => {
-  const prompt = buildReflectionPrompt({
-    episodes: params.episodes,
-    periodStart: params.periodStart,
-    periodEnd: params.periodEnd,
-    profileName: params.profileName,
-    ownerName: params.ownerName,
-  });
-  if (!prompt.trim()) return null;
+const generateReflection = async (
+  params: GenerateReflectionParams
+): Promise<GeneratedLifeReflection | null> => {
+  if (!params.prompt.trim()) return null;
 
   const generator = createSimplePromptTextGenerator({
     enabled: true,
     providerType: params.toolModel.providerType,
     model: params.toolModel.model,
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: params.systemPrompt,
     temperature: 0.15,
-    maxTokens: 420,
+    maxTokens: params.maxTokens,
     maxIterations: 1,
     enableTools: false,
     enableMemory: false,
   });
 
   try {
-    const result = await generator.generate(prompt);
+    const result = await generator.generate(params.prompt);
     const reflection = parseReflectionModelOutput(result.response || '');
     if (!reflection) return null;
 
     const record = lifeReflectionDb.addLifeReflection({
       profile_id: params.profileId,
-      period_type: HOURLY_PERIOD_TYPE,
+      period_type: params.periodType,
       period_start: params.periodStart,
       period_end: params.periodEnd,
       summary: reflection.summary,
@@ -323,8 +561,9 @@ const generateReflectionForWindow = async (params: {
     const wroteMemory = writeReflectionMemory({
       reflectionRecord: record,
       reflection,
-      episodes: params.episodes,
+      episodes: params.memoryEpisodes,
       model: params.toolModel,
+      memoryTags: params.memoryTags,
     });
 
     return {
@@ -332,12 +571,64 @@ const generateReflectionForWindow = async (params: {
       wroteMemory,
     };
   } catch (error) {
-    console.warn('[Life] hourly reflection generation failed:', error);
+    console.warn(`[Life] ${params.periodType} reflection generation failed:`, error);
     return null;
   }
 };
 
+const getProfileSleepWindow = (profileId: string): LifeSleepWindow => {
+  const state = lifeDb.getLifeState(profileId);
+  if (!state?.sleep_window_json?.trim()) return { ...DEFAULT_SLEEP_WINDOW };
+
+  try {
+    return normalizeSleepWindow(JSON.parse(state.sleep_window_json));
+  } catch {
+    return { ...DEFAULT_SLEEP_WINDOW };
+  }
+};
+
 const reflectionLocks = new Set<string>();
+
+const runReflectionWindow = async (params: {
+  profileId: string;
+  profileName: string;
+  ownerName: string;
+  periodType: LifeReflectionPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  prompt: string;
+  toolModel: ToolModelConfig;
+  systemPrompt: string;
+  maxTokens: number;
+  memoryTags: string[];
+  memoryEpisodes: LifeEpisodeRecord[];
+}): Promise<GeneratedLifeReflection | null> => {
+  const lockKey = `${params.profileId}:${params.periodType}:${params.periodStart}`;
+  if (reflectionLocks.has(lockKey)) return null;
+  if (lifeReflectionDb.getLifeReflection(params.profileId, params.periodType, params.periodStart)) {
+    return null;
+  }
+
+  reflectionLocks.add(lockKey);
+  try {
+    return await generateReflection({
+      periodType: params.periodType,
+      profileId: params.profileId,
+      profileName: params.profileName,
+      ownerName: params.ownerName,
+      periodStart: params.periodStart,
+      periodEnd: params.periodEnd,
+      prompt: params.prompt,
+      toolModel: params.toolModel,
+      systemPrompt: params.systemPrompt,
+      maxTokens: params.maxTokens,
+      memoryTags: params.memoryTags,
+      memoryEpisodes: params.memoryEpisodes,
+    });
+  } finally {
+    reflectionLocks.delete(lockKey);
+  }
+};
 
 export const runDueHourlyLifeReflections = async (params?: {
   now?: string;
@@ -358,30 +649,104 @@ export const runDueHourlyLifeReflections = async (params?: {
   for (const window of windows) {
     const periodStart = window.start.toISOString();
     const periodEnd = window.end.toISOString();
-    const lockKey = `${profile.id}:${HOURLY_PERIOD_TYPE}:${periodStart}`;
-
-    if (reflectionLocks.has(lockKey)) continue;
-    if (lifeReflectionDb.getLifeReflection(profile.id, HOURLY_PERIOD_TYPE, periodStart)) continue;
-
     const episodes = lifeDb.listLifeEpisodesInWindow(profile.id, periodStart, periodEnd);
     if (!isMeaningfulHourlyWindow(episodes)) continue;
 
-    reflectionLocks.add(lockKey);
-    try {
-      const generated = await generateReflectionForWindow({
-        profileId: profile.id,
-        profileName: profile.name,
-        ownerName: profile.owner_name,
-        periodStart,
-        periodEnd,
+    const prompt = buildHourlyReflectionPrompt({
+      episodes,
+      periodStart,
+      periodEnd,
+      profileName: profile.name,
+      ownerName: profile.owner_name,
+    });
+
+    const generated = await runReflectionWindow({
+      profileId: profile.id,
+      profileName: profile.name,
+      ownerName: profile.owner_name,
+      periodType: HOURLY_PERIOD_TYPE,
+      periodStart,
+      periodEnd,
+      prompt,
+      toolModel,
+      systemPrompt: HOURLY_SYSTEM_PROMPT,
+      maxTokens: 420,
+      memoryTags: HOURLY_MEMORY_TAGS,
+      memoryEpisodes: episodes,
+    });
+
+    if (generated) {
+      results.push(generated);
+    }
+  }
+
+  return results;
+};
+
+export const runDueDailyLifeReflections = async (params?: {
+  now?: string;
+  maxWindows?: number;
+}): Promise<GeneratedLifeReflection[]> => {
+  const profile = getOrCreateActiveIdentityProfile();
+  if (!profile) return [];
+
+  const toolModel = getToolModel();
+  if (!toolModel) return [];
+
+  const now = params?.now ? new Date(params.now) : new Date();
+  if (Number.isNaN(now.getTime())) return [];
+
+  const sleepWindow = getProfileSleepWindow(profile.id);
+  const windows = buildDailyWindows(now, sleepWindow, params?.maxWindows);
+  const results: GeneratedLifeReflection[] = [];
+
+  for (const window of windows) {
+    const periodStart = window.start.toISOString();
+    const periodEnd = window.end.toISOString();
+    const episodes = lifeDb.listLifeEpisodesInWindow(profile.id, periodStart, periodEnd);
+    const hourlyReflections = lifeReflectionDb.listLifeReflectionsInWindow({
+      profileId: profile.id,
+      periodType: HOURLY_PERIOD_TYPE,
+      periodStart,
+      periodEnd,
+    });
+    const todoLines = buildPendingTodoLines(periodEnd);
+    const taskLines = buildProactiveTaskLines(periodEnd);
+
+    if (!isMeaningfulDailyWindow({ episodes, hourlyReflections, todoLines, taskLines })) {
+      continue;
+    }
+
+    const prompt = buildDailyReflectionPrompt({
+      profileName: profile.name,
+      ownerName: profile.owner_name,
+      periodStart,
+      periodEnd,
+      bundle: {
         episodes,
-        toolModel,
-      });
-      if (generated) {
-        results.push(generated);
-      }
-    } finally {
-      reflectionLocks.delete(lockKey);
+        hourlyReflections,
+        todoLines,
+        taskLines,
+      },
+    });
+
+    const generated = await runReflectionWindow({
+      profileId: profile.id,
+      profileName: profile.name,
+      ownerName: profile.owner_name,
+      periodType: DAILY_PERIOD_TYPE,
+      periodStart,
+      periodEnd,
+      prompt,
+      toolModel,
+      systemPrompt: DAILY_SYSTEM_PROMPT,
+      maxTokens: 520,
+      memoryTags: DAILY_MEMORY_TAGS,
+      memoryEpisodes: episodes,
+    });
+
+    if (generated) {
+      results.push(generated);
     }
   }
 
@@ -392,16 +757,47 @@ export const getRecentLifeReflectionContextMessage = (): string => {
   const profile = getOrCreateActiveIdentityProfile();
   if (!profile) return '';
 
-  const reflection = lifeReflectionDb.getLatestLifeReflection(profile.id, HOURLY_PERIOD_TYPE);
-  if (!reflection) return '';
+  const dailyReflection = lifeReflectionDb.getLatestLifeReflection(profile.id, DAILY_PERIOD_TYPE);
+  const hourlyReflection = lifeReflectionDb.getLatestLifeReflection(profile.id, HOURLY_PERIOD_TYPE);
+  if (!dailyReflection && !hourlyReflection) return '';
 
-  const insights = parseJsonStringArray(reflection.insights_json).slice(0, 2);
-  const plan = parseJsonStringArray(reflection.plan_json).slice(0, 2);
+  const lines = ['Recent life reflection for iKi:'];
 
-  return [
-    'Recent life reflection for iKi:',
-    `- Hourly recap: ${clipText(reflection.summary, MAX_SUMMARY_CHARS)}`,
-    ...(insights.length > 0 ? ['- Insights:', ...insights.map(item => `  - ${item}`)] : []),
-    ...(plan.length > 0 ? ['- Next focus:', ...plan.map(item => `  - ${item}`)] : []),
-  ].join('\n');
+  if (dailyReflection) {
+    const insights = parseJsonStringArray(dailyReflection.insights_json).slice(0, 2);
+    const plan = parseJsonStringArray(dailyReflection.plan_json).slice(0, 3);
+    lines.push(`- Daily arc: ${clipText(dailyReflection.summary, MAX_SUMMARY_CHARS)}`);
+    if (insights.length > 0) {
+      lines.push('- Daily insights:');
+      for (const item of insights) {
+        lines.push(`  - ${item}`);
+      }
+    }
+    if (plan.length > 0) {
+      lines.push('- Next-day focus:');
+      for (const item of plan) {
+        lines.push(`  - ${item}`);
+      }
+    }
+  }
+
+  if (hourlyReflection) {
+    const insights = parseJsonStringArray(hourlyReflection.insights_json).slice(0, 2);
+    const plan = parseJsonStringArray(hourlyReflection.plan_json).slice(0, 2);
+    lines.push(`- Hourly recap: ${clipText(hourlyReflection.summary, MAX_SUMMARY_CHARS)}`);
+    if (insights.length > 0) {
+      lines.push('- Near-term insights:');
+      for (const item of insights) {
+        lines.push(`  - ${item}`);
+      }
+    }
+    if (plan.length > 0) {
+      lines.push('- Near-term focus:');
+      for (const item of plan) {
+        lines.push(`  - ${item}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
 };

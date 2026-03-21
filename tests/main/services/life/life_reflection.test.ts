@@ -5,22 +5,32 @@ const {
   getOrCreateActiveIdentityProfileMock,
   getToolModelMock,
   createSimplePromptTextGeneratorMock,
+  getLifeStateMock,
   listLifeEpisodesInWindowMock,
   getLifeReflectionMock,
   addLifeReflectionMock,
   getLatestLifeReflectionMock,
+  listLifeReflectionsInWindowMock,
   listLongMemoryMock,
   addLongMemoryMock,
+  getProactiveTasksMock,
+  listTodoListsMock,
+  getTodoListByIdMock,
 } = vi.hoisted(() => ({
   getOrCreateActiveIdentityProfileMock: vi.fn(),
   getToolModelMock: vi.fn(),
   createSimplePromptTextGeneratorMock: vi.fn(),
+  getLifeStateMock: vi.fn(),
   listLifeEpisodesInWindowMock: vi.fn(),
   getLifeReflectionMock: vi.fn(),
   addLifeReflectionMock: vi.fn(),
   getLatestLifeReflectionMock: vi.fn(),
+  listLifeReflectionsInWindowMock: vi.fn(),
   listLongMemoryMock: vi.fn(),
   addLongMemoryMock: vi.fn(),
+  getProactiveTasksMock: vi.fn(),
+  listTodoListsMock: vi.fn(),
+  getTodoListByIdMock: vi.fn(),
 }));
 
 vi.mock('../../../../src/main/services/identity/identity_service', () => ({
@@ -36,6 +46,7 @@ vi.mock('../../../../src/core/runtimes/prompt_text_generator', () => ({
 }));
 
 vi.mock('../../../../src/core/db/life', () => ({
+  getLifeState: getLifeStateMock,
   listLifeEpisodesInWindow: listLifeEpisodesInWindowMock,
 }));
 
@@ -43,11 +54,21 @@ vi.mock('../../../../src/core/db/life_reflection', () => ({
   getLifeReflection: getLifeReflectionMock,
   addLifeReflection: addLifeReflectionMock,
   getLatestLifeReflection: getLatestLifeReflectionMock,
+  listLifeReflectionsInWindow: listLifeReflectionsInWindowMock,
 }));
 
 vi.mock('../../../../src/core/db/memory', () => ({
   listLongMemory: listLongMemoryMock,
   addLongMemory: addLongMemoryMock,
+}));
+
+vi.mock('../../../../src/core/db/tasks', () => ({
+  getProactiveTasks: getProactiveTasksMock,
+}));
+
+vi.mock('../../../../src/core/db/todos', () => ({
+  listTodoLists: listTodoListsMock,
+  getTodoListById: getTodoListByIdMock,
 }));
 
 const makeEpisode = (overrides: Partial<LifeEpisodeRecord> = {}): LifeEpisodeRecord => ({
@@ -91,6 +112,7 @@ describe('life_reflection', () => {
       providerType: 'openai',
       model: 'gpt-4o-mini',
     });
+    getLifeStateMock.mockReturnValue(null);
     listLifeEpisodesInWindowMock.mockReturnValue([
       makeEpisode(),
       makeEpisode({
@@ -112,6 +134,10 @@ describe('life_reflection', () => {
     listLongMemoryMock.mockReturnValue([]);
     addLongMemoryMock.mockReturnValue({ changes: 1 });
     getLatestLifeReflectionMock.mockReturnValue(null);
+    listLifeReflectionsInWindowMock.mockReturnValue([]);
+    getProactiveTasksMock.mockReturnValue([]);
+    listTodoListsMock.mockReturnValue([]);
+    getTodoListByIdMock.mockReturnValue(null);
   });
 
   it('generates and stores an hourly reflection with selective memory writeback', async () => {
@@ -184,17 +210,146 @@ describe('life_reflection', () => {
     expect(addLifeReflectionMock).not.toHaveBeenCalled();
   });
 
-  it('formats the latest stored reflection into a bounded context message', async () => {
-    getLatestLifeReflectionMock.mockReturnValue({
-      id: 'reflection_latest',
-      profile_id: 'identity_1',
-      period_type: 'hour',
-      period_start: '2026-03-21T08:00:00.000Z',
-      period_end: '2026-03-21T09:00:00.000Z',
-      summary: 'The hour stayed coherent around one focused task arc.',
-      insights_json: '["Focused task arcs are the most legible unit of trajectory."]',
-      plan_json: '["Protect a calm follow-up window."]',
-      created_at: '2026-03-21T09:01:00.000Z',
+  it('generates a daily reflection with hourly recap and commitment inputs', async () => {
+    const generateMock = vi.fn().mockResolvedValue({
+      response: JSON.stringify({
+        summary: 'The day was strongest when commitments were made explicit and reviewed against pending work.',
+        insights: ['Pending todo structure created the clearest next-day priorities.'],
+        next_focus: ['Finish the inbox review before scheduling fresh exploration.'],
+        memory_candidate: null,
+        memory_confidence: 'none',
+      }),
+    });
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: generateMock,
+    });
+    listLifeReflectionsInWindowMock.mockReturnValue([
+      {
+        id: 'reflection_hour_1',
+        profile_id: 'identity_1',
+        period_type: 'hour',
+        period_start: '2026-03-21T08:00:00.000Z',
+        period_end: '2026-03-21T09:00:00.000Z',
+        summary: 'Focused work stabilized once the task scope was explicit.',
+        insights_json: '["Clear scope reduced drift."]',
+        plan_json: '["Close the open checklist."]',
+        created_at: '2026-03-21T09:01:00.000Z',
+      },
+    ]);
+    listTodoListsMock.mockReturnValue([
+      {
+        id: 'todo_1',
+        title: 'Inbox',
+        summary: 'Owner-facing follow-ups',
+        item_count: 3,
+        completed_count: 1,
+        pending_count: 2,
+        created_at: '2026-03-20T10:00:00.000Z',
+        updated_at: '2026-03-21T23:00:00.000Z',
+      },
+    ]);
+    getTodoListByIdMock.mockReturnValue({
+      id: 'todo_1',
+      title: 'Inbox',
+      summary: 'Owner-facing follow-ups',
+      item_count: 3,
+      completed_count: 1,
+      pending_count: 2,
+      created_at: '2026-03-20T10:00:00.000Z',
+      updated_at: '2026-03-21T23:00:00.000Z',
+      items: [
+        {
+          id: 'todo_item_1',
+          list_id: 'todo_1',
+          content: 'Reply to owner follow-up',
+          notes: null,
+          status: 'pending',
+          sort_order: 0,
+          completed_at: null,
+          created_at: '2026-03-20T10:00:00.000Z',
+          updated_at: '2026-03-21T23:00:00.000Z',
+        },
+      ],
+    });
+    getProactiveTasksMock.mockReturnValue([
+      {
+        id: 'task_1',
+        name: 'Morning sync',
+        prompt: 'Review overnight changes.',
+        schedule_type: 'interval',
+        interval_minutes: 60,
+        cron_expression: null,
+        schedule_timezone: null,
+        enabled: true,
+        provider_type: 'openai',
+        model: 'gpt-4o-mini',
+        tool_mode: 'auto',
+        tools: null,
+        thread_id: 'thread_1',
+        notify: true,
+        last_run_at: '2026-03-21T22:30:00.000Z',
+        next_run_at: '2026-03-22T01:30:00.000Z',
+        last_status: 'success',
+        last_output: null,
+        last_error: null,
+        created_at: '2026-03-20T00:00:00.000Z',
+        updated_at: '2026-03-21T22:30:00.000Z',
+      },
+    ]);
+
+    const { runDueDailyLifeReflections } = await import(
+      '../../../../src/main/services/life/life_reflection'
+    );
+
+    const result = await runDueDailyLifeReflections({
+      now: '2026-03-22T02:15:00.000Z',
+      maxWindows: 1,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(addLifeReflectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile_id: 'identity_1',
+        period_type: 'day',
+      })
+    );
+    expect(generateMock).toHaveBeenCalledWith(expect.stringContaining('Hourly reflections'));
+    expect(generateMock).toHaveBeenCalledWith(expect.stringContaining('Inbox'));
+    expect(generateMock).toHaveBeenCalledWith(expect.stringContaining('Morning sync'));
+    expect(addLongMemoryMock).not.toHaveBeenCalled();
+  });
+
+  it('formats recent daily and hourly reflections into one bounded context message', async () => {
+    getLatestLifeReflectionMock.mockImplementation((_profileId: string, periodType?: string) => {
+      if (periodType === 'day') {
+        return {
+          id: 'reflection_day_latest',
+          profile_id: 'identity_1',
+          period_type: 'day',
+          period_start: '2026-03-21T01:00:00.000Z',
+          period_end: '2026-03-22T01:00:00.000Z',
+          summary: 'The day stayed strongest when open commitments were surfaced early.',
+          insights_json: '["Explicit commitment review reduced drift."]',
+          plan_json: '["Finish inbox follow-ups before new proactive work."]',
+          created_at: '2026-03-22T01:05:00.000Z',
+        };
+      }
+
+      if (periodType === 'hour') {
+        return {
+          id: 'reflection_hour_latest',
+          profile_id: 'identity_1',
+          period_type: 'hour',
+          period_start: '2026-03-22T08:00:00.000Z',
+          period_end: '2026-03-22T09:00:00.000Z',
+          summary: 'The hour stayed coherent around one focused task arc.',
+          insights_json: '["Focused task arcs are the most legible unit of trajectory."]',
+          plan_json: '["Protect a calm follow-up window."]',
+          created_at: '2026-03-22T09:01:00.000Z',
+        };
+      }
+
+      return null;
     });
 
     const { getRecentLifeReflectionContextMessage } = await import(
@@ -204,6 +359,9 @@ describe('life_reflection', () => {
     const message = getRecentLifeReflectionContextMessage();
 
     expect(message).toContain('Recent life reflection for iKi:');
+    expect(message).toContain('Daily arc: The day stayed strongest when open commitments were surfaced early.');
+    expect(message).toContain('Explicit commitment review reduced drift.');
+    expect(message).toContain('Finish inbox follow-ups before new proactive work.');
     expect(message).toContain('Hourly recap: The hour stayed coherent around one focused task arc.');
     expect(message).toContain('Focused task arcs are the most legible unit of trajectory.');
     expect(message).toContain('Protect a calm follow-up window.');

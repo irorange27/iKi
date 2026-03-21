@@ -23,7 +23,7 @@ import {
   serializeLifeStateEnvelope,
 } from './life_activity_engine';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
-import { runDueHourlyLifeReflections } from './life_reflection';
+import { runDueDailyLifeReflections, runDueHourlyLifeReflections } from './life_reflection';
 
 const LIFE_TICK_MS = 60_000;
 const DEFAULT_BUDGETS = {
@@ -384,6 +384,7 @@ const tick = async () => {
     const snapshot = reconcileLifeState({ type: 'tick' });
     if (snapshot) {
       await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
+      await runDueDailyLifeReflections({ now: snapshot.state.updated_at });
     }
   } catch (error) {
     console.warn('[Life] tick failed:', error);
@@ -399,7 +400,10 @@ export const startLifeRuntime = () => {
   }, LIFE_TICK_MS);
   const snapshot = reconcileLifeState({ type: 'runtime-start' });
   if (snapshot) {
-    void runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
+    void (async () => {
+      await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
+      await runDueDailyLifeReflections({ now: snapshot.state.updated_at });
+    })();
   }
 };
 
@@ -438,6 +442,7 @@ export const refreshLifeRuntime = async (): Promise<LifeSnapshot | null> => {
   });
   if (snapshot) {
     await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
+    await runDueDailyLifeReflections({ now: snapshot.state.updated_at });
   }
   return snapshot;
 };

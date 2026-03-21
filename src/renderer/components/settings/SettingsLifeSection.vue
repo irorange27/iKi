@@ -114,8 +114,8 @@
     <div class="settings-card">
       <div class="card-title">Recent Reflections</div>
       <p class="card-help">
-        Hourly recap windows generated from the episode trajectory. These are sparse synthesis
-        records, not chat messages.
+        Hourly and daily synthesis windows generated from the life trajectory and active
+        commitments. These are structured recap records, not chat messages.
       </p>
 
       <div v-if="recentReflections.length === 0" class="tasks-empty">No reflections yet.</div>
@@ -143,7 +143,9 @@
           </div>
 
           <div v-if="parseList(reflection.plan_json).length > 0" class="life-summary-block mini-block">
-            <div class="life-summary-label">Next Focus</div>
+            <div class="life-summary-label">
+              {{ reflection.period_type === 'day' ? 'Next Day' : 'Next Focus' }}
+            </div>
             <div class="life-list">
               <div v-for="item in parseList(reflection.plan_json)" :key="item">{{ item }}</div>
             </div>
