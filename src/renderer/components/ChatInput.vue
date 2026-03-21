@@ -93,9 +93,41 @@
               </span>
             </div>
             <button
-              class="composer-icon-btn ui-text-secondary h-8 w-8 rounded-lg flex items-center justify-center"
+              class="composer-icon-btn composer-mode-btn h-8 w-8 rounded-lg flex items-center justify-center"
+              :class="props.isIncognito ? 'is-incognito ui-text-accent' : 'ui-text-secondary'"
+              :aria-label="incognitoAriaLabel"
+              :aria-pressed="props.isIncognito"
+              :title="incognitoTooltip"
+              :disabled="isLoading || isStopping"
+              @click="toggleIncognitoMode"
             >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                v-if="props.isIncognito"
+                class="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 3l18 18"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M10.58 10.58A3 3 0 0012 15a3 3 0 002.42-1.22"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9.88 5.09A10.94 10.94 0 0112 5c4.48 0 8.27 2.94 9.54 7a11.92 11.92 0 01-4.13 5.36M6.1 6.1A11.96 11.96 0 002.46 12a11.95 11.95 0 005.17 6.37A10.88 10.88 0 0012 19c1.78 0 3.46-.39 4.96-1.09"
+                />
+              </svg>
+              <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -210,10 +242,11 @@ import { Chat } from '@ai-sdk/vue';
 import type { UIMessage } from 'ai';
 import type { Provider } from '../../shared/types/provider';
 import { getErrorMessage } from '../../shared/utils/errors';
-import { parseModelList } from '../../shared/utils/provider_models';
 import { toUiMessages } from '../modules/chat/ui_message_convert';
-import { getProviderDisplayName } from '../modules/providers/provider_display';
+import { isTextPart } from '../modules/chat/ui_message_text';
+import { useChatProviderSelection } from '../composables/useChatProviderSelection';
 import { useSpeechInput } from '../composables/useSpeechInput';
+import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import ChatModelSelector from './ChatModelSelector.vue';
 import ToolSelector from './ToolSelector.vue';
 import SkillSelector from './SkillSelector.vue';
@@ -228,12 +261,14 @@ const emit = defineEmits<{
     mcpServerIds?: string[],
     onReady?: () => void
   ): void;
+  (event: 'incognito-changed', value: boolean): void;
   (event: 'model-selected', payload: { model: string; provider: Provider }): void;
 }>();
 
 const props = defineProps<{
   chat?: Chat<UIMessage>;
   threadId?: string;
+  isIncognito?: boolean;
   contextUsage?: {
     usedTokens: number;
     budgetTokens: number | null;
@@ -248,147 +283,42 @@ const inputRef = ref<HTMLInputElement | null>(null);
 const message = ref('');
 const isLoading = ref(false);
 const isStopping = ref(false);
-const selectedProvider = ref<Provider | null>(null);
-const selectedModel = ref('');
-const availableProviders = ref<Provider[]>([]);
 const isComposing = ref(false);
 const justEndedComposition = ref(false);
-const selectedTools = ref<string[]>([]);
-const selectedMcpServerIds = ref<string[]>([]);
 const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
-const toolMode = ref<'manual' | 'auto'>('auto');
-const isAutoToolMode = computed(() => toolMode.value === 'auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
+const incognitoAriaLabel = computed(() =>
+  props.isIncognito ? 'Disable incognito mode' : 'Enable incognito mode'
+);
+const incognitoTooltip = computed(() =>
+  props.isIncognito
+    ? 'Incognito is on. Memory is disabled for this chat.'
+    : 'Incognito is off. Memory is enabled for this chat.'
+);
 
-type ThreadToolSelectionState = {
-  mode?: 'manual' | 'auto';
-  mcpServerIds: string[];
-};
+const {
+  selectedProvider,
+  selectedModel,
+  availableProviders,
+  loadAvailableProviders,
+  selectProviderModel,
+  ensureProviderReady,
+} = useChatProviderSelection({
+  electronAPI,
+});
 
-const parseStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-
-  const resolved: string[] = [];
-  const seen = new Set<string>();
-
-  for (const item of value) {
-    if (typeof item !== 'string') continue;
-    const trimmed = item.trim();
-    if (!trimmed || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    resolved.push(trimmed);
-  }
-
-  return resolved;
-};
-
-const isTextMessagePart = (part: unknown, expectedText: string): boolean =>
-  !!part &&
-  typeof part === 'object' &&
-  'type' in part &&
-  'text' in part &&
-  (part as { type?: unknown }).type === 'text' &&
-  (part as { text?: unknown }).text === expectedText;
-
-const parseThreadToolSelectionState = (metadataRaw: unknown): ThreadToolSelectionState => {
-  if (!metadataRaw || typeof metadataRaw !== 'object') {
-    return { mcpServerIds: [] };
-  }
-
-  const metadata = metadataRaw as { toolSelection?: unknown };
-  const toolSelection =
-    metadata.toolSelection && typeof metadata.toolSelection === 'object'
-      ? (metadata.toolSelection as { mode?: unknown; mcpServerIds?: unknown })
-      : null;
-
-  return {
-    mode:
-      toolSelection?.mode === 'auto' || toolSelection?.mode === 'manual'
-        ? toolSelection.mode
-        : undefined,
-    mcpServerIds: parseStringArray(toolSelection?.mcpServerIds),
-  };
-};
-
-const deriveMcpServerIdsFromToolNames = async (toolNames: string[]): Promise<string[]> => {
-  const normalizedToolNames = new Set(parseStringArray(toolNames));
-  if (normalizedToolNames.size === 0) return [];
-
-  try {
-    const tools = await electronAPI.tools.list();
-    if (!Array.isArray(tools)) return [];
-
-    const resolvedServerIds = new Set<string>();
-    for (const tool of tools) {
-      if (!tool || typeof tool !== 'object') continue;
-      const name = typeof tool.name === 'string' ? tool.name.trim() : '';
-      const source =
-        tool.source && typeof tool.source === 'object'
-          ? (tool.source as { kind?: unknown; id?: unknown })
-          : null;
-      if (!name || !normalizedToolNames.has(name)) continue;
-      if (source?.kind !== 'mcp' || typeof source.id !== 'string' || !source.id.trim()) continue;
-      resolvedServerIds.add(source.id.trim());
-    }
-
-    return Array.from(resolvedServerIds);
-  } catch (error) {
-    console.error('Failed to derive MCP server ids from tools:', error);
-    return [];
-  }
-};
-
-const resolveSelectedMcpServerIds = async (): Promise<string[]> => {
-  if (selectedMcpServerIds.value.length > 0) {
-    return parseStringArray(selectedMcpServerIds.value);
-  }
-  return await deriveMcpServerIdsFromToolNames(selectedTools.value);
-};
-
-const syncToolSelectionFromThread = async (threadId?: string) => {
-  const normalizedThreadId = typeof threadId === 'string' ? threadId.trim() : '';
-  if (!normalizedThreadId || isLoading.value) return;
-
-  try {
-    const thread = await electronAPI.chat.threads.get(normalizedThreadId);
-    if (!thread) return;
-
-    const persistedTools = parseStringArray(
-      typeof thread.tools === 'string' ? JSON.parse(thread.tools) : []
-    );
-
-    let parsedMetadata: unknown = {};
-    if (typeof thread.metadata === 'string' && thread.metadata.trim()) {
-      try {
-        parsedMetadata = JSON.parse(thread.metadata);
-      } catch {
-        parsedMetadata = {};
-      }
-    }
-
-    const selectionState = parseThreadToolSelectionState(parsedMetadata);
-    const resolvedMcpServerIds =
-      selectionState.mcpServerIds.length > 0
-        ? selectionState.mcpServerIds
-        : await deriveMcpServerIdsFromToolNames(persistedTools);
-    const hasPersistedSelection =
-      persistedTools.length > 0 ||
-      resolvedMcpServerIds.length > 0 ||
-      selectionState.mode === 'auto' ||
-      selectionState.mode === 'manual';
-
-    if (!hasPersistedSelection) return;
-
-    selectedTools.value = persistedTools;
-    selectedMcpServerIds.value = resolvedMcpServerIds;
-    if (selectionState.mode) {
-      toolMode.value = selectionState.mode;
-    }
-  } catch (error) {
-    console.error('Failed to sync tool selection from thread:', error);
-  }
-};
+const {
+  selectedTools,
+  selectedMcpServerIds,
+  toolMode,
+  isAutoToolMode,
+  syncToolSelectionFromThread,
+  resolveSelectedMcpServerIds,
+} = useThreadToolSelection({
+  electronAPI,
+  isLoading,
+});
 
 const {
   isRecording,
@@ -403,47 +333,14 @@ const {
   stopVoiceInput,
 } = useSpeechInput({ inputRef, message });
 
-const loadAvailableProviders = async () => {
-  try {
-    const providers = await electronAPI.providers.list();
-    const normalizedProviders = Array.isArray(providers)
-      ? (providers.filter((provider: Provider) => provider?.enabled) as Provider[])
-      : [];
-
-    availableProviders.value = normalizedProviders;
-
-    if (normalizedProviders.length === 0) {
-      selectedProvider.value = null;
-      selectedModel.value = '';
-      return;
-    }
-
-    const previousProviderId = selectedProvider.value?.id;
-    const previousProvider = normalizedProviders.find(
-      provider => provider.id === previousProviderId
-    );
-    const previousProviderModels = previousProvider ? parseModelList(previousProvider.models) : [];
-    const nextSelectedProvider =
-      (previousProvider && previousProviderModels.length > 0 ? previousProvider : null) ||
-      normalizedProviders.find(provider => parseModelList(provider.models).length > 0) ||
-      previousProvider ||
-      normalizedProviders[0];
-    const availableProviderModels = parseModelList(nextSelectedProvider.models);
-
-    selectedProvider.value = nextSelectedProvider;
-    if (!availableProviderModels.includes(selectedModel.value)) {
-      selectedModel.value = availableProviderModels[0] || '';
-    }
-  } catch (e) {
-    console.error('Failed to load providers:', e);
-  }
+const handleProviderModelSelect = (payload: { provider: Provider; model: string }) => {
+  selectProviderModel(payload);
+  emit('model-selected', payload);
 };
 
-const handleProviderModelSelect = (payload: { provider: Provider; model: string }) => {
-  const { provider, model } = payload;
-  selectedProvider.value = provider;
-  selectedModel.value = model;
-  emit('model-selected', { provider, model });
+const toggleIncognitoMode = () => {
+  if (isLoading.value || isStopping.value) return;
+  emit('incognito-changed', !props.isIncognito);
 };
 
 watch(
@@ -529,21 +426,9 @@ const sendMessage = async () => {
   }
   if (!message.value.trim() || isLoading.value) return;
 
-  if (!selectedProvider.value) {
-    alert('Please configure a provider in Settings first.');
-    return;
-  }
-
-  // Re-check provider status each time
-  const configured = await electronAPI.chat.isProviderConfigured(selectedProvider.value.type);
-  const selectedProviderName = getProviderDisplayName(selectedProvider.value);
-  if (!configured) {
-    alert(`Please configure the ${selectedProviderName} API key in Settings.`);
-    return;
-  }
-
-  if (!selectedModel.value.trim()) {
-    alert(`Please add at least one model for ${selectedProviderName} in Settings.`);
+  const providerReady = await ensureProviderReady();
+  if (providerReady.ok === false) {
+    alert(providerReady.message);
     return;
   }
 
@@ -566,7 +451,7 @@ const sendMessage = async () => {
     emit(
       'message-sent',
       userMessage,
-      selectedModel.value,
+      providerReady.model,
       selectedTools.value,
       resolvedMcpServerIds,
       done
@@ -586,7 +471,7 @@ const sendMessage = async () => {
       lastMessage &&
       lastMessage.role === 'user' &&
       Array.isArray(lastMessage.parts) &&
-      lastMessage.parts.some((part: unknown) => isTextMessagePart(part, userMessage));
+      lastMessage.parts.some((part: unknown) => isTextPart(part) && part.text === userMessage);
 
     // If user message is not in chat.messages yet, include it manually
     const messagesToConvert = userMessageInChat
@@ -611,8 +496,8 @@ const sendMessage = async () => {
 
     // Start streaming via IPC
     const streamResult = await electronAPI.chat.stream({
-      providerType: selectedProvider.value.type,
-      model: selectedModel.value,
+      providerType: providerReady.provider.type,
+      model: providerReady.model,
       messages: transportMessages,
       tools: isAutoToolMode.value
         ? undefined
@@ -778,6 +663,11 @@ button {
   opacity: 0.78;
   border-color: var(--chat-composer-control-disabled-border-color);
   background: var(--chat-composer-control-disabled-background);
+}
+
+.composer-mode-btn.is-incognito {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .speech-btn-unavailable {

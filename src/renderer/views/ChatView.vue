@@ -59,8 +59,10 @@
           ref="chatInputRef"
           :chat="chat"
           :thread-id="currentThread?.id || ''"
+          :is-incognito="isIncognito"
           :context-usage="composerContextUsage"
           @message-sent="handleMessageSent"
+          @incognito-changed="handleIncognitoChanged"
           @model-selected="handleModelSelected"
         />
       </div>
@@ -151,6 +153,7 @@ const scrollToBottom = () => {
 const {
   currentThread,
   currentModel,
+  isIncognito,
   selectedTools,
   showWelcome,
   refreshThreads,
@@ -159,6 +162,7 @@ const {
   handleThreadDeleted: handleThreadDeletedBase,
   handleNewChat: handleNewChatBase,
   handleModelSelected,
+  setIncognito,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
   handleTaskPush,
@@ -169,6 +173,10 @@ const {
   sidebarRef,
   scrollToBottom,
 });
+
+const handleIncognitoChanged = async (nextValue: boolean) => {
+  await setIncognito(nextValue);
+};
 
 const streaming = useChatStreaming({
   electronAPI,

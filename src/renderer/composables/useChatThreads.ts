@@ -5,16 +5,12 @@ import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
 import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
 import { extractTextFromMessage } from '../modules/chat/ui_message_text';
 import { isObjectRecord } from '../../shared/utils/guards';
-import type { ChatMessage } from '../../shared/types/chat';
+import type { ChatMessage, ChatThread as StoredChatThread } from '../../shared/types/chat';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 
-export type ChatThread = {
-  id: string;
-  title: string;
-  model?: string;
-};
+export type ChatThread = StoredChatThread;
 
 type SidebarController = {
   refresh?: () => Promise<void> | void;
@@ -32,10 +28,15 @@ export const useChatThreads = (deps: {
 }) => {
   const currentThread = ref<ChatThread | null>(null);
   const currentModel = ref<string>('');
+  const isIncognito = ref(false);
   const selectedTools = ref<string[]>([]);
   const showWelcome = ref(true);
 
   const getCurrentThreadId = () => currentThread.value?.id || null;
+
+  const syncIncognitoState = (thread: ChatThread | null) => {
+    isIncognito.value = Boolean(thread?.is_incognito);
+  };
 
   const refreshThreads = async () => {
     if (deps.sidebarRef.value?.refresh) {
@@ -145,8 +146,10 @@ export const useChatThreads = (deps: {
         title: 'New Chat',
         model: model || null,
         metadata: JSON.stringify({}),
+        is_incognito: isIncognito.value ? 1 : 0,
       });
       currentThread.value = thread;
+      syncIncognitoState(thread);
       deps.messageStore.clear();
       deps.persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
@@ -202,6 +205,7 @@ export const useChatThreads = (deps: {
       }
 
       currentThread.value = thread;
+      syncIncognitoState(thread);
       showWelcome.value = false;
       await loadThreadMessages(threadId);
 
@@ -218,6 +222,7 @@ export const useChatThreads = (deps: {
 
     currentThread.value = null;
     currentModel.value = '';
+    isIncognito.value = false;
     deps.messageStore.clear();
     deps.persistence.resetPersistedMessageIds();
     resetToolUiStateMap();
@@ -236,6 +241,31 @@ export const useChatThreads = (deps: {
     currentModel.value = data.model;
     if (currentThread.value) {
       deps.electronAPI.chat.threads.update(currentThread.value.id, { model: data.model });
+    }
+  };
+
+  const setIncognito = async (nextValue: boolean) => {
+    const normalizedValue = Boolean(nextValue);
+    const previousValue = isIncognito.value;
+    const activeThread = currentThread.value;
+
+    isIncognito.value = normalizedValue;
+    if (activeThread) {
+      activeThread.is_incognito = normalizedValue ? 1 : 0;
+    }
+
+    if (!activeThread) return;
+
+    try {
+      await deps.electronAPI.chat.threads.update(activeThread.id, {
+        is_incognito: normalizedValue ? 1 : 0,
+      });
+    } catch (error) {
+      console.error('Failed to update thread incognito state:', error);
+      isIncognito.value = previousValue;
+      if (currentThread.value?.id === activeThread.id) {
+        currentThread.value.is_incognito = previousValue ? 1 : 0;
+      }
     }
   };
 
@@ -266,6 +296,7 @@ export const useChatThreads = (deps: {
   return {
     currentThread,
     currentModel,
+    isIncognito,
     selectedTools,
     showWelcome,
     getCurrentThreadId,
@@ -277,6 +308,7 @@ export const useChatThreads = (deps: {
     updateThreadTitleById,
     handleNewChat,
     handleModelSelected,
+    setIncognito,
     handleAssistantMessagePersisted,
     handleTaskPush,
   };

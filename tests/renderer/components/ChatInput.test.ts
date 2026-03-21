@@ -44,6 +44,7 @@ const createElectronApi = (options?: {
     tools?: string | null;
     metadata?: string | null;
     model?: string | null;
+    is_incognito?: number;
   } | null;
 }) => {
   const stream = vi.fn(async () => ({ success: true }));
@@ -56,6 +57,7 @@ const createElectronApi = (options?: {
         stream,
         threads: {
           get: vi.fn(async () => options?.thread ?? null),
+          update: vi.fn(async () => ({})),
         },
       },
       providers: {
@@ -81,6 +83,7 @@ const mountChatInput = async (options?: {
     tools?: string | null;
     metadata?: string | null;
     model?: string | null;
+    is_incognito?: number;
   } | null;
   props?: Record<string, unknown>;
 }) => {
@@ -261,5 +264,34 @@ describe('ChatInput', () => {
         mcpServerIds: ['docs_server'],
       })
     );
+  });
+
+  it('reflects incognito state and emits explicit toggle requests', async () => {
+    const { wrapper } = await mountChatInput({
+      props: {
+        isIncognito: false,
+      },
+    });
+
+    const modeButton = wrapper.find('.composer-mode-btn');
+    expect(modeButton.attributes('aria-pressed')).toBe('false');
+    expect(modeButton.attributes('title')).toContain('Memory is enabled');
+
+    await modeButton.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('incognito-changed')).toEqual([[true]]);
+
+    await wrapper.setProps({ isIncognito: true });
+    await flushPromises();
+
+    expect(modeButton.classes()).toContain('is-incognito');
+    expect(modeButton.attributes('aria-pressed')).toBe('true');
+    expect(modeButton.attributes('title')).toContain('Memory is disabled');
+
+    await modeButton.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('incognito-changed')).toEqual([[true], [false]]);
   });
 });
