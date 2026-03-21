@@ -1,19 +1,10 @@
 import type { UIMessage } from 'ai';
+import type { ElectronApi } from '../../../shared/types/electron_api';
 import type { ChatMessageStore } from './chat_message_store';
-
-type ElectronAPI = {
-  chat: {
-    messages: {
-      create: (input: Record<string, unknown>) => Promise<{ id?: string } | null>;
-      update: (id: string, input: Record<string, unknown>) => Promise<unknown>;
-      delete: (id: string) => Promise<unknown>;
-    };
-  };
-};
 
 export type UiMessagePersistence = ReturnType<typeof createUiMessagePersistence>;
 
-export const createUiMessagePersistence = (deps: { electronAPI: ElectronAPI }) => {
+export const createUiMessagePersistence = (deps: { electronAPI: Pick<ElectronApi, 'chat'> }) => {
   const persistedMessageIds = new Set<string>();
   const messagePersistInFlight = new Map<string, Promise<void>>();
 

@@ -11,23 +11,11 @@ import {
   isTextPart,
 } from '../modules/chat/ui_message_text';
 import { isObjectRecord } from '../../shared/utils/guards';
+import type { ElectronApi } from '../../shared/types/electron_api';
 import type { ChatThread } from './useChatThreads';
 
-type ElectronApi = {
-  chat: {
-    stopStream: () => Promise<unknown>;
-    approveTool: (
-      approvalId: string,
-      approved: boolean
-    ) => Promise<{ success?: boolean; error?: string }>;
-    threads: {
-      update: (id: string, thread: Partial<ChatThread>) => Promise<unknown>;
-    };
-  };
-};
-
 export const useChatStreaming = (deps: {
-  electronAPI: ElectronApi;
+  electronAPI: Pick<ElectronApi, 'chat'>;
   messageStore: ChatMessageStore;
   persistence: UiMessagePersistence;
   createMessageId: () => string;

@@ -162,9 +162,6 @@ import type { AppConfig } from '../../../shared/types/config';
 import type { SkillSummary } from '../../../shared/types/skill';
 import { getErrorMessage } from '../../../shared/utils/errors';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 const emit = defineEmits<{
   (event: 'config-change'): void;
 }>();
@@ -172,6 +169,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -198,13 +196,13 @@ const updateWorkflowOptimization = <K extends keyof AppConfig['workflowOptimizat
 
 const resetWorkflowOptimization = async () => {
   workflowResetError.value = '';
-  if (!window?.electronAPI?.workflow?.resetAutoPinnedSkills) {
+  if (!electronAPI?.workflow?.resetAutoPinnedSkills) {
     workflowResetError.value = 'Workflow reset unavailable.';
     return;
   }
   workflowResetting.value = true;
   try {
-    const result = await window.electronAPI.workflow.resetAutoPinnedSkills();
+    const result = await electronAPI.workflow.resetAutoPinnedSkills();
     if (!result?.success) {
       workflowResetError.value = result?.error || 'Failed to reset workflow data.';
     }
@@ -217,7 +215,7 @@ const resetWorkflowOptimization = async () => {
 
 const loadSkillRoots = async () => {
   try {
-    const roots = await window.electronAPI.skills.roots();
+    const roots = await electronAPI.skills.roots();
     skillRoots.value = Array.isArray(roots) ? roots : [];
   } catch {
     skillRoots.value = [];
@@ -228,7 +226,7 @@ const refreshSkills = async () => {
   skillsLoading.value = true;
   skillsError.value = '';
   try {
-    const list = await window.electronAPI.skills.list();
+    const list = await electronAPI.skills.list();
     skills.value = Array.isArray(list) ? list : [];
   } catch (error: unknown) {
     skillsError.value = `Failed to load skills: ${getErrorMessage(error)}`;
@@ -240,7 +238,7 @@ const refreshSkills = async () => {
 
 const openSkillsFolder = async (source?: 'user' | 'codex') => {
   try {
-    const result = await window.electronAPI.skills.openRoot(source);
+    const result = await electronAPI.skills.openRoot(source);
     if (result?.success === false) {
       skillsError.value = result?.error || 'Failed to open skills folder';
     }
@@ -251,7 +249,7 @@ const openSkillsFolder = async (source?: 'user' | 'codex') => {
 
 const openSkillFolder = async (id: string) => {
   try {
-    const result = await window.electronAPI.skills.openSkill(id);
+    const result = await electronAPI.skills.openSkill(id);
     if (result?.success === false) {
       skillsError.value = result?.error || 'Failed to open skill folder';
     }
@@ -277,7 +275,7 @@ const toggleSkillContent = async (id: string) => {
 
   skillContentLoading.value = { ...skillContentLoading.value, [id]: true };
   try {
-    const result = await window.electronAPI.skills.read(id, { maxChars: 20000 });
+    const result = await electronAPI.skills.read(id, { maxChars: 20000 });
     if (result?.success === false) {
       skillsError.value = result?.error || 'Failed to read skill content';
       skillContents.value = { ...skillContents.value, [id]: '' };

@@ -2,9 +2,6 @@ import { computed, nextTick, onUnmounted, ref } from 'vue';
 import type { Ref } from 'vue';
 import type { SpeechStatus } from '../../shared/types/speech';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 type SpeechInputOptions = {
   inputRef: Ref<HTMLInputElement | null>;
   message: Ref<string>;
@@ -27,6 +24,7 @@ type SpeechInputState = {
 const WAVEFORM_BAR_COUNT = 5;
 
 export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): SpeechInputState => {
+  const electronAPI = window.electronAPI;
   const speechStatus = ref<SpeechStatus | null>(null);
   const isRecording = ref(false);
   const isTranscribing = ref(false);
@@ -59,12 +57,12 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
   );
 
   const loadSpeechStatus = async () => {
-    if (!window?.electronAPI?.speech?.getStatus) {
+    if (!electronAPI?.speech?.getStatus) {
       speechStatus.value = { available: false, reason: 'Speech service unavailable' };
       return;
     }
     try {
-      speechStatus.value = await window.electronAPI.speech.getStatus();
+      speechStatus.value = await electronAPI.speech.getStatus();
     } catch (error) {
       console.error('Failed to load speech status:', error);
       speechStatus.value = { available: false, reason: 'Speech service unavailable' };
@@ -166,7 +164,9 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
   const startWaveform = (stream?: MediaStream | null) => {
     stopWaveform();
     resetWaveformBars();
-    const AudioContextCtor = window?.AudioContext || window?.webkitAudioContext;
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!stream || !AudioContextCtor) return;
     try {
       waveformAudioContext = new AudioContextCtor();
@@ -250,7 +250,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
 
   const transcribeRecording = async (blob: Blob) => {
     if (!blob || blob.size === 0) return;
-    if (!window?.electronAPI?.speech?.transcribe) {
+    if (!electronAPI?.speech?.transcribe) {
       setSpeechError('Speech service unavailable');
       return;
     }
@@ -262,7 +262,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         providerType === 'openai'
           ? speechStatus.value?.language || getTranscriptionLanguage()
           : speechStatus.value?.language;
-      const result = await window.electronAPI.speech.transcribe({
+      const result = await electronAPI.speech.transcribe({
         audioBase64,
         mimeType: blob.type || 'audio/webm',
         language: languageHint,

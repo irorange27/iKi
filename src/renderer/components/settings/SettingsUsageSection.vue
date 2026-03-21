@@ -133,12 +133,10 @@ import type {
 } from '../../../shared/types/chat_usage';
 import { getErrorMessage } from '../../../shared/utils/errors';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 const props = defineProps<{
   active: boolean;
 }>();
+const electronAPI = window.electronAPI;
 
 const usagePeriod = ref<ChatUsagePeriod>('30d');
 const usageSummary = ref<ChatUsageSummary | null>(null);
@@ -240,14 +238,14 @@ const getMonthlyCostBarStyle = (cost: number): Record<string, string> => {
 const loadUsageSummary = async () => {
   usageLoading.value = true;
   usageError.value = '';
-  if (!window?.electronAPI?.chat?.usage?.summary) {
+  if (!electronAPI?.chat?.usage?.summary) {
     usageError.value = 'Usage service unavailable.';
     usageLoading.value = false;
     return;
   }
 
   try {
-    usageSummary.value = await window.electronAPI.chat.usage.summary(usagePeriod.value);
+    usageSummary.value = await electronAPI.chat.usage.summary(usagePeriod.value);
   } catch (error: unknown) {
     usageError.value = `Failed to load usage: ${getErrorMessage(error)}`;
   } finally {

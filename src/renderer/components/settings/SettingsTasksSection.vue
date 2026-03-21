@@ -263,9 +263,6 @@ import {
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { formatTimestamp } from './settings_formatters';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 type ProviderModels = {
   id: string;
   name: string;
@@ -277,6 +274,7 @@ const props = defineProps<{
   active: boolean;
   providers: ProviderModels[];
 }>();
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 const proactiveTasks = ref<ProactiveTask[]>([]);
 const tasksLoading = ref(false);
@@ -346,7 +344,7 @@ const taskAvailableModels = computed(() => {
 
 const loadTaskThreads = async () => {
   try {
-    const threads = await window.electronAPI.chat.threads.list();
+    const threads = await electronAPI.chat.threads.list();
     taskThreads.value = Array.isArray(threads) ? threads : [];
   } catch {
     taskThreads.value = [];
@@ -357,7 +355,7 @@ const loadProactiveTasks = async () => {
   tasksLoading.value = true;
   tasksError.value = '';
   try {
-    const list = await window.electronAPI.tasks.list();
+    const list = await electronAPI.tasks.list();
     proactiveTasks.value = Array.isArray(list) ? list : [];
   } catch (error: unknown) {
     tasksError.value = `Failed to load tasks: ${getErrorMessage(error)}`;
@@ -438,7 +436,7 @@ const createProactiveTask = async () => {
 
   taskCreateLoading.value = true;
   try {
-    const result = await window.electronAPI.tasks.create({
+    const result = await electronAPI.tasks.create({
       name,
       prompt,
       provider_type: form.provider_type,
@@ -477,7 +475,7 @@ const runTaskNow = async (task: ProactiveTask) => {
   if (taskRunLoading.value[task.id]) return;
   taskRunLoading.value = { ...taskRunLoading.value, [task.id]: true };
   try {
-    const result = await window.electronAPI.tasks.runNow(task.id);
+    const result = await electronAPI.tasks.runNow(task.id);
     if (result?.success === false) {
       tasksError.value = result?.error || 'Task run failed.';
     }
@@ -494,7 +492,7 @@ const deleteTask = async (task: ProactiveTask) => {
   const confirmed = window.confirm(`Delete task "${task.name}"?\nThis cannot be undone.`);
   if (!confirmed) return;
   try {
-    const result = await window.electronAPI.tasks.delete(task.id);
+    const result = await electronAPI.tasks.delete(task.id);
     if (result?.success === false) {
       tasksError.value = result?.error || 'Failed to delete task.';
       return;
@@ -507,7 +505,7 @@ const deleteTask = async (task: ProactiveTask) => {
 
 const toggleTaskEnabled = async (task: ProactiveTask, enabled: boolean) => {
   try {
-    const result = await window.electronAPI.tasks.update(task.id, { enabled });
+    const result = await electronAPI.tasks.update(task.id, { enabled });
     if (result?.success === false) {
       tasksError.value = result?.error || 'Failed to update task.';
       return;
@@ -520,7 +518,7 @@ const toggleTaskEnabled = async (task: ProactiveTask, enabled: boolean) => {
 
 const toggleTaskNotify = async (task: ProactiveTask, notify: boolean) => {
   try {
-    const result = await window.electronAPI.tasks.update(task.id, { notify });
+    const result = await electronAPI.tasks.update(task.id, { notify });
     if (result?.success === false) {
       tasksError.value = result?.error || 'Failed to update task.';
       return;
@@ -538,7 +536,7 @@ const updateTaskInterval = async (task: ProactiveTask, raw: string) => {
     return;
   }
   try {
-    const result = await window.electronAPI.tasks.update(task.id, { interval_minutes: next });
+    const result = await electronAPI.tasks.update(task.id, { interval_minutes: next });
     if (result?.success === false) {
       tasksError.value = result?.error || 'Failed to update task.';
       return;
@@ -556,7 +554,7 @@ const updateTaskCron = async (task: ProactiveTask, raw: string) => {
     return;
   }
   try {
-    const result = await window.electronAPI.tasks.update(task.id, {
+    const result = await electronAPI.tasks.update(task.id, {
       cron_expression: cron,
     });
     if (result?.success === false) {
@@ -572,7 +570,7 @@ const updateTaskCron = async (task: ProactiveTask, raw: string) => {
 const updateTaskTimezone = async (task: ProactiveTask, raw: string) => {
   const timezone = raw.trim();
   try {
-    const result = await window.electronAPI.tasks.update(task.id, {
+    const result = await electronAPI.tasks.update(task.id, {
       schedule_timezone: timezone || null,
     });
     if (result?.success === false) {
@@ -622,8 +620,8 @@ watch(
 
 onMounted(() => {
   try {
-    window.electronAPI.tasks.removeAllListeners?.();
-    window.electronAPI.tasks.onPush((payload: unknown) => {
+    electronAPI.tasks.removeAllListeners?.();
+    electronAPI.tasks.onPush((payload: unknown) => {
       if (isTaskPushPayload(payload) && payload.type === 'task-result') {
         void loadProactiveTasks();
       }
@@ -635,7 +633,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   try {
-    window.electronAPI.tasks.removeAllListeners?.();
+    electronAPI.tasks.removeAllListeners?.();
   } catch {
     // ignore
   }

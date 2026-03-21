@@ -6,37 +6,20 @@ import type {
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from '../../shared/types/config';
+import type { ElectronApi } from '../../shared/types/electron_api';
 
 type ConfigUpdatedHandler = (config: AppConfig) => void;
 
-type ElectronConfigApi = {
-  get: () => Promise<AppConfig>;
-  getRuntimeInfo?: () => Promise<ConfigRuntimeInfo>;
-  getDaemonStatus?: () => Promise<DaemonStatusInfo>;
-  getDaemonLogs?: (limit?: number) => Promise<DaemonLogsInfo>;
-  controlDaemon?: (action: DaemonControlAction) => Promise<DaemonControlResult>;
-  set: (config: AppConfig) => Promise<unknown>;
-  onUpdated: (callback: ConfigUpdatedHandler) => void;
-};
-
-type WindowWithElectronApi = Window & {
-  electronAPI?: {
-    config?: ElectronConfigApi;
-  };
-};
-
-const getWindow = (): WindowWithElectronApi | undefined => {
-  if (typeof window === 'undefined') return undefined;
-  return window as WindowWithElectronApi;
-};
+type ElectronConfigApi = ElectronApi['config'];
 
 const getElectronConfigApi = (): ElectronConfigApi | null => {
-  const api = getWindow()?.electronAPI?.config;
+  if (typeof window === 'undefined') return null;
+  const api = window.electronAPI?.config;
   if (!api) return null;
   if (typeof api.get !== 'function') return null;
   if (typeof api.set !== 'function') return null;
   if (typeof api.onUpdated !== 'function') return null;
-  return api as ElectronConfigApi;
+  return api;
 };
 
 const noop = (): void => undefined;

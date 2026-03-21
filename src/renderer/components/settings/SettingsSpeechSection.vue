@@ -245,9 +245,6 @@ import type {
 } from '../../../shared/types/speech';
 import { getErrorMessage } from '../../../shared/utils/errors';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 const emit = defineEmits<{
   (event: 'config-change'): void;
   (event: 'reset'): void;
@@ -256,6 +253,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 type WhisperDownloadStage = 'idle' | 'downloading' | 'compiling' | 'done' | 'error';
 type WhisperDownloadProgressState = {
@@ -364,7 +362,7 @@ const updateSpeech = <K extends keyof AppConfig['speech']>(
 
 const loadSpeechStatus = async () => {
   speechStatusLoading.value = true;
-  if (!window?.electronAPI?.speech?.getStatus) {
+  if (!electronAPI?.speech?.getStatus) {
     speechStatus.value = {
       available: false,
       enabled: false,
@@ -374,7 +372,7 @@ const loadSpeechStatus = async () => {
     return;
   }
   try {
-    speechStatus.value = await window.electronAPI.speech.getStatus();
+    speechStatus.value = await electronAPI.speech.getStatus();
   } catch (error: unknown) {
     speechStatus.value = {
       available: false,
@@ -399,13 +397,13 @@ const scheduleSpeechStatusRefresh = () => {
 const loadWhisperModels = async () => {
   whisperModelsLoading.value = true;
   whisperModelsError.value = '';
-  if (!window?.electronAPI?.speech?.listModels) {
+  if (!electronAPI?.speech?.listModels) {
     whisperModelsError.value = 'Speech model list unavailable';
     whisperModelsLoading.value = false;
     return;
   }
   try {
-    const models = await window.electronAPI.speech.listModels();
+    const models = await electronAPI.speech.listModels();
     whisperModels.value = Array.isArray(models) ? models : [];
   } catch (error: unknown) {
     whisperModelsError.value = `Failed to load models: ${getErrorMessage(error)}`;
@@ -419,13 +417,13 @@ const downloadWhisperModel = async (modelName: string) => {
   whisperModelStages.value[modelName] = 'downloading';
   whisperModelDownloadErrors.value[modelName] = '';
   whisperModelProgress.value[modelName] = {};
-  if (!window?.electronAPI?.speech?.downloadModel) {
+  if (!electronAPI?.speech?.downloadModel) {
     whisperModelDownloadErrors.value[modelName] = 'Model download unavailable';
     whisperModelStages.value[modelName] = 'error';
     return;
   }
   try {
-    const result = await window.electronAPI.speech.downloadModel(modelName);
+    const result = await electronAPI.speech.downloadModel(modelName);
     if (!result?.success) {
       whisperModelDownloadErrors.value[modelName] = result?.error || 'Download failed';
       whisperModelStages.value[modelName] = 'error';
@@ -618,8 +616,8 @@ watch(
 
 onMounted(() => {
   try {
-    window.electronAPI?.speech?.removeAllListeners?.();
-    window.electronAPI?.speech?.onDownloadProgress?.((payload: WhisperNodeDownloadProgress) => {
+    electronAPI?.speech?.removeAllListeners?.();
+    electronAPI?.speech?.onDownloadProgress?.((payload: WhisperNodeDownloadProgress) => {
       handleWhisperDownloadProgress(payload);
     });
   } catch {
@@ -629,7 +627,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   try {
-    window.electronAPI?.speech?.removeAllListeners?.();
+    electronAPI?.speech?.removeAllListeners?.();
   } catch {
     // ignore
   }

@@ -10,7 +10,6 @@ import {
   DaemonStatusInfo,
 } from '../shared/types/config';
 import type { Provider } from '../shared/types/provider';
-import type { ChatMessage, ChatThread, Workspace, PromptApp } from '../shared/types/chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
 import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from '../shared/types/life';
@@ -25,34 +24,21 @@ import type {
   WhisperNodeDownloadResult,
   WhisperNodeModelInfo,
 } from '../shared/types/speech';
+import type {
+  ChatInvocationOptions,
+  ElectronApi,
+  LongMemoryInput,
+  PromptAppInput,
+  ProactiveTaskInput,
+  ProviderInput,
+  ShortMemoryInput,
+  WorkspaceInput,
+  ChatThreadInput,
+  ChatMessageInput,
+} from '../shared/types/electron_api';
 import { toIpcSerializable } from '../shared/utils/ipc_serialization';
 
-type ProviderInput = Partial<Provider> &
-  Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
-type ChatThreadInput = Partial<ChatThread>;
-type ChatMessageInput = Partial<ChatMessage>;
-type WorkspaceInput = Partial<Workspace>;
-type PromptAppInput = Partial<PromptApp>;
-type ShortMemoryInput = {
-  thread_id: string;
-  message_id: string;
-  role: string;
-  content: string;
-  emotion?: unknown;
-  importance?: number;
-};
-type LongMemoryInput = {
-  thread_id: string;
-  summary: string;
-  source_message_ids?: string[];
-  emotion?: unknown;
-  tags?: string[];
-  metadata?: unknown;
-};
-type ProactiveTaskInput = Partial<ProactiveTask> &
-  Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model'>;
-
-contextBridge.exposeInMainWorld('electronAPI', {
+const electronApi: ElectronApi = {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     getRuntimeInfo: (): Promise<ConfigRuntimeInfo> => ipcRenderer.invoke('config:get-runtime-info'),
@@ -81,26 +67,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getModels: (providerType: string) => ipcRenderer.invoke('chat:getModels', providerType),
     isProviderConfigured: (providerType: string) =>
       ipcRenderer.invoke('chat:isProviderConfigured', providerType),
-    send: (options: {
-      providerType: string;
-      model: string;
-      messages: Array<Record<string, unknown>>;
-      tools?: string[];
-      mcpServerIds?: string[];
-      skillIds?: string[];
-      skillMode?: 'manual' | 'auto';
-      threadId?: string;
-    }) => ipcRenderer.invoke('chat:send', options),
-    stream: (options: {
-      providerType: string;
-      model: string;
-      messages: Array<Record<string, unknown>>;
-      tools?: string[];
-      mcpServerIds?: string[];
-      skillIds?: string[];
-      skillMode?: 'manual' | 'auto';
-      threadId?: string;
-    }) => ipcRenderer.invoke('chat:stream', options),
+    send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),
+    stream: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
     onUiChunk: (callback: (chunk: unknown) => void) => {
       ipcRenderer.on('chat:ui-chunk', (_event, chunk) => callback(chunk));
@@ -259,4 +227,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openSettings: () => ipcRenderer.send('open-settings'),
   closeWindow: () => ipcRenderer.send('close-window'),
   setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
-});
+};
+
+contextBridge.exposeInMainWorld('electronAPI', electronApi);

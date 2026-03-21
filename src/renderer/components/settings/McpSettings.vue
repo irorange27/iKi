@@ -297,12 +297,10 @@ import type {
 } from '../../../shared/types/mcp';
 import { getErrorMessage } from '../../../shared/utils/errors';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 const emit = defineEmits<{
   (event: 'config-change'): void;
 }>();
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -361,12 +359,12 @@ const loadServers = async (options?: { clearActionError?: boolean }) => {
   }
   serversLoading.value = true;
   try {
-    if (!window?.electronAPI?.mcp?.list) {
+    if (!electronAPI?.mcp?.list) {
       serversError.value = 'MCP API is unavailable.';
       servers.value = [];
       return;
     }
-    const list = await window.electronAPI.mcp.list();
+    const list = await electronAPI.mcp.list();
     servers.value = Array.isArray(list) ? list : [];
   } catch (error: unknown) {
     serversError.value = getErrorMessage(error) || 'Failed to load MCP servers.';
@@ -531,7 +529,7 @@ const saveServer = async () => {
   const payload = buildServerPayload();
   if (!payload) return;
 
-  if (!window?.electronAPI?.mcp) {
+  if (!electronAPI?.mcp) {
     formError.value = 'MCP API is unavailable.';
     return;
   }
@@ -539,9 +537,9 @@ const saveServer = async () => {
   formSaving.value = true;
   try {
     if (editingServerId.value) {
-      await window.electronAPI.mcp.update(editingServerId.value, payload);
+      await electronAPI.mcp.update(editingServerId.value, payload);
     } else {
-      await window.electronAPI.mcp.add(payload);
+      await electronAPI.mcp.add(payload);
     }
     formOpen.value = false;
     await loadServers();
@@ -553,12 +551,12 @@ const saveServer = async () => {
 };
 
 const deleteServer = async (server: McpServerSummary) => {
-  if (!window?.electronAPI?.mcp?.delete) return;
+  if (!electronAPI?.mcp?.delete) return;
   if (!window.confirm(`Delete MCP server "${server.name}"?`)) return;
   actionLoading.value = true;
   actionError.value = '';
   try {
-    await window.electronAPI.mcp.delete(server.id);
+    await electronAPI.mcp.delete(server.id);
   } catch (error: unknown) {
     actionError.value = getErrorMessage(error) || 'Failed to delete MCP server.';
   } finally {
@@ -568,11 +566,11 @@ const deleteServer = async (server: McpServerSummary) => {
 };
 
 const connectServer = async (server: McpServerSummary) => {
-  if (!window?.electronAPI?.mcp?.connect) return;
+  if (!electronAPI?.mcp?.connect) return;
   actionLoading.value = true;
   actionError.value = '';
   try {
-    await window.electronAPI.mcp.connect(server.id);
+    await electronAPI.mcp.connect(server.id);
   } catch (error: unknown) {
     actionError.value = getErrorMessage(error) || 'Failed to connect MCP server.';
   } finally {
@@ -582,11 +580,11 @@ const connectServer = async (server: McpServerSummary) => {
 };
 
 const disconnectServer = async (server: McpServerSummary) => {
-  if (!window?.electronAPI?.mcp?.disconnect) return;
+  if (!electronAPI?.mcp?.disconnect) return;
   actionLoading.value = true;
   actionError.value = '';
   try {
-    await window.electronAPI.mcp.disconnect(server.id);
+    await electronAPI.mcp.disconnect(server.id);
   } catch (error: unknown) {
     actionError.value = getErrorMessage(error) || 'Failed to disconnect MCP server.';
   } finally {
@@ -596,11 +594,11 @@ const disconnectServer = async (server: McpServerSummary) => {
 };
 
 const refreshTools = async (server: McpServerSummary) => {
-  if (!window?.electronAPI?.mcp?.refreshTools) return;
+  if (!electronAPI?.mcp?.refreshTools) return;
   actionLoading.value = true;
   actionError.value = '';
   try {
-    await window.electronAPI.mcp.refreshTools(server.id);
+    await electronAPI.mcp.refreshTools(server.id);
   } catch (error: unknown) {
     actionError.value = getErrorMessage(error) || 'Failed to refresh MCP tools.';
   } finally {

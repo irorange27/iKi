@@ -545,8 +545,7 @@ import type { Provider } from '../../shared/types/provider';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 const emit = defineEmits(['close']);
 const configStore = useConfigStore();
@@ -593,7 +592,7 @@ const parseOptionalInteger = (value: string): number | null =>
 // Load providers
 const loadProviders = async () => {
   try {
-    providers.value = await window.electronAPI.providers.list();
+    providers.value = await electronAPI.providers.list();
   } catch (error) {
     console.error('Failed to load providers:', error);
   }
@@ -673,7 +672,7 @@ const testToolModel = async () => {
   try {
     const startTime = Date.now();
     // Send a simple test message
-    const result = await window.electronAPI.chat.send({
+    const result = await electronAPI.chat.send({
       providerType: getProviderTypeForModel(selectedToolModel.value),
       model: selectedToolModel.value,
       messages: [{ role: 'user', content: 'Say "OK"' }],

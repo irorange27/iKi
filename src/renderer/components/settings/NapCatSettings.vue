@@ -295,13 +295,11 @@ import {
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 const emit = defineEmits<{
   (event: 'config-change'): void;
   (event: 'reset'): void;
 }>();
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const props = defineProps<{
   active: boolean;
 }>();
@@ -485,12 +483,12 @@ const loadProviders = async () => {
   providersLoading.value = true;
   providersError.value = '';
   try {
-    if (!window?.electronAPI?.providers?.list) {
+    if (!electronAPI?.providers?.list) {
       providers.value = [];
       providersError.value = 'Provider API is unavailable.';
       return;
     }
-    const list = await window.electronAPI.providers.list();
+    const list = await electronAPI.providers.list();
     providers.value = Array.isArray(list) ? (list as Provider[]) : [];
   } catch (error: unknown) {
     providers.value = [];

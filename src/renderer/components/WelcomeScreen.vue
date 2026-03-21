@@ -42,13 +42,10 @@
 <script setup lang="ts">
 defineEmits(['new-chat']);
 
+const electronAPI = window.electronAPI;
+
 const openSettings = () => {
-  const chromeWindow = window as Window & {
-    electronAPI?: {
-      openSettings?: () => void;
-    };
-  };
-  chromeWindow.electronAPI?.openSettings?.();
+  electronAPI?.openSettings?.();
 };
 </script>
 

@@ -1,22 +1,11 @@
 import type { RelationshipOverview } from '../../shared/types/relationship';
+import type { ElectronApi } from '../../shared/types/electron_api';
 
-type ElectronRelationshipApi = {
-  getOverview?: (limit?: number) => Promise<RelationshipOverview>;
-};
-
-type WindowWithElectronApi = Window & {
-  electronAPI?: {
-    relationship?: ElectronRelationshipApi;
-  };
-};
-
-const getWindow = (): WindowWithElectronApi | undefined => {
-  if (typeof window === 'undefined') return undefined;
-  return window as WindowWithElectronApi;
-};
+type ElectronRelationshipApi = ElectronApi['relationship'];
 
 const getRelationshipApi = (): ElectronRelationshipApi | null => {
-  const api = getWindow()?.electronAPI?.relationship;
+  if (typeof window === 'undefined') return null;
+  const api = window.electronAPI?.relationship;
   if (!api || typeof api.getOverview !== 'function') return null;
   return api;
 };

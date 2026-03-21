@@ -14,14 +14,9 @@ import { useAppConfig } from './composables/useAppConfig';
 import { createSidebar } from './composables/useSidebar';
 import { useTheme } from './composables/useTheme';
 
-type WindowChromeApi = Window & {
-  electronAPI?: {
-    closeWindow?: () => void;
-  };
-};
-
 createSidebar();
 useTheme();
+const electronAPI = window.electronAPI;
 const currentHash = ref(window.location.hash);
 const updateHash = () => {
   currentHash.value = window.location.hash;
@@ -37,7 +32,7 @@ onUnmounted(() => {
 
 const isSettings = computed(() => currentHash.value.includes('settings'));
 const closeSettings = () => {
-  (window as WindowChromeApi).electronAPI?.closeWindow?.();
+  electronAPI?.closeWindow?.();
 };
 
 useAppConfig();

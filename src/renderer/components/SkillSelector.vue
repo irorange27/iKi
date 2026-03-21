@@ -101,12 +101,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { SkillSummary } from '../../shared/types/skill';
 
-interface ElectronSkillsApi {
-  skills?: {
-    list?: () => Promise<unknown>;
-  };
-}
-
 const props = defineProps<{
   skillIds: string[];
   mode: 'manual' | 'auto';
@@ -117,7 +111,7 @@ const emit = defineEmits<{
   (event: 'update:mode', value: 'manual' | 'auto'): void;
 }>();
 
-const electronAPI = (window as Window & { electronAPI?: ElectronSkillsApi }).electronAPI;
+const electronAPI = window.electronAPI;
 
 const showSkillSelector = ref(false);
 const availableSkills = ref<SkillSummary[]>([]);

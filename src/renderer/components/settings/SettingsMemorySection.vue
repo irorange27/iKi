@@ -722,9 +722,6 @@ import {
   parseAffectStateSnapshot,
 } from './settings_formatters';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 const emit = defineEmits<{
   (event: 'config-change'): void;
   (event: 'reset'): void;
@@ -733,6 +730,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 const ALL_THREADS = '__all__';
 
@@ -844,7 +842,7 @@ const syncNewLongMemoryThread = () => {
 const loadMemoryThreads = async () => {
   if (memoryThreadsLoaded.value) return;
   try {
-    const threads = await window.electronAPI.chat.threads.list();
+    const threads = await electronAPI.chat.threads.list();
     memoryThreads.value = Array.isArray(threads) ? threads : [];
     memoryThreadsLoaded.value = true;
     if (!selectedMemoryThreadId.value && memoryThreads.value.length > 0) {
@@ -886,15 +884,15 @@ const refreshMemory = async () => {
     const shouldFetchAffect = !isAllThreadsSelected.value;
     const [shortEntries, longEntries, affectEntry] = isAllThreadsSelected.value
       ? await Promise.all([
-          window.electronAPI.memory.short.listAll(50),
-          window.electronAPI.memory.long.listAll(25),
+          electronAPI.memory.short.listAll(50),
+          electronAPI.memory.long.listAll(25),
           Promise.resolve(null),
         ])
       : await Promise.all([
-          window.electronAPI.memory.short.list(selectedMemoryThreadId.value, 50),
-          window.electronAPI.memory.long.list(selectedMemoryThreadId.value, 25),
+          electronAPI.memory.short.list(selectedMemoryThreadId.value, 50),
+          electronAPI.memory.long.list(selectedMemoryThreadId.value, 25),
           shouldFetchAffect
-            ? window.electronAPI.memory.affect.get(selectedMemoryThreadId.value)
+            ? electronAPI.memory.affect.get(selectedMemoryThreadId.value)
             : Promise.resolve(null),
         ]);
     shortMemoryEntries.value = Array.isArray(shortEntries) ? shortEntries : [];
@@ -928,12 +926,12 @@ const runMemorySearch = async () => {
   memorySearchError.value = '';
   try {
     const results = isAllThreadsSelected.value
-      ? await window.electronAPI.memory.long.searchAll(memorySearchQuery.value.trim(), {
+      ? await electronAPI.memory.long.searchAll(memorySearchQuery.value.trim(), {
           limit: config.value.memory.maxRetrievalCount,
           threshold: config.value.memory.similarThreshold,
           force: true,
         })
-      : await window.electronAPI.memory.long.search(
+      : await electronAPI.memory.long.search(
           selectedMemoryThreadId.value,
           memorySearchQuery.value.trim(),
           {
@@ -965,7 +963,7 @@ const createLongMemory = async () => {
   memoryMutationLoading.value = true;
   memoryMutationError.value = '';
   try {
-    await window.electronAPI.memory.long.add({
+    await electronAPI.memory.long.add({
       thread_id: threadId,
       summary,
       metadata: {
@@ -1013,7 +1011,7 @@ const saveLongMemoryEdit = async (entry: LongMemoryEntry) => {
   memoryMutationLoading.value = true;
   memoryMutationError.value = '';
   try {
-    await window.electronAPI.memory.long.update(entry.id, { summary });
+    await electronAPI.memory.long.update(entry.id, { summary });
     await refreshMemory();
     if (hasMemoryQuery.value) {
       await runMemorySearch();
@@ -1033,7 +1031,7 @@ const deleteLongMemoryEntry = async (entry: LongMemoryEntry) => {
   memoryMutationLoading.value = true;
   memoryMutationError.value = '';
   try {
-    await window.electronAPI.memory.long.delete(entry.id);
+    await electronAPI.memory.long.delete(entry.id);
     if (editingLongMemoryId.value === entry.id) {
       cancelEditLongMemory();
     }

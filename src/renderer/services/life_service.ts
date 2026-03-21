@@ -4,29 +4,13 @@ import type {
   LifePushPayload,
   LifeSnapshot,
 } from '../../shared/types/life';
+import type { ElectronApi } from '../../shared/types/electron_api';
 
-type ElectronLifeApi = {
-  getOverview?: (limit?: number) => Promise<LifeOverview>;
-  refresh?: () => Promise<LifeSnapshot | null>;
-  setOwnerMode?: (mode: LifeOwnerMode, note?: string | null) => Promise<LifeSnapshot | null>;
-  clearOwnerMode?: () => Promise<LifeSnapshot | null>;
-  onPush?: (callback: (payload: LifePushPayload | unknown) => void) => void;
-  removeAllListeners?: () => void;
-};
-
-type WindowWithElectronApi = Window & {
-  electronAPI?: {
-    life?: ElectronLifeApi;
-  };
-};
-
-const getWindow = (): WindowWithElectronApi | undefined => {
-  if (typeof window === 'undefined') return undefined;
-  return window as WindowWithElectronApi;
-};
+type ElectronLifeApi = ElectronApi['life'];
 
 const getLifeApi = (): ElectronLifeApi | null => {
-  const api = getWindow()?.electronAPI?.life;
+  if (typeof window === 'undefined') return null;
+  const api = window.electronAPI?.life;
   if (!api || typeof api.getOverview !== 'function') return null;
   return api;
 };

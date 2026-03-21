@@ -235,15 +235,6 @@ interface ToolSummary {
   };
 }
 
-interface ElectronToolsApi {
-  tools?: {
-    list?: () => Promise<unknown>;
-  };
-  mcp?: {
-    list?: () => Promise<unknown>;
-  };
-}
-
 type McpServerEntry = {
   id: string;
   name: string;
@@ -265,7 +256,7 @@ const emit = defineEmits<{
   (event: 'update:mode', value: 'manual' | 'auto'): void;
 }>();
 
-const electronAPI = (window as Window & { electronAPI?: ElectronToolsApi }).electronAPI;
+const electronAPI = window.electronAPI;
 
 const showToolSelector = ref(false);
 const availableTools = ref<ToolSummary[]>([]);

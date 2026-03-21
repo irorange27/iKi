@@ -1,6 +1,7 @@
 import type { UIMessage, UIMessageChunk } from 'ai';
 import { ref } from 'vue';
 
+import type { ElectronApi } from '../../../shared/types/electron_api';
 import { isObjectRecord } from '../../../shared/utils/guards';
 import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
 import type { ChatMessageStore } from './chat_message_store';
@@ -15,16 +16,6 @@ import {
 } from './ui_stream_reducer';
 import { createToolApprovalService, type ApprovalEvent } from './tool_approval_service';
 import { getToolUiState, getToolUiStateMap, updateToolUiState } from './tool_ui_state';
-
-type ElectronAPI = {
-  chat: {
-    stopStream: () => Promise<unknown>;
-    approveTool: (
-      approvalId: string,
-      approved: boolean
-    ) => Promise<{ success?: boolean; error?: string }>;
-  };
-};
 
 const isMemoryRetrievalChunk = (
   chunk: Record<string, unknown>
@@ -50,7 +41,7 @@ export type ChatUiStreamController = ReturnType<typeof createChatUiStreamControl
 
 export const createChatUiStreamController = (deps: {
   messageStore: ChatMessageStore;
-  electronAPI: ElectronAPI;
+  electronAPI: Pick<ElectronApi, 'chat'>;
   persistence: UiMessagePersistence;
   createMessageId: () => string;
   scrollToBottom: () => void;

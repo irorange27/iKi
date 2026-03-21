@@ -168,17 +168,21 @@ describe('SettingsLifeSection', () => {
   });
 
   it('renders deferred owner mode status when a running task blocks the request', async () => {
+    const baseOverview = buildOverview();
+    if (!baseOverview.snapshot) {
+      throw new Error('Expected snapshot in test fixture');
+    }
     const { wrapper } = await mountSettingsLifeSection(
       buildOverview({
         snapshot: {
-          ...buildOverview().snapshot,
+          ...baseOverview.snapshot,
           state: {
-            ...buildOverview().snapshot!.state,
+            ...baseOverview.snapshot.state,
             current_activity: 'focused_work',
             presence: 'focused',
           },
           derived: {
-            ...buildOverview().snapshot!.derived,
+            ...baseOverview.snapshot.derived,
             runningTaskIds: ['task_1'],
             ownerMode: 'sleep',
             ownerModeSetAt: '2026-03-21T14:05:00.000Z',

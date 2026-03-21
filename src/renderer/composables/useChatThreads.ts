@@ -5,6 +5,8 @@ import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
 import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
 import { extractTextFromMessage } from '../modules/chat/ui_message_text';
 import { isObjectRecord } from '../../shared/utils/guards';
+import type { ChatMessage } from '../../shared/types/chat';
+import type { ElectronApi } from '../../shared/types/electron_api';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 
@@ -12,29 +14,6 @@ export type ChatThread = {
   id: string;
   title: string;
   model?: string;
-};
-
-type ElectronApi = {
-  chat: {
-    threads: {
-      create: (thread: {
-        title: string;
-        model?: string | null;
-        metadata: string;
-      }) => Promise<ChatThread>;
-      get: (id: string) => Promise<ChatThread | null>;
-      update: (id: string, thread: Partial<ChatThread>) => Promise<unknown>;
-    };
-    messages: {
-      list: (threadId: string) => Promise<Array<{ id: string; message: string }>>;
-    };
-  };
-  toolModel: {
-    generateTitle: (conversationContent: string) => Promise<string>;
-  };
-  tasks?: {
-    onPush?: (callback: (payload: unknown) => void) => void;
-  };
 };
 
 type SidebarController = {
@@ -45,7 +24,7 @@ type SidebarController = {
 const TITLE_REGEN_INTERVAL = 2;
 
 export const useChatThreads = (deps: {
-  electronAPI: ElectronApi;
+  electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
   messageStore: ChatMessageStore;
   persistence: UiMessagePersistence;
   sidebarRef: Ref<SidebarController | null>;
@@ -192,9 +171,10 @@ export const useChatThreads = (deps: {
       const dbMessages = await deps.electronAPI.chat.messages.list(threadId);
       const rows = Array.isArray(dbMessages)
         ? dbMessages.filter(
-            (message): message is { id: string; message: string } =>
+            (message): message is ChatMessage =>
               isObjectRecord(message) &&
               typeof message.id === 'string' &&
+              typeof message.thread_id === 'string' &&
               typeof message.message === 'string'
           )
         : [];

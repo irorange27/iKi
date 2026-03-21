@@ -11,12 +11,6 @@ type LegacyMediaQueryList = MediaQueryList & {
   removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
 };
 
-type WindowWithChromeApi = Window & {
-  electronAPI?: {
-    setWindowShadow?: (enabled: boolean) => void;
-  };
-};
-
 let lastNativeWindowShadow: boolean | null = null;
 
 const systemPrefersDark = (): boolean => {
@@ -29,7 +23,7 @@ const syncNativeWindowShadow = (resolvedTheme: 'light' | 'dark') => {
   const nextShadowState = resolvedTheme === 'light';
   if (lastNativeWindowShadow === nextShadowState) return;
   lastNativeWindowShadow = nextShadowState;
-  (window as WindowWithChromeApi).electronAPI?.setWindowShadow?.(nextShadowState);
+  window.electronAPI?.setWindowShadow?.(nextShadowState);
 };
 
 export const applyCssVariables = (config: AppConfig) => {

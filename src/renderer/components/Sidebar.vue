@@ -90,10 +90,8 @@ import { ref, onMounted, watch } from 'vue';
 import { PanelLeftDashed, Search, SquarePen, Trash2 } from 'lucide-vue-next';
 import { useSidebar } from '../composables/useSidebar';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const window: any;
-
 const sidebar = useSidebar();
+const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 
 interface ChatThread {
   id: string;
@@ -152,7 +150,7 @@ const emit = defineEmits<{
 // Load chat threads from database
 const loadChatThreads = async () => {
   try {
-    const threads = await window.electronAPI.chat.threads.list();
+    const threads = await electronAPI.chat.threads.list();
     chatThreads.value = Array.isArray(threads)
       ? (threads as ChatThread[]).filter(isDesktopMainUiThread)
       : [];
@@ -184,7 +182,7 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
 
   deletingThreadIds.value[thread.id] = true;
   try {
-    await window.electronAPI.chat.threads.delete(thread.id);
+    await electronAPI.chat.threads.delete(thread.id);
     chatThreads.value = chatThreads.value.filter(chat => chat.id !== thread.id);
     if (currentThreadId.value === thread.id) {
       currentThreadId.value = null;
@@ -278,12 +276,7 @@ const startResize = (e: StartResizeEvent) => {
 };
 
 const openSettings = () => {
-  const chromeWindow = window as Window & {
-    electronAPI?: {
-      openSettings?: () => void;
-    };
-  };
-  chromeWindow.electronAPI?.openSettings?.();
+  electronAPI?.openSettings?.();
 };
 </script>
 
