@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import SettingsColorSchemeSection from '../../../src/renderer/components/settings/SettingsColorSchemeSection.vue';
@@ -17,6 +17,35 @@ const findButtonByText = (wrapper: ReturnType<typeof mount>, text: string) => {
   }
 
   return match;
+};
+
+const findLabelByText = (wrapper: VueWrapper, text: string) => {
+  const match = wrapper
+    .findAll('label')
+    .find(label => label.text().replace(/\s+/g, ' ').includes(text));
+
+  if (!match) {
+    throw new Error(`Label not found: ${text}`);
+  }
+
+  return match;
+};
+
+const selectSettingsOption = async (wrapper: VueWrapper, labelText: string, optionText: string) => {
+  const label = findLabelByText(wrapper, labelText);
+  await label.find('.settings-select-trigger').trigger('click');
+  await flushPromises();
+
+  const option = label
+    .findAll('.settings-select-option')
+    .find(candidate => candidate.text().replace(/\s+/g, ' ').includes(optionText));
+
+  if (!option) {
+    throw new Error(`Option not found for "${labelText}": ${optionText}`);
+  }
+
+  await option.trigger('click');
+  await flushPromises();
 };
 
 describe('SettingsColorSchemeSection', () => {
@@ -109,11 +138,14 @@ describe('SettingsColorSchemeSection', () => {
 
     const labelInput = wrapper.find('input[placeholder="Ocean"]');
     await labelInput.setValue('Midnight Lab');
+    await selectSettingsOption(wrapper, 'Type', 'Light');
     await findButtonByText(wrapper, 'Save').trigger('click');
     await flushPromises();
 
     expect(store.config.themes.base46Presets['midnight-lab']).toBeDefined();
     expect(store.config.themes.base46Presets['midnight-lab']?.label).toBe('Midnight Lab');
+    expect(store.config.themes.base46Presets['midnight-lab']?.light).toBeDefined();
+    expect(store.config.themes.base46Presets['midnight-lab']?.dark).toBeUndefined();
     expect(store.config.general.themePresetId).toBe('midnight-lab');
     expect(wrapper.emitted('config-change')).toHaveLength(1);
   });

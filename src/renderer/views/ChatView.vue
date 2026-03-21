@@ -36,121 +36,7 @@
               :class="m.role"
             >
               <div class="message-shell">
-                <div
-                  v-if="m.role === 'assistant' && hasReferenceSummary(m)"
-                  class="reference-summary"
-                >
-                  <button
-                    v-if="getMemoryReferenceCount(m) > 0"
-                    type="button"
-                    class="reference-summary-item"
-                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'memory' }"
-                    :title="getMemoryReferenceTooltip(m)"
-                    @click.stop="toggleReferencePanel(m, 'memory')"
-                  >
-                    <Brain :size="14" class="reference-summary-icon" />
-                    {{ getMemoryReferenceCount(m) }} memories
-                  </button>
-                  <button
-                    v-if="getToolReferenceCount(m) > 0"
-                    type="button"
-                    class="reference-summary-item"
-                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'tools' }"
-                    :title="getToolReferenceTooltip(m)"
-                    @click.stop="toggleReferencePanel(m, 'tools')"
-                  >
-                    <Wrench :size="14" class="reference-summary-icon" />
-                    {{ getToolReferenceCount(m) }} tools
-                  </button>
-                  <button
-                    v-if="getSkillReferenceCount(m) > 0"
-                    type="button"
-                    class="reference-summary-item"
-                    :class="{ 'is-active': getExpandedReferenceCategory(m) === 'skills' }"
-                    :title="getSkillReferenceTooltip(m)"
-                    @click.stop="toggleReferencePanel(m, 'skills')"
-                  >
-                    <Sparkles :size="14" class="reference-summary-icon" />
-                    {{ getSkillReferenceCount(m) }} skills
-                  </button>
-                </div>
-                <div
-                  v-if="m.role === 'assistant' && getExpandedReferenceCategory(m)"
-                  class="reference-panel"
-                >
-                  <div v-if="getExpandedReferenceCategory(m) === 'tools'">
-                    <div class="reference-panel-label">Tools</div>
-                    <ul class="reference-panel-list">
-                      <li
-                        v-for="entry in getToolReferenceItems(m)"
-                        :key="entry.name"
-                        class="reference-panel-item"
-                      >
-                        <span class="reference-panel-item-name">{{ entry.name }}</span>
-                        <span class="reference-panel-item-meta">{{ entry.count }} calls</span>
-                      </li>
-                    </ul>
-                  </div>
-                  <div v-else-if="getExpandedReferenceCategory(m) === 'skills'">
-                    <div class="reference-panel-label">Skills</div>
-                    <ul class="reference-panel-list">
-                      <li
-                        v-for="skill in getSkillReferenceItems(m)"
-                        :key="skill.id"
-                        class="reference-panel-item reference-panel-item-action"
-                      >
-                        <button
-                          type="button"
-                          class="reference-panel-link"
-                          @click="openSkillReference(skill.id)"
-                        >
-                          <span class="reference-panel-item-name">{{ skill.name }}</span>
-                          <span class="reference-panel-item-meta">{{ skill.sourceLabel }}</span>
-                          <span v-if="skill.description" class="reference-panel-item-description">
-                            {{ skill.description }}
-                          </span>
-                          <ExternalLink :size="13" class="reference-panel-link-icon" />
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
-                  <div v-else-if="getExpandedReferenceCategory(m) === 'memory'">
-                    <div class="reference-panel-label">Memory</div>
-                    <div v-if="getMemoryReferenceQuery(m)" class="reference-panel-query">
-                      {{ getMemoryReferenceQuery(m) }}
-                    </div>
-                    <ul class="reference-panel-list">
-                      <li
-                        v-for="entry in getMemoryReferenceItems(m)"
-                        :key="entry.id || entry.summary"
-                        class="reference-panel-item"
-                      >
-                        <div class="reference-panel-item-row">
-                          <span v-if="entry.score !== null" class="reference-panel-score">
-                            {{ formatMemoryMatchScore(entry.score) }}
-                          </span>
-                          <span
-                            v-if="entry.sourceMessageCount !== null"
-                            class="reference-panel-item-meta"
-                          >
-                            {{ formatMemorySourceCount(entry.sourceMessageCount) }}
-                          </span>
-                          <span v-if="entry.updatedAt" class="reference-panel-item-meta">
-                            {{ formatShortTimestamp(entry.updatedAt) }}
-                          </span>
-                        </div>
-                        <div class="reference-panel-item-description">
-                          {{ entry.summary }}
-                        </div>
-                        <div v-if="entry.tags.length > 0" class="reference-panel-tags">
-                          <span v-for="tag in entry.tags" :key="tag" class="reference-panel-tag">
-                            {{ tag }}
-                          </span>
-                        </div>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
+                <ChatMessageReferences :message="m" @open-skill="openSkillReference" />
                 <div class="message-content">
                   <div
                     v-for="(part, partIndex) in m.parts"
@@ -224,25 +110,15 @@ import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
+import ChatMessageReferences from '../components/chat/ChatMessageReferences.vue';
 import ChatToolPart from '../components/chat/ChatToolPart.vue';
-import {
-  Brain,
-  ExternalLink,
-  FolderOpen,
-  Pencil,
-  Sparkles,
-  Wrench,
-} from 'lucide-vue-next';
+import { FolderOpen, Pencil } from 'lucide-vue-next';
 import {
   getToolName,
 } from '../modules/chat/ui_message_tool_parts';
 import {
   buildContextUsageIndicator,
   getContextReferenceSummary,
-  getMemoryReferenceSummary,
-  getSkillReferenceSummary,
-  getToolReferenceSummary,
-  hasReferenceSummary,
 } from '../modules/chat/ui_message_references';
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import { createChatMessageStore } from '../modules/chat/chat_message_store';
@@ -327,68 +203,6 @@ const getMcpServerLabel = (part: unknown): string => {
   return source.name || source.id || '';
 };
 
-const formatShortTimestamp = (value: string): string => {
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return value;
-  return new Date(parsed).toLocaleDateString();
-};
-
-type ReferenceCategory = 'tools' | 'skills' | 'memory';
-
-const expandedReferencePanels = ref<Record<string, ReferenceCategory | null>>({});
-
-const getReferenceMessageKey = (message: UIMessage): string => message.id || '';
-
-const getExpandedReferenceCategory = (message: UIMessage): ReferenceCategory | null => {
-  const key = getReferenceMessageKey(message);
-  return key ? (expandedReferencePanels.value[key] ?? null) : null;
-};
-
-const toggleReferencePanel = (message: UIMessage, category: ReferenceCategory) => {
-  const key = getReferenceMessageKey(message);
-  if (!key) return;
-  expandedReferencePanels.value = {
-    ...expandedReferencePanels.value,
-    [key]: expandedReferencePanels.value[key] === category ? null : category,
-  };
-};
-
-const getToolReferenceCount = (message: UIMessage): number =>
-  getToolReferenceSummary(message).count;
-
-const getToolReferenceItems = (message: UIMessage) => getToolReferenceSummary(message).items;
-
-const getToolReferenceTooltip = (message: UIMessage): string => {
-  const summary = getToolReferenceSummary(message);
-  return summary.names.length > 0
-    ? `Tools: ${summary.names.join(', ')}`
-    : 'Tools used in this reply';
-};
-
-const getSkillReferenceCount = (message: UIMessage): number =>
-  getSkillReferenceSummary(message).items.length;
-
-const getSkillReferenceItems = (message: UIMessage) => getSkillReferenceSummary(message).items;
-
-const getSkillReferenceTooltip = (message: UIMessage): string => {
-  const summary = getSkillReferenceSummary(message);
-  if (summary.items.length === 0) return 'No skills used';
-  return summary.items.map(skill => skill.name).join(', ');
-};
-
-const getMemoryReferenceCount = (message: UIMessage): number =>
-  getMemoryReferenceSummary(message).items.length;
-
-const getMemoryReferenceItems = (message: UIMessage) => getMemoryReferenceSummary(message).items;
-
-const getMemoryReferenceQuery = (message: UIMessage): string =>
-  getMemoryReferenceSummary(message).query;
-
-const getMemoryReferenceTooltip = (message: UIMessage): string => {
-  const summary = getMemoryReferenceSummary(message);
-  return summary.query ? `Memory query: ${summary.query}` : 'Memory references used in this reply';
-};
-
 const composerContextUsage = computed(() => {
   const messages = Array.isArray(chat.messages) ? [...chat.messages] : [];
 
@@ -403,11 +217,6 @@ const composerContextUsage = computed(() => {
 
   return null;
 });
-
-const formatMemoryMatchScore = (score: number): string => `${score.toFixed(3)} match`;
-
-const formatMemorySourceCount = (count: number): string =>
-  `${count} source ${count === 1 ? 'message' : 'messages'}`;
 
 const openSkillReference = async (skillId: string) => {
   try {
@@ -628,160 +437,6 @@ onUnmounted(() => {
 .message-shell {
   position: relative;
   min-width: 0;
-}
-
-.reference-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 8px;
-}
-
-.reference-summary-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--reference-inline-color);
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-decoration-color: var(--reference-inline-underline);
-  text-underline-offset: 4px;
-}
-
-.reference-summary-item:hover,
-.reference-summary-item.is-active {
-  color: var(--reference-inline-hover);
-  text-decoration-color: var(--reference-inline-underline);
-}
-
-.reference-summary-icon {
-  flex-shrink: 0;
-}
-
-.reference-panel {
-  margin-bottom: 12px;
-  padding: 10px 0 0;
-  border-top: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
-}
-
-.reference-panel-label {
-  margin-bottom: 8px;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.reference-panel-query {
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-
-.reference-panel-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.reference-panel-item {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
-}
-
-.reference-panel-item-action {
-  padding: 0;
-  overflow: hidden;
-}
-
-.reference-panel-link {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 10px;
-  align-items: start;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.reference-panel-link:hover {
-  background: color-mix(in srgb, var(--accent-color) 5%, transparent);
-}
-
-.reference-panel-link-icon {
-  grid-column: 2 / 3;
-  grid-row: 1 / span 2;
-  align-self: center;
-  color: var(--text-muted);
-}
-
-.reference-panel-item-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.reference-panel-item-name {
-  font-size: 13px;
-  font-weight: 650;
-  color: var(--text-primary);
-}
-
-.reference-panel-item-meta {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.reference-panel-item-description {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
-
-.reference-panel-score {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 7px;
-  border-radius: 999px;
-  font-weight: 650;
-  color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
-}
-
-.reference-panel-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.reference-panel-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
 }
 
 .reference-part-hidden {

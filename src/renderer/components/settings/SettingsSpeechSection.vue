@@ -20,18 +20,12 @@
       <h3>Speech Provider</h3>
       <label class="input-label">
         <span>Provider</span>
-        <select
-          :value="config.speech.providerType"
-          @change="
-            updateSpeech(
-              'providerType',
-              ($event.target as HTMLSelectElement).value as AppConfig['speech']['providerType']
-            )
-          "
-        >
-          <option value="openai">OpenAI (Speech)</option>
-          <option value="whisper-node">whisper-node (Local)</option>
-        </select>
+        <SettingsSelect
+          :model-value="config.speech.providerType"
+          :options="speechProviderOptions"
+          aria-label="Speech provider"
+          @update:model-value="updateSpeechProviderSelection"
+        />
       </label>
 
       <template v-if="config.speech.providerType === 'openai'">
@@ -204,14 +198,12 @@
 
       <label class="input-label">
         <span>Recognition Language</span>
-        <select
-          :value="speechLanguageValue"
-          @change="updateSpeech('language', ($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="option in speechLanguageOptions" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        <SettingsSelect
+          :model-value="speechLanguageValue"
+          :options="speechLanguageOptions"
+          aria-label="Recognition language"
+          @update:model-value="updateSpeechLanguageSelection"
+        />
       </label>
 
       <label v-if="config.speech.providerType === 'openai'" class="input-label">
@@ -236,6 +228,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';
 
+import SettingsSelect from './SettingsSelect.vue';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type {
@@ -275,6 +268,11 @@ const whisperModelsError = ref('');
 const whisperModelStages = ref<Record<string, WhisperDownloadStage>>({});
 const whisperModelDownloadErrors = ref<Record<string, string>>({});
 const whisperModelProgress = ref<Record<string, WhisperDownloadProgressState>>({});
+
+const speechProviderOptions = [
+  { value: 'openai', label: 'OpenAI (Speech)' },
+  { value: 'whisper-node', label: 'whisper-node (Local)' },
+];
 
 const selectedWhisperModel = computed(() => {
   if (config.value.speech.providerType !== 'whisper-node') return '';
@@ -358,6 +356,14 @@ const updateSpeech = <K extends keyof AppConfig['speech']>(
 ) => {
   config.value.speech[key] = value;
   emit('config-change');
+};
+
+const updateSpeechProviderSelection = (value: string) => {
+  updateSpeech('providerType', value as AppConfig['speech']['providerType']);
+};
+
+const updateSpeechLanguageSelection = (value: string) => {
+  updateSpeech('language', value);
 };
 
 const loadSpeechStatus = async () => {

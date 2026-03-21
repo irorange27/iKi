@@ -64,15 +64,12 @@
       <div class="config-inline">
         <label class="input-label">
           <span>Provider Type</span>
-          <select
-            :value="napcat.providerType"
-            @change="updateNapCat('providerType', ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">Auto-select first enabled provider</option>
-            <option v-for="provider in providerOptions" :key="provider.type" :value="provider.type">
-              {{ provider.label }}
-            </option>
-          </select>
+          <SettingsSelect
+            :model-value="napcat.providerType"
+            :options="napCatProviderTypeOptions"
+            aria-label="NapCat provider type"
+            @update:model-value="updateNapCatProviderTypeSelection"
+          />
         </label>
 
         <label class="input-label">
@@ -277,6 +274,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
+import SettingsSelect from './SettingsSelect.vue';
 import { configService } from '../../services/config_service';
 import { useConfigStore } from '../../store/config';
 import type {
@@ -373,6 +371,14 @@ const providerOptions = computed<ProviderOption[]>(() => {
   return Array.from(byType.values()).sort((a, b) => a.label.localeCompare(b.label));
 });
 
+const napCatProviderTypeOptions = computed(() => [
+  { value: '', label: 'Auto-select first enabled provider' },
+  ...providerOptions.value.map(provider => ({
+    value: provider.type,
+    label: provider.label,
+  })),
+]);
+
 const selectedProviderOption = computed(() => {
   const providerType = napcat.value.providerType?.trim();
   if (!providerType) return null;
@@ -452,6 +458,10 @@ const updateNapCat = <K extends keyof AppConfig['bridges']['napcat']>(
 ) => {
   config.value.bridges.napcat[key] = value;
   emit('config-change');
+};
+
+const updateNapCatProviderTypeSelection = (value: string) => {
+  updateNapCat('providerType', value);
 };
 
 const updateDaemonHost = (value: string) => {
@@ -621,22 +631,6 @@ onUnmounted(() => {
   gap: 10px;
   margin-top: 14px;
   margin-bottom: 0;
-}
-
-.input-label {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 14px;
-  margin-bottom: 0;
-}
-
-.input-label input,
-.input-label select,
-.input-label textarea {
-  margin-top: 0;
-  border-radius: 12px;
-  font: inherit;
 }
 
 .checkbox-label input[type='checkbox'] {

@@ -43,6 +43,23 @@ const findModelRow = (wrapper: VueWrapper, modelName: string) => {
   return match;
 };
 
+const selectSettingsOption = async (wrapper: VueWrapper, labelText: string, optionText: string) => {
+  const label = findLabelByText(wrapper, labelText);
+  await label.find('.settings-select-trigger').trigger('click');
+  await flushPromises();
+
+  const option = label
+    .findAll('.settings-select-option')
+    .find(candidate => candidate.text().replace(/\s+/g, ' ').includes(optionText));
+
+  if (!option) {
+    throw new Error(`Option not found for "${labelText}": ${optionText}`);
+  }
+
+  await option.trigger('click');
+  await flushPromises();
+};
+
 const buildModel = (
   overrides: Partial<WhisperNodeModelInfo> & Pick<WhisperNodeModelInfo, 'name'>
 ): WhisperNodeModelInfo => ({
@@ -130,8 +147,7 @@ describe('SettingsSpeechSection', () => {
       models,
     });
 
-    await findLabelByText(wrapper, 'Provider').find('select').setValue('whisper-node');
-    await flushPromises();
+    await selectSettingsOption(wrapper, 'Provider', 'whisper-node (Local)');
 
     expect(store.config.speech.providerType).toBe('whisper-node');
     expect(store.config.speech.model).toBe('base.en');

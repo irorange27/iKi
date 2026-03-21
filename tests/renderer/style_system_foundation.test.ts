@@ -33,6 +33,18 @@ const SETTINGS_USAGE_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsUsageSection.vue'
 );
+const SETTINGS_SPEECH_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsSpeechSection.vue'
+);
+const SETTINGS_TASKS_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsTasksSection.vue'
+);
+const SETTINGS_MEMORY_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsMemorySection.vue'
+);
 const SETTINGS_COLOR_SCHEME_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsColorSchemeSection.vue'
@@ -96,6 +108,13 @@ describe('renderer style system foundation', () => {
   it('uses a shared custom settings select for dropdowns that need app-controlled expanded styling', () => {
     const settingsSelectSource = readFileSync(SETTINGS_SELECT_VUE_PATH, 'utf8');
     const usageSource = readFileSync(SETTINGS_USAGE_VUE_PATH, 'utf8');
+    const speechSource = readFileSync(SETTINGS_SPEECH_VUE_PATH, 'utf8');
+    const tasksSource = readFileSync(SETTINGS_TASKS_VUE_PATH, 'utf8');
+    const memorySource = readFileSync(SETTINGS_MEMORY_VUE_PATH, 'utf8');
+    const mcpSource = readFileSync(MCP_SETTINGS_VUE_PATH, 'utf8');
+    const napcatSource = readFileSync(NAPCAT_SETTINGS_VUE_PATH, 'utf8');
+    const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+    const colorSchemeSource = readFileSync(SETTINGS_COLOR_SCHEME_VUE_PATH, 'utf8');
     const settingsViewSource = readFileSync(SETTINGS_VIEW_VUE_PATH, 'utf8');
 
     expect(settingsSelectSource).toMatch(/class="settings-select-trigger"/);
@@ -104,6 +123,20 @@ describe('renderer style system foundation', () => {
     expect(settingsSelectSource).toMatch(/aria-haspopup="listbox"/);
     expect(usageSource).toMatch(/<SettingsSelect/);
     expect(usageSource).not.toMatch(/<select v-model="usagePeriod"/);
+    expect(speechSource).toMatch(/import SettingsSelect from/);
+    expect(speechSource).not.toMatch(/<select/);
+    expect(tasksSource).toMatch(/import SettingsSelect from/);
+    expect(tasksSource).not.toMatch(/<select/);
+    expect(memorySource).toMatch(/import SettingsSelect from/);
+    expect(memorySource).not.toMatch(/<select/);
+    expect(mcpSource).toMatch(/import SettingsSelect from/);
+    expect(mcpSource).not.toMatch(/<select/);
+    expect(napcatSource).toMatch(/import SettingsSelect from/);
+    expect(napcatSource).not.toMatch(/<select/);
+    expect(providersSource).toMatch(/import SettingsSelect from/);
+    expect(providersSource).not.toMatch(/<select/);
+    expect(colorSchemeSource).toMatch(/import SettingsSelect from/);
+    expect(colorSchemeSource).not.toMatch(/<select/);
     expect(settingsViewSource).toMatch(/import SettingsSelect from/);
     expect(settingsViewSource).toMatch(/toolModelSelectOptions/);
     expect(settingsViewSource).not.toMatch(/<select/);

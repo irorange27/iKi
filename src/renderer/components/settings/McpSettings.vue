@@ -36,19 +36,12 @@
 
       <label class="input-label">
         <span>Default approval mode</span>
-        <select
-          :value="config.mcp.defaultApprovalMode"
-          @change="
-            updateMcp(
-              'defaultApprovalMode',
-              ($event.target as HTMLSelectElement).value as AppConfig['mcp']['defaultApprovalMode']
-            )
-          "
-        >
-          <option value="safe-only">Require approval unless tool is read-only (Recommended)</option>
-          <option value="always">Always require approval</option>
-          <option value="never">Never require approval</option>
-        </select>
+        <SettingsSelect
+          :model-value="config.mcp.defaultApprovalMode"
+          :options="mcpDefaultApprovalModeOptions"
+          aria-label="Default approval mode"
+          @update:model-value="updateDefaultApprovalModeSelection"
+        />
       </label>
 
       <div class="config-inline">
@@ -195,11 +188,12 @@
         </label>
         <label class="input-label">
           <span>Transport</span>
-          <select v-model="form.transport">
-            <option value="stdio">Stdio (local process)</option>
-            <option value="streamable-http">Streamable HTTP (Recommended)</option>
-            <option value="sse">SSE (legacy compatibility)</option>
-          </select>
+          <SettingsSelect
+            :model-value="form.transport"
+            :options="mcpTransportOptions"
+            aria-label="MCP server transport"
+            @update:model-value="updateFormTransportSelection"
+          />
         </label>
         <label class="checkbox-label">
           <input type="checkbox" v-model="form.enabled" />
@@ -207,12 +201,12 @@
         </label>
         <label class="input-label">
           <span>Approval mode override</span>
-          <select v-model="form.approvalMode">
-            <option value="">Use global default</option>
-            <option value="safe-only">Require approval unless read-only</option>
-            <option value="always">Always require approval</option>
-            <option value="never">Never require approval</option>
-          </select>
+          <SettingsSelect
+            :model-value="form.approvalMode"
+            :options="mcpApprovalOverrideOptions"
+            aria-label="Approval mode override"
+            @update:model-value="updateFormApprovalModeSelection"
+          />
         </label>
         <label class="input-label">
           <span>Tool allowlist (one per line)</span>
@@ -287,6 +281,7 @@ import { ref, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';
 
+import SettingsSelect from './SettingsSelect.vue';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type {
@@ -347,9 +342,40 @@ const createEmptyForm = (): ServerForm => ({
 
 const form = ref<ServerForm>(createEmptyForm());
 
+const mcpDefaultApprovalModeOptions = [
+  { value: 'safe-only', label: 'Require approval unless tool is read-only (Recommended)' },
+  { value: 'always', label: 'Always require approval' },
+  { value: 'never', label: 'Never require approval' },
+];
+
+const mcpTransportOptions = [
+  { value: 'stdio', label: 'Stdio (local process)' },
+  { value: 'streamable-http', label: 'Streamable HTTP (Recommended)' },
+  { value: 'sse', label: 'SSE (legacy compatibility)' },
+];
+
+const mcpApprovalOverrideOptions = [
+  { value: '', label: 'Use global default' },
+  { value: 'safe-only', label: 'Require approval unless read-only' },
+  { value: 'always', label: 'Always require approval' },
+  { value: 'never', label: 'Never require approval' },
+];
+
 const updateMcp = <K extends keyof AppConfig['mcp']>(key: K, value: AppConfig['mcp'][K]) => {
   config.value.mcp[key] = value;
   emit('config-change');
+};
+
+const updateDefaultApprovalModeSelection = (value: string) => {
+  updateMcp('defaultApprovalMode', value as AppConfig['mcp']['defaultApprovalMode']);
+};
+
+const updateFormTransportSelection = (value: string) => {
+  form.value.transport = value as McpTransport;
+};
+
+const updateFormApprovalModeSelection = (value: string) => {
+  form.value.approvalMode = value as ServerForm['approvalMode'];
 };
 
 const loadServers = async (options?: { clearActionError?: boolean }) => {

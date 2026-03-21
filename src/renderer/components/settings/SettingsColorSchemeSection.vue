@@ -181,15 +181,12 @@
               </label>
               <label class="input-label">
                 <span>Type</span>
-                <select
-                  :value="editor.type"
-                  @change="
-                    setEditorType(($event.target as HTMLSelectElement).value as ThemeVariant)
-                  "
-                >
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
-                </select>
+                <SettingsSelect
+                  :model-value="editor.type"
+                  :options="themeVariantOptions"
+                  aria-label="Theme variant"
+                  @update:model-value="setEditorType($event as ThemeVariant)"
+                />
               </label>
             </div>
 
@@ -411,6 +408,7 @@ import {
   Trash2,
 } from 'lucide-vue-next';
 
+import SettingsSelect from './SettingsSelect.vue';
 import ThemeColorField from './ThemeColorField.vue';
 import { useConfigStore } from '../../store/config';
 import { compileBase46ThemeDocument } from '../../../shared/theme/base46_compile';
@@ -453,6 +451,10 @@ const { config } = storeToRefs(configStore);
 const themeOptions = ['light', 'dark', 'system'] as const;
 const quickStarts = THEME_QUICK_STARTS;
 const searchQuery = ref('');
+const themeVariantOptions = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' },
+];
 
 const createInitialSimpleSeed = (): SimpleThemeSeed => ({ ...quickStarts[0].dark });
 const createInitialAdvancedSeed = (): AdvancedThemeSeed =>

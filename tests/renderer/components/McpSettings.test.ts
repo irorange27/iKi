@@ -40,6 +40,23 @@ const findLabelByText = (wrapper: VueWrapper, text: string) => {
   return match;
 };
 
+const selectSettingsOption = async (wrapper: VueWrapper, labelText: string, optionText: string) => {
+  const label = findLabelByText(wrapper, labelText);
+  await label.find('.settings-select-trigger').trigger('click');
+  await flushPromises();
+
+  const option = label
+    .findAll('.settings-select-option')
+    .find(candidate => candidate.text().replace(/\s+/g, ' ').includes(optionText));
+
+  if (!option) {
+    throw new Error(`Option not found for "${labelText}": ${optionText}`);
+  }
+
+  await option.trigger('click');
+  await flushPromises();
+};
+
 const mountMcpSettings = async (options?: {
   servers?: McpServerSummary[];
 }) => {
@@ -112,7 +129,7 @@ describe('McpSettings', () => {
 
     await formCard.find('input[placeholder="Local tools"]').setValue('Local Tools');
     await findLabelByText(formCard, 'Enabled').find('input').setValue(true);
-    await findLabelByText(formCard, 'Approval mode override').find('select').setValue('always');
+    await selectSettingsOption(formCard, 'Approval mode override', 'Always require approval');
     await findLabelByText(formCard, 'Tool allowlist').find('textarea').setValue('web\nfetch');
     await findLabelByText(formCard, 'Command').find('input').setValue('node');
     await findLabelByText(formCard, 'Working directory').find('input').setValue('/tmp/mcp-demo');
@@ -151,8 +168,7 @@ describe('McpSettings', () => {
     const formCard = cards[cards.length - 1];
 
     await formCard.find('input[placeholder="Local tools"]').setValue('Remote Docs');
-    await findLabelByText(formCard, 'Transport').find('select').setValue('streamable-http');
-    await flushPromises();
+    await selectSettingsOption(formCard, 'Transport', 'Streamable HTTP (Recommended)');
     await findLabelByText(formCard, 'Base URL').find('input').setValue('https://docs.example.com');
     await findLabelByText(formCard, 'Headers').find('textarea').setValue('bad header');
 

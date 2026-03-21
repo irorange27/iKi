@@ -216,13 +216,12 @@
 
           <label class="input-label"
             >Type
-            <select v-model="editingProvider.type">
-              <option value="openai">OpenAI Compatible</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="google">Google Gemini</option>
-              <option value="ollama">Ollama</option>
-              <option value="custom">Custom</option>
-            </select>
+            <SettingsSelect
+              :model-value="editingProvider.type"
+              :options="providerTypeOptions"
+              aria-label="Custom provider type"
+              @update:model-value="updateEditingProviderTypeSelection"
+            />
           </label>
 
           <label class="input-label"
@@ -259,6 +258,7 @@
 import { ref, computed, onMounted } from 'vue';
 import LobeIcon from '../../components/Icon/LobeIcon.vue';
 import { BookOpen, Cog, RefreshCw, Save } from 'lucide-vue-next';
+import SettingsSelect from './SettingsSelect.vue';
 import { BuiltInProvider } from '../../../shared/types/settings';
 import type { Provider } from '../../../shared/types/provider';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
@@ -295,6 +295,14 @@ const providerFormData = ref({
 const isFetchingModels = ref(false);
 const dynamicModels = ref<Record<string, string[]>>({});
 const selectedModels = ref<Record<string, string[]>>({});
+
+const providerTypeOptions = [
+  { value: 'openai', label: 'OpenAI Compatible' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'google', label: 'Google Gemini' },
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'custom', label: 'Custom' },
+];
 
 const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
 
@@ -619,6 +627,11 @@ const addCustomProvider = () => {
     available_models: '[]',
   };
   showProviderEditor.value = true;
+};
+
+const updateEditingProviderTypeSelection = (value: string) => {
+  if (!editingProvider.value) return;
+  editingProvider.value.type = value;
 };
 
 const saveProvider = async () => {

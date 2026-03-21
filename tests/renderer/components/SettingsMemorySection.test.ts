@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import SettingsMemorySection from '../../../src/renderer/components/settings/SettingsMemorySection.vue';
@@ -67,6 +67,25 @@ const findPanelByHeader = (wrapper: VueWrapper, header: string) => {
   }
 
   return match;
+};
+
+const selectSettingsOption = async (
+  wrapper: VueWrapper | DOMWrapper<Element>,
+  optionText: string
+) => {
+  await wrapper.find('.settings-select-trigger').trigger('click');
+  await flushPromises();
+
+  const option = wrapper
+    .findAll('.settings-select-option')
+    .find(candidate => candidate.text().replace(/\s+/g, ' ').includes(optionText));
+
+  if (!option) {
+    throw new Error(`Option not found: ${optionText}`);
+  }
+
+  await option.trigger('click');
+  await flushPromises();
 };
 
 const buildThread = (overrides: Partial<ChatThread> & Pick<ChatThread, 'id' | 'title'>): ChatThread => ({
@@ -308,7 +327,7 @@ describe('SettingsMemorySection', () => {
     expect(wrapper.text()).toContain('Primary: focused');
     expect(wrapper.text()).toContain('Remember the alpha workspace path.');
     expect(wrapper.text()).toContain('User prefers concise release notes.');
-    expect(wrapper.find('.memory-editor select').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.memory-editor .settings-select-trigger').attributes('disabled')).toBeDefined();
   });
 
   it('searches across all threads with trimmed queries and the current retrieval budget config', async () => {
@@ -349,8 +368,7 @@ describe('SettingsMemorySection', () => {
         },
       });
 
-    await wrapper.find('.memory-controls select').setValue('__all__');
-    await flushPromises();
+    await selectSettingsOption(wrapper.find('.memory-controls .input-label'), 'All threads');
 
     expect(shortListAll).toHaveBeenCalledWith(50);
     expect(longListAll).toHaveBeenCalledWith(25);

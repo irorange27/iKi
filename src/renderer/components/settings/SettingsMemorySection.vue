@@ -442,16 +442,14 @@
       <div class="memory-controls">
         <label class="input-label">
           <span>Thread</span>
-          <select
-            :value="selectedMemoryThreadId"
-            @change="selectMemoryThread(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="" disabled>Select a thread</option>
-            <option :value="ALL_THREADS">All threads</option>
-            <option v-for="thread in memoryThreads" :key="thread.id" :value="thread.id">
-              {{ thread.title || thread.id }}
-            </option>
-          </select>
+          <SettingsSelect
+            :model-value="selectedMemoryThreadId"
+            :options="memoryViewerThreadOptions"
+            placeholder="Select a thread"
+            empty-text="No threads available."
+            aria-label="Memory viewer thread"
+            @update:model-value="selectMemoryThread"
+          />
         </label>
         <button
           class="secondary-btn memory-refresh"
@@ -511,16 +509,15 @@
         <div class="memory-editor-grid">
           <label class="input-label">
             <span>Thread</span>
-            <select
-              :value="newLongMemoryThreadId"
+            <SettingsSelect
+              :model-value="newLongMemoryThreadId"
+              :options="memoryEditorThreadOptions"
               :disabled="isMemoryThreadLocked"
-              @change="newLongMemoryThreadId = ($event.target as HTMLSelectElement).value"
-            >
-              <option value="" disabled>Select a thread</option>
-              <option v-for="thread in memoryThreads" :key="thread.id" :value="thread.id">
-                {{ thread.title || thread.id }}
-              </option>
-            </select>
+              placeholder="Select a thread"
+              empty-text="No threads available."
+              aria-label="New long memory thread"
+              @update:model-value="updateNewLongMemoryThreadSelection"
+            />
           </label>
           <label class="input-label">
             <span>Summary</span>
@@ -704,6 +701,7 @@
 import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
+import SettingsSelect from './SettingsSelect.vue';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type { ChatThread } from '../../../shared/types/chat';
@@ -815,6 +813,21 @@ const threadLabelMap = computed(() => {
   return map;
 });
 
+const memoryViewerThreadOptions = computed(() => [
+  { value: ALL_THREADS, label: 'All threads' },
+  ...memoryThreads.value.map(thread => ({
+    value: thread.id,
+    label: thread.title || thread.id,
+  })),
+]);
+
+const memoryEditorThreadOptions = computed(() =>
+  memoryThreads.value.map(thread => ({
+    value: thread.id,
+    label: thread.title || thread.id,
+  }))
+);
+
 const getThreadLabel = (threadId?: string): string => {
   if (!threadId) return 'Unknown thread';
   return threadLabelMap.value.get(threadId) || threadId;
@@ -872,6 +885,10 @@ const selectMemoryThread = async (threadId: string) => {
     editingLongMemoryOriginal.value = '';
   }
   await refreshMemory();
+};
+
+const updateNewLongMemoryThreadSelection = (threadId: string) => {
+  newLongMemoryThreadId.value = threadId;
 };
 
 const refreshMemory = async () => {

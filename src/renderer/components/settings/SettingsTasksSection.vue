@@ -18,10 +18,12 @@
 
       <label class="input-label">
         <span>Schedule Type</span>
-        <select v-model="taskForm.schedule_type">
-          <option value="interval">Interval (minutes)</option>
-          <option value="cron">Cron expression</option>
-        </select>
+        <SettingsSelect
+          :model-value="taskForm.schedule_type"
+          :options="taskScheduleTypeOptions"
+          aria-label="Task schedule type"
+          @update:model-value="updateTaskScheduleTypeSelection"
+        />
       </label>
 
       <div class="task-form-grid">
@@ -44,15 +46,15 @@
 
         <label class="input-label">
           <span>Provider</span>
-          <select v-model="taskForm.provider_type">
-            <option
-              v-for="provider in uniqueProviderTypes"
-              :key="provider.type"
-              :value="provider.type"
-            >
-              {{ provider.name }}
-            </option>
-          </select>
+          <SettingsSelect
+            :model-value="taskForm.provider_type"
+            :options="taskProviderOptions"
+            :disabled="taskProviderOptions.length === 0"
+            placeholder="Select a provider"
+            empty-text="No providers available."
+            aria-label="Task provider"
+            @update:model-value="updateTaskProviderSelection"
+          />
         </label>
       </div>
 
@@ -67,30 +69,35 @@
 
       <label class="input-label">
         <span>Model</span>
-        <select v-model="taskForm.model">
-          <option v-for="model in taskAvailableModels" :key="model" :value="model">
-            {{ model }}
-          </option>
-        </select>
+        <SettingsSelect
+          :model-value="taskForm.model"
+          :options="taskModelOptions"
+          :disabled="taskModelOptions.length === 0"
+          placeholder="Select a model"
+          empty-text="No models available."
+          aria-label="Task model"
+          @update:model-value="updateTaskModelSelection"
+        />
       </label>
 
       <label class="input-label">
         <span>Push To Thread</span>
-        <select v-model="taskForm.thread_id">
-          <option value="">Auto-create dedicated thread</option>
-          <option v-for="thread in taskThreads" :key="thread.id" :value="thread.id">
-            {{ thread.title || thread.id }}
-          </option>
-        </select>
+        <SettingsSelect
+          :model-value="taskForm.thread_id"
+          :options="taskThreadOptions"
+          aria-label="Push task output to thread"
+          @update:model-value="updateTaskThreadSelection"
+        />
       </label>
 
       <label class="input-label">
         <span>Tool Strategy</span>
-        <select v-model="taskForm.tool_mode">
-          <option value="auto">Auto (agent decides)</option>
-          <option value="manual">Manual safe allowlist</option>
-          <option value="disabled">Disabled</option>
-        </select>
+        <SettingsSelect
+          :model-value="taskForm.tool_mode"
+          :options="taskToolModeOptions"
+          aria-label="Task tool strategy"
+          @update:model-value="updateTaskToolModeSelection"
+        />
         <div class="input-hint">
           Auto lets the task agent decide when to use safe built-in tools for freshness.
         </div>
@@ -248,6 +255,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, toRaw, watch } from 'vue';
 
+import SettingsSelect from './SettingsSelect.vue';
 import type { ChatThread } from '../../../shared/types/chat';
 import type {
   ProactiveTask,
@@ -285,6 +293,15 @@ const taskRunLoading = ref<Record<string, boolean>>({});
 const taskThreads = ref<ChatThread[]>([]);
 
 const SAFE_TASK_TOOLS = SAFE_PROACTIVE_TASK_TOOLS;
+const taskScheduleTypeOptions = [
+  { value: 'interval', label: 'Interval (minutes)' },
+  { value: 'cron', label: 'Cron expression' },
+];
+const taskToolModeOptions = [
+  { value: 'auto', label: 'Auto (agent decides)' },
+  { value: 'manual', label: 'Manual safe allowlist' },
+  { value: 'disabled', label: 'Disabled' },
+];
 
 const isTaskPushPayload = (payload: unknown): payload is { type?: string } =>
   typeof payload === 'object' && payload !== null && 'type' in payload;
@@ -335,12 +352,54 @@ const uniqueProviderTypes = computed(() => {
     }));
 });
 
+const taskProviderOptions = computed(() =>
+  uniqueProviderTypes.value.map(provider => ({
+    value: provider.type,
+    label: provider.name,
+  }))
+);
+
 const taskAvailableModels = computed(() => {
   const type = taskForm.value.provider_type;
   if (!type) return [];
   const provider = props.providers.find(candidate => candidate.type === type);
   return provider?.models || [];
 });
+
+const taskModelOptions = computed(() =>
+  taskAvailableModels.value.map(model => ({
+    value: model,
+    label: model,
+  }))
+);
+
+const taskThreadOptions = computed(() => [
+  { value: '', label: 'Auto-create dedicated thread' },
+  ...taskThreads.value.map(thread => ({
+    value: thread.id,
+    label: thread.title || thread.id,
+  })),
+]);
+
+const updateTaskScheduleTypeSelection = (value: string) => {
+  taskForm.value.schedule_type = value as 'interval' | 'cron';
+};
+
+const updateTaskProviderSelection = (value: string) => {
+  taskForm.value.provider_type = value;
+};
+
+const updateTaskModelSelection = (value: string) => {
+  taskForm.value.model = value;
+};
+
+const updateTaskThreadSelection = (value: string) => {
+  taskForm.value.thread_id = value;
+};
+
+const updateTaskToolModeSelection = (value: string) => {
+  taskForm.value.tool_mode = value as ProactiveTaskToolMode;
+};
 
 const loadTaskThreads = async () => {
   try {

@@ -38,6 +38,23 @@ const findLabelByText = (wrapper: VueWrapper, text: string) => {
   return match;
 };
 
+const selectSettingsOption = async (wrapper: VueWrapper, labelText: string, optionText: string) => {
+  const label = findLabelByText(wrapper, labelText);
+  await label.find('.settings-select-trigger').trigger('click');
+  await flushPromises();
+
+  const option = label
+    .findAll('.settings-select-option')
+    .find(candidate => candidate.text().replace(/\s+/g, ' ').includes(optionText));
+
+  if (!option) {
+    throw new Error(`Option not found for "${labelText}": ${optionText}`);
+  }
+
+  await option.trigger('click');
+  await flushPromises();
+};
+
 const buildTask = (overrides: Partial<ProactiveTask> & Pick<ProactiveTask, 'id' | 'name'>): ProactiveTask => ({
   id: overrides.id,
   name: overrides.name,
@@ -148,20 +165,17 @@ describe('SettingsTasksSection', () => {
     await wrapper.find('textarea[placeholder="What should this task do?"]').setValue(
       'Watch the docs and summarize changes.'
     );
-    await findLabelByText(wrapper, 'Schedule Type').find('select').setValue('cron');
-    await flushPromises();
+    await selectSettingsOption(wrapper, 'Schedule Type', 'Cron expression');
     await wrapper.find('input[placeholder="*/15 * * * *"]').setValue('0 9 * * 1-5');
     await wrapper.find('input[placeholder="Auto (local time zone)"]').setValue('Asia/Shanghai');
-    await findLabelByText(wrapper, 'Provider').find('select').setValue('deepseek');
-    await flushPromises();
+    await selectSettingsOption(wrapper, 'Provider', 'DeepSeek (deepseek)');
 
-    const modelSelect = findLabelByText(wrapper, 'Model').find('select');
-    const modelOptions = modelSelect.findAll('option').map(option => option.text());
-    expect(modelOptions).toEqual(['deepseek-chat']);
+    expect(findLabelByText(wrapper, 'Model').find('.settings-select-trigger').text()).toContain(
+      'deepseek-chat'
+    );
 
-    await findLabelByText(wrapper, 'Push To Thread').find('select').setValue('thread_docs');
-    await findLabelByText(wrapper, 'Tool Strategy').find('select').setValue('manual');
-    await flushPromises();
+    await selectSettingsOption(wrapper, 'Push To Thread', 'Docs Thread');
+    await selectSettingsOption(wrapper, 'Tool Strategy', 'Manual safe allowlist');
     await findLabelByText(wrapper, 'fetch').find('input').setValue(false);
 
     await findButtonByText(wrapper, 'Create Task').trigger('click');
@@ -191,8 +205,7 @@ describe('SettingsTasksSection', () => {
     await wrapper.find('textarea[placeholder="What should this task do?"]').setValue(
       'Try to run manually without tools.'
     );
-    await findLabelByText(wrapper, 'Tool Strategy').find('select').setValue('manual');
-    await flushPromises();
+    await selectSettingsOption(wrapper, 'Tool Strategy', 'Manual safe allowlist');
     await findLabelByText(wrapper, 'web').find('input').setValue(false);
     await findLabelByText(wrapper, 'fetch').find('input').setValue(false);
 
