@@ -1009,6 +1009,37 @@ describe('chat_context assembler', () => {
     );
   });
 
+  it('injects workspace scope through the shared identity block without hard-coupling tests to workspace storage', async () => {
+    const workspaceSystemMessage = vi.fn(
+      () => 'Workspace scope:\n- Active workspace: /Users/nina/Developer/MyRepo/iki'
+    );
+
+    const assembler = createChatContextAssembler({
+      memory: {
+        retrieveRelevantMemory: vi.fn(() => null),
+        getAffectContextMessage: vi.fn(() => ''),
+      } as never,
+      workspaceSystemMessage,
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_workspace',
+      messages: [{ role: 'user', content: 'list project files' }],
+    });
+
+    expect(workspaceSystemMessage).toHaveBeenCalledWith('thread_workspace');
+    expect(result.messages[0]).toEqual({
+      role: 'system',
+      content: 'Workspace scope:\n- Active workspace: /Users/nina/Developer/MyRepo/iki',
+    });
+    expect(findBlock(result, 'identity')).toEqual(
+      expect.objectContaining({
+        kind: 'identity',
+        status: 'included',
+      })
+    );
+  });
+
   it('injects thread relationship context as a dedicated bounded block', async () => {
     getRelationshipContextMessageMock.mockReturnValue(
       'Relationship context for iKi:\n- Current thread: QQ Group 30003\n- Thread relationship: shared group context.'

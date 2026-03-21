@@ -10,7 +10,6 @@ import {
   type ThreadSummaryMessage,
 } from '../../../core/context/thread_summary';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
-import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
 import type { ChatInputMessage } from './chat_types';
 import type { ChatMemory } from './chat_memory';
 import { resolveSkillsSystemPrompt } from './chat_skills';
@@ -426,12 +425,13 @@ const buildThreadSummaryContext = (
 };
 
 const buildIdentityContext = (
-  threadId: string | undefined,
+  identityMessage: string,
+  workspaceMessage: string | undefined,
   contextConfig: ContextConfig
 ): IdentityContext => {
-  const identityMessage = getIdentityContextMessage().trim();
-  const workspaceMessage = buildThreadWorkspaceSystemMessage(threadId).trim();
-  const combinedMessage = [identityMessage, workspaceMessage].filter(Boolean).join('\n\n');
+  const combinedMessage = [identityMessage.trim(), workspaceMessage?.trim() ?? '']
+    .filter(Boolean)
+    .join('\n\n');
   const identityClip = clipTextToTokenBudget(combinedMessage, contextConfig.maxIdentityTokens);
 
   return {
@@ -689,7 +689,10 @@ const buildAssembleResult = (params: {
   },
 });
 
-export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
+export const createChatContextAssembler = (deps: {
+  memory: ChatMemory;
+  workspaceSystemMessage?: (threadId?: string) => string;
+}) => {
   const assemble = async (
     params: AssembleChatContextParams
   ): Promise<AssembleChatContextResult> => {
@@ -710,7 +713,11 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
     const recentHistory = selectRecentHistory(params.messages, contextConfig);
     blocks.push(recentHistory.block);
 
-    const identityContext = buildIdentityContext(params.threadId, contextConfig);
+    const identityContext = buildIdentityContext(
+      getIdentityContextMessage(),
+      deps.workspaceSystemMessage?.(params.threadId),
+      contextConfig
+    );
     blocks.push(identityContext.block);
 
     const relationshipContext = buildRelationshipContext(params.threadId, contextConfig);

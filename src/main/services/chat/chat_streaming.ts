@@ -19,6 +19,7 @@ import * as kimiProvider from '../../../core/provider/llm/kimi';
 import * as openaiProvider from '../../../core/provider/llm/openai';
 import { defaultToolRegistry } from '../../../core/tools';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
+import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
 import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
@@ -80,6 +81,7 @@ export const createChatStreaming = (deps: {
   });
   const contextAssembler = createChatContextAssembler({
     memory: deps.memory,
+    workspaceSystemMessage: buildThreadWorkspaceSystemMessage,
   });
 
   const getMemoryConfig = () => getAppConfig()?.memory || null;
