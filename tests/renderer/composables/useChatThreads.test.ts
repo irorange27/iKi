@@ -162,4 +162,24 @@ describe('useChatThreads', () => {
     expect(state.currentThread.value?.id).toBe(normalThread.id);
     expect(state.isIncognito.value).toBe(false);
   });
+
+  it('syncs the active composer model from the selected thread', async () => {
+    const deepseekThread = createStoredThread({
+      id: 'thread_deepseek',
+      title: 'DeepSeek thread',
+      model: 'deepseek-chat',
+    });
+    const openaiThread = createStoredThread({
+      id: 'thread_openai',
+      title: 'OpenAI thread',
+      model: 'gpt-4o',
+    });
+    const { state } = createHarness([deepseekThread, openaiThread]);
+
+    await state.selectThread(deepseekThread.id);
+    expect(state.currentModel.value).toBe('deepseek-chat');
+
+    await state.selectThread(openaiThread.id);
+    expect(state.currentModel.value).toBe('gpt-4o');
+  });
 });

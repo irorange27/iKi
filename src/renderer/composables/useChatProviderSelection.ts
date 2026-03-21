@@ -9,6 +9,7 @@ export const resolveProviderSelection = (params: {
   providers: Provider[];
   currentProvider: Provider | null;
   currentModel: string;
+  preferredModel?: string | null;
 }): {
   availableProviders: Provider[];
   selectedProvider: Provider | null;
@@ -23,20 +24,30 @@ export const resolveProviderSelection = (params: {
     };
   }
 
+  const preferredModel = typeof params.preferredModel === 'string' ? params.preferredModel.trim() : '';
+  const currentModel = params.currentModel.trim();
   const previousProviderId = params.currentProvider?.id;
   const previousProvider =
     availableProviders.find(provider => provider.id === previousProviderId) || null;
   const previousProviderModels = previousProvider ? parseModelList(previousProvider.models) : [];
+  const findProviderForModel = (model: string): Provider | null => {
+    if (!model) return null;
+    return availableProviders.find(provider => parseModelList(provider.models).includes(model)) || null;
+  };
   const selectedProvider =
+    (preferredModel && previousProviderModels.includes(preferredModel) ? previousProvider : null) ||
+    findProviderForModel(preferredModel) ||
     (previousProvider && previousProviderModels.length > 0 ? previousProvider : null) ||
     availableProviders.find(provider => parseModelList(provider.models).length > 0) ||
     previousProvider ||
     availableProviders[0] ||
     null;
   const availableModels = selectedProvider ? parseModelList(selectedProvider.models) : [];
-  const selectedModel = availableModels.includes(params.currentModel)
-    ? params.currentModel
-    : availableModels[0] || '';
+  const selectedModel =
+    (preferredModel && availableModels.includes(preferredModel) ? preferredModel : '') ||
+    (currentModel && availableModels.includes(currentModel) ? currentModel : '') ||
+    availableModels[0] ||
+    '';
 
   return {
     availableProviders,
@@ -52,24 +63,35 @@ export const useChatProviderSelection = (deps: {
   const selectedModel = ref('');
   const availableProviders = ref<Provider[]>([]);
 
-  const loadAvailableProviders = async () => {
+  const applyResolvedSelection = (preferredModel?: string | null) => {
+    const resolved = resolveProviderSelection({
+      providers: availableProviders.value,
+      currentProvider: selectedProvider.value,
+      currentModel: selectedModel.value,
+      preferredModel,
+    });
+
+    availableProviders.value = resolved.availableProviders;
+    selectedProvider.value = resolved.selectedProvider;
+    selectedModel.value = resolved.selectedModel;
+  };
+
+  const loadAvailableProviders = async (preferredModel?: string | null) => {
     try {
       const providers = await deps.electronAPI.providers.list();
-      const resolved = resolveProviderSelection({
-        providers: Array.isArray(providers) ? providers : [],
-        currentProvider: selectedProvider.value,
-        currentModel: selectedModel.value,
-      });
-
-      availableProviders.value = resolved.availableProviders;
-      selectedProvider.value = resolved.selectedProvider;
-      selectedModel.value = resolved.selectedModel;
+      availableProviders.value = Array.isArray(providers) ? providers.filter(provider => provider?.enabled) : [];
+      applyResolvedSelection(preferredModel);
     } catch (error) {
       console.error('Failed to load providers:', error);
       availableProviders.value = [];
       selectedProvider.value = null;
       selectedModel.value = '';
     }
+  };
+
+  const syncPreferredModel = (preferredModel?: string | null) => {
+    if (availableProviders.value.length === 0) return;
+    applyResolvedSelection(preferredModel);
   };
 
   const selectProviderModel = (payload: { provider: Provider; model: string }) => {
@@ -96,7 +118,16 @@ export const useChatProviderSelection = (deps: {
     }
 
     const selectedProviderName = getProviderDisplayName(selectedProvider.value);
-    const configured = await deps.electronAPI.chat.isProviderConfigured(selectedProvider.value.type);
+    let configured = false;
+    try {
+      configured = await deps.electronAPI.chat.isProviderConfigured(selectedProvider.value.type);
+    } catch (error) {
+      console.error('Failed to verify provider configuration:', error);
+      return {
+        ok: false,
+        message: `Failed to verify the ${selectedProviderName} provider configuration. Please try again.`,
+      };
+    }
     if (!configured) {
       return {
         ok: false,
@@ -124,6 +155,7 @@ export const useChatProviderSelection = (deps: {
     availableProviders,
     loadAvailableProviders,
     selectProviderModel,
+    syncPreferredModel,
     ensureProviderReady,
   };
 };

@@ -20,19 +20,44 @@ A local agent pet for AI provider orchestration.
 
 ## Getting Started
 
-1. Clone the repository:
+1. Install Node.js 20.x and npm 10.x.
+
+2. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-repo/iki.git
+   git clone https://github.com/irorange27/iKi.git
    ```
 
-2. Navigate to the project directory:
+3. Navigate to the project directory:
 
    ```bash
-   cd iki
+   cd iKi
    ```
 
-3. Follow the setup instructions in the documentation.
+4. Install dependencies:
+
+   ```bash
+   npm ci
+   ```
+
+5. Start the desktop app in development mode:
+
+   ```bash
+   npm run app:dev
+   ```
+
+6. Open `Settings`, configure at least one provider API key and model, then send
+   your first chat message.
+
+## Useful Commands
+
+- `npm run app:dev`: start the desktop app through Electron Forge's Vite flow.
+- `npm run app:preview`: package and launch a local packaged build for smoke testing.
+- `npm run app:build`: create distributable artifacts via Electron Forge makers.
+- `npm run -s ci:quality`: run the repository quality gate locally.
+
+Packaging may download platform-specific Electron artifacts the first time it
+runs, so `app:preview` and `app:build` expect normal network access.
 
 ## Development Notes
 
@@ -66,6 +91,8 @@ A local agent pet for AI provider orchestration.
 - Conventional Commits remain required for history hygiene, but release intent is manual
 - Curated product notes live in `changelogs/`; there is no `release-please` or machine-generated
   root `CHANGELOG.md` flow
+- Local release smoke path: run `npm run app:preview` before a version cut; `npm run app:build`
+  uses the same Forge `make` route as CI
 - `release-build` runs automatically on `package.json` version updates in `main` and on GitHub
   Release publish
 - `release-build` first runs a lockfile preflight (`npm ci --ignore-scripts`) before matrix builds

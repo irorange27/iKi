@@ -84,6 +84,34 @@ describe('chat provider selection', () => {
     });
   });
 
+  it('prefers a provider that exposes the active thread model', () => {
+    const deepseek = buildProvider({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      type: 'deepseek',
+      models: '["deepseek-chat"]',
+    });
+    const openai = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1","gpt-4o"]',
+    });
+
+    expect(
+      resolveProviderSelection({
+        providers: [deepseek, openai],
+        currentProvider: deepseek,
+        currentModel: 'deepseek-chat',
+        preferredModel: 'gpt-4o',
+      })
+    ).toEqual({
+      availableProviders: [deepseek, openai],
+      selectedProvider: openai,
+      selectedModel: 'gpt-4o',
+    });
+  });
+
   it('surfaces provider configuration failures before send', async () => {
     const openai = buildProvider({
       id: 'openai',
@@ -113,6 +141,40 @@ describe('chat provider selection', () => {
     expect(result).toEqual({
       ok: false,
       message: 'Please configure the OpenAI API key in Settings.',
+    });
+  });
+
+  it('surfaces provider verification exceptions before send', async () => {
+    const openai = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const providerList = vi.fn(async () => [openai]);
+    const isProviderConfigured = vi.fn(async () => {
+      throw new Error('ipc failed');
+    });
+    const selection = useChatProviderSelection({
+      electronAPI: {
+        providers: {
+          list: providerList,
+        },
+        chat: {
+          isProviderConfigured,
+        },
+      } as never,
+    });
+
+    await selection.loadAvailableProviders();
+    const result = await selection.ensureProviderReady();
+
+    expect(providerList).toHaveBeenCalledTimes(1);
+    expect(isProviderConfigured).toHaveBeenCalledWith('openai');
+    expect(result).toEqual({
+      ok: false,
+      message: 'Failed to verify the OpenAI provider configuration. Please try again.',
     });
   });
 });

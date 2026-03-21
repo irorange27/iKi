@@ -59,6 +59,7 @@
           ref="chatInputRef"
           :chat="chat"
           :thread-id="currentThread?.id || ''"
+          :active-model="currentModel"
           :is-incognito="isIncognito"
           :context-usage="composerContextUsage"
           @message-sent="handleMessageSent"

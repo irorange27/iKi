@@ -58,6 +58,7 @@ describe('loadRendererEntry', () => {
     expect(loadURL.mock.calls[0]?.[0]).toContain('data:text/html');
     expect(loadURL.mock.calls[0]?.[0]).toContain(encodeURIComponent('Renderer not available'));
     expect(loadURL.mock.calls[0]?.[0]).toContain(encodeURIComponent('npm run app:dev'));
+    expect(loadURL.mock.calls[0]?.[0]).toContain(encodeURIComponent('npm run app:preview'));
   });
 
   it('loads the packaged renderer HTML directly in production mode', async () => {

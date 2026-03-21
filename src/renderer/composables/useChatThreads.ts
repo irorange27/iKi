@@ -149,6 +149,7 @@ export const useChatThreads = (deps: {
         is_incognito: isIncognito.value ? 1 : 0,
       });
       currentThread.value = thread;
+      currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
       syncIncognitoState(thread);
       deps.messageStore.clear();
       deps.persistence.resetPersistedMessageIds();
@@ -205,6 +206,7 @@ export const useChatThreads = (deps: {
       }
 
       currentThread.value = thread;
+      currentModel.value = typeof thread.model === 'string' ? thread.model : '';
       syncIncognitoState(thread);
       showWelcome.value = false;
       await loadThreadMessages(threadId);

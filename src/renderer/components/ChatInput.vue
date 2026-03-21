@@ -268,6 +268,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   chat?: Chat<UIMessage>;
   threadId?: string;
+  activeModel?: string;
   isIncognito?: boolean;
   contextUsage?: {
     usedTokens: number;
@@ -303,6 +304,7 @@ const {
   availableProviders,
   loadAvailableProviders,
   selectProviderModel,
+  syncPreferredModel,
   ensureProviderReady,
 } = useChatProviderSelection({
   electronAPI,
@@ -349,6 +351,14 @@ watch(
     if (loading) return;
     if (threadId === previousThreadId && previousLoading === loading) return;
     await syncToolSelectionFromThread(threadId);
+  }
+);
+
+watch(
+  () => props.activeModel,
+  (activeModel, previousActiveModel) => {
+    if (activeModel === previousActiveModel) return;
+    syncPreferredModel(activeModel);
   }
 );
 
@@ -529,7 +539,7 @@ const sendMessage = async () => {
 };
 
 onMounted(async () => {
-  await loadAvailableProviders();
+  await loadAvailableProviders(props.activeModel);
   await loadSpeechStatus();
   await syncToolSelectionFromThread(props.threadId);
 });

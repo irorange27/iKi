@@ -140,8 +140,8 @@ const buildRendererUnavailablePage = (params: {
       <ul>
         <li>Expected dev server: <code>${escapeHtml(params.devServerUrl)}${escapeHtml(routeSuffix)}</code></li>
         <li>Expected built file: <code>${escapeHtml(params.prodHtmlPath)}</code></li>
-        <li>For development, start with <code>npm run app:dev</code> or run <code>npm run vite:dev</code> before <code>electron .</code>.</li>
-        <li>For local preview without the dev server, run <code>npm run app:preview</code>.</li>
+        <li>For development, start with <code>npm run app:dev</code> (or <code>npm run start</code>).</li>
+        <li>For a packaged local preview, run <code>npm run app:preview</code>.</li>
       </ul>
     </main>
   </body>

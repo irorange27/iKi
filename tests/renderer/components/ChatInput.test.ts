@@ -38,6 +38,7 @@ const buildProvider = (
 const createElectronApi = (options?: {
   providers?: Provider[];
   configured?: boolean;
+  configuredError?: Error;
   thread?: {
     id: string;
     title: string;
@@ -52,7 +53,12 @@ const createElectronApi = (options?: {
   return {
     api: {
       chat: {
-        isProviderConfigured: vi.fn(async () => options?.configured ?? true),
+        isProviderConfigured: vi.fn(async () => {
+          if (options?.configuredError) {
+            throw options.configuredError;
+          }
+          return options?.configured ?? true;
+        }),
         stopStream: vi.fn(async () => ({ success: true })),
         stream,
         threads: {
@@ -116,6 +122,7 @@ const mountChatInput = async (options?: {
 describe('ChatInput', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
+    Reflect.deleteProperty(window, 'alert');
     vi.restoreAllMocks();
   });
 
@@ -157,6 +164,53 @@ describe('ChatInput', () => {
     expect(wrapper.emitted('model-selected')).toEqual([
       [{ provider: openai, model: 'gpt-4o' }],
     ]);
+  });
+
+  it('aligns the composer selection with the active thread model before send', async () => {
+    const deepseek = buildProvider({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      type: 'deepseek',
+      models: '["deepseek-chat"]',
+    });
+    const openai = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1","gpt-4o"]',
+    });
+
+    const { wrapper, stream } = await mountChatInput({
+      providers: [deepseek, openai],
+      thread: {
+        id: 'thread_1',
+        title: 'Existing thread',
+        model: 'gpt-4o',
+      },
+      props: {
+        threadId: 'thread_1',
+        activeModel: 'gpt-4o',
+      },
+    });
+
+    await wrapper.find('.chat-input-field').setValue('Use the saved model');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    const emitted = wrapper.emitted('message-sent');
+    expect(emitted).toHaveLength(1);
+    expect(emitted?.[0]?.[1]).toBe('gpt-4o');
+
+    const onReady = emitted?.[0]?.[4] as (() => void) | undefined;
+    onReady?.();
+    await flushPromises();
+
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'openai',
+        model: 'gpt-4o',
+      })
+    );
   });
 
   it('sends the current draft through IPC and appends the unsaved user message to transport data', async () => {
@@ -293,5 +347,37 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(wrapper.emitted('incognito-changed')).toEqual([[true], [false]]);
+  });
+
+  it('alerts and aborts send when provider verification throws', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+    const alertSpy = vi.fn();
+    Object.defineProperty(window, 'alert', {
+      configurable: true,
+      value: alertSpy,
+    });
+
+    const { wrapper, stream } = await mountChatInput({
+      providers: [provider],
+      configuredError: new Error('ipc failed'),
+    });
+
+    await wrapper.find('.chat-input-field').setValue('Need help with the repo');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('message-sent')).toBeUndefined();
+    expect(stream).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Failed to verify the OpenAI provider configuration. Please try again.'
+    );
+    expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe(
+      'Need help with the repo'
+    );
   });
 });
