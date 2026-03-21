@@ -534,6 +534,54 @@ describe('daemon server', () => {
     });
   });
 
+  it('answers CORS preflight requests without requiring authentication', async () => {
+    const started = await startTestDaemon();
+
+    const result = await requestJson(started, '/v1/chat/send', {
+      method: 'OPTIONS',
+    });
+
+    expect(result.status).toBe(204);
+    expect(result.headers.get('access-control-allow-origin')).toBe('*');
+    expect(result.headers.get('access-control-allow-methods')).toContain('OPTIONS');
+    expect(getAppClientByTokenMock).not.toHaveBeenCalled();
+    expect(chatServiceMock.send).not.toHaveBeenCalled();
+  });
+
+  it('forces new chat threads to belong to the authenticated client', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:write'] });
+
+    const result = await requestJson(started, '/v1/chat/threads', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: {
+        title: 'Owned Thread',
+        model: 'gpt-4.1',
+        client_id: 'client_other',
+      },
+    });
+
+    expect(result.status).toBe(200);
+    expect(chatServiceMock.createThread).toHaveBeenCalledWith({
+      title: 'Owned Thread',
+      model: 'gpt-4.1',
+      client_id: issued.client.id,
+    });
+    expect(result.json).toEqual({
+      success: true,
+      thread: {
+        id: 'thread_new',
+        title: 'Owned Thread',
+        model: 'gpt-4.1',
+        client_id: issued.client.id,
+      },
+    });
+  });
+
   it('rejects chat send when tools are requested without tools:run scope', async () => {
     const started = await startTestDaemon();
     const issued = issueClient({
