@@ -995,7 +995,7 @@ onMounted(async () => {
   padding: 24px 16px;
   padding-top: 40px;
   /* Space for drag region */
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--surface-shadow-md);
   overflow: hidden;
   min-height: 0;
   position: relative;
@@ -1092,7 +1092,7 @@ onMounted(async () => {
 }
 
 .settings-header-right.is-unsaved {
-  color: #ff6b2d;
+  color: var(--warning-color);
 }
 
 .settings-header-right .unsaved-dot {
@@ -1124,7 +1124,7 @@ onMounted(async () => {
 
 .button-group button.active {
   background: var(--accent-color);
-  color: white;
+  color: var(--accent-contrast);
   border-color: var(--accent-color);
 }
 
@@ -1302,14 +1302,14 @@ onMounted(async () => {
 
 .footer-actions .primary {
   background: var(--accent-color);
-  color: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  color: var(--accent-contrast);
+  box-shadow: var(--surface-shadow-sm);
 }
 
 .footer-actions .primary:hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--surface-shadow-md);
 }
 
 .footer-actions .primary:active {
@@ -1376,21 +1376,21 @@ onMounted(async () => {
 }
 
 .test-result.success {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(var(--success-rgb), 0.15);
+  color: var(--status-success-color);
+  border: 1px solid rgba(var(--success-rgb), 0.3);
 }
 
 .test-result.warning {
-  background: rgba(251, 191, 36, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: rgba(var(--warning-rgb), 0.15);
+  color: var(--warning-color);
+  border: 1px solid rgba(var(--warning-rgb), 0.3);
 }
 
 .test-result.error {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(var(--danger-rgb), 0.15);
+  color: var(--danger-color);
+  border: 1px solid rgba(var(--danger-rgb), 0.3);
 }
 
 .tool-model-info {

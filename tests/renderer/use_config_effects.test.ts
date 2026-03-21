@@ -44,6 +44,10 @@ describe('config effects window chrome sync', () => {
     expect(setAttributeMock).toHaveBeenCalledWith('data-theme', 'light');
     expect(setAttributeMock).toHaveBeenCalledWith('data-theme-preset', 'iki-default');
     expect(setPropertyMock).toHaveBeenCalledWith('--theme-bg-primary', '#ffffff');
+    expect(setPropertyMock).toHaveBeenCalledWith(
+      '--theme-surface-shadow-md',
+      '0 8px 20px rgba(148, 163, 184, 0.12)'
+    );
     expect(setWindowShadowMock).toHaveBeenCalledTimes(1);
     expect(setWindowShadowMock).toHaveBeenCalledWith(true);
   });
@@ -125,5 +129,9 @@ describe('config effects window chrome sync', () => {
     expect(setAttributeMock).toHaveBeenCalledWith('data-theme-preset', 'custom-base46');
     expect(setPropertyMock).toHaveBeenCalledWith('--theme-accent-color', '#112233');
     expect(setPropertyMock).toHaveBeenCalledWith('--theme-chart-1', '#445566');
+    expect(setPropertyMock).toHaveBeenCalledWith(
+      '--theme-surface-inset-highlight',
+      expect.stringMatching(/^inset 0 1px 0 rgba\(/)
+    );
   });
 });

@@ -1051,13 +1051,13 @@ button {
 .composer-icon-btn {
   border: 1px solid var(--chat-composer-control-border-color);
   background: var(--chat-composer-control-background);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--surface-inset-highlight);
 }
 
 .composer-selection-btn {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 8px 18px rgba(0, 0, 0, 0.08);
+    var(--surface-inset-highlight),
+    var(--surface-shadow-md);
 }
 
 .model-selector-trigger {
@@ -1128,9 +1128,7 @@ button {
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
   background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
-  box-shadow:
-    0 28px 56px rgba(0, 0, 0, 0.34),
-    0 12px 22px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--surface-shadow-lg);
   backdrop-filter: blur(18px);
 }
 
@@ -1258,7 +1256,7 @@ button {
 .model-option-selected {
   background: rgba(var(--accent-rgb, 74, 158, 255), 0.22);
   border-color: rgba(var(--accent-rgb, 74, 158, 255), 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chat-composer-action-foreground) 5%, transparent);
 }
 
 .model-option-main {
@@ -1279,7 +1277,7 @@ button {
   margin-top: 1px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
   color: transparent;
   transition:
     background-color 0.18s ease,

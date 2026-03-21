@@ -63,11 +63,15 @@ describe('shared theme registry', () => {
 
     expect(darkPalette.colorScheme).toBe('dark');
     expect(darkPalette.bgPrimary).toBe(preset.dark.base_30.black);
+    expect(darkPalette.surfaceInsetHighlight).toMatch(/^inset 0 1px 0 rgba\(/);
+    expect(darkPalette.surfaceShadowMd).toMatch(/^0 10px 24px rgba\(/);
     expect(darkPalette.accentColor).toBe(preset.dark.base_30.blue);
     expect(darkPalette.chatComposerSendBackground).toMatch(/^rgba\(/);
     expect(darkPalette.chatUserBubbleRadius).toBe('28px 10px 28px 28px');
     expect(lightPalette.colorScheme).toBe('light');
     expect(lightPalette.bgPrimary).toBe(preset.light.base_30.black);
+    expect(lightPalette.surfaceInsetHighlight).toMatch(/^inset 0 1px 0 rgba\(/);
+    expect(lightPalette.surfaceShadowMd).toMatch(/^0 8px 20px rgba\(/);
     expect(lightPalette.accentColor).toBe(preset.light.base_30.blue);
     expect(lightPalette.chatUserBubbleRadius).toBe('28px 10px 28px 28px');
   });

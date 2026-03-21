@@ -48,6 +48,10 @@ export interface ThemeSlotPalette {
   bgTertiary: string;
   bgHover: string;
   bgActive: string;
+  surfaceInsetHighlight: string;
+  surfaceShadowSm: string;
+  surfaceShadowMd: string;
+  surfaceShadowLg: string;
   textPrimary: string;
   textSecondary: string;
   textMuted: string;
@@ -134,6 +138,10 @@ export const THEME_SLOT_TO_CSS_VARIABLE = {
   bgTertiary: '--theme-bg-tertiary',
   bgHover: '--theme-bg-hover',
   bgActive: '--theme-bg-active',
+  surfaceInsetHighlight: '--theme-surface-inset-highlight',
+  surfaceShadowSm: '--theme-surface-shadow-sm',
+  surfaceShadowMd: '--theme-surface-shadow-md',
+  surfaceShadowLg: '--theme-surface-shadow-lg',
   textPrimary: '--theme-text-primary',
   textSecondary: '--theme-text-secondary',
   textMuted: '--theme-text-muted',

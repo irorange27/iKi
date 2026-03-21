@@ -56,6 +56,8 @@ describe('renderer style system foundation', () => {
     const variablesSource = readFileSync(VARIABLES_CSS_PATH, 'utf8');
 
     expect(variablesSource).toMatch(/--theme-bg-primary:/);
+    expect(variablesSource).toMatch(/--theme-surface-inset-highlight:/);
+    expect(variablesSource).toMatch(/--theme-surface-shadow-md:/);
     expect(variablesSource).toMatch(/--warning-color:/);
     expect(variablesSource).toMatch(/--accent-contrast:/);
     expect(variablesSource).toMatch(/--radius-base:/);
@@ -68,6 +70,7 @@ describe('renderer style system foundation', () => {
     expect(variablesSource).toMatch(/--composer-workspace-badge-background:/);
     expect(variablesSource).toMatch(/--sidebar-resize-indicator-color:/);
     expect(variablesSource).toMatch(/--bg-primary:\s*var\(--theme-bg-primary\);/);
+    expect(variablesSource).toMatch(/--surface-shadow-lg:\s*var\(--theme-surface-shadow-lg\);/);
     expect(variablesSource).toMatch(/\[data-theme='light'\][\s\S]*--theme-warning-color:/i);
   });
 

@@ -15,9 +15,22 @@ export const compileBase46ThemeDocument = (theme: Base46ThemeDocument): ThemeSlo
   const bgTertiary = ui.one_bg;
   const bgHover = ui.one_bg2;
   const bgActive = ui.one_bg3 ?? mixHexColors(ui.one_bg2, ui.blue, isLight ? 0.08 : 0.14);
+  const shadowColorBase = isLight
+    ? mixHexColors(ui.line, ui.light_grey, 0.42)
+    : mixHexColors(ui.black, '#000000', 0.78);
   const textPrimary = ui.white;
   const textSecondary = ui.light_grey;
   const textMuted = ui.grey;
+  const surfaceInsetHighlight = `inset 0 1px 0 ${withAlpha('#ffffff', isLight ? 0.72 : 0.04)}`;
+  const surfaceShadowSm = isLight
+    ? `0 2px 6px ${withAlpha(shadowColorBase, 0.12)}`
+    : `0 2px 8px ${withAlpha(shadowColorBase, 0.22)}`;
+  const surfaceShadowMd = isLight
+    ? `0 8px 20px ${withAlpha(shadowColorBase, 0.14)}`
+    : `0 10px 24px ${withAlpha(shadowColorBase, 0.28)}`;
+  const surfaceShadowLg = isLight
+    ? `0 22px 48px ${withAlpha(shadowColorBase, 0.18)}`
+    : `0 24px 56px ${withAlpha(shadowColorBase, 0.34)}`;
   const borderColor = ui.line;
   const accentColor = ui.blue;
   const accentHover = ui.nord_blue ?? mixHexColors(ui.blue, contrastPivot, isLight ? 0.12 : 0.1);
@@ -107,6 +120,10 @@ export const compileBase46ThemeDocument = (theme: Base46ThemeDocument): ThemeSlo
     bgTertiary,
     bgHover,
     bgActive,
+    surfaceInsetHighlight,
+    surfaceShadowSm,
+    surfaceShadowMd,
+    surfaceShadowLg,
     textPrimary,
     textSecondary,
     textMuted,

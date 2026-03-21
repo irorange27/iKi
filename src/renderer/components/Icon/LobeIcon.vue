@@ -120,9 +120,9 @@ const placeholderStyle = computed<CSSProperties>(() => ({
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: '#f5f5f5',
+  backgroundColor: 'var(--bg-secondary)',
   borderRadius: '4px',
-  color: '#999',
+  color: 'var(--text-muted)',
   fontSize: '12px',
   ...props.style,
 }));

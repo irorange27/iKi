@@ -18,6 +18,10 @@
   --theme-bg-tertiary: #2e3036;
   --theme-bg-hover: #3a3d45;
   --theme-bg-active: #4e5256;
+  --theme-surface-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --theme-surface-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.18);
+  --theme-surface-shadow-md: 0 8px 20px rgba(0, 0, 0, 0.18);
+  --theme-surface-shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.34);
   --theme-text-primary: #ffffff;
   --theme-text-secondary: #9ca3af;
   --theme-text-muted: #6b7280;
@@ -80,6 +84,10 @@
   --bg-tertiary: var(--theme-bg-tertiary);
   --bg-hover: var(--theme-bg-hover);
   --bg-active: var(--theme-bg-active);
+  --surface-inset-highlight: var(--theme-surface-inset-highlight);
+  --surface-shadow-sm: var(--theme-surface-shadow-sm);
+  --surface-shadow-md: var(--theme-surface-shadow-md);
+  --surface-shadow-lg: var(--theme-surface-shadow-lg);
   --text-primary: var(--theme-text-primary);
   --text-secondary: var(--theme-text-secondary);
   --text-muted: var(--theme-text-muted);
@@ -179,6 +187,10 @@
   --theme-bg-tertiary: #ffffff;
   --theme-bg-hover: #e5e7eb;
   --theme-bg-active: #dbeafe;
+  --theme-surface-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --theme-surface-shadow-sm: 0 2px 6px rgba(148, 163, 184, 0.1);
+  --theme-surface-shadow-md: 0 8px 20px rgba(148, 163, 184, 0.12);
+  --theme-surface-shadow-lg: 0 22px 48px rgba(148, 163, 184, 0.18);
   --theme-text-primary: #111827;
   --theme-text-secondary: #4b5563;
   --theme-text-muted: #9ca3af;

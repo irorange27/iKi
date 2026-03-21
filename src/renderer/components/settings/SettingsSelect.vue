@@ -371,7 +371,7 @@ const handleOptionKeydown = (event: KeyboardEvent, index: number) => {
     case 'Enter':
     case ' ':
       event.preventDefault();
-      selectOption(props.options[index]?.value ?? '');
+      selectOption(flatOptions.value[index]?.value ?? '');
       break;
     case 'Escape':
       event.preventDefault();
@@ -531,9 +531,7 @@ onUnmounted(() => {
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
   border-radius: 14px;
   background: color-mix(in srgb, var(--bg-primary) 94%, var(--bg-secondary));
-  box-shadow:
-    0 22px 48px rgba(0, 0, 0, 0.2),
-    0 10px 20px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--surface-shadow-lg);
   backdrop-filter: blur(18px);
 }
 

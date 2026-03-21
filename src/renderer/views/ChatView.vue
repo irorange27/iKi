@@ -890,7 +890,7 @@ onUnmounted(() => {
   border-radius: 10px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--surface-shadow-md);
   color: var(--text-primary);
   font-size: 12px;
   letter-spacing: 0.01em;
@@ -1057,23 +1057,23 @@ onUnmounted(() => {
 
 .message-wrapper.user .message-text.markdown-content :deep(a) {
   color: var(--chat-user-bubble-text);
-  border-bottom-color: rgba(255, 255, 255, 0.45);
+  border-bottom-color: color-mix(in srgb, var(--chat-user-bubble-text) 45%, transparent);
 }
 
 .message-wrapper.user .message-text.markdown-content :deep(a:hover) {
-  color: #ffffff;
-  border-bottom-color: rgba(255, 255, 255, 0.72);
+  color: var(--chat-user-bubble-text);
+  border-bottom-color: color-mix(in srgb, var(--chat-user-bubble-text) 72%, transparent);
 }
 
 .message-wrapper.user .message-text.markdown-content :deep(blockquote) {
-  border-left-color: rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
+  border-left-color: color-mix(in srgb, var(--chat-user-bubble-text) 55%, transparent);
+  background: color-mix(in srgb, var(--chat-user-bubble-text) 8%, transparent);
+  color: color-mix(in srgb, var(--chat-user-bubble-text) 90%, transparent);
 }
 
 .message-wrapper.user .message-text.markdown-content :deep(code) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--chat-user-bubble-text) 12%, transparent);
+  border-color: color-mix(in srgb, var(--chat-user-bubble-text) 18%, transparent);
   color: var(--chat-user-bubble-text);
 }
 
