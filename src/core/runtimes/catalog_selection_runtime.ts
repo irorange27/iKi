@@ -61,7 +61,7 @@ export const extractJsonCandidate = (raw: string): string => {
   if (!trimmed) return '';
 
   const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  return (fencedMatch && fencedMatch[1] ? fencedMatch[1].trim() : trimmed).trim();
+  return (fencedMatch ? (fencedMatch[1] ?? '').trim() : trimmed).trim();
 };
 
 export const tryParseJson = (raw: string): unknown => {
@@ -74,10 +74,10 @@ export const tryParseJson = (raw: string): unknown => {
     // continue
   }
 
-  const arrayStart = candidate.indexOf('[');
-  const arrayEnd = candidate.lastIndexOf(']');
-  if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
-    const slice = candidate.slice(arrayStart, arrayEnd + 1);
+  const objStart = candidate.indexOf('{');
+  const objEnd = candidate.lastIndexOf('}');
+  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+    const slice = candidate.slice(objStart, objEnd + 1);
     try {
       return JSON.parse(slice);
     } catch {
@@ -85,10 +85,10 @@ export const tryParseJson = (raw: string): unknown => {
     }
   }
 
-  const objStart = candidate.indexOf('{');
-  const objEnd = candidate.lastIndexOf('}');
-  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
-    const slice = candidate.slice(objStart, objEnd + 1);
+  const arrayStart = candidate.indexOf('[');
+  const arrayEnd = candidate.lastIndexOf(']');
+  if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
+    const slice = candidate.slice(arrayStart, arrayEnd + 1);
     try {
       return JSON.parse(slice);
     } catch {
