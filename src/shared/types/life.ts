@@ -24,6 +24,8 @@ export type LifeEventType =
   | 'task-finished'
   | 'task-failed';
 
+export type LifeReflectionPeriodType = 'hour' | 'day';
+
 export interface LifeStateRecord {
   id: string;
   profile_id: string;
@@ -58,6 +60,18 @@ export interface LifeEpisodeRecord {
   snapshot_json?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface LifeReflectionRecord {
+  id: string;
+  profile_id: string;
+  period_type: LifeReflectionPeriodType;
+  period_start: string;
+  period_end: string;
+  summary: string;
+  insights_json?: string | null;
+  plan_json?: string | null;
+  created_at: string;
 }
 
 export interface LifeSleepWindow {
@@ -109,6 +123,7 @@ export interface LifeSnapshot {
 export interface LifeOverview {
   snapshot: LifeSnapshot | null;
   recentEpisodes: LifeEpisodeRecord[];
+  recentReflections: LifeReflectionRecord[];
 }
 
 export interface LifePushPayload {

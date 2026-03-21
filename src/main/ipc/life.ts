@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 
 import { toIpcSerializable } from '../../shared/utils/ipc_serialization';
-import { getLifeOverview, recordLifeRuntimeEvent } from '../services/life/life_runtime';
+import { getLifeOverview, refreshLifeRuntime } from '../services/life/life_runtime';
 
 let lifeIpcRegistered = false;
 
@@ -12,11 +12,7 @@ export const registerLifeIpc = (): void => {
   ipcMain.handle('life:get-overview', (_event, limit?: number) =>
     toIpcSerializable(getLifeOverview(limit))
   );
-  ipcMain.handle('life:refresh', () =>
-    toIpcSerializable(
-      recordLifeRuntimeEvent({
-        type: 'manual-refresh',
-      })
-    )
+  ipcMain.handle('life:refresh', async () =>
+    toIpcSerializable(await refreshLifeRuntime())
   );
 };

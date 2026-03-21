@@ -157,6 +157,26 @@ export const listLifeEpisodes = (profileId: string, limit = 20): LifeEpisodeReco
   return rows.map(row => normalizeLifeEpisodeRow(row)).filter(Boolean) as LifeEpisodeRecord[];
 };
 
+export const listLifeEpisodesInWindow = (
+  profileId: string,
+  windowStart: string,
+  windowEnd: string
+): LifeEpisodeRecord[] => {
+  if (!profileId?.trim() || !windowStart?.trim() || !windowEnd?.trim()) return [];
+  const rows = getDb()
+    .prepare(
+      `
+      SELECT * FROM life_episodes
+      WHERE profile_id = ?
+        AND started_at < ?
+        AND (ended_at IS NULL OR ended_at >= ?)
+      ORDER BY started_at ASC, created_at ASC
+    `
+    )
+    .all(profileId, windowEnd, windowStart) as LifeEpisodeRecord[];
+  return rows.map(row => normalizeLifeEpisodeRow(row)).filter(Boolean) as LifeEpisodeRecord[];
+};
+
 export const addLifeEpisode = (
   entry: Partial<LifeEpisodeRecord> & {
     profile_id: string;

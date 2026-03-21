@@ -76,6 +76,7 @@ type ContextBudgetConfig = Pick<
   | 'maxRecentTokens'
   | 'maxIdentityTokens'
   | 'maxLifeStateTokens'
+  | 'maxReflectionTokens'
   | 'maxSummaryTokens'
   | 'maxMemoryTokens'
   | 'maxSkillTokens'
@@ -312,6 +313,7 @@ export const getContextBudgetTokens = (
     config.maxRecentTokens,
     config.maxIdentityTokens,
     config.maxLifeStateTokens,
+    config.maxReflectionTokens,
     config.maxSummaryTokens,
     config.maxMemoryTokens,
     config.maxSkillTokens,

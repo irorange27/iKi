@@ -5,10 +5,14 @@ const {
   getOrCreateActiveIdentityProfileMock,
   listDueProactiveTasksMock,
   getProactiveTasksMock,
+  listLifeReflectionsMock,
+  runDueHourlyLifeReflectionsMock,
 } = vi.hoisted(() => ({
   getOrCreateActiveIdentityProfileMock: vi.fn(),
   listDueProactiveTasksMock: vi.fn(),
   getProactiveTasksMock: vi.fn(),
+  listLifeReflectionsMock: vi.fn(),
+  runDueHourlyLifeReflectionsMock: vi.fn(),
 }));
 
 let currentState: LifeStateRecord | null = null;
@@ -86,6 +90,14 @@ vi.mock('../../../../src/core/db/life', () => ({
   listLifeEpisodes: vi.fn((_profileId: string, limit: number) => episodes.slice(-limit).reverse()),
 }));
 
+vi.mock('../../../../src/core/db/life_reflection', () => ({
+  listLifeReflections: listLifeReflectionsMock,
+}));
+
+vi.mock('../../../../src/main/services/life/life_reflection', () => ({
+  runDueHourlyLifeReflections: runDueHourlyLifeReflectionsMock,
+}));
+
 describe('life_runtime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -108,6 +120,8 @@ describe('life_runtime', () => {
     });
     listDueProactiveTasksMock.mockReturnValue([]);
     getProactiveTasksMock.mockReturnValue([]);
+    listLifeReflectionsMock.mockReturnValue([]);
+    runDueHourlyLifeReflectionsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {

@@ -110,6 +110,47 @@
         </div>
       </div>
     </div>
+
+    <div class="settings-card">
+      <div class="card-title">Recent Reflections</div>
+      <p class="card-help">
+        Hourly recap windows generated from the episode trajectory. These are sparse synthesis
+        records, not chat messages.
+      </p>
+
+      <div v-if="recentReflections.length === 0" class="tasks-empty">No reflections yet.</div>
+      <div v-else class="life-episode-list">
+        <div v-for="reflection in recentReflections" :key="reflection.id" class="life-episode-item">
+          <div class="life-episode-head">
+            <div class="task-item-title">
+              <span class="task-name">{{ reflection.period_type }}</span>
+              <span class="task-status status-success">reflection</span>
+            </div>
+            <div class="life-episode-time">
+              {{ formatTimestamp(reflection.period_start) }} -> {{ formatTimestamp(reflection.period_end) }}
+            </div>
+          </div>
+
+          <div class="life-episode-body">
+            <div>{{ reflection.summary }}</div>
+          </div>
+
+          <div v-if="parseList(reflection.insights_json).length > 0" class="life-summary-block mini-block">
+            <div class="life-summary-label">Insights</div>
+            <div class="life-list">
+              <div v-for="item in parseList(reflection.insights_json)" :key="item">{{ item }}</div>
+            </div>
+          </div>
+
+          <div v-if="parseList(reflection.plan_json).length > 0" class="life-summary-block mini-block">
+            <div class="life-summary-label">Next Focus</div>
+            <div class="life-list">
+              <div v-for="item in parseList(reflection.plan_json)" :key="item">{{ item }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -134,8 +175,20 @@ let removePushListener: (() => void) | null = null;
 
 const snapshot = computed<LifeSnapshot | null>(() => overview.value?.snapshot ?? null);
 const recentEpisodes = computed(() => overview.value?.recentEpisodes ?? []);
+const recentReflections = computed(() => overview.value?.recentReflections ?? []);
 
 const formatPercent = (value: number): string => `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+const parseList = (raw: string | null | undefined): string[] => {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+};
 
 const loadOverview = async (limit = 8) => {
   loading.value = true;
@@ -276,6 +329,10 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
+.mini-block {
+  margin-bottom: 10px;
+}
+
 .life-summary-text {
   margin-top: 6px;
   line-height: 1.5;
@@ -304,6 +361,13 @@ onUnmounted(() => {
 .life-episode-body {
   margin-bottom: 10px;
   line-height: 1.5;
+}
+
+.life-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  line-height: 1.4;
 }
 
 @media (max-width: 720px) {

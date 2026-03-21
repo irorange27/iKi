@@ -11,6 +11,7 @@ const {
   resolveSkillsSystemPromptMock,
   getIdentityContextMessageMock,
   getLifeContextMessageMock,
+  getRecentLifeReflectionContextMessageMock,
 } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
   getChatMessagesMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   resolveSkillsSystemPromptMock: vi.fn(),
   getIdentityContextMessageMock: vi.fn(),
   getLifeContextMessageMock: vi.fn(),
+  getRecentLifeReflectionContextMessageMock: vi.fn(),
 }));
 
 vi.mock('../../../../src/core/config', () => ({
@@ -58,6 +60,10 @@ vi.mock('../../../../src/main/services/life/life_runtime', () => ({
   getLifeContextMessage: getLifeContextMessageMock,
 }));
 
+vi.mock('../../../../src/main/services/life/life_reflection', () => ({
+  getRecentLifeReflectionContextMessage: getRecentLifeReflectionContextMessageMock,
+}));
+
 import { createChatContextAssembler } from '../../../../src/main/services/chat/chat_context';
 
 const baseConfig = {
@@ -69,6 +75,7 @@ const baseConfig = {
       maxMessageTokens: 200,
       maxIdentityTokens: 120,
       maxLifeStateTokens: 120,
+      maxReflectionTokens: 120,
       summaryTriggerMessages: 5,
       summaryRecentMessages: 2,
       maxSummaryTokens: 300,
@@ -99,6 +106,7 @@ beforeEach(() => {
   });
   getIdentityContextMessageMock.mockReturnValue('');
   getLifeContextMessageMock.mockReturnValue('');
+  getRecentLifeReflectionContextMessageMock.mockReturnValue('');
   getLifeContextMessageMock.mockReturnValue('');
 });
 
@@ -385,6 +393,37 @@ describe('chat_context assembler', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'life-state',
+          status: 'included',
+        }),
+      ])
+    );
+  });
+
+  it('injects the recent reflection block through the shared context pipeline', async () => {
+    getRecentLifeReflectionContextMessageMock.mockReturnValue(
+      'Recent life reflection for iKi:\n- Hourly recap: task arc stayed coherent.'
+    );
+
+    const assembler = createChatContextAssembler({
+      memory: {
+        retrieveRelevantMemory: vi.fn(() => null),
+        getAffectContextMessage: vi.fn(() => ''),
+      } as never,
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_reflection',
+      messages: [{ role: 'user', content: 'Where are we in the day?' }],
+    });
+
+    expect(result.messages[0]).toEqual({
+      role: 'system',
+      content: 'Recent life reflection for iKi:\n- Hourly recap: task arc stayed coherent.',
+    });
+    expect(result.report.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'recent-reflection',
           status: 'included',
         }),
       ])

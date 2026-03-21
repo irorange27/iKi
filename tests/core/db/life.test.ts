@@ -132,4 +132,49 @@ describe('life db helpers', () => {
       'episode_old',
     ]);
   });
+
+  it('queries windowed episodes with open-episode overlap semantics', async () => {
+    const prepareMock = vi.fn((sql: string) => {
+      if (sql.includes('SELECT * FROM life_episodes') && sql.includes('ended_at IS NULL OR ended_at >= ?')) {
+        return {
+          all: vi.fn(() => [
+            {
+              id: 'episode_open',
+              profile_id: 'identity_1',
+              activity_type: 'companion_idle',
+              presence: 'available',
+              started_at: '2026-03-21T07:30:00.000Z',
+              ended_at: null,
+              transition_reason: 'idle-available',
+              summary: 'Available during the hour.',
+              trigger_type: 'tick',
+              trigger_ref: 'tick',
+              thread_id: null,
+              client_id: null,
+              task_id: null,
+              snapshot_json: '{}',
+              created_at: '2026-03-21T07:30:00.000Z',
+              updated_at: '2026-03-21T07:30:00.000Z',
+            },
+          ]),
+        };
+      }
+
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+
+    getDbMock.mockReturnValue({
+      prepare: prepareMock,
+      transaction: vi.fn((fn: () => unknown) => fn),
+    });
+
+    const { listLifeEpisodesInWindow } = await import('../../../src/core/db/life');
+    const rows = listLifeEpisodesInWindow(
+      'identity_1',
+      '2026-03-21T08:00:00.000Z',
+      '2026-03-21T09:00:00.000Z'
+    );
+
+    expect(rows.map(entry => entry.id)).toEqual(['episode_open']);
+  });
 });

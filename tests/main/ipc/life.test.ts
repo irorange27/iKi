@@ -14,17 +14,17 @@ vi.mock('electron', () => ({
 
 vi.mock('../../../src/main/services/life/life_runtime', () => ({
   getLifeOverview: vi.fn(),
-  recordLifeRuntimeEvent: vi.fn(),
+  refreshLifeRuntime: vi.fn(),
 }));
 
 import { registerLifeIpc } from '../../../src/main/ipc/life';
 import {
   getLifeOverview,
-  recordLifeRuntimeEvent,
+  refreshLifeRuntime,
 } from '../../../src/main/services/life/life_runtime';
 
 const getLifeOverviewMock = vi.mocked(getLifeOverview);
-const recordLifeRuntimeEventMock = vi.mocked(recordLifeRuntimeEvent);
+const refreshLifeRuntimeMock = vi.mocked(refreshLifeRuntime);
 
 beforeAll(() => {
   registerLifeIpc();
@@ -42,6 +42,7 @@ describe('life IPC', () => {
     getLifeOverviewMock.mockReturnValue({
       snapshot: null,
       recentEpisodes: [],
+      recentReflections: [],
     });
 
     const result = await handler(null, 6);
@@ -50,6 +51,7 @@ describe('life IPC', () => {
     expect(result).toEqual({
       snapshot: null,
       recentEpisodes: [],
+      recentReflections: [],
     });
   });
 
@@ -57,13 +59,11 @@ describe('life IPC', () => {
     const handler = ipcHandlers.get('life:refresh');
     if (!handler) throw new Error('life:refresh handler not registered');
 
-    recordLifeRuntimeEventMock.mockReturnValue(null);
+    refreshLifeRuntimeMock.mockResolvedValue(null);
 
     const result = await handler(null);
 
-    expect(recordLifeRuntimeEventMock).toHaveBeenCalledWith({
-      type: 'manual-refresh',
-    });
+    expect(refreshLifeRuntimeMock).toHaveBeenCalledWith();
     expect(result).toBeNull();
   });
 });

@@ -16,11 +16,13 @@ import { resolveSkillsSystemPrompt } from './chat_skills';
 import { getPromptFromMessage } from './chat_ui';
 import { getIdentityContextMessage } from '../identity/identity_service';
 import { getLifeContextMessage } from '../life/life_runtime';
+import { getRecentLifeReflectionContextMessage } from '../life/life_reflection';
 
 export type ContextBlockKind =
   | 'recent-history'
   | 'identity'
   | 'life-state'
+  | 'recent-reflection'
   | 'thread-summary'
   | 'memory'
   | 'affect'
@@ -91,6 +93,11 @@ type IdentityContext = {
 };
 
 type LifeStateContext = {
+  systemMessage: string;
+  block: ContextReportBlock;
+};
+
+type ReflectionContext = {
   systemMessage: string;
   block: ContextReportBlock;
 };
@@ -451,6 +458,28 @@ const buildLifeStateContext = (contextConfig: ContextConfig): LifeStateContext =
   };
 };
 
+const buildRecentReflectionContext = (contextConfig: ContextConfig): ReflectionContext => {
+  const reflectionClip = clipTextToTokenBudget(
+    getRecentLifeReflectionContextMessage(),
+    contextConfig.maxReflectionTokens
+  );
+
+  return {
+    systemMessage: reflectionClip.text,
+    block: {
+      kind: 'recent-reflection',
+      status: reflectionClip.text ? (reflectionClip.truncated ? 'truncated' : 'included') : 'dropped',
+      estimatedTokens: estimateTokens(reflectionClip.text),
+      charCount: reflectionClip.text.length,
+      ...(reflectionClip.text
+        ? reflectionClip.truncated
+          ? { reason: 'reflection block clipped to context budget' }
+          : {}
+        : { reason: 'no recent life reflection available' }),
+    },
+  };
+};
+
 const toMemoryDisplayEntry = (result: Record<string, unknown>) => ({
   summary: typeof result.summary === 'string' ? result.summary : '',
   score: typeof result.score === 'number' ? result.score : Number(result.score || 0),
@@ -647,6 +676,9 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
     const lifeStateContext = buildLifeStateContext(contextConfig);
     blocks.push(lifeStateContext.block);
 
+    const reflectionContext = buildRecentReflectionContext(contextConfig);
+    blocks.push(reflectionContext.block);
+
     const threadSummary = params.threadId
       ? await ensureThreadSummary(params.threadId, contextConfig)
       : null;
@@ -673,6 +705,7 @@ export const createChatContextAssembler = (deps: { memory: ChatMemory }) => {
       [
         identityContext.systemMessage,
         lifeStateContext.systemMessage,
+        reflectionContext.systemMessage,
         summaryContext.systemMessage,
         memoryContext.systemMessage,
       ]

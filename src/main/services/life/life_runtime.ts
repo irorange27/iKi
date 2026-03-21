@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 
 import * as tasksDb from '../../../core/db/tasks';
 import * as lifeDb from '../../../core/db/life';
+import * as lifeReflectionDb from '../../../core/db/life_reflection';
 import type {
   LifeEpisodeRecord,
   LifeEventType,
@@ -22,6 +23,7 @@ import {
   serializeLifeStateEnvelope,
 } from './life_activity_engine';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
+import { runDueHourlyLifeReflections } from './life_reflection';
 
 const LIFE_TICK_MS = 60_000;
 const DEFAULT_BUDGETS = {
@@ -364,7 +366,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
     return buildSnapshot(nextState, nextEpisode);
   });
 
-  if (snapshot && (semanticChange || event.type !== 'tick')) {
+  if (snapshot && (semanticChange || (event.type !== 'tick' && event.persistAsLastEvent !== false))) {
     pushLifeEventToRenderers({
       type: 'life-state',
       snapshot,
@@ -379,7 +381,10 @@ const tick = async () => {
   if (tickInFlight) return;
   tickInFlight = true;
   try {
-    reconcileLifeState({ type: 'tick' });
+    const snapshot = reconcileLifeState({ type: 'tick' });
+    if (snapshot) {
+      await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
+    }
   } catch (error) {
     console.warn('[Life] tick failed:', error);
   } finally {
@@ -392,7 +397,10 @@ export const startLifeRuntime = () => {
   lifeTimer = setInterval(() => {
     void tick();
   }, LIFE_TICK_MS);
-  reconcileLifeState({ type: 'runtime-start' });
+  const snapshot = reconcileLifeState({ type: 'runtime-start' });
+  if (snapshot) {
+    void runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
+  }
 };
 
 export const stopLifeRuntime = () => {
@@ -411,13 +419,27 @@ export const getLifeOverview = (limit = 10): LifeOverview => {
   });
   const profile = getOrCreateActiveIdentityProfile();
   if (!profile) {
-    return { snapshot: null, recentEpisodes: [] };
+    return { snapshot: null, recentEpisodes: [], recentReflections: [] };
   }
 
   return {
     snapshot,
     recentEpisodes: lifeDb.listLifeEpisodes(profile.id, limit),
+    recentReflections: lifeReflectionDb.listLifeReflections({
+      profileId: profile.id,
+      limit: Math.max(1, Math.min(6, limit)),
+    }),
   };
+};
+
+export const refreshLifeRuntime = async (): Promise<LifeSnapshot | null> => {
+  const snapshot = reconcileLifeState({
+    type: 'manual-refresh',
+  });
+  if (snapshot) {
+    await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
+  }
+  return snapshot;
 };
 
 const formatPercent = (value: number): string => `${Math.round(clampUnit(value, 0) * 100)}%`;
