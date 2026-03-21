@@ -8,6 +8,10 @@ const CHAT_TOOL_PART_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/chat/ChatToolPart.vue'
 );
+const CHAT_MESSAGE_ITEM_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/chat/ChatMessageItem.vue'
+);
 const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/SettingsView.vue');
 const VARIABLES_CSS_PATH = resolve(process.cwd(), 'src/renderer/assets/styles/variables.css');
 
@@ -50,6 +54,7 @@ describe('renderer app shell styles', () => {
 
   it('lets the chat column and tool cards shrink cleanly when the sidebar narrows content space', () => {
     const chatSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
+    const chatMessageItemSource = readFileSync(CHAT_MESSAGE_ITEM_VUE_PATH, 'utf8');
     const toolPartSource = readFileSync(CHAT_TOOL_PART_VUE_PATH, 'utf8');
 
     expect(chatSource).toMatch(
@@ -58,7 +63,7 @@ describe('renderer app shell styles', () => {
     expect(chatSource).toMatch(/class="messages-area w-full h-full min-w-0"/);
     expect(chatSource).toMatch(/\.messages-area\s*\{[\s\S]*min-width:\s*0;/i);
     expect(chatSource).toMatch(/\.messages-container\s*\{[\s\S]*min-width:\s*0;/i);
-    expect(chatSource).toMatch(
+    expect(chatMessageItemSource).toMatch(
       /<ChatToolPart[\s\S]*:mcp-server-label="getMcpServerLabel\(part\)"/
     );
     expect(toolPartSource).toMatch(

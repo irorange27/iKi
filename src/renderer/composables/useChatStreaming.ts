@@ -8,9 +8,7 @@ import type { UiMessagePersistence } from '../modules/chat/ui_message_persistenc
 import {
   upsertTextIntoMessageParts,
   extractTextFromMessage,
-  isTextPart,
 } from '../modules/chat/ui_message_text';
-import { isObjectRecord } from '../../shared/utils/guards';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import type { ChatThread } from './useChatThreads';
 
@@ -207,13 +205,6 @@ export const useChatStreaming = (deps: {
     }
   };
 
-  const isStreamingTextPart = (message: UIMessage, part: unknown): boolean => {
-    if (!isTextPart(part)) return false;
-    if (!streamController.activeAssistantMessageId.value) return false;
-    if (message.id !== streamController.activeAssistantMessageId.value) return false;
-    return isObjectRecord(part) && part.state === 'streaming';
-  };
-
   return {
     streamController,
     editingUserMessageId,
@@ -222,7 +213,6 @@ export const useChatStreaming = (deps: {
     handleMessageSent,
     beginEditMessage,
     cancelEditing,
-    isStreamingTextPart,
     selectThread,
     handleThreadDeleted,
     handleNewChat,
