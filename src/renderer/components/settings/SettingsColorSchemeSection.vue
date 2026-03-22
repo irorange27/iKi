@@ -497,7 +497,7 @@ watch(
 }
 
 .theme-modal {
-  width: min(1340px, calc(100vw - 56px));
+  width: min(1380px, calc(100vw - 40px));
   max-height: 100%;
   overflow: hidden;
   border-radius: 30px;
@@ -540,8 +540,8 @@ watch(
 
 .theme-modal-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
-  gap: 28px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 500px);
+  gap: 24px 32px;
   align-items: start;
   min-height: 0;
   overflow: auto;
@@ -655,9 +655,10 @@ watch(
 
 .preview-column {
   position: sticky;
-  top: 0;
+  top: 4px;
   width: 100%;
-  max-width: 430px;
+  min-width: 360px;
+  max-width: 500px;
   align-self: start;
   justify-self: end;
 }
@@ -838,13 +839,26 @@ watch(
   background: color-mix(in srgb, var(--bg-primary) 96%, transparent);
 }
 
-@media (max-width: 940px) {
+@media (max-width: 1120px) {
+  .theme-modal-body {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+    gap: 22px 24px;
+  }
+
+  .preview-column {
+    min-width: 320px;
+    max-width: 420px;
+  }
+}
+
+@media (max-width: 860px) {
   .theme-modal-body {
     grid-template-columns: 1fr;
   }
 
   .preview-column {
     position: static;
+    min-width: 0;
     max-width: none;
     justify-self: stretch;
   }
