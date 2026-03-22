@@ -89,7 +89,7 @@ export const renderMarkdownToPlainText = (markdown: string): string => {
   };
 
   const normalizedLines = text
-    .replace(/\\([\\`*_{}\[\]()#+\-.!>|])/g, '$1')
+    .replace(/\\([\\`*_{}[\]()+#\-.!>|])/g, '$1')
     .split('\n')
     .map(normalizeTableLine);
 
