@@ -20,10 +20,12 @@ import type {
 } from '../../shared/theme/types';
 import type { AppConfig } from '../../shared/types/config';
 
-type ThemeEditorState = {
+export type ThemeEditorMode = 'simple' | 'advanced';
+
+export type ThemeEditorState = {
   open: boolean;
   editingPresetId: string | null;
-  mode: 'simple' | 'advanced';
+  mode: ThemeEditorMode;
   type: ThemeVariant;
   label: string;
   quickStartId: string | null;
