@@ -36,6 +36,19 @@ describe('ui_message_references', () => {
           toolName: 'fetch',
           state: 'output-available',
         },
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call_3',
+          toolName: 'load_skill',
+          state: 'output-available',
+          output: {
+            id: 'user:planner',
+            name: 'Planner',
+            source: 'user',
+            content: '<skill>...</skill>',
+            truncated: false,
+          },
+        },
       ],
     } as never);
 
@@ -49,7 +62,7 @@ describe('ui_message_references', () => {
     });
   });
 
-  it('deduplicates skill references and keeps the selection mode', () => {
+  it('reports loaded skills separately from selected-only skills', () => {
     const summary = getSkillReferenceSummary({
       id: 'assistant_1',
       role: 'assistant',
@@ -70,13 +83,57 @@ describe('ui_message_references', () => {
               description: 'Duplicate',
               source: 'codex',
             },
+            {
+              id: 'user:planner',
+              name: 'Planner',
+              description: 'Planning workflow',
+              source: 'user',
+            },
           ],
+        },
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call_skill_1',
+          toolName: 'load_skill',
+          state: 'output-available',
+          output: {
+            id: 'user:planner',
+            name: 'Planner',
+            source: 'user',
+            content: '<skill id="user:planner">...</skill>',
+            truncated: false,
+          },
         },
       ],
     } as never);
 
     expect(summary.mode).toBe('auto');
     expect(summary.items).toEqual([
+      {
+        id: 'user:planner',
+        name: 'Planner',
+        description: 'Planning workflow',
+        source: 'user',
+        sourceLabel: 'User',
+      },
+    ]);
+    expect(summary.selectedItems).toEqual([
+      {
+        id: 'codex:.system/openai-docs',
+        name: 'openai-docs',
+        description: 'Official OpenAI docs guidance',
+        source: 'codex',
+        sourceLabel: 'Codex',
+      },
+      {
+        id: 'user:planner',
+        name: 'Planner',
+        description: 'Planning workflow',
+        source: 'user',
+        sourceLabel: 'User',
+      },
+    ]);
+    expect(summary.selectedOnlyItems).toEqual([
       {
         id: 'codex:.system/openai-docs',
         name: 'openai-docs',
@@ -229,6 +286,29 @@ describe('ui_message_references', () => {
         parts: [{ type: 'affect-signal', label: 'anger', confidence: 0.5 }],
       } as never)
     ).toBe(true);
+  });
+
+  it('does not expose selected-only skills as executed skill references', () => {
+    expect(
+      hasReferenceSummary({
+        id: 'assistant_skill_only',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'skill-usage',
+            mode: 'manual',
+            skills: [
+              {
+                id: 'user:planner',
+                name: 'Planner',
+                description: 'Planning workflow',
+                source: 'user',
+              },
+            ],
+          },
+        ],
+      } as never)
+    ).toBe(false);
   });
 
   it('formats total context token counts for compact UI labels', () => {

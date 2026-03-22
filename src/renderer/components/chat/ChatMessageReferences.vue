@@ -69,8 +69,18 @@ const toolTooltip = computed(() =>
 );
 
 const skillTooltip = computed(() => {
-  if (skillSummary.value.items.length === 0) return 'No skills used';
-  return skillSummary.value.items.map(skill => skill.name).join(', ');
+  if (skillSummary.value.items.length === 0) return 'No skills loaded';
+
+  const lines = [`Loaded skills: ${skillSummary.value.items.map(skill => skill.name).join(', ')}`];
+  if (skillSummary.value.selectedOnlyItems.length > 0) {
+    lines.push(
+      `Selected not loaded: ${skillSummary.value.selectedOnlyItems.map(skill => skill.name).join(', ')}`
+    );
+  }
+  if (skillSummary.value.selectedItems.length > 0) {
+    lines.push(`Selection mode: ${skillSummary.value.mode}`);
+  }
+  return lines.join('\n');
 });
 
 const memoryTooltip = computed(() =>

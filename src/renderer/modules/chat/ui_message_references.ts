@@ -10,7 +10,13 @@ import {
   isObjectRecord,
   isSkillUsagePart,
 } from '../../../shared/chat/message_parts';
-import { getToolCallIdFromPart, getToolName, isToolPart } from './ui_message_tool_parts';
+import {
+  getParsedToolOutput,
+  getToolCallIdFromPart,
+  getToolName,
+  isToolPart,
+  normalizeToolNameKey,
+} from './ui_message_tool_parts';
 
 export type ToolReferenceSummary = {
   count: number;
@@ -32,6 +38,8 @@ export type SkillReferenceItem = {
 export type SkillReferenceSummary = {
   mode: 'manual' | 'auto';
   items: SkillReferenceItem[];
+  selectedItems: SkillReferenceItem[];
+  selectedOnlyItems: SkillReferenceItem[];
 };
 
 export type MemoryReferenceItem = {
@@ -184,6 +192,33 @@ const normalizeAffectScores = (
     }));
 };
 
+const normalizeSkillItems = (rawSkills: unknown): SkillReferenceItem[] => {
+  const skills = Array.isArray(rawSkills) ? rawSkills : [];
+  const seen = new Set<string>();
+
+  return skills
+    .filter(
+      (entry): entry is SkillUsageEntry =>
+        isObjectRecord(entry) &&
+        typeof entry.id === 'string' &&
+        entry.id.trim().length > 0 &&
+        typeof entry.name === 'string' &&
+        entry.name.trim().length > 0
+    )
+    .map(entry => ({
+      id: entry.id.trim(),
+      name: normalizeText(entry.name),
+      description: typeof entry.description === 'string' ? normalizeText(entry.description) : '',
+      source: normalizeSkillSource(entry.source),
+      sourceLabel: formatSkillSourceLabel(entry.source),
+    }))
+    .filter(entry => {
+      if (seen.has(entry.id)) return false;
+      seen.add(entry.id);
+      return true;
+    });
+};
+
 export const getToolReferenceSummary = (message: UIMessage | unknown): ToolReferenceSummary => {
   const parts = getMessageParts(message);
   const toolCallIds = new Set<string>();
@@ -197,6 +232,9 @@ export const getToolReferenceSummary = (message: UIMessage | unknown): ToolRefer
 
     const toolCallId = getToolCallIdFromPart(part);
     const toolName = normalizeText(getToolName(part));
+    if (toolName && normalizeToolNameKey(toolName) === 'load_skill') {
+      continue;
+    }
 
     if (toolCallId && countedCallIds.has(toolCallId)) {
       if (toolName && !toolNamesSeen.has(toolName)) {
@@ -228,44 +266,64 @@ export const getToolReferenceSummary = (message: UIMessage | unknown): ToolRefer
   };
 };
 
-export const getSkillReferenceSummary = (message: UIMessage | unknown): SkillReferenceSummary => {
+export const getSelectedSkillReferenceSummary = (
+  message: UIMessage | unknown
+): Pick<SkillReferenceSummary, 'mode' | 'selectedItems'> => {
   const parts = getMessageParts(message);
   const skillPart = parts.find(part => isSkillUsagePart(part));
 
   if (!skillPart) {
     return {
       mode: 'manual',
-      items: [],
+      selectedItems: [],
     };
   }
 
-  const rawSkills = Array.isArray(skillPart.skills) ? skillPart.skills : [];
-  const seen = new Set<string>();
-  const items = rawSkills
-    .filter(
-      (entry): entry is SkillUsageEntry =>
-        isObjectRecord(entry) &&
-        typeof entry.id === 'string' &&
-        entry.id.trim().length > 0 &&
-        typeof entry.name === 'string' &&
-        entry.name.trim().length > 0
-    )
-    .map(entry => ({
-      id: entry.id.trim(),
-      name: normalizeText(entry.name),
-      description: typeof entry.description === 'string' ? normalizeText(entry.description) : '',
-      source: normalizeSkillSource(entry.source),
-      sourceLabel: formatSkillSourceLabel(entry.source),
-    }))
-    .filter(entry => {
-      if (seen.has(entry.id)) return false;
-      seen.add(entry.id);
-      return true;
-    });
-
   return {
     mode: skillPart.mode === 'auto' ? 'auto' : 'manual',
+    selectedItems: normalizeSkillItems(skillPart.skills),
+  };
+};
+
+export const getSkillReferenceSummary = (message: UIMessage | unknown): SkillReferenceSummary => {
+  const parts = getMessageParts(message);
+  const selectedSummary = getSelectedSkillReferenceSummary(message);
+  const selectedById = new Map(
+    selectedSummary.selectedItems.map(item => [item.id, item] as const)
+  );
+
+  const loadedById = new Map<string, SkillReferenceItem>();
+  for (const part of parts) {
+    if (!isToolPart(part)) continue;
+    if (normalizeToolNameKey(getToolName(part)) !== 'load_skill') continue;
+
+    const parsedOutput = getParsedToolOutput(part);
+    if (parsedOutput.kind !== 'load_skill') continue;
+
+    const output = parsedOutput.output;
+    const id = typeof output.id === 'string' ? output.id.trim() : '';
+    const name = typeof output.name === 'string' ? normalizeText(output.name) : '';
+    if (!id || !name || loadedById.has(id)) continue;
+
+    const selected = selectedById.get(id);
+    const source = normalizeSkillSource(output.source ?? selected?.source);
+    loadedById.set(id, {
+      id,
+      name,
+      description: selected?.description || '',
+      source,
+      sourceLabel: formatSkillSourceLabel(source),
+    });
+  }
+
+  const items = Array.from(loadedById.values());
+  const selectedOnlyItems = selectedSummary.selectedItems.filter(item => !loadedById.has(item.id));
+
+  return {
+    mode: selectedSummary.mode,
     items,
+    selectedItems: selectedSummary.selectedItems,
+    selectedOnlyItems,
   };
 };
 
