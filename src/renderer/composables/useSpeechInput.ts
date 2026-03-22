@@ -1,6 +1,7 @@
 import { computed, nextTick, onUnmounted, ref } from 'vue';
 import type { Ref } from 'vue';
 import type { SpeechStatus } from '../../shared/types/speech';
+import { createLogger } from '../logger';
 
 type SpeechInputOptions = {
   inputRef: Ref<HTMLInputElement | null>;
@@ -22,6 +23,7 @@ type SpeechInputState = {
 };
 
 const WAVEFORM_BAR_COUNT = 5;
+const speechInputLogger = createLogger({ module: 'speech_input' });
 
 export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): SpeechInputState => {
   const electronAPI = window.electronAPI;
@@ -64,7 +66,12 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
     try {
       speechStatus.value = await electronAPI.speech.getStatus();
     } catch (error) {
-      console.error('Failed to load speech status:', error);
+      speechInputLogger.event({
+        level: 'error',
+        event: 'speech.status.load',
+        outcome: 'failed',
+        error,
+      });
       speechStatus.value = { available: false, reason: 'Speech service unavailable' };
     }
   };
@@ -180,7 +187,12 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       }
       waveformRafId = window.requestAnimationFrame(updateWaveform);
     } catch (error) {
-      console.warn('Failed to start audio waveform:', error);
+      speechInputLogger.event({
+        level: 'warn',
+        event: 'speech.waveform.start',
+        outcome: 'degraded',
+        error,
+      });
     }
   };
 
@@ -276,7 +288,12 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         setSpeechError('No speech detected');
       }
     } catch (error) {
-      console.error('Speech transcription failed:', error);
+      speechInputLogger.event({
+        level: 'error',
+        event: 'speech.transcribe',
+        outcome: 'failed',
+        error,
+      });
       setSpeechError('Transcription failed');
     } finally {
       isTranscribing.value = false;
@@ -306,7 +323,15 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         }
       };
       recorder.onerror = event => {
-        console.error('Recording error:', event);
+        speechInputLogger.event({
+          level: 'error',
+          event: 'speech.recording',
+          outcome: 'failed',
+          message: 'Recording error.',
+          data: {
+            event,
+          },
+        });
         setSpeechError('Recording failed');
         isRecording.value = false;
         stopMediaTracks();
@@ -331,7 +356,12 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         }
       }, 60000);
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      speechInputLogger.event({
+        level: 'error',
+        event: 'speech.recording.start',
+        outcome: 'failed',
+        error,
+      });
       setSpeechError('Microphone permission denied');
       stopMediaTracks();
     }

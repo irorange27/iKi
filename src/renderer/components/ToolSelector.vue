@@ -222,6 +222,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { McpServerSummary } from '../../shared/types/mcp';
+import { createLogger } from '../logger';
 
 interface ToolSummary {
   name: string;
@@ -257,6 +258,7 @@ const emit = defineEmits<{
 }>();
 
 const electronAPI = window.electronAPI;
+const toolSelectorLogger = createLogger({ module: 'tool_selector' });
 
 const showToolSelector = ref(false);
 const availableTools = ref<ToolSummary[]>([]);
@@ -484,7 +486,12 @@ const loadAvailableTools = async (options?: { force?: boolean }) => {
     availableTools.value = normalized;
     lastLoadedAt.value = now;
   } catch (error) {
-    console.error('Failed to load tools:', error);
+    toolSelectorLogger.event({
+      level: 'error',
+      event: 'tools.load',
+      outcome: 'failed',
+      error,
+    });
     availableTools.value = [];
   }
 };
@@ -500,7 +507,12 @@ const loadAvailableMcpServers = async () => {
     const servers = await electronAPI.mcp.list();
     availableMcpServers.value = normalizeMcpServers(servers);
   } catch (error) {
-    console.error('Failed to load MCP servers:', error);
+    toolSelectorLogger.event({
+      level: 'error',
+      event: 'mcp.servers.load',
+      outcome: 'failed',
+      error,
+    });
     availableMcpServers.value = [];
   } finally {
     mcpServersLoading.value = false;

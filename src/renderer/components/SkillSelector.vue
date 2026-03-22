@@ -100,6 +100,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { SkillSummary } from '../../shared/types/skill';
+import { createLogger } from '../logger';
 
 const props = defineProps<{
   skillIds: string[];
@@ -112,6 +113,7 @@ const emit = defineEmits<{
 }>();
 
 const electronAPI = window.electronAPI;
+const skillSelectorLogger = createLogger({ module: 'skill_selector' });
 
 const showSkillSelector = ref(false);
 const availableSkills = ref<SkillSummary[]>([]);
@@ -143,7 +145,12 @@ const loadAvailableSkills = async () => {
     const skills = await electronAPI?.skills?.list?.();
     availableSkills.value = normalizeSkills(skills);
   } catch (error) {
-    console.error('Failed to load skills:', error);
+    skillSelectorLogger.event({
+      level: 'error',
+      event: 'skills.load',
+      outcome: 'failed',
+      error,
+    });
     availableSkills.value = [];
   }
 };

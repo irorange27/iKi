@@ -1,8 +1,10 @@
 import type { UIMessage } from 'ai';
 import type { ElectronApi } from '../../../shared/types/electron_api';
+import { createLogger } from '../../logger';
 import type { ChatMessageStore } from './chat_message_store';
 
 export type UiMessagePersistence = ReturnType<typeof createUiMessagePersistence>;
+const uiMessagePersistenceLogger = createLogger({ module: 'ui_message_persistence' });
 
 export const createUiMessagePersistence = (deps: { electronAPI: Pick<ElectronApi, 'chat'> }) => {
   const persistedMessageIds = new Set<string>();
@@ -69,9 +71,21 @@ export const createUiMessagePersistence = (deps: { electronAPI: Pick<ElectronApi
           typeof error === 'object' && error !== null && 'code' in error
             ? String((error as { code?: unknown }).code)
             : '';
-        console.warn(
-          `[ChatPersist][Renderer] create-failed id=${message.id} source=${source} code=${errorCode || 'unknown'} error=${errorMessage}`
-        );
+        uiMessagePersistenceLogger.event({
+          level: 'warn',
+          event: 'chat.message.persist',
+          outcome: 'failed',
+          error,
+          entity: {
+            message_id: message.id,
+            thread_id: threadId,
+          },
+          data: {
+            source,
+            error_code: errorCode || 'unknown',
+            error_message: errorMessage,
+          },
+        });
 
         if (
           errorCode === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
@@ -82,9 +96,19 @@ export const createUiMessagePersistence = (deps: { electronAPI: Pick<ElectronApi
             message: serializedMessage,
             metadata,
           });
-          console.warn(
-            `[ChatPersist][Renderer] duplicate-resolved-via-update id=${message.id} source=${source}`
-          );
+          uiMessagePersistenceLogger.event({
+            level: 'warn',
+            event: 'chat.message.persist',
+            outcome: 'degraded',
+            message: 'Duplicate renderer message persist resolved via update.',
+            entity: {
+              message_id: message.id,
+              thread_id: threadId,
+            },
+            data: {
+              source,
+            },
+          });
           return;
         }
 

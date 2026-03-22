@@ -7,10 +7,12 @@ import type {
   DaemonStatusInfo,
 } from '../../shared/types/config';
 import type { ElectronApi } from '../../shared/types/electron_api';
+import { createLogger } from '../logger';
 
 type ConfigUpdatedHandler = (config: AppConfig) => void;
 
 type ElectronConfigApi = ElectronApi['config'];
+const configServiceLogger = createLogger({ module: 'config_service' });
 
 const getElectronConfigApi = (): ElectronConfigApi | null => {
   if (typeof window === 'undefined') return null;
@@ -70,7 +72,12 @@ export const configService = {
   onUpdated(callback: ConfigUpdatedHandler): () => void {
     const api = getElectronConfigApi();
     if (!api) {
-      console.warn('window.electronAPI.config is missing; config updates are disabled.');
+      configServiceLogger.event({
+        level: 'warn',
+        event: 'config.subscription',
+        outcome: 'skipped',
+        message: 'window.electronAPI.config is missing; config updates are disabled.',
+      });
       return noop;
     }
     api.onUpdated(callback);

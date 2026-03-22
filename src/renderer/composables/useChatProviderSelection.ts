@@ -2,8 +2,11 @@ import { ref } from 'vue';
 
 import type { ElectronApi } from '../../shared/types/electron_api';
 import type { Provider } from '../../shared/types/provider';
+import { createLogger } from '../logger';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
+
+const providerSelectionLogger = createLogger({ module: 'chat_provider_selection' });
 
 export const resolveProviderSelection = (params: {
   providers: Provider[];
@@ -82,7 +85,12 @@ export const useChatProviderSelection = (deps: {
       availableProviders.value = Array.isArray(providers) ? providers.filter(provider => provider?.enabled) : [];
       applyResolvedSelection(preferredModel);
     } catch (error) {
-      console.error('Failed to load providers:', error);
+      providerSelectionLogger.event({
+        level: 'error',
+        event: 'chat.providers.load',
+        outcome: 'failed',
+        error,
+      });
       availableProviders.value = [];
       selectedProvider.value = null;
       selectedModel.value = '';
@@ -122,7 +130,16 @@ export const useChatProviderSelection = (deps: {
     try {
       configured = await deps.electronAPI.chat.isProviderConfigured(selectedProvider.value.type);
     } catch (error) {
-      console.error('Failed to verify provider configuration:', error);
+      providerSelectionLogger.event({
+        level: 'error',
+        event: 'chat.provider.verify',
+        outcome: 'failed',
+        error,
+        entity: {
+          provider_type: selectedProvider.value.type,
+          provider_id: selectedProvider.value.id,
+        },
+      });
       return {
         ok: false,
         message: `Failed to verify the ${selectedProviderName} provider configuration. Please try again.`,

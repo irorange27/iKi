@@ -7,6 +7,7 @@ import { extractTextFromMessage } from '../modules/chat/ui_message_text';
 import { isObjectRecord } from '../../shared/utils/guards';
 import type { ChatMessage, ChatThread as StoredChatThread } from '../../shared/types/chat';
 import type { ElectronApi } from '../../shared/types/electron_api';
+import { createLogger } from '../logger';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 
@@ -18,6 +19,7 @@ type SidebarController = {
 };
 
 const TITLE_REGEN_INTERVAL = 2;
+const chatThreadsLogger = createLogger({ module: 'chat_threads' });
 
 export const useChatThreads = (deps: {
   electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
@@ -64,7 +66,15 @@ export const useChatThreads = (deps: {
       }
       await refreshThreads();
     } catch (error) {
-      console.error('Failed to update thread title:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.title_update',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: currentThread.value.id,
+        },
+      });
     }
   };
 
@@ -80,7 +90,15 @@ export const useChatThreads = (deps: {
       await deps.electronAPI.chat.threads.update(threadId, { title });
       await refreshThreads();
     } catch (error) {
-      console.error('Failed to update thread title by id:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.title_update',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: threadId,
+        },
+      });
     }
   };
 
@@ -127,7 +145,12 @@ export const useChatThreads = (deps: {
       const title = await deps.electronAPI.toolModel.generateTitle(conversationContent);
       return title || getFallbackThreadTitle(messages);
     } catch (error) {
-      console.error('Failed to generate thread title with agent:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.title_generate',
+        outcome: 'failed',
+        error,
+      });
       return getFallbackThreadTitle(messages);
     }
   };
@@ -176,7 +199,12 @@ export const useChatThreads = (deps: {
 
       return thread;
     } catch (error) {
-      console.error('Failed to create thread:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.create',
+        outcome: 'failed',
+        error,
+      });
       return null;
     }
   };
@@ -200,7 +228,15 @@ export const useChatThreads = (deps: {
       resetToolUiStateMap();
       deps.scrollToBottom();
     } catch (error) {
-      console.error('Failed to load thread messages:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.messages_load',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: threadId,
+        },
+      });
     }
   };
 
@@ -212,7 +248,15 @@ export const useChatThreads = (deps: {
 
       const thread = await deps.electronAPI.chat.threads.get(threadId);
       if (!thread) {
-        console.error('Thread not found:', threadId);
+        chatThreadsLogger.event({
+          level: 'warn',
+          event: 'chat.thread.select',
+          outcome: 'skipped',
+          message: 'Thread not found.',
+          entity: {
+            thread_id: threadId,
+          },
+        });
         return;
       }
 
@@ -227,7 +271,15 @@ export const useChatThreads = (deps: {
         deps.sidebarRef.value.setCurrentThread(threadId);
       }
     } catch (error) {
-      console.error('Failed to select thread:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.select',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: threadId,
+        },
+      });
     }
   };
 
@@ -276,7 +328,15 @@ export const useChatThreads = (deps: {
         is_incognito: normalizedValue ? 1 : 0,
       });
     } catch (error) {
-      console.error('Failed to update thread incognito state:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.incognito_update',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: activeThread.id,
+        },
+      });
       isIncognito.value = previousValue;
       if (currentThread.value?.id === activeThread.id) {
         currentThread.value.is_incognito = previousValue ? 1 : 0;
@@ -302,7 +362,16 @@ export const useChatThreads = (deps: {
         workspace_id: normalizedValue,
       });
     } catch (error) {
-      console.error('Failed to update thread workspace state:', error);
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.workspace_update',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: activeThread.id,
+          workspace_id: normalizedValue,
+        },
+      });
       selectedWorkspaceId.value = previousValue;
       if (currentThread.value?.id === activeThread.id) {
         currentThread.value.workspace_id = previousValue ?? undefined;

@@ -2,12 +2,15 @@ import { ref } from 'vue';
 
 import { getToolName } from '../modules/chat/ui_message_tool_parts';
 import type { ElectronApi } from '../../shared/types/electron_api';
+import { createLogger } from '../logger';
 
 type ToolSource = {
   kind?: 'builtin' | 'mcp';
   id?: string;
   name?: string;
 };
+
+const toolMetadataLogger = createLogger({ module: 'tool_metadata' });
 
 export const useToolMetadata = (deps: {
   electronAPI: Pick<ElectronApi, 'tools' | 'skills'>;
@@ -34,7 +37,12 @@ export const useToolMetadata = (deps: {
       }
       toolSourceMap.value = next;
     } catch (error) {
-      console.warn('Failed to load tool metadata:', error);
+      toolMetadataLogger.event({
+        level: 'warn',
+        event: 'tools.metadata.load',
+        outcome: 'failed',
+        error,
+      });
     } finally {
       toolSourceLoading.value = false;
     }
@@ -55,9 +63,25 @@ export const useToolMetadata = (deps: {
     try {
       const result = await deps.electronAPI?.skills?.openSkill?.(skillId);
       if (result?.success) return;
-      console.warn('Failed to open skill:', result?.error || skillId);
+      toolMetadataLogger.event({
+        level: 'warn',
+        event: 'skills.open',
+        outcome: 'failed',
+        message: typeof result?.error === 'string' ? result.error : 'Failed to open skill.',
+        entity: {
+          skill_id: skillId,
+        },
+      });
     } catch (error) {
-      console.warn('Failed to open skill:', error);
+      toolMetadataLogger.event({
+        level: 'warn',
+        event: 'skills.open',
+        outcome: 'failed',
+        error,
+        entity: {
+          skill_id: skillId,
+        },
+      });
     }
   };
 

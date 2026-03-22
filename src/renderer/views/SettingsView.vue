@@ -538,6 +538,7 @@ import SettingsTasksSection from '../components/settings/SettingsTasksSection.vu
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
 import SettingsSelect from '../components/settings/SettingsSelect.vue';
+import { createLogger } from '../logger';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '../../shared/config/defaults';
 import type { AppConfig } from '../../shared/types/config';
@@ -546,6 +547,7 @@ import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
 
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const settingsViewLogger = createLogger({ module: 'settings_view' });
 
 const emit = defineEmits(['close']);
 const configStore = useConfigStore();
@@ -594,7 +596,12 @@ const loadProviders = async () => {
   try {
     providers.value = await electronAPI.providers.list();
   } catch (error) {
-    console.error('Failed to load providers:', error);
+    settingsViewLogger.event({
+      level: 'error',
+      event: 'settings.providers.load',
+      outcome: 'failed',
+      error,
+    });
   }
 };
 

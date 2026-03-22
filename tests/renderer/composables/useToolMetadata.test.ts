@@ -1,4 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
+vi.mock('../../../src/renderer/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
+}));
 
 import { useToolMetadata } from '../../../src/renderer/composables/useToolMetadata';
 
@@ -8,6 +23,10 @@ const flushMicrotasks = async () => {
 };
 
 describe('useToolMetadata', () => {
+  beforeEach(() => {
+    loggerEventMock.mockReset();
+  });
+
   it('loads tool sources and resolves MCP server labels from the shared metadata list', async () => {
     const list = vi.fn(async () => [
       {
@@ -96,7 +115,6 @@ describe('useToolMetadata', () => {
   });
 
   it('warns when opening a skill reference fails or the bridge throws', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const openSkill = vi
       .fn()
       .mockResolvedValueOnce({ success: false, error: 'Missing skill' })
@@ -114,7 +132,29 @@ describe('useToolMetadata', () => {
 
     expect(openSkill).toHaveBeenNthCalledWith(1, 'skill_missing');
     expect(openSkill).toHaveBeenNthCalledWith(2, 'skill_error');
-    expect(warn).toHaveBeenNthCalledWith(1, 'Failed to open skill:', 'Missing skill');
-    expect(warn).toHaveBeenNthCalledWith(2, 'Failed to open skill:', expect.any(Error));
+    expect(loggerEventMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        level: 'warn',
+        event: 'skills.open',
+        outcome: 'failed',
+        message: 'Missing skill',
+        entity: {
+          skill_id: 'skill_missing',
+        },
+      })
+    );
+    expect(loggerEventMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        level: 'warn',
+        event: 'skills.open',
+        outcome: 'failed',
+        error: expect.any(Error),
+        entity: {
+          skill_id: 'skill_error',
+        },
+      })
+    );
   });
 });

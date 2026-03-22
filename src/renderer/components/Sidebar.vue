@@ -88,10 +88,12 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { PanelLeftDashed, Search, SquarePen, Trash2 } from 'lucide-vue-next';
+import { createLogger } from '../logger';
 import { useSidebar } from '../composables/useSidebar';
 
 const sidebar = useSidebar();
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const sidebarLogger = createLogger({ module: 'sidebar' });
 
 interface ChatThread {
   id: string;
@@ -155,7 +157,12 @@ const loadChatThreads = async () => {
       ? (threads as ChatThread[]).filter(isDesktopMainUiThread)
       : [];
   } catch (error) {
-    console.error('Failed to load chat threads:', error);
+    sidebarLogger.event({
+      level: 'error',
+      event: 'chat.threads.load',
+      outcome: 'failed',
+      error,
+    });
   }
 };
 
@@ -189,7 +196,15 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
     }
     emit('thread-deleted', thread.id);
   } catch (error) {
-    console.error('Failed to delete thread:', error);
+    sidebarLogger.event({
+      level: 'error',
+      event: 'chat.thread.delete',
+      outcome: 'failed',
+      error,
+      entity: {
+        thread_id: thread.id,
+      },
+    });
   } finally {
     deletingThreadIds.value = {
       ...deletingThreadIds.value,

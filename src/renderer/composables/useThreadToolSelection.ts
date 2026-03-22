@@ -6,6 +6,9 @@ import {
   parseThreadToolSelectionState,
 } from '../../shared/chat/thread_runtime_hints';
 import type { ElectronApi } from '../../shared/types/electron_api';
+import { createLogger } from '../logger';
+
+const threadToolSelectionLogger = createLogger({ module: 'thread_tool_selection' });
 
 export const useThreadToolSelection = (deps: {
   electronAPI: Pick<ElectronApi, 'chat' | 'tools'>;
@@ -47,7 +50,12 @@ export const useThreadToolSelection = (deps: {
 
       return Array.from(resolvedServerIds);
     } catch (error) {
-      console.error('Failed to derive MCP server ids from tools:', error);
+      threadToolSelectionLogger.event({
+        level: 'error',
+        event: 'tools.selection.derive_mcp_servers',
+        outcome: 'failed',
+        error,
+      });
       return [];
     }
   };
@@ -95,7 +103,15 @@ export const useThreadToolSelection = (deps: {
       selectedMcpServerIds.value = resolvedMcpServerIds;
       toolMode.value = selectionState.mode ?? 'auto';
     } catch (error) {
-      console.error('Failed to sync tool selection from thread:', error);
+      threadToolSelectionLogger.event({
+        level: 'error',
+        event: 'tools.selection.sync',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: normalizedThreadId,
+        },
+      });
     }
   };
 

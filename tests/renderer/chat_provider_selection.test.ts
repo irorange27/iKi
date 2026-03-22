@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { expectConsoleErrorArgs } from '../setup/error_log_guard';
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
+vi.mock('../../src/renderer/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
+}));
+
 import type { Provider } from '../../src/shared/types/provider';
 import {
   resolveProviderSelection,
@@ -170,11 +184,18 @@ describe('chat provider selection', () => {
     });
 
     await selection.loadAvailableProviders();
-    expectConsoleErrorArgs('Failed to verify provider configuration:', configuredError);
     const result = await selection.ensureProviderReady();
 
     expect(providerList).toHaveBeenCalledTimes(1);
     expect(isProviderConfigured).toHaveBeenCalledWith('openai');
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'chat.provider.verify',
+        outcome: 'failed',
+        error: configuredError,
+      })
+    );
     expect(result).toEqual({
       ok: false,
       message: 'Failed to verify the OpenAI provider configuration. Please try again.',

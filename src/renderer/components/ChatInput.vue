@@ -223,6 +223,7 @@ import { ref, onMounted, watch, nextTick, computed } from 'vue';
 import type { UIMessage } from 'ai';
 import type { Provider } from '../../shared/types/provider';
 import { getErrorMessage } from '../../shared/utils/errors';
+import { createLogger } from '../logger';
 import { useChatProviderSelection } from '../composables/useChatProviderSelection';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
@@ -232,6 +233,7 @@ import SkillSelector from './SkillSelector.vue';
 import WorkspaceSelector from './WorkspaceSelector.vue';
 
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const chatInputLogger = createLogger({ module: 'chat_input' });
 const emit = defineEmits<{
   (event: 'incognito-changed', value: boolean): void;
   (event: 'model-selected', payload: { model: string; provider: Provider }): void;
@@ -379,12 +381,22 @@ const stopStreaming = async () => {
   try {
     const result = await electronAPI.chat.stopStream();
     if (!result?.success) {
-      console.warn('Stop stream request failed:', result?.error || 'Unknown error');
+      chatInputLogger.event({
+        level: 'warn',
+        event: 'chat.stream.stop',
+        outcome: 'failed',
+        message: typeof result?.error === 'string' ? result.error : 'Unknown error',
+      });
       isLoading.value = false;
       isStopping.value = false;
     }
   } catch (error) {
-    console.error('Failed to stop stream:', error);
+    chatInputLogger.event({
+      level: 'error',
+      event: 'chat.stream.stop',
+      outcome: 'failed',
+      error,
+    });
     isLoading.value = false;
     isStopping.value = false;
   }
@@ -441,7 +453,12 @@ const sendMessage = async () => {
   let preparedMessageSend: { threadId: string; messagesSnapshot: UIMessage[] } | null = null;
   try {
     if (!props.prepareMessageSend) {
-      console.error('Missing prepareMessageSend handler');
+      chatInputLogger.event({
+        level: 'error',
+        event: 'chat.send.prepare',
+        outcome: 'failed',
+        message: 'Missing prepareMessageSend handler.',
+      });
     } else {
       preparedMessageSend = await props.prepareMessageSend({
         content: userMessage,
@@ -451,7 +468,12 @@ const sendMessage = async () => {
       });
     }
   } catch (error) {
-    console.error('Failed to prepare message send:', error);
+    chatInputLogger.event({
+      level: 'error',
+      event: 'chat.send.prepare',
+      outcome: 'failed',
+      error,
+    });
   } finally {
     isPreparingSend.value = false;
   }
@@ -469,7 +491,12 @@ const sendMessage = async () => {
     const transportMessages = JSON.parse(JSON.stringify(preparedMessageSend.messagesSnapshot));
 
     if (!Array.isArray(transportMessages) || transportMessages.length === 0) {
-      console.warn('No valid messages to send');
+      chatInputLogger.event({
+        level: 'warn',
+        event: 'chat.send',
+        outcome: 'skipped',
+        message: 'No valid messages to send.',
+      });
       isLoading.value = false;
       return;
     }
@@ -499,10 +526,20 @@ const sendMessage = async () => {
     isLoading.value = false;
     isStopping.value = false;
   } catch (error: unknown) {
-    console.error('Failed to send message:', error);
+    chatInputLogger.event({
+      level: 'error',
+      event: 'chat.send',
+      outcome: 'failed',
+      error,
+    });
     isLoading.value = false;
     isStopping.value = false;
-    console.warn('Chat send failed:', getErrorMessage(error));
+    chatInputLogger.event({
+      level: 'warn',
+      event: 'chat.send',
+      outcome: 'degraded',
+      message: getErrorMessage(error),
+    });
     // Remove the user message if failed (it was already added to chat.messages in ChatView)
     // The error handler will clean up the state
   }

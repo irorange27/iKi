@@ -3,7 +3,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import { expectConsoleErrorMatching } from '../../setup/error_log_guard';
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
+vi.mock('../../../src/renderer/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
+}));
+
 import type { Provider } from '../../../src/shared/types/provider';
 import type { Workspace } from '../../../src/shared/types/chat';
 
@@ -563,18 +577,19 @@ describe('ChatInput', () => {
     });
 
     await wrapper.find('.chat-input-field').setValue('Need help with the repo');
-    expectConsoleErrorMatching(
-      args =>
-        args[0] === 'Failed to verify provider configuration:' &&
-        args[1] instanceof Error &&
-        args[1].message === configuredError.message,
-      'console.error(Failed to verify provider configuration:, Error: ipc failed)'
-    );
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
     expect(prepareMessageSend).not.toHaveBeenCalled();
     expect(stream).not.toHaveBeenCalled();
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'chat.provider.verify',
+        outcome: 'failed',
+        error: configuredError,
+      })
+    );
     expect(alertSpy).toHaveBeenCalledWith(
       'Failed to verify the OpenAI provider configuration. Please try again.'
     );

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 
 import type { ElectronApi } from '../../../shared/types/electron_api';
 import { isObjectRecord } from '../../../shared/utils/guards';
+import { createLogger } from '../../logger';
 import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
 import type { ChatMessageStore } from './chat_message_store';
 import type { UiMessagePersistence } from './ui_message_persistence';
@@ -16,6 +17,8 @@ import {
 } from './ui_stream_reducer';
 import { createToolApprovalService, type ApprovalEvent } from './tool_approval_service';
 import { getToolUiState, getToolUiStateMap, updateToolUiState } from './tool_ui_state';
+
+const streamControllerLogger = createLogger({ module: 'ui_stream_controller' });
 
 const isMemoryRetrievalChunk = (
   chunk: Record<string, unknown>
@@ -241,7 +244,12 @@ export const createChatUiStreamController = (deps: {
     try {
       await deps.electronAPI.chat.stopStream();
     } catch (error) {
-      console.warn('[ChatView] stop-stream failed:', error);
+      streamControllerLogger.event({
+        level: 'warn',
+        event: 'chat.stream.stop',
+        outcome: 'failed',
+        error,
+      });
     } finally {
       await resetTransientState();
     }
@@ -296,7 +304,12 @@ export const createChatUiStreamController = (deps: {
         typeof chunk.errorText === 'string' && chunk.errorText.trim().length > 0
           ? chunk.errorText
           : 'Unknown chat stream error';
-      console.error('[ChatView] UI stream error:', errorText);
+      streamControllerLogger.event({
+        level: 'error',
+        event: 'chat.stream',
+        outcome: 'failed',
+        message: errorText,
+      });
       if (streamingAssistantText.value.trim().length > 0) {
         await dispatch({ type: 'finalize_response', fullText: streamingAssistantText.value });
       } else {
@@ -406,7 +419,12 @@ export const createChatUiStreamController = (deps: {
         });
       }
     } catch (error) {
-      console.error('Failed to approve tool:', error);
+      streamControllerLogger.event({
+        level: 'error',
+        event: 'chat.tool_approval',
+        outcome: 'failed',
+        error,
+      });
     } finally {
       approvals.setApprovalProcessing(approvalId, false);
     }

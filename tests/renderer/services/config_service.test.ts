@@ -2,11 +2,27 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
+vi.mock('../../../src/renderer/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
+}));
+
 import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
 import { configService } from '../../../src/renderer/services/config_service';
 
 describe('configService', () => {
   beforeEach(() => {
+    loggerEventMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -84,12 +100,15 @@ describe('configService', () => {
   });
 
   it('warns and returns a noop unsubscribe when config updates are unavailable', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
     const unsubscribe = configService.onUpdated(vi.fn());
 
-    expect(warn).toHaveBeenCalledWith(
-      'window.electronAPI.config is missing; config updates are disabled.'
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'config.subscription',
+        outcome: 'skipped',
+        message: 'window.electronAPI.config is missing; config updates are disabled.',
+      })
     );
     expect(unsubscribe).toBeTypeOf('function');
     expect(() => unsubscribe()).not.toThrow();

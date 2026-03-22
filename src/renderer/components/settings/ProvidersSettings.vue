@@ -264,6 +264,7 @@ import type { Provider } from '../../../shared/types/provider';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
+import { createLogger } from '../../logger';
 import { getProviderIconName } from '../../modules/providers/provider_icons';
 
 type ProviderRecord = Provider & {
@@ -279,6 +280,7 @@ type EditableProvider = Pick<
 };
 
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const providersSettingsLogger = createLogger({ module: 'providers_settings' });
 
 const providers = ref<ProviderRecord[]>([]);
 const editingProvider = ref<EditableProvider | null>(null);
@@ -330,7 +332,15 @@ const fetchLatestModels = async () => {
       );
     }
   } catch (error) {
-    console.error('Error fetching models:', error);
+    providersSettingsLogger.event({
+      level: 'error',
+      event: 'providers.models.fetch',
+      outcome: 'failed',
+      error,
+      entity: {
+        provider_id: selectedProviderId.value,
+      },
+    });
   } finally {
     isFetchingModels.value = false;
   }
@@ -598,7 +608,16 @@ const saveProviderConfig = async () => {
     showConfigForm.value = false;
     await loadProviders();
   } catch (error: unknown) {
-    console.error('Error saving provider:', getErrorMessage(error));
+    providersSettingsLogger.event({
+      level: 'error',
+      event: 'providers.config.save',
+      outcome: 'failed',
+      error,
+      message: getErrorMessage(error),
+      entity: {
+        provider_id: activeProviderId,
+      },
+    });
   }
 };
 

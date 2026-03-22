@@ -1,7 +1,10 @@
 import { computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useConfigStore } from '../store/config';
+import { createLogger } from '../logger';
 import type { AppConfig } from '../../shared/types/config';
+
+const appConfigLogger = createLogger({ module: 'app_config' });
 
 /**
  * 全局配置管理 Composable
@@ -67,7 +70,12 @@ export const useAppConfig = () => {
       try {
         await store.saveConfig();
       } catch (error) {
-        console.error('❌ Auto-save failed:', error);
+        appConfigLogger.event({
+          level: 'error',
+          event: 'config.auto_save',
+          outcome: 'failed',
+          error,
+        });
       }
     }, SAVE_DELAY);
   };
@@ -193,12 +201,22 @@ export const useAppConfig = () => {
     for (let index = 0; index < keys.length - 1; index++) {
       const key = keys[index];
       if (!(key in current)) {
-        console.warn(`Path ${path} does not exist in target`);
+        appConfigLogger.event({
+          level: 'warn',
+          event: 'config.update_nested',
+          outcome: 'skipped',
+          message: `Path ${path} does not exist in target.`,
+        });
         return;
       }
       const next = current[key];
       if (!next || typeof next !== 'object') {
-        console.warn(`Path ${path} is not an object path`);
+        appConfigLogger.event({
+          level: 'warn',
+          event: 'config.update_nested',
+          outcome: 'skipped',
+          message: `Path ${path} is not an object path.`,
+        });
         return;
       }
       current = next as Record<string, unknown>;

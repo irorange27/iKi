@@ -10,7 +10,10 @@ import {
   extractTextFromMessage,
 } from '../modules/chat/ui_message_text';
 import type { ElectronApi } from '../../shared/types/electron_api';
+import { createLogger } from '../logger';
 import type { ChatThread } from './useChatThreads';
+
+const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
 export type PreparedMessageSend = {
   threadId: string;
@@ -135,7 +138,12 @@ export const useChatStreaming = (deps: {
     if (!deps.currentThread.value) {
       const thread = await deps.createNewThread(model || deps.currentModel.value);
       if (!thread) {
-        console.error('Failed to create thread');
+        chatStreamingLogger.event({
+          level: 'error',
+          event: 'chat.send.prepare',
+          outcome: 'failed',
+          message: 'Failed to create thread before send.',
+        });
         return null;
       }
       resetStreamState();
@@ -143,7 +151,12 @@ export const useChatStreaming = (deps: {
     }
 
     if (!deps.currentThread.value) {
-      console.error('No thread available');
+      chatStreamingLogger.event({
+        level: 'error',
+        event: 'chat.send.prepare',
+        outcome: 'failed',
+        message: 'No thread available after send preparation.',
+      });
       return null;
     }
 

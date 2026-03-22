@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia';
 import type { AppConfig } from '../../shared/types/config';
 import { createDefaultAppConfig, mergeAppConfig } from '../../shared/config/defaults';
+import { createLogger } from '../logger';
 import { configService } from '../services/config_service';
 
 const mergeConfigWithDefaults = (rawConfig: Partial<AppConfig> | null | undefined): AppConfig =>
   mergeAppConfig(rawConfig ?? null);
+const configStoreLogger = createLogger({ module: 'config_store' });
 
 export const useConfigStore = defineStore('config', {
   state: (): { config: AppConfig; initialized: boolean } => ({
@@ -21,7 +23,14 @@ export const useConfigStore = defineStore('config', {
         // 合并配置，防止字段缺失
         this.config = mergeConfigWithDefaults(saved as Partial<AppConfig>);
       } catch (error) {
-        console.warn('Failed to load config, using defaults:', error);
+        configStoreLogger.event({
+          level: 'warn',
+          event: 'config.load',
+          outcome: 'degraded',
+          error,
+          message: 'Failed to load config; using defaults.',
+          fallback_applied: true,
+        });
       }
 
       // 2. Setup listeners (once)
