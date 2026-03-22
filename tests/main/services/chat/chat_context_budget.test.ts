@@ -26,7 +26,7 @@ describe('chat_context_budget', () => {
     expect(result.maxSkillTokens).toBe(baseConfig.maxSkillTokens);
     expect(result.budgetScale).toBe(1);
     expect(result.availableContextTokens).toBeNull();
-    expect(result.reservedOutputTokens).toBeNull();
+    expect(result.maxOutputTokens).toBeNull();
   });
 
   it('shrinks context budgets to fit smaller model input limits', () => {
@@ -48,6 +48,7 @@ describe('chat_context_budget', () => {
     expect(result.maxSummaryTokens).toBeLessThan(baseConfig.maxSummaryTokens);
     expect(result.maxSkillTokens).toBeLessThan(baseConfig.maxSkillTokens);
     expect(result.maxMessageTokens).toBeLessThan(baseConfig.maxMessageTokens);
+    expect(result.maxOutputTokens).toBe(1024);
 
     const totalBudget =
       result.maxRecentTokens +
@@ -79,5 +80,6 @@ describe('chat_context_budget', () => {
     expect(result.maxSkillTokens).toBe(baseConfig.maxSkillTokens);
     expect(result.maxSummaryTokens).toBe(baseConfig.maxSummaryTokens);
     expect(result.budgetScale).toBe(1);
+    expect(result.maxOutputTokens).toBe(32768);
   });
 });

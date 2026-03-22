@@ -21,7 +21,7 @@ export type EffectiveContextConfig = ContextConfig & {
   budgetScale: number;
   availableContextTokens: number | null;
   requestedContextTokens: number;
-  reservedOutputTokens: number | null;
+  maxOutputTokens: number | null;
   modelContextWindow: number | null;
   modelInputLimit: number | null;
 };
@@ -137,7 +137,7 @@ const buildRequestedContextTokens = (config: ContextConfig): number =>
   config.maxMemoryTokens +
   config.maxSkillTokens;
 
-const resolveReservedOutputTokens = (
+const resolveMaxOutputTokens = (
   modelInputLimit: number,
   capability?: ModelCapability | null
 ): number => {
@@ -182,17 +182,17 @@ export const deriveModelAwareContextConfig = (
       budgetScale: 1,
       availableContextTokens: null,
       requestedContextTokens,
-      reservedOutputTokens: null,
+      maxOutputTokens: null,
       modelContextWindow,
       modelInputLimit,
     };
   }
 
-  const reservedOutputTokens = resolveReservedOutputTokens(modelInputLimit, capability);
+  const maxOutputTokens = resolveMaxOutputTokens(modelInputLimit, capability);
   const safetyReserveTokens = clampInteger(Math.floor(modelInputLimit * 0.05), 128, 1024);
   const availableContextTokens = Math.max(
     CONTEXT_BUDGET_FLOORS.maxRecentTokens,
-    modelInputLimit - reservedOutputTokens - safetyReserveTokens
+    modelInputLimit - maxOutputTokens - safetyReserveTokens
   );
 
   if (availableContextTokens >= requestedContextTokens) {
@@ -201,7 +201,7 @@ export const deriveModelAwareContextConfig = (
       budgetScale: 1,
       availableContextTokens,
       requestedContextTokens,
-      reservedOutputTokens,
+      maxOutputTokens,
       modelContextWindow,
       modelInputLimit,
     };
@@ -236,7 +236,7 @@ export const deriveModelAwareContextConfig = (
     budgetScale: scale,
     availableContextTokens,
     requestedContextTokens,
-    reservedOutputTokens,
+    maxOutputTokens,
     modelContextWindow,
     modelInputLimit,
   };

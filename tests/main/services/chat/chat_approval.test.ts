@@ -112,6 +112,7 @@ describe('createChatApproval', () => {
           providerType: 'openai',
           model: 'gpt-4o-mini',
           systemPrompt: 'system prompt',
+          maxOutputTokens: 640,
           enabledTools: ['web'],
           availableSkillIds: [],
         },
@@ -125,6 +126,7 @@ describe('createChatApproval', () => {
       provider_type: 'openai',
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
+      max_output_tokens: 640,
       enabled_tools: '["web"]',
       available_skill_ids: '[]',
     });
@@ -177,6 +179,7 @@ describe('createChatApproval', () => {
       provider_type: 'openai',
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
+      max_output_tokens: 640,
       enabled_tools: '["web"]',
       available_skill_ids: '[]',
       created_at: '2026-03-19T00:00:00.000Z',
@@ -234,6 +237,7 @@ describe('createChatApproval', () => {
       systemPrompt: 'system prompt',
       enableTools: true,
       maxIterations: 5,
+      maxTokens: 640,
     });
     expect(runner.registerTool).toHaveBeenCalledTimes(1);
     expect(answerChatToolApprovalMock).toHaveBeenCalledWith(
@@ -264,6 +268,7 @@ describe('createChatApproval', () => {
           threadId: 'thread_1',
           providerType: 'openai',
           model: 'gpt-4o-mini',
+          maxOutputTokens: 640,
           enabledTools: ['web'],
           availableSkillIds: [],
         }),

@@ -6,6 +6,11 @@ import * as threadContextDb from '../../../core/db/thread_context';
 import * as memoryDb from '../../../core/db/memory';
 import { extractTextFromModelMessageContent } from '../../../core/agent/model_messages';
 import {
+  clipTextToTokenBudget,
+  estimateMessageTokens,
+  estimateTextTokens,
+} from '../../../core/context/token_estimator';
+import {
   generateThreadSummary,
   type ThreadSummaryMessage,
 } from '../../../core/context/thread_summary';
@@ -14,7 +19,7 @@ import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
 import type { ChatInputMessage } from './chat_types';
 import type { ChatMemory } from './chat_memory';
-import { deriveModelAwareContextConfig } from './chat_context_budget';
+import { deriveModelAwareContextConfig, type EffectiveContextConfig } from './chat_context_budget';
 import { resolveSkillsSystemPrompt } from './chat_skills';
 import { getPromptFromMessage } from './chat_ui';
 import { getIdentityContextMessage } from '../identity/identity_service';
@@ -56,6 +61,7 @@ type AssembleChatContextResult = {
   usedSkills: Awaited<ReturnType<typeof resolveSkillsSystemPrompt>>['usedSkills'];
   skillMode: 'manual' | 'auto';
   report: ContextReport;
+  effectiveContextConfig: EffectiveContextConfig;
 };
 
 type ThreadSummaryState = {
@@ -126,27 +132,7 @@ type SkillContext = {
   block: ContextReportBlock;
 };
 
-const estimateTokens = (value: string): number => Math.ceil(value.length / 4);
-
 const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim();
-
-const clipTextToTokenBudget = (
-  value: string,
-  maxTokens: number
-): { text: string; truncated: boolean } => {
-  if (!value.trim()) return { text: '', truncated: false };
-  if (maxTokens <= 0) return { text: '', truncated: value.trim().length > 0 };
-
-  const maxChars = maxTokens * 4;
-  if (value.length <= maxChars) {
-    return { text: value, truncated: false };
-  }
-
-  return {
-    text: `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`,
-    truncated: true,
-  };
-};
 
 const getContextConfig = (): ContextConfig => {
   const configured = getAppConfig()?.memory?.context;
@@ -156,21 +142,15 @@ const getContextConfig = (): ContextConfig => {
   };
 };
 
-const countMessageTokens = (message: ChatInputMessage): number => {
-  if (typeof message.content === 'string') {
-    return estimateTokens(message.content);
-  }
-
-  if (message.role === 'tool') {
-    return estimateTokens(JSON.stringify(message.content ?? {}));
-  }
-
-  return estimateTokens(extractTextFromModelMessageContent(message.content));
-};
+const countMessageTokens = (
+  message: ChatInputMessage,
+  modelCapability?: ModelCapability | null
+): number => estimateMessageTokens(message, modelCapability);
 
 const clipMessageToBudget = (
   message: ChatInputMessage,
-  maxTokens: number
+  maxTokens: number,
+  modelCapability?: ModelCapability | null
 ): { message: ChatInputMessage; truncated: boolean } => {
   if (maxTokens <= 0) return { message, truncated: false };
 
@@ -179,7 +159,7 @@ const clipMessageToBudget = (
   }
 
   if (typeof message.content === 'string') {
-    const clipped = clipTextToTokenBudget(message.content, maxTokens);
+    const clipped = clipTextToTokenBudget(message.content, maxTokens, modelCapability);
     return clipped.truncated
       ? { message: { ...message, content: clipped.text }, truncated: true }
       : { message, truncated: false };
@@ -198,7 +178,8 @@ const clipMessageToBudget = (
   ) {
     const clipped = clipTextToTokenBudget(
       extractTextFromModelMessageContent(message.content),
-      maxTokens
+      maxTokens,
+      modelCapability
     );
     return clipped.truncated
       ? { message: { ...message, content: clipped.text }, truncated: true }
@@ -335,7 +316,8 @@ const buildMemorySystemMessage = (
 
 const selectRecentHistory = (
   messages: ChatInputMessage[],
-  contextConfig: ContextConfig
+  contextConfig: ContextConfig,
+  modelCapability?: ModelCapability | null
 ): RecentHistoryContext => {
   const conversationMessages = messages.filter(message => message.role !== 'system');
   const systemMessages = messages.filter(message => message.role === 'system');
@@ -347,9 +329,13 @@ const selectRecentHistory = (
     const isLatestMessage = index === conversationMessages.length - 1;
     const clippedMessage = isLatestMessage
       ? { message: conversationMessages[index], truncated: false }
-      : clipMessageToBudget(conversationMessages[index], contextConfig.maxMessageTokens);
+      : clipMessageToBudget(
+          conversationMessages[index],
+          contextConfig.maxMessageTokens,
+          modelCapability
+        );
     const message = clippedMessage.message;
-    const messageTokens = countMessageTokens(message);
+    const messageTokens = countMessageTokens(message, modelCapability);
     const exceedsBudget =
       recentMessages.length > 0 && recentTokens + messageTokens > contextConfig.maxRecentTokens;
     const exceedsCount = recentMessages.length >= Math.max(1, contextConfig.recentMessageCount);
@@ -397,10 +383,11 @@ const selectRecentHistory = (
 const buildThreadSummaryContext = (
   threadSummary: ThreadSummaryState | null,
   compactedMessages: number,
-  contextConfig: ContextConfig
+  contextConfig: ContextConfig,
+  modelCapability?: ModelCapability | null
 ): SummaryContext => {
   const summaryClip = threadSummary?.summary
-    ? clipTextToTokenBudget(threadSummary.summary, contextConfig.maxSummaryTokens)
+    ? clipTextToTokenBudget(threadSummary.summary, contextConfig.maxSummaryTokens, modelCapability)
     : { text: '', truncated: false };
 
   if (threadSummary?.summary) {
@@ -409,7 +396,7 @@ const buildThreadSummaryContext = (
       block: {
         kind: 'thread-summary',
         status: summaryClip.truncated ? 'truncated' : 'included',
-        estimatedTokens: estimateTokens(summaryClip.text),
+        estimatedTokens: estimateTextTokens(summaryClip.text, modelCapability),
         charCount: summaryClip.text.length,
         ...(summaryClip.truncated ? { reason: 'thread summary clipped to context budget' } : {}),
         sourceCount: threadSummary.sourceMessageCount,
@@ -432,19 +419,24 @@ const buildThreadSummaryContext = (
 const buildIdentityContext = (
   identityMessage: string,
   workspaceMessage: string | undefined,
-  contextConfig: ContextConfig
+  contextConfig: ContextConfig,
+  modelCapability?: ModelCapability | null
 ): IdentityContext => {
   const combinedMessage = [identityMessage.trim(), workspaceMessage?.trim() ?? '']
     .filter(Boolean)
     .join('\n\n');
-  const identityClip = clipTextToTokenBudget(combinedMessage, contextConfig.maxIdentityTokens);
+  const identityClip = clipTextToTokenBudget(
+    combinedMessage,
+    contextConfig.maxIdentityTokens,
+    modelCapability
+  );
 
   return {
     systemMessage: identityClip.text,
     block: {
       kind: 'identity',
       status: identityClip.text ? (identityClip.truncated ? 'truncated' : 'included') : 'dropped',
-      estimatedTokens: estimateTokens(identityClip.text),
+      estimatedTokens: estimateTextTokens(identityClip.text, modelCapability),
       charCount: identityClip.text.length,
       ...(identityClip.text
         ? identityClip.truncated
@@ -457,11 +449,13 @@ const buildIdentityContext = (
 
 const buildRelationshipContext = (
   threadId: string | undefined,
-  contextConfig: ContextConfig
+  contextConfig: ContextConfig,
+  modelCapability?: ModelCapability | null
 ): RelationshipContext => {
   const relationshipClip = clipTextToTokenBudget(
     getRelationshipContextMessage(threadId),
-    contextConfig.maxRelationshipTokens
+    contextConfig.maxRelationshipTokens,
+    modelCapability
   );
 
   return {
@@ -473,7 +467,7 @@ const buildRelationshipContext = (
           ? 'truncated'
           : 'included'
         : 'dropped',
-      estimatedTokens: estimateTokens(relationshipClip.text),
+      estimatedTokens: estimateTextTokens(relationshipClip.text, modelCapability),
       charCount: relationshipClip.text.length,
       ...(relationshipClip.text
         ? relationshipClip.truncated
@@ -488,15 +482,22 @@ const buildRelationshipContext = (
   };
 };
 
-const buildLifeStateContext = (contextConfig: ContextConfig): LifeStateContext => {
-  const lifeClip = clipTextToTokenBudget(getLifeContextMessage(), contextConfig.maxLifeStateTokens);
+const buildLifeStateContext = (
+  contextConfig: ContextConfig,
+  modelCapability?: ModelCapability | null
+): LifeStateContext => {
+  const lifeClip = clipTextToTokenBudget(
+    getLifeContextMessage(),
+    contextConfig.maxLifeStateTokens,
+    modelCapability
+  );
 
   return {
     systemMessage: lifeClip.text,
     block: {
       kind: 'life-state',
       status: lifeClip.text ? (lifeClip.truncated ? 'truncated' : 'included') : 'dropped',
-      estimatedTokens: estimateTokens(lifeClip.text),
+      estimatedTokens: estimateTextTokens(lifeClip.text, modelCapability),
       charCount: lifeClip.text.length,
       ...(lifeClip.text
         ? lifeClip.truncated
@@ -507,10 +508,14 @@ const buildLifeStateContext = (contextConfig: ContextConfig): LifeStateContext =
   };
 };
 
-const buildRecentReflectionContext = (contextConfig: ContextConfig): ReflectionContext => {
+const buildRecentReflectionContext = (
+  contextConfig: ContextConfig,
+  modelCapability?: ModelCapability | null
+): ReflectionContext => {
   const reflectionClip = clipTextToTokenBudget(
     getRecentLifeReflectionContextMessage(),
-    contextConfig.maxReflectionTokens
+    contextConfig.maxReflectionTokens,
+    modelCapability
   );
 
   return {
@@ -522,7 +527,7 @@ const buildRecentReflectionContext = (contextConfig: ContextConfig): ReflectionC
           ? 'truncated'
           : 'included'
         : 'dropped',
-      estimatedTokens: estimateTokens(reflectionClip.text),
+      estimatedTokens: estimateTextTokens(reflectionClip.text, modelCapability),
       charCount: reflectionClip.text.length,
       ...(reflectionClip.text
         ? reflectionClip.truncated
@@ -544,6 +549,7 @@ const buildMemoryContext = (params: {
   query: string;
   memory: ChatMemory;
   contextConfig: ContextConfig;
+  modelCapability?: ModelCapability | null;
   onMemoryRetrieved?: AssembleChatContextParams['onMemoryRetrieved'];
 }): MemoryContext => {
   if (!params.query.trim()) {
@@ -591,7 +597,8 @@ const buildMemoryContext = (params: {
 
   while (
     memoryResults.length > 1 &&
-    estimateTokens(memorySystemMessage) > params.contextConfig.maxMemoryTokens
+    estimateTextTokens(memorySystemMessage, params.modelCapability) >
+      params.contextConfig.maxMemoryTokens
   ) {
     memoryResults = memoryResults.slice(0, -1);
     memorySystemMessage = buildMemorySystemMessage(memoryResults.map(toMemoryDisplayEntry));
@@ -599,7 +606,8 @@ const buildMemoryContext = (params: {
 
   const memoryClip = clipTextToTokenBudget(
     memorySystemMessage,
-    params.contextConfig.maxMemoryTokens
+    params.contextConfig.maxMemoryTokens,
+    params.modelCapability
   );
   params.onMemoryRetrieved?.({
     query: memoryPayload.query,
@@ -616,7 +624,7 @@ const buildMemoryContext = (params: {
           ? 'truncated'
           : 'included'
         : 'dropped',
-      estimatedTokens: estimateTokens(memoryClip.text),
+      estimatedTokens: estimateTextTokens(memoryClip.text, params.modelCapability),
       charCount: memoryClip.text.length,
       ...(memoryClip.text
         ? memoryClip.truncated
@@ -641,10 +649,13 @@ const resolveAffectMessage = (
   return params.threadId ? memory.getAffectContextMessage(params.threadId) : '';
 };
 
-const buildAffectBlock = (affectMessage: string): ContextReportBlock => ({
+const buildAffectBlock = (
+  affectMessage: string,
+  modelCapability?: ModelCapability | null
+): ContextReportBlock => ({
   kind: 'affect',
   status: affectMessage ? 'included' : 'dropped',
-  estimatedTokens: estimateTokens(affectMessage),
+  estimatedTokens: estimateTextTokens(affectMessage, modelCapability),
   charCount: affectMessage.length,
   ...(affectMessage ? {} : { reason: 'no affect context available' }),
 });
@@ -656,6 +667,7 @@ const buildSkillContext = async (params: {
   skillMode?: 'manual' | 'auto';
   affectState?: AffectState | null;
   contextConfig: ContextConfig;
+  modelCapability?: ModelCapability | null;
 }): Promise<SkillContext> => {
   const { skillsSystemPrompt, usedSkills, skillMode } = await resolveSkillsSystemPrompt({
     inputMessages: params.inputMessages,
@@ -664,7 +676,11 @@ const buildSkillContext = async (params: {
     skillMode: params.skillMode,
     affectState: params.affectState,
   });
-  const skillClip = clipTextToTokenBudget(skillsSystemPrompt, params.contextConfig.maxSkillTokens);
+  const skillClip = clipTextToTokenBudget(
+    skillsSystemPrompt,
+    params.contextConfig.maxSkillTokens,
+    params.modelCapability
+  );
 
   return {
     systemMessage: skillClip.text,
@@ -673,7 +689,7 @@ const buildSkillContext = async (params: {
     block: {
       kind: 'skills',
       status: skillClip.text ? (skillClip.truncated ? 'truncated' : 'included') : 'dropped',
-      estimatedTokens: estimateTokens(skillClip.text),
+      estimatedTokens: estimateTextTokens(skillClip.text, params.modelCapability),
       charCount: skillClip.text.length,
       ...(skillClip.text
         ? skillClip.truncated
@@ -692,10 +708,12 @@ const buildAssembleResult = (params: {
   retainedRecentMessages: number;
   compactedMessages: number;
   blocks: ContextReportBlock[];
+  effectiveContextConfig: EffectiveContextConfig;
 }): AssembleChatContextResult => ({
   messages: params.messages,
   usedSkills: params.usedSkills,
   skillMode: params.skillMode,
+  effectiveContextConfig: params.effectiveContextConfig,
   report: {
     totalEstimatedTokens: params.blocks.reduce((sum, block) => sum + block.estimatedTokens, 0),
     retainedRecentMessages: params.retainedRecentMessages,
@@ -722,26 +740,36 @@ export const createChatContextAssembler = (deps: {
         retainedRecentMessages: params.messages.filter(message => message.role !== 'system').length,
         compactedMessages: 0,
         blocks: [],
+        effectiveContextConfig: contextConfig,
       });
     }
 
-    const recentHistory = selectRecentHistory(params.messages, contextConfig);
+    const recentHistory = selectRecentHistory(
+      params.messages,
+      contextConfig,
+      params.modelCapability
+    );
     blocks.push(recentHistory.block);
 
     const identityContext = buildIdentityContext(
       getIdentityContextMessage(),
       deps.workspaceSystemMessage?.(params.threadId),
-      contextConfig
+      contextConfig,
+      params.modelCapability
     );
     blocks.push(identityContext.block);
 
-    const relationshipContext = buildRelationshipContext(params.threadId, contextConfig);
+    const relationshipContext = buildRelationshipContext(
+      params.threadId,
+      contextConfig,
+      params.modelCapability
+    );
     blocks.push(relationshipContext.block);
 
-    const lifeStateContext = buildLifeStateContext(contextConfig);
+    const lifeStateContext = buildLifeStateContext(contextConfig, params.modelCapability);
     blocks.push(lifeStateContext.block);
 
-    const reflectionContext = buildRecentReflectionContext(contextConfig);
+    const reflectionContext = buildRecentReflectionContext(contextConfig, params.modelCapability);
     blocks.push(reflectionContext.block);
 
     const threadSummary = params.threadId
@@ -750,7 +778,8 @@ export const createChatContextAssembler = (deps: {
     const summaryContext = buildThreadSummaryContext(
       threadSummary,
       recentHistory.compactedMessages,
-      contextConfig
+      contextConfig,
+      params.modelCapability
     );
     blocks.push(summaryContext.block);
 
@@ -761,6 +790,7 @@ export const createChatContextAssembler = (deps: {
       query,
       memory: deps.memory,
       contextConfig,
+      modelCapability: params.modelCapability,
       onMemoryRetrieved: params.onMemoryRetrieved,
     });
     blocks.push(memoryContext.block);
@@ -778,7 +808,7 @@ export const createChatContextAssembler = (deps: {
     );
 
     const affectMessage = resolveAffectMessage(params, deps.memory);
-    blocks.push(buildAffectBlock(affectMessage));
+    blocks.push(buildAffectBlock(affectMessage, params.modelCapability));
 
     const baseWithAffect = insertSystemMessages(baseMessages, [affectMessage]);
     const skillContext = await buildSkillContext({
@@ -788,6 +818,7 @@ export const createChatContextAssembler = (deps: {
       skillMode: params.skillMode,
       affectState: params.affectState,
       contextConfig,
+      modelCapability: params.modelCapability,
     });
     blocks.push(skillContext.block);
 
@@ -798,6 +829,7 @@ export const createChatContextAssembler = (deps: {
       retainedRecentMessages: recentHistory.recentMessages.length,
       compactedMessages: recentHistory.compactedMessages,
       blocks,
+      effectiveContextConfig: contextConfig,
     });
   };
 

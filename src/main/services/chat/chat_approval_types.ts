@@ -5,6 +5,7 @@ export type ApprovalRecoveryContext = {
   providerType: string;
   model: string;
   systemPrompt: string;
+  maxOutputTokens?: number;
   enabledTools: string[];
   availableSkillIds?: string[];
 };

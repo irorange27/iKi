@@ -119,6 +119,7 @@ export const streamChat = async (
     modelId: string;
     messages: ChatTextMessage[];
     extraSystemPrompt?: string;
+    maxOutputTokens?: number;
   },
   onChunk: (chunk: string) => void,
   shouldCancel?: () => boolean,
@@ -134,6 +135,7 @@ export const streamChatWithUsage = async (
     modelId: string;
     messages: ChatTextMessage[];
     extraSystemPrompt?: string;
+    maxOutputTokens?: number;
   },
   onChunk: (chunk: string) => void,
   shouldCancel?: () => boolean,
@@ -148,6 +150,9 @@ export const streamChatWithUsage = async (
     model,
     system: systemPrompt,
     messages: toModelMessages(options.messages),
+    ...(typeof options.maxOutputTokens === 'number'
+      ? { maxOutputTokens: options.maxOutputTokens }
+      : {}),
     abortSignal,
   });
 
@@ -181,6 +186,7 @@ export const generateChat = async (options: {
   modelId: string;
   messages: ChatTextMessage[];
   extraSystemPrompt?: string;
+  maxOutputTokens?: number;
 }) => {
   const result = await generateChatWithUsage(options);
   return result.text;
@@ -191,6 +197,7 @@ export const generateChatWithUsage = async (options: {
   modelId: string;
   messages: ChatTextMessage[];
   extraSystemPrompt?: string;
+  maxOutputTokens?: number;
 }): Promise<ChatGenerationResult> => {
   const model = createModel(options.providerType, options.modelId);
   const systemPrompt = [getFullSystemPrompt(options.providerType), options.extraSystemPrompt]
@@ -201,6 +208,9 @@ export const generateChatWithUsage = async (options: {
     model,
     system: systemPrompt,
     messages: toModelMessages(options.messages),
+    ...(typeof options.maxOutputTokens === 'number'
+      ? { maxOutputTokens: options.maxOutputTokens }
+      : {}),
   });
 
   return {

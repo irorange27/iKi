@@ -6,6 +6,7 @@ type CreateChatConversationRunnerParams = {
   systemPrompt: string;
   enableTools: boolean;
   maxIterations?: number;
+  maxTokens?: number;
 };
 
 export const createChatConversationRunner = (
@@ -17,5 +18,6 @@ export const createChatConversationRunner = (
     model: params.model,
     systemPrompt: params.systemPrompt,
     enableTools: params.enableTools,
+    ...(typeof params.maxTokens === 'number' ? { maxTokens: params.maxTokens } : {}),
     maxIterations: params.maxIterations ?? 5,
   });

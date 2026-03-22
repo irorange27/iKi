@@ -6,6 +6,7 @@ const {
   createOpenAICompatibleMock,
   createOpenAIMock,
   fetchWithTimeoutMock,
+  generateTextMock,
   getProvidersMock,
   getPersonaPromptMock,
   streamTextMock,
@@ -21,13 +22,14 @@ const {
   createOpenAICompatibleMock: vi.fn(),
   createOpenAIMock: vi.fn(),
   fetchWithTimeoutMock: vi.fn(),
+  generateTextMock: vi.fn(),
   getProvidersMock: vi.fn(),
   getPersonaPromptMock: vi.fn(),
   streamTextMock: vi.fn(),
 }));
 
 vi.mock('ai', () => ({
-  generateText: vi.fn(),
+  generateText: generateTextMock,
   streamText: streamTextMock,
 }));
 
@@ -61,6 +63,7 @@ vi.mock('../../../../src/core/network/http', () => ({
 
 import {
   fetchModelCapabilityFromDev,
+  generateChatWithUsage,
   streamChat,
   streamChatWithUsage,
 } from '../../../../src/core/provider/llm/factory';
@@ -149,6 +152,7 @@ describe('llm factory', () => {
           providerType: 'openai',
           modelId: 'gpt-4o-mini',
           messages: [{ role: 'user', content: 'hi' }],
+          maxOutputTokens: 256,
         },
         onChunk
       )
@@ -172,6 +176,47 @@ describe('llm factory', () => {
         model: 'mock-model',
         system: 'persona prompt',
         messages: [{ role: 'user', content: 'hi' }],
+        maxOutputTokens: 256,
+      })
+    );
+  });
+
+  it('forwards max output tokens in non-stream generation calls', async () => {
+    generateTextMock.mockResolvedValue({
+      text: 'generated',
+      usage: {
+        inputTokens: 9,
+        outputTokens: 4,
+        totalTokens: 13,
+      },
+    });
+
+    await expect(
+      generateChatWithUsage({
+        providerType: 'openai',
+        modelId: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: 'hi' }],
+        maxOutputTokens: 384,
+      })
+    ).resolves.toEqual({
+      text: 'generated',
+      usage: {
+        inputTokens: 9,
+        outputTokens: 4,
+        totalTokens: 13,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        estimatedCostUsd: 0,
+      },
+    });
+
+    expect(generateTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'mock-model',
+        system: 'persona prompt',
+        messages: [{ role: 'user', content: 'hi' }],
+        maxOutputTokens: 384,
       })
     );
   });

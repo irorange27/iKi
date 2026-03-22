@@ -254,6 +254,7 @@ export const createChatStreaming = (deps: {
     providerType: string;
     model: string;
     systemPrompt: string;
+    maxOutputTokens?: number;
     enabledTools: string[];
     availableSkillIds: string[];
   }): ApprovalRecoveryContext | undefined => {
@@ -268,6 +269,9 @@ export const createChatStreaming = (deps: {
       providerType: params.providerType,
       model: params.model,
       systemPrompt: params.systemPrompt,
+      ...(typeof params.maxOutputTokens === 'number'
+        ? { maxOutputTokens: params.maxOutputTokens }
+        : {}),
       enabledTools: [...params.enabledTools],
       availableSkillIds: [...params.availableSkillIds],
     };
@@ -325,6 +329,7 @@ export const createChatStreaming = (deps: {
     usedSkills: Awaited<ReturnType<typeof contextAssembler.assemble>>['usedSkills'];
     selectedSkillIds: string[];
     skillMode: Awaited<ReturnType<typeof contextAssembler.assemble>>['skillMode'];
+    maxOutputTokens?: number;
     finalMessages: ChatInputMessage[];
     history: ChatInputMessage[];
     prompt: string;
@@ -404,6 +409,9 @@ export const createChatStreaming = (deps: {
       usedSkills: Array.isArray(assembledContext.usedSkills) ? assembledContext.usedSkills : [],
       selectedSkillIds,
       skillMode: assembledContext.skillMode,
+      ...(typeof assembledContext.effectiveContextConfig?.maxOutputTokens === 'number'
+        ? { maxOutputTokens: assembledContext.effectiveContextConfig.maxOutputTokens }
+        : {}),
       finalMessages,
       history,
       prompt,
@@ -425,6 +433,9 @@ export const createChatStreaming = (deps: {
           systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
           enableTools: true,
           maxIterations: 5,
+          ...(typeof preparedTurn.maxOutputTokens === 'number'
+            ? { maxTokens: preparedTurn.maxOutputTokens }
+            : {}),
         });
 
         if (preparedTurn.selectedSkillIds.length > 0) {
@@ -486,6 +497,9 @@ export const createChatStreaming = (deps: {
         providerType: options.providerType,
         modelId: options.model,
         messages: toLlmChatMessages(preparedTurn.finalMessages),
+        ...(typeof preparedTurn.maxOutputTokens === 'number'
+          ? { maxOutputTokens: preparedTurn.maxOutputTokens }
+          : {}),
       });
       deps.usage.recordUsageEvent({
         threadId: options.threadId,
@@ -557,6 +571,7 @@ export const createChatStreaming = (deps: {
             providerType: options.providerType,
             model: options.model,
             systemPrompt,
+            maxOutputTokens: preparedTurn.maxOutputTokens,
             enabledTools: preparedTurn.guardedTools,
             availableSkillIds: preparedTurn.selectedSkillIds,
           })
@@ -568,6 +583,9 @@ export const createChatStreaming = (deps: {
         systemPrompt,
         enableTools: preparedTurn.enableTools,
         maxIterations: 5,
+        ...(typeof preparedTurn.maxOutputTokens === 'number'
+          ? { maxTokens: preparedTurn.maxOutputTokens }
+          : {}),
       });
 
       if (preparedTurn.enableTools) {

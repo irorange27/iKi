@@ -108,6 +108,7 @@ export const createChatApproval = (deps: {
         provider_type: recoveryContext.providerType,
         model: recoveryContext.model,
         system_prompt: recoveryContext.systemPrompt,
+        max_output_tokens: recoveryContext.maxOutputTokens ?? null,
         enabled_tools: JSON.stringify(recoveryContext.enabledTools),
         available_skill_ids: JSON.stringify(recoveryContext.availableSkillIds),
       });
@@ -223,6 +224,9 @@ export const createChatApproval = (deps: {
       systemPrompt: approvalSession.system_prompt,
       enableTools: true,
       maxIterations: 5,
+      ...(typeof approvalSession.max_output_tokens === 'number'
+        ? { maxTokens: approvalSession.max_output_tokens }
+        : {}),
     });
 
     if (availableSkillIds.length > 0) {
@@ -263,6 +267,9 @@ export const createChatApproval = (deps: {
         providerType: approvalSession.provider_type,
         model: approvalSession.model,
         systemPrompt: approvalSession.system_prompt,
+        ...(typeof approvalSession.max_output_tokens === 'number'
+          ? { maxOutputTokens: approvalSession.max_output_tokens }
+          : {}),
         enabledTools: toolNames,
         availableSkillIds,
       },

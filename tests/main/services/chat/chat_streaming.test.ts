@@ -216,6 +216,9 @@ beforeEach(() => {
       compactedMessages: 0,
       blocks: [],
     },
+    effectiveContextConfig: {
+      maxOutputTokens: null,
+    },
   }));
   resolveToolNamesMock.mockResolvedValue({
     mode: 'manual',
@@ -331,6 +334,21 @@ describe('createChatStreaming', () => {
   });
 
   it('send() uses plain llm generation when no tools are enabled', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 0,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 700,
+      },
+    });
+
     const { streaming } = createDeps();
 
     const result = await streaming.send({
@@ -342,6 +360,12 @@ describe('createChatStreaming', () => {
 
     expect(result).toEqual({ success: true, text: 'assistant result' });
     expect(generateChatWithUsageMock).toHaveBeenCalledTimes(1);
+    expect(generateChatWithUsageMock).toHaveBeenCalledWith({
+      providerType: 'openai',
+      modelId: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hello' }],
+      maxOutputTokens: 700,
+    });
     expect(createChatConversationRunnerMock).not.toHaveBeenCalled();
     expect(assembleContextMock).toHaveBeenCalledTimes(1);
     expect(persistThreadRuntimeHintsMock).toHaveBeenCalledWith(
@@ -499,6 +523,23 @@ describe('createChatStreaming', () => {
   });
 
   it('stream() persists pending approval sessions when tool events request approval', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [
+        { role: 'system', content: 'history' },
+        { role: 'user', content: 'stream tool' },
+      ],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 24,
+        retainedRecentMessages: 2,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 512,
+      },
+    });
     resolveToolNamesMock.mockResolvedValue({
       mode: 'manual',
       explicitTools: ['web'],
@@ -563,9 +604,19 @@ describe('createChatStreaming', () => {
         webContents,
         recoveryContext: expect.objectContaining({
           threadId: 'thread_3',
+          maxOutputTokens: 512,
           enabledTools: ['web'],
           availableSkillIds: [],
         }),
+      })
+    );
+    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        enableTools: true,
+        maxIterations: 5,
+        maxTokens: 512,
       })
     );
     expect(toolLoopStreamMock).toHaveBeenCalledWith(
