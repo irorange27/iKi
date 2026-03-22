@@ -238,16 +238,23 @@ export const normalizeSkillIds = (value: unknown): string[] => {
 
 let cachedRecords: SkillRecord[] | null = null;
 let cachedAtMs = 0;
+let cachedRootsSignature = '';
 const CACHE_TTL_MS = 5_000;
 
 const listSkillRecords = async (options?: { forceRefresh?: boolean }): Promise<SkillRecord[]> => {
   const forceRefresh = options?.forceRefresh === true;
   const now = Date.now();
-  if (!forceRefresh && cachedRecords && now - cachedAtMs < CACHE_TTL_MS) {
+  const roots = getSkillRootsInternal();
+  const rootsSignature = roots.map(root => `${root.source}:${root.root}`).join('|');
+  if (
+    !forceRefresh &&
+    cachedRecords &&
+    now - cachedAtMs < CACHE_TTL_MS &&
+    rootsSignature === cachedRootsSignature
+  ) {
     return cachedRecords;
   }
 
-  const roots = getSkillRootsInternal();
   const records: SkillRecord[] = [];
   const seenIds = new Set<string>();
 
@@ -280,6 +287,7 @@ const listSkillRecords = async (options?: { forceRefresh?: boolean }): Promise<S
 
   cachedRecords = records;
   cachedAtMs = now;
+  cachedRootsSignature = rootsSignature;
   return records;
 };
 
@@ -336,46 +344,57 @@ export const readSkillContent = async (
   };
 };
 
+export const readSkillInstructions = async (
+  id: string,
+  options?: { maxChars?: number }
+): Promise<{
+  id: string;
+  name: string;
+  source: SkillSource;
+  content: string;
+  truncated: boolean;
+} | null> => {
+  const record = await getSkillRecordById(id);
+  if (!record) return null;
+
+  const raw = await safeReadTextFile(record.filePath);
+  const body = (extractFrontmatter(raw)?.body || raw).trim();
+  const maxChars =
+    typeof options?.maxChars === 'number' && Number.isFinite(options.maxChars)
+      ? Math.max(200, Math.trunc(options.maxChars))
+      : 20000;
+  const truncated = truncateText(body, maxChars);
+
+  return {
+    id: record.id,
+    name: record.name,
+    source: record.source,
+    content: truncated.text,
+    truncated: truncated.truncated,
+  };
+};
+
 export const getSkillFolderPath = async (id: string): Promise<string | null> => {
   const record = await getSkillRecordById(id);
   if (!record) return null;
   return path.dirname(record.filePath);
 };
 
-export const buildSkillsSystemPrompt = async (skillIds: string[]): Promise<string> => {
-  const ids = normalizeSkillIds(skillIds);
-  if (ids.length === 0) return '';
+export const buildSkillsMetadataSystemPrompt = (skills: SkillSummary[]): string => {
+  if (!Array.isArray(skills) || skills.length === 0) return '';
 
-  const MAX_SKILL_CHARS = 12000;
-  const MAX_TOTAL_CHARS = 40000;
+  const lines = skills.map(skill => {
+    const description = normalizeSummaryText(skill.description || '');
+    return description
+      ? `- ${skill.id} | ${skill.name} | ${description}`
+      : `- ${skill.id} | ${skill.name}`;
+  });
 
-  const parts: string[] = [];
-  let totalChars = 0;
-  let totalTruncated = false;
-  for (const id of ids) {
-    const record = await getSkillRecordById(id);
-    if (!record) continue;
-    const content = await safeReadTextFile(record.filePath);
-    const trimmed = content.trim();
-    if (!trimmed) continue;
-
-    const clipped = truncateText(trimmed, MAX_SKILL_CHARS);
-    let chunk = `SKILL: ${record.name} (${id})\n${clipped.text.trim()}`;
-    if (clipped.truncated) {
-      chunk += '\n\n[Skill content truncated]';
-    }
-
-    const nextLen = chunk.length + (parts.length > 0 ? 2 : 0);
-    if (totalChars + nextLen > MAX_TOTAL_CHARS) {
-      totalTruncated = true;
-      break;
-    }
-
-    parts.push(chunk);
-    totalChars += nextLen;
-  }
-
-  if (parts.length === 0) return '';
-  const built = parts.join('\n\n');
-  return totalTruncated ? `${built}\n\n[Additional skills omitted due to size limits]` : built;
+  return [
+    'Selected skills are available for this turn as on-demand instruction packs.',
+    "This prompt includes metadata only. Call `load_skill` with the exact skill id before relying on a skill's detailed workflow.",
+    'Selected skills:',
+    ...lines,
+    'Only load skills that are materially relevant to the current task.',
+  ].join('\n');
 };

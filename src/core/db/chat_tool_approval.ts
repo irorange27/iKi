@@ -66,10 +66,10 @@ export const upsertChatToolApprovalSession = (session: UpsertChatToolApprovalSes
       `
         INSERT INTO chat_tool_approval_sessions (
           session_id, thread_id, assistant_message_id, provider_type, model, system_prompt,
-          enabled_tools, created_at, updated_at
+          enabled_tools, available_skill_ids, created_at, updated_at
         ) VALUES (
           @session_id, @thread_id, @assistant_message_id, @provider_type, @model, @system_prompt,
-          @enabled_tools, @created_at, @updated_at
+          @enabled_tools, @available_skill_ids, @created_at, @updated_at
         )
         ON CONFLICT(session_id) DO UPDATE SET
           thread_id = excluded.thread_id,
@@ -78,6 +78,7 @@ export const upsertChatToolApprovalSession = (session: UpsertChatToolApprovalSes
           model = excluded.model,
           system_prompt = excluded.system_prompt,
           enabled_tools = excluded.enabled_tools,
+          available_skill_ids = excluded.available_skill_ids,
           updated_at = excluded.updated_at
       `
     )

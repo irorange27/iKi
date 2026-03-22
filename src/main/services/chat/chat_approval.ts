@@ -4,6 +4,7 @@ import type { ConversationRunner } from '../../../core/agent';
 import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
 import { defaultToolRegistry } from '../../../core/tools';
+import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_approval';
 import { getErrorMessage } from '../../utils/errors';
@@ -108,6 +109,7 @@ export const createChatApproval = (deps: {
         model: recoveryContext.model,
         system_prompt: recoveryContext.systemPrompt,
         enabled_tools: JSON.stringify(recoveryContext.enabledTools),
+        available_skill_ids: JSON.stringify(recoveryContext.availableSkillIds),
       });
 
       chatToolApprovalDb.upsertChatToolApprovals(
@@ -184,6 +186,20 @@ export const createChatApproval = (deps: {
       }
     }
 
+    let availableSkillIds: string[] = [];
+    if (approvalSession.available_skill_ids) {
+      try {
+        const parsed = JSON.parse(approvalSession.available_skill_ids);
+        if (Array.isArray(parsed)) {
+          availableSkillIds = parsed.filter(
+            (id): id is string => typeof id === 'string' && id.trim().length > 0
+          );
+        }
+      } catch {
+        availableSkillIds = [];
+      }
+    }
+
     const activeApprovals = chatToolApprovalDb.getActiveChatToolApprovalsBySession(
       approvalSession.session_id
     );
@@ -208,6 +224,10 @@ export const createChatApproval = (deps: {
       enableTools: true,
       maxIterations: 5,
     });
+
+    if (availableSkillIds.length > 0) {
+      runner.registerTool(new LoadSkillTool().toAgentTool());
+    }
 
     for (const name of toolNames) {
       const tool = defaultToolRegistry.get(name);
@@ -244,6 +264,7 @@ export const createChatApproval = (deps: {
         model: approvalSession.model,
         systemPrompt: approvalSession.system_prompt,
         enabledTools: toolNames,
+        availableSkillIds,
       },
       pendingApprovalIds,
       collectedApprovalResponses,
@@ -343,7 +364,11 @@ export const createChatApproval = (deps: {
 
     try {
       const streamResult = await runWithToolRuntimeContext(
-        { threadId: nextApprovalContext?.threadId || session.recoveryContext?.threadId },
+        {
+          threadId: nextApprovalContext?.threadId || session.recoveryContext?.threadId,
+          availableSkillIds:
+            nextApprovalContext?.availableSkillIds || session.recoveryContext?.availableSkillIds,
+        },
         async () =>
           await toolLoopRunner.stream({
             runner: session.runner,

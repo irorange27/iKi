@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 export type ToolRuntimeContext = {
   threadId?: string;
+  availableSkillIds?: string[];
 };
 
 const storage = new AsyncLocalStorage<ToolRuntimeContext>();

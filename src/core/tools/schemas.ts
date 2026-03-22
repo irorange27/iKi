@@ -24,7 +24,10 @@ const webInputFields = {
 
 const fetchInputFields = {
   url: z.string().url().describe('HTTP/HTTPS URL to fetch'),
-  maxChars: z.number().int().describe('Maximum number of characters to return from fetched content'),
+  maxChars: z
+    .number()
+    .int()
+    .describe('Maximum number of characters to return from fetched content'),
 };
 
 const shellInputFields = {
@@ -51,6 +54,10 @@ const listDirInputFields = {
 
 const deleteFileInputFields = {
   path: z.string().describe('Absolute path or workspace-relative path to the file to delete'),
+};
+
+const loadSkillInputFields = {
+  id: z.string().describe('Exact selected skill id to load'),
 };
 
 const todoListLookupInputFields = {
@@ -157,11 +164,19 @@ export const DeleteFileInputSchema = z.object({
   description: toolCallDescriptionField,
 });
 
+export const LoadSkillInputSchema = z.object({
+  id: loadSkillInputFields.id,
+  description: toolCallDescriptionField,
+});
+
 export const ListTodoListsInputSchema = z.object({
   query: z.string().trim().describe('Optional search text for matching todo lists').optional(),
-  limit: z.number().int().describe('Maximum number of todo lists to return').optional().default(
-    DEFAULT_TODO_LIST_LIMIT
-  ),
+  limit: z
+    .number()
+    .int()
+    .describe('Maximum number of todo lists to return')
+    .optional()
+    .default(DEFAULT_TODO_LIST_LIMIT),
   description: toolCallDescriptionField,
 });
 
@@ -262,6 +277,13 @@ export const DeleteTodoListInputSchemaUi = z
 export const DeleteFileInputSchemaUi = z
   .object({
     path: deleteFileInputFields.path.optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const LoadSkillInputSchemaUi = z
+  .object({
+    id: loadSkillInputFields.id.optional(),
     description: toolCallDescriptionField,
   })
   .passthrough();
@@ -370,6 +392,16 @@ export const DeleteFileOutputSchema = z
   .object({
     path: z.string().optional(),
     deleted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const LoadSkillOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    source: z.enum(['user', 'codex']).optional(),
+    content: z.string().optional(),
+    truncated: z.boolean().optional(),
   })
   .passthrough();
 

@@ -6,4 +6,5 @@ export type ApprovalRecoveryContext = {
   model: string;
   systemPrompt: string;
   enabledTools: string[];
+  availableSkillIds?: string[];
 };
