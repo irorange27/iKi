@@ -13,6 +13,10 @@ import type {
   StructuredLogOutcome,
   StructuredLogProcess,
 } from '../shared/types/logging';
+import {
+  formatStructuredConsoleLine,
+  type StructuredConsoleFormatterInput,
+} from '../shared/logging/console_formatter';
 import { getUserDataPath } from './platform';
 
 type LogContext = {
@@ -85,7 +89,6 @@ const TRUNCATED_VALUE = '[TRUNCATED]';
 const REDACTED_KEY_PATTERN = /(token|secret|authorization|cookie|password|credential|api[-_]?key)/i;
 
 const winstonJsonLine = winston.format.printf(info => JSON.stringify(stripWinstonFields(info)));
-const consoleTimestamp = () => new Date().toISOString();
 
 const contextStorage = new AsyncLocalStorage<LogContext>();
 
@@ -326,35 +329,22 @@ function stripWinstonFields(info: Record<string, unknown>): Record<string, unkno
   return output;
 }
 
+function shouldUseAnsiColors(): boolean {
+  const forceColor = process.env.FORCE_COLOR;
+  if (forceColor === '0') return false;
+  if (typeof process.env.NO_COLOR === 'string') return false;
+  if (forceColor && forceColor !== 'false') return true;
+  return Boolean(process.stdout?.isTTY || process.stderr?.isTTY);
+}
+
 function buildConsoleTransport(): winston.transport {
   return new winston.transports.Console({
     stderrLevels: ['error'],
-    format: winston.format.printf(info => {
-      const ts = typeof info.ts === 'string' ? info.ts : consoleTimestamp();
-      const level = typeof info.level === 'string' ? info.level : 'info';
-      const processKind = typeof info.process === 'string' ? info.process : 'main';
-      const moduleName = typeof info.module === 'string' ? info.module : 'app';
-      const event = typeof info.event === 'string' ? ` ${info.event}` : '';
-      const outcome = typeof info.outcome === 'string' ? ` ${info.outcome}` : '';
-      const message =
-        typeof info.message === 'string' && info.message.trim() ? ` ${info.message}` : '';
-
-      const extras = sanitizeUnknown(
-        {
-          ...(typeof info.trace_id === 'string' ? { trace_id: info.trace_id } : {}),
-          ...(typeof info.request_id === 'string' ? { request_id: info.request_id } : {}),
-          ...(typeof info.session_id === 'string' ? { session_id: info.session_id } : {}),
-          ...(typeof info.duration_ms === 'number' ? { duration_ms: info.duration_ms } : {}),
-          ...(info.entity ? { entity: info.entity } : {}),
-          ...(info.data ? { data: info.data } : {}),
-          ...(info.error ? { error: info.error } : {}),
-        },
-        { maxStringBytes: MAX_STACK_BYTES }
-      ) as Record<string, unknown>;
-
-      const suffix = Object.keys(extras).length > 0 ? ` ${JSON.stringify(extras)}` : '';
-      return `${ts} [${level}] [${processKind}/${moduleName}]${event}${outcome}${message}${suffix}`;
-    }),
+    format: winston.format.printf(info =>
+      formatStructuredConsoleLine(stripWinstonFields(info) as StructuredConsoleFormatterInput, {
+        colorize: shouldUseAnsiColors(),
+      })
+    ),
   });
 }
 

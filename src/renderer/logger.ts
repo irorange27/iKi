@@ -4,6 +4,7 @@ import type {
   StructuredLogLevel,
   StructuredLogOutcome,
 } from '../shared/types/logging';
+import { formatStructuredConsoleLine } from '../shared/logging/console_formatter';
 
 type LogEventInput = {
   level: StructuredLogLevel;
@@ -264,7 +265,15 @@ const emitStructuredLog = (entry: StructuredLogEntry): StructuredLogEntry => {
   if (!method) return entry;
 
   sink[method]?.(
-    `${entry.ts} [${entry.level}] [renderer/${entry.module}] ${entry.event}${entry.outcome ? ` ${entry.outcome}` : ''} ${deriveMessage(entry)}`.trim(),
+    formatStructuredConsoleLine(
+      {
+        ...entry,
+        message: deriveMessage(entry),
+      },
+      {
+        colorize: false,
+      }
+    ),
     entry
   );
 
