@@ -59,7 +59,7 @@
         </button>
       </div>
 
-      <div v-if="filteredCustomPresets.length === 0" class="custom-empty-state">
+      <div v-if="filteredCustomPresetCards.length === 0" class="custom-empty-state">
         <div class="custom-empty-message">
           {{
             customPresetSummaries.length === 0
@@ -69,50 +69,15 @@
         </div>
       </div>
 
-      <div v-else class="preset-grid">
-        <button
-          v-for="preset in filteredCustomPresets"
-          :key="preset.id"
-          class="preset-card custom-card"
-          :class="{ selected: currentThemePresetId === preset.id }"
-          @click="selectThemePreset(preset.id)"
-        >
-          <div class="preset-card-top">
-            <div class="preset-swatches">
-              <span
-                v-for="(swatch, index) in getPresetSwatches(preset.id)"
-                :key="`${preset.id}-${index}`"
-                class="preset-swatch"
-                :style="{ backgroundColor: swatch }"
-              />
-            </div>
-            <div class="preset-badges">
-              <span class="preset-badge">Custom</span>
-              <Check v-if="currentThemePresetId === preset.id" :size="16" class="preset-check" />
-            </div>
-          </div>
-          <div class="preset-card-title">{{ preset.label }}</div>
-          <div class="preset-card-meta">{{ formatVariantMeta(preset.variants) }}</div>
-          <div class="preset-card-actions">
-            <button
-              class="secondary-btn mini-btn"
-              type="button"
-              @click.stop="openEditThemeModal(preset.id)"
-            >
-              <Pencil :size="14" />
-              Edit
-            </button>
-            <button
-              class="danger-btn mini-btn"
-              type="button"
-              @click.stop="deleteCustomTheme(preset.id)"
-            >
-              <Trash2 :size="14" />
-              Delete
-            </button>
-          </div>
-        </button>
-      </div>
+      <ThemePresetGrid
+        v-else
+        kind="custom"
+        :presets="filteredCustomPresetCards"
+        :selected-preset-id="currentThemePresetId"
+        @delete="deleteCustomTheme"
+        @edit="openEditThemeModal"
+        @select="selectThemePreset"
+      />
     </div>
 
     <div class="settings-card">
@@ -125,33 +90,16 @@
         </div>
       </div>
 
-      <div v-if="filteredBuiltinPresets.length === 0" class="custom-empty-state">
+      <div v-if="filteredBuiltinPresetCards.length === 0" class="custom-empty-state">
         <div class="custom-empty-message">No built-in themes match your search.</div>
       </div>
 
-      <div v-else class="preset-grid">
-        <button
-          v-for="preset in filteredBuiltinPresets"
-          :key="preset.id"
-          class="preset-card"
-          :class="{ selected: currentThemePresetId === preset.id }"
-          @click="selectThemePreset(preset.id)"
-        >
-          <div class="preset-card-top">
-            <div class="preset-swatches">
-              <span
-                v-for="(swatch, index) in getPresetSwatches(preset.id)"
-                :key="`${preset.id}-${index}`"
-                class="preset-swatch"
-                :style="{ backgroundColor: swatch }"
-              />
-            </div>
-            <Check v-if="currentThemePresetId === preset.id" :size="18" class="preset-check" />
-          </div>
-          <div class="preset-card-title">{{ preset.label }}</div>
-          <div class="preset-card-meta">{{ formatVariantMeta(preset.variants) }}</div>
-        </button>
-      </div>
+      <ThemePresetGrid
+        v-else
+        :presets="filteredBuiltinPresetCards"
+        :selected-preset-id="currentThemePresetId"
+        @select="selectThemePreset"
+      />
     </div>
 
     <div class="config-actions">
@@ -234,28 +182,12 @@
               </div>
               <div class="theme-editor-grid">
                 <ThemeColorField
-                  label="Background"
-                  hint="Main background color"
-                  :value="editor.simple.background"
-                  @update:value="updateSimpleColor('background', $event)"
-                />
-                <ThemeColorField
-                  label="Text"
-                  hint="Main text color"
-                  :value="editor.simple.text"
-                  @update:value="updateSimpleColor('text', $event)"
-                />
-                <ThemeColorField
-                  label="Accent"
-                  hint="Buttons, links, highlights"
-                  :value="editor.simple.accent"
-                  @update:value="updateSimpleColor('accent', $event)"
-                />
-                <ThemeColorField
-                  label="Secondary"
-                  hint="Success states, info"
-                  :value="editor.simple.secondary"
-                  @update:value="updateSimpleColor('secondary', $event)"
+                  v-for="field in SIMPLE_THEME_FIELDS"
+                  :key="field.key"
+                  :label="field.label"
+                  :hint="field.hint"
+                  :value="editor.simple[field.key]"
+                  @update:value="updateSimpleColor(field.key, $event)"
                 />
               </div>
             </template>
@@ -266,64 +198,12 @@
               </p>
               <div class="theme-editor-grid advanced-grid">
                 <ThemeColorField
-                  label="Background"
-                  hint="Main background"
-                  :value="editor.advanced.background"
-                  @update:value="updateAdvancedColor('background', $event)"
-                />
-                <ThemeColorField
-                  label="Surface"
-                  hint="Cards and panels"
-                  :value="editor.advanced.surface"
-                  @update:value="updateAdvancedColor('surface', $event)"
-                />
-                <ThemeColorField
-                  label="Surface Alt"
-                  hint="Nested chrome"
-                  :value="editor.advanced.surfaceAlt"
-                  @update:value="updateAdvancedColor('surfaceAlt', $event)"
-                />
-                <ThemeColorField
-                  label="Hover"
-                  hint="Hover or active surfaces"
-                  :value="editor.advanced.hover"
-                  @update:value="updateAdvancedColor('hover', $event)"
-                />
-                <ThemeColorField
-                  label="Text"
-                  hint="Primary text"
-                  :value="editor.advanced.text"
-                  @update:value="updateAdvancedColor('text', $event)"
-                />
-                <ThemeColorField
-                  label="Muted"
-                  hint="Secondary text"
-                  :value="editor.advanced.muted"
-                  @update:value="updateAdvancedColor('muted', $event)"
-                />
-                <ThemeColorField
-                  label="Accent"
-                  hint="Buttons and links"
-                  :value="editor.advanced.accent"
-                  @update:value="updateAdvancedColor('accent', $event)"
-                />
-                <ThemeColorField
-                  label="Secondary"
-                  hint="Success and info"
-                  :value="editor.advanced.secondary"
-                  @update:value="updateAdvancedColor('secondary', $event)"
-                />
-                <ThemeColorField
-                  label="Warning"
-                  hint="Warnings"
-                  :value="editor.advanced.warning"
-                  @update:value="updateAdvancedColor('warning', $event)"
-                />
-                <ThemeColorField
-                  label="Danger"
-                  hint="Destructive actions"
-                  :value="editor.advanced.danger"
-                  @update:value="updateAdvancedColor('danger', $event)"
+                  v-for="field in ADVANCED_THEME_FIELDS"
+                  :key="field.key"
+                  :label="field.label"
+                  :hint="field.hint"
+                  :value="editor.advanced[field.key]"
+                  @update:value="updateAdvancedColor(field.key, $event)"
                 />
               </div>
             </template>
@@ -392,49 +272,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
-  Check,
   MonitorCog,
   Moon,
   Palette,
-  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
   Sparkles,
   Sun,
-  Trash2,
 } from 'lucide-vue-next';
 
 import SettingsSelect from './SettingsSelect.vue';
+import ThemePresetGrid from './ThemePresetGrid.vue';
 import ThemeColorField from './ThemeColorField.vue';
+import { ADVANCED_THEME_FIELDS, SIMPLE_THEME_FIELDS } from './theme_editor_fields';
+import { useThemeEditor } from '../../composables/useThemeEditor';
+import { useThemePresetGallery } from '../../composables/useThemePresetGallery';
 import { useConfigStore } from '../../store/config';
-import { compileBase46ThemeDocument } from '../../../shared/theme/base46_compile';
-import {
-  type AdvancedThemeSeed,
-  type Base46ThemeDocument,
-  type Base46ThemePresetInput,
-  type SimpleThemeSeed,
-  type ThemeSlotPalette,
-  type ThemeVariant,
-} from '../../../shared/theme/types';
-import {
-  THEME_QUICK_STARTS,
-  DEFAULT_THEME_PRESET_ID,
-  listThemePresetSummaries,
-  resolveThemeSelection,
-} from '../../../shared/theme/registry';
-import {
-  cloneBase46ThemePresetInput,
-  createAdvancedThemeSeedFromSimpleSeed,
-  createBase46ThemeDocumentFromAdvancedSeed,
-  createBase46ThemeDocumentFromSimpleSeed,
-  createThemePresetId,
-} from '../../../shared/theme/theme_creator';
-import { normalizeHexColor } from '../../../shared/theme/color_utils';
-import type { AppConfig } from '../../../shared/types/config';
+import type { ThemeVariant } from '../../../shared/theme/types';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;
@@ -448,372 +306,54 @@ const props = defineProps<{
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
 
-const themeOptions = ['light', 'dark', 'system'] as const;
-const quickStarts = THEME_QUICK_STARTS;
-const searchQuery = ref('');
-const themeVariantOptions = [
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
-];
-
-const createInitialSimpleSeed = (): SimpleThemeSeed => ({ ...quickStarts[0].dark });
-const createInitialAdvancedSeed = (): AdvancedThemeSeed =>
-  createAdvancedThemeSeedFromSimpleSeed(createInitialSimpleSeed(), 'dark');
-
-const editor = reactive<{
-  open: boolean;
-  editingPresetId: string | null;
-  mode: 'simple' | 'advanced';
-  type: ThemeVariant;
-  label: string;
-  quickStartId: string | null;
-  simple: SimpleThemeSeed;
-  advanced: AdvancedThemeSeed;
-  error: string;
-}>({
-  open: false,
-  editingPresetId: null,
-  mode: 'simple',
-  type: 'dark',
-  label: '',
-  quickStartId: quickStarts[0]?.id ?? null,
-  simple: createInitialSimpleSeed(),
-  advanced: createInitialAdvancedSeed(),
-  error: '',
-});
-
-const themePresetSummaries = computed(() =>
-  listThemePresetSummaries(config.value.themes.base46Presets)
-);
-const customPresetIds = computed(() => new Set(Object.keys(config.value.themes.base46Presets)));
-
-const currentThemePresetId = computed(() => {
-  const configured = config.value.general.themePresetId;
-  return themePresetSummaries.value.some(preset => preset.id === configured)
-    ? configured
-    : DEFAULT_THEME_PRESET_ID;
-});
-
-const selectedPresetLabel = computed(
-  () =>
-    themePresetSummaries.value.find(preset => preset.id === currentThemePresetId.value)?.label ??
-    'iKi Default'
-);
-
-const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase());
-
-const filteredThemePresets = computed(() => {
-  if (!normalizedSearch.value) return themePresetSummaries.value;
-  return themePresetSummaries.value.filter(preset =>
-    `${preset.label} ${preset.id}`.toLowerCase().includes(normalizedSearch.value)
-  );
-});
-
-const customPresetSummaries = computed(() =>
-  themePresetSummaries.value.filter(preset => customPresetIds.value.has(preset.id))
-);
-const filteredCustomPresets = computed(() =>
-  filteredThemePresets.value.filter(preset => customPresetIds.value.has(preset.id))
-);
-const filteredBuiltinPresets = computed(() =>
-  filteredThemePresets.value.filter(preset => !customPresetIds.value.has(preset.id))
-);
-
-const activeGalleryVariant = computed<ThemeVariant>(() => {
-  if (config.value.general.theme === 'system') {
-    return systemPrefersDark() ? 'dark' : 'light';
-  }
-  return config.value.general.theme;
-});
-
-const gallerySectionTitle = computed(() =>
-  activeGalleryVariant.value === 'light' ? 'Light Theme Gallery' : 'Dark Theme Gallery'
-);
-
 const systemPrefersDark = (): boolean => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 };
 
-const resolvePaletteForPreset = (presetId: string): ThemeSlotPalette =>
-  resolveThemeSelection({
-    presetId,
-    themeMode: config.value.general.theme,
-    systemPrefersDark: systemPrefersDark(),
-    base46Presets: config.value.themes.base46Presets,
-  }).palette;
+const {
+  capitalizeWord,
+  customPresetSummaries,
+  currentThemePresetId,
+  filteredBuiltinPresetCards,
+  filteredCustomPresetCards,
+  gallerySectionTitle,
+  searchQuery,
+  selectedPresetLabel,
+  setThemeMode,
+  selectThemePreset,
+  themeOptions,
+  themePresetSummaries,
+} = useThemePresetGallery({
+  config,
+  onConfigChange: () => emit('config-change'),
+  systemPrefersDark,
+});
 
-const getPresetSwatches = (presetId: string): string[] => {
-  const palette = resolvePaletteForPreset(presetId);
-  return [
-    palette.bgPrimary,
-    palette.accentColor,
-    palette.successColor,
-    palette.dangerColor,
-    palette.chart4,
-    palette.textPrimary,
-  ];
-};
+const {
+  applyQuickStart,
+  closeEditor,
+  deleteCustomTheme,
+  editor,
+  openCreateThemeModal,
+  openEditThemeModal,
+  previewStyle,
+  quickStarts,
+  saveTheme,
+  setEditorMode,
+  setEditorType,
+  themeVariantOptions,
+  updateAdvancedColor,
+  updateSimpleColor,
+} = useThemeEditor({
+  config,
+  themePresetSummaries,
+  onConfigChange: () => emit('config-change'),
+});
 
 const getQuickStartSwatches = (preset: (typeof quickStarts)[number]): string[] => {
   const seed = editor.type === 'light' ? preset.light : preset.dark;
   return [seed.background, seed.accent, seed.secondary];
-};
-
-const capitalizeWord = (value: string): string =>
-  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
-
-const formatVariantMeta = (variants: ThemeVariant[]): string =>
-  variants.length === 2 ? 'Light + Dark variants' : `${capitalizeWord(variants[0] || 'dark')} only`;
-
-const setThemeMode = (theme: AppConfig['general']['theme']) => {
-  config.value.general.theme = theme;
-  emit('config-change');
-};
-
-const selectThemePreset = (presetId: string) => {
-  config.value.general.themePresetId = presetId;
-  emit('config-change');
-};
-
-const createSimpleSeedFromDocument = (document: Base46ThemeDocument): SimpleThemeSeed => ({
-  background: document.base_30.black,
-  text: document.base_30.white,
-  accent: document.base_30.blue,
-  secondary: document.base_30.green,
-});
-
-const createAdvancedSeedFromDocument = (document: Base46ThemeDocument): AdvancedThemeSeed => ({
-  background: document.base_30.black,
-  surface: document.base_30.one_bg,
-  surfaceAlt: document.base_30.one_bg2,
-  hover: document.base_30.one_bg3 || document.base_30.one_bg2,
-  text: document.base_30.white,
-  muted: document.base_30.grey,
-  accent: document.base_30.blue,
-  secondary: document.base_30.green,
-  warning: document.base_30.yellow,
-  danger: document.base_30.red,
-});
-
-const applySeedToEditor = (seed: SimpleThemeSeed) => {
-  editor.simple = { ...seed };
-  editor.advanced = createAdvancedThemeSeedFromSimpleSeed(seed, editor.type);
-};
-
-const applyQuickStart = (quickStartId: string) => {
-  const preset = quickStarts.find(item => item.id === quickStartId);
-  if (!preset) return;
-  editor.quickStartId = quickStartId;
-  applySeedToEditor(editor.type === 'light' ? preset.light : preset.dark);
-};
-
-const resetEditor = () => {
-  editor.editingPresetId = null;
-  editor.mode = 'simple';
-  editor.type = config.value.general.theme === 'light' ? 'light' : 'dark';
-  editor.label = '';
-  editor.quickStartId = quickStarts[0]?.id ?? null;
-  applyQuickStart(editor.quickStartId ?? quickStarts[0]?.id ?? '');
-  editor.error = '';
-};
-
-const openCreateThemeModal = () => {
-  resetEditor();
-  editor.label = 'Ocean';
-  editor.open = true;
-};
-
-const loadPresetVariantIntoEditor = (preset: Base46ThemePresetInput, variant: ThemeVariant) => {
-  const sourceDocument =
-    (variant === 'light' ? preset.light : preset.dark) ?? preset.dark ?? preset.light;
-  if (!sourceDocument) {
-    applyQuickStart(quickStarts[0]?.id ?? '');
-    return;
-  }
-  editor.simple = createSimpleSeedFromDocument(sourceDocument);
-  editor.advanced = createAdvancedSeedFromDocument(sourceDocument);
-  editor.quickStartId = null;
-};
-
-const openEditThemeModal = (presetId: string) => {
-  const preset = config.value.themes.base46Presets[presetId];
-  if (!preset) return;
-  editor.editingPresetId = presetId;
-  editor.open = true;
-  editor.mode = 'advanced';
-  editor.type =
-    config.value.general.theme === 'light'
-      ? preset.light
-        ? 'light'
-        : 'dark'
-      : preset.dark
-        ? 'dark'
-        : 'light';
-  editor.label = preset.label;
-  editor.error = '';
-  loadPresetVariantIntoEditor(cloneBase46ThemePresetInput(preset), editor.type);
-};
-
-const closeEditor = () => {
-  editor.open = false;
-  editor.error = '';
-};
-
-const setEditorMode = (mode: 'simple' | 'advanced') => {
-  if (mode === editor.mode) return;
-  editor.mode = mode;
-  if (mode === 'advanced') {
-    editor.advanced = createAdvancedThemeSeedFromSimpleSeed(editor.simple, editor.type);
-  } else {
-    editor.simple = {
-      background: editor.advanced.background,
-      text: editor.advanced.text,
-      accent: editor.advanced.accent,
-      secondary: editor.advanced.secondary,
-    };
-  }
-};
-
-const setEditorType = (variant: ThemeVariant) => {
-  if (variant === editor.type) return;
-  editor.type = variant;
-  if (editor.quickStartId) {
-    applyQuickStart(editor.quickStartId);
-    return;
-  }
-  if (editor.editingPresetId) {
-    const preset = config.value.themes.base46Presets[editor.editingPresetId];
-    if (preset) {
-      loadPresetVariantIntoEditor(preset, variant);
-      return;
-    }
-  }
-  editor.advanced = createAdvancedThemeSeedFromSimpleSeed(editor.simple, variant);
-};
-
-const updateSimpleColor = (key: keyof SimpleThemeSeed, next: string) => {
-  editor.simple = {
-    ...editor.simple,
-    [key]: next,
-  };
-  editor.advanced = createAdvancedThemeSeedFromSimpleSeed(editor.simple, editor.type);
-  editor.quickStartId = null;
-  editor.error = '';
-};
-
-const updateAdvancedColor = (key: keyof AdvancedThemeSeed, next: string) => {
-  editor.advanced = {
-    ...editor.advanced,
-    [key]: next,
-  };
-  editor.quickStartId = null;
-  editor.error = '';
-};
-
-const previewDocument = computed(() => {
-  const label = editor.label.trim() || 'Untitled Theme';
-  if (editor.mode === 'simple') {
-    return createBase46ThemeDocumentFromSimpleSeed({
-      name: `${label} ${capitalizeWord(editor.type)}`,
-      type: editor.type,
-      seed: {
-        ...editor.simple,
-        background: normalizeHexColor(editor.simple.background),
-        text: normalizeHexColor(editor.simple.text),
-        accent: normalizeHexColor(editor.simple.accent),
-        secondary: normalizeHexColor(editor.simple.secondary),
-      },
-    });
-  }
-  return createBase46ThemeDocumentFromAdvancedSeed({
-    name: `${label} ${capitalizeWord(editor.type)}`,
-    type: editor.type,
-    seed: {
-      ...editor.advanced,
-      background: normalizeHexColor(editor.advanced.background),
-      surface: normalizeHexColor(editor.advanced.surface),
-      surfaceAlt: normalizeHexColor(editor.advanced.surfaceAlt),
-      hover: normalizeHexColor(editor.advanced.hover),
-      text: normalizeHexColor(editor.advanced.text),
-      muted: normalizeHexColor(editor.advanced.muted),
-      accent: normalizeHexColor(editor.advanced.accent),
-      secondary: normalizeHexColor(editor.advanced.secondary),
-      warning: normalizeHexColor(editor.advanced.warning),
-      danger: normalizeHexColor(editor.advanced.danger),
-    },
-  });
-});
-
-const previewPalette = computed(() => compileBase46ThemeDocument(previewDocument.value));
-
-const previewStyle = computed<Record<string, string>>(() => {
-  const palette = previewPalette.value;
-  return {
-    '--bg-primary': palette.bgPrimary,
-    '--bg-secondary': palette.bgSecondary,
-    '--bg-tertiary': palette.bgTertiary,
-    '--bg-hover': palette.bgHover,
-    '--text-primary': palette.textPrimary,
-    '--text-secondary': palette.textSecondary,
-    '--text-muted': palette.textMuted,
-    '--border-color': palette.borderColor,
-    '--accent-color': palette.accentColor,
-    '--accent-contrast': palette.accentContrast,
-    '--danger-color': palette.dangerColor,
-    '--success-color': palette.successColor,
-    '--warning-color': palette.warningColor,
-  };
-});
-
-const saveTheme = () => {
-  editor.error = '';
-  try {
-    const label = editor.label.trim();
-    if (!label) {
-      throw new Error('Display name is required.');
-    }
-
-    const nextDocument = previewDocument.value;
-    const currentPresets = config.value.themes.base46Presets;
-    const nextPresetId =
-      editor.editingPresetId ??
-      createThemePresetId(label, [
-        ...themePresetSummaries.value.map(preset => preset.id),
-        ...Object.keys(currentPresets),
-      ]);
-    const existingPreset = currentPresets[nextPresetId];
-
-    const nextPreset: Base46ThemePresetInput = {
-      label,
-      light: existingPreset?.light,
-      dark: existingPreset?.dark,
-      [editor.type]: nextDocument,
-    };
-
-    config.value.themes.base46Presets[nextPresetId] = cloneBase46ThemePresetInput(nextPreset);
-    config.value.general.themePresetId = nextPresetId;
-    emit('config-change');
-    closeEditor();
-  } catch (error) {
-    editor.error = error instanceof Error ? error.message : 'Failed to save theme.';
-  }
-};
-
-const deleteCustomTheme = (presetId: string) => {
-  if (
-    typeof window !== 'undefined' &&
-    typeof window.confirm === 'function' &&
-    !window.confirm('Delete this custom theme? This action cannot be undone.')
-  ) {
-    return;
-  }
-
-  delete config.value.themes.base46Presets[presetId];
-  if (config.value.general.themePresetId === presetId) {
-    config.value.general.themePresetId = DEFAULT_THEME_PRESET_ID;
-  }
-  emit('config-change');
 };
 
 watch(
@@ -941,109 +481,6 @@ watch(
 .custom-empty-message {
   color: var(--text-secondary);
   font-size: 1.05em;
-}
-
-.preset-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-
-.preset-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
-  border-radius: 18px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-primary) 96%, transparent) 0%,
-    var(--bg-primary) 100%
-  );
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.preset-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent-color) 42%, var(--border-color));
-  box-shadow: var(--surface-shadow-md);
-}
-
-.preset-card.selected {
-  border-color: var(--accent-color);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent-color) 32%, transparent),
-    0 18px 30px rgba(var(--accent-rgb), 0.15);
-}
-
-.preset-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.preset-swatches {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.preset-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-  box-shadow: var(--surface-inset-highlight);
-}
-
-.preset-check {
-  color: var(--accent-color);
-}
-
-.preset-badges {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.preset-badge {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
-  color: var(--accent-color);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.preset-card-title {
-  font-size: 1.02em;
-  font-weight: 600;
-}
-
-.preset-card-meta {
-  color: var(--text-secondary);
-  font-size: 0.9em;
-}
-
-.preset-card-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.mini-btn {
-  min-height: 32px;
-  padding: 7px 12px;
-  font-size: 13px;
 }
 
 .theme-modal-backdrop {

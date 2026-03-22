@@ -6,6 +6,8 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import SettingsColorSchemeSection from '../../../src/renderer/components/settings/SettingsColorSchemeSection.vue';
 import { useConfigStore } from '../../../src/renderer/store/config';
+import { THEME_QUICK_STARTS } from '../../../src/shared/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '../../../src/shared/theme/theme_creator';
 
 const findButtonByText = (wrapper: ReturnType<typeof mount>, text: string) => {
   const match = wrapper
@@ -14,6 +16,18 @@ const findButtonByText = (wrapper: ReturnType<typeof mount>, text: string) => {
 
   if (!match) {
     throw new Error(`Button not found: ${text}`);
+  }
+
+  return match;
+};
+
+const findExactButtonByText = (wrapper: VueWrapper, text: string) => {
+  const match = wrapper
+    .findAll('button')
+    .find(button => button.text().replace(/\s+/g, ' ').trim() === text);
+
+  if (!match) {
+    throw new Error(`Exact button not found: ${text}`);
   }
 
   return match;
@@ -147,6 +161,42 @@ describe('SettingsColorSchemeSection', () => {
     expect(store.config.themes.base46Presets['midnight-lab']?.light).toBeDefined();
     expect(store.config.themes.base46Presets['midnight-lab']?.dark).toBeUndefined();
     expect(store.config.general.themePresetId).toBe('midnight-lab');
+    expect(wrapper.emitted('config-change')).toHaveLength(1);
+  });
+
+  it('deletes the active custom theme and falls back to the builtin preset', async () => {
+    const store = useConfigStore(pinia);
+    store.config.themes.base46Presets['midnight-lab'] = createBase46ThemePresetFromQuickStart(
+      THEME_QUICK_STARTS[0]
+    );
+    store.config.themes.base46Presets['midnight-lab'].label = 'Midnight Lab';
+    store.config.general.themePresetId = 'midnight-lab';
+
+    const wrapper = mount(SettingsColorSchemeSection, {
+      props: {
+        active: true,
+      },
+      global: {
+        plugins: [pinia],
+        stubs: {
+          MonitorCog: true,
+          Moon: true,
+          Palette: true,
+          Plus: true,
+          Search: true,
+          SlidersHorizontal: true,
+          Sparkles: true,
+          Sun: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await findExactButtonByText(wrapper, 'Delete').trigger('click');
+    await flushPromises();
+
+    expect(store.config.themes.base46Presets['midnight-lab']).toBeUndefined();
+    expect(store.config.general.themePresetId).toBe('iki-default');
     expect(wrapper.emitted('config-change')).toHaveLength(1);
   });
 });
