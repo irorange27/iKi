@@ -84,6 +84,9 @@ type PendingAction = {
   timeout: NodeJS.Timeout;
 };
 
+const SAFE_NAPCAT_TOOLS = ['web', 'fetch'] as const;
+const SAFE_NAPCAT_TOOL_SET = new Set<string>(SAFE_NAPCAT_TOOLS);
+
 const DEFAULT_SYSTEM_PROMPT = [
   'You are iKi, responding to QQ messages via NapCat.',
   'Keep replies concise and helpful.',
@@ -148,19 +151,83 @@ const normalizeId = (value: unknown): string => {
   return String(value).trim();
 };
 
+const decodeCqText = (value: string): string =>
+  value
+    .replace(/&amp;/g, '&')
+    .replace(/&#91;/g, '[')
+    .replace(/&#93;/g, ']')
+    .replace(/&#44;/g, ',');
+
+const parseCqParams = (rawParams: string): Record<string, string> => {
+  const params = rawParams.startsWith(',') ? rawParams.slice(1) : rawParams;
+  if (!params) return {};
+
+  const parsed: Record<string, string> = {};
+  for (const entry of params.split(',')) {
+    if (!entry) continue;
+    const separatorIndex = entry.indexOf('=');
+    if (separatorIndex <= 0) continue;
+
+    const key = entry.slice(0, separatorIndex).trim();
+    const value = decodeCqText(entry.slice(separatorIndex + 1));
+    if (!key) continue;
+    parsed[key] = value;
+  }
+
+  return parsed;
+};
+
+const parseStringMessageText = (
+  value: string,
+  selfId: string
+): { text: string; mentionedSelf: boolean } => {
+  const text = value.trim();
+  if (!text) return { text: '', mentionedSelf: false };
+  if (!text.includes('[CQ:')) {
+    return { text, mentionedSelf: text.includes(`@${selfId}`) };
+  }
+
+  let normalized = '';
+  let mentionedSelf = false;
+  let lastIndex = 0;
+  const segmentPattern = /\[CQ:([a-zA-Z0-9_-]+)((?:,[^\]]*)?)\]/g;
+
+  for (const match of text.matchAll(segmentPattern)) {
+    const [rawSegment, type, rawParams = ''] = match;
+    const start = match.index ?? 0;
+    normalized += decodeCqText(text.slice(lastIndex, start));
+
+    const params = parseCqParams(rawParams);
+    if (type === 'at') {
+      const qq = params.qq || params.id || '';
+      normalized += qq === 'all' ? '@all ' : qq ? `@${qq} ` : '';
+      if (normalizeId(qq) === selfId) {
+        mentionedSelf = true;
+      }
+    } else if (type === 'image') {
+      normalized += '[image]';
+    }
+
+    lastIndex = start + rawSegment.length;
+  }
+
+  normalized += decodeCqText(text.slice(lastIndex));
+  const trimmed = normalized.trim().replace(/ {2,}/g, ' ');
+  return { text: trimmed, mentionedSelf };
+};
+
 const parseMessageText = (
   message: NapCatMessageEvent['message'],
   rawMessage: string | undefined,
   selfId: string
 ): { text: string; mentionedSelf: boolean } => {
   if (typeof message === 'string') {
-    const text = message.trim();
-    return { text, mentionedSelf: text.includes(`@${selfId}`) };
+    return parseStringMessageText(message, selfId);
   }
 
   if (!Array.isArray(message)) {
-    const fallback = typeof rawMessage === 'string' ? rawMessage.trim() : '';
-    return { text: fallback, mentionedSelf: fallback.includes(`@${selfId}`) };
+    const fallback = typeof rawMessage === 'string' ? rawMessage : '';
+    return parseStringMessageText(fallback, selfId);
   }
 
   let text = '';
@@ -194,7 +261,7 @@ const parseMessageText = (
 
   const trimmed = text.trim();
   if (!trimmed && typeof rawMessage === 'string') {
-    return { text: rawMessage.trim(), mentionedSelf: rawMessage.includes(`@${selfId}`) };
+    return parseStringMessageText(rawMessage, selfId);
   }
   return { text: trimmed, mentionedSelf };
 };
@@ -237,6 +304,21 @@ const getNapCatConfig = (): NapCatRuntimeConfig => {
         ? config.requireMention
         : String(process.env.IKI_NAPCAT_REQUIRE_MENTION || '').toLowerCase() === 'true',
   };
+};
+
+const filterNapCatTools = (tools: string[]): string[] => {
+  const filtered: string[] = [];
+  const seen = new Set<string>();
+
+  for (const toolName of tools) {
+    const normalized = toolName.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    if (!SAFE_NAPCAT_TOOL_SET.has(normalized)) continue;
+    seen.add(normalized);
+    filtered.push(normalized);
+  }
+
+  return filtered;
 };
 
 const resolveNapCatModel = (
@@ -459,6 +541,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
     const napcatConfig = getNapCatConfig();
     if (!napcatConfig.enabled) return;
+    const napcatTools = filterNapCatTools(napcatConfig.tools);
 
     const { text, mentionedSelf } = parseMessageText(event.message, event.raw_message, selfId);
     if (!text) return;
@@ -524,7 +607,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       providerType: modelConfig.providerType,
       model: modelConfig.model,
       messages: messages as unknown as ChatTransportMessage[],
-      tools: napcatConfig.tools,
+      tools: napcatTools,
       threadId,
     });
 

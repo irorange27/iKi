@@ -293,6 +293,57 @@ describe('createNapCatReverseBridge', () => {
     );
   });
 
+  it('filters NapCat tools down to the safe non-interactive web subset', async () => {
+    getAppConfigMock.mockReturnValue(
+      createConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+        tools: ['web', 'shell', 'fetch'],
+      })
+    );
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    chatService.getThread.mockReturnValue(null);
+    chatService.listMessages.mockReturnValue([
+      {
+        id: 'msg_user_safe_tools',
+        message: JSON.stringify({
+          role: 'user',
+          parts: [{ type: 'text', text: 'hello from qq' }],
+        }),
+      },
+    ]);
+    chatService.send.mockResolvedValue({ success: true, text: 'hello from iki' });
+
+    const { ws } = connectBridge(chatService);
+    const socket = expectSocket(ws);
+    const inbound = socket.emitMessage(
+      JSON.stringify({
+        post_type: 'message',
+        message_type: 'private',
+        self_id: '10001',
+        user_id: '20002',
+        message_id: 'm_safe_tools',
+        message: 'hello from qq',
+      })
+    ) as Promise<void>;
+
+    await Promise.resolve();
+
+    expect(chatService.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: ['web', 'fetch'],
+      })
+    );
+
+    const outbound = JSON.parse(socket.sent[0]);
+    await (socket.emitMessage(JSON.stringify({ status: 'ok', retcode: 0, echo: outbound.echo })) as
+      Promise<void>);
+    await inbound;
+  });
+
   it('ignores group messages without @mention when mention gate is enabled', async () => {
     getAppConfigMock.mockReturnValue(
       createConfig({
@@ -326,6 +377,82 @@ describe('createNapCatReverseBridge', () => {
     expect(chatService.createMessage).not.toHaveBeenCalled();
     expect(chatService.send).not.toHaveBeenCalled();
     expect(socket.sent).toEqual([]);
+  });
+
+  it('accepts CQ-code @mentions in group string payloads when mention gate is enabled', async () => {
+    getAppConfigMock.mockReturnValue(
+      createConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+        requireMention: true,
+      })
+    );
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    chatService.getThread.mockReturnValue(null);
+    chatService.listMessages.mockReturnValue([]);
+    chatService.send.mockResolvedValue({ success: true, text: 'group reply' });
+
+    const { ws } = connectBridge(chatService);
+    const socket = expectSocket(ws);
+    const inbound = socket.emitMessage(
+      JSON.stringify({
+        post_type: 'message',
+        message_type: 'group',
+        self_id: '10001',
+        user_id: '20002',
+        group_id: '30003',
+        message_id: 'm2b',
+        message: '[CQ:at,qq=10001] hello group',
+      })
+    ) as Promise<void>;
+
+    await Promise.resolve();
+
+    expect(chatService.createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'napcat_10001_group_30003',
+        title: 'QQ Group 30003',
+        client_id: 'client_napcat',
+      })
+    );
+    expect(chatService.createMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        thread_id: 'napcat_10001_group_30003',
+        message: {
+          role: 'user',
+          parts: [{ type: 'text', text: '@10001 hello group' }],
+        },
+      })
+    );
+    expect(chatService.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+        threadId: 'napcat_10001_group_30003',
+      })
+    );
+
+    const outbound = JSON.parse(socket.sent[0]);
+    expect(outbound).toMatchObject({
+      action: 'send_group_msg',
+      params: {
+        group_id: '30003',
+        message: 'group reply',
+      },
+    });
+
+    await (socket.emitMessage(
+      JSON.stringify({
+        status: 'ok',
+        retcode: 0,
+        echo: outbound.echo,
+      })
+    ) as Promise<void>);
+    await inbound;
   });
 
   it('uses environment fallback for model and tools when persisted values are empty', async () => {

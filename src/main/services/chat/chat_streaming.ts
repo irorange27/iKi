@@ -218,6 +218,21 @@ export const createChatStreaming = (deps: {
     return tools;
   };
 
+  const describeApprovalRequiredTools = (
+    requests: Array<{ toolCall?: { toolName: string } }>
+  ): string => {
+    const toolNames = requests
+      .map(request => request.toolCall?.toolName)
+      .filter((toolName): toolName is string => typeof toolName === 'string' && toolName.trim().length > 0)
+      .filter((toolName, index, list) => list.indexOf(toolName) === index);
+
+    if (toolNames.length === 0) {
+      return 'Tool approval required for non-interactive chat';
+    }
+
+    return `Tool approval required for non-interactive chat: ${toolNames.join(', ')}`;
+  };
+
   const registerToolWithGuard = (
     runner: ConversationRunner,
     toolName: string,
@@ -434,8 +449,28 @@ export const createChatStreaming = (deps: {
           source: 'chat.send.tools',
           metadata: {
             contextTokens: preparedTurn.report.totalEstimatedTokens,
+            approvalRequestCount: result.toolApprovalRequests?.length ?? 0,
           },
         });
+        if (result.toolApprovalRequests && result.toolApprovalRequests.length > 0) {
+          const approvalError = describeApprovalRequiredTools(result.toolApprovalRequests);
+          chatStreamingLogger.event({
+            level: 'warn',
+            event: 'chat.send.approval_required',
+            outcome: 'denied',
+            message: approvalError,
+            data: {
+              thread_id: options.threadId || null,
+              tool_names: result.toolApprovalRequests
+                .map(request => request.toolCall?.toolName)
+                .filter(
+                  (toolName): toolName is string =>
+                    typeof toolName === 'string' && toolName.trim().length > 0
+                ),
+            },
+          });
+          throw new Error(approvalError);
+        }
         return { success: true, text: result.response };
       }
 

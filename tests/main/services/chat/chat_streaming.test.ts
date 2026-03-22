@@ -436,6 +436,65 @@ describe('createChatStreaming', () => {
     );
   });
 
+  it('send() fails clearly when a non-interactive tool turn requires approval', async () => {
+    resolveToolNamesMock.mockResolvedValue({
+      mode: 'manual',
+      explicitTools: ['shell'],
+      resolvedTools: ['shell'],
+    });
+    toModelInputMessagesMock.mockResolvedValue([
+      { role: 'system', content: 'history' },
+      { role: 'user', content: 'check bbc' },
+    ]);
+
+    const runner = {
+      registerTool: vi.fn(),
+      generate: vi.fn().mockResolvedValue({
+        response: '让我尝试访问BBC新闻：',
+        iterations: 1,
+        toolApprovalRequests: [
+          {
+            approvalId: 'approval_shell_1',
+            toolCall: {
+              toolName: 'shell',
+              args: { command: 'curl https://www.bbc.com/news' },
+            },
+          },
+        ],
+      }),
+    };
+    createChatConversationRunnerMock.mockReturnValue(runner);
+
+    defaultToolRegistryGetMock.mockReturnValue({
+      name: 'shell',
+      description: 'Run shell commands',
+      parameters: {},
+      handler: vi.fn(async () => ({ ok: true })),
+    });
+
+    const { streaming, recordUsageEvent } = createDeps();
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'check bbc' }],
+      tools: ['shell'],
+      threadId: 'thread_approval_blocked',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Tool approval required for non-interactive chat: shell',
+    });
+    expect(recordUsageEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'chat.send.tools',
+        metadata: expect.objectContaining({
+          approvalRequestCount: 1,
+        }),
+      })
+    );
+  });
+
   it('stream() persists pending approval sessions when tool events request approval', async () => {
     resolveToolNamesMock.mockResolvedValue({
       mode: 'manual',
