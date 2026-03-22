@@ -24,6 +24,14 @@ vi.mock('../../../src/core/logger', () => ({
     debug: vi.fn(),
     info: vi.fn(),
   },
+  createLogger: vi.fn(() => ({
+    error: loggerErrorMock,
+    warn: loggerWarnMock,
+    debug: vi.fn(),
+    info: vi.fn(),
+    event: vi.fn(),
+    span: vi.fn(),
+  })),
 }));
 
 import {

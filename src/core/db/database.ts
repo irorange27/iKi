@@ -2,12 +2,14 @@ import Database = require('better-sqlite3');
 import path from 'path';
 import fs from 'fs';
 import { initializeMigrations } from './migration';
+import { createLogger } from '../logger';
 import { getUserDataPath } from '../platform';
 
 let db: Database.Database | null = null;
 let initialized = false;
 let initializing = false;
 let dbPathOverride: string | null = null;
+const databaseLogger = createLogger({ module: 'database' });
 
 const resolveDbPath = (): string => {
   if (dbPathOverride && dbPathOverride.trim()) return dbPathOverride.trim();
@@ -78,7 +80,7 @@ export const getConfig = (key: string): unknown => {
     try {
       return JSON.parse(row.value);
     } catch (e) {
-      console.error('Failed to parse config value:', e);
+      databaseLogger.error('Failed to parse config value', e);
       return null;
     }
   }
@@ -97,9 +99,28 @@ export const migrateFromJson = (jsonPath: string, key: string) => {
       setConfig(key, data);
       // Optional: Rename or delete the old file
       fs.renameSync(jsonPath, jsonPath + '.bak');
-      console.log(`Migrated config from ${jsonPath} to SQLite`);
+      databaseLogger.event({
+        level: 'info',
+        event: 'config.migrate',
+        outcome: 'succeeded',
+        message: 'Migrated config from JSON to SQLite',
+        data: {
+          json_path: jsonPath,
+          config_key: key,
+        },
+      });
     } catch (e) {
-      console.error('Migration failed:', e);
+      databaseLogger.event({
+        level: 'error',
+        event: 'config.migrate',
+        outcome: 'failed',
+        message: 'Failed to migrate config from JSON to SQLite',
+        data: {
+          json_path: jsonPath,
+          config_key: key,
+        },
+        error: e,
+      });
     }
   }
 };

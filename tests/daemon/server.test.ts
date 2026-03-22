@@ -16,6 +16,7 @@ const {
   resetAppClientState,
   resetBootstrapState,
   createAppClientMock,
+  getAppConfigMock,
   getAppClientByIdMock,
   getAppClientByTokenMock,
   listAppClientsMock,
@@ -37,6 +38,7 @@ const {
   mkdirSyncMock,
   writeFileSyncMock,
   daemonLogInfoMock,
+  applyAppLoggingConfigMock,
   createNapCatReverseBridgeMock,
   createServerMock,
   getRequestHandler,
@@ -97,15 +99,20 @@ const {
 
   const registerStandardToolsMock = vi.fn();
   const initializeDatabaseMock = vi.fn();
+  const getAppConfigMock = vi.fn(() => ({
+    security: {
+      enableLogging: true,
+      logLevel: 'info',
+    },
+  }));
   const getUserDataPathMock = vi.fn(() => '/tmp/iki-daemon-tests');
   const setPlatformInfoMock = vi.fn();
   const mkdirSyncMock = vi.fn();
   const writeFileSyncMock = vi.fn();
   const daemonLogInfoMock = vi.fn();
+  const applyAppLoggingConfigMock = vi.fn();
 
-  let requestHandler:
-    | ((req: unknown, res: unknown) => unknown | Promise<unknown>)
-    | null = null;
+  let requestHandler: ((req: unknown, res: unknown) => unknown | Promise<unknown>) | null = null;
   const serverMock = {
     listening: false,
     on: vi.fn(() => serverMock),
@@ -166,14 +173,18 @@ const {
     Array.isArray(payload.mcpServerIds) ? [...(payload.mcpServerIds as string[])] : []
   );
   const resolveToolsForClientMock = vi.fn((requested: unknown, allowedTools: string[]) => {
-    const requestedTools = Array.isArray(requested) ? requested.filter((value): value is string => typeof value === 'string') : [];
+    const requestedTools = Array.isArray(requested)
+      ? requested.filter((value): value is string => typeof value === 'string')
+      : [];
     if (requestedTools.length === 0) {
       return ['web', 'fetch'].filter(tool => allowedTools.includes(tool));
     }
     return requestedTools.filter(tool => allowedTools.includes(tool));
   });
   const resolveMcpServerIdsForClientMock = vi.fn((requested: unknown, allowedTools: string[]) => {
-    const requestedIds = Array.isArray(requested) ? requested.filter((value): value is string => typeof value === 'string') : [];
+    const requestedIds = Array.isArray(requested)
+      ? requested.filter((value): value is string => typeof value === 'string')
+      : [];
     return requestedIds.filter(serverId => allowedTools.includes(`mcp:server:${serverId}`));
   });
 
@@ -187,6 +198,7 @@ const {
     resetAppClientState,
     resetBootstrapState,
     createAppClientMock,
+    getAppConfigMock,
     getAppClientByIdMock,
     getAppClientByTokenMock,
     listAppClientsMock,
@@ -208,6 +220,7 @@ const {
     mkdirSyncMock,
     writeFileSyncMock,
     daemonLogInfoMock,
+    applyAppLoggingConfigMock,
     createNapCatReverseBridgeMock,
     createServerMock,
     getRequestHandler,
@@ -245,6 +258,15 @@ vi.mock('../../src/core/daemon_logs', () => ({
 
 vi.mock('../../src/core/db/database', () => ({
   initializeDatabase: initializeDatabaseMock,
+}));
+
+vi.mock('../../src/core/config', () => ({
+  getAppConfig: getAppConfigMock,
+}));
+
+vi.mock('../../src/core/logger', () => ({
+  applyAppLoggingConfig: applyAppLoggingConfigMock,
+  withLogContext: (_context: unknown, fn: () => unknown) => fn(),
 }));
 
 vi.mock('../../src/core/platform', () => ({
@@ -478,7 +500,16 @@ describe('daemon server', () => {
       success: true,
       client_id: 'client_2',
       token: 'token_client_2',
-      scopes: ['chat:read', 'chat:write', 'memory:read', 'memory:write', 'tools:run', 'tools:approve', 'mcp:read', 'mcp:write'],
+      scopes: [
+        'chat:read',
+        'chat:write',
+        'memory:read',
+        'memory:write',
+        'tools:run',
+        'tools:approve',
+        'mcp:read',
+        'mcp:write',
+      ],
       allowed_tools: ['web', 'fetch'],
     });
     expect(assignClientToLegacyThreadsMock).toHaveBeenCalledTimes(1);
@@ -671,19 +702,19 @@ describe('daemon server', () => {
 
     expect(allowed.status).toBe(200);
     expect(allowed.json).toEqual({ success: true, answer: 'ok' });
-    expect(resolveToolsForClientMock).toHaveBeenCalledWith(['web', 'shell'], [
-      'web',
-      'mcp:server:docs',
-    ]);
+    expect(resolveToolsForClientMock).toHaveBeenCalledWith(
+      ['web', 'shell'],
+      ['web', 'mcp:server:docs']
+    );
     expect(readRequestedMcpServerIdsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         mcpServerIds: ['docs', 'other'],
       })
     );
-    expect(resolveMcpServerIdsForClientMock).toHaveBeenCalledWith(['docs', 'other'], [
-      'web',
-      'mcp:server:docs',
-    ]);
+    expect(resolveMcpServerIdsForClientMock).toHaveBeenCalledWith(
+      ['docs', 'other'],
+      ['web', 'mcp:server:docs']
+    );
     expect(chatServiceMock.send).toHaveBeenCalledWith({
       providerType: 'openai',
       model: 'gpt-4.1',

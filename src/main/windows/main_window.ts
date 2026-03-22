@@ -1,9 +1,12 @@
 import { BrowserWindow, app } from 'electron';
 import path from 'node:path';
 
+import { createLogger } from '../../core/logger';
 import { maybeOpenDevTools } from './devtools_policy';
 import { loadRendererEntry } from './renderer';
 import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
+
+const windowLogger = createLogger({ module: 'main_window' });
 
 export const createMainWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
@@ -29,6 +32,26 @@ export const createMainWindow = (): BrowserWindow => {
   maybeOpenDevTools(mainWindow.webContents, {
     isPackaged: app.isPackaged,
     autoOpenEnv: process.env.IKI_AUTO_OPEN_DEVTOOLS,
+  });
+
+  windowLogger.event({
+    level: 'info',
+    event: 'window.created',
+    message: 'Main window created',
+    data: {
+      window_kind: 'main',
+    },
+  });
+
+  mainWindow.on('closed', () => {
+    windowLogger.event({
+      level: 'info',
+      event: 'window.closed',
+      message: 'Main window closed',
+      data: {
+        window_kind: 'main',
+      },
+    });
   });
 
   return mainWindow;

@@ -46,6 +46,14 @@ vi.mock('../../../../src/core/logger', () => ({
     debug: vi.fn(),
     info: vi.fn(),
   },
+  createLogger: vi.fn(() => ({
+    error: loggerErrorMock,
+    warn: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    event: vi.fn(),
+    span: vi.fn(),
+  })),
 }));
 
 import { createSimpleConversationRunner } from '../../../../src/core/agent';

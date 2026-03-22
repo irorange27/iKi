@@ -1,5 +1,7 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
+import { getAppConfig } from './core/config';
+import { applyAppLoggingConfig, createLogger, setBaseLogContext } from './core/logger';
 import { registerStandardTools } from './core/tools';
 import { getMcpManager } from './core/mcp';
 import { setPlatformInfo } from './core/platform';
@@ -17,6 +19,17 @@ import {
 import { createMainWindow } from './main/windows/main_window';
 
 const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
+const appLogger = createLogger({ module: 'app' });
+
+setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
+
+const syncLoggingConfig = () => {
+  try {
+    applyAppLoggingConfig(getAppConfig());
+  } catch {
+    // Fall back to env/default logger config until app config becomes available.
+  }
+};
 
 const updatePlatformTheme = () => {
   setPlatformInfo({
@@ -38,12 +51,33 @@ if (isDaemonMode) {
   const port = Number.isFinite(portEnv) && portEnv > 0 ? portEnv : undefined;
   const host = process.env.IKI_DAEMON_HOST?.trim() || undefined;
 
+  appLogger.event({
+    level: 'info',
+    event: 'app.start',
+    message: 'Daemon process booting',
+    data: {
+      daemon_mode: true,
+      host: host || null,
+      port: port || null,
+    },
+  });
   startDaemonServer({ port, host });
   startBackgroundRuntime();
 } else {
   setPlatformInfo({
     userDataPath: app.getPath('userData'),
     locale: app.getLocale(),
+  });
+  syncLoggingConfig();
+  appLogger.event({
+    level: 'info',
+    event: 'app.start',
+    message: 'Desktop process booting',
+    data: {
+      daemon_mode: false,
+      packaged: app.isPackaged,
+      platform: process.platform,
+    },
   });
 
   if (app.isReady()) {
@@ -74,12 +108,27 @@ if (isDaemonMode) {
   // initialization and is ready to create browser windows.
   // Some APIs can only be used after this event occurs.
   app.on('ready', () => {
+    syncLoggingConfig();
+    appLogger.event({
+      level: 'info',
+      event: 'app.ready',
+      message: 'Application ready',
+      data: {
+        packaged: app.isPackaged,
+        platform: process.platform,
+      },
+    });
     startBackgroundRuntime();
     void startDesktopDaemon();
     createMainWindow();
   });
 
   app.on('before-quit', () => {
+    appLogger.event({
+      level: 'info',
+      event: 'app.shutdown',
+      message: 'Application shutting down',
+    });
     stopBackgroundRuntime();
     stopDesktopDaemon();
   });

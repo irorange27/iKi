@@ -6,6 +6,7 @@ import path from 'node:path';
 import { setConfig, migrateFromJson } from '../../core/db/database';
 import { getAppConfig } from '../../core/config';
 import { readRecentDaemonLogs } from '../../core/daemon_logs';
+import { applyAppLoggingConfig, createLogger } from '../../core/logger';
 import { getMcpManager } from '../../core/mcp';
 import { normalizeAppConfig } from '../../shared/config/normalize';
 import type {
@@ -32,6 +33,7 @@ import {
 
 let configIpcRegistered = false;
 let configMigrationRun = false;
+const configLogger = createLogger({ module: 'config_ipc' });
 
 export const migrateLegacyConfig = (): void => {
   if (configMigrationRun) return;
@@ -138,11 +140,16 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
     return {
       online: true,
       host: typeof payload.host === 'string' && payload.host.trim() ? payload.host : recorded.host,
-      port: typeof payload.port === 'number' && Number.isFinite(payload.port) ? payload.port : recorded.port,
+      port:
+        typeof payload.port === 'number' && Number.isFinite(payload.port)
+          ? payload.port
+          : recorded.port,
       status: typeof payload.status === 'string' && payload.status.trim() ? payload.status : 'ok',
       source: 'health',
       uptimeSeconds:
-        typeof payload.uptime === 'number' && Number.isFinite(payload.uptime) ? payload.uptime : null,
+        typeof payload.uptime === 'number' && Number.isFinite(payload.uptime)
+          ? payload.uptime
+          : null,
     };
   } catch (error) {
     return {
@@ -242,6 +249,7 @@ const controlDesktopDaemon = async (action: DaemonControlAction): Promise<Daemon
 const saveConfig = (config: unknown): AppConfig => {
   const normalized = normalizeAppConfig(config);
   setConfig('app_config', normalized);
+  applyAppLoggingConfig(normalized);
   return normalized;
 };
 
@@ -279,10 +287,7 @@ const handleMcpConfigUpdate = async (prevConfig: AppConfig, nextConfig: AppConfi
       await manager.initialize();
     }
 
-    if (
-      prevConfig.mcp.allowRemoteServers &&
-      !nextConfig.mcp.allowRemoteServers
-    ) {
+    if (prevConfig.mcp.allowRemoteServers && !nextConfig.mcp.allowRemoteServers) {
       const servers = manager.listServers();
       const remoteServers = servers.filter(
         server =>
@@ -340,10 +345,10 @@ export const registerConfigIpc = (): void => {
 
     const shouldAwaitMcp = Boolean(prevConfig.mcp?.enabled) && !normalized.mcp.enabled;
     const mcpUpdate = handleMcpConfigUpdate(prevConfig, normalized).catch(error => {
-      console.warn('Failed to apply MCP config update', error);
+      configLogger.warn('Failed to apply MCP config update', error);
     });
     const daemonUpdate = applyDesktopDaemonConfigUpdate(prevConfig, normalized).catch(error => {
-      console.warn('Failed to apply daemon config update', error);
+      configLogger.warn('Failed to apply daemon config update', error);
     });
 
     if (shouldAwaitMcp) {

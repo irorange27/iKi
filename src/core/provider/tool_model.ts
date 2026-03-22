@@ -1,5 +1,6 @@
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
+import { createLogger } from '../logger';
 import { TitleAgent } from '../agents/title_agent';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
@@ -9,6 +10,8 @@ export interface ToolModelConfig {
   providerType: string;
   model: string;
 }
+
+const toolModelLogger = createLogger({ module: 'tool_model' });
 
 /**
  * Get Tool Model configuration with auto-detection
@@ -94,7 +97,7 @@ export const getToolModel = (): ToolModelConfig | null => {
 
     return null;
   } catch (error) {
-    console.error('Failed to get tool model:', error);
+    toolModelLogger.error('Failed to get tool model', error);
     return null;
   }
 };

@@ -4,6 +4,7 @@ import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import * as emotionDb from '../../../core/db/emotion';
 import * as memoryDb from '../../../core/db/memory';
+import { createLogger } from '../../../core/logger';
 import {
   type AffectState,
   buildAffectSystemMessage,
@@ -43,6 +44,8 @@ import {
   toModelInputMessages,
 } from './chat_ui';
 import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_loop';
+
+const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
 export const createChatStreaming = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
@@ -122,7 +125,7 @@ export const createChatStreaming = (deps: {
     try {
       emotion = await analyzeEmotionWithAgent(content);
     } catch (error) {
-      console.warn('[Emotion][Main] realtime analysis failed:', error);
+      chatStreamingLogger.warn('Realtime emotion analysis failed', error);
       return { message: '', state: null };
     }
     if (!emotion) return { message: '', state: null };
@@ -263,7 +266,7 @@ export const createChatStreaming = (deps: {
       // 2. Fallback to general factory fetch
       return await llmFactory.fetchModelsFromDev(providerType);
     } catch (error: unknown) {
-      console.error(`Failed to get models for ${providerType}:`, error);
+      chatStreamingLogger.error(`Failed to get models for ${providerType}`, error);
       return [];
     }
   };
@@ -532,7 +535,7 @@ export const createChatStreaming = (deps: {
 
         for (const toolName of preparedTurn.guardedTools) {
           if (!defaultToolRegistry.get(toolName)) {
-            console.warn(`[Main] Tool ${toolName} not found in registry`);
+            chatStreamingLogger.warn(`Tool ${toolName} not found in registry`);
             continue;
           }
           registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
@@ -596,7 +599,19 @@ export const createChatStreaming = (deps: {
         return { success: true, stopped: streamState.stoppedByUser };
       }
       const message = getErrorMessage(error);
-      console.error('[Main] Stream failed:', message);
+      chatStreamingLogger.event({
+        level: 'error',
+        event: 'chat.stream',
+        outcome: 'failed',
+        message: 'Stream failed',
+        error,
+        data: {
+          thread_id: options.threadId || null,
+          provider_type: options.providerType,
+          model: options.model,
+          user_facing_error: message,
+        },
+      });
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {

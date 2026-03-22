@@ -1,5 +1,11 @@
 import type { WorkflowOptimizationConfig } from './workflow';
 import type { ThemeConfig } from '../theme/types';
+import type {
+  StructuredLogEntry,
+  StructuredLogLevel,
+  StructuredLogOutcome,
+  StructuredLogProcess,
+} from './logging';
 
 export interface ConfigRuntimeInfo {
   userDataPath: string;
@@ -25,11 +31,12 @@ export interface DaemonStatusInfo {
   error?: string;
 }
 
-export interface DaemonLogEntry {
+export interface DaemonLogEntry extends Omit<StructuredLogEntry, 'level' | 'process' | 'outcome'> {
+  level: StructuredLogLevel;
+  process?: StructuredLogProcess;
+  outcome?: StructuredLogOutcome;
   timestamp: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
   source: string;
-  message: string;
 }
 
 export interface DaemonLogsInfo {

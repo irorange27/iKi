@@ -39,11 +39,11 @@
             placeholder="127.0.0.1"
             @input="updateDaemonHost(($event.target as HTMLInputElement).value)"
           />
-        <small class="input-help">
-          Defaults to <code>127.0.0.1</code>. Use <code>0.0.0.0</code> only when you intentionally
-          need LAN/Docker access.
-        </small>
-      </label>
+          <small class="input-help">
+            Defaults to <code>127.0.0.1</code>. Use <code>0.0.0.0</code> only when you intentionally
+            need LAN/Docker access.
+          </small>
+        </label>
 
         <label class="input-label">
           <span>Daemon Port</span>
@@ -440,7 +440,13 @@ const daemonLogText = computed(() => {
   const entries = daemonLogs.value?.entries || [];
   if (entries.length === 0) return 'No daemon logs available yet.';
   return entries
-    .map(entry => `[${entry.timestamp}] [${entry.level}] [${entry.source}] ${entry.message}`)
+    .map(entry => {
+      const timestamp = entry.ts || entry.timestamp;
+      const source = entry.module || entry.source;
+      const event = entry.event ? ` ${entry.event}` : '';
+      const outcome = entry.outcome ? ` ${entry.outcome}` : '';
+      return `[${timestamp}] [${entry.level}] [${source}]${event}${outcome} ${entry.message}`;
+    })
     .join('\n');
 });
 

@@ -1,4 +1,7 @@
 import { getDb } from '../database';
+import { createLogger } from '../../logger';
+
+const migrationLogger = createLogger({ module: 'db_migration_runner' });
 
 // Migration table to track executed migrations
 const initMigrationsTable = () => {
@@ -18,7 +21,9 @@ export interface Migration {
   down?: () => void;
 }
 
-const findExecutedMigrationName = (migration: Pick<Migration, 'name' | 'aliases'>): string | null => {
+const findExecutedMigrationName = (
+  migration: Pick<Migration, 'name' | 'aliases'>
+): string | null => {
   const candidates = [migration.name, ...(migration.aliases ?? [])];
   const placeholders = candidates.map(() => '?').join(', ');
   const rows = getDb()
@@ -57,20 +62,62 @@ export const runMigration = (migration: Migration) => {
   const executedName = findExecutedMigrationName(migration);
   if (executedName) {
     if (executedName !== migration.name) {
-      console.log(`Normalizing migration record: ${executedName} -> ${migration.name}`);
+      migrationLogger.event({
+        level: 'info',
+        event: 'db.migration',
+        outcome: 'degraded',
+        message: 'Normalized legacy migration name',
+        data: {
+          from_name: executedName,
+          to_name: migration.name,
+        },
+      });
       renameExecutedMigration(executedName, migration.name);
     }
-    console.log(`Migration ${migration.name} already executed, skipping...`);
+    migrationLogger.event({
+      level: 'info',
+      event: 'db.migration',
+      outcome: 'skipped',
+      message: 'Migration already executed',
+      data: {
+        migration_name: migration.name,
+      },
+    });
     return;
   }
 
   try {
-    console.log(`Running migration: ${migration.name}`);
+    migrationLogger.event({
+      level: 'info',
+      event: 'db.migration',
+      outcome: 'started',
+      message: 'Running migration',
+      data: {
+        migration_name: migration.name,
+      },
+    });
     migration.up();
     markMigrationExecuted(migration.name);
-    console.log(`Migration ${migration.name} completed successfully`);
+    migrationLogger.event({
+      level: 'info',
+      event: 'db.migration',
+      outcome: 'succeeded',
+      message: 'Migration completed successfully',
+      data: {
+        migration_name: migration.name,
+      },
+    });
   } catch (error) {
-    console.error(`Migration ${migration.name} failed:`, error);
+    migrationLogger.event({
+      level: 'error',
+      event: 'db.migration',
+      outcome: 'failed',
+      message: 'Migration failed',
+      data: {
+        migration_name: migration.name,
+      },
+      error,
+    });
     throw error;
   }
 };

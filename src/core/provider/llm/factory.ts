@@ -3,11 +3,14 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { getProviders } from '../../db/providers';
+import { createLogger } from '../../logger';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import { parseModelList } from '../../../shared/utils/provider_models';
 import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
 import { normalizeLanguageModelUsage } from './usage';
+
+const factoryLogger = createLogger({ module: 'llm_factory' });
 
 export interface ProviderConfig {
   id: string;
@@ -190,7 +193,7 @@ export const fetchModelsFromDev = async (providerType: string) => {
       return Object.keys(providerData.models);
     }
   } catch (error) {
-    console.error(`[Factory] Failed to fetch models for ${providerType}:`, error);
+    factoryLogger.error(`Failed to fetch models for ${providerType}`, error);
   }
   return [];
 };

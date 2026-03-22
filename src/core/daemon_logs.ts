@@ -2,16 +2,37 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { DaemonLogEntry, DaemonLogsInfo } from '../shared/types/config';
-import { logger } from './logger';
+import type { StructuredLogEntry, StructuredLogLevel } from '../shared/types/logging';
+import { createLogger, getRuntimeLoggingConfig } from './logger';
 import { getUserDataPath } from './platform';
-
-type DaemonLogLevel = DaemonLogEntry['level'];
 
 const MAX_BUFFER_ENTRIES = 300;
 
 const logBuffer: DaemonLogEntry[] = [];
+const loggerCache = new Map<string, ReturnType<typeof createLogger>>();
 
 const getDefaultLogFilePath = () => path.join(getUserDataPath(), 'logs', 'daemon.log');
+
+const isStructuredLogLevel = (level: unknown): level is StructuredLogLevel =>
+  level === 'debug' || level === 'info' || level === 'warn' || level === 'error';
+
+const normalizeModule = (source: string): string => {
+  const trimmed = source.trim();
+  if (!trimmed) return 'daemon';
+  return trimmed.replace(/[^a-zA-Z0-9_.-]+/g, '_');
+};
+
+const getModuleLogger = (source: string) => {
+  const normalized = normalizeModule(source);
+  const cached = loggerCache.get(normalized);
+  if (cached) return cached;
+  const created = createLogger({
+    process: 'daemon',
+    module: normalized,
+  });
+  loggerCache.set(normalized, created);
+  return created;
+};
 
 const pushToBuffer = (entry: DaemonLogEntry) => {
   logBuffer.push(entry);
@@ -24,56 +45,33 @@ const ensureLogDir = (filePath: string) => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 };
 
-const toLogMessage = (message: string, details?: unknown): string => {
-  if (details === undefined) return message;
-  if (details instanceof Error) {
-    return `${message} ${details.stack || details.message}`;
-  }
-  if (typeof details === 'string') return `${message} ${details}`;
-  try {
-    return `${message} ${JSON.stringify(details)}`;
-  } catch {
-    return `${message} ${String(details)}`;
-  }
-};
-
-const appendLogLine = (filePath: string, entry: DaemonLogEntry) => {
+const appendLogLine = (filePath: string, entry: StructuredLogEntry) => {
   ensureLogDir(filePath);
   fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`, { encoding: 'utf8' });
 };
 
-const forwardToLogger = (level: DaemonLogLevel, source: string, message: string) => {
-  const line = `[${source}] ${message}`;
-  if (level === 'error') {
-    logger.error(line);
-    return;
-  }
-  if (level === 'warn') {
-    logger.warn(line);
-    return;
-  }
-  if (level === 'debug') {
-    logger.debug(line);
-    return;
-  }
-  logger.info(line);
-};
+const toDaemonLogEntry = (entry: StructuredLogEntry, source?: string): DaemonLogEntry => ({
+  ...entry,
+  timestamp: entry.ts,
+  source: source || entry.module || entry.process,
+  message: entry.message || `${entry.event}${entry.outcome ? ` ${entry.outcome}` : ''}`,
+});
 
 const record = (
-  level: DaemonLogLevel,
+  level: StructuredLogLevel,
   source: string,
   message: string,
   details?: unknown,
   userDataPath?: string
 ): DaemonLogEntry => {
-  const entry: DaemonLogEntry = {
-    timestamp: new Date().toISOString(),
-    level,
-    source,
-    message: toLogMessage(message, details),
-  };
+  const entry = getModuleLogger(source)[level](message, details);
+  const daemonEntry = toDaemonLogEntry(entry, source);
 
-  pushToBuffer(entry);
+  if (!getRuntimeLoggingConfig().enabled) {
+    return daemonEntry;
+  }
+
+  pushToBuffer(daemonEntry);
 
   try {
     appendLogLine(
@@ -84,8 +82,7 @@ const record = (
     // Best-effort logging only. Keep the in-memory buffer available for diagnostics.
   }
 
-  forwardToLogger(level, source, entry.message);
-  return entry;
+  return daemonEntry;
 };
 
 const parseLogLine = (line: string): DaemonLogEntry | null => {
@@ -93,27 +90,46 @@ const parseLogLine = (line: string): DaemonLogEntry | null => {
   if (!trimmed) return null;
 
   try {
-    const parsed = JSON.parse(trimmed) as Partial<DaemonLogEntry>;
+    const parsed = JSON.parse(trimmed) as Partial<StructuredLogEntry> &
+      Partial<Pick<DaemonLogEntry, 'timestamp' | 'source'>>;
+
+    if (
+      typeof parsed.ts === 'string' &&
+      isStructuredLogLevel(parsed.level) &&
+      typeof parsed.process === 'string' &&
+      typeof parsed.module === 'string' &&
+      typeof parsed.event === 'string'
+    ) {
+      return toDaemonLogEntry(parsed as StructuredLogEntry, parsed.source);
+    }
+
     if (
       typeof parsed.timestamp === 'string' &&
-      (parsed.level === 'debug' ||
-        parsed.level === 'info' ||
-        parsed.level === 'warn' ||
-        parsed.level === 'error') &&
+      isStructuredLogLevel(parsed.level) &&
       typeof parsed.source === 'string' &&
       typeof parsed.message === 'string'
     ) {
       return {
+        ts: parsed.timestamp,
         timestamp: parsed.timestamp,
+        schema_version: 1,
         level: parsed.level,
+        process: 'daemon',
+        module: normalizeModule(parsed.source),
+        event: 'legacy.log',
         source: parsed.source,
         message: parsed.message,
       };
     }
   } catch {
     return {
+      ts: new Date(0).toISOString(),
       timestamp: new Date(0).toISOString(),
+      schema_version: 1,
       level: 'info',
+      process: 'daemon',
+      module: 'daemon',
+      event: 'legacy.log',
       source: 'daemon',
       message: trimmed,
     };
@@ -136,10 +152,7 @@ export const daemonLog = {
     record('error', source, message, details, userDataPath),
 };
 
-export const readRecentDaemonLogs = (
-  limit = 120,
-  userDataPath?: string
-): DaemonLogsInfo => {
+export const readRecentDaemonLogs = (limit = 120, userDataPath?: string): DaemonLogsInfo => {
   const filePath = getDaemonLogFilePath(userDataPath);
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
