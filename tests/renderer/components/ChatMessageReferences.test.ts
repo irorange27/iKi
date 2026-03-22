@@ -63,7 +63,8 @@ describe('ChatMessageReferences', () => {
     expect(wrapper.text()).toContain('1 tools');
     expect(wrapper.text()).toContain('1 memories');
     expect(wrapper.text()).toContain('affect');
-    expect(summaryItems[3].attributes('title')).toContain('openai-docs');
+    expect(summaryItems[3].attributes('data-tooltip')).toContain('openai-docs');
+    expect(summaryItems[3].attributes('title')).toBeUndefined();
 
     await summaryItems[3].trigger('click');
 

@@ -4,7 +4,7 @@
       <span
         v-if="affectSummary.label"
         class="reference-summary-item"
-        :title="affectTooltip"
+        :data-tooltip="affectTooltip"
       >
         <Heart :size="14" class="reference-summary-icon" />
         affect
@@ -12,7 +12,7 @@
       <span
         v-if="memorySummary.items.length > 0"
         class="reference-summary-item"
-        :title="memoryTooltip"
+        :data-tooltip="memoryTooltip"
       >
         <Brain :size="14" class="reference-summary-icon" />
         {{ memorySummary.items.length }} memories
@@ -20,7 +20,7 @@
       <span
         v-if="toolSummary.count > 0"
         class="reference-summary-item"
-        :title="toolTooltip"
+        :data-tooltip="toolTooltip"
       >
         <Wrench :size="14" class="reference-summary-icon" />
         {{ toolSummary.count }} tools
@@ -28,7 +28,7 @@
       <span
         v-if="skillSummary.items.length > 0"
         class="reference-summary-item"
-        :title="skillTooltip"
+        :data-tooltip="skillTooltip"
       >
         <Sparkles :size="14" class="reference-summary-icon" />
         {{ skillSummary.items.length }} skills
@@ -108,12 +108,42 @@ const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
 }
 
 .reference-summary-item {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  cursor: default;
+  cursor: help;
   font-size: 13px;
   color: var(--reference-inline-color);
+}
+
+.reference-summary-item::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  box-shadow: var(--surface-shadow-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.reference-summary-item:hover::after {
+  opacity: 1;
+  visibility: visible;
 }
 
 .reference-summary-icon {
