@@ -41,6 +41,16 @@ const {
         message: `log tail ${limit}`,
       },
     ],
+    napcatMessages: [
+      {
+        receivedAt: '2026-03-19T00:01:00.000Z',
+        messageType: 'private',
+        userId: '20002',
+        textPreview: 'hello from qq',
+        mentionedSelf: true,
+        replyEligible: true,
+      },
+    ],
   })),
   applyDesktopDaemonConfigUpdateMock: vi.fn(),
   isDesktopDaemonEmbeddedRunningMock: vi.fn(() => true),
@@ -222,6 +232,16 @@ describe('config IPC', () => {
           level: 'info',
           source: 'daemon',
           message: 'log tail 50',
+        },
+      ],
+      napcatMessages: [
+        {
+          receivedAt: '2026-03-19T00:01:00.000Z',
+          messageType: 'private',
+          userId: '20002',
+          textPreview: 'hello from qq',
+          mentionedSelf: true,
+          replyEligible: true,
         },
       ],
     });

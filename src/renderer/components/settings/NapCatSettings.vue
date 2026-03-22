@@ -296,6 +296,10 @@ import {
   DEFAULT_DAEMON_HOST,
   DEFAULT_DAEMON_PORT,
 } from '../../../shared/constants/daemon';
+import {
+  formatStructuredConsoleLine,
+  type StructuredConsoleFormatterInput,
+} from '../../../shared/logging/console_formatter';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
 
@@ -440,13 +444,27 @@ const daemonLogCount = computed(() => {
   if (daemonLogsLoading.value) return 'Loading...';
   return String(daemonLogs.value?.entries.length || 0);
 });
-const formatDaemonLogLine = (entry: NonNullable<DaemonLogsInfo['entries']>[number]) => {
-  const timestamp = entry.ts || entry.timestamp;
-  const source = entry.module || entry.source;
-  const event = entry.event ? ` ${entry.event}` : '';
-  const outcome = entry.outcome ? ` ${entry.outcome}` : '';
-  return `[${timestamp}] [${entry.level}] [${source}]${event}${outcome} ${entry.message}`;
-};
+
+const formatStructuredLogViewLine = (input: StructuredConsoleFormatterInput) =>
+  formatStructuredConsoleLine(input, { colorize: false });
+
+const toFormattedDaemonLogLine = (entry: NonNullable<DaemonLogsInfo['entries']>[number]) =>
+  formatStructuredLogViewLine({
+    ts: entry.ts || entry.timestamp,
+    level: entry.level,
+    process: entry.process || 'daemon',
+    module: entry.module || entry.source || 'daemon',
+    event: entry.event || 'legacy.log',
+    ...(entry.outcome ? { outcome: entry.outcome } : {}),
+    ...(entry.message ? { message: entry.message } : {}),
+    ...(entry.trace_id ? { trace_id: entry.trace_id } : {}),
+    ...(entry.request_id ? { request_id: entry.request_id } : {}),
+    ...(entry.session_id ? { session_id: entry.session_id } : {}),
+    ...(typeof entry.duration_ms === 'number' ? { duration_ms: entry.duration_ms } : {}),
+    ...(entry.entity ? { entity: entry.entity } : {}),
+    ...(entry.data ? { data: entry.data } : {}),
+    ...(entry.error ? { error: entry.error } : {}),
+  });
 
 const normalizeNapCatPreviewFromLogEntry = (
   entry: NonNullable<DaemonLogsInfo['entries']>[number]
@@ -506,18 +524,24 @@ const napcatMessagePreviewCount = computed(() => {
 });
 
 const formatNapCatPreviewLine = (entry: NapCatMessagePreviewEntry) => {
-  const scope = entry.messageType === 'group' ? 'group' : 'private';
-  const gate = entry.replyEligible ? 'reply' : 'blocked';
-  const mention = entry.mentionedSelf ? 'mentioned' : 'not-mentioned';
-  const targets = [
-    `user=${entry.userId}`,
-    entry.groupId ? `group=${entry.groupId}` : '',
-    entry.messageId ? `message=${entry.messageId}` : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  return `[${entry.receivedAt}] [qq] [${scope}] [${gate}/${mention}] ${targets} ${entry.textPreview}`.trim();
+  return formatStructuredLogViewLine({
+    ts: entry.receivedAt,
+    level: 'info',
+    process: 'daemon',
+    module: 'napcat',
+    event: 'napcat.message.received',
+    ...(entry.replyEligible ? {} : { outcome: 'skipped' }),
+    message: entry.textPreview,
+    data: {
+      message_type: entry.messageType,
+      user_id: entry.userId,
+      ...(entry.groupId ? { group_id: entry.groupId } : {}),
+      ...(entry.selfId ? { self_id: entry.selfId } : {}),
+      ...(entry.messageId ? { message_id: entry.messageId } : {}),
+      mentioned_self: entry.mentionedSelf,
+      reply_eligible: entry.replyEligible,
+    },
+  });
 };
 
 const daemonLogText = computed(() => {
@@ -535,7 +559,7 @@ const daemonLogText = computed(() => {
   if (entries.length > 0) {
     if (sections.length > 0) sections.push('');
     sections.push('Recent Logs');
-    sections.push(...entries.map(formatDaemonLogLine));
+    sections.push(...entries.map(toFormattedDaemonLogLine));
   }
 
   if (sections.length === 0) return 'No daemon logs or inbound QQ messages available yet.';

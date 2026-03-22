@@ -39,9 +39,22 @@ export interface DaemonLogEntry extends Omit<StructuredLogEntry, 'level' | 'proc
   source: string;
 }
 
+export interface NapCatMessagePreviewEntry {
+  receivedAt: string;
+  messageType: 'private' | 'group';
+  userId: string;
+  groupId?: string;
+  selfId?: string;
+  messageId?: string;
+  textPreview: string;
+  mentionedSelf: boolean;
+  replyEligible: boolean;
+}
+
 export interface DaemonLogsInfo {
   filePath: string;
   entries: DaemonLogEntry[];
+  napcatMessages: NapCatMessagePreviewEntry[];
 }
 
 export type DaemonControlAction = 'start' | 'restart' | 'stop';

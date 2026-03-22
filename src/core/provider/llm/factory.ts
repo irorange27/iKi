@@ -6,11 +6,22 @@ import { getProviders } from '../../db/providers';
 import { createLogger } from '../../logger';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
-import { parseModelList } from '../../../shared/utils/provider_models';
+import {
+  listModelsDevProviderModels,
+  lookupModelsDevModelCapability,
+  parseModelList,
+  type ModelCapability,
+  type ModelsDevCatalog,
+} from '../../../shared/utils/provider_models';
 import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
 import { normalizeLanguageModelUsage } from './usage';
 
 const factoryLogger = createLogger({ module: 'llm_factory' });
+const MODELS_DEV_CACHE_TTL_MS = 3600000;
+const MODELS_DEV_TIMEOUT_MS = 1200;
+
+let cachedModelsDevCatalog: ModelsDevCatalog | null = null;
+let cachedModelsDevFetchedAt = 0;
 
 export interface ProviderConfig {
   id: string;
@@ -24,6 +35,8 @@ export interface ChatGenerationResult {
   text: string;
   usage: TokenUsageMetrics;
 }
+
+export type StreamChatResult = ChatGenerationResult;
 
 export type ChatTextMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -111,6 +124,21 @@ export const streamChat = async (
   shouldCancel?: () => boolean,
   abortSignal?: AbortSignal
 ) => {
+  const result = await streamChatWithUsage(options, onChunk, shouldCancel, abortSignal);
+  return result.text;
+};
+
+export const streamChatWithUsage = async (
+  options: {
+    providerType: string;
+    modelId: string;
+    messages: ChatTextMessage[];
+    extraSystemPrompt?: string;
+  },
+  onChunk: (chunk: string) => void,
+  shouldCancel?: () => boolean,
+  abortSignal?: AbortSignal
+) => {
   const model = createModel(options.providerType, options.modelId);
   const systemPrompt = [getFullSystemPrompt(options.providerType), options.extraSystemPrompt]
     .filter(value => typeof value === 'string' && value.trim().length > 0)
@@ -134,7 +162,18 @@ export const streamChat = async (
     fullText += part.text;
     onChunk(part.text);
   }
-  return fullText;
+
+  if (!fullText) {
+    const streamedText = await Promise.resolve(result.text);
+    if (streamedText) {
+      fullText = streamedText;
+    }
+  }
+
+  return {
+    text: fullText,
+    usage: normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage ?? result.usage)),
+  };
 };
 
 export const generateChat = async (options: {
@@ -172,28 +211,55 @@ export const generateChatWithUsage = async (options: {
 
 export const fetchModelsFromDev = async (providerType: string) => {
   try {
-    const response = await fetchWithTimeout('https://models.dev/api.json');
-    if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
-
-    const data = (await response.json()) as Record<string, { models?: Record<string, unknown> }>;
-
-    const mapping: Record<string, string> = {
-      kimi: 'moonshotai',
-      moonshot: 'moonshotai',
-      zhipu: 'zhipuai',
-      minimax: 'minimax-cn',
-      deepseek: 'deepseek',
-      openai: 'openai',
-    };
-
-    const key = mapping[providerType] || providerType;
-    const providerData = data[key];
-
-    if (providerData && providerData.models) {
-      return Object.keys(providerData.models);
-    }
+    const data = await fetchModelsDevCatalog();
+    return listModelsDevProviderModels(data, providerType);
   } catch (error) {
     factoryLogger.error(`Failed to fetch models for ${providerType}`, error);
   }
   return [];
+};
+
+const fetchModelsDevCatalog = async (): Promise<ModelsDevCatalog> => {
+  const now = Date.now();
+  if (cachedModelsDevCatalog && now - cachedModelsDevFetchedAt < MODELS_DEV_CACHE_TTL_MS) {
+    return cachedModelsDevCatalog;
+  }
+
+  const response = await fetchWithTimeout(
+    'https://models.dev/api.json',
+    {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
+    },
+    { timeoutMs: MODELS_DEV_TIMEOUT_MS, retries: 0 }
+  );
+  if (!response.ok) {
+    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as ModelsDevCatalog;
+  cachedModelsDevCatalog = data;
+  cachedModelsDevFetchedAt = now;
+  return data;
+};
+
+export const fetchModelCapabilityFromDev = async (
+  providerType: string,
+  modelId: string
+): Promise<ModelCapability | null> => {
+  const trimmedModelId = modelId.trim();
+  if (!trimmedModelId) return null;
+
+  try {
+    const catalog = await fetchModelsDevCatalog();
+    return lookupModelsDevModelCapability(catalog, providerType, trimmedModelId);
+  } catch (error) {
+    factoryLogger.error(
+      `Failed to fetch model capability for ${providerType}/${trimmedModelId}`,
+      error
+    );
+    return null;
+  }
 };

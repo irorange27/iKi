@@ -11,8 +11,10 @@ import {
 } from '../../../core/context/thread_summary';
 import type { AffectState } from '../../../core/emotion/affect_state';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
+import type { ModelCapability } from '../../../shared/utils/provider_models';
 import type { ChatInputMessage } from './chat_types';
 import type { ChatMemory } from './chat_memory';
+import { deriveModelAwareContextConfig } from './chat_context_budget';
 import { resolveSkillsSystemPrompt } from './chat_skills';
 import { getPromptFromMessage } from './chat_ui';
 import { getIdentityContextMessage } from '../identity/identity_service';
@@ -70,6 +72,7 @@ type AssembleChatContextParams = {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
+  modelCapability?: ModelCapability | null;
   affectState?: AffectState | null;
   realtimeAffectMessage?: string;
   onMemoryRetrieved?: (payload: {
@@ -476,7 +479,11 @@ const buildRelationshipContext = (
         ? relationshipClip.truncated
           ? { reason: 'relationship block clipped to context budget' }
           : {}
-        : { reason: threadId ? 'no relationship state available' : 'no active thread scope available' }),
+        : {
+            reason: threadId
+              ? 'no relationship state available'
+              : 'no active thread scope available',
+          }),
     },
   };
 };
@@ -510,7 +517,11 @@ const buildRecentReflectionContext = (contextConfig: ContextConfig): ReflectionC
     systemMessage: reflectionClip.text,
     block: {
       kind: 'recent-reflection',
-      status: reflectionClip.text ? (reflectionClip.truncated ? 'truncated' : 'included') : 'dropped',
+      status: reflectionClip.text
+        ? reflectionClip.truncated
+          ? 'truncated'
+          : 'included'
+        : 'dropped',
       estimatedTokens: estimateTokens(reflectionClip.text),
       charCount: reflectionClip.text.length,
       ...(reflectionClip.text
@@ -700,7 +711,7 @@ export const createChatContextAssembler = (deps: {
   const assemble = async (
     params: AssembleChatContextParams
   ): Promise<AssembleChatContextResult> => {
-    const contextConfig = getContextConfig();
+    const contextConfig = deriveModelAwareContextConfig(getContextConfig(), params.modelCapability);
     const blocks: ContextReportBlock[] = [];
 
     if (!contextConfig.enabled) {

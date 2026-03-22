@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultAppConfig } from '../../src/shared/config/defaults';
 
+const { daemonLoggerEventMock, recordNapCatMessagePreviewMock } = vi.hoisted(() => ({
+  daemonLoggerEventMock: vi.fn(),
+  recordNapCatMessagePreviewMock: vi.fn(),
+}));
+
 class FakeBridgeSocket {
   readyState = 1;
   sent: string[] = [];
@@ -32,8 +37,9 @@ vi.mock('../../src/core/db/providers', () => ({
 
 vi.mock('../../src/core/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
-    event: vi.fn(),
+    event: daemonLoggerEventMock,
   })),
+  recordNapCatMessagePreview: recordNapCatMessagePreviewMock,
   daemonLog: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -258,6 +264,15 @@ describe('createNapCatReverseBridge', () => {
         model: 'gpt-4.1-mini',
         tools: ['web', 'fetch'],
         threadId: 'napcat_10001_private_20002',
+      })
+    );
+    expect(recordNapCatMessagePreviewMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageType: 'private',
+        userId: '20002',
+        textPreview: 'hello from qq',
+        mentionedSelf: false,
+        replyEligible: true,
       })
     );
 

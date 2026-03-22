@@ -8,6 +8,7 @@ const {
   getAppConfigMock,
   shouldGuardToolsMock,
   generateChatWithUsageMock,
+  fetchModelCapabilityFromDevMock,
   assembleContextMock,
   createChatConversationRunnerMock,
   persistThreadRuntimeHintsMock,
@@ -44,6 +45,7 @@ const {
   })),
   shouldGuardToolsMock: vi.fn(() => false),
   generateChatWithUsageMock: vi.fn(),
+  fetchModelCapabilityFromDevMock: vi.fn(async () => null),
   assembleContextMock: vi.fn(),
   createChatConversationRunnerMock: vi.fn(),
   persistThreadRuntimeHintsMock: vi.fn(),
@@ -105,6 +107,7 @@ vi.mock('../../../../src/core/provider/emotion_model', () => ({
 vi.mock('../../../../src/core/provider/llm/factory', () => ({
   generateChatWithUsage: generateChatWithUsageMock,
   fetchModelsFromDev: vi.fn(async () => []),
+  fetchModelCapabilityFromDev: fetchModelCapabilityFromDevMock,
   getProviderConfig: vi.fn(() => ({ apiKey: 'test-key' })),
 }));
 

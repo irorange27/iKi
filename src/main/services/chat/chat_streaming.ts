@@ -223,7 +223,9 @@ export const createChatStreaming = (deps: {
   ): string => {
     const toolNames = requests
       .map(request => request.toolCall?.toolName)
-      .filter((toolName): toolName is string => typeof toolName === 'string' && toolName.trim().length > 0)
+      .filter(
+        (toolName): toolName is string => typeof toolName === 'string' && toolName.trim().length > 0
+      )
       .filter((toolName, index, list) => list.indexOf(toolName) === index);
 
     if (toolNames.length === 0) {
@@ -338,6 +340,10 @@ export const createChatStreaming = (deps: {
     }
   ): Promise<PreparedChatTurn> => {
     const modelMessages = await toModelInputMessages(options.messages);
+    const modelCapability = await llmFactory.fetchModelCapabilityFromDev(
+      options.providerType,
+      options.model
+    );
     const lastModelMessage = modelMessages[modelMessages.length - 1];
     const emotionConfig = getEmotionConfig();
     const realtimeContext = lastModelMessage
@@ -357,6 +363,7 @@ export const createChatStreaming = (deps: {
       threadId: options.threadId,
       skillIds: options.skillIds,
       skillMode: options.skillMode,
+      modelCapability,
       affectState: affectStateForRouting,
       realtimeAffectMessage: realtimeContext.message,
       onMemoryRetrieved: options.onMemoryRetrieved,

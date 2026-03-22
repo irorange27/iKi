@@ -15,6 +15,9 @@ A local agent pet for AI provider orchestration.
 - Structured context assembly with rolling thread summaries, bounded memory / skill context, and
   visible context reports per assistant turn.
 
+- Model-aware context budgeting that can use `models.dev` metadata (model list + context window)
+  to avoid overstuffing smaller models while keeping larger-model defaults stable.
+
 - First-class affect signals that can shape reply strategy, skill/tool routing, and tool-autonomy
   guardrails with explicit UI transparency.
 

@@ -5,7 +5,7 @@ import type { ChatService } from '../main/services/chat/chat_service';
 import { parseStoredUiMessageRow } from '../main/services/chat/chat_ui';
 import type { ChatTransportMessage } from '../main/services/chat/chat_types';
 import { getAppConfig } from '../core/config';
-import { createDaemonLogger } from '../core/daemon_logs';
+import { createDaemonLogger, recordNapCatMessagePreview } from '../core/daemon_logs';
 import { getProviders } from '../core/db/providers';
 import type { ChatThread } from '../shared/types/chat';
 import { parseModelList } from '../shared/utils/provider_models';
@@ -552,7 +552,22 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
     const { text, mentionedSelf } = parseMessageText(event.message, event.raw_message, selfId);
     if (!text) return;
-    if (napcatConfig.requireMention && event.message_type === 'group' && !mentionedSelf) return;
+    const replyEligible =
+      !napcatConfig.requireMention || event.message_type !== 'group' || mentionedSelf;
+
+    recordNapCatMessagePreview({
+      receivedAt: new Date().toISOString(),
+      messageType: event.message_type,
+      userId: userId || 'unknown',
+      ...(event.group_id !== undefined ? { groupId: normalizeId(event.group_id) } : {}),
+      ...(event.self_id !== undefined ? { selfId: selfId } : {}),
+      ...(event.message_id !== undefined ? { messageId: normalizeId(event.message_id) } : {}),
+      textPreview: text,
+      mentionedSelf,
+      replyEligible,
+    });
+
+    if (!replyEligible) return;
 
     const modelConfig = resolveNapCatModel(napcatConfig);
     if (!modelConfig) {

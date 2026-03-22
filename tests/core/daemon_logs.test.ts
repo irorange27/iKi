@@ -51,6 +51,7 @@ describe('daemon_logs', () => {
       timestamp: written.ts,
       message: 'Bridge connected',
     });
+    expect(read.napcatMessages).toEqual([]);
   });
 
   it('parses legacy daemon log lines for compatibility', async () => {
@@ -83,6 +84,48 @@ describe('daemon_logs', () => {
         event: 'legacy.log',
         source: 'daemon-lifecycle',
         message: 'Existing daemon detected',
+      },
+    ]);
+    expect(read.napcatMessages).toEqual([]);
+  });
+
+  it('records recent NapCat message previews independently from the log level setting', async () => {
+    const { setLoggingEnabled, setLogLevel } = await import('../../src/core/logger');
+    const { readRecentDaemonLogs, recordNapCatMessagePreview } =
+      await import('../../src/core/daemon_logs');
+
+    setLoggingEnabled(false);
+    setLogLevel('error');
+
+    recordNapCatMessagePreview(
+      {
+        receivedAt: '2026-03-22T08:00:00.000Z',
+        messageType: 'group',
+        userId: '20002',
+        groupId: '30003',
+        selfId: '10001',
+        messageId: 'msg_preview',
+        textPreview: 'hello from qq',
+        mentionedSelf: false,
+        replyEligible: false,
+      },
+      tempDir
+    );
+
+    const read = readRecentDaemonLogs(10, tempDir);
+
+    expect(read.entries).toEqual([]);
+    expect(read.napcatMessages).toEqual([
+      {
+        receivedAt: '2026-03-22T08:00:00.000Z',
+        messageType: 'group',
+        userId: '20002',
+        groupId: '30003',
+        selfId: '10001',
+        messageId: 'msg_preview',
+        textPreview: 'hello from qq',
+        mentionedSelf: false,
+        replyEligible: false,
       },
     ]);
   });
