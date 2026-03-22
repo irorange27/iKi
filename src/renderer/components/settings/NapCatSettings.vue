@@ -241,7 +241,8 @@
         <div>
           <div class="card-title">Recent Logs</div>
           <div class="card-subtitle">
-            Recent daemon and NapCat events for local debugging. Auto-refreshes every 5s while open.
+            Recent daemon and NapCat events, including inbound QQ message previews. Auto-refreshes
+            every 5s while open.
           </div>
         </div>
         <div class="card-actions">
@@ -257,6 +258,10 @@
         <div class="summary-row">
           <span class="summary-label">Entries</span>
           <span>{{ daemonLogCount }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">QQ Messages</span>
+          <span>{{ napcatMessagePreviewCount }}</span>
         </div>
       </div>
 
@@ -283,6 +288,7 @@ import type {
   DaemonControlAction,
   DaemonLogsInfo,
   DaemonStatusInfo,
+  NapCatMessagePreviewEntry,
 } from '../../../shared/types/config';
 import type { Provider } from '../../../shared/types/provider';
 import {
@@ -434,20 +440,106 @@ const daemonLogCount = computed(() => {
   if (daemonLogsLoading.value) return 'Loading...';
   return String(daemonLogs.value?.entries.length || 0);
 });
+const formatDaemonLogLine = (entry: NonNullable<DaemonLogsInfo['entries']>[number]) => {
+  const timestamp = entry.ts || entry.timestamp;
+  const source = entry.module || entry.source;
+  const event = entry.event ? ` ${entry.event}` : '';
+  const outcome = entry.outcome ? ` ${entry.outcome}` : '';
+  return `[${timestamp}] [${entry.level}] [${source}]${event}${outcome} ${entry.message}`;
+};
+
+const normalizeNapCatPreviewFromLogEntry = (
+  entry: NonNullable<DaemonLogsInfo['entries']>[number]
+): NapCatMessagePreviewEntry | null => {
+  if (entry.event !== 'napcat.message.received') return null;
+  const data = entry.data || {};
+  const messageType =
+    data.message_type === 'group'
+      ? 'group'
+      : data.message_type === 'private'
+        ? 'private'
+        : null;
+  const textPreview = typeof data.text_preview === 'string' ? data.text_preview.trim() : '';
+  const userId =
+    typeof data.user_id === 'string'
+      ? data.user_id.trim()
+      : typeof data.user_id === 'number'
+        ? String(data.user_id)
+        : '';
+
+  if (!messageType || !textPreview || !userId) return null;
+
+  return {
+    receivedAt: entry.ts || entry.timestamp,
+    messageType,
+    userId,
+    ...(typeof data.group_id === 'string' || typeof data.group_id === 'number'
+      ? { groupId: String(data.group_id) }
+      : {}),
+    ...(typeof data.self_id === 'string' || typeof data.self_id === 'number'
+      ? { selfId: String(data.self_id) }
+      : {}),
+    ...(typeof data.message_id === 'string' || typeof data.message_id === 'number'
+      ? { messageId: String(data.message_id) }
+      : {}),
+    textPreview,
+    mentionedSelf: Boolean(data.mentioned_self),
+    replyEligible: Boolean(data.reply_eligible),
+  };
+};
+
+const napcatMessagePreviews = computed(() => {
+  const explicit = Array.isArray(daemonLogs.value?.napcatMessages) ? daemonLogs.value?.napcatMessages : [];
+  const entries =
+    explicit && explicit.length > 0
+      ? explicit
+      : (daemonLogs.value?.entries || [])
+          .map(normalizeNapCatPreviewFromLogEntry)
+          .filter((entry): entry is NapCatMessagePreviewEntry => Boolean(entry));
+
+  return [...entries].reverse();
+});
+
+const napcatMessagePreviewCount = computed(() => {
+  if (daemonLogsLoading.value) return 'Loading...';
+  return String(napcatMessagePreviews.value.length);
+});
+
+const formatNapCatPreviewLine = (entry: NapCatMessagePreviewEntry) => {
+  const scope = entry.messageType === 'group' ? 'group' : 'private';
+  const gate = entry.replyEligible ? 'reply' : 'blocked';
+  const mention = entry.mentionedSelf ? 'mentioned' : 'not-mentioned';
+  const targets = [
+    `user=${entry.userId}`,
+    entry.groupId ? `group=${entry.groupId}` : '',
+    entry.messageId ? `message=${entry.messageId}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return `[${entry.receivedAt}] [qq] [${scope}] [${gate}/${mention}] ${targets} ${entry.textPreview}`.trim();
+};
+
 const daemonLogText = computed(() => {
   if (daemonLogsLoading.value) return 'Loading daemon logs...';
   if (daemonLogsError.value) return daemonLogsError.value;
+
+  const sections: string[] = [];
+
+  if (napcatMessagePreviews.value.length > 0) {
+    sections.push('Recent QQ Messages');
+    sections.push(...napcatMessagePreviews.value.map(formatNapCatPreviewLine));
+  }
+
   const entries = daemonLogs.value?.entries || [];
-  if (entries.length === 0) return 'No daemon logs available yet.';
-  return entries
-    .map(entry => {
-      const timestamp = entry.ts || entry.timestamp;
-      const source = entry.module || entry.source;
-      const event = entry.event ? ` ${entry.event}` : '';
-      const outcome = entry.outcome ? ` ${entry.outcome}` : '';
-      return `[${timestamp}] [${entry.level}] [${source}]${event}${outcome} ${entry.message}`;
-    })
-    .join('\n');
+  if (entries.length > 0) {
+    if (sections.length > 0) sections.push('');
+    sections.push('Recent Logs');
+    sections.push(...entries.map(formatDaemonLogLine));
+  }
+
+  if (sections.length === 0) return 'No daemon logs or inbound QQ messages available yet.';
+  return sections.join('\n');
 });
 
 const localWsUrl = computed(() =>
