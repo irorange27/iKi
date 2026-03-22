@@ -7,8 +7,8 @@ import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
 
 export const createMainWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 900,
+    height: 680,
     minWidth: 800,
     minHeight: 600,
     backgroundColor: resolveWindowBootstrapBackgroundColor(),
