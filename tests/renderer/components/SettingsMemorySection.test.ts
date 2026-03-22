@@ -278,8 +278,7 @@ describe('SettingsMemorySection', () => {
     await flushPromises();
 
     const emotionCard = findCardByTitle(wrapper, 'Emotion Context');
-    await findLabelByText(emotionCard, 'Enable Emotion Analysis').find('input').setValue(true);
-    await flushPromises();
+    expect(store.config.memory.emotion.enabled).toBe(true);
     await emotionCard.find('input[type="range"][max="100"]').setValue('65');
     await flushPromises();
 
@@ -293,7 +292,7 @@ describe('SettingsMemorySection', () => {
     expect(store.config.memory.emotion.enabled).toBe(true);
     expect(store.config.memory.emotion.minConfidence).toBe(0.65);
     expect(store.config.memory.emotion.toolGuard.maxValence).toBe(-0.35);
-    expect(wrapper.emitted('config-change')).toHaveLength(6);
+    expect(wrapper.emitted('config-change')).toHaveLength(5);
   });
 
   it('loads the first thread on activation and hydrates memory plus affect-state panels', async () => {

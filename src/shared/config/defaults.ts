@@ -70,7 +70,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       maxSkillTokens: 1200,
     },
     emotion: {
-      enabled: false,
+      enabled: true,
       injectToSystemPrompt: true,
       realtimeAnalysis: false,
       minConfidence: 0.45,
