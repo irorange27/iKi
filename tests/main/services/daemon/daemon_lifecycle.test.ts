@@ -15,8 +15,7 @@ const {
   getAppConfigMock,
   getPathMock,
   getLocaleMock,
-  daemonLogInfoMock,
-  daemonLogWarnMock,
+  daemonLoggerEventMock,
 } = vi.hoisted(() => ({
   requestMock: vi.fn(),
   spawnMock: vi.fn(),
@@ -29,8 +28,7 @@ const {
   })),
   getPathMock: vi.fn(() => '/tmp/iki-user-data'),
   getLocaleMock: vi.fn(() => 'en-US'),
-  daemonLogInfoMock: vi.fn(),
-  daemonLogWarnMock: vi.fn(),
+  daemonLoggerEventMock: vi.fn(),
 }));
 
 vi.mock('node:http', () => ({
@@ -60,9 +58,12 @@ vi.mock('../../../../src/daemon/server', () => ({
 }));
 
 vi.mock('../../../../src/core/daemon_logs', () => ({
+  createDaemonLogger: vi.fn(() => ({
+    event: daemonLoggerEventMock,
+  })),
   daemonLog: {
-    info: daemonLogInfoMock,
-    warn: daemonLogWarnMock,
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -163,11 +164,13 @@ describe('daemon lifecycle', () => {
     await startDesktopDaemon();
 
     expect(startDaemonServerMock).not.toHaveBeenCalled();
-    expect(daemonLogInfoMock).toHaveBeenCalledWith(
-      'daemon-lifecycle',
-      'Existing daemon detected on 127.0.0.1:6127, skipping embedded startup.',
-      undefined,
-      '/tmp/iki-user-data'
+    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'info',
+        event: 'daemon.lifecycle.start',
+        outcome: 'skipped',
+        message: 'Existing daemon detected on 127.0.0.1:6127, skipping embedded startup.',
+      })
     );
   });
 

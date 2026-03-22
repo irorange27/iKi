@@ -1,7 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { expectConsoleErrorArgs } from '../../setup/error_log_guard';
-
 type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
 const { ipcHandlers, ipcHandleMock } = vi.hoisted(() => ({
@@ -15,6 +13,10 @@ const { showOpenDialogMock } = vi.hoisted(() => ({
   showOpenDialogMock: vi.fn(),
 }));
 
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
 vi.mock('electron', () => ({
   ipcMain: {
     handle: ipcHandleMock,
@@ -22,6 +24,17 @@ vi.mock('electron', () => ({
   dialog: {
     showOpenDialog: showOpenDialogMock,
   },
+}));
+
+vi.mock('../../../src/core/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
 }));
 
 vi.mock('../../../src/core/db/affect_state', () => ({
@@ -220,19 +233,33 @@ describe('data access IPC modules', () => {
     addProviderMock.mockImplementationOnce(() => {
       throw addError;
     });
-    expectConsoleErrorArgs('[Main] providers:add error:', addError);
     expect(() => ipcHandlers.get('providers:add')?.(null, { id: 'provider_bad' })).toThrow(
       'add failed'
+    );
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.providers.add',
+        outcome: 'failed',
+        error: addError,
+      })
     );
 
     const updateError = new Error('update failed');
     updateProviderMock.mockImplementationOnce(() => {
       throw updateError;
     });
-    expectConsoleErrorArgs('[Main] providers:update error:', updateError);
     expect(() =>
       ipcHandlers.get('providers:update')?.(null, 'provider_1', { enabled: false })
     ).toThrow('update failed');
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.providers.update',
+        outcome: 'failed',
+        error: updateError,
+      })
+    );
   });
 
   it('creates workspace records with normalized defaults and forwards remaining workspace handlers', async () => {

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { getAppConfig } from '../core/config';
 import { registerStandardTools } from '../core/tools';
 import { getMcpManager } from '../core/mcp';
-import { daemonLog } from '../core/daemon_logs';
+import { createDaemonLogger } from '../core/daemon_logs';
 import { initializeDatabase } from '../core/db/database';
 import { applyAppLoggingConfig, withLogContext } from '../core/logger';
 import { getUserDataPath, setPlatformInfo } from '../core/platform';
@@ -264,6 +264,11 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     let bootstrapToken = readOrCreateBootstrapToken(userDataPath);
     const port = Number.isFinite(options?.port) ? Number(options?.port) : DEFAULT_DAEMON_PORT;
     const host = options?.host?.trim() || DEFAULT_DAEMON_HOST;
+    const serverLogger = createDaemonLogger({
+      module: 'daemon_server',
+      source: 'daemon',
+      userDataPath,
+    });
 
     writePortFile(userDataPath, port);
     writeHostFile(userDataPath, host);
@@ -921,7 +926,16 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     });
 
     server.listen(port, host, () => {
-      daemonLog.info('daemon', `Listening on http://${host}:${port}.`, undefined, userDataPath);
+      serverLogger.event({
+        level: 'info',
+        event: 'daemon.server.listen',
+        outcome: 'succeeded',
+        message: `Listening on http://${host}:${port}.`,
+        data: {
+          host,
+          port,
+        },
+      });
     });
 
     const shutdown = () => {

@@ -2,14 +2,52 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { DaemonLogEntry, DaemonLogsInfo } from '../shared/types/config';
-import type { StructuredLogEntry, StructuredLogLevel } from '../shared/types/logging';
-import { createLogger, getRuntimeLoggingConfig } from './logger';
+import type {
+  StructuredLogEntry,
+  StructuredLogLevel,
+  StructuredLogOutcome,
+} from '../shared/types/logging';
+import {
+  createStructuredLogEntry,
+  getRuntimeLoggingConfig,
+  sanitizeLogData,
+  writeStructuredLogEntry,
+} from './logger';
 import { getUserDataPath } from './platform';
 
 const MAX_BUFFER_ENTRIES = 300;
 
 const logBuffer: DaemonLogEntry[] = [];
-const loggerCache = new Map<string, ReturnType<typeof createLogger>>();
+
+type DaemonLoggerOptions = {
+  module: string;
+  source?: string;
+  userDataPath?: string;
+};
+
+type DaemonLogEventInput = {
+  level: StructuredLogLevel;
+  event: string;
+  outcome?: StructuredLogOutcome;
+  message?: string;
+  trace_id?: string;
+  request_id?: string;
+  session_id?: string;
+  duration_ms?: number;
+  entity?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  error?: unknown;
+  retryable?: boolean;
+  fallback_applied?: boolean;
+};
+
+type DaemonLogger = {
+  debug: (message: string, details?: unknown) => DaemonLogEntry;
+  info: (message: string, details?: unknown) => DaemonLogEntry;
+  warn: (message: string, details?: unknown) => DaemonLogEntry;
+  error: (message: string, details?: unknown) => DaemonLogEntry;
+  event: (input: DaemonLogEventInput) => DaemonLogEntry;
+};
 
 const getDefaultLogFilePath = () => path.join(getUserDataPath(), 'logs', 'daemon.log');
 
@@ -20,18 +58,6 @@ const normalizeModule = (source: string): string => {
   const trimmed = source.trim();
   if (!trimmed) return 'daemon';
   return trimmed.replace(/[^a-zA-Z0-9_.-]+/g, '_');
-};
-
-const getModuleLogger = (source: string) => {
-  const normalized = normalizeModule(source);
-  const cached = loggerCache.get(normalized);
-  if (cached) return cached;
-  const created = createLogger({
-    process: 'daemon',
-    module: normalized,
-  });
-  loggerCache.set(normalized, created);
-  return created;
 };
 
 const pushToBuffer = (entry: DaemonLogEntry) => {
@@ -57,20 +83,18 @@ const toDaemonLogEntry = (entry: StructuredLogEntry, source?: string): DaemonLog
   message: entry.message || `${entry.event}${entry.outcome ? ` ${entry.outcome}` : ''}`,
 });
 
-const record = (
-  level: StructuredLogLevel,
+const writeDaemonEntry = (
+  entry: StructuredLogEntry,
   source: string,
-  message: string,
-  details?: unknown,
   userDataPath?: string
 ): DaemonLogEntry => {
-  const entry = getModuleLogger(source)[level](message, details);
   const daemonEntry = toDaemonLogEntry(entry, source);
 
   if (!getRuntimeLoggingConfig().enabled) {
     return daemonEntry;
   }
 
+  writeStructuredLogEntry(entry);
   pushToBuffer(daemonEntry);
 
   try {
@@ -83,6 +107,48 @@ const record = (
   }
 
   return daemonEntry;
+};
+
+const toLegacyData = (details: unknown): Record<string, unknown> | undefined => {
+  if (!details || typeof details !== 'object' || Array.isArray(details) || details instanceof Error) {
+    return undefined;
+  }
+  return sanitizeLogData(details as Record<string, unknown>);
+};
+
+export const createDaemonLogger = (options: DaemonLoggerOptions): DaemonLogger => {
+  const module = normalizeModule(options.module);
+  const source = options.source?.trim() || options.module.trim() || module;
+
+  const event = (input: DaemonLogEventInput): DaemonLogEntry => {
+    const entry = createStructuredLogEntry(
+      {
+        process: 'daemon',
+        module,
+      },
+      input
+    );
+    return writeDaemonEntry(entry, source, options.userDataPath);
+  };
+
+  const createLegacyMethod =
+    (level: StructuredLogLevel) =>
+    (message: string, details?: unknown): DaemonLogEntry =>
+      event({
+        level,
+        event: 'legacy.log',
+        message,
+        ...(details instanceof Error ? { error: details } : {}),
+        ...(toLegacyData(details) ? { data: toLegacyData(details) } : {}),
+      });
+
+  return {
+    debug: createLegacyMethod('debug'),
+    info: createLegacyMethod('info'),
+    warn: createLegacyMethod('warn'),
+    error: createLegacyMethod('error'),
+    event,
+  };
 };
 
 const parseLogLine = (line: string): DaemonLogEntry | null => {
@@ -143,13 +209,13 @@ export const getDaemonLogFilePath = (userDataPath?: string): string =>
 
 export const daemonLog = {
   debug: (source: string, message: string, details?: unknown, userDataPath?: string) =>
-    record('debug', source, message, details, userDataPath),
+    createDaemonLogger({ module: source, source, userDataPath }).debug(message, details),
   info: (source: string, message: string, details?: unknown, userDataPath?: string) =>
-    record('info', source, message, details, userDataPath),
+    createDaemonLogger({ module: source, source, userDataPath }).info(message, details),
   warn: (source: string, message: string, details?: unknown, userDataPath?: string) =>
-    record('warn', source, message, details, userDataPath),
+    createDaemonLogger({ module: source, source, userDataPath }).warn(message, details),
   error: (source: string, message: string, details?: unknown, userDataPath?: string) =>
-    record('error', source, message, details, userDataPath),
+    createDaemonLogger({ module: source, source, userDataPath }).error(message, details),
 };
 
 export const readRecentDaemonLogs = (limit = 120, userDataPath?: string): DaemonLogsInfo => {

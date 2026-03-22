@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron';
 import * as tasksDb from '../../../core/db/tasks';
 import * as lifeDb from '../../../core/db/life';
 import * as lifeReflectionDb from '../../../core/db/life_reflection';
+import { createLogger } from '../../../core/logger';
 import type {
   LifeEpisodeRecord,
   LifeEventType,
@@ -33,6 +34,7 @@ const DEFAULT_BUDGETS = {
   focus_budget: 0.7,
   social_availability: 0.78,
 };
+const lifeRuntimeLogger = createLogger({ module: 'life_runtime' });
 
 type LifeRuntimeEvent = {
   type: LifeEventType;
@@ -60,7 +62,13 @@ const pushLifeEventToRenderers = (payload: LifePushPayload) => {
     try {
       win.webContents.send('life:push', payload);
     } catch (error) {
-      console.warn('[Life] failed to send push event:', error);
+      lifeRuntimeLogger.event({
+        level: 'warn',
+        event: 'life.push',
+        outcome: 'degraded',
+        error,
+        message: 'Failed to push life event to renderer.',
+      });
     }
   }
 };
@@ -441,7 +449,12 @@ const tick = async () => {
       await runDueDailyLifeReflections({ now: snapshot.state.updated_at });
     }
   } catch (error) {
-    console.warn('[Life] tick failed:', error);
+    lifeRuntimeLogger.event({
+      level: 'warn',
+      event: 'life.tick',
+      outcome: 'failed',
+      error,
+    });
   } finally {
     tickInFlight = false;
   }

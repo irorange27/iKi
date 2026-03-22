@@ -3,8 +3,10 @@ import { jsonSchema, tool } from 'ai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 import type { AgentTool } from '../agent/types';
+import { createLogger } from '../logger';
 
 type ApprovalPolicy = boolean | ToolNeedsApprovalFunction<unknown>;
+const toolBaseLogger = createLogger({ module: 'tool_base' });
 
 const deriveJsonSchema = (
   schema: z.ZodTypeAny | undefined,
@@ -27,7 +29,15 @@ const deriveJsonSchema = (
       return jsonSchema as Record<string, unknown>;
     }
   } catch (error) {
-    console.warn('[ToolSchema] Failed to derive JSON schema from Zod', error);
+    toolBaseLogger.event({
+      level: 'warn',
+      event: 'tool.schema.derive',
+      outcome: 'failed',
+      error,
+      data: {
+        title: fallbackTitle || null,
+      },
+    });
   }
 
   return {

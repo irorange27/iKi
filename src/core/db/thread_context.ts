@@ -1,9 +1,11 @@
 import { getDb } from './database';
 import type { ThreadContextEntry } from '../../shared/types/memory';
+import { createLogger } from '../logger';
 import { CHAT_THREAD_CONTEXT_SCHEMA_SQL } from './thread_context_schema';
 
 const nowIso = () => new Date().toISOString();
 let threadContextSchemaEnsured = false;
+const threadContextLogger = createLogger({ module: 'thread_context_db' });
 
 const isMissingThreadContextTableError = (error: unknown): boolean =>
   error instanceof Error && /no such table:\s*chat_thread_context/i.test(error.message);
@@ -16,7 +18,12 @@ const ensureThreadContextSchema = (): boolean => {
     threadContextSchemaEnsured = true;
     return true;
   } catch (error) {
-    console.warn('[Context][DB] Failed to ensure chat_thread_context schema.', error);
+    threadContextLogger.event({
+      level: 'warn',
+      event: 'thread_context.schema.ensure',
+      outcome: 'failed',
+      error,
+    });
     return false;
   }
 };
@@ -38,7 +45,13 @@ const withThreadContextTable = <T>(operation: () => T): T | null => {
       return operation();
     } catch (retryError) {
       if (isMissingThreadContextTableError(retryError)) {
-        console.warn('[Context][DB] chat_thread_context table is unavailable after retry.', retryError);
+        threadContextLogger.event({
+          level: 'warn',
+          event: 'thread_context.schema.ensure',
+          outcome: 'degraded',
+          message: 'chat_thread_context table remained unavailable after retry.',
+          error: retryError,
+        });
         return null;
       }
       throw retryError;

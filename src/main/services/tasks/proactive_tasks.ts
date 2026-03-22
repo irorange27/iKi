@@ -2,6 +2,7 @@ import { BrowserWindow, Notification, app } from 'electron';
 
 import * as tasksDb from '../../../core/db/tasks';
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import { createLogger } from '../../../core/logger';
 import { deliverBridgeThreadMessage } from '../../../daemon/bridge_dispatch';
 import {
   filterSafeProactiveTaskTools,
@@ -15,6 +16,7 @@ import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
 import { recordLifeRuntimeEvent } from '../life/life_runtime';
 
 const SCHEDULER_TICK_MS = 30_000;
+const proactiveTaskLogger = createLogger({ module: 'proactive_tasks' });
 
 let schedulerTimer: NodeJS.Timeout | null = null;
 let tickInFlight = false;
@@ -100,7 +102,13 @@ const sendPushEventToRenderers = (payload: unknown) => {
     try {
       win.webContents.send('tasks:push', payload);
     } catch (error) {
-      console.warn('[Tasks] failed to send push event:', error);
+      proactiveTaskLogger.event({
+        level: 'warn',
+        event: 'task.push',
+        outcome: 'degraded',
+        error,
+        message: 'Failed to push proactive task event to renderer.',
+      });
     }
   }
 };
@@ -114,7 +122,13 @@ const showDesktopNotification = (params: { title: string; body: string }) => {
       body: params.body,
     }).show();
   } catch (error) {
-    console.warn('[Tasks] notification failed:', error);
+    proactiveTaskLogger.event({
+      level: 'warn',
+      event: 'task.notification',
+      outcome: 'degraded',
+      error,
+      message: 'Desktop notification failed.',
+    });
   }
 };
 
@@ -510,7 +524,12 @@ const tick = async () => {
       await runProactiveTask(task.id, { reason: 'schedule' });
     }
   } catch (error) {
-    console.warn('[Tasks] scheduler tick failed:', error);
+    proactiveTaskLogger.event({
+      level: 'warn',
+      event: 'task.scheduler.tick',
+      outcome: 'failed',
+      error,
+    });
   } finally {
     tickInFlight = false;
   }

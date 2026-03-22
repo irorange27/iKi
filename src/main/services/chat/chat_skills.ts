@@ -1,5 +1,6 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import type { AffectState } from '../../../core/emotion/affect_state';
+import { createLogger } from '../../../core/logger';
 import {
   buildSkillsMetadataSystemPrompt,
   listSkills,
@@ -11,6 +12,8 @@ import type { SkillSummary } from '../../../shared/types/skill';
 import type { ChatInputMessage } from './chat_types';
 import { toLlmChatMessages } from './chat_ui';
 import { getAutoPinnedSkillIds, recordAutoSkillSelection } from '../workflow/workflow_optimizer';
+
+const chatSkillsLogger = createLogger({ module: 'chat_skills' });
 
 export const resolveSkillsSystemPrompt = async (params: {
   inputMessages: ChatInputMessage[];
@@ -35,7 +38,15 @@ export const resolveSkillsSystemPrompt = async (params: {
         pinnedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
       }
     } catch (error) {
-      console.warn('[Main] Failed to resolve skill_ids from thread:', error);
+      chatSkillsLogger.event({
+        level: 'warn',
+        event: 'chat.skills.thread_state_load',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: normalizedThreadId,
+        },
+      });
     }
 
     autoPinnedSkillIds = getAutoPinnedSkillIds(normalizedThreadId);
@@ -57,7 +68,15 @@ export const resolveSkillsSystemPrompt = async (params: {
           skill_ids: JSON.stringify(normalizedSkillIds),
         });
       } catch (error) {
-        console.warn('[Main] Failed to persist skill_ids for thread:', error);
+        chatSkillsLogger.event({
+          level: 'warn',
+          event: 'chat.skills.thread_state_persist',
+          outcome: 'failed',
+          error,
+          entity: {
+            thread_id: normalizedThreadId,
+          },
+        });
       }
     }
   } else {

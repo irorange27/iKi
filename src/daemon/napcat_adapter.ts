@@ -5,7 +5,7 @@ import type { ChatService } from '../main/services/chat/chat_service';
 import { parseStoredUiMessageRow } from '../main/services/chat/chat_ui';
 import type { ChatTransportMessage } from '../main/services/chat/chat_types';
 import { getAppConfig } from '../core/config';
-import { daemonLog } from '../core/daemon_logs';
+import { createDaemonLogger } from '../core/daemon_logs';
 import { getProviders } from '../core/db/providers';
 import type { ChatThread } from '../shared/types/chat';
 import { parseModelList } from '../shared/utils/provider_models';
@@ -38,6 +38,8 @@ const nodeRequire = createRequire(__filename);
 const { WebSocketServer } = nodeRequire('ws') as {
   WebSocketServer: new (options: { noServer: boolean }) => ReverseBridgeSocketServer;
 };
+
+const napcatLogger = createDaemonLogger({ module: 'napcat' });
 
 type NapCatMessageSegment = {
   type?: string;
@@ -464,7 +466,12 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
     const modelConfig = resolveNapCatModel(napcatConfig);
     if (!modelConfig) {
-      daemonLog.warn('napcat', 'No provider/model configured, ignoring message.');
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.message.handle',
+        outcome: 'skipped',
+        message: 'No provider/model configured; ignoring inbound message.',
+      });
       return;
     }
 
@@ -492,7 +499,16 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
         metadata: '{}',
       });
     } catch (error) {
-      daemonLog.warn('napcat', 'Failed to persist user message.', error);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.message.persist',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: threadId,
+          role: 'user',
+        },
+      });
     }
 
     const rows = options.chatService.listMessages(threadId);
@@ -513,7 +529,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     });
 
     if (!result.success || !result.text) {
-      daemonLog.warn('napcat', 'LLM failed.', result.error);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.reply.generate',
+        outcome: 'failed',
+        error: result.error,
+        entity: {
+          thread_id: threadId,
+        },
+      });
       return;
     }
 
@@ -524,7 +548,16 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
         metadata: '{}',
       });
     } catch (error) {
-      daemonLog.warn('napcat', 'Failed to persist assistant message.', error);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.message.persist',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: threadId,
+          role: 'assistant',
+        },
+      });
     }
 
     if (event.message_type === 'private') {
@@ -534,7 +567,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
           message: result.text,
         });
       } catch (error) {
-        daemonLog.warn('napcat', 'Failed to send private reply.', error);
+        napcatLogger.event({
+          level: 'warn',
+          event: 'napcat.reply.send',
+          outcome: 'failed',
+          error,
+          data: {
+            message_type: 'private',
+          },
+        });
       }
       return;
     }
@@ -545,7 +586,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
         message: result.text,
       });
     } catch (error) {
-      daemonLog.warn('napcat', 'Failed to send group reply.', error);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.reply.send',
+        outcome: 'failed',
+        error,
+        data: {
+          message_type: 'group',
+        },
+      });
     }
   };
 
@@ -556,7 +605,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
     const napcatConfig = getNapCatConfig();
     if (!napcatConfig.enabled) {
-      daemonLog.warn('napcat', `Upgrade rejected from ${remote}: bridge disabled.`);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.ws.upgrade',
+        outcome: 'denied',
+        message: `Upgrade rejected from ${remote}: bridge disabled.`,
+        data: {
+          remote,
+        },
+      });
       if (socket && typeof (socket as { write?: unknown }).write === 'function') {
         (socket as { write: (data: string) => void }).write('HTTP/1.1 404 Not Found\r\n\r\n');
       }
@@ -568,7 +625,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
     const token = parseToken(req);
     if (napcatConfig.accessToken && token !== napcatConfig.accessToken) {
-      daemonLog.warn('napcat', `Upgrade rejected from ${remote}: invalid access token.`);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.ws.upgrade',
+        outcome: 'denied',
+        message: `Upgrade rejected from ${remote}: invalid access token.`,
+        data: {
+          remote,
+        },
+      });
       if (socket && typeof (socket as { write?: unknown }).write === 'function') {
         (socket as { write: (data: string) => void }).write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       }
@@ -579,7 +644,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     }
 
     wss.handleUpgrade(req, socket, head, ws => {
-      daemonLog.info('napcat', `Reverse WS upgraded from ${remote}.`);
+      napcatLogger.event({
+        level: 'info',
+        event: 'napcat.ws.upgrade',
+        outcome: 'succeeded',
+        message: `Reverse WS upgraded from ${remote}.`,
+        data: {
+          remote,
+        },
+      });
       wss.emit('connection', ws, req);
     });
     return true;
@@ -588,15 +661,40 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
   wss.on('connection', (ws, req) => {
     const remote = getRemoteLabel(req);
     activeSockets.push(ws);
-    daemonLog.info('napcat', `Reverse WS connected: ${remote}.`);
+    napcatLogger.event({
+      level: 'info',
+      event: 'napcat.ws.connection',
+      outcome: 'succeeded',
+      message: `Reverse WS connected: ${remote}.`,
+      data: {
+        remote,
+      },
+    });
 
     ws.on('close', () => {
       removeActiveSocket(ws);
-      daemonLog.warn('napcat', `Reverse WS disconnected: ${remote}.`);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.ws.connection',
+        outcome: 'cancelled',
+        message: `Reverse WS disconnected: ${remote}.`,
+        data: {
+          remote,
+        },
+      });
     });
 
     ws.on('error', error => {
-      daemonLog.warn('napcat', 'Reverse WS socket error.', error);
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.ws.connection',
+        outcome: 'failed',
+        error,
+        message: 'Reverse WS socket error.',
+        data: {
+          remote,
+        },
+      });
     });
 
     ws.on('message', async (data: unknown) => {
@@ -616,7 +714,13 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       try {
         await handleIncomingMessage(payload as NapCatMessageEvent, ws);
       } catch (error) {
-        daemonLog.warn('napcat', 'Handler error.', error);
+        napcatLogger.event({
+          level: 'warn',
+          event: 'napcat.message.handle',
+          outcome: 'failed',
+          error,
+          message: 'Unhandled NapCat message processing error.',
+        });
       }
     });
   });

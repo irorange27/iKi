@@ -8,11 +8,14 @@ import {
   collectEmotionSamples,
   computeAffectState,
 } from '../../../core/emotion/affect_state';
+import { createLogger } from '../../../core/logger';
 import { generateLongMemorySummary } from '../../../core/memory/auto_summarize';
 import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage } from './chat_types';
 import { getPromptFromMessage } from './chat_ui';
+
+const chatMemoryLogger = createLogger({ module: 'chat_memory' });
 
 type MemoryPreview = {
   id: string;
@@ -289,10 +292,19 @@ export const createChatMemory = () => {
 
         persistAffectState(params.threadId);
       } catch (error) {
-        console.warn(
-          `[Emotion][Main] analysis failed message=${params.messageId}:`,
-          getErrorMessage(error)
-        );
+        chatMemoryLogger.event({
+          level: 'warn',
+          event: 'chat.memory.emotion_analysis',
+          outcome: 'failed',
+          error,
+          entity: {
+            thread_id: params.threadId,
+            message_id: params.messageId,
+          },
+          data: {
+            error_message: getErrorMessage(error),
+          },
+        });
       } finally {
         emotionInFlight.delete(params.messageId);
       }
@@ -426,7 +438,19 @@ export const createChatMemory = () => {
 
       void maybeAutoSummarizeLongMemory(params.threadId, params.messageId, params.messageJson);
     } catch (error) {
-      console.warn('[Memory][Main] short memory upsert failed:', getErrorMessage(error));
+      chatMemoryLogger.event({
+        level: 'warn',
+        event: 'chat.memory.short_memory_upsert',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: params.threadId,
+          message_id: params.messageId,
+        },
+        data: {
+          error_message: getErrorMessage(error),
+        },
+      });
     }
   };
 

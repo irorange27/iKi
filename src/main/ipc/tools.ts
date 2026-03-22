@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron';
 
+import { createLogger } from '../../core/logger';
 import { defaultToolRegistry } from '../../core/tools';
 
 let toolsIpcRegistered = false;
+const toolsIpcLogger = createLogger({ module: 'tools_ipc' });
 
 export const registerToolsIpc = (): void => {
   if (toolsIpcRegistered) return;
@@ -12,9 +14,13 @@ export const registerToolsIpc = (): void => {
     try {
       return defaultToolRegistry.getToolMetadata();
     } catch (error: unknown) {
-      console.error('Failed to list tools:', error);
+      toolsIpcLogger.event({
+        level: 'error',
+        event: 'ipc.tools.list',
+        outcome: 'failed',
+        error,
+      });
       return [];
     }
   });
 };
-

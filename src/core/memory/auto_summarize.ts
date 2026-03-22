@@ -1,5 +1,6 @@
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import type { ShortMemoryEntry } from '../db/memory';
+import { createLogger } from '../logger';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 
 export type LongMemorySummaryResult = {
@@ -12,6 +13,7 @@ const MAX_INPUT_CHARS = 4000;
 const MAX_ENTRIES = 12;
 const MIN_INPUT_CHARS = 40;
 const MAX_SUMMARY_CHARS = 320;
+const autoSummarizeLogger = createLogger({ module: 'auto_summarize' });
 
 const SYSTEM_PROMPT =
   'You extract long-term memory from a short conversation snippet.\n' +
@@ -86,7 +88,12 @@ export const generateLongMemorySummary = async (
 
   const toolModel = getToolModel();
   if (!toolModel) {
-    console.warn('[Memory] No tool model available for auto summarization');
+    autoSummarizeLogger.event({
+      level: 'warn',
+      event: 'memory.long_summary.generate',
+      outcome: 'skipped',
+      message: 'Tool model unavailable; skipping auto summarization.',
+    });
     return null;
   }
 
@@ -116,7 +123,15 @@ export const generateLongMemorySummary = async (
       model: toolModel,
     };
   } catch (error) {
-    console.warn('[Memory] auto summarization failed:', error);
+    autoSummarizeLogger.event({
+      level: 'warn',
+      event: 'memory.long_summary.generate',
+      outcome: 'failed',
+      error,
+      data: {
+        entry_count: entries.length,
+      },
+    });
     return null;
   }
 };

@@ -1,12 +1,14 @@
 import { CronExpressionParser } from 'cron-parser';
 
 import type { ProactiveTaskScheduleType } from '../../../shared/types/tasks';
+import { createLogger } from '../../../core/logger';
 import { getErrorMessage } from '../../utils/errors';
 
 export const MIN_INTERVAL_MINUTES = 1;
 export const MAX_INTERVAL_MINUTES = 60 * 24 * 7; // 7 days
 
 const nowIso = () => new Date().toISOString();
+const taskScheduleLogger = createLogger({ module: 'task_schedule' });
 
 const addMinutes = (baseIso: string, minutes: number): string => {
   const base = new Date(baseIso);
@@ -97,7 +99,17 @@ export const computeNextRunAt = (
       try {
         return computeNextCronRunAt(expression, fromIso, task.schedule_timezone);
       } catch (error) {
-        console.warn('[Tasks] invalid cron schedule, falling back to interval:', error);
+        taskScheduleLogger.event({
+          level: 'warn',
+          event: 'task.schedule.compute_next',
+          outcome: 'degraded',
+          error,
+          message: 'Invalid cron schedule; falling back to interval schedule.',
+          data: {
+            cron_expression: expression,
+            schedule_timezone: task.schedule_timezone || null,
+          },
+        });
       }
     }
   }

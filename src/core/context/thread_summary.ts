@@ -1,4 +1,5 @@
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
+import { createLogger } from '../logger';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 
 export type ThreadSummaryMessage = {
@@ -14,6 +15,7 @@ export type ThreadSummaryResult = {
 const MAX_TRANSCRIPT_CHARS = 12000;
 const MAX_EXISTING_SUMMARY_CHARS = 2400;
 const MAX_SUMMARY_CHARS = 2200;
+const threadSummaryLogger = createLogger({ module: 'thread_summary' });
 
 const SYSTEM_PROMPT =
   'You maintain a rolling thread summary for a chat assistant.\n' +
@@ -100,7 +102,12 @@ export const generateThreadSummary = async (params: {
 
   const toolModel = getToolModel();
   if (!toolModel) {
-    console.warn('[Context] No tool model available for thread summary generation');
+    threadSummaryLogger.event({
+      level: 'warn',
+      event: 'thread.summary.generate',
+      outcome: 'skipped',
+      message: 'Tool model unavailable; skipping thread summary generation.',
+    });
     return null;
   }
 
@@ -129,7 +136,16 @@ export const generateThreadSummary = async (params: {
       model: toolModel,
     };
   } catch (error) {
-    console.warn('[Context] thread summary generation failed:', error);
+    threadSummaryLogger.event({
+      level: 'warn',
+      event: 'thread.summary.generate',
+      outcome: 'failed',
+      error,
+      data: {
+        message_count: params.messages.length,
+        has_existing_summary: Boolean(params.existingSummary?.trim()),
+      },
+    });
     return null;
   }
 };

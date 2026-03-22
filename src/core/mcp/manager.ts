@@ -14,7 +14,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getAppConfig } from '../config';
-import { logger } from '../logger';
+import { createLogger } from '../logger';
 import {
   addMcpServer,
   deleteMcpServer,
@@ -53,6 +53,7 @@ type ManagerEvents = {
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const MAX_SCHEMA_BYTES = 20000;
+const mcpManagerLogger = createLogger({ module: 'mcp_manager' });
 
 const TOOL_NAME_MAX_LENGTH = 64;
 const TOOL_NAME_SANITIZE = /[^a-zA-Z0-9_-]+/g;
@@ -371,18 +372,31 @@ export class McpManager extends EventEmitter {
           tools: {
             onChanged: async error => {
               if (error) {
-                logger.warn('[MCP] Tool list refresh failed', {
-                  serverId: server.id,
-                  error: error.message,
+                mcpManagerLogger.event({
+                  level: 'warn',
+                  event: 'mcp.tools.refresh',
+                  outcome: 'failed',
+                  error,
+                  data: {
+                    server_id: server.id,
+                    source: 'list_changed',
+                  },
                 });
                 return;
               }
               try {
                 await this.refreshTools(server.id);
               } catch (err) {
-                logger.warn('[MCP] Tool refresh failed after list_changed', {
-                  serverId: server.id,
-                  error: err instanceof Error ? err.message : String(err),
+                mcpManagerLogger.event({
+                  level: 'warn',
+                  event: 'mcp.tools.refresh',
+                  outcome: 'degraded',
+                  error: err,
+                  message: 'Tool refresh failed after list_changed notification.',
+                  data: {
+                    server_id: server.id,
+                    source: 'list_changed',
+                  },
                 });
               }
             },
@@ -414,9 +428,16 @@ export class McpManager extends EventEmitter {
       try {
         await this.connectServer(server.id);
       } catch (error) {
-        logger.warn('[MCP] Failed to connect on startup', {
-          serverId: server.id,
-          error: error instanceof Error ? error.message : String(error),
+        mcpManagerLogger.event({
+          level: 'warn',
+          event: 'mcp.connect',
+          outcome: 'failed',
+          error,
+          message: 'Failed to connect MCP server on startup.',
+          data: {
+            server_id: server.id,
+            source: 'startup',
+          },
         });
       }
     }
@@ -523,9 +544,16 @@ export class McpManager extends EventEmitter {
     try {
       await existing.client.close();
     } catch (error) {
-      logger.warn('[MCP] Failed to close MCP client', {
-        serverId: id,
-        error: error instanceof Error ? error.message : String(error),
+      mcpManagerLogger.event({
+        level: 'warn',
+        event: 'mcp.disconnect',
+        outcome: 'degraded',
+        error,
+        message: 'Failed to close MCP client cleanly.',
+        data: {
+          server_id: id,
+          resource: 'client',
+        },
       });
     }
 
@@ -549,7 +577,13 @@ export class McpManager extends EventEmitter {
     );
     for (const result of results) {
       if (result.status === 'rejected') {
-        logger.warn('[MCP] Failed to disconnect server', { error: result.reason });
+        mcpManagerLogger.event({
+          level: 'warn',
+          event: 'mcp.disconnect',
+          outcome: 'degraded',
+          error: result.reason,
+          message: 'Failed to disconnect MCP server.',
+        });
       }
     }
   }

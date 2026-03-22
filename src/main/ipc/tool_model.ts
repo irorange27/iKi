@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron';
 
+import { createLogger } from '../../core/logger';
 import { getToolModel, generateTitleWithAgent } from '../../core/provider/tool_model';
 
 let toolModelIpcRegistered = false;
+const toolModelIpcLogger = createLogger({ module: 'tool_model_ipc' });
 
 export const registerToolModelIpc = (): void => {
   if (toolModelIpcRegistered) return;
@@ -12,7 +14,12 @@ export const registerToolModelIpc = (): void => {
     try {
       return getToolModel();
     } catch (error: unknown) {
-      console.error('Failed to get tool model:', error);
+      toolModelIpcLogger.event({
+        level: 'error',
+        event: 'ipc.tool_model.get',
+        outcome: 'failed',
+        error,
+      });
       return null;
     }
   });
@@ -21,9 +28,13 @@ export const registerToolModelIpc = (): void => {
     try {
       return await generateTitleWithAgent(conversationContent);
     } catch (error: unknown) {
-      console.error('Failed to generate title with agent:', error);
+      toolModelIpcLogger.event({
+        level: 'error',
+        event: 'ipc.tool_model.generate_title',
+        outcome: 'failed',
+        error,
+      });
       return null;
     }
   });
 };
-

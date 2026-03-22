@@ -1,9 +1,12 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import type { ConversationRunner, AgentResult, ToolApprovalRequest } from '../../../core/agent';
+import { createLogger } from '../../../core/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
 import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_types';
+
+const chatToolLoopLogger = createLogger({ module: 'chat_tool_loop' });
 
 export type RegisterApprovalBatch = (
   approvalRequests: ToolApprovalRequest[],
@@ -69,7 +72,13 @@ const streamToolLoop = async (
         try {
           await generator.return(undefined);
         } catch (error) {
-          console.warn('[Main] Failed to close cancelled tool stream:', error);
+          chatToolLoopLogger.event({
+            level: 'warn',
+            event: 'chat.tool_stream.close',
+            outcome: 'degraded',
+            error,
+            message: 'Failed to close cancelled tool stream.',
+          });
         }
         break;
       }
@@ -87,7 +96,13 @@ const streamToolLoop = async (
       try {
         await generator.return(undefined);
       } catch (returnError) {
-        console.warn('[Main] Failed to close aborted tool stream:', returnError);
+        chatToolLoopLogger.event({
+          level: 'warn',
+          event: 'chat.tool_stream.close',
+          outcome: 'degraded',
+          error: returnError,
+          message: 'Failed to close aborted tool stream.',
+        });
       }
     } else {
       params.uiChunkEmitter?.error(getErrorMessage(error));

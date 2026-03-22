@@ -1,4 +1,5 @@
 import { isAffectLabel, type AffectLabel, type AffectScore } from '../../shared/emotion/affect';
+import { createLogger } from '../logger';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import {
   createSimplePromptTextGenerator,
@@ -31,6 +32,7 @@ type ParsedEmotionResult = Omit<
 >;
 
 const MAX_INPUT_CHARS = 2000;
+const emotionRuntimeLogger = createLogger({ module: 'emotion_runtime' });
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const toNumber = (value: unknown): number | null => {
@@ -132,7 +134,12 @@ export class LlmEmotionRuntime implements EmotionRuntime {
 
     const toolModel = this.deps.getToolModel();
     if (!toolModel) {
-      console.warn('[Emotion] No tool model available for emotion analysis');
+      emotionRuntimeLogger.event({
+        level: 'warn',
+        event: 'emotion.analysis',
+        outcome: 'skipped',
+        message: 'Tool model unavailable; skipping emotion analysis.',
+      });
       return null;
     }
 
@@ -173,7 +180,18 @@ export class LlmEmotionRuntime implements EmotionRuntime {
         truncated,
       };
     } catch (error) {
-      console.warn('[Emotion] emotion analysis failed:', error);
+      emotionRuntimeLogger.event({
+        level: 'warn',
+        event: 'emotion.analysis',
+        outcome: 'failed',
+        error,
+        data: {
+          input_chars: inputChars,
+          truncated,
+          provider_type: toolModel.providerType,
+          model: toolModel.model,
+        },
+      });
       return null;
     }
   }

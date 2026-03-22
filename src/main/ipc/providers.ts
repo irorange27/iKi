@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron';
 
 import * as providerDb from '../../core/db/providers';
+import { createLogger } from '../../core/logger';
 
 let providersIpcRegistered = false;
+const providersIpcLogger = createLogger({ module: 'providers_ipc' });
 
 export const registerProvidersIpc = (): void => {
   if (providersIpcRegistered) return;
@@ -20,7 +22,12 @@ export const registerProvidersIpc = (): void => {
       const result = providerDb.addProvider(provider);
       return result;
     } catch (error) {
-      console.error('[Main] providers:add error:', error);
+      providersIpcLogger.event({
+        level: 'error',
+        event: 'ipc.providers.add',
+        outcome: 'failed',
+        error,
+      });
       throw error;
     }
   });
@@ -30,7 +37,15 @@ export const registerProvidersIpc = (): void => {
       const result = providerDb.updateProvider(id, provider);
       return result;
     } catch (error) {
-      console.error('[Main] providers:update error:', error);
+      providersIpcLogger.event({
+        level: 'error',
+        event: 'ipc.providers.update',
+        outcome: 'failed',
+        error,
+        entity: {
+          provider_id: typeof id === 'string' ? id : null,
+        },
+      });
       throw error;
     }
   });

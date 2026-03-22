@@ -1,6 +1,6 @@
 import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai';
 
-import { logger } from '../../logger';
+import { createLogger } from '../../logger';
 import { createModel } from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import { ToolRegistry } from '../../tools/base';
@@ -22,6 +22,8 @@ import type {
   ConversationRunnerGenerateRequest,
   ConversationRunnerStreamRequest,
 } from './conversation_runner';
+
+const simpleConversationLogger = createLogger({ module: 'simple_conversation_runner' });
 
 export class SimpleConversationRunner implements ConversationRunner {
   private readonly config: AgentConfig;
@@ -74,46 +76,74 @@ export class SimpleConversationRunner implements ConversationRunner {
     const history = this.buildTurnHistory(request.history, request.prompt);
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
 
-    logger.debug('Sending LLM Request (SimpleConversationRunner.generate)', {
-      model: this.config.model,
-      toolCount: tools ? Object.keys(tools).length : 0,
-      messages: JSON.stringify(messages, null, 2),
-    });
-
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      messages,
-      tools,
-      temperature: this.config.temperature,
-      maxOutputTokens: this.config.maxTokens,
-      stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
-      onStepFinish: async ({
-        toolCalls,
-        toolResults,
-      }: {
-        toolCalls?: unknown[];
-        toolResults?: unknown[];
-      }) => {
-        logger.debug('Step finished (SimpleConversationRunner.generate)', {
-          toolCallsLen: toolCalls?.length,
-          resultLen: toolResults?.length,
-        });
+    const generationSpan = simpleConversationLogger.span({
+      level: 'debug',
+      event: 'conversation.generate',
+      data: {
+        model: this.config.model,
+        provider_type: this.config.providerType,
+        tool_count: tools ? Object.keys(tools).length : 0,
+        message_count: messages.length,
       },
     });
 
-    this.persistHistory(history, result.response.messages);
+    try {
+      const result = await generateText({
+        model,
+        system: systemPrompt,
+        messages,
+        tools,
+        temperature: this.config.temperature,
+        maxOutputTokens: this.config.maxTokens,
+        stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
+        onStepFinish: async ({
+          toolCalls,
+          toolResults,
+        }: {
+          toolCalls?: unknown[];
+          toolResults?: unknown[];
+        }) => {
+          simpleConversationLogger.event({
+            level: 'debug',
+            event: 'conversation.generate.step',
+            outcome: 'succeeded',
+            data: {
+              tool_call_count: toolCalls?.length ?? 0,
+              tool_result_count: toolResults?.length ?? 0,
+            },
+          });
+        },
+      });
 
-    const toolApprovalRequests = collectApprovalRequests(result.content);
-    const toolCalls = collectToolCalls(result.steps, result.toolCalls);
+      this.persistHistory(history, result.response.messages);
 
-    return {
-      response: result.text,
-      ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
-      ...(toolApprovalRequests.length > 0 ? { toolApprovalRequests } : {}),
-      usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
-      iterations: result.steps?.length || 1,
-    };
+      const toolApprovalRequests = collectApprovalRequests(result.content);
+      const toolCalls = collectToolCalls(result.steps, result.toolCalls);
+
+      generationSpan.succeed({
+        data: {
+          iterations: result.steps?.length || 1,
+          tool_call_count: toolCalls?.length ?? 0,
+          approval_request_count: toolApprovalRequests.length,
+        },
+      });
+
+      return {
+        response: result.text,
+        ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
+        ...(toolApprovalRequests.length > 0 ? { toolApprovalRequests } : {}),
+        usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
+        iterations: result.steps?.length || 1,
+      };
+    } catch (error) {
+      generationSpan.fail(error, {
+        data: {
+          message_count: messages.length,
+          tool_count: tools ? Object.keys(tools).length : 0,
+        },
+      });
+      throw error;
+    }
   }
 
   async *stream(

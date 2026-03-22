@@ -1,5 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
+vi.mock('../../../../src/core/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
+}));
+
 import {
   MAX_INTERVAL_MINUTES,
   MIN_INTERVAL_MINUTES,
@@ -45,8 +60,6 @@ describe('task_schedule cron/next-run behavior', () => {
   });
 
   it('falls back to interval scheduling when cron parsing fails', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
     const next = computeNextRunAt(
       {
         schedule_type: 'cron',
@@ -57,9 +70,13 @@ describe('task_schedule cron/next-run behavior', () => {
     );
 
     expect(next).toBe('2026-03-18T00:15:00.000Z');
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-
-    warnSpy.mockRestore();
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'task.schedule.compute_next',
+        outcome: 'degraded',
+      })
+    );
   });
 
   it('uses cron scheduling in computeNextRunAt when expression is valid', () => {

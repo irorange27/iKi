@@ -1,10 +1,13 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import { createLogger } from '../../../core/logger';
 import type { ChatThread } from '../../../shared/types/chat';
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import {
   buildThreadRuntimeMetadata,
   normalizeStringArray,
 } from '../../../shared/chat/thread_runtime_hints';
+
+const chatThreadHintsLogger = createLogger({ module: 'chat_thread_hints' });
 
 export const persistThreadRuntimeHints = (params: {
   threadId: string;
@@ -38,6 +41,14 @@ export const persistThreadRuntimeHints = (params: {
     };
     chatThreadDb.updateChatThread(normalizedThreadId, update);
   } catch (error) {
-    console.warn('[Main] Failed to persist thread runtime hints:', error);
+    chatThreadHintsLogger.event({
+      level: 'warn',
+      event: 'chat.thread_hints.persist',
+      outcome: 'failed',
+      error,
+      entity: {
+        thread_id: normalizedThreadId,
+      },
+    });
   }
 };

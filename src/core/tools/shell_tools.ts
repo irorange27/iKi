@@ -4,11 +4,13 @@ import { promisify } from 'util';
 import { BaseTool } from './base';
 import type { AppConfig } from '../../shared/types/config';
 import { getAppConfig } from '../config';
+import { createLogger } from '../logger';
 import { ShellToolInputSchema } from './schemas';
 import { resolveShellWorkingDirectory } from './workspace_paths';
 
 const execAsync = promisify(exec);
 const invalidCustomShellPatterns = new Set<string>();
+const shellToolLogger = createLogger({ module: 'shell_tools' });
 const highRiskShellPatterns: RegExp[] = [
   /\bsudo\b/i,
   /(^|[;&|]\s*)(rm|rmdir)\b/i,
@@ -77,10 +79,16 @@ const parseShellRegexPattern = (pattern: string): RegExp | null => {
   } catch (error) {
     if (!invalidCustomShellPatterns.has(trimmed)) {
       invalidCustomShellPatterns.add(trimmed);
-      console.warn(
-        `[ShellTool] Invalid custom high-risk regex ignored: ${trimmed}`,
-        error
-      );
+      shellToolLogger.event({
+        level: 'warn',
+        event: 'shell.approval_pattern.compile',
+        outcome: 'failed',
+        message: 'Invalid custom high-risk regex ignored.',
+        error,
+        data: {
+          pattern: trimmed,
+        },
+      });
     }
     return null;
   }

@@ -1,7 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { expectConsoleErrorArgs } from '../../setup/error_log_guard';
-
 type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
 const { ipcHandlers, ipcHandleMock, shellOpenPathMock, mkdirMock } = vi.hoisted(() => ({
@@ -13,6 +11,10 @@ const { ipcHandlers, ipcHandleMock, shellOpenPathMock, mkdirMock } = vi.hoisted(
   mkdirMock: vi.fn(),
 }));
 
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
 vi.mock('electron', () => ({
   ipcMain: {
     handle: ipcHandleMock,
@@ -20,6 +22,17 @@ vi.mock('electron', () => ({
   shell: {
     openPath: shellOpenPathMock,
   },
+}));
+
+vi.mock('../../../src/core/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -126,8 +139,15 @@ describe('system IPC modules', () => {
 
     const listError = new Error('list failed');
     listSkillsMock.mockRejectedValueOnce(listError);
-    expectConsoleErrorArgs('Failed to list skills:', listError);
     expect(await ipcHandlers.get('skills:list')?.(null)).toEqual([]);
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.skills.list',
+        outcome: 'failed',
+        error: listError,
+      })
+    );
 
     getSkillRootsForUiMock.mockReturnValueOnce([{ source: 'user', path: '/skills/user' } as never]);
     expect(await ipcHandlers.get('skills:roots')?.(null)).toEqual([
@@ -138,8 +158,15 @@ describe('system IPC modules', () => {
     getSkillRootsForUiMock.mockImplementationOnce(() => {
       throw rootsError;
     });
-    expectConsoleErrorArgs('Failed to get skill roots:', rootsError);
     expect(await ipcHandlers.get('skills:roots')?.(null)).toEqual([]);
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.skills.roots',
+        outcome: 'failed',
+        error: rootsError,
+      })
+    );
 
     getSkillRootsForUiMock.mockReturnValue([{ source: 'user', path: '/skills/user' } as never]);
     mkdirMock.mockResolvedValue(undefined);
@@ -204,8 +231,15 @@ describe('system IPC modules', () => {
     getToolMetadataMock.mockImplementationOnce(() => {
       throw metadataError;
     });
-    expectConsoleErrorArgs('Failed to list tools:', metadataError);
     expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([]);
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.tools.list',
+        outcome: 'failed',
+        error: metadataError,
+      })
+    );
   });
 
   it('resets workflow optimization state and returns structured failure details on error', async () => {
@@ -234,11 +268,18 @@ describe('system IPC modules', () => {
     getSpeechStatusMock.mockImplementationOnce(() => {
       throw statusError;
     });
-    expectConsoleErrorArgs('Failed to get speech status:', statusError);
     expect(await ipcHandlers.get('speech:get-status')?.(null)).toEqual({
       available: false,
       reason: 'Speech service unavailable',
     });
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.speech.get_status',
+        outcome: 'failed',
+        error: statusError,
+      })
+    );
 
     const input = { audioBase64: 'ZmFrZQ==', mimeType: 'audio/webm' };
     transcribeSpeechMock.mockResolvedValueOnce({ text: 'hello' } as never);
@@ -247,9 +288,16 @@ describe('system IPC modules', () => {
 
     const transcribeError = new Error('transcribe failed');
     transcribeSpeechMock.mockRejectedValueOnce(transcribeError);
-    expectConsoleErrorArgs('Speech transcription failed:', transcribeError);
     await expect(ipcHandlers.get('speech:transcribe')?.(null, input)).rejects.toThrow(
       'transcribe failed'
+    );
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.speech.transcribe',
+        outcome: 'failed',
+        error: transcribeError,
+      })
     );
 
     listWhisperNodeModelsMock.mockReturnValueOnce([{ name: 'base.en' } as never]);
@@ -259,8 +307,15 @@ describe('system IPC modules', () => {
     listWhisperNodeModelsMock.mockImplementationOnce(() => {
       throw modelsError;
     });
-    expectConsoleErrorArgs('Failed to list whisper models:', modelsError);
     expect(await ipcHandlers.get('speech:list-models')?.(null)).toEqual([]);
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.speech.list_models',
+        outcome: 'failed',
+        error: modelsError,
+      })
+    );
 
     downloadWhisperNodeModelMock.mockImplementationOnce(async (_modelName, onProgress) => {
       onProgress?.({ model: 'base.en', phase: 'download', percent: 50 } as never);
@@ -278,12 +333,19 @@ describe('system IPC modules', () => {
 
     const downloadError = new Error('download failed');
     downloadWhisperNodeModelMock.mockRejectedValueOnce(downloadError);
-    expectConsoleErrorArgs('Failed to download whisper model:', downloadError);
     expect(await ipcHandlers.get('speech:download-model')?.({ sender }, 'large-v3')).toEqual({
       model: 'large-v3',
       success: false,
       error: 'download failed',
     });
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.speech.download_model',
+        outcome: 'failed',
+        error: downloadError,
+      })
+    );
   });
 
   it('returns tool-model config and title-generation fallbacks when provider selection fails', async () => {
@@ -297,8 +359,15 @@ describe('system IPC modules', () => {
     getToolModelMock.mockImplementationOnce(() => {
       throw getError;
     });
-    expectConsoleErrorArgs('Failed to get tool model:', getError);
     expect(await ipcHandlers.get('toolModel:get')?.(null)).toBeNull();
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.tool_model.get',
+        outcome: 'failed',
+        error: getError,
+      })
+    );
 
     generateTitleWithAgentMock.mockResolvedValueOnce('Generated Title');
     expect(await ipcHandlers.get('toolModel:generateTitle')?.(null, 'Conversation')).toBe(
@@ -307,7 +376,14 @@ describe('system IPC modules', () => {
 
     const titleError = new Error('title failed');
     generateTitleWithAgentMock.mockRejectedValueOnce(titleError);
-    expectConsoleErrorArgs('Failed to generate title with agent:', titleError);
     expect(await ipcHandlers.get('toolModel:generateTitle')?.(null, 'Conversation')).toBeNull();
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.tool_model.generate_title',
+        outcome: 'failed',
+        error: titleError,
+      })
+    );
   });
 });

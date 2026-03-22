@@ -4,7 +4,7 @@ import { app } from 'electron';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../../../shared/constants/daemon';
 import { getAppConfig } from '../../../core/config';
 import type { AppConfig } from '../../../shared/types/config';
-import { daemonLog } from '../../../core/daemon_logs';
+import { createDaemonLogger } from '../../../core/daemon_logs';
 import { startDaemonServer } from '../../../daemon/server';
 
 export const DAEMON_MODE_ARG = '--iki-daemon';
@@ -18,6 +18,13 @@ const AUTOSTART_DISABLED_VALUES = new Set(['0', 'false', 'off', 'no']);
 let embeddedDaemon: ReturnType<typeof startDaemonServer> | null = null;
 let embeddedBinding: { host: string; port: number } | null = null;
 let startPromise: Promise<void> | null = null;
+
+const getDaemonLifecycleLogger = () =>
+  createDaemonLogger({
+    module: 'daemon_lifecycle',
+    source: 'daemon-lifecycle',
+    userDataPath: app.getPath('userData'),
+  });
 
 const sleep = (ms: number): Promise<void> =>
   new Promise(resolve => {
@@ -145,7 +152,13 @@ const stopEmbeddedDaemon = () => {
     embeddedDaemon.server.close();
     embeddedDaemon.wss.close();
   } catch (error) {
-    daemonLog.warn('daemon-lifecycle', 'Failed to stop embedded daemon.', error, app.getPath('userData'));
+    getDaemonLifecycleLogger().event({
+      level: 'warn',
+      event: 'daemon.lifecycle.stop',
+      outcome: 'failed',
+      error,
+      message: 'Failed to stop embedded daemon.',
+    });
   } finally {
     embeddedDaemon = null;
     embeddedBinding = null;
@@ -167,7 +180,12 @@ export const isDesktopDaemonEmbeddedRunning = (): boolean => Boolean(embeddedDae
 export const startDesktopDaemon = async (options?: { ignoreAutostartEnv?: boolean }): Promise<void> => {
   if (process.argv.includes(DAEMON_MODE_ARG)) return;
   if (!options?.ignoreAutostartEnv && normalizeBoolEnv(process.env.IKI_DAEMON_AUTOSTART)) {
-    daemonLog.info('daemon-lifecycle', 'Autostart disabled by IKI_DAEMON_AUTOSTART.', undefined, app.getPath('userData'));
+    getDaemonLifecycleLogger().event({
+      level: 'info',
+      event: 'daemon.lifecycle.autostart',
+      outcome: 'skipped',
+      message: 'Autostart disabled by IKI_DAEMON_AUTOSTART.',
+    });
     return;
   }
   if (startPromise) return startPromise;
@@ -179,28 +197,36 @@ export const startDesktopDaemon = async (options?: { ignoreAutostartEnv?: boolea
     if (embeddedBinding && sameBinding(embeddedBinding, binding)) {
       const healthy = await probeDaemonHealth(binding.port, probeHost);
       if (healthy) {
-        daemonLog.info(
-          'daemon-lifecycle',
-          `Embedded daemon already running on http://${binding.host}:${binding.port}.`,
-          undefined,
-          app.getPath('userData')
-        );
+        getDaemonLifecycleLogger().event({
+          level: 'info',
+          event: 'daemon.lifecycle.start',
+          outcome: 'skipped',
+          message: `Embedded daemon already running on http://${binding.host}:${binding.port}.`,
+          data: {
+            host: binding.host,
+            port: binding.port,
+          },
+        });
         return;
       }
-      daemonLog.warn(
-        'daemon-lifecycle',
-        'Embedded daemon health check failed, restarting.',
-        undefined,
-        app.getPath('userData')
-      );
+      getDaemonLifecycleLogger().event({
+        level: 'warn',
+        event: 'daemon.lifecycle.healthcheck',
+        outcome: 'degraded',
+        message: 'Embedded daemon health check failed, restarting.',
+        data: {
+          host: binding.host,
+          port: binding.port,
+        },
+      });
       stopEmbeddedDaemon();
     } else if (embeddedBinding) {
-      daemonLog.info(
-        'daemon-lifecycle',
-        'Restarting embedded daemon for updated binding.',
-        undefined,
-        app.getPath('userData')
-      );
+      getDaemonLifecycleLogger().event({
+        level: 'info',
+        event: 'daemon.lifecycle.start',
+        outcome: 'started',
+        message: 'Restarting embedded daemon for updated binding.',
+      });
       stopEmbeddedDaemon();
     }
 
@@ -208,26 +234,35 @@ export const startDesktopDaemon = async (options?: { ignoreAutostartEnv?: boolea
 
     if (existingHealth?.ok) {
       if (existingHealth.host === binding.host) {
-        daemonLog.info(
-          'daemon-lifecycle',
-          `Existing daemon detected on ${binding.host}:${binding.port}, skipping embedded startup.`,
-          undefined,
-          app.getPath('userData')
-        );
+        getDaemonLifecycleLogger().event({
+          level: 'info',
+          event: 'daemon.lifecycle.start',
+          outcome: 'skipped',
+          message: `Existing daemon detected on ${binding.host}:${binding.port}, skipping embedded startup.`,
+          data: {
+            host: binding.host,
+            port: binding.port,
+          },
+        });
         return;
       }
-      daemonLog.warn(
-        'daemon-lifecycle',
-        `Port ${binding.port} already in use by daemon host=${existingHealth.host}, but settings host=${binding.host}.`,
-        undefined,
-        app.getPath('userData')
-      );
-      daemonLog.warn(
-        'daemon-lifecycle',
-        'Close the existing daemon instance first to apply the new host binding.',
-        undefined,
-        app.getPath('userData')
-      );
+      getDaemonLifecycleLogger().event({
+        level: 'warn',
+        event: 'daemon.lifecycle.binding',
+        outcome: 'denied',
+        message: `Port ${binding.port} already in use by daemon host=${existingHealth.host}, but settings host=${binding.host}.`,
+        data: {
+          configured_host: binding.host,
+          configured_port: binding.port,
+          existing_host: existingHealth.host,
+        },
+      });
+      getDaemonLifecycleLogger().event({
+        level: 'warn',
+        event: 'daemon.lifecycle.binding',
+        outcome: 'denied',
+        message: 'Close the existing daemon instance first to apply the new host binding.',
+      });
       return;
     }
 
@@ -235,25 +270,40 @@ export const startDesktopDaemon = async (options?: { ignoreAutostartEnv?: boolea
 
     const healthy = await waitForDaemonHealthy(binding.port, probeHost);
     if (!healthy) {
-      daemonLog.warn(
-        'daemon-lifecycle',
-        `Embedded daemon not healthy within ${STARTUP_WAIT_TIMEOUT_MS}ms; stopping embedded instance.`,
-        undefined,
-        app.getPath('userData')
-      );
+      getDaemonLifecycleLogger().event({
+        level: 'warn',
+        event: 'daemon.lifecycle.healthcheck',
+        outcome: 'failed',
+        message: `Embedded daemon not healthy within ${STARTUP_WAIT_TIMEOUT_MS}ms; stopping embedded instance.`,
+        data: {
+          host: binding.host,
+          port: binding.port,
+          timeout_ms: STARTUP_WAIT_TIMEOUT_MS,
+        },
+      });
       stopEmbeddedDaemon();
       return;
     }
 
-    daemonLog.info(
-      'daemon-lifecycle',
-      `Desktop-embedded daemon ready on http://${binding.host}:${binding.port}.`,
-      undefined,
-      app.getPath('userData')
-    );
+    getDaemonLifecycleLogger().event({
+      level: 'info',
+      event: 'daemon.lifecycle.start',
+      outcome: 'succeeded',
+      message: `Desktop-embedded daemon ready on http://${binding.host}:${binding.port}.`,
+      data: {
+        host: binding.host,
+        port: binding.port,
+      },
+    });
   })()
     .catch(error => {
-      daemonLog.warn('daemon-lifecycle', 'Autostart flow failed.', error, app.getPath('userData'));
+      getDaemonLifecycleLogger().event({
+        level: 'warn',
+        event: 'daemon.lifecycle.autostart',
+        outcome: 'failed',
+        error,
+        message: 'Autostart flow failed.',
+      });
     })
     .finally(() => {
       startPromise = null;

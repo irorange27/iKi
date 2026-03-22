@@ -3,6 +3,7 @@ import * as lifeReflectionDb from '../../../core/db/life_reflection';
 import * as memoryDb from '../../../core/db/memory';
 import * as tasksDb from '../../../core/db/tasks';
 import * as todosDb from '../../../core/db/todos';
+import { createLogger } from '../../../core/logger';
 import { getToolModel, type ToolModelConfig } from '../../../core/provider/tool_model';
 import { createSimplePromptTextGenerator } from '../../../core/runtimes/prompt_text_generator';
 import type {
@@ -27,6 +28,7 @@ const HOURLY_PERIOD_TYPE: LifeReflectionPeriodType = 'hour';
 const DAILY_PERIOD_TYPE: LifeReflectionPeriodType = 'day';
 const HOURLY_MEMORY_TAGS = ['life-reflection', 'hourly-reflection'];
 const DAILY_MEMORY_TAGS = ['life-reflection', 'daily-reflection'];
+const lifeReflectionLogger = createLogger({ module: 'life_reflection' });
 
 type ReflectionModelOutput = {
   summary: string;
@@ -571,7 +573,20 @@ const generateReflection = async (
       wroteMemory,
     };
   } catch (error) {
-    console.warn(`[Life] ${params.periodType} reflection generation failed:`, error);
+    lifeReflectionLogger.event({
+      level: 'warn',
+      event: 'life.reflection.generate',
+      outcome: 'failed',
+      error,
+      entity: {
+        period_type: params.periodType,
+        profile_id: params.profileId,
+      },
+      data: {
+        period_start: params.periodStart,
+        period_end: params.periodEnd,
+      },
+    });
     return null;
   }
 };

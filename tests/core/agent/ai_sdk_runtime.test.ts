@@ -1,13 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-const { getFullSystemPromptMock, getAppConfigMock, loggerErrorMock, loggerWarnMock } = vi.hoisted(
-  () => ({
-    getFullSystemPromptMock: vi.fn(),
-    getAppConfigMock: vi.fn(),
-    loggerErrorMock: vi.fn(),
-    loggerWarnMock: vi.fn(),
-  })
-);
+const { getFullSystemPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(() => ({
+  getFullSystemPromptMock: vi.fn(),
+  getAppConfigMock: vi.fn(),
+  loggerEventMock: vi.fn(),
+}));
 
 vi.mock('../../../src/core/provider/llm/factory', () => ({
   getFullSystemPrompt: getFullSystemPromptMock,
@@ -18,18 +15,12 @@ vi.mock('../../../src/core/config', () => ({
 }));
 
 vi.mock('../../../src/core/logger', () => ({
-  logger: {
-    error: loggerErrorMock,
-    warn: loggerWarnMock,
-    debug: vi.fn(),
-    info: vi.fn(),
-  },
   createLogger: vi.fn(() => ({
-    error: loggerErrorMock,
-    warn: loggerWarnMock,
+    error: vi.fn(),
+    warn: vi.fn(),
     debug: vi.fn(),
     info: vi.fn(),
-    event: vi.fn(),
+    event: loggerEventMock,
     span: vi.fn(),
   })),
 }));
@@ -156,7 +147,7 @@ describe('ai_sdk_runtime', () => {
     });
 
     expect(getAppConfigMock).not.toHaveBeenCalled();
-    expect(loggerErrorMock).not.toHaveBeenCalled();
+    expect(loggerEventMock).not.toHaveBeenCalled();
   });
 
   it('loads app config only when no explicit runtime override is provided', () => {
@@ -187,7 +178,7 @@ describe('ai_sdk_runtime', () => {
     });
 
     expect(getAppConfigMock).toHaveBeenCalledTimes(1);
-    expect(loggerErrorMock).not.toHaveBeenCalled();
+    expect(loggerEventMock).not.toHaveBeenCalled();
   });
 
   it('falls back to defaults and logs when app config loading fails', () => {
@@ -197,6 +188,13 @@ describe('ai_sdk_runtime', () => {
     });
 
     expect(loadAgentConfig()).toEqual(getDefaultAgentConfig());
-    expect(loggerErrorMock).toHaveBeenCalledWith('Failed to load agent config:', error);
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'agent.config.load',
+        outcome: 'failed',
+        error,
+      })
+    );
   });
 });

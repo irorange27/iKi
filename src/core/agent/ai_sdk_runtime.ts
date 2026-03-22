@@ -1,7 +1,7 @@
 import { jsonSchema, tool, type ModelMessage, type ToolApprovalResponse, type ToolSet } from 'ai';
 
 import { getAppConfig } from '../config';
-import { logger } from '../logger';
+import { createLogger } from '../logger';
 import { getFullSystemPrompt } from '../provider/llm/factory';
 import { extractTextFromModelMessageContent } from './model_messages';
 import {
@@ -11,6 +11,8 @@ import {
   type PartialAgentConfig,
   type ToolApprovalRequest,
 } from './types';
+
+const agentRuntimeLogger = createLogger({ module: 'ai_sdk_runtime' });
 
 export const getDefaultAgentConfig = (): AgentConfig =>
   AgentConfigSchema.parse({
@@ -34,7 +36,12 @@ const getAgentConfigBase = (overrideConfig?: PartialAgentConfig): PartialAgentCo
     const appConfig = getAppConfig();
     return appConfig?.agent || getDefaultAgentConfig();
   } catch (error) {
-    logger.error('Failed to load agent config:', error);
+    agentRuntimeLogger.event({
+      level: 'error',
+      event: 'agent.config.load',
+      outcome: 'failed',
+      error,
+    });
     return getDefaultAgentConfig();
   }
 };
@@ -48,14 +55,31 @@ export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfi
       ...overrideConfig,
     });
   } catch (error) {
-    logger.error('Failed to parse agent config:', error);
+    agentRuntimeLogger.event({
+      level: 'error',
+      event: 'agent.config.parse',
+      outcome: 'failed',
+      error,
+      data: {
+        source: 'primary',
+      },
+    });
     try {
       return AgentConfigSchema.parse({
         ...getDefaultAgentConfig(),
         ...overrideConfig,
       });
     } catch (parseError) {
-      logger.error('Failed to parse fallback agent config:', parseError);
+      agentRuntimeLogger.event({
+        level: 'error',
+        event: 'agent.config.parse',
+        outcome: 'degraded',
+        error: parseError,
+        message: 'Fallback agent config parsing failed; using defaults.',
+        data: {
+          source: 'fallback',
+        },
+      });
       return getDefaultAgentConfig();
     }
   }
@@ -84,12 +108,24 @@ export const buildAiToolSet = (
   registeredTools: AgentTool[]
 ): ToolSet | undefined => {
   if (!config.enableTools || registeredTools.length === 0) {
-    logger.debug('buildTools: tools disabled or no tools registered');
+    agentRuntimeLogger.event({
+      level: 'debug',
+      event: 'agent.tools.build',
+      outcome: 'skipped',
+      message: 'Tools disabled or no tools registered.',
+    });
     return undefined;
   }
 
   const tools: ToolSet = {};
-  logger.debug(`buildTools: building tools for ${registeredTools.length} registered tools`);
+  agentRuntimeLogger.event({
+    level: 'debug',
+    event: 'agent.tools.build',
+    outcome: 'started',
+    data: {
+      registered_tool_count: registeredTools.length,
+    },
+  });
 
   for (const agentTool of registeredTools) {
     if (agentTool.paramSchema) {
@@ -105,18 +141,28 @@ export const buildAiToolSet = (
         } as unknown as Parameters<typeof tool>[0]);
 
         const toolDefWithExecute = toolDef as unknown as { execute?: unknown };
-        logger.debug(`Tool ${agentTool.name} built successfully with Zod schema`, {
-          toolName: agentTool.name,
-          hasExecute: typeof toolDefWithExecute.execute === 'function',
+        agentRuntimeLogger.event({
+          level: 'debug',
+          event: 'agent.tool.prepare',
+          outcome: 'succeeded',
+          data: {
+            tool_name: agentTool.name,
+            schema_source: 'zod',
+            has_execute: typeof toolDefWithExecute.execute === 'function',
+          },
         });
 
         tools[agentTool.name] = toolDef;
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        const stack = error instanceof Error ? error.stack : undefined;
-        logger.error(`Failed to build tool ${agentTool.name} with Zod schema`, {
-          error: message,
-          stack,
+        agentRuntimeLogger.event({
+          level: 'error',
+          event: 'agent.tool.prepare',
+          outcome: 'failed',
+          error,
+          data: {
+            tool_name: agentTool.name,
+            schema_source: 'zod',
+          },
         });
         throw error;
       }
@@ -136,30 +182,54 @@ export const buildAiToolSet = (
         } as unknown as Parameters<typeof tool>[0]);
 
         const toolDefWithExecute = toolDef as unknown as { execute?: unknown };
-        logger.debug(`Tool ${agentTool.name} built successfully with JSON Schema`, {
-          toolName: agentTool.name,
-          hasExecute: typeof toolDefWithExecute.execute === 'function',
+        agentRuntimeLogger.event({
+          level: 'debug',
+          event: 'agent.tool.prepare',
+          outcome: 'succeeded',
+          data: {
+            tool_name: agentTool.name,
+            schema_source: 'json',
+            has_execute: typeof toolDefWithExecute.execute === 'function',
+          },
         });
 
         tools[agentTool.name] = toolDef;
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        const stack = error instanceof Error ? error.stack : undefined;
-        logger.error(`Failed to build tool ${agentTool.name} with JSON Schema`, {
-          error: message,
-          stack,
-          parameters: JSON.stringify(agentTool.parameters, null, 2),
+        agentRuntimeLogger.event({
+          level: 'error',
+          event: 'agent.tool.prepare',
+          outcome: 'failed',
+          error,
+          data: {
+            tool_name: agentTool.name,
+            schema_source: 'json',
+            parameters: agentTool.parameters,
+          },
         });
         throw error;
       }
       continue;
     }
 
-    logger.warn(`Tool ${agentTool.name} has neither parameters nor paramSchema`);
+    agentRuntimeLogger.event({
+      level: 'warn',
+      event: 'agent.tool.prepare',
+      outcome: 'skipped',
+      message: 'Tool has neither parameters nor paramSchema.',
+      data: {
+        tool_name: agentTool.name,
+      },
+    });
   }
 
-  logger.debug(`buildTools: built ${Object.keys(tools).length} tools`, {
-    toolNames: Object.keys(tools),
+  agentRuntimeLogger.event({
+    level: 'debug',
+    event: 'agent.tools.build',
+    outcome: 'succeeded',
+    data: {
+      built_tool_count: Object.keys(tools).length,
+      tool_names: Object.keys(tools),
+    },
   });
 
   return Object.keys(tools).length > 0 ? tools : undefined;

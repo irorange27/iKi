@@ -1,6 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import fs from 'node:fs/promises';
 
+import { createLogger } from '../../core/logger';
 import {
   getSkillFolderPath,
   getSkillRootsForUi,
@@ -10,6 +11,7 @@ import {
 import { getErrorMessage } from '../utils/errors';
 
 let skillsIpcRegistered = false;
+const skillsIpcLogger = createLogger({ module: 'skills_ipc' });
 
 export const registerSkillsIpc = (): void => {
   if (skillsIpcRegistered) return;
@@ -19,7 +21,12 @@ export const registerSkillsIpc = (): void => {
     try {
       return await listSkills({ forceRefresh: true });
     } catch (error: unknown) {
-      console.error('Failed to list skills:', error);
+      skillsIpcLogger.event({
+        level: 'error',
+        event: 'ipc.skills.list',
+        outcome: 'failed',
+        error,
+      });
       return [];
     }
   });
@@ -28,7 +35,12 @@ export const registerSkillsIpc = (): void => {
     try {
       return getSkillRootsForUi();
     } catch (error: unknown) {
-      console.error('Failed to get skill roots:', error);
+      skillsIpcLogger.event({
+        level: 'error',
+        event: 'ipc.skills.roots',
+        outcome: 'failed',
+        error,
+      });
       return [];
     }
   });
@@ -81,4 +93,3 @@ export const registerSkillsIpc = (): void => {
     }
   });
 };
-

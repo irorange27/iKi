@@ -1,3 +1,4 @@
+import { createLogger } from '../logger';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
 
@@ -32,6 +33,7 @@ export const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ')
 
 const formatRole = (role: SelectionMessage['role']) =>
   role === 'assistant' ? 'Assistant' : role === 'system' ? 'System' : 'User';
+const catalogSelectionLogger = createLogger({ module: 'catalog_selection_runtime' });
 
 export const buildTranscript = (
   messages: SelectionMessage[],
@@ -135,7 +137,17 @@ export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
       const result = await generator.generate(prompt);
       return request.parseSelection(result.response || '', request.availableCatalog);
     } catch (error) {
-      console.warn(`[${request.logLabel}] selection failed:`, error);
+      catalogSelectionLogger.event({
+        level: 'warn',
+        event: 'catalog.selection',
+        outcome: 'failed',
+        error,
+        data: {
+          label: request.logLabel,
+          available_catalog_count: request.availableCatalog.length,
+          message_count: request.messages.length,
+        },
+      });
       return [];
     }
   }

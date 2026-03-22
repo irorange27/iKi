@@ -1,3 +1,4 @@
+import { createLogger } from '../logger';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
 
@@ -9,6 +10,8 @@ export type LlmTitleRuntimeDeps = {
   getToolModel: () => ToolModelConfig | null;
   createGenerator: (config?: PromptTextGeneratorConfig) => PromptTextGenerator;
 };
+
+const titleRuntimeLogger = createLogger({ module: 'title_runtime' });
 
 export const sanitizeGeneratedTitle = (value: string): string | null => {
   const trimmed = value.trim();
@@ -34,7 +37,12 @@ export class LlmTitleRuntime implements TitleRuntime {
     try {
       const toolModel = this.deps.getToolModel();
       if (!toolModel) {
-        console.warn('No tool model available for title generation');
+        titleRuntimeLogger.event({
+          level: 'warn',
+          event: 'title.generate',
+          outcome: 'skipped',
+          message: 'Tool model unavailable; skipping title generation.',
+        });
         return null;
       }
 
@@ -54,7 +62,12 @@ export class LlmTitleRuntime implements TitleRuntime {
       const result = await generator.generate(text);
       return sanitizeGeneratedTitle(result.response || '');
     } catch (error) {
-      console.error('Failed to generate title with agent:', error);
+      titleRuntimeLogger.event({
+        level: 'error',
+        event: 'title.generate',
+        outcome: 'failed',
+        error,
+      });
       return null;
     }
   }

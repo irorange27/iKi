@@ -31,6 +31,9 @@ vi.mock('../../src/core/db/providers', () => ({
 }));
 
 vi.mock('../../src/core/daemon_logs', () => ({
+  createDaemonLogger: vi.fn(() => ({
+    event: vi.fn(),
+  })),
   daemonLog: {
     debug: vi.fn(),
     info: vi.fn(),

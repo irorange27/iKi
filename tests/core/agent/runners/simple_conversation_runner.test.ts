@@ -4,23 +4,37 @@ const {
   generateTextMock,
   getAppConfigMock,
   jsonSchemaMock,
-  loggerErrorMock,
+  loggerEventMock,
+  loggerSpanFailMock,
+  loggerSpanMock,
   stepCountIsMock,
   streamTextMock,
   toolMock,
   createModelMock,
   getFullSystemPromptMock,
-} = vi.hoisted(() => ({
-  generateTextMock: vi.fn(),
-  getAppConfigMock: vi.fn(),
-  jsonSchemaMock: vi.fn((schema: unknown) => schema),
-  loggerErrorMock: vi.fn(),
-  stepCountIsMock: vi.fn((count: number) => ({ type: 'step-count', count })),
-  streamTextMock: vi.fn(),
-  toolMock: vi.fn((definition: unknown) => definition),
-  createModelMock: vi.fn(),
-  getFullSystemPromptMock: vi.fn(),
-}));
+} = vi.hoisted(() => {
+  const loggerEventMock = vi.fn();
+  const loggerSpanFailMock = vi.fn();
+  const loggerSpanSucceedMock = vi.fn();
+  const loggerSpanMock = vi.fn(() => ({
+    started: {},
+    succeed: loggerSpanSucceedMock,
+    fail: loggerSpanFailMock,
+  }));
+  return {
+    generateTextMock: vi.fn(),
+    getAppConfigMock: vi.fn(),
+    jsonSchemaMock: vi.fn((schema: unknown) => schema),
+    loggerEventMock,
+    loggerSpanFailMock,
+    loggerSpanMock,
+    stepCountIsMock: vi.fn((count: number) => ({ type: 'step-count', count })),
+    streamTextMock: vi.fn(),
+    toolMock: vi.fn((definition: unknown) => definition),
+    createModelMock: vi.fn(),
+    getFullSystemPromptMock: vi.fn(),
+  };
+});
 
 vi.mock('ai', () => ({
   generateText: generateTextMock,
@@ -40,19 +54,13 @@ vi.mock('../../../../src/core/config', () => ({
 }));
 
 vi.mock('../../../../src/core/logger', () => ({
-  logger: {
-    error: loggerErrorMock,
-    warn: vi.fn(),
-    debug: vi.fn(),
-    info: vi.fn(),
-  },
   createLogger: vi.fn(() => ({
-    error: loggerErrorMock,
+    error: vi.fn(),
     warn: vi.fn(),
     debug: vi.fn(),
     info: vi.fn(),
-    event: vi.fn(),
-    span: vi.fn(),
+    event: loggerEventMock,
+    span: loggerSpanMock,
   })),
 }));
 
@@ -202,7 +210,7 @@ describe('SimpleConversationRunner', () => {
       })
     );
     expect(getAppConfigMock).not.toHaveBeenCalled();
-    expect(loggerErrorMock).not.toHaveBeenCalled();
+    expect(loggerSpanFailMock).not.toHaveBeenCalled();
   });
 
   it('reuses persisted history for approval continuation without requiring explicit history', async () => {
@@ -383,6 +391,6 @@ describe('SimpleConversationRunner', () => {
       })
     );
     expect(getAppConfigMock).not.toHaveBeenCalled();
-    expect(loggerErrorMock).not.toHaveBeenCalled();
+    expect(loggerSpanFailMock).not.toHaveBeenCalled();
   });
 });

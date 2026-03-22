@@ -1,11 +1,14 @@
 import * as chatMessageDb from '../../../core/db/chat_message';
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import { createLogger } from '../../../core/logger';
 import type { ChatMessage, ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/utils/guards';
 import { getErrorMessage } from '../../utils/errors';
 import { touchThreadRelationshipState } from '../relationship/relationship_service';
 import type { ChatMemory } from './chat_memory';
 import { sanitizeUiMessageJsonForStorage } from './chat_ui';
+
+const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
 export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   const listThreads = () => chatThreadDb.getChatThreads();
@@ -99,16 +102,35 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
         errorCode === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
         errorMessage.includes('UNIQUE constraint failed: chat_messages.id')
       ) {
-        console.warn(
-          `[ChatPersist][Main] duplicate-create id=${messageId} thread=${message.thread_id} parent=${message.parent_id || 'null'}`
-        );
+        chatPersistenceLogger.event({
+          level: 'warn',
+          event: 'chat.message.create',
+          outcome: 'degraded',
+          message: 'Duplicate chat message create ignored.',
+          entity: {
+            message_id: messageId,
+            thread_id: typeof message.thread_id === 'string' ? message.thread_id : null,
+            parent_id: typeof message.parent_id === 'string' ? message.parent_id : null,
+          },
+        });
         const existing = chatMessageDb.getChatMessage(messageId);
         if (existing) return existing;
       }
 
-      console.error(
-        `[ChatPersist][Main] create-failed id=${messageId} thread=${message.thread_id} code=${errorCode || 'unknown'} error=${errorMessage}`
-      );
+      chatPersistenceLogger.event({
+        level: 'error',
+        event: 'chat.message.create',
+        outcome: 'failed',
+        error,
+        entity: {
+          message_id: messageId,
+          thread_id: typeof message.thread_id === 'string' ? message.thread_id : null,
+        },
+        data: {
+          error_code: errorCode || 'unknown',
+          error_message: errorMessage,
+        },
+      });
       throw error;
     }
 
@@ -155,7 +177,18 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
         touchThreadRelationshipState(threadId);
       }
     } catch (error) {
-      console.warn('[Memory][Main] short memory update failed:', getErrorMessage(error));
+      chatPersistenceLogger.event({
+        level: 'warn',
+        event: 'chat.message.update',
+        outcome: 'degraded',
+        error,
+        entity: {
+          message_id: id,
+        },
+        data: {
+          error_message: getErrorMessage(error),
+        },
+      });
     }
 
     return result;

@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 
+import { createLogger } from '../../core/logger';
 import {
   downloadWhisperNodeModel,
   getSpeechStatus,
@@ -9,6 +10,7 @@ import {
 import type { SpeechTranscriptionInput } from '../../shared/types/speech';
 
 let speechIpcRegistered = false;
+const speechIpcLogger = createLogger({ module: 'speech_ipc' });
 
 export const registerSpeechIpc = (): void => {
   if (speechIpcRegistered) return;
@@ -18,7 +20,12 @@ export const registerSpeechIpc = (): void => {
     try {
       return getSpeechStatus();
     } catch (error: unknown) {
-      console.error('Failed to get speech status:', error);
+      speechIpcLogger.event({
+        level: 'error',
+        event: 'ipc.speech.get_status',
+        outcome: 'failed',
+        error,
+      });
       return { available: false, reason: 'Speech service unavailable' };
     }
   });
@@ -27,7 +34,12 @@ export const registerSpeechIpc = (): void => {
     try {
       return await transcribeSpeech(input);
     } catch (error: unknown) {
-      console.error('Speech transcription failed:', error);
+      speechIpcLogger.event({
+        level: 'error',
+        event: 'ipc.speech.transcribe',
+        outcome: 'failed',
+        error,
+      });
       throw error;
     }
   });
@@ -36,7 +48,12 @@ export const registerSpeechIpc = (): void => {
     try {
       return listWhisperNodeModels();
     } catch (error: unknown) {
-      console.error('Failed to list whisper models:', error);
+      speechIpcLogger.event({
+        level: 'error',
+        event: 'ipc.speech.list_models',
+        outcome: 'failed',
+        error,
+      });
       return [];
     }
   });
@@ -47,7 +64,15 @@ export const registerSpeechIpc = (): void => {
         event.sender.send('speech:download-progress', payload);
       });
     } catch (error: unknown) {
-      console.error('Failed to download whisper model:', error);
+      speechIpcLogger.event({
+        level: 'error',
+        event: 'ipc.speech.download_model',
+        outcome: 'failed',
+        error,
+        entity: {
+          model: modelName,
+        },
+      });
       return {
         model: modelName,
         success: false,

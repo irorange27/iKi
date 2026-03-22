@@ -37,7 +37,7 @@ const {
   resolveToolsForClientMock,
   mkdirSyncMock,
   writeFileSyncMock,
-  daemonLogInfoMock,
+  daemonLoggerEventMock,
   applyAppLoggingConfigMock,
   createNapCatReverseBridgeMock,
   createServerMock,
@@ -109,7 +109,7 @@ const {
   const setPlatformInfoMock = vi.fn();
   const mkdirSyncMock = vi.fn();
   const writeFileSyncMock = vi.fn();
-  const daemonLogInfoMock = vi.fn();
+  const daemonLoggerEventMock = vi.fn();
   const applyAppLoggingConfigMock = vi.fn();
 
   let requestHandler: ((req: unknown, res: unknown) => unknown | Promise<unknown>) | null = null;
@@ -219,7 +219,7 @@ const {
     resolveToolsForClientMock,
     mkdirSyncMock,
     writeFileSyncMock,
-    daemonLogInfoMock,
+    daemonLoggerEventMock,
     applyAppLoggingConfigMock,
     createNapCatReverseBridgeMock,
     createServerMock,
@@ -251,8 +251,11 @@ vi.mock('../../src/core/mcp', () => ({
 }));
 
 vi.mock('../../src/core/daemon_logs', () => ({
+  createDaemonLogger: vi.fn(() => ({
+    event: daemonLoggerEventMock,
+  })),
   daemonLog: {
-    info: daemonLogInfoMock,
+    info: vi.fn(),
   },
 }));
 

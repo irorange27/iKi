@@ -1,11 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { loggerEventMock } = vi.hoisted(() => ({
+  loggerEventMock: vi.fn(),
+}));
+
 vi.mock('../../../src/core/provider/tool_model', () => ({
   getToolModel: vi.fn(),
 }));
 
 vi.mock('../../../src/core/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
+}));
+
+vi.mock('../../../src/core/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: loggerEventMock,
+    span: vi.fn(),
+  })),
 }));
 
 import { getToolModel } from '../../../src/core/provider/tool_model';
@@ -39,7 +54,6 @@ describe('generateThreadSummary', () => {
   });
 
   it('returns null and warns when no tool model is available', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     getToolModelMock.mockReturnValue(null);
 
     const result = await generateThreadSummary({
@@ -48,8 +62,12 @@ describe('generateThreadSummary', () => {
 
     expect(result).toBeNull();
     expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[Context] No tool model available for thread summary generation'
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'thread.summary.generate',
+        outcome: 'skipped',
+      })
     );
   });
 
@@ -132,7 +150,6 @@ describe('generateThreadSummary', () => {
 
   it('returns null and warns when summary generation throws', async () => {
     const error = new Error('generator failed');
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     createSimplePromptTextGeneratorMock.mockReturnValue({
       generate: vi.fn().mockRejectedValue(error),
     } as never);
@@ -142,6 +159,13 @@ describe('generateThreadSummary', () => {
     });
 
     expect(result).toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith('[Context] thread summary generation failed:', error);
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'thread.summary.generate',
+        outcome: 'failed',
+        error,
+      })
+    );
   });
 });
