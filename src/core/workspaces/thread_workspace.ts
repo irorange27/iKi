@@ -40,7 +40,12 @@ export const getThreadWorkspaceSelection = (
 
 export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): string => {
   const selection = getThreadWorkspaceSelection(threadId);
-  if (!selection?.workspaceId) return '';
+  if (!selection?.threadId || !selection.workspaceId) {
+    return (
+      'No workspace is selected for this conversation. Do not use filesystem or shell tools ' +
+      'until the user selects a workspace in the composer.'
+    );
+  }
 
   if (!selection.workspace) {
     return (
@@ -49,8 +54,10 @@ export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): str
     );
   }
 
-  const workspacePath = typeof selection.workspace.path === 'string' ? selection.workspace.path.trim() : '';
-  const workspaceName = typeof selection.workspace.name === 'string' ? selection.workspace.name.trim() : '';
+  const workspacePath =
+    typeof selection.workspace.path === 'string' ? selection.workspace.path.trim() : '';
+  const workspaceName =
+    typeof selection.workspace.name === 'string' ? selection.workspace.name.trim() : '';
 
   if (!workspacePath) {
     return (

@@ -171,8 +171,7 @@ export interface AppConfig {
     model: string;
   };
   toolExecution: {
-    shellApprovalMode: 'high-risk' | 'always' | 'never';
-    shellHighRiskPatterns: string[];
+    shellApprovalMode: 'always';
   };
   mcp: {
     enabled: boolean;

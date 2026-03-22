@@ -1,7 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { getVisibleWorkspaces } from '../db/workspaces';
 import {
   getThreadWorkspaceSelection,
   type ThreadWorkspaceSelection,
@@ -31,9 +30,19 @@ const resolveThreadWorkspaceSelection = (): ThreadWorkspaceSelection | null => {
   return getThreadWorkspaceSelection(threadId);
 };
 
-const resolveExplicitWorkspaceRoots = async (): Promise<WorkspaceRoot[] | null> => {
+const getWorkspaceSelectionRequirementError = (): Error =>
+  new Error(
+    'Filesystem and shell tools require an active conversation workspace. Choose a workspace in the composer before using local tools.'
+  );
+
+const resolveExplicitWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
   const selection = resolveThreadWorkspaceSelection();
-  if (!selection?.workspaceId) return null;
+  if (!selection?.threadId) {
+    throw getWorkspaceSelectionRequirementError();
+  }
+  if (!selection.workspaceId) {
+    throw getWorkspaceSelectionRequirementError();
+  }
 
   if (!selection.workspace) {
     throw new Error(
@@ -54,36 +63,7 @@ const resolveExplicitWorkspaceRoots = async (): Promise<WorkspaceRoot[] | null> 
 };
 
 export const resolveWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
-  const explicitRoots = await resolveExplicitWorkspaceRoots();
-  if (explicitRoots && explicitRoots.length > 0) {
-    return explicitRoots;
-  }
-
-  const candidateRoots: string[] = [];
-  const workspaces = getVisibleWorkspaces();
-  for (const workspace of workspaces) {
-    const workspacePath = normalizeWorkspacePath(workspace.path);
-    if (!workspacePath) continue;
-    candidateRoots.push(path.resolve(workspacePath));
-  }
-
-  const cwdRoot = path.resolve(process.cwd());
-  if (!candidateRoots.includes(cwdRoot)) {
-    candidateRoots.push(cwdRoot);
-  }
-
-  const roots: WorkspaceRoot[] = [];
-  const seen = new Set<string>();
-
-  for (const candidateRoot of candidateRoots.length > 0 ? candidateRoots : [cwdRoot]) {
-    const realPath = await resolveRootRealPath(candidateRoot);
-    const key = `${candidateRoot}\0${realPath}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    roots.push({ resolvedPath: candidateRoot, realPath });
-  }
-
-  return roots;
+  return await resolveExplicitWorkspaceRoots();
 };
 
 const isPathWithinRoot = (root: string, candidate: string): boolean => {
@@ -136,7 +116,10 @@ const resolveExistingAncestorRealPath = async (targetPath: string): Promise<stri
 
 export const resolveReadableWorkspacePath = async (inputPath: string): Promise<string> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath ?? path.resolve(process.cwd());
+  const primaryRoot = roots[0]?.resolvedPath;
+  if (!primaryRoot) {
+    throw getWorkspaceSelectionRequirementError();
+  }
   const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
   const actualPath = await fs.realpath(absolutePath);
   ensurePathWithinWorkspaceRoots(inputPath, actualPath, roots);
@@ -145,7 +128,10 @@ export const resolveReadableWorkspacePath = async (inputPath: string): Promise<s
 
 export const resolveWritableWorkspacePath = async (inputPath: string): Promise<string> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath ?? path.resolve(process.cwd());
+  const primaryRoot = roots[0]?.resolvedPath;
+  if (!primaryRoot) {
+    throw getWorkspaceSelectionRequirementError();
+  }
   const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
 
   const existingTargetRealPath = await tryRealpath(absolutePath);
@@ -154,14 +140,19 @@ export const resolveWritableWorkspacePath = async (inputPath: string): Promise<s
     return absolutePath;
   }
 
-  const existingAncestorRealPath = await resolveExistingAncestorRealPath(path.dirname(absolutePath));
+  const existingAncestorRealPath = await resolveExistingAncestorRealPath(
+    path.dirname(absolutePath)
+  );
   ensurePathWithinWorkspaceRoots(inputPath, existingAncestorRealPath, roots);
   return absolutePath;
 };
 
 export const resolveDeleteWorkspacePath = async (inputPath: string): Promise<string> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath ?? path.resolve(process.cwd());
+  const primaryRoot = roots[0]?.resolvedPath;
+  if (!primaryRoot) {
+    throw getWorkspaceSelectionRequirementError();
+  }
   const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
   const parentRealPath = await resolveExistingAncestorRealPath(path.dirname(absolutePath));
   ensurePathWithinWorkspaceRoots(inputPath, parentRealPath, roots);
@@ -170,7 +161,10 @@ export const resolveDeleteWorkspacePath = async (inputPath: string): Promise<str
 
 export const resolveShellWorkingDirectory = async (inputCwd?: string): Promise<string> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath ?? path.resolve(process.cwd());
+  const primaryRoot = roots[0]?.resolvedPath;
+  if (!primaryRoot) {
+    throw getWorkspaceSelectionRequirementError();
+  }
   const cwd = inputCwd?.trim()
     ? resolveAbsoluteWorkspacePath(inputCwd.trim(), primaryRoot)
     : primaryRoot;

@@ -36,6 +36,9 @@ const createWorkspace = (workspacePath: string) => ({
   updated_at: new Date(0).toISOString(),
 });
 
+const runInWorkspaceContext = async <T>(threadId: string, fn: () => Promise<T>): Promise<T> =>
+  await runWithToolRuntimeContext({ threadId }, fn);
+
 const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
 
 describe('file tools workspace boundaries', () => {
@@ -56,12 +59,16 @@ describe('file tools workspace boundaries', () => {
     await fs.mkdir(path.join(workspaceRoot, 'docs'), { recursive: true });
     await fs.writeFile(path.join(workspaceRoot, 'docs', 'note.txt'), 'hello workspace', 'utf8');
     getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
 
     const tool = new ReadFileTool();
-    const result = (await tool.execute({ path: 'docs/note.txt' })) as {
-      path: string;
-      content: string;
-    };
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      tool.execute({ path: 'docs/note.txt' })
+    )) as { path: string; content: string };
 
     expect(result.path).toBe(path.join(workspaceRoot, 'docs', 'note.txt'));
     expect(result.content).toBe('hello workspace');
@@ -75,12 +82,17 @@ describe('file tools workspace boundaries', () => {
     await fs.writeFile(path.join(outsideRoot, 'secret.txt'), 'outside', 'utf8');
     await fs.symlink(outsideRoot, path.join(workspaceRoot, 'shared'), symlinkType);
     getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
 
     const tool = new ReadFileTool();
 
-    await expect(tool.execute({ path: 'shared/secret.txt' })).rejects.toThrow(
-      /outside workspace roots/i
-    );
+    await expect(
+      runInWorkspaceContext('thread_1', async () => tool.execute({ path: 'shared/secret.txt' }))
+    ).rejects.toThrow(/outside workspace roots/i);
   });
 
   it('rejects writes that escape through a symlinked directory', async () => {
@@ -91,14 +103,21 @@ describe('file tools workspace boundaries', () => {
     await fs.mkdir(outsideRoot, { recursive: true });
     await fs.symlink(outsideRoot, path.join(workspaceRoot, 'shared'), symlinkType);
     getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
 
     const tool = new WriteFileTool();
 
     await expect(
-      tool.execute({
-        path: 'shared/created.txt',
-        content: 'nope',
-      })
+      runInWorkspaceContext('thread_1', async () =>
+        tool.execute({
+          path: 'shared/created.txt',
+          content: 'nope',
+        })
+      )
     ).rejects.toThrow(/outside workspace roots/i);
 
     await expect(fs.access(outsideFile)).rejects.toThrow();
@@ -135,7 +154,7 @@ describe('file tools workspace boundaries', () => {
     });
 
     const tool = new ReadFileTool();
-    const result = await runWithToolRuntimeContext({ threadId: 'thread_1' }, async () =>
+    const result = await runInWorkspaceContext('thread_1', async () =>
       tool.execute({ path: 'docs/note.txt' })
     );
 
@@ -160,5 +179,23 @@ describe('file tools workspace boundaries', () => {
         tool.execute({ path: 'docs/note.txt' })
       )
     ).rejects.toThrow(/selected workspace "workspace_missing" is unavailable/i);
+  });
+
+  it('fails closed when no workspace is selected for the active thread', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(path.join(workspaceRoot, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, 'docs', 'note.txt'), 'hello workspace', 'utf8');
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: null,
+    });
+    getWorkspaceMock.mockReturnValue(null);
+
+    const tool = new ReadFileTool();
+
+    await expect(
+      runInWorkspaceContext('thread_1', async () => tool.execute({ path: 'docs/note.txt' }))
+    ).rejects.toThrow(/require an active conversation workspace/i);
   });
 });

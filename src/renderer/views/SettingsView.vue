@@ -87,7 +87,7 @@
         <div class="config-group">
           <h3>Shell Tool Approval</h3>
           <p class="group-description">
-            Configure when shell commands require manual approval before execution.
+            Shell commands are always manual-only and always require approval before execution.
           </p>
           <div class="input-label">
             <span>Approval Mode</span>
@@ -99,18 +99,6 @@
               @update:model-value="updateShellApprovalMode"
             />
           </div>
-          <label class="input-label">
-            <span>Custom High-risk Regex (one per line)</span>
-            <textarea
-              rows="5"
-              :value="shellHighRiskPatternText"
-              placeholder="Example: \\bgit\\s+push\\s+--force\\b"
-              @input="updateShellHighRiskPatterns(($event.target as HTMLTextAreaElement).value)"
-            />
-          </label>
-          <p class="group-description">
-            Patterns here are matched in high-risk mode and force approval when matched.
-          </p>
         </div>
 
         <div class="config-group">
@@ -640,11 +628,7 @@ const toolModelSelectOptions = computed(() => [
   })),
 ]);
 
-const shellApprovalModeOptions = [
-  { value: 'high-risk', label: 'Only High-risk Commands (Recommended)' },
-  { value: 'always', label: 'Always Require Approval' },
-  { value: 'never', label: 'Never Require Approval' },
-];
+const shellApprovalModeOptions = [{ value: 'always', label: 'Always Require Approval (Required)' }];
 
 const languageOptions = [
   { value: 'en', label: 'English' },
@@ -750,7 +734,7 @@ const updateToolExecution = <K extends keyof AppConfig['toolExecution']>(
 };
 
 const updateShellApprovalMode = (value: string) => {
-  if (value === 'high-risk' || value === 'always' || value === 'never') {
+  if (value === 'always') {
     updateToolExecution('shellApprovalMode', value);
   }
 };
@@ -897,19 +881,6 @@ const updateKeybinding = <K extends keyof AppConfig['keybindings']>(key: K, valu
   config.value.keybindings[key] = value;
   autoSave();
 };
-const shellHighRiskPatternText = computed(() =>
-  (config.value.toolExecution.shellHighRiskPatterns || []).join('\n')
-);
-
-const updateShellHighRiskPatterns = (value: string) => {
-  const patterns = value
-    .split(/\r?\n/)
-    .map(pattern => pattern.trim())
-    .filter(Boolean)
-    .slice(0, 100);
-  updateToolExecution('shellHighRiskPatterns', patterns);
-};
-
 const resetSection = (section: keyof AppConfig) => {
   configStore.resetSection(section);
   saved.value = true;

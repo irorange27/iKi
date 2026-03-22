@@ -104,8 +104,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     model: '',
   },
   toolExecution: {
-    shellApprovalMode: 'high-risk',
-    shellHighRiskPatterns: [],
+    shellApprovalMode: 'always',
   },
   mcp: {
     enabled: false,

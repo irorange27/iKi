@@ -134,28 +134,15 @@ describe('SettingsView general custom selects', () => {
     wrapper.unmount();
   });
 
-  it('updates shell approval mode and language through shared settings selects', async () => {
+  it('renders shell approval as fixed always-on policy and still updates language', async () => {
     const { wrapper, store } = await mountSettingsView();
 
-    expect(wrapper.find('.general-shell-approval-select .settings-select-trigger').text()).toContain(
-      'Only High-risk Commands'
-    );
+    expect(
+      wrapper.find('.general-shell-approval-select .settings-select-trigger').text()
+    ).toContain('Always Require Approval');
     expect(wrapper.find('.general-language-select .settings-select-trigger').text()).toContain(
       'English'
     );
-
-    await wrapper.find('.general-shell-approval-select .settings-select-trigger').trigger('click');
-
-    const approvalOption = wrapper
-      .findAll('.general-shell-approval-select .settings-select-option')
-      .find(candidate => candidate.text().includes('Always Require Approval'));
-
-    if (!approvalOption) {
-      throw new Error('Always Require Approval option not found');
-    }
-
-    await approvalOption.trigger('click');
-
     expect(store.config.toolExecution.shellApprovalMode).toBe('always');
 
     await wrapper.find('.general-language-select .settings-select-trigger').trigger('click');

@@ -176,9 +176,8 @@ const ToolModelSchema = z
 const ToolExecutionSchema = z
   .object({
     shellApprovalMode: z
-      .enum(['high-risk', 'always', 'never'])
+      .literal('always')
       .catch(DEFAULT_APP_CONFIG.toolExecution.shellApprovalMode),
-    shellHighRiskPatterns: stringArrayField(DEFAULT_APP_CONFIG.toolExecution.shellHighRiskPatterns),
   })
   .catch(DEFAULT_APP_CONFIG.toolExecution);
 
