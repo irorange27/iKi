@@ -4,7 +4,6 @@
       <ChatMessageReferences
         v-if="message.role === 'assistant'"
         :message="message"
-        @open-skill="emit('open-skill', $event)"
       />
 
       <div class="message-content">
@@ -60,7 +59,6 @@ const emit = defineEmits<{
     }
   ): void;
   (event: 'edit-user-message', message: UIMessage): void;
-  (event: 'open-skill', skillId: string): void;
 }>();
 </script>
 

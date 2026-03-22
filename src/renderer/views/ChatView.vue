@@ -40,7 +40,6 @@
               :get-mcp-server-label="getMcpServerLabel"
               @approve-tool="handleToolApprovalEvent"
               @edit-user-message="beginEditMessage"
-              @open-skill="openSkillReference"
             />
           </div>
         </div>
@@ -117,7 +116,7 @@ const messageStore = createChatMessageStore(chat);
 const { handleMarkdownClick } = useMarkdownCopy();
 
 const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-const { loadToolSources, getMcpServerLabel, openSkillReference } = useToolMetadata({
+const { loadToolSources, getMcpServerLabel } = useToolMetadata({
   electronAPI,
 });
 
