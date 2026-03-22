@@ -19,6 +19,7 @@ import { migration as migration016IdentityProfiles } from './016_add_identity_pr
 import { migration as migration017LifeRuntime } from './017_add_life_runtime_tables';
 import { migration as migration018LifeReflections } from './018_add_life_reflections_table';
 import { migration as migration019RelationshipStates } from './019_add_relationship_states_table';
+import { migration as migration020ChatToolApprovalSkillIds } from './020_add_chat_tool_approval_skill_ids';
 
 // Register all migrations here
 const migrations = [
@@ -42,6 +43,7 @@ const migrations = [
   migration017LifeRuntime,
   migration018LifeReflections,
   migration019RelationshipStates,
+  migration020ChatToolApprovalSkillIds,
   // Add more migrations here as needed
 ];
 

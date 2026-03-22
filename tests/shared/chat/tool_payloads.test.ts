@@ -28,6 +28,14 @@ describe('parseToolInput', () => {
     expect(parsed.input.title).toBe('Today');
     expect(parsed.input.items?.[0]?.content).toBe('Ship feature');
   });
+
+  it('parses load_skill inputs from JSON', () => {
+    const parsed = parseToolInput('load_skill', '{"id":"user:planner"}');
+
+    expect(parsed.kind).toBe('load_skill');
+    if (parsed.kind !== 'load_skill') throw new Error('Expected load_skill payload');
+    expect(parsed.input.id).toBe('user:planner');
+  });
 });
 
 describe('parseToolOutput', () => {
@@ -54,5 +62,18 @@ describe('parseToolOutput', () => {
     if (parsed.kind !== 'read_todo_list') throw new Error('Expected read_todo_list payload');
     expect(parsed.output.list?.title).toBe('Today');
     expect(parsed.output.list?.items?.[0]?.status).toBe('pending');
+  });
+
+  it('parses load_skill outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'load_skill',
+      '{"id":"user:planner","name":"Planner","source":"user","content":"<skill>...</skill>","truncated":false}'
+    );
+
+    expect(parsed.kind).toBe('load_skill');
+    if (parsed.kind !== 'load_skill') throw new Error('Expected load_skill payload');
+    expect(parsed.output.id).toBe('user:planner');
+    expect(parsed.output.name).toBe('Planner');
+    expect(parsed.output.truncated).toBe(false);
   });
 });

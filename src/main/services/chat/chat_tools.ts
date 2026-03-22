@@ -1,4 +1,5 @@
 import { defaultToolRegistry } from '../../../core/tools';
+import type { AffectState } from '../../../core/emotion/affect_state';
 import { selectToolsWithAgent } from '../../../core/provider/tool_selection';
 import type { ChatInputMessage } from './chat_types';
 import { toLlmChatMessages } from './chat_ui';
@@ -86,6 +87,7 @@ export const resolveToolNames = async (params: {
   tools?: string[];
   mcpServerIds?: string[];
   inputMessages?: ChatInputMessage[];
+  affectState?: AffectState | null;
 }): Promise<{ explicitTools: string[]; resolvedTools: string[]; mode: ToolResolveMode }> => {
   const hasExplicitToolsParam = Array.isArray(params.tools);
   const hasExplicitMcpServerIdsParam = Array.isArray(params.mcpServerIds);
@@ -112,6 +114,7 @@ export const resolveToolNames = async (params: {
       ? await selectToolsWithAgent({
           messages: toLlmChatMessages(params.inputMessages ?? []),
           availableTools: catalog,
+          affectState: params.affectState,
         })
       : null;
   const resolvedTools =

@@ -37,6 +37,7 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             if (
               partType === 'memory-retrieval' ||
               partType === 'skill-usage' ||
+              partType === 'affect-signal' ||
               partType === 'context-report'
             ) {
               return null;

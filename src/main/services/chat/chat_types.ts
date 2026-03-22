@@ -1,6 +1,7 @@
 import type { ModelMessage, UIMessage } from 'ai';
 import type { ConversationRunnerStreamEvent } from '../../../core/agent';
 import type { ContextReportItem } from '../../../shared/chat/message_parts';
+import type { AffectSignal } from '../../../shared/emotion/affect';
 
 export type ChatWebContents = {
   id: number;
@@ -32,6 +33,7 @@ export type UiChunkEmitter = {
     query: string;
     results: Array<Record<string, unknown>>;
   }) => void;
+  emitAffectSignal: (payload: AffectSignal) => void;
   emitContextReport: (payload: {
     totalEstimatedTokens: number;
     retainedRecentMessages: number;

@@ -26,6 +26,7 @@ vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
     emitTextDelta: vi.fn(),
     emitToolEvent: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
+    emitAffectSignal: vi.fn(),
     emitContextReport: vi.fn(),
     finish: vi.fn(),
     abort: vi.fn(),
@@ -112,6 +113,7 @@ describe('createChatApproval', () => {
           model: 'gpt-4o-mini',
           systemPrompt: 'system prompt',
           enabledTools: ['web'],
+          availableSkillIds: [],
         },
       }
     );
@@ -124,6 +126,7 @@ describe('createChatApproval', () => {
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
       enabled_tools: '["web"]',
+      available_skill_ids: '[]',
     });
     expect(upsertChatToolApprovalsMock).toHaveBeenCalledWith([
       {
@@ -175,6 +178,7 @@ describe('createChatApproval', () => {
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
       enabled_tools: '["web"]',
+      available_skill_ids: '[]',
       created_at: '2026-03-19T00:00:00.000Z',
       updated_at: '2026-03-19T00:00:00.000Z',
     });
@@ -261,6 +265,7 @@ describe('createChatApproval', () => {
           providerType: 'openai',
           model: 'gpt-4o-mini',
           enabledTools: ['web'],
+          availableSkillIds: [],
         }),
       })
     );
@@ -269,5 +274,114 @@ describe('createChatApproval', () => {
       awaitingApproval: false,
       stopped: false,
     });
+  });
+
+  it('re-registers load_skill when a recovered approval session carries selected skills', async () => {
+    const resumedStream = vi.fn().mockResolvedValue({ awaitingApproval: false });
+    createToolLoopRunnerMock.mockReturnValue({
+      stream: resumedStream,
+    });
+
+    const runner = {
+      registerTool: vi.fn(),
+    };
+    createChatConversationRunnerMock.mockReturnValue(runner as never);
+    defaultToolRegistryGetMock.mockReturnValue({
+      name: 'web',
+      description: 'Search',
+      parameters: {},
+      handler: vi.fn(),
+    } as never);
+
+    getChatToolApprovalMock.mockReturnValue({
+      approval_id: 'approval_2',
+      session_id: 'assistant_skill_1',
+      tool_call_id: 'call_2',
+      tool_name: 'web',
+      tool_args: '{"q":"hello"}',
+      state: 'pending',
+      decision: null,
+      decision_reason: null,
+      responded_at: null,
+      created_at: '2026-03-19T00:00:00.000Z',
+      updated_at: '2026-03-19T00:00:00.000Z',
+    });
+    getChatToolApprovalSessionMock.mockReturnValue({
+      session_id: 'assistant_skill_1',
+      thread_id: 'thread_skill_1',
+      assistant_message_id: 'assistant_skill_1',
+      provider_type: 'openai',
+      model: 'gpt-4o-mini',
+      system_prompt: 'system prompt',
+      enabled_tools: '["web"]',
+      available_skill_ids: '["user:planner"]',
+      created_at: '2026-03-19T00:00:00.000Z',
+      updated_at: '2026-03-19T00:00:00.000Z',
+    });
+    getActiveChatToolApprovalsBySessionMock.mockReturnValue([
+      {
+        approval_id: 'approval_2',
+        session_id: 'assistant_skill_1',
+        tool_call_id: 'call_2',
+        tool_name: 'web',
+        tool_args: '{"q":"hello"}',
+        state: 'pending',
+        decision: null,
+        decision_reason: null,
+        responded_at: null,
+        created_at: '2026-03-19T00:00:00.000Z',
+        updated_at: '2026-03-19T00:00:00.000Z',
+      },
+    ]);
+    getChatMessagesMock.mockReturnValue([
+      {
+        id: 'msg_skill_1',
+        thread_id: 'thread_skill_1',
+        parent_id: null,
+        slot_id: null,
+        depth: 0,
+        message: JSON.stringify({
+          id: 'msg_skill_1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hello' }],
+        }),
+        timestamp: '2026-03-19T00:00:00.000Z',
+        metadata: '{}',
+        created_at: '2026-03-19T00:00:00.000Z',
+        updated_at: '2026-03-19T00:00:00.000Z',
+      },
+    ]);
+
+    const approvals = createChatApproval({
+      activeStreams: new Map(),
+      memory: {
+        injectMemoryIntoMessages: vi.fn(messages => messages),
+      } as never,
+      usage: {
+        recordUsageEvent: vi.fn(),
+      },
+    });
+
+    await approvals.approveTool({ id: 11, send: vi.fn() }, 'approval_2', true);
+
+    expect(runner.registerTool).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        name: 'load_skill',
+      })
+    );
+    expect(runner.registerTool).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        name: 'web',
+      })
+    );
+    expect(resumedStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvalContext: expect.objectContaining({
+          availableSkillIds: ['user:planner'],
+        }),
+      })
+    );
   });
 });

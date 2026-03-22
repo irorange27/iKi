@@ -7,6 +7,8 @@ import {
   DeleteFileOutputSchema,
   FetchToolInputSchemaUi,
   FetchToolOutputSchema,
+  LoadSkillInputSchemaUi,
+  LoadSkillOutputSchema,
   ListTodoListsInputSchemaUi,
   ListTodoListsOutputSchema,
   ListDirInputSchemaUi,
@@ -34,6 +36,7 @@ export type ReadFileToolInput = z.infer<typeof ReadFileInputSchemaUi>;
 export type WriteFileToolInput = z.infer<typeof WriteFileInputSchemaUi>;
 export type ListDirToolInput = z.infer<typeof ListDirInputSchemaUi>;
 export type DeleteFileToolInput = z.infer<typeof DeleteFileInputSchemaUi>;
+export type LoadSkillToolInput = z.infer<typeof LoadSkillInputSchemaUi>;
 export type ListTodoListsToolInput = z.infer<typeof ListTodoListsInputSchemaUi>;
 export type ReadTodoListToolInput = z.infer<typeof ReadTodoListInputSchemaUi>;
 export type WriteTodoListToolInput = z.infer<typeof WriteTodoListInputSchemaUi>;
@@ -46,6 +49,7 @@ export type ReadFileToolOutput = z.infer<typeof ReadFileOutputSchema>;
 export type WriteFileToolOutput = z.infer<typeof WriteFileOutputSchema>;
 export type ListDirToolOutput = z.infer<typeof ListDirOutputSchema>;
 export type DeleteFileToolOutput = z.infer<typeof DeleteFileOutputSchema>;
+export type LoadSkillToolOutput = z.infer<typeof LoadSkillOutputSchema>;
 export type ListTodoListsToolOutput = z.infer<typeof ListTodoListsOutputSchema>;
 export type ReadTodoListToolOutput = z.infer<typeof ReadTodoListOutputSchema>;
 export type WriteTodoListToolOutput = z.infer<typeof WriteTodoListOutputSchema>;
@@ -59,6 +63,7 @@ type ToolKind =
   | 'write_file'
   | 'list_dir'
   | 'delete_file'
+  | 'load_skill'
   | 'list_todo_lists'
   | 'read_todo_list'
   | 'write_todo_list'
@@ -72,6 +77,7 @@ export type ParsedToolInput =
   | { kind: 'write_file'; input: WriteFileToolInput }
   | { kind: 'list_dir'; input: ListDirToolInput }
   | { kind: 'delete_file'; input: DeleteFileToolInput }
+  | { kind: 'load_skill'; input: LoadSkillToolInput }
   | { kind: 'list_todo_lists'; input: ListTodoListsToolInput }
   | { kind: 'read_todo_list'; input: ReadTodoListToolInput }
   | { kind: 'write_todo_list'; input: WriteTodoListToolInput }
@@ -86,6 +92,7 @@ export type ParsedToolOutput =
   | { kind: 'write_file'; output: WriteFileToolOutput }
   | { kind: 'list_dir'; output: ListDirToolOutput }
   | { kind: 'delete_file'; output: DeleteFileToolOutput }
+  | { kind: 'load_skill'; output: LoadSkillToolOutput }
   | { kind: 'list_todo_lists'; output: ListTodoListsToolOutput }
   | { kind: 'read_todo_list'; output: ReadTodoListToolOutput }
   | { kind: 'write_todo_list'; output: WriteTodoListToolOutput }
@@ -100,6 +107,7 @@ const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny
   write_file: { input: WriteFileInputSchemaUi, output: WriteFileOutputSchema },
   list_dir: { input: ListDirInputSchemaUi, output: ListDirOutputSchema },
   delete_file: { input: DeleteFileInputSchemaUi, output: DeleteFileOutputSchema },
+  load_skill: { input: LoadSkillInputSchemaUi, output: LoadSkillOutputSchema },
   list_todo_lists: { input: ListTodoListsInputSchemaUi, output: ListTodoListsOutputSchema },
   read_todo_list: { input: ReadTodoListInputSchemaUi, output: ReadTodoListOutputSchema },
   write_todo_list: { input: WriteTodoListInputSchemaUi, output: WriteTodoListOutputSchema },

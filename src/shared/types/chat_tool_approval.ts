@@ -10,6 +10,7 @@ export interface ChatToolApprovalSession {
   model: string;
   system_prompt: string;
   enabled_tools: string; // JSON string
+  available_skill_ids: string; // JSON string
   created_at: string;
   updated_at: string;
 }

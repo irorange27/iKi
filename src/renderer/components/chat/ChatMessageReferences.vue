@@ -2,6 +2,17 @@
   <div v-if="hasSummary" class="chat-message-references">
     <div class="reference-summary">
       <button
+        v-if="affectSummary.label"
+        type="button"
+        class="reference-summary-item"
+        :class="{ 'is-active': expandedCategory === 'affect' }"
+        :title="affectTooltip"
+        @click.stop="toggleReferencePanel('affect')"
+      >
+        <Heart :size="14" class="reference-summary-icon" />
+        affect
+      </button>
+      <button
         v-if="memorySummary.items.length > 0"
         type="button"
         class="reference-summary-item"
@@ -111,6 +122,67 @@
           </li>
         </ul>
       </div>
+
+      <div v-else-if="expandedCategory === 'affect'">
+        <div class="reference-panel-label">Affect</div>
+        <ul class="reference-panel-list">
+          <li class="reference-panel-item">
+            <div class="reference-panel-item-row">
+              <span class="reference-panel-item-name">{{ affectSummary.label }}</span>
+              <span v-if="affectSummary.confidence !== null" class="reference-panel-item-meta">
+                {{ formatPercent(affectSummary.confidence) }} confidence
+              </span>
+              <span class="reference-panel-item-meta">
+                {{ affectSummary.source === 'realtime' ? 'Realtime' : 'History' }}
+              </span>
+              <span
+                v-if="affectSummary.guardActive"
+                class="reference-panel-item-meta reference-panel-warning"
+              >
+                guarded
+              </span>
+            </div>
+            <div class="reference-panel-item-description">
+              <template v-if="affectSummary.valence !== null">
+                valence {{ formatSigned(affectSummary.valence) }}
+              </template>
+              <template v-if="affectSummary.valence !== null && affectSummary.arousal !== null">
+                ·
+              </template>
+              <template v-if="affectSummary.arousal !== null">
+                arousal {{ affectSummary.arousal.toFixed(2) }}
+              </template>
+              <template
+                v-if="affectSummary.sampleCount !== null || affectSummary.windowMinutes !== null"
+              >
+                <span v-if="affectSummary.valence !== null || affectSummary.arousal !== null">
+                  ·
+                </span>
+                <span v-if="affectSummary.sampleCount !== null">
+                  {{ affectSummary.sampleCount }} samples
+                </span>
+                <span
+                  v-if="affectSummary.sampleCount !== null && affectSummary.windowMinutes !== null"
+                >
+                  ·
+                </span>
+                <span v-if="affectSummary.windowMinutes !== null">
+                  ~{{ Math.max(1, Math.round(affectSummary.windowMinutes)) }}m window
+                </span>
+              </template>
+            </div>
+            <div v-if="affectSummary.emotions.length > 0" class="reference-panel-tags">
+              <span
+                v-for="emotion in affectSummary.emotions"
+                :key="emotion.label"
+                class="reference-panel-tag"
+              >
+                {{ emotion.label }} {{ formatPercent(emotion.score) }}
+              </span>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>
@@ -118,16 +190,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { UIMessage } from 'ai';
-import { Brain, ExternalLink, Sparkles, Wrench } from 'lucide-vue-next';
+import { Brain, ExternalLink, Heart, Sparkles, Wrench } from 'lucide-vue-next';
 
 import {
+  getAffectReferenceSummary,
   getMemoryReferenceSummary,
   getSkillReferenceSummary,
   getToolReferenceSummary,
   hasReferenceSummary,
 } from '../../modules/chat/ui_message_references';
 
-type ReferenceCategory = 'tools' | 'skills' | 'memory';
+type ReferenceCategory = 'tools' | 'skills' | 'memory' | 'affect';
 
 const props = defineProps<{
   message: UIMessage;
@@ -145,6 +218,7 @@ const hasSummary = computed(
 const toolSummary = computed(() => getToolReferenceSummary(props.message));
 const skillSummary = computed(() => getSkillReferenceSummary(props.message));
 const memorySummary = computed(() => getMemoryReferenceSummary(props.message));
+const affectSummary = computed(() => getAffectReferenceSummary(props.message));
 
 const toolTooltip = computed(() =>
   toolSummary.value.names.length > 0
@@ -163,6 +237,18 @@ const memoryTooltip = computed(() =>
     : 'Memory references used in this reply'
 );
 
+const affectTooltip = computed(() => {
+  if (!affectSummary.value.label) return 'No affect signal';
+  const details: string[] = [affectSummary.value.label];
+  if (affectSummary.value.confidence !== null) {
+    details.push(`${formatPercent(affectSummary.value.confidence)} confidence`);
+  }
+  if (affectSummary.value.guardActive) {
+    details.push('guarded');
+  }
+  return details.join(' · ');
+});
+
 const toggleReferencePanel = (category: ReferenceCategory) => {
   expandedCategory.value = expandedCategory.value === category ? null : category;
 };
@@ -178,18 +264,24 @@ const formatMemoryMatchScore = (score: number): string => `${score.toFixed(3)} m
 const formatMemorySourceCount = (count: number): string =>
   `${count} source ${count === 1 ? 'message' : 'messages'}`;
 
+const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
+
+const formatSigned = (value: number): string => (value >= 0 ? `+${value.toFixed(2)}` : value.toFixed(2));
+
 watch(
   () => ({
     messageId: props.message.id,
     hasTools: toolSummary.value.count > 0,
     hasSkills: skillSummary.value.items.length > 0,
     hasMemory: memorySummary.value.items.length > 0,
+    hasAffect: Boolean(affectSummary.value.label),
   }),
   value => {
     if (
       (expandedCategory.value === 'tools' && !value.hasTools) ||
       (expandedCategory.value === 'skills' && !value.hasSkills) ||
-      (expandedCategory.value === 'memory' && !value.hasMemory)
+      (expandedCategory.value === 'memory' && !value.hasMemory) ||
+      (expandedCategory.value === 'affect' && !value.hasAffect)
     ) {
       expandedCategory.value = null;
     }
@@ -322,6 +414,10 @@ watch(
 .reference-panel-item-meta {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.reference-panel-warning {
+  color: var(--status-danger-color);
 }
 
 .reference-panel-item-description {

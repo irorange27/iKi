@@ -1,4 +1,5 @@
 import { isObjectRecord } from '../utils/guards';
+import type { AffectLabel, AffectScore, AffectSignalSource } from '../emotion/affect';
 import type { SkillSource } from '../types/skill';
 
 export { isObjectRecord };
@@ -54,6 +55,23 @@ export type ContextReportPart = {
   retainedRecentMessages?: number;
   compactedMessages?: number;
   blocks?: ContextReportItem[];
+};
+
+export type AffectSignalPart = {
+  type: 'affect-signal';
+  source?: AffectSignalSource;
+  guardActive?: boolean;
+  label?: AffectLabel;
+  confidence?: number;
+  valence?: number;
+  arousal?: number;
+  emotions?: AffectScore[];
+  sampleCount?: number;
+  windowSize?: number;
+  startAt?: string;
+  endAt?: string;
+  ageMinutes?: number;
+  windowMinutes?: number;
 };
 
 export type ToolApproval = {
@@ -149,7 +167,13 @@ export type ToolPart =
   | ToolApprovalRequestPart
   | ToolApprovalResponsePart;
 
-export type UiMessagePart = TextPart | MemoryPart | SkillUsagePart | ContextReportPart | ToolPart;
+export type UiMessagePart =
+  | TextPart
+  | MemoryPart
+  | SkillUsagePart
+  | ContextReportPart
+  | AffectSignalPart
+  | ToolPart;
 
 export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
@@ -162,6 +186,9 @@ export const isSkillUsagePart = (part: unknown): part is SkillUsagePart =>
 
 export const isContextReportPart = (part: unknown): part is ContextReportPart =>
   isObjectRecord(part) && part.type === 'context-report';
+
+export const isAffectSignalPart = (part: unknown): part is AffectSignalPart =>
+  isObjectRecord(part) && part.type === 'affect-signal';
 
 export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
   isObjectRecord(part) &&

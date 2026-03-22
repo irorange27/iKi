@@ -1,7 +1,8 @@
 import type { UIMessageChunk } from 'ai';
 
 import { defaultToolRegistry } from '../../../core/tools';
-import type { ContextReportItem } from '../../../shared/chat/message_parts';
+import type { AffectSignalPart, ContextReportItem } from '../../../shared/chat/message_parts';
+import type { AffectSignal } from '../../../shared/emotion/affect';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
 import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_types';
@@ -167,6 +168,7 @@ export const createUiChunkEmitter = (
     chunk:
       | UIMessageChunk
       | { type: 'memory-retrieval'; query?: string; results?: Array<Record<string, unknown>> }
+      | AffectSignalPart
       | {
           type: 'context-report';
           totalEstimatedTokens?: number;
@@ -217,6 +219,26 @@ export const createUiChunkEmitter = (
         type: 'memory-retrieval',
         query: payload?.query ?? '',
         results: Array.isArray(payload?.results) ? payload.results : [],
+      });
+    },
+    emitAffectSignal: (payload: AffectSignal) => {
+      if (terminated) return;
+      ensureStarted();
+      emitChunk({
+        type: 'affect-signal',
+        source: payload.source,
+        guardActive: payload.guardActive,
+        label: payload.state.label,
+        confidence: payload.state.confidence,
+        ...(typeof payload.state.valence === 'number' ? { valence: payload.state.valence } : {}),
+        ...(typeof payload.state.arousal === 'number' ? { arousal: payload.state.arousal } : {}),
+        ...(payload.state.emotions ? { emotions: payload.state.emotions } : {}),
+        sampleCount: payload.state.sampleCount,
+        windowSize: payload.state.windowSize,
+        startAt: payload.state.startAt,
+        endAt: payload.state.endAt,
+        ageMinutes: payload.state.ageMinutes,
+        windowMinutes: payload.state.windowMinutes,
       });
     },
     emitContextReport: payload => {

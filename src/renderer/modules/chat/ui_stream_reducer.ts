@@ -8,12 +8,14 @@ import {
 } from './ui_message_tool_parts';
 import type { ToolUiState, ToolUiStatePatch } from './tool_ui_state';
 import {
+  isAffectSignalPart,
   isContextReportPart,
   isDynamicToolPart,
   isMemoryPart,
   isObjectRecord,
   isSkillUsagePart,
   isTextPart,
+  type AffectSignalPart,
   type ContextReportItem,
   type ContextReportPart,
   type DynamicToolPart,
@@ -23,6 +25,7 @@ import {
   type TextPart,
   type UiMessagePart,
 } from '../../../shared/chat/message_parts';
+import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
 
 export type StreamState = {
   activeAssistantMessageId: string | null;
@@ -85,6 +88,24 @@ export type StreamAction =
       chunk: { mode?: unknown; skills?: unknown };
     }
   | { type: 'memory_chunk'; chunk: { query?: unknown; results?: unknown } }
+  | {
+      type: 'affect_chunk';
+      chunk: {
+        source?: unknown;
+        guardActive?: unknown;
+        label?: unknown;
+        confidence?: unknown;
+        valence?: unknown;
+        arousal?: unknown;
+        emotions?: unknown;
+        sampleCount?: unknown;
+        windowSize?: unknown;
+        startAt?: unknown;
+        endAt?: unknown;
+        ageMinutes?: unknown;
+        windowMinutes?: unknown;
+      };
+    }
   | {
       type: 'context_chunk';
       chunk: {
@@ -787,6 +808,87 @@ export const reduceStream = (
         nextParts[existingIndex] = skillPart;
       } else {
         nextParts.unshift(skillPart);
+      }
+
+      return {
+        ...message,
+        parts: nextParts as UIMessage['parts'],
+      };
+    });
+
+    return {
+      state: updateResult.state,
+      messageOps: updateResult.messageOps,
+      effects: [{ type: 'scroll' }],
+    };
+  }
+
+  if (action.type === 'affect_chunk') {
+    if (!isAffectLabel(action.chunk.label)) {
+      return { state, messageOps: [], effects: [] };
+    }
+    const label = action.chunk.label;
+
+    const emotions = Array.isArray(action.chunk.emotions)
+      ? action.chunk.emotions
+          .filter(
+            (entry): entry is { label: AffectLabel; score: number } =>
+              isObjectRecord(entry) &&
+              isAffectLabel(entry.label) &&
+              typeof entry.score === 'number' &&
+              Number.isFinite(entry.score)
+          )
+          .map(entry => ({
+            label: entry.label,
+            score: Math.min(1, Math.max(0, entry.score)),
+          }))
+      : [];
+
+    const updateResult = updateAssistantMessage(state, ctx, message => {
+      const nextParts = [...(message.parts as UiMessagePart[])];
+      const existingIndex = nextParts.findIndex(part => isAffectSignalPart(part));
+
+      const affectPart: AffectSignalPart = {
+        type: 'affect-signal',
+        label,
+        ...(action.chunk.source === 'history' || action.chunk.source === 'realtime'
+          ? { source: action.chunk.source }
+          : {}),
+        ...(typeof action.chunk.guardActive === 'boolean'
+          ? { guardActive: action.chunk.guardActive }
+          : {}),
+        ...(typeof action.chunk.confidence === 'number' &&
+        Number.isFinite(action.chunk.confidence)
+          ? { confidence: Math.min(1, Math.max(0, action.chunk.confidence)) }
+          : {}),
+        ...(typeof action.chunk.valence === 'number' && Number.isFinite(action.chunk.valence)
+          ? { valence: Math.min(1, Math.max(-1, action.chunk.valence)) }
+          : {}),
+        ...(typeof action.chunk.arousal === 'number' && Number.isFinite(action.chunk.arousal)
+          ? { arousal: Math.min(1, Math.max(0, action.chunk.arousal)) }
+          : {}),
+        ...(emotions.length > 0 ? { emotions } : {}),
+        ...(typeof action.chunk.sampleCount === 'number' && Number.isFinite(action.chunk.sampleCount)
+          ? { sampleCount: Math.max(0, Math.trunc(action.chunk.sampleCount)) }
+          : {}),
+        ...(typeof action.chunk.windowSize === 'number' && Number.isFinite(action.chunk.windowSize)
+          ? { windowSize: Math.max(0, Math.trunc(action.chunk.windowSize)) }
+          : {}),
+        ...(typeof action.chunk.startAt === 'string' ? { startAt: action.chunk.startAt } : {}),
+        ...(typeof action.chunk.endAt === 'string' ? { endAt: action.chunk.endAt } : {}),
+        ...(typeof action.chunk.ageMinutes === 'number' && Number.isFinite(action.chunk.ageMinutes)
+          ? { ageMinutes: Math.max(0, action.chunk.ageMinutes) }
+          : {}),
+        ...(typeof action.chunk.windowMinutes === 'number' &&
+        Number.isFinite(action.chunk.windowMinutes)
+          ? { windowMinutes: Math.max(0, action.chunk.windowMinutes) }
+          : {}),
+      };
+
+      if (existingIndex >= 0) {
+        nextParts[existingIndex] = affectPart;
+      } else {
+        nextParts.unshift(affectPart);
       }
 
       return {

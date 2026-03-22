@@ -1,4 +1,5 @@
 import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
+import { isAffectLabel } from '../../../shared/emotion/affect';
 import { isObjectRecord, normalizeDynamicToolPart } from '../../../shared/chat/tool_parts';
 
 import { createRuntimeId } from './chat_ui_tool_parts';
@@ -90,6 +91,66 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
               }));
           } else {
             normalized.skills = [];
+          }
+          nextParts.push(normalized);
+          continue;
+        }
+
+        if (part.type === 'affect-signal') {
+          const normalized: Record<string, unknown> = {
+            type: 'affect-signal',
+          };
+          if (part.source === 'history' || part.source === 'realtime') {
+            normalized.source = part.source;
+          }
+          if (typeof part.guardActive === 'boolean') {
+            normalized.guardActive = part.guardActive;
+          }
+          if (isAffectLabel(part.label)) {
+            normalized.label = part.label;
+          }
+          if (typeof part.confidence === 'number' && Number.isFinite(part.confidence)) {
+            normalized.confidence = Math.min(1, Math.max(0, part.confidence));
+          }
+          if (typeof part.valence === 'number' && Number.isFinite(part.valence)) {
+            normalized.valence = Math.min(1, Math.max(-1, part.valence));
+          }
+          if (typeof part.arousal === 'number' && Number.isFinite(part.arousal)) {
+            normalized.arousal = Math.min(1, Math.max(0, part.arousal));
+          }
+          if (Array.isArray(part.emotions)) {
+            normalized.emotions = part.emotions
+              .filter(
+                entry =>
+                  isObjectRecord(entry) &&
+                  isAffectLabel(entry.label) &&
+                  typeof entry.score === 'number' &&
+                  Number.isFinite(entry.score)
+              )
+              .map(entry => ({
+                label: entry.label,
+                score: Math.min(1, Math.max(0, entry.score)),
+              }));
+          } else {
+            normalized.emotions = [];
+          }
+          if (typeof part.sampleCount === 'number' && Number.isFinite(part.sampleCount)) {
+            normalized.sampleCount = Math.max(0, Math.trunc(part.sampleCount));
+          }
+          if (typeof part.windowSize === 'number' && Number.isFinite(part.windowSize)) {
+            normalized.windowSize = Math.max(0, Math.trunc(part.windowSize));
+          }
+          if (typeof part.startAt === 'string' && part.startAt.trim()) {
+            normalized.startAt = part.startAt.trim();
+          }
+          if (typeof part.endAt === 'string' && part.endAt.trim()) {
+            normalized.endAt = part.endAt.trim();
+          }
+          if (typeof part.ageMinutes === 'number' && Number.isFinite(part.ageMinutes)) {
+            normalized.ageMinutes = Math.max(0, part.ageMinutes);
+          }
+          if (typeof part.windowMinutes === 'number' && Number.isFinite(part.windowMinutes)) {
+            normalized.windowMinutes = Math.max(0, part.windowMinutes);
           }
           nextParts.push(normalized);
           continue;

@@ -18,8 +18,10 @@ import * as deepseekProvider from '../../../core/provider/llm/deepseek';
 import * as kimiProvider from '../../../core/provider/llm/kimi';
 import * as openaiProvider from '../../../core/provider/llm/openai';
 import { defaultToolRegistry } from '../../../core/tools';
+import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
+import type { AffectSignal } from '../../../shared/emotion/affect';
 import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
@@ -187,6 +189,19 @@ export const createChatStreaming = (deps: {
     return shouldGuardTools(state, emotionConfig?.toolGuard);
   };
 
+  const toAffectSignal = (
+    state: AffectState | null,
+    source: 'history' | 'realtime',
+    guardActive: boolean
+  ): AffectSignal | null => {
+    if (!state) return null;
+    return {
+      source,
+      guardActive,
+      state,
+    };
+  };
+
   const applyToolGuard = (
     tools: string[],
     mode: 'manual' | 'auto',
@@ -220,6 +235,7 @@ export const createChatStreaming = (deps: {
     model: string;
     systemPrompt: string;
     enabledTools: string[];
+    availableSkillIds: string[];
   }): ApprovalRecoveryContext | undefined => {
     const threadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
     const sessionId = params.sessionId.trim();
@@ -233,6 +249,7 @@ export const createChatStreaming = (deps: {
       model: params.model,
       systemPrompt: params.systemPrompt,
       enabledTools: [...params.enabledTools],
+      availableSkillIds: [...params.availableSkillIds],
     };
   };
 
@@ -286,11 +303,13 @@ export const createChatStreaming = (deps: {
   type PreparedChatTurn = {
     report: Awaited<ReturnType<typeof contextAssembler.assemble>>['report'];
     usedSkills: Awaited<ReturnType<typeof contextAssembler.assemble>>['usedSkills'];
+    selectedSkillIds: string[];
     skillMode: Awaited<ReturnType<typeof contextAssembler.assemble>>['skillMode'];
     finalMessages: ChatInputMessage[];
     history: ChatInputMessage[];
     prompt: string;
     guardActive: boolean;
+    affectSignal: AffectSignal | null;
     guardedTools: string[];
     enableTools: boolean;
   };
@@ -302,26 +321,38 @@ export const createChatStreaming = (deps: {
   ): Promise<PreparedChatTurn> => {
     const modelMessages = await toModelInputMessages(options.messages);
     const lastModelMessage = modelMessages[modelMessages.length - 1];
+    const emotionConfig = getEmotionConfig();
     const realtimeContext = lastModelMessage
       ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
       : { message: '', state: null };
+    const affectStateForPolicy = realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
+    const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
+    const affectSignal = realtimeContext.state
+      ? toAffectSignal(realtimeContext.state, 'realtime', guardActive)
+      : toAffectSignal(affectStateForPolicy, 'history', guardActive);
+    const affectStateForRouting = emotionConfig?.injectToSystemPrompt
+      ? (affectSignal?.state ?? null)
+      : null;
+
     const assembledContext = await contextAssembler.assemble({
       messages: modelMessages,
       threadId: options.threadId,
       skillIds: options.skillIds,
       skillMode: options.skillMode,
+      affectState: affectStateForRouting,
       realtimeAffectMessage: realtimeContext.message,
       onMemoryRetrieved: options.onMemoryRetrieved,
     });
     const finalMessages = assembledContext.messages;
-
-    const affectStateForPolicy = realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
-    const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
+    const selectedSkillIds = assembledContext.usedSkills
+      .map(skill => skill.id)
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
 
     const { resolvedTools, mode } = await resolveToolNames({
       tools: options.tools,
       mcpServerIds: options.mcpServerIds,
       inputMessages: finalMessages,
+      affectState: affectStateForRouting,
     });
     const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
 
@@ -332,6 +363,7 @@ export const createChatStreaming = (deps: {
       tools: guardedTools,
       toolMode: mode,
       mcpServerIds: options.mcpServerIds,
+      affectSignal,
     });
 
     if (!finalMessages || finalMessages.length === 0) {
@@ -345,13 +377,15 @@ export const createChatStreaming = (deps: {
     return {
       report: assembledContext.report,
       usedSkills: Array.isArray(assembledContext.usedSkills) ? assembledContext.usedSkills : [],
+      selectedSkillIds,
       skillMode: assembledContext.skillMode,
       finalMessages,
       history,
       prompt,
       guardActive,
+      affectSignal,
       guardedTools,
-      enableTools: guardedTools.length > 0,
+      enableTools: guardedTools.length > 0 || selectedSkillIds.length > 0,
     };
   };
 
@@ -368,6 +402,10 @@ export const createChatStreaming = (deps: {
           maxIterations: 5,
         });
 
+        if (preparedTurn.selectedSkillIds.length > 0) {
+          runner.registerTool(new LoadSkillTool().toAgentTool());
+        }
+
         // Register selected tools
         for (const toolName of preparedTurn.guardedTools) {
           registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
@@ -378,7 +416,7 @@ export const createChatStreaming = (deps: {
         }
 
         const result = await runWithToolRuntimeContext(
-          { threadId: options.threadId },
+          { threadId: options.threadId, availableSkillIds: preparedTurn.selectedSkillIds },
           async () =>
             await runner.generate({
               history: preparedTurn.history,
@@ -460,6 +498,10 @@ export const createChatStreaming = (deps: {
         });
       }
 
+      if (preparedTurn.affectSignal) {
+        uiChunkEmitter.emitAffectSignal(preparedTurn.affectSignal);
+      }
+
       uiChunkEmitter.emitContextReport(preparedTurn.report);
 
       const systemPrompt = preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '';
@@ -471,6 +513,7 @@ export const createChatStreaming = (deps: {
             model: options.model,
             systemPrompt,
             enabledTools: preparedTurn.guardedTools,
+            availableSkillIds: preparedTurn.selectedSkillIds,
           })
         : undefined;
 
@@ -483,6 +526,10 @@ export const createChatStreaming = (deps: {
       });
 
       if (preparedTurn.enableTools) {
+        if (preparedTurn.selectedSkillIds.length > 0) {
+          runner.registerTool(new LoadSkillTool().toAgentTool());
+        }
+
         for (const toolName of preparedTurn.guardedTools) {
           if (!defaultToolRegistry.get(toolName)) {
             console.warn(`[Main] Tool ${toolName} not found in registry`);
@@ -497,7 +544,7 @@ export const createChatStreaming = (deps: {
       }
 
       const streamResult = await runWithToolRuntimeContext(
-        { threadId: options.threadId },
+        { threadId: options.threadId, availableSkillIds: preparedTurn.selectedSkillIds },
         async () =>
           await toolLoopRunner.stream({
             runner,

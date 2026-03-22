@@ -1,5 +1,6 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import type { ChatThread } from '../../../shared/types/chat';
+import type { AffectSignal } from '../../../shared/emotion/affect';
 import {
   buildThreadRuntimeMetadata,
   normalizeStringArray,
@@ -12,6 +13,7 @@ export const persistThreadRuntimeHints = (params: {
   tools: string[];
   toolMode: 'manual' | 'auto';
   mcpServerIds?: string[];
+  affectSignal?: AffectSignal | null;
 }): void => {
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
   if (!normalizedThreadId) return;
@@ -30,6 +32,7 @@ export const persistThreadRuntimeHints = (params: {
           model: params.model,
           toolMode: params.toolMode,
           mcpServerIds: params.mcpServerIds,
+          affectSignal: params.affectSignal,
         })
       ),
     };

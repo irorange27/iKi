@@ -4,6 +4,7 @@ import {
   buildThreadRuntimeMetadata,
   normalizeStringArray,
   parseJsonRecord,
+  parseThreadAffectState,
   parseThreadToolNames,
   parseThreadToolSelectionState,
 } from '../../../src/shared/chat/thread_runtime_hints';
@@ -71,6 +72,52 @@ describe('thread_runtime_hints', () => {
         mcpServerIds: ['docs'],
         pinned: true,
         updatedAt: '2026-03-22T00:00:00.000Z',
+      },
+    });
+  });
+
+  it('stores and parses structured affect metadata as a first-class runtime hint', () => {
+    const metadata = buildThreadRuntimeMetadata({
+      existingMetadata: '{}',
+      providerType: 'openai',
+      model: 'gpt-4.1',
+      toolMode: 'auto',
+      affectSignal: {
+        source: 'realtime',
+        guardActive: true,
+        state: {
+          label: 'anger',
+          confidence: 0.82,
+          valence: -0.64,
+          arousal: 0.77,
+          emotions: [{ label: 'anger', score: 0.82 }],
+          sampleCount: 3,
+          windowSize: 8,
+          startAt: '2026-03-22T00:00:00.000Z',
+          endAt: '2026-03-22T00:05:00.000Z',
+          ageMinutes: 1,
+          windowMinutes: 5,
+        },
+      },
+      updatedAt: '2026-03-22T00:06:00.000Z',
+    });
+
+    expect(parseThreadAffectState(metadata)).toEqual({
+      source: 'realtime',
+      guardActive: true,
+      updatedAt: '2026-03-22T00:06:00.000Z',
+      state: {
+        label: 'anger',
+        confidence: 0.82,
+        valence: -0.64,
+        arousal: 0.77,
+        emotions: [{ label: 'anger', score: 0.82 }],
+        sampleCount: 3,
+        windowSize: 8,
+        startAt: '2026-03-22T00:00:00.000Z',
+        endAt: '2026-03-22T00:05:00.000Z',
+        ageMinutes: 1,
+        windowMinutes: 5,
       },
     });
   });

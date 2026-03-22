@@ -1,3 +1,4 @@
+import { isAffectLabel, type AffectLabel, type AffectScore } from '../../shared/emotion/affect';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import {
   createSimplePromptTextGenerator,
@@ -5,9 +6,9 @@ import {
   type PromptTextGeneratorConfig,
 } from './prompt_text_generator';
 
-export type EmotionScore = { label: string; score: number };
+export type EmotionScore = AffectScore;
 export type EmotionResult = {
-  label: string;
+  label: AffectLabel;
   confidence: number;
   valence?: number;
   arousal?: number;
@@ -30,16 +31,6 @@ type ParsedEmotionResult = Omit<
 >;
 
 const MAX_INPUT_CHARS = 2000;
-const EMOTION_LABELS = [
-  'joy',
-  'sadness',
-  'anger',
-  'fear',
-  'disgust',
-  'surprise',
-  'neutral',
-] as const;
-
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const toNumber = (value: unknown): number | null => {
@@ -51,11 +42,10 @@ const toNumber = (value: unknown): number | null => {
   return null;
 };
 
-const normalizeLabel = (value: unknown): string | null => {
+const normalizeLabel = (value: unknown): AffectLabel | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
-  if (!trimmed) return null;
-  if (EMOTION_LABELS.includes(trimmed as (typeof EMOTION_LABELS)[number])) return trimmed;
+  if (!trimmed || !isAffectLabel(trimmed)) return null;
   return trimmed;
 };
 

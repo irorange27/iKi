@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { listSkills } from '../../../src/core/skills';
+import { listSkills, readSkillInstructions } from '../../../src/core/skills';
 
 describe('core skills metadata extraction', () => {
   let tempRoot = '';
@@ -123,6 +123,73 @@ Additional details below.
         id: 'user:legacy-preview',
         name: 'Legacy Preview',
         description: 'Fallback description from markdown body.',
+      })
+    );
+  });
+
+  it('reads instruction content without yaml frontmatter for on-demand loading', async () => {
+    await writeSkill(
+      userDataPath(),
+      'planner',
+      `---
+name: planner
+description: Planning support
+---
+
+# Planner
+
+Step 1: Inspect context.
+Step 2: Draft a plan.
+`
+    );
+
+    const content = await readSkillInstructions('user:planner');
+
+    expect(content).toEqual(
+      expect.objectContaining({
+        id: 'user:planner',
+        name: 'Planner',
+        content: '# Planner\n\nStep 1: Inspect context.\nStep 2: Draft a plan.',
+        truncated: false,
+      })
+    );
+  });
+
+  it('invalidates cached skill roots when the configured roots change', async () => {
+    await writeSkill(
+      userDataPath(),
+      'alpha',
+      `---
+name: alpha
+description: alpha skill
+---
+`
+    );
+
+    await listSkills({ forceRefresh: true });
+
+    const nextRoot = path.join(tempRoot, 'next-user-data');
+    process.env.IKI_USER_DATA_PATH = nextRoot;
+    await writeSkill(
+      nextRoot,
+      'beta',
+      `---
+name: beta
+description: beta skill
+---
+
+# Beta
+
+Instruction body.
+`
+    );
+
+    const content = await readSkillInstructions('user:beta');
+    expect(content).toEqual(
+      expect.objectContaining({
+        id: 'user:beta',
+        name: 'Beta',
+        content: '# Beta\n\nInstruction body.',
       })
     );
   });

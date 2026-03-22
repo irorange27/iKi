@@ -27,6 +27,25 @@ const isSkillUsageChunk = (
 ): chunk is { type: 'skill-usage'; mode?: unknown; skills?: unknown } =>
   chunk.type === 'skill-usage';
 
+const isAffectSignalChunk = (
+  chunk: Record<string, unknown>
+): chunk is {
+  type: 'affect-signal';
+  source?: unknown;
+  guardActive?: unknown;
+  label?: unknown;
+  confidence?: unknown;
+  valence?: unknown;
+  arousal?: unknown;
+  emotions?: unknown;
+  sampleCount?: unknown;
+  windowSize?: unknown;
+  startAt?: unknown;
+  endAt?: unknown;
+  ageMinutes?: unknown;
+  windowMinutes?: unknown;
+} => chunk.type === 'affect-signal';
+
 const isContextReportChunk = (
   chunk: Record<string, unknown>
 ): chunk is {
@@ -247,6 +266,11 @@ export const createChatUiStreamController = (deps: {
 
     if (isSkillUsageChunk(chunk)) {
       await dispatch({ type: 'skill_chunk', chunk });
+      return;
+    }
+
+    if (isAffectSignalChunk(chunk)) {
+      await dispatch({ type: 'affect_chunk', chunk });
       return;
     }
 

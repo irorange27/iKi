@@ -80,4 +80,31 @@ describe('selectSkillsWithAgent', () => {
 
     expect(skills).toEqual(['user:my-skill']);
   });
+
+  it('injects affect as a first-class routing signal', async () => {
+    const generate = vi.fn().mockResolvedValue({ response: '["user:my-skill"]' });
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({ generate });
+
+    await selectSkillsWithAgent({
+      messages: [{ role: 'user', content: 'Help me respond carefully.' }],
+      availableSkills: [{ id: 'user:my-skill', name: 'my-skill', description: 'Custom' }],
+      affectState: {
+        label: 'sadness',
+        confidence: 0.71,
+        valence: -0.52,
+        arousal: 0.42,
+        emotions: [{ label: 'sadness', score: 0.71 }],
+        sampleCount: 4,
+        windowSize: 8,
+        startAt: '2026-03-22T00:00:00.000Z',
+        endAt: '2026-03-22T00:05:00.000Z',
+        ageMinutes: 2,
+        windowMinutes: 5,
+      },
+    });
+
+    expect(generate).toHaveBeenCalledWith(expect.stringContaining('Current user affect signal:'));
+    expect(generate).toHaveBeenCalledWith(expect.stringContaining('primary=sadness'));
+  });
 });

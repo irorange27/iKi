@@ -1,8 +1,10 @@
 import type { UIMessage } from 'ai';
 import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
+import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
 import type { AppConfig } from '../../../shared/types/config';
 
 import {
+  isAffectSignalPart,
   isContextReportPart,
   isMemoryPart,
   isObjectRecord,
@@ -44,6 +46,23 @@ export type MemoryReferenceItem = {
 export type MemoryReferenceSummary = {
   query: string;
   items: MemoryReferenceItem[];
+};
+
+export type AffectReferenceSummary = {
+  source: 'history' | 'realtime' | '';
+  guardActive: boolean;
+  label: AffectLabel | '';
+  confidence: number | null;
+  valence: number | null;
+  arousal: number | null;
+  sampleCount: number | null;
+  windowSize: number | null;
+  ageMinutes: number | null;
+  windowMinutes: number | null;
+  emotions: Array<{
+    label: AffectLabel;
+    score: number;
+  }>;
 };
 
 export type ContextReferenceItem = {
@@ -141,6 +160,28 @@ const formatSkillSourceLabel = (value: unknown): SkillReferenceItem['sourceLabel
 const normalizeSkillSource = (value: unknown): SkillReferenceItem['source'] => {
   if (value === 'user' || value === 'codex') return value;
   return '';
+};
+
+const normalizeAffectScores = (
+  value: unknown
+): Array<{
+  label: AffectLabel;
+  score: number;
+}> => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(
+      (entry): entry is { label: AffectLabel; score: number } =>
+        isObjectRecord(entry) &&
+        isAffectLabel(entry.label) &&
+        typeof entry.score === 'number' &&
+        Number.isFinite(entry.score)
+    )
+    .map(entry => ({
+      label: entry.label,
+      score: Math.min(1, Math.max(0, entry.score)),
+    }));
 };
 
 export const getToolReferenceSummary = (message: UIMessage | unknown): ToolReferenceSummary => {
@@ -259,6 +300,41 @@ export const getMemoryReferenceSummary = (message: UIMessage | unknown): MemoryR
   return {
     query: typeof memoryPart.query === 'string' ? normalizeText(memoryPart.query) : '',
     items,
+  };
+};
+
+export const getAffectReferenceSummary = (message: UIMessage | unknown): AffectReferenceSummary => {
+  const parts = getMessageParts(message);
+  const affectPart = parts.find(part => isAffectSignalPart(part));
+
+  if (!affectPart) {
+    return {
+      source: '',
+      guardActive: false,
+      label: '',
+      confidence: null,
+      valence: null,
+      arousal: null,
+      sampleCount: null,
+      windowSize: null,
+      ageMinutes: null,
+      windowMinutes: null,
+      emotions: [],
+    };
+  }
+
+  return {
+    source: affectPart.source === 'history' || affectPart.source === 'realtime' ? affectPart.source : '',
+    guardActive: affectPart.guardActive === true,
+    label: isAffectLabel(affectPart.label) ? affectPart.label : '',
+    confidence: toScore(affectPart.confidence),
+    valence: toScore(affectPart.valence),
+    arousal: toScore(affectPart.arousal),
+    sampleCount: toScore(affectPart.sampleCount),
+    windowSize: toScore(affectPart.windowSize),
+    ageMinutes: toScore(affectPart.ageMinutes),
+    windowMinutes: toScore(affectPart.windowMinutes),
+    emotions: normalizeAffectScores(affectPart.emotions),
   };
 };
 
@@ -383,5 +459,6 @@ export const hasReferenceSummary = (message: UIMessage | unknown): boolean => {
   if (toolSummary.count > 0) return true;
   if (getSkillReferenceSummary(message).items.length > 0) return true;
   if (getMemoryReferenceSummary(message).items.length > 0) return true;
+  if (getAffectReferenceSummary(message).label) return true;
   return false;
 };

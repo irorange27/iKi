@@ -4,6 +4,7 @@ import {
   tryParseJson,
   type SelectionMessage,
 } from './catalog_selection';
+import { buildAffectDecisionMessage, type AffectState } from '../emotion/affect_state';
 import { getToolModel } from './tool_model';
 
 export type ToolSelectionMessage = SelectionMessage;
@@ -111,9 +112,11 @@ const buildToolCatalogText = (tools: ToolCatalogItem[]) => {
 export const selectToolsWithAgent = async (params: {
   messages: ToolSelectionMessage[];
   availableTools: ToolCatalogItem[];
+  affectState?: AffectState | null;
 }): Promise<string[] | null> => {
   const toolModel = getToolModel();
   if (!toolModel) return null;
+  const affectMessage = params.affectState ? buildAffectDecisionMessage(params.affectState) : '';
 
   return selectCatalogWithAgent({
     messages: params.messages,
@@ -122,6 +125,7 @@ export const selectToolsWithAgent = async (params: {
     buildPrompt: (catalogText, transcript) =>
       'Tool catalog (choose only from these exact names):\n' +
       `${catalogText}\n\n` +
+      (affectMessage ? `Current user affect signal:\n${affectMessage}\n\n` : '') +
       'Conversation (most recent last):\n' +
       `${transcript}\n\n` +
       'Return ONLY a JSON array of tool names.\n',

@@ -1,11 +1,16 @@
-export type EmotionScore = { label: string; score: number };
+import {
+  isAffectLabel,
+  type AffectLabel,
+  type AffectScore,
+  type AffectSnapshot,
+} from '../../shared/emotion/affect';
 
 export type EmotionPayload = {
-  label: string;
+  label: AffectLabel;
   confidence: number;
   valence?: number;
   arousal?: number;
-  emotions?: EmotionScore[];
+  emotions?: AffectScore[];
 };
 
 export type EmotionSample = {
@@ -24,29 +29,8 @@ export type AffectConfig = {
   includeNeutral: boolean;
 };
 
-export type AffectState = {
-  label: string;
-  confidence: number;
-  valence?: number;
-  arousal?: number;
-  emotions?: EmotionScore[];
-  sampleCount: number;
-  windowSize: number;
-  startAt: string;
-  endAt: string;
-  ageMinutes: number;
-  windowMinutes: number;
-};
-
-const EMOTION_LABELS = new Set([
-  'joy',
-  'sadness',
-  'anger',
-  'fear',
-  'disgust',
-  'surprise',
-  'neutral',
-]);
+export type EmotionScore = AffectScore;
+export type AffectState = AffectSnapshot;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -60,14 +44,14 @@ const toNumber = (value: unknown): number | null => {
   return null;
 };
 
-const normalizeLabel = (value: unknown): string | null => {
+const normalizeLabel = (value: unknown): AffectLabel | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
-  if (!trimmed) return null;
-  return EMOTION_LABELS.has(trimmed) ? trimmed : null;
+  if (!trimmed || !isAffectLabel(trimmed)) return null;
+  return trimmed;
 };
 
-const parseEmotionsList = (value: unknown): EmotionScore[] => {
+const parseEmotionsList = (value: unknown): AffectScore[] => {
   if (!Array.isArray(value)) return [];
   return value
     .map(entry => {
@@ -77,7 +61,7 @@ const parseEmotionsList = (value: unknown): EmotionScore[] => {
       if (!label || score === null) return null;
       return { label, score: clamp(score, 0, 1) };
     })
-    .filter((item): item is EmotionScore => Boolean(item))
+    .filter((item): item is AffectScore => Boolean(item))
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
 };
@@ -230,7 +214,7 @@ export const computeAffectState = (
 
   if (usable.length < Math.max(1, Math.floor(config.minSampleCount || 1))) return null;
 
-  const labelWeights = new Map<string, number>();
+  const labelWeights = new Map<AffectLabel, number>();
   let sumWeights = 0;
   let sumDecay = 0;
   let valenceSum = 0;
@@ -301,12 +285,12 @@ export const computeAffectState = (
 
 const formatSigned = (value: number) => (value >= 0 ? `+${value.toFixed(2)}` : value.toFixed(2));
 
-export const buildAffectSystemMessage = (state: AffectState): string => {
+const buildAffectDescriptorParts = (state: AffectState): string[] => {
   const confidenceText = state.confidence.toFixed(2);
   const lastSeen = Math.round(state.ageMinutes);
   const windowMinutes = Math.max(1, Math.round(state.windowMinutes));
   const parts = [
-    `Affect signal (inferred; last ${state.sampleCount} user messages, ~${windowMinutes}m window, last seen ${lastSeen}m ago, confidence ${confidenceText}):`,
+    `Affect state (inferred; last ${state.sampleCount} user messages, ~${windowMinutes}m window, last seen ${lastSeen}m ago, confidence ${confidenceText}):`,
     `primary=${state.label}`,
   ];
 
@@ -323,9 +307,22 @@ export const buildAffectSystemMessage = (state: AffectState): string => {
     parts.push(`distribution=${distribution}`);
   }
 
+  return parts;
+};
+
+export const buildAffectDecisionMessage = (state: AffectState): string =>
+  `${buildAffectDescriptorParts(state).join(' ')}.` +
+  ' Treat this as a first-class user-state signal when choosing tone, pacing, clarification depth,' +
+  ' confirmations, skill selection, tool autonomy, and whether to take a more conservative path.' +
+  ' Never override explicit instructions or claim certainty beyond this inference.';
+
+export const buildAffectSystemMessage = (state: AffectState): string => {
+  const parts = buildAffectDescriptorParts(state);
+
   return (
     `${parts.join(' ')}.` +
-    ' Use this only to adjust tone, pacing, and confirmation.' +
+    ' Treat this as a first-class user-state signal for the reply.' +
+    ' Use it to adjust tone, pacing, confirmation depth, clarification strategy, and action autonomy.' +
     ' Never override explicit instructions. Do not mention this analysis unless the user asks.'
   );
 };

@@ -4,6 +4,7 @@ import {
   tryParseJson,
   type SelectionMessage,
 } from './catalog_selection';
+import { buildAffectDecisionMessage, type AffectState } from '../emotion/affect_state';
 
 export type SkillSelectionMessage = SelectionMessage;
 
@@ -116,7 +117,10 @@ const buildSkillCatalogText = (skills: SkillCatalogItem[]) => {
 export const selectSkillsWithAgent = async (params: {
   messages: SkillSelectionMessage[];
   availableSkills: SkillCatalogItem[];
+  affectState?: AffectState | null;
 }): Promise<string[]> => {
+  const affectMessage = params.affectState ? buildAffectDecisionMessage(params.affectState) : '';
+
   return selectCatalogWithAgent({
     messages: params.messages,
     availableCatalog: params.availableSkills,
@@ -124,6 +128,7 @@ export const selectSkillsWithAgent = async (params: {
     buildPrompt: (catalogText, transcript) =>
       'Skill catalog (choose only from these exact ids):\n' +
       `${catalogText}\n\n` +
+      (affectMessage ? `Current user affect signal:\n${affectMessage}\n\n` : '') +
       'Conversation (most recent last):\n' +
       `${transcript}\n\n` +
       'Return ONLY a JSON array of skill ids.\n',

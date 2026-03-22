@@ -73,4 +73,32 @@ describe('selectToolsWithAgent', () => {
 
     expect(tools).toEqual(['web']);
   });
+
+  it('injects affect as a first-class routing signal', async () => {
+    const generate = vi.fn().mockResolvedValue({ response: '["web"]' });
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({ generate });
+
+    await selectToolsWithAgent({
+      messages: [{ role: 'user', content: 'Should I act now?' }],
+      availableTools: [{ name: 'web' }],
+      affectState: {
+        label: 'anger',
+        confidence: 0.82,
+        valence: -0.64,
+        arousal: 0.77,
+        emotions: [{ label: 'anger', score: 0.82 }],
+        sampleCount: 3,
+        windowSize: 8,
+        startAt: '2026-03-22T00:00:00.000Z',
+        endAt: '2026-03-22T00:05:00.000Z',
+        ageMinutes: 1,
+        windowMinutes: 5,
+      },
+    });
+
+    expect(generate).toHaveBeenCalledWith(expect.stringContaining('Current user affect signal:'));
+    expect(generate).toHaveBeenCalledWith(expect.stringContaining('first-class user-state signal'));
+    expect(generate).toHaveBeenCalledWith(expect.stringContaining('primary=anger'));
+  });
 });

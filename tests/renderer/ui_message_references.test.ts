@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getAffectReferenceSummary,
   buildContextUsageIndicator,
   formatContextTokenCount,
   getContextReferenceSummary,
@@ -184,6 +185,50 @@ describe('ui_message_references', () => {
         },
       ],
     });
+  });
+
+  it('parses affect signals for reference inspection', () => {
+    const summary = getAffectReferenceSummary({
+      id: 'assistant_1',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'affect-signal',
+          source: 'realtime',
+          guardActive: true,
+          label: 'anger',
+          confidence: 0.82,
+          valence: -0.64,
+          arousal: 0.77,
+          emotions: [{ label: 'anger', score: 0.82 }],
+          sampleCount: 3,
+          windowSize: 8,
+          ageMinutes: 1,
+          windowMinutes: 5,
+        },
+      ],
+    } as never);
+
+    expect(summary).toEqual({
+      source: 'realtime',
+      guardActive: true,
+      label: 'anger',
+      confidence: 0.82,
+      valence: -0.64,
+      arousal: 0.77,
+      sampleCount: 3,
+      windowSize: 8,
+      ageMinutes: 1,
+      windowMinutes: 5,
+      emotions: [{ label: 'anger', score: 0.82 }],
+    });
+    expect(
+      hasReferenceSummary({
+        id: 'assistant_3',
+        role: 'assistant',
+        parts: [{ type: 'affect-signal', label: 'anger', confidence: 0.5 }],
+      } as never)
+    ).toBe(true);
   });
 
   it('formats total context token counts for compact UI labels', () => {

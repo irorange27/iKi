@@ -23,6 +23,7 @@ const createUiChunkEmitter = () => ({
   emitTextDelta: vi.fn(),
   emitToolEvent: vi.fn(),
   emitMemoryRetrieval: vi.fn(),
+  emitAffectSignal: vi.fn(),
   emitContextReport: vi.fn(),
   finish: vi.fn(),
   abort: vi.fn(),

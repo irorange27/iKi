@@ -256,6 +256,7 @@ beforeEach(() => {
     emitTextDelta: vi.fn(),
     emitToolEvent: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
+    emitAffectSignal: vi.fn(),
     emitContextReport: vi.fn(),
     finish: vi.fn(),
     abort: vi.fn(),
@@ -318,6 +319,12 @@ describe('createChatStreaming', () => {
       compactedMessages: 0,
       blocks: [{ kind: 'skills', status: 'included', estimatedTokens: 120, charCount: 480 }],
     });
+    const runner = createChatConversationRunnerMock.mock.results[0]?.value;
+    expect(runner?.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'load_skill',
+      })
+    );
   });
 
   it('send() uses plain llm generation when no tools are enabled', async () => {
@@ -340,6 +347,51 @@ describe('createChatStreaming', () => {
         tools: [],
       })
     );
+  });
+
+  it('send() routes through the runner when selected skills need on-demand loading', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'draft it' }],
+      usedSkills: [
+        {
+          id: 'user:planner',
+          name: 'Planner',
+          description: 'Planning support',
+          source: 'user',
+        },
+      ],
+      skillMode: 'auto',
+      report: {
+        totalEstimatedTokens: 32,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [{ kind: 'skills', status: 'included', estimatedTokens: 32, charCount: 128 }],
+      },
+    });
+
+    const runner = {
+      registerTool: vi.fn(),
+      generate: vi.fn().mockResolvedValue({ response: 'skill aware result', iterations: 1 }),
+    };
+    createChatConversationRunnerMock.mockReturnValue(runner);
+
+    const { streaming } = createDeps();
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'draft it' }],
+      threadId: 'thread_skill_tool',
+      skillMode: 'auto',
+    });
+
+    expect(result).toEqual({ success: true, text: 'skill aware result' });
+    expect(createChatConversationRunnerMock).toHaveBeenCalledTimes(1);
+    expect(runner.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'load_skill',
+      })
+    );
+    expect(generateChatWithUsageMock).not.toHaveBeenCalled();
   });
 
   it('send() routes through the tool runner when tools are enabled', async () => {
@@ -405,6 +457,7 @@ describe('createChatStreaming', () => {
       emitTextDelta: vi.fn(),
       emitToolEvent: vi.fn(),
       emitMemoryRetrieval: vi.fn(),
+      emitAffectSignal: vi.fn(),
       emitContextReport: vi.fn(),
       finish: vi.fn(),
       abort: vi.fn(),
@@ -449,6 +502,7 @@ describe('createChatStreaming', () => {
         recoveryContext: expect.objectContaining({
           threadId: 'thread_3',
           enabledTools: ['web'],
+          availableSkillIds: [],
         }),
       })
     );
@@ -461,5 +515,89 @@ describe('createChatStreaming', () => {
     );
     expect(uiChunkEmitter.emitToolEvent).toHaveBeenCalledTimes(1);
     expect(activeStreams.size).toBe(0);
+  });
+
+  it('treats affect as a first-class turn signal for routing and ui emission', async () => {
+    getAppConfigMock.mockReturnValue({
+      memory: {
+        enabled: false,
+        autoSummarize: false,
+        context: {
+          enabled: true,
+        },
+        emotion: {
+          enabled: true,
+          injectToSystemPrompt: true,
+          realtimeAnalysis: false,
+          toolGuard: {
+            enabled: true,
+            minConfidence: 0.6,
+            minArousal: 0.6,
+            maxValence: -0.2,
+            requireApproval: true,
+            disableAutoTools: false,
+          },
+        },
+      },
+      mcp: {
+        defaultApprovalMode: 'safe-only',
+      },
+    });
+
+    resolveToolNamesMock.mockResolvedValue({
+      mode: 'auto',
+      explicitTools: [],
+      resolvedTools: ['web'],
+    });
+
+    const affectState = {
+      label: 'anger',
+      confidence: 0.82,
+      valence: -0.64,
+      arousal: 0.77,
+      emotions: [{ label: 'anger', score: 0.82 }],
+      sampleCount: 3,
+      windowSize: 8,
+      startAt: '2026-03-22T00:00:00.000Z',
+      endAt: '2026-03-22T00:05:00.000Z',
+      ageMinutes: 1,
+      windowMinutes: 5,
+    };
+
+    const { streaming, memory } = createDeps();
+    memory.getAffectState.mockReturnValue(affectState);
+    const webContents = { id: 12, send: vi.fn() };
+
+    const result = await streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'handle this carefully' }],
+      threadId: 'thread_affect',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      awaitingApproval: false,
+      stopped: false,
+    });
+    expect(resolveToolNamesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectState,
+      })
+    );
+    expect(persistThreadRuntimeHintsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectSignal: {
+          source: 'history',
+          guardActive: false,
+          state: affectState,
+        },
+      })
+    );
+    expect(createUiChunkEmitterMock.mock.results[0]?.value.emitAffectSignal).toHaveBeenCalledWith({
+      source: 'history',
+      guardActive: false,
+      state: affectState,
+    });
   });
 });

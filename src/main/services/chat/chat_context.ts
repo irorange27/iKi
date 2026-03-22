@@ -9,6 +9,7 @@ import {
   generateThreadSummary,
   type ThreadSummaryMessage,
 } from '../../../core/context/thread_summary';
+import type { AffectState } from '../../../core/emotion/affect_state';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
 import type { ChatInputMessage } from './chat_types';
 import type { ChatMemory } from './chat_memory';
@@ -69,6 +70,7 @@ type AssembleChatContextParams = {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
+  affectState?: AffectState | null;
   realtimeAffectMessage?: string;
   onMemoryRetrieved?: (payload: {
     query: string;
@@ -641,6 +643,7 @@ const buildSkillContext = async (params: {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
+  affectState?: AffectState | null;
   contextConfig: ContextConfig;
 }): Promise<SkillContext> => {
   const { skillsSystemPrompt, usedSkills, skillMode } = await resolveSkillsSystemPrompt({
@@ -648,6 +651,7 @@ const buildSkillContext = async (params: {
     threadId: params.threadId,
     skillIds: params.skillIds,
     skillMode: params.skillMode,
+    affectState: params.affectState,
   });
   const skillClip = clipTextToTokenBudget(skillsSystemPrompt, params.contextConfig.maxSkillTokens);
 
@@ -771,6 +775,7 @@ export const createChatContextAssembler = (deps: {
       threadId: params.threadId,
       skillIds: params.skillIds,
       skillMode: params.skillMode,
+      affectState: params.affectState,
       contextConfig,
     });
     blocks.push(skillContext.block);

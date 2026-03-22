@@ -1,5 +1,10 @@
 import * as chatThreadDb from '../../../core/db/chat_thread';
-import { buildSkillsSystemPrompt, listSkills, normalizeSkillIds } from '../../../core/skills';
+import type { AffectState } from '../../../core/emotion/affect_state';
+import {
+  buildSkillsMetadataSystemPrompt,
+  listSkills,
+  normalizeSkillIds,
+} from '../../../core/skills';
 import { getToolModel } from '../../../core/provider/tool_model';
 import { selectSkillsWithAgent } from '../../../core/provider/skill_selection';
 import type { SkillSummary } from '../../../shared/types/skill';
@@ -12,6 +17,7 @@ export const resolveSkillsSystemPrompt = async (params: {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
+  affectState?: AffectState | null;
 }): Promise<{
   skillsSystemPrompt: string;
   usedSkills: SkillSummary[];
@@ -70,6 +76,7 @@ export const resolveSkillsSystemPrompt = async (params: {
         ? await selectSkillsWithAgent({
             messages: toLlmChatMessages(params.inputMessages),
             availableSkills: availableSkillCatalog,
+            affectState: params.affectState,
           })
         : [];
 
@@ -97,8 +104,7 @@ export const resolveSkillsSystemPrompt = async (params: {
     .map(id => skillsById.get(id))
     .filter((skill): skill is SkillSummary => Boolean(skill));
 
-  const skillsSystemPrompt =
-    normalizedSkillIds.length > 0 ? await buildSkillsSystemPrompt(normalizedSkillIds) : '';
+  const skillsSystemPrompt = buildSkillsMetadataSystemPrompt(usedSkills);
 
   return { skillsSystemPrompt, usedSkills, skillMode };
 };
