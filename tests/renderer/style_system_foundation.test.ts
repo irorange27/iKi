@@ -49,6 +49,14 @@ const SETTINGS_COLOR_SCHEME_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsColorSchemeSection.vue'
 );
+const THEME_EDITOR_MODAL_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/ThemeEditorModal.vue'
+);
+const THEME_PREVIEW_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/ThemePreview.vue'
+);
 const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/SettingsView.vue');
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
 const TOOL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ToolSelector.vue');
@@ -119,6 +127,7 @@ describe('renderer style system foundation', () => {
     const napcatSource = readFileSync(NAPCAT_SETTINGS_VUE_PATH, 'utf8');
     const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
     const colorSchemeSource = readFileSync(SETTINGS_COLOR_SCHEME_VUE_PATH, 'utf8');
+    const themeEditorModalSource = readFileSync(THEME_EDITOR_MODAL_VUE_PATH, 'utf8');
     const settingsViewSource = readFileSync(SETTINGS_VIEW_VUE_PATH, 'utf8');
 
     expect(settingsSelectSource).toMatch(/class="settings-select-trigger"/);
@@ -139,7 +148,9 @@ describe('renderer style system foundation', () => {
     expect(napcatSource).not.toMatch(/<select/);
     expect(providersSource).toMatch(/import SettingsSelect from/);
     expect(providersSource).not.toMatch(/<select/);
-    expect(colorSchemeSource).toMatch(/import SettingsSelect from/);
+    expect(colorSchemeSource).toMatch(/import ThemeEditorModal from/);
+    expect(themeEditorModalSource).toMatch(/import SettingsSelect from/);
+    expect(themeEditorModalSource).not.toMatch(/<select/);
     expect(colorSchemeSource).not.toMatch(/<select/);
     expect(settingsViewSource).toMatch(/import SettingsSelect from/);
     expect(settingsViewSource).toMatch(/toolModelSelectOptions/);
@@ -152,6 +163,13 @@ describe('renderer style system foundation', () => {
     const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
     const lifeSource = readFileSync(SETTINGS_LIFE_VUE_PATH, 'utf8');
     const colorSchemeSource = readFileSync(SETTINGS_COLOR_SCHEME_VUE_PATH, 'utf8');
+    const themeEditorModalSource = readFileSync(THEME_EDITOR_MODAL_VUE_PATH, 'utf8');
+    const themePreviewSource = readFileSync(THEME_PREVIEW_VUE_PATH, 'utf8');
+    const combinedColorSchemeSource = [
+      colorSchemeSource,
+      themeEditorModalSource,
+      themePreviewSource,
+    ].join('\n');
 
     expect(mcpSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
     expect(napcatSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
@@ -182,15 +200,17 @@ describe('renderer style system foundation', () => {
     expect(lifeSource).not.toMatch(/--color-accent-primary/);
     expect(lifeSource).not.toMatch(/--color-text-secondary/);
 
-    expect(colorSchemeSource).toMatch(/surface-shadow-md/);
-    expect(colorSchemeSource).toMatch(/surface-shadow-lg/);
-    expect(colorSchemeSource).toMatch(/danger-color/);
-    expect(colorSchemeSource).toMatch(/warning-color/);
-    expect(colorSchemeSource).toMatch(/success-color/);
-    expect(colorSchemeSource).not.toMatch(/rgba\(var\(--accent-rgb,\s*96,\s*165,\s*250\)/);
-    expect(colorSchemeSource).not.toMatch(/background:\s*#ef4444/);
-    expect(colorSchemeSource).not.toMatch(/background:\s*#f59e0b/);
-    expect(colorSchemeSource).not.toMatch(/background:\s*#22c55e/);
+    expect(combinedColorSchemeSource).toMatch(/surface-shadow-md/);
+    expect(combinedColorSchemeSource).toMatch(/surface-shadow-lg/);
+    expect(combinedColorSchemeSource).toMatch(/danger-color/);
+    expect(combinedColorSchemeSource).toMatch(/warning-color/);
+    expect(combinedColorSchemeSource).toMatch(/success-color/);
+    expect(combinedColorSchemeSource).not.toMatch(
+      /rgba\(var\(--accent-rgb,\s*96,\s*165,\s*250\)/
+    );
+    expect(combinedColorSchemeSource).not.toMatch(/background:\s*#ef4444/);
+    expect(combinedColorSchemeSource).not.toMatch(/background:\s*#f59e0b/);
+    expect(combinedColorSchemeSource).not.toMatch(/background:\s*#22c55e/);
   });
 
   it('centralizes app-shell text and selector affordances in globals.css', () => {
