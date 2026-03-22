@@ -7,7 +7,8 @@ const columnExists = (tableName: string, columnName: string): boolean => {
 };
 
 export const migration: Migration = {
-  name: '020_add_chat_tool_approval_skill_ids',
+  name: '021_add_chat_tool_approval_skill_ids',
+  aliases: ['020_add_chat_tool_approval_skill_ids'],
   up: () => {
     if (!columnExists('chat_tool_approval_sessions', 'available_skill_ids')) {
       getDb().exec(

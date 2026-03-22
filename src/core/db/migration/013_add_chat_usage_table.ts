@@ -2,7 +2,8 @@ import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
-  name: '012_add_chat_usage_table',
+  name: '013_add_chat_usage_table',
+  aliases: ['012_add_chat_usage_table'],
   up: () => {
     getDb().exec(`
       CREATE TABLE IF NOT EXISTS chat_usage_events (

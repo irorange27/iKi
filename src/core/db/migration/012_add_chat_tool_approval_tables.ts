@@ -2,7 +2,8 @@ import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
-  name: '011_add_chat_tool_approval_tables',
+  name: '012_add_chat_tool_approval_tables',
+  aliases: ['011_add_chat_tool_approval_tables'],
   up: () => {
     getDb().exec(`
       CREATE TABLE IF NOT EXISTS chat_tool_approval_sessions (

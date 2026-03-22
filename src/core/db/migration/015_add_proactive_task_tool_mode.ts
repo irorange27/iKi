@@ -7,7 +7,8 @@ const columnExists = (tableName: string, columnName: string): boolean => {
 };
 
 export const migration: Migration = {
-  name: '014_add_proactive_task_tool_mode',
+  name: '015_add_proactive_task_tool_mode',
+  aliases: ['014_add_proactive_task_tool_mode'],
   up: () => {
     if (!columnExists('proactive_tasks', 'tool_mode')) {
       getDb().exec(

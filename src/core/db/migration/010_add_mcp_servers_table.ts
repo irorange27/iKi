@@ -2,7 +2,8 @@ import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
-  name: '009_add_mcp_servers_table',
+  name: '010_add_mcp_servers_table',
+  aliases: ['009_add_mcp_servers_table'],
   up: () => {
     getDb().exec(`
       CREATE TABLE IF NOT EXISTS mcp_servers (

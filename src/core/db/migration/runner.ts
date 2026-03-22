@@ -13,16 +13,28 @@ const initMigrationsTable = () => {
 
 export interface Migration {
   name: string;
+  aliases?: string[];
   up: () => void;
   down?: () => void;
 }
 
-// Check if a migration has been executed
-export const isMigrationExecuted = (name: string): boolean => {
-  const row = getDb().prepare('SELECT name FROM migrations WHERE name = ?').get(name) as
-    | { name: string }
-    | undefined;
-  return !!row;
+const findExecutedMigrationName = (migration: Pick<Migration, 'name' | 'aliases'>): string | null => {
+  const candidates = [migration.name, ...(migration.aliases ?? [])];
+  const placeholders = candidates.map(() => '?').join(', ');
+  const rows = getDb()
+    .prepare(`SELECT name FROM migrations WHERE name IN (${placeholders})`)
+    .all(...candidates) as Array<{ name: string }>;
+
+  if (rows.length === 0) return null;
+
+  const executedNames = new Set(rows.map(row => row.name));
+  for (const candidate of candidates) {
+    if (executedNames.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 };
 
 // Mark a migration as executed
@@ -31,9 +43,23 @@ export const markMigrationExecuted = (name: string) => {
   getDb().prepare('INSERT INTO migrations (name, executed_at) VALUES (?, ?)').run(name, now);
 };
 
+const renameExecutedMigration = (fromName: string, toName: string) => {
+  if (fromName === toName) return;
+  getDb().prepare('UPDATE migrations SET name = ? WHERE name = ?').run(toName, fromName);
+};
+
+// Check if a migration has been executed
+export const isMigrationExecuted = (name: string, aliases: string[] = []): boolean =>
+  Boolean(findExecutedMigrationName({ name, aliases }));
+
 // Run a migration
 export const runMigration = (migration: Migration) => {
-  if (isMigrationExecuted(migration.name)) {
+  const executedName = findExecutedMigrationName(migration);
+  if (executedName) {
+    if (executedName !== migration.name) {
+      console.log(`Normalizing migration record: ${executedName} -> ${migration.name}`);
+      renameExecutedMigration(executedName, migration.name);
+    }
     console.log(`Migration ${migration.name} already executed, skipping...`);
     return;
   }

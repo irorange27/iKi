@@ -2,7 +2,8 @@ import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
-  name: '016_add_identity_profiles_table',
+  name: '017_add_identity_profiles_table',
+  aliases: ['016_add_identity_profiles_table'],
   up: () => {
     getDb().exec(`
       CREATE TABLE IF NOT EXISTS identity_profiles (
@@ -36,4 +37,3 @@ export const migration: Migration = {
     `);
   },
 };
-

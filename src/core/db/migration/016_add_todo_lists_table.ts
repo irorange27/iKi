@@ -2,7 +2,8 @@ import { getDb } from '../database';
 import { Migration } from './runner';
 
 export const migration: Migration = {
-  name: '015_add_todo_lists_table',
+  name: '016_add_todo_lists_table',
+  aliases: ['015_add_todo_lists_table'],
   up: () => {
     getDb().exec(`
       CREATE TABLE IF NOT EXISTS todo_lists (

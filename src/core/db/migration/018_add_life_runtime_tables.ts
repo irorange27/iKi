@@ -2,7 +2,8 @@ import type { Migration } from './runner';
 import { getDb } from '../database';
 
 export const migration: Migration = {
-  name: '017_add_life_runtime_tables',
+  name: '018_add_life_runtime_tables',
+  aliases: ['017_add_life_runtime_tables'],
   up: () => {
     getDb().exec(`
       CREATE TABLE IF NOT EXISTS life_episodes (

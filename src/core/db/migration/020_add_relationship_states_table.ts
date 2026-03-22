@@ -2,7 +2,8 @@ import type { Migration } from './runner';
 import { getDb } from '../database';
 
 export const migration: Migration = {
-  name: '019_add_relationship_states_table',
+  name: '020_add_relationship_states_table',
+  aliases: ['019_add_relationship_states_table'],
   up: () => {
     getDb().exec(`
       CREATE TABLE IF NOT EXISTS relationship_states (

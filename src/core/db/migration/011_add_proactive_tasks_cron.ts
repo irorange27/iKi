@@ -9,7 +9,8 @@ const columnExists = (table: string, column: string): boolean => {
 };
 
 export const migration: Migration = {
-  name: '010_add_proactive_tasks_cron',
+  name: '011_add_proactive_tasks_cron',
+  aliases: ['010_add_proactive_tasks_cron'],
   up: () => {
     if (!columnExists('proactive_tasks', 'cron_expression')) {
       getDb().exec('ALTER TABLE proactive_tasks ADD COLUMN cron_expression TEXT;');
