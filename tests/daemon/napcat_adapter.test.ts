@@ -344,6 +344,79 @@ describe('createNapCatReverseBridge', () => {
     await inbound;
   });
 
+  it('formats markdown replies into QQ-friendly plain text before persisting and sending', async () => {
+    getAppConfigMock.mockReturnValue(
+      createConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+        tools: ['web', 'fetch'],
+      })
+    );
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    chatService.getThread.mockReturnValue(null);
+    chatService.listMessages.mockReturnValue([
+      {
+        id: 'msg_user_markdown_reply',
+        message: JSON.stringify({
+          role: 'user',
+          parts: [{ type: 'text', text: 'today news' }],
+        }),
+      },
+    ]);
+    chatService.send.mockResolvedValue({
+      success: true,
+      text: '# Daily Brief\n- **BBC**\n- [OpenAI](https://openai.com)',
+    });
+
+    const { ws } = connectBridge(chatService);
+    const socket = expectSocket(ws);
+    const inbound = socket.emitMessage(
+      JSON.stringify({
+        post_type: 'message',
+        message_type: 'private',
+        self_id: '10001',
+        user_id: '20002',
+        message_id: 'm_markdown_reply',
+        message: 'today news',
+      })
+    ) as Promise<void>;
+
+    await Promise.resolve();
+
+    expect(chatService.createMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        thread_id: 'napcat_10001_private_20002',
+        metadata: '{}',
+        message: expect.objectContaining({
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Daily Brief\n• BBC\n• OpenAI (https://openai.com)',
+            },
+          ],
+        }),
+      })
+    );
+
+    const outbound = JSON.parse(socket.sent[0]);
+    expect(outbound).toMatchObject({
+      action: 'send_private_msg',
+      params: {
+        user_id: '20002',
+        message: 'Daily Brief\n• BBC\n• OpenAI (https://openai.com)',
+      },
+    });
+
+    await (socket.emitMessage(JSON.stringify({ status: 'ok', retcode: 0, echo: outbound.echo })) as
+      Promise<void>);
+    await inbound;
+  });
+
   it('ignores group messages without @mention when mention gate is enabled', async () => {
     getAppConfigMock.mockReturnValue(
       createConfig({
@@ -553,6 +626,48 @@ describe('createNapCatReverseBridge', () => {
       params: {
         user_id: '20002',
         message: 'scheduled hello',
+      },
+    });
+
+    await (ws.emitMessage(JSON.stringify({ status: 'ok', retcode: 0, echo: outbound.echo })) as
+      Promise<void>);
+    await outboundPromise;
+  });
+
+  it('formats proactive markdown output before sending it to NapCat', async () => {
+    getAppConfigMock.mockReturnValue(
+      createConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+      })
+    );
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    const { bridge, ws } = connectBridge(chatService);
+
+    const outboundPromise = bridge.sendThreadMessage({
+      thread: {
+        id: 'napcat_10001_private_20002',
+        title: 'QQ User 20002',
+        metadata: JSON.stringify({
+          source: 'napcat',
+          message_type: 'private',
+          user_id: '20002',
+        }),
+      } as never,
+      text: '## Daily\n- **Item**\n- [BBC](https://bbc.com)',
+    });
+
+    await Promise.resolve();
+
+    const outbound = JSON.parse(ws.sent[0]);
+    expect(outbound).toMatchObject({
+      action: 'send_private_msg',
+      params: {
+        user_id: '20002',
+        message: 'Daily\n• Item\n• BBC (https://bbc.com)',
       },
     });
 

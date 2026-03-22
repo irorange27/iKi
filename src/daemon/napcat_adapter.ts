@@ -10,6 +10,7 @@ import { getProviders } from '../core/db/providers';
 import type { ChatThread } from '../shared/types/chat';
 import { parseModelList } from '../shared/utils/provider_models';
 import { isObjectRecord } from '../shared/utils/guards';
+import { renderMarkdownToPlainText } from '../shared/utils/plain_text_markdown';
 import type { ParsedUiMessage } from '../shared/chat/ui_message_codec';
 import { registerBridgeThreadSender } from './bridge_dispatch';
 
@@ -90,6 +91,7 @@ const SAFE_NAPCAT_TOOL_SET = new Set<string>(SAFE_NAPCAT_TOOLS);
 const DEFAULT_SYSTEM_PROMPT = [
   'You are iKi, responding to QQ messages via NapCat.',
   'Keep replies concise and helpful.',
+  'Output plain text only for QQ. Do not use markdown, headings, tables, or code fences.',
 ].join(' ');
 
 const isSuccessfulActionResponse = (payload: NapCatActionResponse): boolean => {
@@ -373,6 +375,11 @@ const buildAssistantMessage = (text: string): Record<string, unknown> => ({
   parts: [{ type: 'text', text }],
 });
 
+const formatNapCatOutboundText = (text: string): string => {
+  const normalized = renderMarkdownToPlainText(text).trim();
+  return normalized || text.trim();
+};
+
 const buildThreadTitle = (event: NapCatMessageEvent): string => {
   const messageType = event.message_type || 'unknown';
   if (messageType === 'group') {
@@ -488,7 +495,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       throw new Error('Thread is not a valid NapCat conversation');
     }
 
-    const message = params.text.trim();
+    const message = formatNapCatOutboundText(params.text);
     if (!message) {
       throw new Error('Cannot send an empty NapCat message');
     }
@@ -624,10 +631,24 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       return;
     }
 
+    const outboundText = formatNapCatOutboundText(result.text);
+    if (!outboundText) {
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.reply.generate',
+        outcome: 'failed',
+        message: 'Generated NapCat reply became empty after QQ text normalization.',
+        entity: {
+          thread_id: threadId,
+        },
+      });
+      return;
+    }
+
     try {
       options.chatService.createMessage({
         thread_id: threadId,
-        message: buildAssistantMessage(result.text),
+        message: buildAssistantMessage(outboundText),
         metadata: '{}',
       });
     } catch (error) {
@@ -647,7 +668,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       try {
         await sendAction(ws, 'send_private_msg', {
           user_id: event.user_id,
-          message: result.text,
+          message: outboundText,
         });
       } catch (error) {
         napcatLogger.event({
@@ -666,7 +687,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     try {
       await sendAction(ws, 'send_group_msg', {
         group_id: event.group_id,
-        message: result.text,
+        message: outboundText,
       });
     } catch (error) {
       napcatLogger.event({
