@@ -33,6 +33,7 @@ import type { UIMessage } from 'ai';
 import VueMarkdown from 'vue-markdown-render';
 
 import {
+  isAffectSignalPart,
   isContextReportPart,
   isMemoryPart,
   isSkillUsagePart,
@@ -65,7 +66,10 @@ const emit = defineEmits<{
 }>();
 
 const shouldHideReferencePart = (part: unknown): boolean =>
-  isSkillUsagePart(part) || isMemoryPart(part) || isContextReportPart(part);
+  isSkillUsagePart(part) ||
+  isMemoryPart(part) ||
+  isContextReportPart(part) ||
+  isAffectSignalPart(part);
 
 const getPartType = (part: unknown): string =>
   isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
