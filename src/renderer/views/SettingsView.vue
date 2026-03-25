@@ -35,9 +35,8 @@
         <div class="config-group">
           <h3>Tool Model</h3>
           <p class="group-description">
-            The Tool Model is a dedicated model used for background AI operations, separate from
-            your main chat model. This allows you to use a fast, cost-effective model for auxiliary
-            tasks while using more capable models for conversation.
+            Used for background AI tasks separate from your main chat model. Prefer a low-latency
+            model.
           </p>
           <div class="tool-model-selector">
             <div class="input-label">
@@ -69,16 +68,8 @@
             </div>
             <div class="tool-model-info">
               <p class="info-text">
-                <strong>Recommended models:</strong> gpt-4o-mini, claude-3-5-haiku,
-                gemini-2.0-flash, deepseek-chat
-              </p>
-              <p class="info-text">
-                <strong>What Tool Model does:</strong> Thread title generation, tool selection,
-                parameter extraction, memory operations, and background tasks.
-              </p>
-              <p class="info-text warning-text">
-                <strong>⚠️ Avoid reasoning models:</strong> Never use o1, o3, or extended thinking
-                models as they are too slow for tool operations.
+                <strong>Used for:</strong> Thread title generation, tool selection, parameter
+                extraction, memory operations, and other background tasks.
               </p>
             </div>
           </div>

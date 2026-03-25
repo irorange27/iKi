@@ -105,6 +105,8 @@ describe('SettingsView general custom selects', () => {
     const { wrapper, store, saveConfig, providersList } = await mountSettingsView();
 
     expect(providersList).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('Prefer a low-latency model.');
+    expect(wrapper.text()).not.toContain('Avoid reasoning models');
     expect(wrapper.find('.tool-model-select .settings-select-trigger').text()).toContain(
       'Auto-detect (Recommended)'
     );
