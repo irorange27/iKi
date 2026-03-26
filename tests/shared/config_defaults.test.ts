@@ -10,5 +10,6 @@ describe('default app config', () => {
     expect(config.memory.emotion.injectToSystemPrompt).toBe(true);
     expect(config.memory.emotion.realtimeAnalysis).toBe(false);
     expect(config.toolModel.providerType).toBe('');
+    expect(config.general.autoApproveToolRequests).toBe(false);
   });
 });

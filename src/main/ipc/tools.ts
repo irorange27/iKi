@@ -1,10 +1,19 @@
 import { ipcMain } from 'electron';
 
+import { getAppConfig } from '../../core/config';
 import { createLogger } from '../../core/logger';
 import { defaultToolRegistry } from '../../core/tools';
+import { applyToolApprovalPolicyList } from '../../shared/utils/tool_approval';
 
 let toolsIpcRegistered = false;
 const toolsIpcLogger = createLogger({ module: 'tools_ipc' });
+const shouldAutoApproveToolRequests = () => {
+  try {
+    return getAppConfig()?.general?.autoApproveToolRequests === true;
+  } catch {
+    return false;
+  }
+};
 
 export const registerToolsIpc = (): void => {
   if (toolsIpcRegistered) return;
@@ -12,7 +21,9 @@ export const registerToolsIpc = (): void => {
 
   ipcMain.handle('tools:list', () => {
     try {
-      return defaultToolRegistry.getToolMetadata();
+      return applyToolApprovalPolicyList(defaultToolRegistry.getToolMetadata(), {
+        autoApproveToolRequests: shouldAutoApproveToolRequests(),
+      });
     } catch (error: unknown) {
       toolsIpcLogger.event({
         level: 'error',

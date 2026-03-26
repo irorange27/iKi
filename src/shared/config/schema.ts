@@ -20,6 +20,7 @@ const GeneralSchema = z
     closeToTray: booleanField(DEFAULT_APP_CONFIG.general.closeToTray),
     startMinimized: booleanField(DEFAULT_APP_CONFIG.general.startMinimized),
     quickChatHideOnBlur: booleanField(DEFAULT_APP_CONFIG.general.quickChatHideOnBlur),
+    autoApproveToolRequests: booleanField(DEFAULT_APP_CONFIG.general.autoApproveToolRequests),
   })
   .catch(DEFAULT_APP_CONFIG.general);
 

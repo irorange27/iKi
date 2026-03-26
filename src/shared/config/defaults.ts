@@ -12,6 +12,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     closeToTray: false,
     startMinimized: false,
     quickChatHideOnBlur: false,
+    autoApproveToolRequests: false,
   },
   ui: {
     fontSize: 15,

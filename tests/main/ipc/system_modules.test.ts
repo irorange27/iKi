@@ -15,6 +15,14 @@ const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
+const { getAppConfigMock } = vi.hoisted(() => ({
+  getAppConfigMock: vi.fn(() => ({
+    general: {
+      autoApproveToolRequests: false,
+    },
+  })),
+}));
+
 vi.mock('electron', () => ({
   ipcMain: {
     handle: ipcHandleMock,
@@ -33,6 +41,10 @@ vi.mock('../../../src/core/logger', () => ({
     event: loggerEventMock,
     span: vi.fn(),
   })),
+}));
+
+vi.mock('../../../src/core/config', () => ({
+  getAppConfig: getAppConfigMock,
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -95,6 +107,7 @@ import {
   getToolModel,
   testToolModelLatency,
 } from '../../../src/core/provider/tool_model';
+import { getAppConfig } from '../../../src/core/config';
 
 const getSkillFolderPathMock = vi.mocked(getSkillFolderPath);
 const getSkillRootsForUiMock = vi.mocked(getSkillRootsForUi);
@@ -109,6 +122,7 @@ const transcribeSpeechMock = vi.mocked(transcribeSpeech);
 const generateTitleWithAgentMock = vi.mocked(generateTitleWithAgent);
 const getToolModelMock = vi.mocked(getToolModel);
 const testToolModelLatencyMock = vi.mocked(testToolModelLatency);
+const getAppConfigRuntimeMock = vi.mocked(getAppConfig);
 
 beforeAll(() => {
   registerSkillsIpc();
@@ -120,6 +134,11 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getAppConfigRuntimeMock.mockReturnValue({
+    general: {
+      autoApproveToolRequests: false,
+    },
+  } as never);
 });
 
 afterEach(() => {
@@ -232,6 +251,16 @@ describe('system IPC modules', () => {
   it('lists tools and falls back to an empty set when metadata resolution fails', async () => {
     getToolMetadataMock.mockReturnValueOnce([{ name: 'web' } as never]);
     expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([{ name: 'web' }]);
+
+    getAppConfigRuntimeMock.mockReturnValueOnce({
+      general: {
+        autoApproveToolRequests: true,
+      },
+    } as never);
+    getToolMetadataMock.mockReturnValueOnce([{ name: 'shell', needsApproval: true } as never]);
+    expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([
+      { name: 'shell', needsApproval: false },
+    ]);
 
     const metadataError = new Error('metadata failed');
     getToolMetadataMock.mockImplementationOnce(() => {

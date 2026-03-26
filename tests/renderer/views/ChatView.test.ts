@@ -48,7 +48,12 @@ const {
     messages: [] as UIMessage[],
   };
 
-  const currentThreadRef = makeRef<{ id: string; title: string } | null>(null);
+  const currentThreadRef = makeRef<{
+    id: string;
+    title: string;
+    metadata?: string;
+    client_id?: string;
+  } | null>(null);
   const currentModelRef = makeRef('gpt-4.1');
   const isIncognitoRef = makeRef(false);
   const selectedWorkspaceIdRef = makeRef<string | null>(null);
@@ -196,7 +201,10 @@ const SidebarStub = defineComponent({
   setup(_, { emit }) {
     return () =>
       h('div', { class: 'sidebar-stub' }, [
-        h('button', { class: 'sidebar-select', onClick: () => emit('thread-selected', 'thread_2') }),
+        h('button', {
+          class: 'sidebar-select',
+          onClick: () => emit('thread-selected', 'thread_2'),
+        }),
         h('button', { class: 'sidebar-new', onClick: () => emit('new-chat') }),
       ]);
   },
@@ -387,9 +395,11 @@ describe('ChatView', () => {
       parts: [{ type: 'text', text: 'Edit me' }],
     };
     chatState.messages = [userMessage];
-    beginEditMessageMock.mockImplementation(async (_message: UIMessage, setDraft: (text: string) => Promise<void>) => {
-      await setDraft('Edited from history');
-    });
+    beginEditMessageMock.mockImplementation(
+      async (_message: UIMessage, setDraft: (text: string) => Promise<void>) => {
+        await setDraft('Edited from history');
+      }
+    );
 
     const wrapper = await mountChatView();
     const messageItem = wrapper.findComponent(ChatMessageItemStub);
@@ -449,5 +459,32 @@ describe('ChatView', () => {
       label: '3 kept',
       tone: 'neutral',
     });
+  });
+
+  it('shows an external-thread control-plane notice when viewing bridge-owned chats', async () => {
+    currentThreadRef.value = {
+      id: 'napcat_10001_private_20002',
+      title: 'QQ User 20002',
+      client_id: 'client_napcat',
+      metadata: JSON.stringify({ source: 'napcat', message_type: 'private' }),
+    };
+    chatState.messages = [
+      {
+        id: 'assistant_external',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Hello from QQ' }],
+      },
+    ];
+
+    const wrapper = await mountChatView();
+
+    expect(wrapper.find('.thread-origin-chip').exists()).toBe(true);
+    expect(wrapper.find('.thread-origin-chip').text()).toContain('QQ private');
+    expect(wrapper.find('.thread-origin-banner').text()).toContain(
+      'Viewing QQ private in the desktop control plane.'
+    );
+    expect(wrapper.find('.thread-origin-banner').text()).toContain(
+      'not delivered back to the external channel'
+    );
   });
 });

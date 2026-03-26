@@ -23,6 +23,7 @@ import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
 import type { AffectSignal } from '../../../shared/emotion/affect';
+import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import { getErrorMessage } from '../../utils/errors';
 import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
@@ -91,6 +92,8 @@ export const createChatStreaming = (deps: {
 
   const getMemoryConfig = () => getAppConfig()?.memory || null;
   const getEmotionConfig = () => getAppConfig()?.memory?.emotion || null;
+  const shouldAutoApproveToolRequests = () =>
+    getAppConfig()?.general?.autoApproveToolRequests === true;
 
   const canStoreShortMemory = () => {
     const memoryConfig = getMemoryConfig();
@@ -244,7 +247,12 @@ export const createChatStreaming = (deps: {
     if (!tool) return;
     const emotionConfig = getEmotionConfig();
     const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
-    const registered = requireApproval ? { ...tool, needsApproval: true } : tool;
+    const registered = applyToolApprovalPolicy(
+      requireApproval ? { ...tool, needsApproval: true } : tool,
+      {
+        autoApproveToolRequests: shouldAutoApproveToolRequests(),
+      }
+    );
     runner.registerTool(registered);
   };
 

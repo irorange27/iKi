@@ -1,11 +1,13 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import type { ConversationRunner } from '../../../core/agent';
+import { getAppConfig } from '../../../core/config';
 import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
 import { defaultToolRegistry } from '../../../core/tools';
 import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
+import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_approval';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatMemory } from './chat_memory';
@@ -49,6 +51,13 @@ export const createChatApproval = (deps: {
   };
 }) => {
   const pendingApprovalSessions = new Map<string, PendingApprovalSession>();
+  const shouldAutoApproveToolRequests = () => {
+    try {
+      return getAppConfig()?.general?.autoApproveToolRequests === true;
+    } catch {
+      return false;
+    }
+  };
 
   const ensurePendingApprovalSession = (
     approvalId: string,
@@ -235,7 +244,13 @@ export const createChatApproval = (deps: {
 
     for (const name of toolNames) {
       const tool = defaultToolRegistry.get(name);
-      if (tool) runner.registerTool(tool);
+      if (tool) {
+        runner.registerTool(
+          applyToolApprovalPolicy(tool, {
+            autoApproveToolRequests: shouldAutoApproveToolRequests(),
+          })
+        );
+      }
     }
 
     const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));

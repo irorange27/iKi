@@ -16,6 +16,9 @@
           <span v-if="currentThread">·</span>
           <FolderOpen v-if="currentThread" :size="12" />
           <span v-if="currentThread">{{ currentThread.title }}</span>
+          <span v-if="currentThreadOrigin?.isExternal" class="thread-origin-chip">
+            {{ currentThreadOrigin.channelLabel || currentThreadOrigin.sourceLabel || 'External' }}
+          </span>
         </div>
       </div>
 
@@ -28,6 +31,9 @@
 
         <!-- Messages List -->
         <div v-else class="messages-area w-full h-full min-w-0">
+          <div v-if="externalThreadNotice" class="thread-origin-banner">
+            {{ externalThreadNotice }}
+          </div>
           <div class="messages-container" @click="handleMarkdownClick">
             <ChatMessageItem
               v-for="(m, index) in chatMessages"
@@ -93,6 +99,7 @@ import { useMarkdownCopy } from '../composables/useMarkdownCopy';
 import { useChatThreads } from '../composables/useChatThreads';
 import { useChatStreaming } from '../composables/useChatStreaming';
 import { useToolMetadata } from '../composables/useToolMetadata';
+import { getThreadOriginInfo } from '../modules/chat/thread_origin';
 
 type ChatInputExpose = {
   setDraftMessage: (
@@ -133,6 +140,18 @@ const composerContextUsage = computed(() => {
   }
 
   return null;
+});
+
+const currentThreadOrigin = computed(() =>
+  currentThread.value ? getThreadOriginInfo(currentThread.value) : null
+);
+
+const externalThreadNotice = computed(() => {
+  const origin = currentThreadOrigin.value;
+  if (!origin?.isExternal) return '';
+
+  const channelLabel = origin.channelLabel || origin.sourceLabel || 'external chat';
+  return `Viewing ${channelLabel} in the desktop control plane. Messages you send here stay local to iKi and are not delivered back to the external channel.`;
 });
 
 const handleToolApprovalEvent = (payload: {
@@ -257,6 +276,29 @@ useChatViewLifecycle({
   margin: 0 auto;
 }
 
+.thread-origin-chip {
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.thread-origin-banner {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .composer-area {
   width: 100%;
 }
@@ -306,5 +348,4 @@ useChatViewLifecycle({
     max-width: 100%;
   }
 }
-
 </style>

@@ -77,15 +77,14 @@
 
         <div class="config-group">
           <h3>Shell Tool Approval</h3>
-          <p class="group-description">
-            Shell commands are always manual-only and always require approval before execution.
-          </p>
+          <p class="group-description">{{ shellApprovalDescription }}</p>
           <div class="input-label">
             <span>Approval Mode</span>
             <SettingsSelect
               class="general-shell-approval-select"
               :model-value="config.toolExecution.shellApprovalMode"
               :options="shellApprovalModeOptions"
+              :disabled="config.general.autoApproveToolRequests"
               aria-label="Shell Tool Approval Mode"
               @update:model-value="updateShellApprovalMode"
             />
@@ -125,6 +124,36 @@
             />
             {{ formatLabel(key) }}
           </label>
+        </div>
+
+        <div class="config-group">
+          <h3>Permission Requests</h3>
+          <p class="group-description">
+            Automatically continue tool-enabled turns without waiting for approval prompts.
+          </p>
+          <button
+            type="button"
+            class="permission-request-card general-auto-approve-switch"
+            :class="{
+              'permission-request-card-enabled': config.general.autoApproveToolRequests,
+            }"
+            role="switch"
+            :aria-checked="config.general.autoApproveToolRequests ? 'true' : 'false'"
+            aria-label="Automatically approve all tool requests"
+            @click="toggleAutoApproveToolRequests"
+          >
+            <span class="permission-request-copy">
+              <span class="permission-request-title">Automatically approve all tool requests</span>
+              <span class="permission-request-description">
+                When enabled, built-in and MCP tools continue immediately without waiting for
+                approval prompts, including shell commands.
+              </span>
+              <span class="permission-request-warning">Use with caution.</span>
+            </span>
+            <span class="permission-request-switch" aria-hidden="true">
+              <span class="permission-request-switch-thumb" />
+            </span>
+          </button>
         </div>
 
         <button class="reset-btn" @click="resetSection('general')">Reset General</button>
@@ -719,6 +748,11 @@ const selectedToolModelOptionValue = computed(() => {
 });
 
 const canTestToolModel = computed(() => availableProvidersWithModels.value.length > 0);
+const shellApprovalDescription = computed(() =>
+  config.value.general.autoApproveToolRequests
+    ? 'Shell approval is currently bypassed because automatic tool approval is enabled below.'
+    : 'Shell commands always require manual approval before execution.'
+);
 
 const formatTestedToolModel = (selection: ToolModelSelection): string =>
   `${selection.model} (${selection.providerType})`;
@@ -906,6 +940,10 @@ const updateLanguageSelection = (value: string) => {
   if (value === 'en' || value === 'zh-CN') {
     updateGeneral('language', value);
   }
+};
+
+const toggleAutoApproveToolRequests = () => {
+  updateGeneral('autoApproveToolRequests', !config.value.general.autoApproveToolRequests);
 };
 
 const updateNetwork = (path: NetworkUpdatePath, value: boolean | string | number | null) => {
@@ -1472,5 +1510,98 @@ onMounted(async () => {
 
 .info-text:last-child {
   margin-bottom: 0;
+}
+
+.permission-request-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.permission-request-card:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--accent-color) 6%);
+}
+
+.permission-request-card:focus-visible {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 22%, transparent);
+}
+
+.permission-request-card-enabled {
+  border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
+  background: color-mix(in srgb, var(--bg-secondary) 68%, var(--accent-color) 10%);
+}
+
+.permission-request-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.permission-request-title {
+  font-size: 0.98em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.permission-request-description {
+  font-size: 0.92em;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.permission-request-warning {
+  font-size: 0.84em;
+  color: var(--warning-color);
+}
+
+.permission-request-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 30px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.permission-request-card-enabled .permission-request-switch {
+  background: color-mix(in srgb, var(--accent-color) 86%, white 14%);
+  border-color: color-mix(in srgb, var(--accent-color) 88%, white 12%);
+}
+
+.permission-request-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.28);
+  transition: transform 0.2s ease;
+}
+
+.permission-request-card-enabled .permission-request-switch-thumb {
+  transform: translateX(24px);
 }
 </style>

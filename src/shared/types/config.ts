@@ -77,6 +77,7 @@ export interface AppConfig {
     closeToTray: boolean;
     startMinimized: boolean;
     quickChatHideOnBlur: boolean;
+    autoApproveToolRequests: boolean;
   };
   ui: {
     fontSize: number; // 10-32px

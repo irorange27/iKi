@@ -1,4 +1,6 @@
+import { getAppConfig } from '../../../core/config';
 import { defaultToolRegistry } from '../../../core/tools';
+import { applyToolApprovalPolicyList } from '../../../shared/utils/tool_approval';
 import type { AffectState } from '../../../core/emotion/affect_state';
 import { selectToolsWithAgent } from '../../../core/provider/tool_selection';
 import type { ChatInputMessage } from './chat_types';
@@ -49,7 +51,18 @@ const isMcpToolFromAllowedServer = (
   return serverId.length > 0 && allowedServerIds.has(serverId);
 };
 
-const getRegisteredToolMetadata = () => defaultToolRegistry.getToolMetadata();
+const shouldAutoApproveToolRequests = () => {
+  try {
+    return getAppConfig()?.general?.autoApproveToolRequests === true;
+  } catch {
+    return false;
+  }
+};
+
+const getRegisteredToolMetadata = () =>
+  applyToolApprovalPolicyList(defaultToolRegistry.getToolMetadata(), {
+    autoApproveToolRequests: shouldAutoApproveToolRequests(),
+  });
 
 const getAutoToolCatalog = (allowedMcpServerIds: Set<string> | null) =>
   getRegisteredToolMetadata()

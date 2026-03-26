@@ -522,6 +522,67 @@ describe('createChatStreaming', () => {
     );
   });
 
+  it('registers approval-gated tools without approval prompts when global auto-approve is enabled', async () => {
+    getAppConfigMock.mockReturnValue({
+      general: {
+        autoApproveToolRequests: true,
+      },
+      memory: {
+        enabled: false,
+        autoSummarize: false,
+        context: {
+          enabled: true,
+        },
+        emotion: {
+          enabled: false,
+          injectToSystemPrompt: false,
+          realtimeAnalysis: false,
+        },
+      },
+      mcp: {
+        defaultApprovalMode: 'safe-only',
+      },
+    });
+
+    resolveToolNamesMock.mockResolvedValue({
+      mode: 'manual',
+      explicitTools: ['shell'],
+      resolvedTools: ['shell'],
+    });
+    toModelInputMessagesMock.mockResolvedValue([{ role: 'user', content: 'run ls' }]);
+
+    const runner = {
+      registerTool: vi.fn(),
+      generate: vi.fn().mockResolvedValue({ response: 'done', iterations: 1 }),
+    };
+    createChatConversationRunnerMock.mockReturnValue(runner);
+
+    defaultToolRegistryGetMock.mockReturnValue({
+      name: 'shell',
+      description: 'Run shell commands',
+      needsApproval: true,
+      parameters: {},
+      handler: vi.fn(async () => ({ ok: true })),
+    });
+
+    const { streaming } = createDeps();
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'run ls' }],
+      tools: ['shell'],
+      threadId: 'thread_auto_approve',
+    });
+
+    expect(result).toEqual({ success: true, text: 'done' });
+    expect(runner.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'shell',
+        needsApproval: false,
+      })
+    );
+  });
+
   it('stream() persists pending approval sessions when tool events request approval', async () => {
     assembleContextMock.mockResolvedValue({
       messages: [

@@ -164,4 +164,32 @@ describe('SettingsView general custom selects', () => {
 
     wrapper.unmount();
   });
+
+  it('toggles automatic tool approval and disables the shell approval selector', async () => {
+    const { wrapper, store, saveConfig } = await mountSettingsView();
+
+    expect(wrapper.find('.general-auto-approve-switch').attributes('aria-checked')).toBe('false');
+    expect(
+      wrapper
+        .find('.general-shell-approval-select .settings-select-trigger')
+        .attributes('disabled')
+    ).toBeUndefined();
+
+    await wrapper.find('.general-auto-approve-switch').trigger('click');
+
+    expect(store.config.general.autoApproveToolRequests).toBe(true);
+    expect(wrapper.find('.general-auto-approve-switch').attributes('aria-checked')).toBe('true');
+    expect(wrapper.text()).toContain('including shell commands');
+    expect(
+      wrapper
+        .find('.general-shell-approval-select .settings-select-trigger')
+        .attributes('disabled')
+    ).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
 });

@@ -1,7 +1,21 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTool, defaultToolRegistry } from '../../../../src/core/tools';
+import { getAppConfig } from '../../../../src/core/config';
+import { selectToolsWithAgent } from '../../../../src/core/provider/tool_selection';
 import { resolveToolNames } from '../../../../src/main/services/chat/chat_tools';
+
+vi.mock('../../../../src/core/config', () => ({
+  getAppConfig: vi.fn(() => ({
+    general: {
+      autoApproveToolRequests: false,
+    },
+  })),
+}));
+
+vi.mock('../../../../src/core/provider/tool_selection', () => ({
+  selectToolsWithAgent: vi.fn(async () => null),
+}));
 
 const TEST_TOOL_NAMES = [
   'web',
@@ -23,6 +37,7 @@ const TEST_TOOL_NAMES = [
 const registerTool = (options: {
   name: string;
   autoAllowed?: boolean;
+  needsApproval?: boolean;
   source?: { kind: 'builtin' | 'mcp'; id?: string; name?: string };
 }) => {
   defaultToolRegistry.register(
@@ -32,11 +47,25 @@ const registerTool = (options: {
       description: `Tool ${options.name}`,
       parameters: { type: 'object', properties: {} },
       autoAllowed: options.autoAllowed,
+      needsApproval: options.needsApproval,
       source: options.source,
       handler: async () => ({ ok: true }),
     })
   );
 };
+
+const getAppConfigMock = vi.mocked(getAppConfig);
+const selectToolsWithAgentMock = vi.mocked(selectToolsWithAgent);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  getAppConfigMock.mockReturnValue({
+    general: {
+      autoApproveToolRequests: false,
+    },
+  } as never);
+  selectToolsWithAgentMock.mockResolvedValue(null);
+});
 
 afterEach(() => {
   for (const toolName of TEST_TOOL_NAMES) {
@@ -144,5 +173,32 @@ describe('resolveToolNames', () => {
       'write_todo_list',
       'delete_todo_list',
     ]);
+  });
+
+  it('reports approval-gated tools as prompt-free to the auto router when global auto-approve is enabled', async () => {
+    getAppConfigMock.mockReturnValue({
+      general: {
+        autoApproveToolRequests: true,
+      },
+    } as never);
+    selectToolsWithAgentMock.mockResolvedValue(['shell']);
+    registerTool({ name: 'shell', needsApproval: true, source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [{ role: 'user', content: 'Run a shell command.' }],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual(['shell']);
+    expect(selectToolsWithAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        availableTools: [
+          expect.objectContaining({
+            name: 'shell',
+            needsApproval: false,
+          }),
+        ],
+      })
+    );
   });
 });
