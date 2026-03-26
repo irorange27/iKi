@@ -3,6 +3,7 @@ import {
   getActiveIdentityProfile,
 } from '../../../core/db/identity';
 import type { IdentityProfile } from '../../../shared/types/identity';
+import { getIdentityBrainContextMessage } from './identity_brain';
 
 const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
@@ -79,5 +80,7 @@ export const buildIdentitySystemMessage = (profile: IdentityProfile): string => 
 export const getIdentityContextMessage = (): string => {
   const profile = getOrCreateActiveIdentityProfile();
   if (!profile) return '';
-  return buildIdentitySystemMessage(profile);
+  return [buildIdentitySystemMessage(profile), getIdentityBrainContextMessage()]
+    .filter(Boolean)
+    .join('\n\n');
 };
