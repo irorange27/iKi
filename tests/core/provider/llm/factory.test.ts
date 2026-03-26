@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  createAnthropicMock,
   createDeepSeekMock,
   createLoggerMock,
   createOpenAICompatibleMock,
@@ -11,6 +12,7 @@ const {
   getPersonaPromptMock,
   streamTextMock,
 } = vi.hoisted(() => ({
+  createAnthropicMock: vi.fn(),
   createDeepSeekMock: vi.fn(),
   createLoggerMock: vi.fn(() => ({
     error: vi.fn(),
@@ -35,6 +37,10 @@ vi.mock('ai', () => ({
 
 vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: createOpenAIMock,
+}));
+
+vi.mock('@ai-sdk/anthropic', () => ({
+  createAnthropic: createAnthropicMock,
 }));
 
 vi.mock('@ai-sdk/deepseek', () => ({
@@ -113,6 +119,29 @@ describe('llm factory', () => {
       baseURL: 'https://api.openai.com/v1',
     });
     expect(modelFactory).toHaveBeenCalledWith('gpt-4.1');
+    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
+  });
+
+  it('instantiates Anthropic models through the Anthropic provider adapter', () => {
+    const modelFactory = vi.fn(() => 'anthropic-model');
+    createAnthropicMock.mockReturnValue(modelFactory);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_anthropic',
+        type: 'anthropic',
+        enabled: true,
+        api_key: 'sk-ant',
+        base_url: 'https://api.anthropic.com/v1',
+        models: JSON.stringify(['claude-sonnet-4-5']),
+      },
+    ]);
+
+    expect(createModel('anthropic', 'claude-sonnet-4-5')).toBe('anthropic-model');
+    expect(createAnthropicMock).toHaveBeenCalledWith({
+      apiKey: 'sk-ant',
+      baseURL: 'https://api.anthropic.com/v1',
+    });
+    expect(modelFactory).toHaveBeenCalledWith('claude-sonnet-4-5');
     expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
   });
 

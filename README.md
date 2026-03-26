@@ -7,8 +7,9 @@ A local agent pet for AI provider orchestration.
 ## Features
 
 - Orchestrates multiple AI providers.
-- Ships first-class built-in provider entries for OpenAI, DeepSeek, Moonshot AI (Kimi), and
-  Ollama, while still allowing custom OpenAI-compatible endpoints.
+- Ships first-class built-in provider entries for OpenAI, Anthropic, DeepSeek, Moonshot AI
+  (Kimi), and Ollama, while still allowing custom OpenAI-compatible and Anthropic-compatible
+  endpoints.
 
 - Acts as a local agent for streamlined AI interactions.
 
@@ -54,8 +55,8 @@ A local agent pet for AI provider orchestration.
    npm run app:dev
    ```
 
-6. Open `Settings`, configure at least one provider API key and model (for example OpenAI or
-   DeepSeek), then send
+6. Open `Settings`, configure at least one provider API key and model (for example OpenAI,
+   Anthropic, or DeepSeek), then send
    your first chat message.
 
 ## Useful Commands
@@ -118,5 +119,10 @@ existing packaged output under `out/`.
   outputs as workflow artifacts per OS
 - Tag builds automatically create or update a draft GitHub Release whose body comes from the
   curated `changelogs/vX.Y.Z.md` file and whose assets include a `SHA256SUMS.txt` manifest
+- Packaged macOS and Windows builds now use Electron's native `autoUpdater` via
+  `update.electronjs.org`, so the desktop client only sees releases after the GitHub draft release
+  has been explicitly published; draft assets remain invisible to auto-update checks
+- macOS production auto-update still depends on shipping signed builds; unsigned local previews can
+  exercise the UI wiring but are not a substitute for a signed release verification pass
 - `workflow_dispatch` remains available for CI build-only verification of any branch, tag, or SHA
   without publishing a release

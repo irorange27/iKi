@@ -5,6 +5,7 @@ export const getProviderIconName = (providerId: string): string => {
     openai: 'openai',
     'openai-compatible': 'openai',
     anthropic: 'anthropic',
+    'anthropic-compatible': 'anthropic',
     claude: 'claude',
     google: 'google',
     gemini: 'gemini',

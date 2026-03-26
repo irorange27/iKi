@@ -14,6 +14,7 @@ const {
   readFileSyncMock,
   httpGetMock,
   readRecentDaemonLogsMock,
+  applyAppUpdateConfigMock,
   applyDesktopDaemonConfigUpdateMock,
   isDesktopDaemonEmbeddedRunningMock,
   restartDesktopDaemonMock,
@@ -52,7 +53,8 @@ const {
       },
     ],
   })),
-  applyDesktopDaemonConfigUpdateMock: vi.fn(),
+  applyAppUpdateConfigMock: vi.fn(),
+  applyDesktopDaemonConfigUpdateMock: vi.fn(async () => undefined),
   isDesktopDaemonEmbeddedRunningMock: vi.fn(() => true),
   restartDesktopDaemonMock: vi.fn(),
   startDesktopDaemonMock: vi.fn(),
@@ -119,6 +121,10 @@ vi.mock('../../../src/main/services/daemon/daemon_lifecycle', () => ({
   restartDesktopDaemon: restartDesktopDaemonMock,
   startDesktopDaemon: startDesktopDaemonMock,
   stopDesktopDaemon: stopDesktopDaemonMock,
+}));
+
+vi.mock('../../../src/main/services/update/auto_update_service', () => ({
+  applyAppUpdateConfig: applyAppUpdateConfigMock,
 }));
 
 vi.mock('../../../src/core/mcp', () => ({
@@ -270,5 +276,32 @@ describe('config IPC', () => {
       },
       embeddedRunning: true,
     });
+  });
+
+  it('applies updater config when settings are saved', async () => {
+    const handler = ipcHandlers.get('config:set');
+    if (!handler) throw new Error('config:set handler not registered');
+
+    const nextConfig = {
+      general: {
+        autoUpdate: false,
+      },
+      daemon: {
+        host: '127.0.0.1',
+        port: 6127,
+      },
+      mcp: {
+        enabled: false,
+        connectOnStartup: false,
+        allowRemoteServers: false,
+        defaultApprovalMode: 'safe-only',
+        requestTimeoutMs: 20000,
+        maxConcurrentRequests: 4,
+      },
+    };
+
+    await handler(null, nextConfig);
+
+    expect(applyAppUpdateConfigMock).toHaveBeenCalledWith(nextConfig);
   });
 });

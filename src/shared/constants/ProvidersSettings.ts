@@ -11,6 +11,15 @@ export const BUILTIN_PROVIDERS: BuiltInProvider[] = [
     credentialsLabel: 'OpenAI API Keys',
   },
   {
+    id: 'anthropic',
+    name: 'Anthropic',
+    description: 'Official Claude models via the AI SDK Anthropic provider',
+    defaultBaseUrl: 'https://api.anthropic.com/v1',
+    docsUrl: 'https://docs.anthropic.com/en/api/overview',
+    credentialsUrl: 'https://platform.claude.com/settings/keys',
+    credentialsLabel: 'Anthropic Console',
+  },
+  {
     id: 'deepseek',
     name: 'DeepSeek',
     description: 'DeepSeek AI models with advanced reasoning capabilities',

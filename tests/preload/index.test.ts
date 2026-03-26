@@ -156,6 +156,7 @@ describe('preload task IPC payload serialization', () => {
     invokeMock.mockResolvedValue({});
 
     const configUpdated = vi.fn();
+    const updateStatusChanged = vi.fn();
     const chatChunk = vi.fn();
     const lifePush = vi.fn();
     const taskPush = vi.fn();
@@ -168,6 +169,11 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.config.controlDaemon('restart');
     await exposedApi.config.set({} as never);
     exposedApi.config.onUpdated(configUpdated);
+    await exposedApi.updates.getStatus();
+    await exposedApi.updates.check();
+    await exposedApi.updates.install();
+    exposedApi.updates.onStatusChanged(updateStatusChanged);
+    exposedApi.updates.removeAllListeners();
 
     await exposedApi.providers.list();
     await exposedApi.providers.get('provider_1');
@@ -301,6 +307,9 @@ describe('preload task IPC payload serialization', () => {
         'config:get-daemon-logs',
         'config:control-daemon',
         'config:set',
+        'updates:get-status',
+        'updates:check',
+        'updates:install',
         'providers:list',
         'providers:get',
         'providers:add',
@@ -384,6 +393,7 @@ describe('preload task IPC payload serialization', () => {
     expect(onMock.mock.calls.map(call => call[0])).toEqual(
       expect.arrayContaining([
         'config:updated',
+        'updates:status-changed',
         'chat:ui-chunk',
         'life:push',
         'speech:download-progress',
@@ -393,6 +403,7 @@ describe('preload task IPC payload serialization', () => {
     expect(removeAllListenersMock.mock.calls.map(call => call[0])).toEqual(
       expect.arrayContaining([
         'chat:ui-chunk',
+        'updates:status-changed',
         'life:push',
         'speech:download-progress',
         'tasks:push',

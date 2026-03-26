@@ -1,4 +1,5 @@
 import { generateText, streamText, type LanguageModel, type ModelMessage } from 'ai';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
@@ -89,6 +90,17 @@ export const createModel = (providerType: string, modelId: string): LanguageMode
       baseURL: config.baseURL || 'https://api.openai.com/v1',
     });
     return client(modelId);
+  }
+  if (providerType === 'anthropic' || providerType === 'anthropic-compatible') {
+    const client = createAnthropic({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
+      ...(providerType === 'anthropic-compatible' ? { name: providerType } : {}),
+    });
+    // Some package trees currently hoist a second copy of `@ai-sdk/provider` under
+    // `@ai-sdk/anthropic`, which makes the runtime-compatible model surface appear
+    // structurally incompatible to TypeScript even though the adapter works correctly.
+    return client(modelId) as unknown as LanguageModel;
   }
   if (providerType === 'deepseek') {
     const client = createDeepSeek({

@@ -400,7 +400,7 @@ const modelsPanelOpen = ref(false);
 
 const providerTypeOptions = computed(() => [
   { value: 'openai-compatible', label: t('settings.providers.type.openaiCompatible') },
-  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'anthropic-compatible', label: t('settings.providers.type.anthropicCompatible') },
   { value: 'google', label: t('settings.providers.type.googleGemini') },
   { value: 'ollama', label: 'Ollama' },
   { value: 'custom', label: t('common.custom') },
@@ -423,12 +423,19 @@ const getBuiltInProvider = (providerId: string | null): BuiltInProvider | null =
   return BUILTIN_PROVIDERS.find(provider => provider.id === providerId) || null;
 };
 
+const isCanonicalBuiltInConfig = (provider: ProviderRecord, providerId: string) => {
+  const builtIn = getBuiltInProvider(providerId);
+  return builtIn ? provider.type === providerId && provider.name === builtIn.name : false;
+};
+
 const getProviderRecord = (providerId: string | null): ProviderRecord | null => {
   if (!providerId) return null;
-  return (
-    providers.value.find(provider => provider.type === providerId || provider.id === providerId) ||
-    null
-  );
+
+  if (getBuiltInProvider(providerId)) {
+    return providers.value.find(provider => isCanonicalBuiltInConfig(provider, providerId)) || null;
+  }
+
+  return providers.value.find(provider => provider.id === providerId) || null;
 };
 
 const normalizeBaseUrlForDraft = (providerId: string, baseUrl?: string) => {
@@ -620,7 +627,7 @@ const filteredBuiltInProviders = computed(() => {
 
 const customProviders = computed(() => {
   const custom = providers.value.filter(
-    provider => !BUILTIN_PROVIDERS.some(builtInProvider => builtInProvider.id === provider.type)
+    provider => !BUILTIN_PROVIDERS.some(builtInProvider => isCanonicalBuiltInConfig(provider, builtInProvider.id))
   );
 
   return [...custom].sort((a, b) => {
@@ -638,18 +645,16 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
   const builtIn = BUILTIN_PROVIDERS.find(p => p.id === selectedProviderId.value);
   if (builtIn) {
     const selected = selectedModels.value[builtIn.id] || getPersistedProviderSnapshot(builtIn.id).models;
+    const descriptionByProviderId: Record<string, string> = {
+      openai: t('settings.providers.description.openai'),
+      anthropic: t('settings.providers.description.anthropic'),
+      deepseek: t('settings.providers.description.deepseek'),
+      kimi: t('settings.providers.description.kimi'),
+      ollama: t('settings.providers.description.ollama'),
+    };
     return {
       ...builtIn,
-      description:
-        builtIn.id === 'openai'
-          ? t('settings.providers.description.openai')
-          : builtIn.id === 'deepseek'
-            ? t('settings.providers.description.deepseek')
-            : builtIn.id === 'kimi'
-              ? t('settings.providers.description.kimi')
-              : builtIn.id === 'ollama'
-                ? t('settings.providers.description.ollama')
-                : builtIn.description,
+      description: descriptionByProviderId[builtIn.id] || builtIn.description,
       models: selected,
     };
   }
@@ -747,12 +752,11 @@ const canSaveSelectedProvider = computed(() => {
 });
 
 const isProviderConfigured = (providerId: string) => {
-  return providers.value.some(p => p.type === providerId);
+  return providers.value.some(provider => isCanonicalBuiltInConfig(provider, providerId));
 };
 
 const isProviderEnabled = (providerId: string) => {
-  const config = providers.value.find(p => p.type === providerId || p.id === providerId);
-  return config?.enabled === true;
+  return getProviderRecord(providerId)?.enabled === true;
 };
 
 const setSelectedProviderEnabled = (enabled: boolean) => {
@@ -792,6 +796,9 @@ const saveProviderConfig = async () => {
   try {
     if (existingConfig) {
       await electronAPI.providers.update(existingConfig.id, {
+        ...(selectedProviderId.value === existingConfig.id && existingConfig.type === 'anthropic'
+          ? { type: 'anthropic-compatible' }
+          : {}),
         api_key: draft.api_key.trim(),
         base_url: normalizedBaseUrl,
         enabled: draft.enabled,
@@ -960,7 +967,7 @@ onMounted(() => {
 
 .providers-layout {
   display: flex;
-  gap: 20px;
+  gap: 16px;
   min-height: 460px;
 }
 

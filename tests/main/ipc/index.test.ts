@@ -21,6 +21,7 @@ const { registerMocks, callOrder } = vi.hoisted(() => {
       registerPromptAppsIpc: namedRegister('prompt_apps'),
       registerToolModelIpc: namedRegister('tool_model'),
       registerToolsIpc: namedRegister('tools'),
+      registerUpdaterIpc: namedRegister('updater'),
       registerSkillsIpc: namedRegister('skills'),
       registerWorkflowIpc: namedRegister('workflow'),
       registerSpeechIpc: namedRegister('speech'),
@@ -63,6 +64,9 @@ vi.mock('../../../src/main/ipc/tool_model', () => ({
 vi.mock('../../../src/main/ipc/tools', () => ({
   registerToolsIpc: registerMocks.registerToolsIpc,
 }));
+vi.mock('../../../src/main/ipc/updater', () => ({
+  registerUpdaterIpc: registerMocks.registerUpdaterIpc,
+}));
 vi.mock('../../../src/main/ipc/skills', () => ({
   registerSkillsIpc: registerMocks.registerSkillsIpc,
 }));
@@ -94,6 +98,7 @@ describe('main IPC registration', () => {
     expect(callOrder).toEqual([
       'window',
       'config',
+      'updater',
       'life',
       'relationship',
       'providers',

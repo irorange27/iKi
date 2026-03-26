@@ -128,6 +128,63 @@
         </div>
 
         <div class="config-group">
+          <div class="update-status-header">
+            <div>
+              <h3>{{ t('settings.general.updates.title') }}</h3>
+              <p class="group-description">{{ t('settings.general.updates.description') }}</p>
+            </div>
+            <span v-if="updateStatus" class="update-version-pill">
+              v{{ updateStatus.currentVersion }}
+            </span>
+          </div>
+
+          <div
+            class="update-status-card"
+            :class="updateStatusTone ? `update-status-card-${updateStatusTone}` : ''"
+          >
+            <template v-if="isLoadingUpdateStatus">
+              <span class="update-status-title">{{ t('common.loading') }}</span>
+              <span class="update-status-description">
+                {{ t('settings.general.updates.loadingDescription') }}
+              </span>
+            </template>
+
+            <template v-else-if="updateStatus">
+              <div class="update-status-copy">
+                <span class="update-status-title">{{ updateStatusTitle }}</span>
+                <span class="update-status-description">{{ updateStatusDescription }}</span>
+                <span v-if="updateStatusMeta" class="update-status-meta">
+                  {{ updateStatusMeta }}
+                </span>
+              </div>
+              <div class="update-status-actions">
+                <button
+                  type="button"
+                  class="test-model-btn general-update-check-btn"
+                  @click="checkForUpdatesNow"
+                  :disabled="!canCheckForUpdates"
+                >
+                  <RefreshCw :size="14" :class="{ 'animate-spin': isCheckingForUpdates }" />
+                  {{
+                    isCheckingForUpdates
+                      ? t('settings.general.updates.checking')
+                      : t('settings.general.updates.checkNow')
+                  }}
+                </button>
+                <button
+                  v-if="canInstallDownloadedUpdate"
+                  type="button"
+                  class="update-install-btn"
+                  @click="installDownloadedUpdate"
+                >
+                  {{ t('settings.general.updates.restartNow') }}
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="config-group">
           <h3>{{ t('settings.general.permissionRequests.title') }}</h3>
           <p class="group-description">
             {{ t('settings.general.permissionRequests.description') }}
@@ -524,7 +581,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   Cog,
@@ -554,10 +611,12 @@ import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.
 import SettingsSelect from '../components/settings/SettingsSelect.vue';
 import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
+import { updateService } from '../services/update_service';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '../../shared/config/defaults';
 import type { AppConfig } from '../../shared/types/config';
 import type { Provider } from '../../shared/types/provider';
+import type { AppUpdateStatus } from '../../shared/types/update';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
 
@@ -573,10 +632,12 @@ const activeSection = ref('general');
 const saved = ref(true);
 const providers = ref<Provider[]>([]);
 const isTestingModel = ref(false);
+const isLoadingUpdateStatus = ref(true);
 const toolModelTestResult = ref<{
   status: 'success' | 'warning' | 'error';
   message: string;
 } | null>(null);
+const updateStatus = ref<AppUpdateStatus | null>(null);
 
 type AvailableProvider = {
   id: string;
@@ -766,9 +827,204 @@ const shellApprovalDescription = computed(() =>
     ? t('settings.general.shellApproval.bypassed')
     : t('settings.general.shellApproval.description')
 );
+const isCheckingForUpdates = computed(
+  () => updateStatus.value?.state === 'checking' || updateStatus.value?.state === 'downloading'
+);
+const canCheckForUpdates = computed(
+  () =>
+    Boolean(updateStatus.value?.supported) &&
+    !isCheckingForUpdates.value &&
+    updateStatus.value?.state !== 'downloaded'
+);
+const canInstallDownloadedUpdate = computed(() => updateStatus.value?.state === 'downloaded');
+
+const formatUpdateTimestamp = (value: string | null): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const locale = config.value.general.language === 'zh-CN' ? 'zh-CN' : 'en';
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+};
+
+const getUpdateIntervalHours = (value: number | null): number => {
+  if (!value || value <= 0) return 0;
+  return Math.max(1, Math.round(value / (60 * 60 * 1000)));
+};
+
+const updateStatusTone = computed<'success' | 'warning' | 'error' | ''>(() => {
+  switch (updateStatus.value?.state) {
+    case 'up-to-date':
+    case 'downloaded':
+      return 'success';
+    case 'checking':
+    case 'downloading':
+    case 'unsupported':
+      return 'warning';
+    case 'error':
+      return 'error';
+    default:
+      return '';
+  }
+});
+
+const updateStatusTitle = computed(() => {
+  if (!updateStatus.value) return '';
+
+  switch (updateStatus.value.state) {
+    case 'unsupported':
+      return t('settings.general.updates.unsupportedTitle');
+    case 'checking':
+      return t('settings.general.updates.checkingTitle');
+    case 'downloading':
+      return t('settings.general.updates.downloadingTitle');
+    case 'downloaded':
+      return t('settings.general.updates.downloadedTitle');
+    case 'up-to-date':
+      return t('settings.general.updates.upToDateTitle');
+    case 'error':
+      return t('settings.general.updates.errorTitle');
+    case 'idle':
+    default:
+      return updateStatus.value.autoUpdateEnabled
+        ? t('settings.general.updates.idleAutoTitle')
+        : t('settings.general.updates.idleManualTitle');
+  }
+});
+
+const updateStatusDescription = computed(() => {
+  if (!updateStatus.value) return '';
+
+  switch (updateStatus.value.state) {
+    case 'unsupported':
+      switch (updateStatus.value.unsupportedReason) {
+        case 'platform':
+          return t('settings.general.updates.unsupportedPlatform');
+        case 'not-packaged':
+          return t('settings.general.updates.unsupportedNotPackaged');
+        case 'first-run':
+          return t('settings.general.updates.unsupportedFirstRun');
+        case 'repository-unavailable':
+          return t('settings.general.updates.unsupportedRepository');
+        default:
+          return t('settings.general.updates.unsupportedGeneric');
+      }
+    case 'checking':
+      return t('settings.general.updates.checkingDescription');
+    case 'downloading':
+      return t('settings.general.updates.downloadingDescription');
+    case 'downloaded':
+      return t('settings.general.updates.downloadedDescription');
+    case 'up-to-date':
+      return t('settings.general.updates.upToDateDescription');
+    case 'error':
+      return t('settings.general.updates.errorDescription', {
+        error: updateStatus.value.error || t('common.unknown'),
+      });
+    case 'idle':
+    default:
+      return updateStatus.value.autoUpdateEnabled
+        ? t('settings.general.updates.idleAutoDescription', {
+            hours: getUpdateIntervalHours(updateStatus.value.checkIntervalMs),
+          })
+        : t('settings.general.updates.idleManualDescription');
+  }
+});
+
+const updateStatusMeta = computed(() => {
+  if (!updateStatus.value) return '';
+  if (updateStatus.value.releaseName) {
+    return t('settings.general.updates.metaRelease', {
+      release: updateStatus.value.releaseName,
+    });
+  }
+  if (updateStatus.value.lastCheckedAt) {
+    return t('settings.general.updates.metaLastChecked', {
+      time: formatUpdateTimestamp(updateStatus.value.lastCheckedAt),
+    });
+  }
+  return '';
+});
 
 const formatTestedToolModel = (selection: ToolModelSelection): string =>
   `${selection.model} (${selection.providerType})`;
+
+let removeUpdateStatusListener: () => void = () => undefined;
+
+const loadUpdateStatus = async () => {
+  isLoadingUpdateStatus.value = true;
+  try {
+    updateStatus.value = await updateService.getStatus();
+  } catch (error) {
+    settingsViewLogger.event({
+      level: 'warn',
+      event: 'settings.updates.load',
+      outcome: 'failed',
+      error,
+      message: 'Failed to load update status.',
+    });
+    updateStatus.value = {
+      state: 'error',
+      autoUpdateEnabled: config.value.general.autoUpdate,
+      supported: false,
+      checkIntervalMs: null,
+      currentVersion: '',
+      lastCheckedAt: null,
+      releaseName: null,
+      releaseDate: null,
+      releaseNotes: null,
+      updateUrl: null,
+      error: getErrorMessage(error),
+      unsupportedReason: null,
+    };
+  } finally {
+    isLoadingUpdateStatus.value = false;
+  }
+};
+
+const checkForUpdatesNow = async () => {
+  try {
+    updateStatus.value = await updateService.check();
+  } catch (error) {
+    settingsViewLogger.event({
+      level: 'warn',
+      event: 'settings.updates.check',
+      outcome: 'failed',
+      error,
+      message: 'Failed to trigger update check.',
+    });
+    if (updateStatus.value) {
+      updateStatus.value = {
+        ...updateStatus.value,
+        state: 'error',
+        error: getErrorMessage(error),
+      };
+    }
+  }
+};
+
+const installDownloadedUpdate = async () => {
+  try {
+    await updateService.install();
+  } catch (error) {
+    settingsViewLogger.event({
+      level: 'warn',
+      event: 'settings.updates.install',
+      outcome: 'failed',
+      error,
+      message: 'Failed to install downloaded update.',
+    });
+    if (updateStatus.value) {
+      updateStatus.value = {
+        ...updateStatus.value,
+        state: 'error',
+        error: getErrorMessage(error),
+      };
+    }
+  }
+};
 
 // Test tool model latency
 const testToolModel = async () => {
@@ -1087,10 +1343,19 @@ const saveAndClose = async () => {
 };
 
 onMounted(async () => {
+  removeUpdateStatusListener = updateService.onStatusChanged(status => {
+    updateStatus.value = status;
+    isLoadingUpdateStatus.value = false;
+  });
   if (!configStore.initialized) {
     await configStore.initialize();
   }
+  await loadUpdateStatus();
   await loadProviders();
+});
+
+onBeforeUnmount(() => {
+  removeUpdateStatusListener();
 });
 </script>
 
@@ -1571,6 +1836,115 @@ onMounted(async () => {
 
 .info-text:last-child {
   margin-bottom: 0;
+}
+
+.update-status-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.update-version-pill {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.update-status-card {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+}
+
+.update-status-card-success {
+  border-color: rgba(var(--success-rgb), 0.3);
+  background: rgba(var(--success-rgb), 0.1);
+}
+
+.update-status-card-warning {
+  border-color: rgba(var(--warning-rgb), 0.28);
+  background: rgba(var(--warning-rgb), 0.1);
+}
+
+.update-status-card-error {
+  border-color: rgba(var(--danger-rgb), 0.28);
+  background: rgba(var(--danger-rgb), 0.1);
+}
+
+.update-status-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-status-title {
+  font-size: 0.98em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.update-status-description {
+  font-size: 0.92em;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.update-status-meta {
+  font-size: 0.84em;
+  color: var(--text-tertiary);
+}
+
+.update-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.update-install-btn {
+  border: 1px solid rgba(var(--success-rgb), 0.42);
+  background: rgba(var(--success-rgb), 0.18);
+  color: var(--status-success-color);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.update-install-btn:hover {
+  background: rgba(var(--success-rgb), 0.24);
+  border-color: rgba(var(--success-rgb), 0.55);
+}
+
+@media (max-width: 760px) {
+  .update-status-header,
+  .update-status-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .update-status-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 .permission-request-card {

@@ -55,10 +55,48 @@ const mountSettingsView = async () => {
       models: JSON.stringify(['deepseek-chat', 'deepseek-reasoner']),
     }),
   ]);
+  const getUpdateStatus = vi.fn(async () => ({
+    state: 'idle',
+    autoUpdateEnabled: true,
+    supported: true,
+    checkIntervalMs: 21600000,
+    currentVersion: '0.0.1',
+    lastCheckedAt: null,
+    releaseName: null,
+    releaseDate: null,
+    releaseNotes: null,
+    updateUrl: null,
+    error: null,
+    unsupportedReason: null,
+  }));
+  const checkUpdates = vi.fn(async () => ({
+    state: 'checking',
+    autoUpdateEnabled: true,
+    supported: true,
+    checkIntervalMs: 21600000,
+    currentVersion: '0.0.1',
+    lastCheckedAt: null,
+    releaseName: null,
+    releaseDate: null,
+    releaseNotes: null,
+    updateUrl: null,
+    error: null,
+    unsupportedReason: null,
+  }));
+  const installUpdate = vi.fn(async () => undefined);
+  const onUpdateStatusChanged = vi.fn();
+  const removeUpdateStatusListeners = vi.fn();
 
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
     value: {
+      updates: {
+        getStatus: getUpdateStatus,
+        check: checkUpdates,
+        install: installUpdate,
+        onStatusChanged: onUpdateStatusChanged,
+        removeAllListeners: removeUpdateStatusListeners,
+      },
       providers: {
         list: providersList,
       },
@@ -86,7 +124,15 @@ const mountSettingsView = async () => {
 
   await flushPromises();
 
-  return { wrapper, store, saveConfig, providersList };
+  return {
+    wrapper,
+    store,
+    saveConfig,
+    providersList,
+    getUpdateStatus,
+    checkUpdates,
+    installUpdate,
+  };
 };
 
 describe('SettingsView general custom selects', () => {
@@ -189,6 +235,20 @@ describe('SettingsView general custom selects', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     expect(saveConfig).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('renders updater status and allows a manual check', async () => {
+    const { wrapper, getUpdateStatus, checkUpdates } = await mountSettingsView();
+
+    expect(getUpdateStatus).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('Automatic Updates');
+    expect(wrapper.text()).toContain('Check Now');
+
+    await wrapper.find('.general-update-check-btn').trigger('click');
+
+    expect(checkUpdates).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
   });

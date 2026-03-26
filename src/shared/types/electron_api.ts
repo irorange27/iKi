@@ -32,6 +32,7 @@ import type {
   WhisperNodeModelInfo,
 } from './speech';
 import type { SkillSource, SkillSummary } from './skill';
+import type { AppUpdateStatus } from './update';
 
 export type ProviderInput = Partial<Provider> &
   Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
@@ -138,6 +139,13 @@ export interface ElectronApi {
     controlDaemon: (action: DaemonControlAction) => Promise<DaemonControlResult>;
     set: (config: AppConfig) => Promise<unknown>;
     onUpdated: (callback: (config: AppConfig) => void) => void;
+  };
+  updates: {
+    getStatus: () => Promise<AppUpdateStatus>;
+    check: () => Promise<AppUpdateStatus>;
+    install: () => Promise<void>;
+    onStatusChanged: (callback: (status: AppUpdateStatus) => void) => void;
+    removeAllListeners: () => void;
   };
   providers: {
     list: () => Promise<Provider[]>;

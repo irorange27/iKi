@@ -24,6 +24,7 @@ import {
   startDesktopDaemon,
   stopDesktopDaemon,
 } from '../services/daemon/daemon_lifecycle';
+import { applyAppUpdateConfig } from '../services/update/auto_update_service';
 import {
   buildNapCatWsUrl,
   DEFAULT_DAEMON_HOST,
@@ -338,6 +339,7 @@ export const registerConfigIpc = (): void => {
   ipcMain.handle('config:set', async (_event, config) => {
     const prevConfig = getAppConfig();
     const normalized = saveConfig(config);
+    applyAppUpdateConfig(normalized);
 
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('config:updated', normalized);

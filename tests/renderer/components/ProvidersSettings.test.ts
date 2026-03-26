@@ -198,6 +198,76 @@ describe('ProvidersSettings', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
+  it('surfaces Anthropic as a built-in provider with the official default base URL', async () => {
+    const list = vi.fn(async () => []);
+    const add = vi.fn(async () => ({ id: 'anthropic_176' }));
+
+    setElectronApi({
+      providers: {
+        list,
+        add,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const anthropicRow = wrapper
+      .findAll('.provider-list-item')
+      .find(item => item.text().includes('Anthropic'));
+
+    if (!anthropicRow) {
+      throw new Error('Anthropic provider row not found');
+    }
+
+    await anthropicRow.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Inactive');
+    expect(wrapper.find('input[type="password"]').exists()).toBe(true);
+    expect(
+      wrapper.find('input[placeholder="https://api.anthropic.com/v1"]').exists()
+    ).toBe(true);
+
+    const apiKeyInput = wrapper.find('input[type="password"]');
+    await apiKeyInput.setValue('sk-ant-test');
+    await wrapper.find('.provider-switch input').setValue(true);
+    await findButtonByText(wrapper, 'Save').trigger('click');
+    await flushPromises();
+
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^anthropic_\d+$/),
+        name: 'Anthropic',
+        type: 'anthropic',
+        api_key: 'sk-ant-test',
+        base_url: 'https://api.anthropic.com/v1',
+        models: '[]',
+        available_models: '[]',
+        enabled: true,
+      })
+    );
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
   it('creates a custom provider with the selected shared dropdown type', async () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'custom_176' }));
@@ -233,7 +303,7 @@ describe('ProvidersSettings', () => {
     await flushPromises();
 
     await wrapper.find('input[placeholder="e.g. My Local LLM"]').setValue('Anthropic Mirror');
-    await selectSettingsOption(wrapper, 'Type', 'Anthropic');
+    await selectSettingsOption(wrapper, 'Type', 'Anthropic Compatible');
     await wrapper.find('input[placeholder="Enter API Key"]').setValue('test-key');
     await findButtonByText(wrapper, 'Save Provider').trigger('click');
     await flushPromises();
@@ -241,7 +311,7 @@ describe('ProvidersSettings', () => {
     expect(add).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Anthropic Mirror',
-        type: 'anthropic',
+        type: 'anthropic-compatible',
         api_key: 'test-key',
       })
     );

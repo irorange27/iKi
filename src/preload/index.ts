@@ -9,6 +9,7 @@ import {
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from '../shared/types/config';
+import type { AppUpdateStatus } from '../shared/types/update';
 import type { Provider } from '../shared/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
@@ -53,6 +54,19 @@ const electronApi: ElectronApi = {
       ipcRenderer.on('config:updated', (_event, config) => {
         callback(config);
       });
+    },
+  },
+  updates: {
+    getStatus: (): Promise<AppUpdateStatus> => ipcRenderer.invoke('updates:get-status'),
+    check: (): Promise<AppUpdateStatus> => ipcRenderer.invoke('updates:check'),
+    install: (): Promise<void> => ipcRenderer.invoke('updates:install'),
+    onStatusChanged: (callback: (status: AppUpdateStatus) => void) => {
+      ipcRenderer.on('updates:status-changed', (_event, status) => {
+        callback(status);
+      });
+    },
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('updates:status-changed');
     },
   },
   providers: {

@@ -16,6 +16,7 @@ import {
   startBackgroundRuntime,
   stopBackgroundRuntime,
 } from './main/services/runtime/background_runtime';
+import { startAppUpdateService } from './main/services/update/auto_update_service';
 import { createMainWindow } from './main/windows/main_window';
 
 const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
@@ -119,6 +120,7 @@ if (isDaemonMode) {
       },
     });
     startBackgroundRuntime();
+    startAppUpdateService(getAppConfig());
     void startDesktopDaemon();
     createMainWindow();
   });

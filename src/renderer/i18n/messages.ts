@@ -272,6 +272,49 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.general.language.title': 'Language',
     'settings.general.language.label': 'Language',
     'settings.general.startupBehavior.title': 'Startup Behavior',
+    'settings.general.updates.title': 'Automatic Updates',
+    'settings.general.updates.description':
+      'Packaged Windows and macOS builds can check published GitHub Releases and download updates in the background.',
+    'settings.general.updates.loadingDescription':
+      'Loading the current updater state from the desktop runtime.',
+    'settings.general.updates.checkNow': 'Check Now',
+    'settings.general.updates.checking': 'Checking...',
+    'settings.general.updates.restartNow': 'Restart to Install',
+    'settings.general.updates.unsupportedTitle': 'Automatic updates are unavailable',
+    'settings.general.updates.unsupportedPlatform':
+      'Automatic downloads currently run only on packaged Windows and macOS builds.',
+    'settings.general.updates.unsupportedNotPackaged':
+      'Development builds do not expose an update feed. Use a packaged build to verify updates.',
+    'settings.general.updates.unsupportedFirstRun':
+      'The Windows installer is still finalizing this app launch. Update checks will start on the next launch.',
+    'settings.general.updates.unsupportedRepository':
+      'The GitHub release repository could not be resolved for this build, so no update feed is available.',
+    'settings.general.updates.unsupportedGeneric':
+      'This build does not currently expose an update feed.',
+    'settings.general.updates.checkingTitle': 'Checking for updates',
+    'settings.general.updates.checkingDescription':
+      'iKi is contacting the release feed and verifying whether a newer build is available.',
+    'settings.general.updates.downloadingTitle': 'Downloading update',
+    'settings.general.updates.downloadingDescription':
+      'A newer version was found and is now downloading in the background.',
+    'settings.general.updates.downloadedTitle': 'Update ready to install',
+    'settings.general.updates.downloadedDescription':
+      'The new build has been downloaded. Restart iKi now or let it install on the next launch.',
+    'settings.general.updates.upToDateTitle': 'You are up to date',
+    'settings.general.updates.upToDateDescription':
+      'No newer published release was found for this platform and architecture.',
+    'settings.general.updates.errorTitle': 'Update check failed',
+    'settings.general.updates.errorDescription': ({ error }) =>
+      `The update runtime reported: ${asText(error) || 'Unknown error'}`,
+    'settings.general.updates.idleAutoTitle': 'Automatic checks are enabled',
+    'settings.general.updates.idleAutoDescription': ({ hours }) =>
+      `iKi checks on launch and then about every ${asText(hours)} hours.`,
+    'settings.general.updates.idleManualTitle': 'Automatic checks are disabled',
+    'settings.general.updates.idleManualDescription':
+      'Background checks are off, but you can still run a manual check at any time.',
+    'settings.general.updates.metaRelease': ({ release }) => `Release: ${asText(release)}`,
+    'settings.general.updates.metaLastChecked': ({ time }) =>
+      `Last checked: ${asText(time)}`,
     'settings.general.permissionRequests.title': 'Permission Requests',
     'settings.general.permissionRequests.description':
       'Automatically continue tool-enabled turns without waiting for approval prompts.',
@@ -911,6 +954,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.modal.modelsPlaceholder': 'model-1, model-2',
     'settings.providers.modal.save': 'Save Provider',
     'settings.providers.type.openaiCompatible': 'OpenAI Compatible',
+    'settings.providers.type.anthropicCompatible': 'Anthropic Compatible',
     'settings.providers.type.googleGemini': 'Google Gemini',
     'settings.providers.customDescription': 'Custom provider configuration',
     'settings.providers.support.credentialsPrefix': 'Get your API key from',
@@ -924,6 +968,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
       'Are you sure you want to remove this provider configuration?',
     'settings.providers.description.openai':
       'Official OpenAI models via the AI SDK OpenAI provider',
+    'settings.providers.description.anthropic':
+      'Official Claude models via the AI SDK Anthropic provider',
     'settings.providers.description.deepseek':
       'DeepSeek AI models with advanced reasoning capabilities',
     'settings.providers.description.kimi': 'Moonshot AI models like Kimi with long context support',
@@ -1248,7 +1294,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.select.emptyText': '当前没有可选项。',
     'settings.select.ariaLabel': '请选择一项',
     'settings.menu.general': '通用',
-    'settings.menu.provider': '提供方',
+    'settings.menu.provider': '供应商',
     'settings.menu.mcp': 'MCP',
     'settings.menu.bridges': '桥接',
     'settings.menu.usage': '用量',
@@ -1291,6 +1337,46 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.general.language.title': '语言',
     'settings.general.language.label': '语言',
     'settings.general.startupBehavior.title': '启动行为',
+    'settings.general.updates.title': '自动更新',
+    'settings.general.updates.description':
+      '已打包的 Windows 和 macOS 版本可以检查已发布的 GitHub Release，并在后台下载更新。',
+    'settings.general.updates.loadingDescription': '正在从桌面运行时读取当前更新状态。',
+    'settings.general.updates.checkNow': '立即检查',
+    'settings.general.updates.checking': '检查中...',
+    'settings.general.updates.restartNow': '重启安装',
+    'settings.general.updates.unsupportedTitle': '当前无法自动更新',
+    'settings.general.updates.unsupportedPlatform':
+      '自动下载目前只在已打包的 Windows 和 macOS 版本中可用。',
+    'settings.general.updates.unsupportedNotPackaged':
+      '开发模式构建没有更新源。请使用打包后的应用验证更新能力。',
+    'settings.general.updates.unsupportedFirstRun':
+      'Windows 安装器仍在完成本次首次启动，更新检查会从下次启动开始生效。',
+    'settings.general.updates.unsupportedRepository':
+      '当前构建无法解析 GitHub 发布仓库，因此没有可用的更新源。',
+    'settings.general.updates.unsupportedGeneric': '当前构建暂时没有可用的更新源。',
+    'settings.general.updates.checkingTitle': '正在检查更新',
+    'settings.general.updates.checkingDescription':
+      'iKi 正在访问发布通道，确认是否存在更新版本。',
+    'settings.general.updates.downloadingTitle': '正在下载更新',
+    'settings.general.updates.downloadingDescription':
+      '已发现新版本，正在后台下载。',
+    'settings.general.updates.downloadedTitle': '更新已准备安装',
+    'settings.general.updates.downloadedDescription':
+      '新版本已经下载完成。你可以现在重启 iKi，或在下次启动时完成安装。',
+    'settings.general.updates.upToDateTitle': '当前已是最新版本',
+    'settings.general.updates.upToDateDescription':
+      '此平台和架构下没有发现更新的已发布版本。',
+    'settings.general.updates.errorTitle': '更新检查失败',
+    'settings.general.updates.errorDescription': ({ error }) =>
+      `更新运行时返回错误：${asText(error) || '未知错误'}`,
+    'settings.general.updates.idleAutoTitle': '已启用自动检查',
+    'settings.general.updates.idleAutoDescription': ({ hours }) =>
+      `iKi 会在启动时检查，并大约每 ${asText(hours)} 小时再次检查一次。`,
+    'settings.general.updates.idleManualTitle': '已关闭自动检查',
+    'settings.general.updates.idleManualDescription':
+      '后台自动检查已关闭，但你仍然可以随时手动检查更新。',
+    'settings.general.updates.metaRelease': ({ release }) => `版本：${asText(release)}`,
+    'settings.general.updates.metaLastChecked': ({ time }) => `上次检查：${asText(time)}`,
     'settings.general.permissionRequests.title': '权限请求',
     'settings.general.permissionRequests.description':
       '自动继续执行启用了工具的回合，不再等待审批提示。',
@@ -1894,6 +1980,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.modal.modelsPlaceholder': 'model-1, model-2',
     'settings.providers.modal.save': '保存 Provider',
     'settings.providers.type.openaiCompatible': 'OpenAI 兼容',
+    'settings.providers.type.anthropicCompatible': 'Anthropic 兼容',
     'settings.providers.type.googleGemini': 'Google Gemini',
     'settings.providers.customDescription': '自定义 Provider 配置',
     'settings.providers.support.credentialsPrefix': '前往此处获取你的 API Key：',
@@ -1906,6 +1993,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.confirmRemove': '确定要移除这个 Provider 配置吗？',
     'settings.providers.description.openai':
       '通过 AI SDK 的 OpenAI Provider 使用官方 OpenAI 模型',
+    'settings.providers.description.anthropic':
+      '通过 AI SDK 的 Anthropic Provider 使用官方 Claude 模型',
     'settings.providers.description.deepseek': 'DeepSeek AI 模型，具备更强的推理能力',
     'settings.providers.description.kimi': 'Moonshot AI 模型，例如支持超长上下文的 Kimi',
     'settings.providers.description.ollama': '通过 Ollama 在本地运行开源大模型',
