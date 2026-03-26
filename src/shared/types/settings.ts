@@ -6,4 +6,7 @@ export interface BuiltInProvider {
   defaultBaseUrl?: string;
   models?: string[];
   docsUrl?: string;
+  credentialsUrl?: string;
+  credentialsLabel?: string;
+  requiresApiKey?: boolean;
 }

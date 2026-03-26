@@ -14,7 +14,7 @@
       :disabled="disabled"
       :aria-expanded="isOpen ? 'true' : 'false'"
       aria-haspopup="listbox"
-      :aria-label="ariaLabel"
+      :aria-label="resolvedAriaLabel"
       @click="toggleOpen"
       @keydown="handleTriggerKeydown"
     >
@@ -23,7 +23,7 @@
           class="settings-select-trigger-value"
           :class="{ 'settings-select-trigger-placeholder': !selectedOption }"
         >
-          {{ selectedOption?.label || placeholder }}
+          {{ selectedOption?.label || resolvedPlaceholder }}
         </span>
         <span v-if="selectedOption?.description" class="settings-select-trigger-meta">
           {{ selectedOption.description }}
@@ -47,9 +47,9 @@
       </svg>
     </button>
 
-    <div v-if="isOpen" class="settings-select-panel" role="listbox" :aria-label="ariaLabel">
+    <div v-if="isOpen" class="settings-select-panel" role="listbox" :aria-label="resolvedAriaLabel">
       <div v-if="flatOptions.length === 0" class="settings-select-empty">
-        {{ emptyText }}
+        {{ resolvedEmptyText }}
       </div>
       <div v-else class="settings-select-options">
         <div
@@ -112,6 +112,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from '../../i18n';
 
 type SettingsSelectOption = {
   value: string;
@@ -148,12 +149,14 @@ const props = withDefaults(
     ariaLabel?: string;
   }>(),
   {
-    placeholder: 'Select an option',
-    emptyText: 'No options available.',
+    placeholder: '',
+    emptyText: '',
     disabled: false,
-    ariaLabel: 'Select an option',
+    ariaLabel: '',
   }
 );
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: string): void;
@@ -217,6 +220,9 @@ const resolvedGroups = computed<ResolvedSettingsSelectGroup[]>(() => {
 });
 
 const flatOptions = computed(() => resolvedGroups.value.flatMap(group => group.options));
+const resolvedPlaceholder = computed(() => props.placeholder || t('settings.select.placeholder'));
+const resolvedEmptyText = computed(() => props.emptyText || t('settings.select.emptyText'));
+const resolvedAriaLabel = computed(() => props.ariaLabel || t('settings.select.ariaLabel'));
 
 const selectedIndex = computed(() =>
   flatOptions.value.findIndex(option => option.value === props.modelValue)

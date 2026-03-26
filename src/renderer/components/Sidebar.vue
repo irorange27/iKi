@@ -116,7 +116,7 @@
         ref="menuAnchorRef"
         class="sidebar-menu-anchor"
         @mouseenter="openMenu"
-        @mouseleave="closeMenu"
+        @mouseleave="scheduleMenuClose"
         @focusin="openMenu"
         @focusout="handleMenuFocusOut"
       >
@@ -129,36 +129,46 @@
         >
           <MoreHorizontal :size="18" />
         </button>
-        <div v-if="isMenuOpen" class="sidebar-menu" role="menu">
-          <button class="sidebar-menu-item" role="menuitem" @click="handleOpenSettings">
-            <span class="sidebar-menu-item-icon">
-              <Settings2 :size="14" />
-            </span>
-            <span class="sidebar-menu-item-label text-sm">{{ t('chat.welcome.settings') }}</span>
-          </button>
-          <button
-            class="sidebar-menu-item"
-            role="menuitemcheckbox"
-            :aria-checked="sidebar.showExternalChats.value"
-            @click="toggleExternalChats"
-          >
-            <span class="sidebar-menu-item-icon">
-              <MessageSquareShare :size="16" />
-            </span>
-            <span class="sidebar-menu-item-label text-sm">{{
-              t('chat.sidebar.showExternalChats')
-            }}</span>
-            <span
-              class="sidebar-menu-item-check"
-              :class="{ visible: sidebar.showExternalChats.value }"
-            >
-              <Check :size="14" />
-            </span>
-          </button>
-        </div>
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="isMenuOpen"
+      ref="menuRef"
+      class="sidebar-menu"
+      :style="menuStyle"
+      role="menu"
+      @mouseenter="handleMenuMouseEnter"
+      @mouseleave="scheduleMenuClose"
+      @focusin="openMenu"
+      @focusout="handleMenuFocusOut"
+    >
+      <button class="sidebar-menu-item" role="menuitem" @click="handleOpenSettings">
+        <span class="sidebar-menu-item-icon">
+          <Settings2 :size="14" />
+        </span>
+        <span class="sidebar-menu-item-label text-sm">{{ t('chat.welcome.settings') }}</span>
+      </button>
+      <button
+        class="sidebar-menu-item"
+        role="menuitemcheckbox"
+        :aria-checked="sidebar.showExternalChats.value"
+        @click="toggleExternalChats"
+      >
+        <span class="sidebar-menu-item-icon">
+          <MessageSquareShare :size="16" />
+        </span>
+        <span class="sidebar-menu-item-label text-sm">{{
+          t('chat.sidebar.showExternalChats')
+        }}</span>
+        <span class="sidebar-menu-item-check" :class="{ visible: sidebar.showExternalChats.value }">
+          <Check :size="14" />
+        </span>
+      </button>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -197,6 +207,12 @@ const currentThreadId = ref<string | null>(null);
 const deletingThreadIds = ref<Record<string, boolean>>({});
 const isMenuOpen = ref(false);
 const menuAnchorRef = ref<HTMLElement | null>(null);
+const menuRef = ref<HTMLElement | null>(null);
+const menuPosition = ref({
+  left: 0,
+  bottom: 0,
+});
+let menuCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Emit events to parent
 const emit = defineEmits<{
@@ -289,16 +305,58 @@ const threadOriginMap = computed(() => {
 const getThreadOrigin = (thread: ChatThread) =>
   threadOriginMap.value.get(thread.id) ?? getThreadOriginInfo(thread);
 
+const updateMenuPosition = () => {
+  const anchor = menuAnchorRef.value;
+  if (!anchor) return;
+
+  const rect = anchor.getBoundingClientRect();
+  menuPosition.value = {
+    left: Math.max(8, rect.left),
+    bottom: Math.max(8, window.innerHeight - rect.top + 6),
+  };
+};
+
+const menuStyle = computed(() => ({
+  left: `${menuPosition.value.left}px`,
+  bottom: `${menuPosition.value.bottom}px`,
+  maxWidth: 'min(260px, calc(100vw - 16px))',
+}));
+
+const clearMenuCloseTimer = () => {
+  if (!menuCloseTimer) return;
+  clearTimeout(menuCloseTimer);
+  menuCloseTimer = null;
+};
+
 const closeMenu = () => {
+  clearMenuCloseTimer();
   isMenuOpen.value = false;
 };
 
 const openMenu = () => {
+  clearMenuCloseTimer();
+  updateMenuPosition();
   isMenuOpen.value = true;
 };
 
+const scheduleMenuClose = () => {
+  clearMenuCloseTimer();
+  menuCloseTimer = setTimeout(() => {
+    isMenuOpen.value = false;
+    menuCloseTimer = null;
+  }, 120);
+};
+
+const handleMenuMouseEnter = () => {
+  openMenu();
+};
+
 const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value;
+  if (isMenuOpen.value) {
+    closeMenu();
+    return;
+  }
+  openMenu();
 };
 
 const handleOpenSettings = () => {
@@ -314,25 +372,37 @@ const toggleExternalChats = () => {
 const handleDocumentPointerDown = (event: PointerEvent) => {
   if (!isMenuOpen.value) return;
   const anchor = menuAnchorRef.value;
+  const menu = menuRef.value;
   if (!anchor) {
     closeMenu();
     return;
   }
 
   const target = event.target;
-  if (target instanceof Node && anchor.contains(target)) return;
+  if (
+    target instanceof Node &&
+    (anchor.contains(target) || (menu instanceof HTMLElement && menu.contains(target)))
+  ) {
+    return;
+  }
   closeMenu();
 };
 
 const handleMenuFocusOut = (event: FocusEvent) => {
   const anchor = menuAnchorRef.value;
+  const menu = menuRef.value;
   if (!anchor) {
     closeMenu();
     return;
   }
 
   const nextTarget = event.relatedTarget;
-  if (nextTarget instanceof Node && anchor.contains(nextTarget)) return;
+  if (
+    nextTarget instanceof Node &&
+    (anchor.contains(nextTarget) || (menu instanceof HTMLElement && menu.contains(nextTarget)))
+  ) {
+    return;
+  }
   closeMenu();
 };
 
@@ -347,10 +417,13 @@ defineExpose({
 onMounted(() => {
   loadChatThreads();
   document.addEventListener('pointerdown', handleDocumentPointerDown);
+  window.addEventListener('resize', updateMenuPosition);
 });
 
 onBeforeUnmount(() => {
+  clearMenuCloseTimer();
   document.removeEventListener('pointerdown', handleDocumentPointerDown);
+  window.removeEventListener('resize', updateMenuPosition);
 });
 
 const MIN_WIDTH = 210; // 最小宽度 (Tailwind w-64)
@@ -619,15 +692,12 @@ const openSettings = () => {
 }
 
 .sidebar-menu {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
+  position: fixed;
   display: flex;
   min-width: 220px;
   flex-direction: column;
   gap: 4px;
   border-radius: 14px;
-  border: 1px solid var(--border-color);
   background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
   padding: 8px;
   box-shadow: var(--app-shell-shadow);

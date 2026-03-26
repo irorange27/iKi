@@ -85,9 +85,11 @@ describe('ProvidersSettings', () => {
         stubs: {
           LobeIcon: true,
           BookOpen: true,
-          Cog: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
           RefreshCw: true,
-          Save: true,
         },
       },
     });
@@ -104,12 +106,11 @@ describe('ProvidersSettings', () => {
 
     await deepseekRow.trigger('click');
     await flushPromises();
-    await findButtonByText(wrapper, 'Configure Provider').trigger('click');
-    await flushPromises();
 
     const apiKeyInput = wrapper.find('input[type="password"]');
     await apiKeyInput.setValue('test-key');
-    await findButtonByText(wrapper, 'Save & Enable Provider').trigger('click');
+    await wrapper.find('.provider-switch input').setValue(true);
+    await findButtonByText(wrapper, 'Save').trigger('click');
     await flushPromises();
 
     expect(add).toHaveBeenCalledWith(
@@ -119,6 +120,76 @@ describe('ProvidersSettings', () => {
         type: 'deepseek',
         api_key: 'test-key',
         base_url: 'https://api.deepseek.com/v1',
+        models: '[]',
+        available_models: '[]',
+        enabled: true,
+      })
+    );
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces OpenAI as a built-in provider with the official default base URL', async () => {
+    const list = vi.fn(async () => []);
+    const add = vi.fn(async () => ({ id: 'openai_176' }));
+
+    setElectronApi({
+      providers: {
+        list,
+        add,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const openaiRow = wrapper
+      .findAll('.provider-list-item')
+      .find(item => item.text().includes('OpenAI'));
+
+    if (!openaiRow) {
+      throw new Error('OpenAI provider row not found');
+    }
+
+    await openaiRow.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Inactive');
+    expect(wrapper.find('input[type="password"]').exists()).toBe(true);
+    expect(
+      wrapper.find('input[placeholder="https://api.openai.com/v1"]').exists()
+    ).toBe(true);
+
+    const apiKeyInput = wrapper.find('input[type="password"]');
+    await apiKeyInput.setValue('sk-test');
+    await wrapper.find('.provider-switch input').setValue(true);
+    await findButtonByText(wrapper, 'Save').trigger('click');
+    await flushPromises();
+
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^openai_\d+$/),
+        name: 'OpenAI',
+        type: 'openai',
+        api_key: 'sk-test',
+        base_url: 'https://api.openai.com/v1',
         models: '[]',
         available_models: '[]',
         enabled: true,
@@ -148,9 +219,11 @@ describe('ProvidersSettings', () => {
         stubs: {
           LobeIcon: true,
           BookOpen: true,
-          Cog: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
           RefreshCw: true,
-          Save: true,
         },
       },
     });
@@ -172,5 +245,115 @@ describe('ProvidersSettings', () => {
         api_key: 'test-key',
       })
     );
+  });
+
+  it('keeps OpenAI-compatible endpoints on the custom-provider path', async () => {
+    const list = vi.fn(async () => []);
+    const add = vi.fn(async () => ({ id: 'custom_176' }));
+
+    setElectronApi({
+      providers: {
+        list,
+        add,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await findButtonByText(wrapper, 'Add Custom Provider').trigger('click');
+    await flushPromises();
+
+    await wrapper.find('input[placeholder="e.g. My Local LLM"]').setValue('Proxy Gateway');
+    await selectSettingsOption(wrapper, 'Type', 'OpenAI Compatible');
+    await wrapper.find('input[placeholder="Enter API Key"]').setValue('proxy-key');
+    await findButtonByText(wrapper, 'Save Provider').trigger('click');
+    await flushPromises();
+
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Proxy Gateway',
+        type: 'openai-compatible',
+        api_key: 'proxy-key',
+      })
+    );
+  });
+
+  it('restores the persisted draft when cancel is pressed', async () => {
+    const list = vi.fn(async () => [
+      {
+        id: 'openai_1',
+        name: 'OpenAI',
+        type: 'openai',
+        api_key: 'saved-key',
+        models: '["gpt-4.1"]',
+        base_url: 'https://api.openai.com/v1',
+        enabled: true,
+        created_at: '2026-03-21T12:00:00.000Z',
+        updated_at: '2026-03-21T12:00:00.000Z',
+        available_models: '["gpt-4.1"]',
+      },
+    ]);
+
+    setElectronApi({
+      providers: {
+        list,
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const apiKeyInput = wrapper.find('input[type="password"]');
+    expect((apiKeyInput.element as HTMLInputElement).value).toBe('saved-key');
+
+    await apiKeyInput.setValue('changed-key');
+    expect(findButtonByText(wrapper, 'Cancel').attributes('disabled')).toBeUndefined();
+    expect(findButtonByText(wrapper, 'Save').attributes('disabled')).toBeUndefined();
+
+    await findButtonByText(wrapper, 'Cancel').trigger('click');
+    await flushPromises();
+
+    expect((wrapper.find('input[type="password"]').element as HTMLInputElement).value).toBe(
+      'saved-key'
+    );
+    expect(findButtonByText(wrapper, 'Cancel').attributes('disabled')).toBeDefined();
+    expect(findButtonByText(wrapper, 'Save').attributes('disabled')).toBeDefined();
   });
 });

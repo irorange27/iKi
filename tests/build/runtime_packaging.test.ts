@@ -29,7 +29,44 @@ const writeText = (filePath: string, value = '') => {
   fs.writeFileSync(filePath, value);
 };
 
-const seedRuntimePackages = (projectDir: string) => {
+type BuildFixture = {
+  fileName: string;
+  source: string;
+};
+
+const DEFAULT_BUILD_FIXTURES: BuildFixture[] = [
+  {
+    fileName: 'main-test.js',
+    source: [
+      'require("ws");',
+      'require("ajv/dist/runtime/equal");',
+      'require("ajv-formats/dist/formats");',
+      'require("better-sqlite3");',
+      'require("node:fs");',
+    ].join('\n'),
+  },
+];
+
+const EXPECTED_RUNTIME_PACKAGING_PATHS = [
+  'node_modules/ajv',
+  'node_modules/ajv-formats',
+  'node_modules/better-sqlite3/build/Release',
+  'node_modules/better-sqlite3/lib',
+  'node_modules/better-sqlite3/package.json',
+  'node_modules/bindings',
+  'node_modules/ffmpeg-static/ffmpeg',
+  'node_modules/ffmpeg-static/index.js',
+  'node_modules/ffmpeg-static/package.json',
+  'node_modules/file-uri-to-path',
+  'node_modules/whisper-node/lib/whisper.cpp/main',
+  'node_modules/whisper-node/package.json',
+  'node_modules/ws',
+] as const;
+
+const seedRuntimePackages = (
+  projectDir: string,
+  buildFixtures: readonly BuildFixture[] = DEFAULT_BUILD_FIXTURES
+) => {
   writeJson(path.join(projectDir, 'package-lock.json'), {
     name: 'fixture',
     lockfileVersion: 3,
@@ -115,16 +152,9 @@ const seedRuntimePackages = (projectDir: string) => {
   });
   writeText(path.join(projectDir, 'node_modules/ajv-formats/dist/formats.js'), 'module.exports = {};');
 
-  writeText(
-    path.join(projectDir, '.vite/build/main-test.js'),
-    [
-      'require("ws");',
-      'require("ajv/dist/runtime/equal");',
-      'require("ajv-formats/dist/formats");',
-      'require("better-sqlite3");',
-      'require("node:fs");',
-    ].join('\n')
-  );
+  for (const buildFixture of buildFixtures) {
+    writeText(path.join(projectDir, `.vite/build/${buildFixture.fileName}`), buildFixture.source);
+  }
 };
 
 describe('runtime_packaging', () => {
@@ -140,21 +170,28 @@ describe('runtime_packaging', () => {
     const projectDir = createTempProject();
     seedRuntimePackages(projectDir);
 
-    expect(resolveRuntimePackagingPaths(projectDir, 'darwin')).toEqual([
-      'node_modules/ajv',
-      'node_modules/ajv-formats',
-      'node_modules/better-sqlite3/build/Release',
-      'node_modules/better-sqlite3/lib',
-      'node_modules/better-sqlite3/package.json',
-      'node_modules/bindings',
-      'node_modules/ffmpeg-static/ffmpeg',
-      'node_modules/ffmpeg-static/index.js',
-      'node_modules/ffmpeg-static/package.json',
-      'node_modules/file-uri-to-path',
-      'node_modules/whisper-node/lib/whisper.cpp/main',
-      'node_modules/whisper-node/package.json',
-      'node_modules/ws',
+    expect(resolveRuntimePackagingPaths(projectDir, 'darwin')).toEqual(EXPECTED_RUNTIME_PACKAGING_PATHS);
+  });
+
+  it('detects runtime packages loaded through createRequire aliases', () => {
+    const projectDir = createTempProject();
+    seedRuntimePackages(projectDir, [
+      {
+        fileName: 'main-create-require.js',
+        source: [
+          'const { createRequire } = require("node:module");',
+          'const nodeRequire = createRequire(__filename);',
+          'nodeRequire("ws");',
+          'nodeRequire.resolve("ajv-formats/package.json");',
+          'nodeRequire.resolve("node:fs");',
+        ].join('\n'),
+      },
     ]);
+
+    expect(resolveRuntimePackagingPaths(projectDir, 'darwin')).toEqual(EXPECTED_RUNTIME_PACKAGING_PATHS);
+    const ignore = createVitePackagingIgnore(projectDir, 'darwin');
+    expect(ignore('/node_modules/ws/index.js')).toBe(false);
+    expect(ignore('/node_modules/ajv-formats/package.json')).toBe(false);
   });
 
   it('resolves the native and executable files that must stay unpacked', () => {

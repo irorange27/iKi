@@ -154,8 +154,9 @@ const externalThreadNotice = computed(() => {
   const origin = currentThreadOrigin.value;
   if (!origin?.isExternal) return '';
 
-  const channelLabel = origin.channelLabel || origin.sourceLabel || 'external chat';
-  return `Viewing ${channelLabel} in the desktop control plane. Messages you send here stay local to iKi and are not delivered back to the external channel.`;
+  const channelLabel =
+    origin.channelLabel || origin.sourceLabel || t('chat.external.defaultChannelLabel');
+  return t('chat.external.notice', { channel: channelLabel });
 });
 
 const handleToolApprovalEvent = (payload: {

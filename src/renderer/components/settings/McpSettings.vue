@@ -1,18 +1,15 @@
 <template>
   <section class="config-section mcp-section">
     <div class="config-group">
-      <h3>MCP (Model Context Protocol)</h3>
-      <p class="group-description">
-        Connect external tool servers and expose their tools in iKi. Remote servers are disabled by
-        default and require explicit opt-in.
-      </p>
+      <h3>{{ t('settings.mcp.title') }}</h3>
+      <p class="group-description">{{ t('settings.mcp.description') }}</p>
       <label class="checkbox-label">
         <input
           type="checkbox"
           :checked="config.mcp.enabled"
           @change="updateMcp('enabled', ($event.target as HTMLInputElement).checked)"
         />
-        Enable MCP
+        {{ t('settings.mcp.enable') }}
       </label>
       <label class="checkbox-label">
         <input
@@ -20,7 +17,7 @@
           :checked="config.mcp.connectOnStartup"
           @change="updateMcp('connectOnStartup', ($event.target as HTMLInputElement).checked)"
         />
-        Connect enabled servers on startup
+        {{ t('settings.mcp.connectOnStartup') }}
       </label>
       <label class="checkbox-label">
         <input
@@ -28,25 +25,25 @@
           :checked="config.mcp.allowRemoteServers"
           @change="updateMcp('allowRemoteServers', ($event.target as HTMLInputElement).checked)"
         />
-        Allow remote MCP servers (HTTP/SSE)
+        {{ t('settings.mcp.allowRemoteServers') }}
       </label>
       <p v-if="!config.mcp.allowRemoteServers" class="group-description warning-text">
-        Remote servers are blocked unless you enable this toggle.
+        {{ t('settings.mcp.remoteBlocked') }}
       </p>
 
       <label class="input-label">
-        <span>Default approval mode</span>
+        <span>{{ t('settings.mcp.defaultApprovalMode') }}</span>
         <SettingsSelect
           :model-value="config.mcp.defaultApprovalMode"
           :options="mcpDefaultApprovalModeOptions"
-          aria-label="Default approval mode"
+          :aria-label="t('settings.mcp.defaultApprovalModeAria')"
           @update:model-value="updateDefaultApprovalModeSelection"
         />
       </label>
 
       <div class="config-inline">
         <label class="input-label">
-          <span>Request timeout (ms)</span>
+          <span>{{ t('settings.mcp.requestTimeoutMs') }}</span>
           <input
             type="number"
             min="1000"
@@ -61,7 +58,7 @@
           />
         </label>
         <label class="input-label">
-          <span>Max concurrent requests</span>
+          <span>{{ t('settings.mcp.maxConcurrentRequests') }}</span>
           <input
             type="number"
             min="1"
@@ -81,21 +78,21 @@
     <div class="settings-card">
       <div class="card-header">
         <div>
-          <div class="card-title">Servers</div>
-          <div class="card-subtitle">{{ servers.length }} configured</div>
+          <div class="card-title">{{ t('settings.mcp.serversTitle') }}</div>
+          <div class="card-subtitle">{{ t('settings.mcp.configuredCount', { count: servers.length }) }}</div>
         </div>
         <div class="card-actions">
           <button class="secondary-btn" @click="() => loadServers()" :disabled="serversLoading">
             <RefreshCw :size="14" :class="{ 'animate-spin': serversLoading }" />
-            {{ serversLoading ? 'Loading' : 'Refresh' }}
+            {{ serversLoading ? t('settings.mcp.loading') : t('common.refresh') }}
           </button>
-          <button class="secondary-btn" @click="startAddServer">Add Server</button>
+          <button class="secondary-btn" @click="startAddServer">{{ t('settings.mcp.addServer') }}</button>
         </div>
       </div>
 
-      <div v-if="serversLoading" class="empty-state">Loading MCP servers...</div>
+      <div v-if="serversLoading" class="empty-state">{{ t('settings.mcp.loadingServers') }}</div>
       <div v-else-if="serversError" class="error-text">{{ serversError }}</div>
-      <div v-else-if="servers.length === 0" class="empty-state">No MCP servers configured yet.</div>
+      <div v-else-if="servers.length === 0" class="empty-state">{{ t('settings.mcp.empty') }}</div>
       <div v-else class="server-list">
         <div v-for="server in servers" :key="server.id" class="server-row">
           <div class="server-main">
@@ -108,7 +105,7 @@
             </div>
             <div class="server-meta">
               <span v-if="server.transport === 'stdio' && server.command">
-                Command: {{ server.command }}
+                {{ t('settings.mcp.meta.command', { value: server.command }) }}
               </span>
               <span
                 v-else-if="
@@ -116,16 +113,16 @@
                   server.base_url
                 "
               >
-                URL: {{ server.base_url }}
+                {{ t('settings.mcp.meta.url', { value: server.base_url }) }}
               </span>
             </div>
             <div class="server-meta">
-              <span>Enabled: {{ server.enabled ? 'Yes' : 'No' }}</span>
+              <span>{{ t('settings.mcp.meta.enabled', { value: server.enabled ? t('common.yes') : t('common.no') }) }}</span>
               <span v-if="server.status?.toolCount !== undefined">
-                Tools: {{ server.status.toolCount }}
+                {{ t('settings.mcp.meta.tools', { count: server.status.toolCount }) }}
               </span>
               <span v-if="server.last_connected_at">
-                Last connected: {{ formatTimestamp(server.last_connected_at) }}
+                {{ t('settings.mcp.meta.lastConnected', { value: formatTimestamp(server.last_connected_at) }) }}
               </span>
             </div>
             <div v-if="server.last_error" class="error-text server-error">
@@ -138,31 +135,31 @@
               :disabled="!canConnect(server)"
               @click="connectServer(server)"
             >
-              Connect
+              {{ t('settings.mcp.connect') }}
             </button>
             <button
               class="secondary-btn"
               :disabled="!canDisconnect(server)"
               @click="disconnectServer(server)"
             >
-              Disconnect
+              {{ t('settings.mcp.disconnect') }}
             </button>
             <button
               class="secondary-btn"
               :disabled="!canRefresh(server)"
               @click="refreshTools(server)"
             >
-              Refresh tools
+              {{ t('settings.mcp.refreshTools') }}
             </button>
             <button
               class="secondary-btn"
               :disabled="actionLoading"
               @click="startEditServer(server)"
             >
-              Edit
+              {{ t('settings.mcp.editServer') }}
             </button>
             <button class="danger-btn" :disabled="actionLoading" @click="deleteServer(server)">
-              Delete
+              {{ t('settings.mcp.deleteServer') }}
             </button>
           </div>
         </div>
@@ -174,72 +171,82 @@
     <div v-if="formOpen" class="settings-card">
       <div class="card-header">
         <div class="card-title">
-          {{ editingServerId ? 'Edit MCP Server' : 'Add MCP Server' }}
+          {{ editingServerId ? t('settings.mcp.form.editTitle') : t('settings.mcp.form.addTitle') }}
         </div>
         <div class="card-actions">
-          <button class="secondary-btn" @click="cancelForm">Cancel</button>
+          <button class="secondary-btn" @click="cancelForm">{{ t('common.cancel') }}</button>
         </div>
       </div>
 
       <div class="config-grid">
         <label class="input-label">
-          <span>Name</span>
-          <input v-model="form.name" type="text" placeholder="Local tools" />
+          <span>{{ t('common.name') }}</span>
+          <input v-model="form.name" type="text" :placeholder="t('settings.mcp.form.namePlaceholder')" />
         </label>
         <label class="input-label">
-          <span>Transport</span>
+          <span>{{ t('settings.mcp.form.transport') }}</span>
           <SettingsSelect
             :model-value="form.transport"
             :options="mcpTransportOptions"
-            aria-label="MCP server transport"
+            :aria-label="t('settings.mcp.form.transportAria')"
             @update:model-value="updateFormTransportSelection"
           />
         </label>
         <label class="checkbox-label">
           <input type="checkbox" v-model="form.enabled" />
-          Enabled
+          {{ t('common.enabled') }}
         </label>
         <label class="input-label">
-          <span>Approval mode override</span>
+          <span>{{ t('settings.mcp.form.approvalOverride') }}</span>
           <SettingsSelect
             :model-value="form.approvalMode"
             :options="mcpApprovalOverrideOptions"
-            aria-label="Approval mode override"
+            :aria-label="t('settings.mcp.form.approvalOverrideAria')"
             @update:model-value="updateFormApprovalModeSelection"
           />
         </label>
         <label class="input-label">
-          <span>Tool allowlist (one per line)</span>
-          <textarea v-model="form.toolAllowlist" rows="4" placeholder="tool_one&#10;tool_two" />
+          <span>{{ t('settings.mcp.form.toolAllowlist') }}</span>
+          <textarea
+            v-model="form.toolAllowlist"
+            rows="4"
+            :placeholder="t('settings.mcp.form.toolAllowlistPlaceholder')"
+          />
         </label>
       </div>
 
       <p v-if="form.transport === 'streamable-http'" class="group-description">
-        AI SDK practice prefers Streamable HTTP for remote MCP servers. It supports modern MCP
-        semantics and is the default choice for new integrations.
+        {{ t('settings.mcp.form.streamableHint') }}
       </p>
       <p v-else-if="form.transport === 'sse'" class="group-description warning-text">
-        SSE is kept for older MCP servers that have not migrated yet. Prefer Streamable HTTP when
-        the server supports both.
+        {{ t('settings.mcp.form.sseHint') }}
       </p>
 
       <template v-if="form.transport === 'stdio'">
         <div class="config-grid">
           <label class="input-label">
-            <span>Command</span>
-            <input v-model="form.command" type="text" placeholder="node" />
+            <span>{{ t('settings.mcp.form.command') }}</span>
+            <input v-model="form.command" type="text" :placeholder="t('settings.mcp.form.commandPlaceholder')" />
           </label>
           <label class="input-label">
-            <span>Working directory (optional)</span>
-            <input v-model="form.cwd" type="text" placeholder="/path/to/project" />
+            <span>{{ t('settings.mcp.form.workingDirectoryOptional') }}</span>
+            <input
+              v-model="form.cwd"
+              type="text"
+              :placeholder="t('settings.mcp.form.workingDirectoryPlaceholder')"
+            />
           </label>
           <label class="input-label">
-            <span>Args (one per line)</span>
-            <textarea v-model="form.args" rows="4" placeholder="server.js&#10;--port=7000" />
+            <span>{{ t('settings.mcp.form.args') }}</span>
+            <textarea v-model="form.args" rows="4" :placeholder="t('settings.mcp.form.argsPlaceholder')" />
           </label>
           <label class="input-label">
-            <span>Environment (JSON or key=value per line)</span>
-            <textarea v-model="form.env" rows="4" placeholder="API_KEY=abc123" />
+            <span>{{ t('settings.mcp.form.environment') }}</span>
+            <textarea
+              v-model="form.env"
+              rows="4"
+              :placeholder="t('settings.mcp.form.environmentPlaceholder')"
+            />
           </label>
         </div>
       </template>
@@ -247,28 +254,35 @@
       <template v-else>
         <div class="config-grid">
           <label class="input-label">
-            <span>Base URL</span>
-            <input v-model="form.baseUrl" type="text" placeholder="http://localhost:8080" />
+            <span>{{ t('settings.mcp.form.baseUrl') }}</span>
+            <input v-model="form.baseUrl" type="text" :placeholder="t('settings.mcp.form.baseUrlPlaceholder')" />
           </label>
           <label class="input-label">
-            <span>Auth ref (optional)</span>
-            <input v-model="form.authRef" type="text" placeholder="keychain:my-mcp" />
+            <span>{{ t('settings.mcp.form.authRefOptional') }}</span>
+            <input
+              v-model="form.authRef"
+              type="text"
+              :placeholder="t('settings.mcp.form.authRefPlaceholder')"
+            />
           </label>
           <label class="input-label">
-            <span>Headers (JSON or key=value per line)</span>
-            <textarea v-model="form.headers" rows="4" placeholder="Authorization=Bearer ..." />
+            <span>{{ t('settings.mcp.form.headers') }}</span>
+            <textarea
+              v-model="form.headers"
+              rows="4"
+              :placeholder="t('settings.mcp.form.headersPlaceholder')"
+            />
           </label>
         </div>
         <p v-if="!config.mcp.allowRemoteServers" class="group-description warning-text">
-          Remote HTTP/SSE servers are disabled. Enable "Allow remote MCP servers" to connect to
-          non-local URLs.
+          {{ t('settings.mcp.form.remoteDisabled') }}
         </p>
       </template>
 
       <div class="form-actions">
-        <button class="secondary-btn" @click="cancelForm">Cancel</button>
+        <button class="secondary-btn" @click="cancelForm">{{ t('common.cancel') }}</button>
         <button class="primary-btn" :disabled="formSaving" @click="saveServer">
-          {{ formSaving ? 'Saving...' : 'Save Server' }}
+          {{ formSaving ? t('settings.mcp.form.saving') : t('settings.mcp.form.save') }}
         </button>
       </div>
       <div v-if="formError" class="error-text">{{ formError }}</div>
@@ -277,11 +291,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';
 
 import SettingsSelect from './SettingsSelect.vue';
+import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type {
@@ -296,6 +311,7 @@ const emit = defineEmits<{
   (event: 'config-change'): void;
 }>();
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const { t } = useI18n();
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -342,24 +358,24 @@ const createEmptyForm = (): ServerForm => ({
 
 const form = ref<ServerForm>(createEmptyForm());
 
-const mcpDefaultApprovalModeOptions = [
-  { value: 'safe-only', label: 'Require approval unless tool is read-only (Recommended)' },
-  { value: 'always', label: 'Always require approval' },
-  { value: 'never', label: 'Never require approval' },
-];
+const mcpDefaultApprovalModeOptions = computed(() => [
+  { value: 'safe-only', label: t('settings.mcp.approval.safeOnly') },
+  { value: 'always', label: t('settings.mcp.approval.always') },
+  { value: 'never', label: t('settings.mcp.approval.never') },
+]);
 
-const mcpTransportOptions = [
-  { value: 'stdio', label: 'Stdio (local process)' },
-  { value: 'streamable-http', label: 'Streamable HTTP (Recommended)' },
-  { value: 'sse', label: 'SSE (legacy compatibility)' },
-];
+const mcpTransportOptions = computed(() => [
+  { value: 'stdio', label: t('settings.mcp.transport.stdio') },
+  { value: 'streamable-http', label: t('settings.mcp.transport.streamableHttp') },
+  { value: 'sse', label: t('settings.mcp.transport.sse') },
+]);
 
-const mcpApprovalOverrideOptions = [
-  { value: '', label: 'Use global default' },
-  { value: 'safe-only', label: 'Require approval unless read-only' },
-  { value: 'always', label: 'Always require approval' },
-  { value: 'never', label: 'Never require approval' },
-];
+const mcpApprovalOverrideOptions = computed(() => [
+  { value: '', label: t('settings.mcp.approval.globalDefault') },
+  { value: 'safe-only', label: t('settings.mcp.approval.safeOnlyShort') },
+  { value: 'always', label: t('settings.mcp.approval.always') },
+  { value: 'never', label: t('settings.mcp.approval.never') },
+]);
 
 const updateMcp = <K extends keyof AppConfig['mcp']>(key: K, value: AppConfig['mcp'][K]) => {
   config.value.mcp[key] = value;
@@ -386,14 +402,16 @@ const loadServers = async (options?: { clearActionError?: boolean }) => {
   serversLoading.value = true;
   try {
     if (!electronAPI?.mcp?.list) {
-      serversError.value = 'MCP API is unavailable.';
+      serversError.value = t('settings.mcp.error.apiUnavailable');
       servers.value = [];
       return;
     }
     const list = await electronAPI.mcp.list();
     servers.value = Array.isArray(list) ? list : [];
   } catch (error: unknown) {
-    serversError.value = getErrorMessage(error) || 'Failed to load MCP servers.';
+    serversError.value = t('settings.mcp.error.loadFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     serversLoading.value = false;
   }
@@ -461,7 +479,7 @@ const parseStringMap = (value: string): { value: Record<string, string> | null; 
     const parsed = JSON.parse(trimmed);
     const normalized = normalizeStringMap(parsed);
     if (!normalized) {
-      return { value: null, error: 'Expected a JSON object with string values.' };
+      return { value: null, error: t('settings.mcp.error.expectedJsonObject') };
     }
     return { value: normalized, error: '' };
   } catch {
@@ -470,12 +488,12 @@ const parseStringMap = (value: string): { value: Record<string, string> | null; 
     for (const line of lines) {
       const match = line.match(/^([^:=]+)\s*[:=]\s*(.*)$/);
       if (!match) {
-        return { value: null, error: 'Use JSON or key=value lines.' };
+        return { value: null, error: t('settings.mcp.error.useJsonOrKeyValue') };
       }
       const key = match[1].trim();
       const val = match[2].trim();
       if (!key) {
-        return { value: null, error: 'Environment keys cannot be empty.' };
+        return { value: null, error: t('settings.mcp.error.environmentKeyEmpty') };
       }
       result[key] = val;
     }
@@ -493,7 +511,7 @@ const formatStringMap = (value: Record<string, string> | null | undefined): stri
 const buildServerPayload = (): McpServerInput | null => {
   const name = form.value.name.trim();
   if (!name) {
-    formError.value = 'Server name is required.';
+    formError.value = t('settings.mcp.error.serverNameRequired');
     return null;
   }
 
@@ -517,11 +535,11 @@ const buildServerPayload = (): McpServerInput | null => {
 
   if (form.value.transport === 'stdio') {
     if (!form.value.command.trim()) {
-      formError.value = 'Command is required for stdio servers.';
+      formError.value = t('settings.mcp.error.commandRequired');
       return null;
     }
   } else if (!form.value.baseUrl.trim()) {
-    formError.value = 'Base URL is required for HTTP/SSE servers.';
+    formError.value = t('settings.mcp.error.baseUrlRequired');
     return null;
   }
 
@@ -556,7 +574,7 @@ const saveServer = async () => {
   if (!payload) return;
 
   if (!electronAPI?.mcp) {
-    formError.value = 'MCP API is unavailable.';
+    formError.value = t('settings.mcp.error.apiUnavailable');
     return;
   }
 
@@ -570,7 +588,9 @@ const saveServer = async () => {
     formOpen.value = false;
     await loadServers();
   } catch (error: unknown) {
-    formError.value = getErrorMessage(error) || 'Failed to save MCP server.';
+    formError.value = t('settings.mcp.error.saveFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     formSaving.value = false;
   }
@@ -578,13 +598,15 @@ const saveServer = async () => {
 
 const deleteServer = async (server: McpServerSummary) => {
   if (!electronAPI?.mcp?.delete) return;
-  if (!window.confirm(`Delete MCP server "${server.name}"?`)) return;
+  if (!window.confirm(t('settings.mcp.confirmDelete', { name: server.name }))) return;
   actionLoading.value = true;
   actionError.value = '';
   try {
     await electronAPI.mcp.delete(server.id);
   } catch (error: unknown) {
-    actionError.value = getErrorMessage(error) || 'Failed to delete MCP server.';
+    actionError.value = t('settings.mcp.error.deleteFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });
@@ -598,7 +620,9 @@ const connectServer = async (server: McpServerSummary) => {
   try {
     await electronAPI.mcp.connect(server.id);
   } catch (error: unknown) {
-    actionError.value = getErrorMessage(error) || 'Failed to connect MCP server.';
+    actionError.value = t('settings.mcp.error.connectFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });
@@ -612,7 +636,9 @@ const disconnectServer = async (server: McpServerSummary) => {
   try {
     await electronAPI.mcp.disconnect(server.id);
   } catch (error: unknown) {
-    actionError.value = getErrorMessage(error) || 'Failed to disconnect MCP server.';
+    actionError.value = t('settings.mcp.error.disconnectFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });
@@ -626,7 +652,9 @@ const refreshTools = async (server: McpServerSummary) => {
   try {
     await electronAPI.mcp.refreshTools(server.id);
   } catch (error: unknown) {
-    actionError.value = getErrorMessage(error) || 'Failed to refresh MCP tools.';
+    actionError.value = t('settings.mcp.error.refreshFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     actionLoading.value = false;
     await loadServers({ clearActionError: false });
@@ -634,13 +662,13 @@ const refreshTools = async (server: McpServerSummary) => {
 };
 
 const statusLabel = (server: McpServerSummary): string => {
-  if (!server.enabled) return 'Disabled';
+  if (!server.enabled) return t('settings.mcp.status.disabled');
   const state = server.status?.state;
-  if (state === 'connected') return 'Connected';
-  if (state === 'connecting') return 'Connecting';
-  if (state === 'error') return 'Error';
-  if (server.last_error) return 'Error';
-  return 'Disconnected';
+  if (state === 'connected') return t('settings.mcp.status.connected');
+  if (state === 'connecting') return t('settings.mcp.status.connecting');
+  if (state === 'error') return t('settings.mcp.status.error');
+  if (server.last_error) return t('settings.mcp.status.error');
+  return t('settings.mcp.status.disconnected');
 };
 
 const statusClass = (server: McpServerSummary): string => {
@@ -676,7 +704,11 @@ const formatTimestamp = (value: string): string => {
 };
 
 const formatTransport = (transport: McpTransport): string =>
-  transport === 'stdio' ? 'Stdio' : transport === 'sse' ? 'SSE' : 'HTTP';
+  transport === 'stdio'
+    ? t('settings.mcp.transport.stdioShort')
+    : transport === 'sse'
+      ? 'SSE'
+      : t('settings.mcp.transport.httpShort');
 
 onMounted(() => {
   void loadServers();

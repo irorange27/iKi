@@ -3,9 +3,9 @@
     <div class="settings-card mode-card">
       <div class="card-header">
         <div>
-          <div class="card-title">Color Scheme</div>
+          <div class="card-title">{{ t('settings.theme.title') }}</div>
           <div class="card-subtitle">
-            Pick a theme preset, search the gallery, or design your own Base46-powered interface.
+            {{ t('settings.theme.description') }}
           </div>
         </div>
       </div>
@@ -22,11 +22,11 @@
             <Moon v-if="theme === 'dark'" :size="14" />
             <Sun v-else-if="theme === 'light'" :size="14" />
             <MonitorCog v-else :size="14" />
-            {{ capitalizeWord(theme) }}
+            {{ formatThemeModeLabel(theme) }}
           </button>
         </div>
         <div class="mode-meta">
-          <span class="mode-meta-label">Current preset</span>
+          <span class="mode-meta-label">{{ t('settings.theme.currentPreset') }}</span>
           <span class="mode-meta-value">{{ selectedPresetLabel }}</span>
         </div>
       </div>
@@ -36,7 +36,7 @@
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search themes..."
+          :placeholder="t('settings.theme.searchPlaceholder')"
           class="search-input"
         />
       </label>
@@ -47,15 +47,15 @@
         <div>
           <div class="card-title custom-title-row">
             <Palette :size="18" />
-            <span>Custom Themes</span>
+            <span>{{ t('settings.theme.customTitle') }}</span>
           </div>
           <div class="card-subtitle">
-            Create, edit, and manage your own Base46-derived color schemes.
+            {{ t('settings.theme.customDescription') }}
           </div>
         </div>
         <button class="primary-btn" @click="openCreateThemeModal()">
           <Plus :size="14" />
-          Create Theme
+          {{ t('settings.theme.create') }}
         </button>
       </div>
 
@@ -63,8 +63,8 @@
         <div class="custom-empty-message">
           {{
             customPresetSummaries.length === 0
-              ? "No custom themes yet. Click 'Create Theme' to get started."
-              : 'No custom themes match your search.'
+              ? t('settings.theme.emptyCustomInitial')
+              : t('settings.theme.emptyCustomSearch')
           }}
         </div>
       </div>
@@ -85,13 +85,13 @@
         <div>
           <div class="card-title">{{ gallerySectionTitle }}</div>
           <div class="card-subtitle">
-            Built-in presets that resolve through the same semantic renderer token pipeline.
+            {{ t('settings.theme.builtinDescription') }}
           </div>
         </div>
       </div>
 
       <div v-if="filteredBuiltinPresetCards.length === 0" class="custom-empty-state">
-        <div class="custom-empty-message">No built-in themes match your search.</div>
+        <div class="custom-empty-message">{{ t('settings.theme.emptyBuiltinSearch') }}</div>
       </div>
 
       <ThemePresetGrid
@@ -103,7 +103,9 @@
     </div>
 
     <div class="config-actions">
-      <button class="reset-btn" type="button" @click="emit('reset')">Reset Color Scheme</button>
+      <button class="reset-btn" type="button" @click="emit('reset')">
+        {{ t('settings.theme.reset') }}
+      </button>
     </div>
 
     <ThemeEditorModal
@@ -133,6 +135,7 @@ import ThemeEditorModal from './ThemeEditorModal.vue';
 import ThemePresetGrid from './ThemePresetGrid.vue';
 import { useThemeEditor } from '../../composables/useThemeEditor';
 import { useThemePresetGallery } from '../../composables/useThemePresetGallery';
+import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 
 const emit = defineEmits<{
@@ -143,6 +146,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
+const { t } = useI18n();
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -153,11 +157,11 @@ const systemPrefersDark = (): boolean => {
 };
 
 const {
-  capitalizeWord,
   customPresetSummaries,
   currentThemePresetId,
   filteredBuiltinPresetCards,
   filteredCustomPresetCards,
+  formatThemeModeLabel,
   gallerySectionTitle,
   searchQuery,
   selectedPresetLabel,

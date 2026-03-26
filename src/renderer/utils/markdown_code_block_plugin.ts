@@ -1,5 +1,6 @@
 import hljs from 'highlight.js/lib/common';
 import 'highlight.js/styles/atom-one-dark.css';
+import { translate } from '../i18n';
 
 type MarkdownToken = { info?: string; content?: string };
 type MarkdownFenceRenderer = (
@@ -86,8 +87,8 @@ export const markdownCodeBlockPlugin: MarkdownPlugin = md => {
     const escapedLanguage = md.utils.escapeHtml(displayLanguage || 'code');
     const codeClass = md.utils.escapeHtml(languageClass || 'text');
     const renderedFence = `<pre><code class="hljs language-${codeClass}">${html}</code></pre>`;
+    const copyCodeLabel = md.utils.escapeHtml(translate('markdown.copyCode'));
 
-    return `<div class="md-code-block"><div class="md-code-header"><span class="md-code-lang">${escapedLanguage}</span><button type="button" class="md-code-copy-btn" aria-label="Copy code" title="Copy code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div>${renderedFence}</div>`;
+    return `<div class="md-code-block"><div class="md-code-header"><span class="md-code-lang">${escapedLanguage}</span><button type="button" class="md-code-copy-btn" aria-label="${copyCodeLabel}" title="${copyCodeLabel}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div>${renderedFence}</div>`;
   };
 };
-

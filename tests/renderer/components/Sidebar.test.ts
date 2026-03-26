@@ -59,6 +59,8 @@ const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>>
 };
 
 describe('Sidebar', () => {
+  const queryMenu = () => document.body.querySelector('.sidebar-menu');
+
   beforeEach(() => {
     Object.defineProperty(window, 'confirm', {
       configurable: true,
@@ -142,7 +144,9 @@ describe('Sidebar', () => {
     expect(wrapper.findAll('.chat-item-external')).toHaveLength(0);
 
     await wrapper.find('.sidebar-menu-btn').trigger('click');
-    await wrapper.find('[role="menuitemcheckbox"]').trigger('click');
+    const externalToggle = document.body.querySelector('[role="menuitemcheckbox"]');
+    expect(externalToggle).not.toBeNull();
+    (externalToggle as HTMLButtonElement).click();
     await flushPromises();
 
     expect(wrapper.text()).toContain('External Chats');
@@ -163,12 +167,13 @@ describe('Sidebar', () => {
       threads: [],
     });
 
-    expect(wrapper.find('.sidebar-menu').exists()).toBe(false);
+    expect(queryMenu()).toBeNull();
 
     await wrapper.find('.sidebar-menu-anchor').trigger('mouseenter');
+    await flushPromises();
 
-    expect(wrapper.find('.sidebar-menu').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Show External Chats');
+    expect(queryMenu()).not.toBeNull();
+    expect(queryMenu()?.textContent ?? '').toContain('Show External Chats');
   });
 
   it('deletes the confirmed thread, removes it locally, and emits thread-deleted', async () => {
@@ -199,7 +204,9 @@ describe('Sidebar', () => {
     });
 
     await wrapper.find('.sidebar-menu-btn').trigger('click');
-    await wrapper.find('[role="menuitem"]').trigger('click');
+    const settingsButton = document.body.querySelector('[role="menuitem"]');
+    expect(settingsButton).not.toBeNull();
+    (settingsButton as HTMLButtonElement).click();
 
     expect(openSettings).toHaveBeenCalledTimes(1);
   });

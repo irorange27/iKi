@@ -1,12 +1,8 @@
 <template>
   <section class="config-section bridges-section">
     <div class="config-group">
-      <h3>NapCat (QQ)</h3>
-      <p class="group-description">
-        Configure the reverse WebSocket bridge exposed by the daemon at path
-        <code>/onebot/v11/ws</code>. If NapCat runs in Docker, use a host-reachable daemon address
-        instead of <code>localhost</code>.
-      </p>
+      <h3>{{ t('settings.napcat.title') }}</h3>
+      <p class="group-description">{{ t('settings.napcat.description') }}</p>
 
       <label class="checkbox-label">
         <input
@@ -14,71 +10,68 @@
           :checked="napcat.enabled"
           @change="updateNapCat('enabled', ($event.target as HTMLInputElement).checked)"
         />
-        Enable NapCat reverse WebSocket bridge
+        {{ t('settings.napcat.enable') }}
       </label>
 
       <label class="input-label">
-        <span>Access Token (optional)</span>
+        <span>{{ t('settings.napcat.accessTokenOptional') }}</span>
         <input
           type="password"
           :value="napcat.accessToken"
-          placeholder="Leave empty to disable bridge auth"
+          :placeholder="t('settings.napcat.accessTokenPlaceholder')"
           @input="updateNapCat('accessToken', ($event.target as HTMLInputElement).value)"
         />
         <small class="input-help">
-          If set, NapCat must connect with <code>?access_token=...</code>.
+          {{ t('settings.napcat.accessTokenHelp') }}
         </small>
       </label>
 
       <div class="config-inline">
         <label class="input-label">
-          <span>Daemon Host</span>
+          <span>{{ t('settings.napcat.daemonHost') }}</span>
           <input
             type="text"
             :value="daemonHost"
-            placeholder="127.0.0.1"
+            :placeholder="t('settings.napcat.daemonHostPlaceholder')"
             @input="updateDaemonHost(($event.target as HTMLInputElement).value)"
           />
           <small class="input-help">
-            Defaults to <code>127.0.0.1</code>. Use <code>0.0.0.0</code> only when you intentionally
-            need LAN/Docker access.
+            {{ t('settings.napcat.daemonHostHelp') }}
           </small>
         </label>
 
         <label class="input-label">
-          <span>Daemon Port</span>
+          <span>{{ t('settings.napcat.daemonPort') }}</span>
           <input
             type="number"
             min="1"
             max="65535"
             :value="daemonPort"
-            placeholder="6127"
+            :placeholder="t('settings.napcat.daemonPortPlaceholder')"
             @input="updateDaemonPort(($event.target as HTMLInputElement).value)"
           />
         </label>
       </div>
-      <p class="group-description">
-        Changing daemon host/port will restart the desktop-managed daemon after saving settings.
-      </p>
+      <p class="group-description">{{ t('settings.napcat.daemonRestartNotice') }}</p>
 
       <div class="config-inline">
         <label class="input-label">
-          <span>Provider Type</span>
+          <span>{{ t('settings.napcat.providerType') }}</span>
           <SettingsSelect
             :model-value="napcat.providerType"
             :options="napCatProviderTypeOptions"
-            aria-label="NapCat provider type"
+            :aria-label="t('settings.napcat.providerTypeAria')"
             @update:model-value="updateNapCatProviderTypeSelection"
           />
         </label>
 
         <label class="input-label">
-          <span>Model</span>
+          <span>{{ t('common.model') }}</span>
           <input
             list="napcat-model-options"
             type="text"
             :value="napcat.model"
-            placeholder="Leave empty to use the provider default"
+            :placeholder="t('settings.napcat.modelPlaceholder')"
             @input="updateNapCat('model', ($event.target as HTMLInputElement).value)"
           />
           <datalist id="napcat-model-options">
@@ -87,15 +80,13 @@
         </label>
       </div>
 
-      <p v-if="providersLoading" class="group-description">Loading enabled providers...</p>
+      <p v-if="providersLoading" class="group-description">{{ t('settings.napcat.loadingProviders') }}</p>
       <p v-else-if="providersError" class="error-text">{{ providersError }}</p>
       <p v-else-if="providerOptions.length === 0" class="group-description warning-text">
-        No enabled providers with model metadata are available. The bridge will not be able to
-        generate replies until at least one provider is configured.
+        {{ t('settings.napcat.noProviders') }}
       </p>
       <p v-else-if="hasDuplicateProviderType" class="group-description warning-text">
-        Multiple enabled providers share the same type. The bridge currently uses the first enabled
-        provider for that type.
+        {{ t('settings.napcat.duplicateProviderType') }}
       </p>
 
       <label class="checkbox-label">
@@ -104,28 +95,26 @@
           :checked="napcat.requireMention"
           @change="updateNapCat('requireMention', ($event.target as HTMLInputElement).checked)"
         />
-        Require @mention in group chats before replying
+        {{ t('settings.napcat.requireMention') }}
       </label>
 
       <label class="input-label">
-        <span>Allowed Tools (one per line)</span>
+        <span>{{ t('settings.napcat.allowedTools') }}</span>
         <textarea
           :value="toolListText"
           rows="4"
-          placeholder="web&#10;fetch"
+          :placeholder="t('settings.napcat.toolsPlaceholder')"
           @input="updateTools(($event.target as HTMLTextAreaElement).value)"
         />
-        <small class="input-help">Leave empty to disable tool use for QQ replies.</small>
+        <small class="input-help">{{ t('settings.napcat.toolsHelp') }}</small>
       </label>
     </div>
 
     <div class="settings-card">
       <div class="card-header">
         <div>
-          <div class="card-title">Connection Summary</div>
-          <div class="card-subtitle">
-            What NapCat needs to connect successfully. Auto-refreshes every 5s while open.
-          </div>
+          <div class="card-title">{{ t('settings.napcat.connectionTitle') }}</div>
+          <div class="card-subtitle">{{ t('settings.napcat.connectionDescription') }}</div>
         </div>
         <div class="card-actions">
           <button
@@ -134,7 +123,7 @@
             :disabled="daemonControlLoading"
             @click="handleDaemonControl('start')"
           >
-            Start
+            {{ t('common.start') }}
           </button>
           <button
             class="reset-btn"
@@ -142,7 +131,7 @@
             :disabled="daemonControlLoading"
             @click="handleDaemonControl('restart')"
           >
-            Restart
+            {{ t('common.restart') }}
           </button>
           <button
             class="reset-btn"
@@ -150,45 +139,49 @@
             :disabled="daemonControlLoading"
             @click="handleDaemonControl('stop')"
           >
-            Stop
+            {{ t('common.stop') }}
           </button>
-          <button class="reset-btn" type="button" @click="loadDaemonStatus">Refresh Status</button>
+          <button class="reset-btn" type="button" @click="loadDaemonStatus">
+            {{ t('settings.napcat.refreshStatus') }}
+          </button>
         </div>
       </div>
 
       <div class="summary-list">
         <div class="summary-row">
-          <span class="summary-label">Status</span>
+          <span class="summary-label">{{ t('common.status') }}</span>
           <span class="status-chip" :class="{ active: napcat.enabled }">
-            {{ napcat.enabled ? 'Enabled' : 'Disabled' }}
+            {{ napcat.enabled ? t('common.enabled') : t('common.disabled') }}
           </span>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Daemon</span>
+          <span class="summary-label">{{ t('settings.napcat.daemonLabel') }}</span>
           <span class="status-chip" :class="daemonStatusClass">
             {{ daemonStatusChip }}
           </span>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Listening</span>
+          <span class="summary-label">{{ t('settings.napcat.listening') }}</span>
           <code class="summary-code">{{ activeDaemonAddress }}</code>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Endpoint</span>
+          <span class="summary-label">{{ t('settings.napcat.endpoint') }}</span>
           <code class="summary-code">ws://{{ activeDaemonAddress }}/onebot/v11/ws</code>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Authentication</span>
+          <span class="summary-label">{{ t('settings.napcat.authentication') }}</span>
           <span>{{
-            napcat.accessToken.trim() ? 'Bearer token required' : 'No token required'
+            napcat.accessToken.trim()
+              ? t('settings.napcat.authRequired')
+              : t('settings.napcat.authNone')
           }}</span>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Provider</span>
+          <span class="summary-label">{{ t('common.provider') }}</span>
           <span>{{ providerSummary }}</span>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Tools</span>
+          <span class="summary-label">{{ t('settings.napcat.toolsLabel') }}</span>
           <span>{{ toolSummary }}</span>
         </div>
       </div>
@@ -201,66 +194,60 @@
       >
         {{ daemonControlMessage }}
       </p>
-      <p class="group-description">
-        These controls manage the desktop-managed embedded daemon only.
-      </p>
+      <p class="group-description">{{ t('settings.napcat.embeddedOnly') }}</p>
     </div>
 
     <div class="settings-card">
       <div class="card-header">
         <div>
-          <div class="card-title">Runtime Paths</div>
-          <div class="card-subtitle">The desktop app and daemon should read the same config DB</div>
+          <div class="card-title">{{ t('settings.napcat.runtimePathsTitle') }}</div>
+          <div class="card-subtitle">{{ t('settings.napcat.runtimePathsDescription') }}</div>
         </div>
       </div>
 
       <div class="summary-list">
         <div class="summary-row">
-          <span class="summary-label">Config DB</span>
+          <span class="summary-label">{{ t('settings.napcat.configDb') }}</span>
           <code class="summary-code">{{ configPathSummary }}</code>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Local NapCat URL</span>
+          <span class="summary-label">{{ t('settings.napcat.localUrl') }}</span>
           <code class="summary-code">{{ localWsUrl }}</code>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Docker NapCat URL</span>
+          <span class="summary-label">{{ t('settings.napcat.dockerUrl') }}</span>
           <code class="summary-code">{{ dockerWsUrl }}</code>
         </div>
       </div>
 
-      <p class="group-description">
-        When the URL already includes <code>access_token=...</code>, leave NapCat's separate
-        <code>Token</code> field empty to avoid mixing two auth paths.
-      </p>
+      <p class="group-description">{{ t('settings.napcat.runtimePathsHelp') }}</p>
       <p v-if="runtimeInfoError" class="error-text">{{ runtimeInfoError }}</p>
     </div>
 
     <div class="settings-card">
       <div class="card-header">
         <div>
-          <div class="card-title">Recent Logs</div>
-          <div class="card-subtitle">
-            Recent daemon and NapCat events, including inbound QQ message previews. Auto-refreshes
-            every 5s while open.
-          </div>
+          <div class="card-title">{{ t('settings.napcat.recentLogsTitle') }}</div>
+          <div class="card-subtitle">{{ t('settings.napcat.recentLogsDescription') }}</div>
         </div>
         <div class="card-actions">
-          <button class="reset-btn" type="button" @click="loadDaemonLogs">Refresh Logs</button>
+          <button class="reset-btn" type="button" @click="loadDaemonLogs">
+            {{ t('settings.napcat.refreshLogs') }}
+          </button>
         </div>
       </div>
 
       <div class="summary-list">
         <div class="summary-row">
-          <span class="summary-label">Log File</span>
+          <span class="summary-label">{{ t('settings.napcat.logFile') }}</span>
           <code class="summary-code">{{ daemonLogPath }}</code>
         </div>
         <div class="summary-row">
-          <span class="summary-label">Entries</span>
+          <span class="summary-label">{{ t('settings.napcat.entries') }}</span>
           <span>{{ daemonLogCount }}</span>
         </div>
         <div class="summary-row">
-          <span class="summary-label">QQ Messages</span>
+          <span class="summary-label">{{ t('settings.napcat.qqMessages') }}</span>
           <span>{{ napcatMessagePreviewCount }}</span>
         </div>
       </div>
@@ -270,7 +257,9 @@
     </div>
 
     <div class="config-actions">
-      <button class="reset-btn" type="button" @click="emit('reset')">Reset Bridges</button>
+      <button class="reset-btn" type="button" @click="emit('reset')">
+        {{ t('settings.napcat.reset') }}
+      </button>
     </div>
   </section>
 </template>
@@ -280,6 +269,7 @@ import { computed, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import SettingsSelect from './SettingsSelect.vue';
+import { useI18n } from '../../i18n';
 import { configService } from '../../services/config_service';
 import { useConfigStore } from '../../store/config';
 import type {
@@ -311,6 +301,7 @@ const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>
 const props = defineProps<{
   active: boolean;
 }>();
+const { t } = useI18n();
 
 type ProviderOption = {
   type: string;
@@ -382,7 +373,7 @@ const providerOptions = computed<ProviderOption[]>(() => {
 });
 
 const napCatProviderTypeOptions = computed(() => [
-  { value: '', label: 'Auto-select first enabled provider' },
+  { value: '', label: t('settings.napcat.providerAuto') },
   ...providerOptions.value.map(provider => ({
     value: provider.type,
     label: provider.label,
@@ -407,41 +398,59 @@ const providerSummary = computed(() => {
   const providerType = napcat.value.providerType?.trim();
   const model = napcat.value.model?.trim();
 
-  if (!providerType && !model) return 'Auto-select first enabled provider and model';
-  if (providerType && model) return `${providerType} / ${model}`;
-  if (providerType) return `${providerType} / default model`;
-  return `Auto-select provider / ${model}`;
+  if (!providerType && !model) return t('settings.napcat.providerSummary.auto');
+  if (providerType && model) {
+    return t('settings.napcat.providerSummary.providerAndModel', {
+      provider: providerType,
+      model,
+    });
+  }
+  if (providerType) {
+    return t('settings.napcat.providerSummary.providerOnly', {
+      provider: providerType,
+    });
+  }
+  return t('settings.napcat.providerSummary.modelOnly', { model });
 });
 
 const toolSummary = computed(() => {
-  return napcat.value.tools.length > 0 ? napcat.value.tools.join(', ') : 'Disabled';
+  return napcat.value.tools.length > 0 ? napcat.value.tools.join(', ') : t('settings.napcat.toolsDisabled');
 });
 
-const configPathSummary = computed(() => runtimeInfo.value?.dbPath || 'Unavailable');
+const configPathSummary = computed(() => runtimeInfo.value?.dbPath || t('common.unavailable'));
 const daemonStatusChip = computed(() => {
-  if (daemonStatusLoading.value) return 'Checking';
-  if (daemonStatus.value?.online) return 'Online';
-  return 'Offline';
+  if (daemonStatusLoading.value) return t('settings.napcat.daemonChecking');
+  if (daemonStatus.value?.online) return t('settings.napcat.daemonOnline');
+  return t('settings.napcat.daemonOffline');
 });
 const daemonStatusClass = computed(() => ({
   active: Boolean(daemonStatus.value?.online),
 }));
+const formatDaemonSourceLabel = (source: DaemonStatusInfo['source']): string => {
+  if (source === 'health') return t('settings.napcat.daemonSource.health');
+  if (source === 'recorded') return t('settings.napcat.daemonSource.recorded');
+  return t('settings.napcat.daemonSource.default');
+};
 const daemonStatusDetail = computed(() => {
-  if (daemonStatusLoading.value) return 'Checking daemon health...';
+  if (daemonStatusLoading.value) return t('settings.napcat.daemonCheckingDetail');
   if (daemonStatusError.value) return daemonStatusError.value;
-  if (!daemonStatus.value) return 'Daemon status unavailable.';
+  if (!daemonStatus.value) return t('settings.napcat.daemonUnavailable');
   if (daemonStatus.value.online && daemonStatus.value.uptimeSeconds !== null) {
-    return `Uptime ${daemonStatus.value.uptimeSeconds.toFixed(0)}s`;
+    return t('settings.napcat.daemonUptime', {
+      seconds: daemonStatus.value.uptimeSeconds.toFixed(0),
+    });
   }
   if (daemonStatus.value.error) return daemonStatus.value.error;
-  return `Using ${daemonStatus.value.source} address information.`;
+  return t('settings.napcat.daemonSource', {
+    source: formatDaemonSourceLabel(daemonStatus.value.source),
+  });
 });
 const activeDaemonHost = computed(() => daemonStatus.value?.host || daemonHost.value);
 const activeDaemonPort = computed(() => daemonStatus.value?.port || daemonPort.value);
 const activeDaemonAddress = computed(() => `${activeDaemonHost.value}:${activeDaemonPort.value}`);
-const daemonLogPath = computed(() => daemonLogs.value?.filePath || 'Unavailable');
+const daemonLogPath = computed(() => daemonLogs.value?.filePath || t('common.unavailable'));
 const daemonLogCount = computed(() => {
-  if (daemonLogsLoading.value) return 'Loading...';
+  if (daemonLogsLoading.value) return t('settings.napcat.loadingCount');
   return String(daemonLogs.value?.entries.length || 0);
 });
 
@@ -519,7 +528,7 @@ const napcatMessagePreviews = computed(() => {
 });
 
 const napcatMessagePreviewCount = computed(() => {
-  if (daemonLogsLoading.value) return 'Loading...';
+  if (daemonLogsLoading.value) return t('settings.napcat.loadingCount');
   return String(napcatMessagePreviews.value.length);
 });
 
@@ -545,24 +554,24 @@ const formatNapCatPreviewLine = (entry: NapCatMessagePreviewEntry) => {
 };
 
 const daemonLogText = computed(() => {
-  if (daemonLogsLoading.value) return 'Loading daemon logs...';
+  if (daemonLogsLoading.value) return t('settings.napcat.loadingLogs');
   if (daemonLogsError.value) return daemonLogsError.value;
 
   const sections: string[] = [];
 
   if (napcatMessagePreviews.value.length > 0) {
-    sections.push('Recent QQ Messages');
+    sections.push(t('settings.napcat.recentQqMessages'));
     sections.push(...napcatMessagePreviews.value.map(formatNapCatPreviewLine));
   }
 
   const entries = daemonLogs.value?.entries || [];
   if (entries.length > 0) {
     if (sections.length > 0) sections.push('');
-    sections.push('Recent Logs');
+    sections.push(t('settings.napcat.recentLogs'));
     sections.push(...entries.map(toFormattedDaemonLogLine));
   }
 
-  if (sections.length === 0) return 'No daemon logs or inbound QQ messages available yet.';
+  if (sections.length === 0) return t('settings.napcat.noLogs');
   return sections.join('\n');
 });
 
@@ -617,7 +626,7 @@ const loadProviders = async () => {
   try {
     if (!electronAPI?.providers?.list) {
       providers.value = [];
-      providersError.value = 'Provider API is unavailable.';
+      providersError.value = t('settings.napcat.error.providerApiUnavailable');
       return;
     }
     const list = await electronAPI.providers.list();
@@ -732,7 +741,7 @@ onUnmounted(() => {
 .bridges-section {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--settings-card-gap);
 }
 
 .config-group,

@@ -1,6 +1,6 @@
 <template>
   <div class="preview-column">
-    <div class="preview-title">Preview</div>
+    <div class="preview-title">{{ t('settings.theme.preview.title') }}</div>
     <div class="preview-shell" :style="previewStyle">
       <div class="preview-window-bar">
         <div class="preview-dots">
@@ -8,23 +8,29 @@
           <span class="preview-dot dot-yellow" />
           <span class="preview-dot dot-green" />
         </div>
-        <div class="preview-window-name">{{ label || 'Untitled Theme' }}</div>
+        <div class="preview-window-name">{{ label || t('settings.theme.preview.untitled') }}</div>
       </div>
       <div class="preview-body">
         <div class="preview-sidebar">
-          <div class="preview-sidebar-item active">Selected Item</div>
-          <div class="preview-sidebar-item">Menu Item 1</div>
-          <div class="preview-sidebar-item">Menu Item 2</div>
+          <div class="preview-sidebar-item active">{{ t('settings.theme.preview.selectedItem') }}</div>
+          <div class="preview-sidebar-item">{{ t('settings.theme.preview.menuItem1') }}</div>
+          <div class="preview-sidebar-item">{{ t('settings.theme.preview.menuItem2') }}</div>
         </div>
         <div class="preview-main">
           <div class="preview-card">
-            <div class="preview-card-title">Card Title</div>
-            <div class="preview-card-copy">This is muted text content.</div>
+            <div class="preview-card-title">{{ t('settings.theme.preview.cardTitle') }}</div>
+            <div class="preview-card-copy">{{ t('settings.theme.preview.cardCopy') }}</div>
           </div>
           <div class="preview-actions">
-            <button class="preview-primary-btn" type="button">Primary</button>
-            <button class="preview-secondary-btn" type="button">Secondary</button>
-            <button class="preview-tertiary-btn" type="button">Delete</button>
+            <button class="preview-primary-btn" type="button">
+              {{ t('settings.theme.preview.primary') }}
+            </button>
+            <button class="preview-secondary-btn" type="button">
+              {{ t('settings.theme.preview.secondary') }}
+            </button>
+            <button class="preview-tertiary-btn" type="button">
+              {{ t('settings.theme.preview.delete') }}
+            </button>
           </div>
           <div class="preview-code">
             <span class="code-keyword">const</span>
@@ -40,10 +46,13 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '../../i18n';
+
 defineProps<{
   label: string;
   previewStyle: Record<string, string>;
 }>();
+const { t } = useI18n();
 </script>
 
 <style scoped>

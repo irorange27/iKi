@@ -1,6 +1,7 @@
 import { computed, reactive, type ComputedRef, type Ref } from 'vue';
 
 import { DEFAULT_THEME_PRESET_ID, THEME_QUICK_STARTS } from '../../shared/theme/registry';
+import { translate } from '../i18n';
 import {
   applySimpleThemeSeed,
   buildThemePresetVariant,
@@ -43,7 +44,7 @@ const resolveDeleteConfirmation = (): boolean => {
   if (
     typeof window !== 'undefined' &&
     typeof window.confirm === 'function' &&
-    !window.confirm('Delete this custom theme? This action cannot be undone.')
+    !window.confirm(translate('settings.theme.error.deleteConfirm'))
   ) {
     return false;
   }
@@ -60,10 +61,10 @@ export const useThemeEditor = ({
   themePresetSummaries: ComputedRef<ThemePresetSummary[]>;
   onConfigChange: () => void;
 }) => {
-  const themeVariantOptions: Array<{ value: ThemeVariant; label: string }> = [
-    { value: 'dark', label: 'Dark' },
-    { value: 'light', label: 'Light' },
-  ];
+  const themeVariantOptions = computed<Array<{ value: ThemeVariant; label: string }>>(() => [
+    { value: 'dark', label: translate('common.dark') },
+    { value: 'light', label: translate('common.light') },
+  ]);
 
   const editor = reactive<ThemeEditorState>({
     open: false,
@@ -100,7 +101,7 @@ export const useThemeEditor = ({
 
   const openCreateThemeModal = () => {
     resetEditor();
-    editor.label = 'Ocean';
+    editor.label = translate('settings.theme.modal.displayNamePlaceholder');
     editor.open = true;
   };
 
@@ -221,7 +222,7 @@ export const useThemeEditor = ({
     try {
       const label = editor.label.trim();
       if (!label) {
-        throw new Error('Display name is required.');
+        throw new Error(translate('settings.theme.error.displayNameRequired'));
       }
 
       const currentPresets = config.value.themes.base46Presets;
@@ -244,7 +245,8 @@ export const useThemeEditor = ({
       onConfigChange();
       closeEditor();
     } catch (error) {
-      editor.error = error instanceof Error ? error.message : 'Failed to save theme.';
+      editor.error =
+        error instanceof Error ? error.message : translate('settings.theme.error.saveFailed');
     }
   };
 

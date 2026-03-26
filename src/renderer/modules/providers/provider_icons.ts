@@ -3,6 +3,7 @@ export const getProviderIconName = (providerId: string): string => {
 
   const iconMap: Record<string, string> = {
     openai: 'openai',
+    'openai-compatible': 'openai',
     anthropic: 'anthropic',
     claude: 'claude',
     google: 'google',

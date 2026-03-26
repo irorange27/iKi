@@ -2,6 +2,7 @@
   max-width: 860px;
   padding-top: 8px;
   flex: 1 0 auto;
+  --settings-card-gap: 18px;
 }
 
 .settings-card,
@@ -10,7 +11,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--surface-radius);
   padding: 20px 22px;
-  margin-bottom: 24px;
+  margin-bottom: var(--settings-card-gap);
   box-shadow: var(--surface-shadow-md);
 }
 

@@ -1,31 +1,27 @@
 <template>
   <section class="config-section">
     <div class="settings-card">
-      <div class="card-title">Owner Controls</div>
-      <p class="card-help">
-        Explicit mode controls override the normal day rhythm, but never lie about a currently
-        running task. If a task is active, the requested mode is kept and applied as soon as the
-        task lock clears.
-      </p>
+      <div class="card-title">{{ t('settings.life.controlsTitle') }}</div>
+      <p class="card-help">{{ t('settings.life.controlsDescription') }}</p>
 
       <p v-if="controlErrorText" class="tasks-error">{{ controlErrorText }}</p>
 
       <div class="life-summary-block">
-        <div class="life-summary-label">Current owner mode</div>
+        <div class="life-summary-label">{{ t('settings.life.currentOwnerMode') }}</div>
         <div class="life-summary-text">
           {{ ownerModeLabel }}
           <span v-if="snapshot?.derived.ownerMode" class="task-meta-label">
-            ({{ snapshot?.derived.ownerModeStatus }})
+            ({{ formatOwnerStatus(snapshot?.derived.ownerModeStatus) }})
           </span>
         </div>
         <div class="life-meta-lines">
           <div v-if="snapshot?.derived.ownerModeSetAt">
-            <span class="task-meta-label">Set:</span>
+            <span class="task-meta-label">{{ t('settings.life.setAt') }}:</span>
             {{ formatTimestamp(snapshot.derived.ownerModeSetAt) }}
           </div>
           <div v-if="snapshot?.derived.ownerModeStatus === 'deferred'">
-            <span class="task-meta-label">Deferred:</span>
-            Waiting for the current task lock to clear before the requested mode can fully apply.
+            <span class="task-meta-label">{{ t('settings.life.deferred') }}:</span>
+            {{ t('settings.life.deferredDescription') }}
           </div>
         </div>
       </div>
@@ -37,7 +33,7 @@
           :disabled="loading || controlLoading"
           @click="clearOwnerMode"
         >
-          {{ controlLoading && pendingMode === null ? 'Applying...' : 'Auto' }}
+          {{ controlLoading && pendingMode === null ? t('settings.life.applying') : t('settings.life.mode.auto') }}
         </button>
         <button
           class="secondary-btn"
@@ -45,7 +41,7 @@
           :disabled="loading || controlLoading"
           @click="setOwnerMode('sleep')"
         >
-          {{ controlLoading && pendingMode === 'sleep' ? 'Applying...' : 'Sleep Now' }}
+          {{ controlLoading && pendingMode === 'sleep' ? t('settings.life.applying') : t('settings.life.mode.sleepNow') }}
         </button>
         <button
           class="secondary-btn"
@@ -53,7 +49,7 @@
           :disabled="loading || controlLoading"
           @click="setOwnerMode('focus')"
         >
-          {{ controlLoading && pendingMode === 'focus' ? 'Applying...' : 'Focus' }}
+          {{ controlLoading && pendingMode === 'focus' ? t('settings.life.applying') : t('settings.life.mode.focus') }}
         </button>
         <button
           class="secondary-btn"
@@ -61,73 +57,79 @@
           :disabled="loading || controlLoading"
           @click="setOwnerMode('available')"
         >
-          {{ controlLoading && pendingMode === 'available' ? 'Applying...' : 'Stay Available' }}
+          {{ controlLoading && pendingMode === 'available' ? t('settings.life.applying') : t('settings.life.mode.available') }}
         </button>
       </div>
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Current Presence</div>
-      <p class="card-help">
-        Read-only view of iKi's daemon-owned life state. This should reflect one shared presence
-        across threads instead of per-thread roleplay.
-      </p>
+      <div class="card-title">{{ t('settings.life.presenceTitle') }}</div>
+      <p class="card-help">{{ t('settings.life.presenceDescription') }}</p>
 
       <div class="task-form-actions">
         <button class="secondary-btn" @click="refreshOverview" :disabled="loading">
-          {{ loading ? 'Refreshing...' : 'Refresh' }}
+          {{ loading ? t('settings.life.refreshing') : t('common.refresh') }}
         </button>
         <button class="secondary-btn" @click="forceRefresh" :disabled="loading">
-          Recompute Now
+          {{ t('settings.life.recomputeNow') }}
         </button>
       </div>
 
       <p v-if="errorText" class="tasks-error">{{ errorText }}</p>
-      <div v-else-if="loading && !snapshot" class="tasks-empty">Loading...</div>
-      <div v-else-if="!snapshot" class="tasks-empty">Life runtime has not produced a state yet.</div>
+      <div v-else-if="loading && !snapshot" class="tasks-empty">{{ t('settings.life.runtimeLoading') }}</div>
+      <div v-else-if="!snapshot" class="tasks-empty">{{ t('settings.life.runtimeEmpty') }}</div>
       <template v-else>
         <div class="life-status-row">
-          <span class="life-chip life-chip-primary">{{ snapshot.state.presence }}</span>
-          <span class="life-chip">{{ snapshot.state.current_activity }}</span>
-          <span class="life-chip">{{ snapshot.derived.dayPhase }}</span>
+          <span class="life-chip life-chip-primary">{{ formatPresence(snapshot.state.presence) }}</span>
+          <span class="life-chip">{{ formatActivity(snapshot.state.current_activity) }}</span>
+          <span class="life-chip">{{ formatDayPhase(snapshot.derived.dayPhase) }}</span>
           <span v-if="snapshot.derived.ownerMode" class="life-chip">
-            owner: {{ snapshot.derived.ownerMode }} ({{ snapshot.derived.ownerModeStatus }})
+            {{
+              t('settings.life.ownerChip', {
+                mode: formatOwnerMode(snapshot.derived.ownerMode),
+                status: formatOwnerStatus(snapshot.derived.ownerModeStatus),
+              })
+            }}
           </span>
         </div>
 
         <div class="life-grid">
           <div class="life-stat">
-            <span class="life-stat-label">Energy</span>
+            <span class="life-stat-label">{{ t('settings.life.energy') }}</span>
             <strong>{{ formatPercent(snapshot.state.energy) }}</strong>
           </div>
           <div class="life-stat">
-            <span class="life-stat-label">Focus</span>
+            <span class="life-stat-label">{{ t('settings.life.focus') }}</span>
             <strong>{{ formatPercent(snapshot.state.focus_budget) }}</strong>
           </div>
           <div class="life-stat">
-            <span class="life-stat-label">Social</span>
+            <span class="life-stat-label">{{ t('settings.life.social') }}</span>
             <strong>{{ formatPercent(snapshot.state.social_availability) }}</strong>
           </div>
           <div class="life-stat">
-            <span class="life-stat-label">Next Review</span>
-            <strong>{{ snapshot.state.next_review_at ? formatTimestamp(snapshot.state.next_review_at) : 'n/a' }}</strong>
+            <span class="life-stat-label">{{ t('settings.life.nextReview') }}</span>
+            <strong>{{
+              snapshot.state.next_review_at
+                ? formatTimestamp(snapshot.state.next_review_at)
+                : t('settings.memory.na')
+            }}</strong>
           </div>
         </div>
 
         <div class="life-summary-block">
-          <div class="life-summary-label">Current trajectory</div>
+          <div class="life-summary-label">{{ t('settings.life.currentTrajectory') }}</div>
           <div class="life-summary-text">
-            {{ snapshot.currentEpisode?.summary || 'No active episode summary yet.' }}
+            {{ snapshot.currentEpisode?.summary || t('settings.life.noEpisodeSummary') }}
           </div>
         </div>
 
         <div class="life-meta-lines">
           <div v-if="snapshot.derived.lastTransitionReason">
-            <span class="task-meta-label">Transition:</span>
+            <span class="task-meta-label">{{ t('settings.life.transition') }}:</span>
             {{ snapshot.derived.lastTransitionReason }}
           </div>
           <div v-if="snapshot.derived.runningTaskIds.length > 0">
-            <span class="task-meta-label">Running tasks:</span>
+            <span class="task-meta-label">{{ t('settings.life.runningTasks') }}:</span>
             {{ snapshot.derived.runningTaskIds.join(', ') }}
           </div>
         </div>
@@ -135,17 +137,13 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Relationship Memory</div>
-      <p class="card-help">
-        Structured relationship state keeps owner baseline and thread-level context separate from
-        generic long memory. This is the persistent social frame iKi should carry across access
-        layers.
-      </p>
+      <div class="card-title">{{ t('settings.life.relationshipTitle') }}</div>
+      <p class="card-help">{{ t('settings.life.relationshipDescription') }}</p>
 
       <p v-if="relationshipErrorText" class="tasks-error">{{ relationshipErrorText }}</p>
       <template v-else-if="relationshipOverview">
         <div class="life-summary-block">
-          <div class="life-summary-label">Owner baseline</div>
+          <div class="life-summary-label">{{ t('settings.life.ownerBaseline') }}</div>
           <div class="life-summary-text">
             {{ relationshipOverview.owner.owner_label }}: {{
               relationshipOverview.owner.relationship_to_owner
@@ -154,7 +152,7 @@
         </div>
 
         <div v-if="recentRelationshipStates.length === 0" class="tasks-empty">
-          No thread relationship states yet.
+          {{ t('settings.life.noRelationshipStates') }}
         </div>
         <div v-else class="life-episode-list">
           <div
@@ -171,7 +169,7 @@
                 {{
                   state.last_interaction_at
                     ? formatTimestamp(state.last_interaction_at)
-                    : 'No interaction yet'
+                    : t('settings.life.noInteractionYet')
                 }}
               </div>
             </div>
@@ -182,20 +180,20 @@
 
             <div v-if="state.preferred_address" class="life-meta-lines">
               <div>
-                <span class="task-meta-label">Preferred address:</span>
+                <span class="task-meta-label">{{ t('settings.life.preferredAddress') }}:</span>
                 {{ state.preferred_address }}
               </div>
             </div>
 
             <div v-if="parseList(state.boundaries_json).length > 0" class="life-summary-block mini-block">
-              <div class="life-summary-label">Boundaries</div>
+              <div class="life-summary-label">{{ t('settings.life.boundaries') }}</div>
               <div class="life-list">
                 <div v-for="item in parseList(state.boundaries_json)" :key="item">{{ item }}</div>
               </div>
             </div>
 
             <div v-if="parseList(state.notes_json).length > 0" class="life-summary-block mini-block">
-              <div class="life-summary-label">Notes</div>
+              <div class="life-summary-label">{{ t('settings.life.notes') }}</div>
               <div class="life-list">
                 <div v-for="item in parseList(state.notes_json)" :key="item">{{ item }}</div>
               </div>
@@ -203,35 +201,32 @@
 
             <div class="life-meta-lines">
               <div>
-                <span class="task-meta-label">Thread:</span>
+                <span class="task-meta-label">{{ t('common.thread') }}:</span>
                 {{ state.scope_id }}
               </div>
               <div>
-                <span class="task-meta-label">Updated:</span>
+                <span class="task-meta-label">{{ t('settings.life.updated') }}:</span>
                 {{ formatTimestamp(state.updated_at) }}
               </div>
             </div>
           </div>
         </div>
       </template>
-      <div v-else-if="loading" class="tasks-empty">Loading...</div>
-      <div v-else class="tasks-empty">Relationship memory has not produced any state yet.</div>
+      <div v-else-if="loading" class="tasks-empty">{{ t('settings.life.relationshipLoading') }}</div>
+      <div v-else class="tasks-empty">{{ t('settings.life.relationshipEmpty') }}</div>
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Recent Episodes</div>
-      <p class="card-help">
-        The recent trajectory log should explain what iKi has been occupied with, without inventing
-        physical routines.
-      </p>
+      <div class="card-title">{{ t('settings.life.episodesTitle') }}</div>
+      <p class="card-help">{{ t('settings.life.episodesDescription') }}</p>
 
-      <div v-if="recentEpisodes.length === 0" class="tasks-empty">No episodes yet.</div>
+      <div v-if="recentEpisodes.length === 0" class="tasks-empty">{{ t('settings.life.noEpisodes') }}</div>
       <div v-else class="life-episode-list">
         <div v-for="episode in recentEpisodes" :key="episode.id" class="life-episode-item">
           <div class="life-episode-head">
             <div class="task-item-title">
-              <span class="task-name">{{ episode.activity_type }}</span>
-              <span class="task-status status-idle">{{ episode.presence }}</span>
+              <span class="task-name">{{ formatActivity(episode.activity_type) }}</span>
+              <span class="task-status status-idle">{{ formatPresence(episode.presence) }}</span>
             </div>
             <div class="life-episode-time">
               {{ formatTimestamp(episode.started_at) }}
@@ -244,19 +239,19 @@
 
           <div class="life-meta-lines">
             <div>
-              <span class="task-meta-label">Reason:</span>
+              <span class="task-meta-label">{{ t('settings.life.reason') }}:</span>
               {{ episode.transition_reason }}
             </div>
             <div v-if="episode.task_id">
-              <span class="task-meta-label">Task:</span>
+              <span class="task-meta-label">{{ t('settings.life.task') }}:</span>
               {{ episode.task_id }}
             </div>
             <div v-if="episode.thread_id">
-              <span class="task-meta-label">Thread:</span>
+              <span class="task-meta-label">{{ t('common.thread') }}:</span>
               {{ episode.thread_id }}
             </div>
             <div v-if="episode.ended_at">
-              <span class="task-meta-label">Ended:</span>
+              <span class="task-meta-label">{{ t('settings.life.ended') }}:</span>
               {{ formatTimestamp(episode.ended_at) }}
             </div>
           </div>
@@ -265,19 +260,16 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Recent Reflections</div>
-      <p class="card-help">
-        Hourly and daily synthesis windows generated from the life trajectory and active
-        commitments. These are structured recap records, not chat messages.
-      </p>
+      <div class="card-title">{{ t('settings.life.reflectionsTitle') }}</div>
+      <p class="card-help">{{ t('settings.life.reflectionsDescription') }}</p>
 
-      <div v-if="recentReflections.length === 0" class="tasks-empty">No reflections yet.</div>
+      <div v-if="recentReflections.length === 0" class="tasks-empty">{{ t('settings.life.noReflections') }}</div>
       <div v-else class="life-episode-list">
         <div v-for="reflection in recentReflections" :key="reflection.id" class="life-episode-item">
           <div class="life-episode-head">
             <div class="task-item-title">
-              <span class="task-name">{{ reflection.period_type }}</span>
-              <span class="task-status status-success">reflection</span>
+              <span class="task-name">{{ formatReflectionPeriod(reflection.period_type) }}</span>
+              <span class="task-status status-success">{{ t('settings.life.reflectionLabel') }}</span>
             </div>
             <div class="life-episode-time">
               {{ formatTimestamp(reflection.period_start) }} -> {{ formatTimestamp(reflection.period_end) }}
@@ -289,7 +281,7 @@
           </div>
 
           <div v-if="parseList(reflection.insights_json).length > 0" class="life-summary-block mini-block">
-            <div class="life-summary-label">Insights</div>
+            <div class="life-summary-label">{{ t('settings.life.insights') }}</div>
             <div class="life-list">
               <div v-for="item in parseList(reflection.insights_json)" :key="item">{{ item }}</div>
             </div>
@@ -297,7 +289,7 @@
 
           <div v-if="parseList(reflection.plan_json).length > 0" class="life-summary-block mini-block">
             <div class="life-summary-label">
-              {{ reflection.period_type === 'day' ? 'Next Day' : 'Next Focus' }}
+              {{ reflection.period_type === 'day' ? t('settings.life.nextDay') : t('settings.life.nextFocus') }}
             </div>
             <div class="life-list">
               <div v-for="item in parseList(reflection.plan_json)" :key="item">{{ item }}</div>
@@ -312,6 +304,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
+import { useI18n } from '../../i18n';
 import type {
   LifeOverview,
   LifeOwnerMode,
@@ -327,6 +320,7 @@ import { formatTimestamp } from './settings_formatters';
 const props = defineProps<{
   active: boolean;
 }>();
+const { t } = useI18n();
 
 const loading = ref(false);
 const controlLoading = ref(false);
@@ -345,12 +339,49 @@ const snapshot = computed<LifeSnapshot | null>(() => lifeOverview.value?.snapsho
 const recentEpisodes = computed(() => lifeOverview.value?.recentEpisodes ?? []);
 const recentReflections = computed(() => lifeOverview.value?.recentReflections ?? []);
 const recentRelationshipStates = computed(() => relationshipOverview.value?.recentStates ?? []);
+const formatOwnerMode = (mode: LifeOwnerMode | null | undefined): string => {
+  if (!mode) return t('settings.life.mode.auto');
+  if (mode === 'sleep') return t('settings.life.mode.sleep');
+  if (mode === 'focus') return t('settings.life.mode.focus');
+  return t('settings.life.mode.available');
+};
+const formatOwnerStatus = (status: string | null | undefined): string => {
+  if (status === 'applied') return t('settings.life.ownerStatus.applied');
+  if (status === 'deferred') return t('settings.life.ownerStatus.deferred');
+  return t('settings.life.ownerStatus.none');
+};
+const formatPresence = (presence: string | null | undefined): string => {
+  if (presence === 'sleeping') return t('settings.life.presence.sleeping');
+  if (presence === 'waking') return t('settings.life.presence.waking');
+  if (presence === 'available') return t('settings.life.presence.available');
+  if (presence === 'focused') return t('settings.life.presence.focused');
+  if (presence === 'maintaining') return t('settings.life.presence.maintaining');
+  if (presence === 'recovering') return t('settings.life.presence.recovering');
+  return presence || t('common.unknown');
+};
+const formatActivity = (activity: string | null | undefined): string => {
+  if (activity === 'sleep') return t('settings.life.activity.sleep');
+  if (activity === 'wake_transition') return t('settings.life.activity.wake_transition');
+  if (activity === 'companion_idle') return t('settings.life.activity.companion_idle');
+  if (activity === 'focused_work') return t('settings.life.activity.focused_work');
+  if (activity === 'maintenance') return t('settings.life.activity.maintenance');
+  if (activity === 'recovery') return t('settings.life.activity.recovery');
+  return activity || t('common.unknown');
+};
+const formatDayPhase = (phase: string | null | undefined): string => {
+  if (phase === 'night') return t('settings.life.dayPhase.night');
+  if (phase === 'wake') return t('settings.life.dayPhase.wake');
+  if (phase === 'day') return t('settings.life.dayPhase.day');
+  if (phase === 'evening') return t('settings.life.dayPhase.evening');
+  return phase || t('common.unknown');
+};
+const formatReflectionPeriod = (period: string | null | undefined): string => {
+  if (period === 'day') return t('settings.life.period.day');
+  if (period === 'hour') return t('settings.life.period.hour');
+  return period || t('common.unknown');
+};
 const ownerModeLabel = computed(() => {
-  const mode = snapshot.value?.derived.ownerMode;
-  if (!mode) return 'Auto';
-  if (mode === 'sleep') return 'Sleep';
-  if (mode === 'focus') return 'Focus';
-  return 'Stay Available';
+  return formatOwnerMode(snapshot.value?.derived.ownerMode);
 });
 
 const formatPercent = (value: number): string => `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
@@ -367,11 +398,11 @@ const parseList = (raw: string | null | undefined): string[] => {
 };
 
 const formatRelationshipSource = (sourceKind: RelationshipSourceKind): string => {
-  if (sourceKind === 'desktop-owner-thread') return 'Desktop owner';
-  if (sourceKind === 'napcat-private') return 'QQ private';
-  if (sourceKind === 'napcat-group') return 'QQ group';
-  if (sourceKind === 'external-client-thread') return 'External client';
-  return 'Unknown';
+  if (sourceKind === 'desktop-owner-thread') return t('settings.life.source.desktopOwner');
+  if (sourceKind === 'napcat-private') return t('settings.life.source.napcatPrivate');
+  if (sourceKind === 'napcat-group') return t('settings.life.source.napcatGroup');
+  if (sourceKind === 'external-client-thread') return t('settings.life.source.externalClient');
+  return t('settings.life.source.unknown');
 };
 
 const loadState = async (limit = overviewLimit, options?: { showLoading?: boolean }) => {

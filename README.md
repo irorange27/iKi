@@ -7,6 +7,8 @@ A local agent pet for AI provider orchestration.
 ## Features
 
 - Orchestrates multiple AI providers.
+- Ships first-class built-in provider entries for OpenAI, DeepSeek, Moonshot AI (Kimi), and
+  Ollama, while still allowing custom OpenAI-compatible endpoints.
 
 - Acts as a local agent for streamlined AI interactions.
 
@@ -52,7 +54,8 @@ A local agent pet for AI provider orchestration.
    npm run app:dev
    ```
 
-6. Open `Settings`, configure at least one provider API key and model, then send
+6. Open `Settings`, configure at least one provider API key and model (for example OpenAI or
+   DeepSeek), then send
    your first chat message.
 
 ## Useful Commands

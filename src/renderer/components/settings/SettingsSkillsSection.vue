@@ -3,8 +3,10 @@
     <div class="settings-card">
       <div class="skills-toolbar">
         <div class="skills-toolbar-left">
-          <div class="card-title">Skills</div>
-          <div class="skills-subtitle">{{ filteredSkills.length }} skill(s) available</div>
+          <div class="card-title">{{ t('settings.skills.title') }}</div>
+          <div class="skills-subtitle">
+            {{ t('settings.skills.availableCount', { count: filteredSkills.length }) }}
+          </div>
         </div>
         <div class="skills-toolbar-actions">
           <button
@@ -13,24 +15,25 @@
             :disabled="skillsLoading"
           >
             <RefreshCw :size="14" :class="{ 'animate-spin': skillsLoading }" />
-            {{ skillsLoading ? 'Refreshing...' : 'Refresh' }}
+            {{ skillsLoading ? t('settings.skills.refreshing') : t('common.refresh') }}
           </button>
           <button class="secondary-btn skills-btn" @click="() => openSkillsFolder()">
-            Open Folder
+            {{ t('common.openFolder') }}
           </button>
         </div>
       </div>
 
-      <p class="card-help">
-        Skills are instruction packs loaded from local <code>SKILL.md</code> files. Put your custom
-        skills into the Personal skills folder to make them show up here.
-      </p>
+      <p class="card-help">{{ t('settings.skills.description') }}</p>
 
       <div v-if="skillRoots.length" class="skills-paths">
         <div v-for="root in skillRoots" :key="root.source" class="skills-path-row">
-          <span class="skills-path-label">{{ root.source === 'user' ? 'Personal' : 'Codex' }}</span>
+          <span class="skills-path-label">
+            {{ root.source === 'user' ? t('settings.skills.source.personal') : t('settings.skills.source.codex') }}
+          </span>
           <code class="skills-path-value">{{ root.path }}</code>
-          <button class="skills-mini-btn" @click="openSkillsFolder(root.source)">Open</button>
+          <button class="skills-mini-btn" @click="openSkillsFolder(root.source)">
+            {{ t('common.open') }}
+          </button>
         </div>
       </div>
 
@@ -38,41 +41,44 @@
         <input
           v-model="skillSearchQuery"
           type="text"
-          placeholder="Search skills by name, description, or id..."
+          :placeholder="t('settings.skills.searchPlaceholder')"
         />
       </div>
 
       <p v-if="skillsError" class="skills-error">{{ skillsError }}</p>
 
       <div v-if="!skillsLoading && filteredSkills.length === 0" class="skills-empty">
-        No skills found.
+        {{ t('settings.skills.empty') }}
       </div>
 
       <div v-else class="skills-groups">
         <div v-if="personalSkills.length" class="skills-group">
           <div class="skills-group-title">
-            Personal Skills <span class="skills-count-pill">{{ personalSkills.length }}</span>
+            {{ t('settings.skills.group.personal') }}
+            <span class="skills-count-pill">{{ personalSkills.length }}</span>
           </div>
           <div class="skills-list">
             <div v-for="skill in personalSkills" :key="skill.id" class="skill-item">
               <div class="skill-item-header">
                 <div class="skill-item-meta">
                   <div class="skill-name">{{ skill.name }}</div>
-                  <div class="skill-desc">{{ skill.description || 'No description' }}</div>
+                  <div class="skill-desc">{{ skill.description || t('settings.skills.noDescription') }}</div>
                   <div class="skill-id">{{ skill.path || skill.id }}</div>
                 </div>
                 <div class="skill-item-actions">
-                  <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">Open</button>
+                  <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">
+                    {{ t('common.open') }}
+                  </button>
                   <button class="skills-mini-btn" @click="toggleSkillContent(skill.id)">
-                    {{ isSkillExpanded(skill.id) ? 'Hide' : 'View Content' }}
+                    {{ isSkillExpanded(skill.id) ? t('common.hide') : t('settings.skills.viewContent') }}
                   </button>
                 </div>
               </div>
               <div v-if="isSkillExpanded(skill.id)" class="skill-content">
-                <div v-if="skillContentLoading[skill.id]" class="skills-empty">Loading...</div>
+                <div v-if="skillContentLoading[skill.id]" class="skills-empty">{{ t('common.loading') }}</div>
                 <pre v-else class="skill-content-pre">{{ skillContents[skill.id] || '' }}</pre>
                 <div v-if="skillContentTruncated[skill.id]" class="skills-truncated">
-                  Content truncated for display.
+                  {{ t('settings.skills.contentTruncated') }}
                 </div>
               </div>
             </div>
@@ -81,28 +87,31 @@
 
         <div v-if="codexSkills.length" class="skills-group">
           <div class="skills-group-title">
-            Codex Skills <span class="skills-count-pill">{{ codexSkills.length }}</span>
+            {{ t('settings.skills.group.codex') }}
+            <span class="skills-count-pill">{{ codexSkills.length }}</span>
           </div>
           <div class="skills-list">
             <div v-for="skill in codexSkills" :key="skill.id" class="skill-item">
               <div class="skill-item-header">
                 <div class="skill-item-meta">
                   <div class="skill-name">{{ skill.name }}</div>
-                  <div class="skill-desc">{{ skill.description || 'No description' }}</div>
+                  <div class="skill-desc">{{ skill.description || t('settings.skills.noDescription') }}</div>
                   <div class="skill-id">{{ skill.path || skill.id }}</div>
                 </div>
                 <div class="skill-item-actions">
-                  <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">Open</button>
+                  <button class="skills-mini-btn" @click="openSkillFolder(skill.id)">
+                    {{ t('common.open') }}
+                  </button>
                   <button class="skills-mini-btn" @click="toggleSkillContent(skill.id)">
-                    {{ isSkillExpanded(skill.id) ? 'Hide' : 'View Content' }}
+                    {{ isSkillExpanded(skill.id) ? t('common.hide') : t('settings.skills.viewContent') }}
                   </button>
                 </div>
               </div>
               <div v-if="isSkillExpanded(skill.id)" class="skill-content">
-                <div v-if="skillContentLoading[skill.id]" class="skills-empty">Loading...</div>
+                <div v-if="skillContentLoading[skill.id]" class="skills-empty">{{ t('common.loading') }}</div>
                 <pre v-else class="skill-content-pre">{{ skillContents[skill.id] || '' }}</pre>
                 <div v-if="skillContentTruncated[skill.id]" class="skills-truncated">
-                  Content truncated for display.
+                  {{ t('settings.skills.contentTruncated') }}
                 </div>
               </div>
             </div>
@@ -112,7 +121,7 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Workflow Optimization</div>
+      <div class="card-title">{{ t('settings.skills.workflowTitle') }}</div>
       <label class="checkbox-label">
         <input
           type="checkbox"
@@ -121,7 +130,7 @@
             updateWorkflowOptimization('enabled', ($event.target as HTMLInputElement).checked)
           "
         />
-        Enable self-optimizing workflow
+        {{ t('settings.skills.workflowEnable') }}
       </label>
       <label class="checkbox-label">
         <input
@@ -132,19 +141,16 @@
             updateWorkflowOptimization('autoPinSkills', ($event.target as HTMLInputElement).checked)
           "
         />
-        Auto-pin frequently used skills per thread
+        {{ t('settings.skills.workflowAutoPin') }}
       </label>
-      <p class="card-help">
-        iKi learns which skills consistently help in a thread and keeps them pinned in auto mode.
-        This never affects manual skill selection.
-      </p>
+      <p class="card-help">{{ t('settings.skills.workflowDescription') }}</p>
       <div class="skills-toolbar-actions">
         <button
           class="secondary-btn skills-btn"
           @click="resetWorkflowOptimization"
           :disabled="workflowResetting"
         >
-          {{ workflowResetting ? 'Resetting...' : 'Reset auto-pinned skills' }}
+          {{ workflowResetting ? t('settings.skills.workflowResetting') : t('settings.skills.workflowReset') }}
         </button>
       </div>
       <p v-if="workflowResetError" class="skills-error">{{ workflowResetError }}</p>
@@ -158,6 +164,7 @@ import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';
 
 import { useConfigStore } from '../../store/config';
+import { useI18n } from '../../i18n';
 import type { AppConfig } from '../../../shared/types/config';
 import type { SkillSummary } from '../../../shared/types/skill';
 import { getErrorMessage } from '../../../shared/utils/errors';
@@ -170,6 +177,7 @@ const props = defineProps<{
   active: boolean;
 }>();
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const { t } = useI18n();
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -197,17 +205,20 @@ const updateWorkflowOptimization = <K extends keyof AppConfig['workflowOptimizat
 const resetWorkflowOptimization = async () => {
   workflowResetError.value = '';
   if (!electronAPI?.workflow?.resetAutoPinnedSkills) {
-    workflowResetError.value = 'Workflow reset unavailable.';
+    workflowResetError.value = t('settings.skills.error.resetUnavailable');
     return;
   }
   workflowResetting.value = true;
   try {
     const result = await electronAPI.workflow.resetAutoPinnedSkills();
     if (!result?.success) {
-      workflowResetError.value = result?.error || 'Failed to reset workflow data.';
+      workflowResetError.value =
+        result?.error || t('settings.skills.error.resetFailed', { error: '' });
     }
   } catch (error: unknown) {
-    workflowResetError.value = `Failed to reset workflow data: ${getErrorMessage(error)}`;
+    workflowResetError.value = t('settings.skills.error.resetFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     workflowResetting.value = false;
   }
@@ -229,7 +240,7 @@ const refreshSkills = async () => {
     const list = await electronAPI.skills.list();
     skills.value = Array.isArray(list) ? list : [];
   } catch (error: unknown) {
-    skillsError.value = `Failed to load skills: ${getErrorMessage(error)}`;
+    skillsError.value = t('settings.skills.error.loadFailed', { error: getErrorMessage(error) });
     skills.value = [];
   } finally {
     skillsLoading.value = false;
@@ -240,10 +251,13 @@ const openSkillsFolder = async (source?: 'user' | 'codex') => {
   try {
     const result = await electronAPI.skills.openRoot(source);
     if (result?.success === false) {
-      skillsError.value = result?.error || 'Failed to open skills folder';
+      skillsError.value =
+        result?.error || t('settings.skills.error.openFolderFailed', { error: '' });
     }
   } catch (error: unknown) {
-    skillsError.value = `Failed to open skills folder: ${getErrorMessage(error)}`;
+    skillsError.value = t('settings.skills.error.openFolderFailed', {
+      error: getErrorMessage(error),
+    });
   }
 };
 
@@ -251,10 +265,12 @@ const openSkillFolder = async (id: string) => {
   try {
     const result = await electronAPI.skills.openSkill(id);
     if (result?.success === false) {
-      skillsError.value = result?.error || 'Failed to open skill folder';
+      skillsError.value = result?.error || t('settings.skills.error.openSkillFailed', { error: '' });
     }
   } catch (error: unknown) {
-    skillsError.value = `Failed to open skill folder: ${getErrorMessage(error)}`;
+    skillsError.value = t('settings.skills.error.openSkillFailed', {
+      error: getErrorMessage(error),
+    });
   }
 };
 
@@ -277,7 +293,7 @@ const toggleSkillContent = async (id: string) => {
   try {
     const result = await electronAPI.skills.read(id, { maxChars: 20000 });
     if (result?.success === false) {
-      skillsError.value = result?.error || 'Failed to read skill content';
+      skillsError.value = result?.error || t('settings.skills.error.readFailed', { error: '' });
       skillContents.value = { ...skillContents.value, [id]: '' };
       skillContentTruncated.value = { ...skillContentTruncated.value, [id]: false };
       return;
@@ -288,7 +304,9 @@ const toggleSkillContent = async (id: string) => {
       [id]: Boolean(result?.truncated),
     };
   } catch (error: unknown) {
-    skillsError.value = `Failed to read skill content: ${getErrorMessage(error)}`;
+    skillsError.value = t('settings.skills.error.readFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     skillContentLoading.value = { ...skillContentLoading.value, [id]: false };
   }

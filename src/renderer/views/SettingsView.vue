@@ -312,30 +312,30 @@
       <!-- Network -->
       <section v-show="activeSection === 'network'" class="config-section">
         <div class="config-group">
-          <h3>Proxy</h3>
+          <h3>{{ t('settings.network.proxy.title') }}</h3>
           <label class="checkbox-label">
             <input
               type="checkbox"
               :checked="config.network.proxy.enable"
               @change="updateNetwork('proxy.enable', ($event.target as HTMLInputElement).checked)"
             />
-            Enable Proxy
+            {{ t('settings.network.proxy.enable') }}
           </label>
 
           <template v-if="config.network.proxy.enable">
             <div class="input-label">
-              <span>Type</span>
+              <span>{{ t('settings.network.proxy.type') }}</span>
               <SettingsSelect
                 class="network-proxy-type-select"
                 :model-value="config.network.proxy.type"
                 :options="proxyTypeOptions"
-                aria-label="Proxy Type"
+                :aria-label="t('settings.network.proxy.typeAria')"
                 @update:model-value="updateProxyTypeSelection"
               />
             </div>
 
             <label class="input-label"
-              >Host
+              >{{ t('settings.network.proxy.host') }}
               <input
                 type="text"
                 :value="config.network.proxy.host"
@@ -344,7 +344,7 @@
             </label>
 
             <label class="input-label"
-              >Port
+              >{{ t('settings.network.proxy.port') }}
               <input
                 type="number"
                 :value="config.network.proxy.port || ''"
@@ -355,9 +355,9 @@
         </div>
 
         <div class="config-group">
-          <h3>Timeout & Retry</h3>
+          <h3>{{ t('settings.network.timeoutRetryTitle') }}</h3>
           <div class="slider-field">
-            <span>Timeout (ms)</span>
+            <span>{{ t('settings.network.timeoutMs') }}</span>
             <span class="value-badge">{{ config.network.timeout }}</span>
           </div>
           <input
@@ -368,10 +368,10 @@
             :value="config.network.timeout"
             @input="updateNetwork('timeout', parseRequiredInteger(getInputValue($event)))"
           />
-          <p class="slider-hint">Controls how long the app waits before timing out.</p>
+          <p class="slider-hint">{{ t('settings.network.timeoutHint') }}</p>
 
           <div class="slider-field">
-            <span>Retry Attempts</span>
+            <span>{{ t('settings.network.retryAttempts') }}</span>
             <span class="value-badge">{{ config.network.retryAttempts }}</span>
           </div>
           <input
@@ -382,16 +382,16 @@
             :value="config.network.retryAttempts"
             @input="updateNetwork('retryAttempts', parseRequiredInteger(getInputValue($event)))"
           />
-          <p class="slider-hint">Number of retries before a request fails.</p>
+          <p class="slider-hint">{{ t('settings.network.retryHint') }}</p>
         </div>
 
-        <button class="reset-btn" @click="resetSection('network')">Reset Network</button>
+        <button class="reset-btn" @click="resetSection('network')">{{ t('settings.network.reset') }}</button>
       </section>
 
       <!-- Security -->
       <section v-show="activeSection === 'security'" class="config-section">
         <div class="config-group">
-          <h3>Data Protection</h3>
+          <h3>{{ t('settings.security.dataProtection') }}</h3>
           <label
             v-for="key in ['encryptApikeys', 'requirePassword'] as const"
             :key="key"
@@ -402,14 +402,14 @@
               :checked="config.security[key]"
               @change="updateSecurity(key, ($event.target as HTMLInputElement).checked)"
             />
-            {{ formatLabel(key) }}
+            {{ formatSecurityLabel(key) }}
           </label>
         </div>
 
         <div class="config-group">
-          <h3>Session Timeout</h3>
+          <h3>{{ t('settings.security.sessionTimeout') }}</h3>
           <div class="slider-field">
-            <span>Minutes</span>
+            <span>{{ t('settings.security.minutes') }}</span>
             <span class="value-badge">{{ config.security.sessionTimeout }}</span>
           </div>
           <input
@@ -420,38 +420,38 @@
             :value="config.security.sessionTimeout"
             @input="updateSecurity('sessionTimeout', parseRequiredInteger(getInputValue($event)))"
           />
-          <p class="slider-hint">Shorter timeouts increase security.</p>
+          <p class="slider-hint">{{ t('settings.security.timeoutHint') }}</p>
         </div>
 
         <div class="config-group">
-          <h3>Logging</h3>
+          <h3>{{ t('settings.security.logging') }}</h3>
           <label class="checkbox-label">
             <input
               type="checkbox"
               :checked="config.security.enableLogging"
               @change="updateSecurity('enableLogging', getCheckedValue($event))"
             />
-            Enable Logging
+            {{ t('settings.security.enableLogging') }}
           </label>
           <div v-if="config.security.enableLogging" class="input-label">
-            <span>Level</span>
+            <span>{{ t('settings.security.level') }}</span>
             <SettingsSelect
               class="security-log-level-select"
               :model-value="config.security.logLevel"
               :options="securityLogLevelOptions"
-              aria-label="Logging Level"
+              :aria-label="t('settings.security.levelAria')"
               @update:model-value="updateSecurityLogLevelSelection"
             />
           </div>
         </div>
 
-        <button class="reset-btn" @click="resetSection('security')">Reset Security</button>
+        <button class="reset-btn" @click="resetSection('security')">{{ t('settings.security.reset') }}</button>
       </section>
 
       <!-- Advanced -->
       <section v-show="activeSection === 'advanced'" class="config-section">
         <div class="config-group">
-          <h3>Development Mode</h3>
+          <h3>{{ t('settings.advanced.title') }}</h3>
           <label
             v-for="key in ['debugMode', 'developerMode', 'enableExperimentalFeatures'] as const"
             :key="key"
@@ -462,18 +462,18 @@
               :checked="config.advanced[key]"
               @change="updateAdvanced(key, ($event.target as HTMLInputElement).checked)"
             />
-            {{ formatLabel(key) }}
+            {{ formatAdvancedLabel(key) }}
           </label>
         </div>
 
-        <button class="reset-btn" @click="resetSection('advanced')">Reset Advanced</button>
+        <button class="reset-btn" @click="resetSection('advanced')">{{ t('settings.advanced.reset') }}</button>
       </section>
 
       <!-- Keybindings -->
       <section v-show="activeSection === 'keybindings'" class="config-section">
         <div class="config-group">
           <label v-for="(value, key) in config.keybindings" :key="key" class="input-label">
-            {{ formatLabel(key) }}:
+            {{ formatKeybindingLabel(key) }}:
             <input
               type="text"
               :value="value"
@@ -482,7 +482,7 @@
           </label>
         </div>
 
-        <button class="reset-btn" @click="resetSection('keybindings')">Reset Keybindings</button>
+        <button class="reset-btn" @click="resetSection('keybindings')">{{ t('settings.keybindings.reset') }}</button>
       </section>
 
       <SettingsMemorySection
@@ -707,18 +707,18 @@ const languageOptions = computed(() => [
   { value: 'zh-CN', label: t('language.chineseSimplified') },
 ]);
 
-const proxyTypeOptions = [
-  { value: 'http', label: 'HTTP' },
-  { value: 'https', label: 'HTTPS' },
-  { value: 'socks5', label: 'SOCKS5' },
-];
+const proxyTypeOptions = computed(() => [
+  { value: 'http', label: t('settings.network.proxy.http') },
+  { value: 'https', label: t('settings.network.proxy.https') },
+  { value: 'socks5', label: t('settings.network.proxy.socks5') },
+]);
 
-const securityLogLevelOptions = [
-  { value: 'error', label: 'Error' },
-  { value: 'warn', label: 'Warning' },
-  { value: 'info', label: 'Info' },
-  { value: 'debug', label: 'Debug' },
-];
+const securityLogLevelOptions = computed(() => [
+  { value: 'error', label: t('settings.security.logLevel.error') },
+  { value: 'warn', label: t('settings.security.logLevel.warn') },
+  { value: 'info', label: t('settings.security.logLevel.info') },
+  { value: 'debug', label: t('settings.security.logLevel.debug') },
+]);
 
 const resolveConfiguredProviderType = (model: string): string | null => {
   for (const provider of availableProvidersWithModels.value) {
@@ -921,6 +921,34 @@ const formatSettingLabel = (key: string): string => {
     closeToTray: t('settings.general.closeToTray'),
     autoUpdate: t('settings.general.autoUpdate'),
     quickChatHideOnBlur: t('settings.general.quickChatHideOnBlur'),
+  };
+
+  return translatedLabels[key] || formatLabel(key);
+};
+
+const formatSecurityLabel = (key: string): string => {
+  const translatedLabels: Record<string, string> = {
+    encryptApikeys: t('settings.security.encryptApiKeys'),
+    requirePassword: t('settings.security.requirePassword'),
+  };
+
+  return translatedLabels[key] || formatLabel(key);
+};
+
+const formatAdvancedLabel = (key: string): string => {
+  const translatedLabels: Record<string, string> = {
+    debugMode: t('settings.advanced.debugMode'),
+    developerMode: t('settings.advanced.developerMode'),
+    enableExperimentalFeatures: t('settings.advanced.experimental'),
+  };
+
+  return translatedLabels[key] || formatLabel(key);
+};
+
+const formatKeybindingLabel = (key: string): string => {
+  const translatedLabels: Record<string, string> = {
+    sendMessage: t('settings.keybindings.sendMessage'),
+    openSettings: t('settings.keybindings.openSettings'),
   };
 
   return translatedLabels[key] || formatLabel(key);

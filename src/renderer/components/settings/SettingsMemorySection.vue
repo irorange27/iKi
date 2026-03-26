@@ -1,20 +1,20 @@
 <template>
   <section class="config-section">
     <div class="settings-card">
-      <div class="card-title">Memory Retrieval</div>
+      <div class="card-title">{{ t('settings.memory.retrievalTitle') }}</div>
       <label class="checkbox-label">
         <input
           type="checkbox"
           :checked="config.memory.enabled"
           @change="updateMemory('enabled', ($event.target as HTMLInputElement).checked)"
         />
-        Enable Memory
+        {{ t('settings.memory.enable') }}
       </label>
-      <p class="card-help">Long-term memory is injected automatically when Memory is enabled.</p>
+      <p class="card-help">{{ t('settings.memory.retrievalDescription') }}</p>
 
       <template v-if="config.memory.enabled">
         <div class="slider-field">
-          <span>Max Retrieved Memories</span>
+          <span>{{ t('settings.memory.maxRetrievedMemories') }}</span>
           <span class="value-badge">{{ config.memory.maxRetrievalCount }}</span>
         </div>
         <input
@@ -26,12 +26,10 @@
             updateMemory('maxRetrievalCount', parseInt(($event.target as HTMLInputElement).value))
           "
         />
-        <p class="slider-hint">
-          Maximum number of relevant memories injected into the conversation context (1-20).
-        </p>
+        <p class="slider-hint">{{ t('settings.memory.maxRetrievedHint') }}</p>
 
         <div class="slider-field">
-          <span>Similarity Threshold</span>
+          <span>{{ t('settings.memory.similarityThreshold') }}</span>
           <span class="value-badge">{{ Math.round(config.memory.similarThreshold * 100) }}%</span>
         </div>
         <input
@@ -48,49 +46,41 @@
           "
         />
         <div class="slider-legend">
-          <span>Loose (0%)</span>
-          <span>Strict (100%)</span>
+          <span>{{ t('settings.memory.loose') }}</span>
+          <span>{{ t('settings.memory.strict') }}</span>
         </div>
-        <p class="slider-hint">
-          Minimum similarity score required for a memory to be retrieved. Higher values mean
-          stricter matching.
-        </p>
+        <p class="slider-hint">{{ t('settings.memory.similarityHint') }}</p>
       </template>
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Memory Summarization</div>
+      <div class="card-title">{{ t('settings.memory.summarizationTitle') }}</div>
       <label class="checkbox-label">
         <input
           type="checkbox"
           :checked="config.memory.autoSummarize"
           @change="updateMemory('autoSummarize', ($event.target as HTMLInputElement).checked)"
         />
-        Auto Summarize Conversations
+        {{ t('settings.memory.autoSummarize') }}
       </label>
-      <p class="card-help">
-        Automatically extract and store important information from conversations as new memories.
-      </p>
+      <p class="card-help">{{ t('settings.memory.summarizationDescription') }}</p>
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Context Assembly</div>
+      <div class="card-title">{{ t('settings.memory.contextTitle') }}</div>
       <label class="checkbox-label">
         <input
           type="checkbox"
           :checked="config.memory.context.enabled"
           @change="updateMemoryContext('enabled', ($event.target as HTMLInputElement).checked)"
         />
-        Enable Context Budgeting
+        {{ t('settings.memory.contextEnable') }}
       </label>
-      <p class="card-help">
-        Compact long threads into a rolling summary plus recent turns, and bound skill / memory
-        context by estimated token budgets.
-      </p>
+      <p class="card-help">{{ t('settings.memory.contextDescription') }}</p>
 
       <template v-if="config.memory.context.enabled">
         <label class="input-label">
-          <span>Recent Raw Messages</span>
+          <span>{{ t('settings.memory.recentRawMessages') }}</span>
           <input
             type="number"
             min="2"
@@ -105,7 +95,7 @@
           />
         </label>
         <label class="input-label">
-          <span>Recent History Budget (tokens)</span>
+          <span>{{ t('settings.memory.recentHistoryBudget') }}</span>
           <input
             type="number"
             min="200"
@@ -121,7 +111,7 @@
           />
         </label>
         <label class="input-label">
-          <span>Summary Trigger Messages</span>
+          <span>{{ t('settings.memory.summaryTriggerMessages') }}</span>
           <input
             type="number"
             min="4"
@@ -136,7 +126,7 @@
           />
         </label>
         <label class="input-label">
-          <span>Recent Messages Excluded From Summary</span>
+          <span>{{ t('settings.memory.recentExcludedFromSummary') }}</span>
           <input
             type="number"
             min="2"
@@ -151,7 +141,7 @@
           />
         </label>
         <label class="input-label">
-          <span>Thread Summary Budget (tokens)</span>
+          <span>{{ t('settings.memory.threadSummaryBudget') }}</span>
           <input
             type="number"
             min="100"
@@ -167,7 +157,7 @@
           />
         </label>
         <label class="input-label">
-          <span>Memory Budget (tokens)</span>
+          <span>{{ t('settings.memory.memoryBudget') }}</span>
           <input
             type="number"
             min="100"
@@ -183,7 +173,7 @@
           />
         </label>
         <label class="input-label">
-          <span>Skill Budget (tokens)</span>
+          <span>{{ t('settings.memory.skillBudget') }}</span>
           <input
             type="number"
             min="100"
@@ -202,19 +192,16 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Emotion Context</div>
+      <div class="card-title">{{ t('settings.memory.emotionTitle') }}</div>
       <label class="checkbox-label">
         <input
           type="checkbox"
           :checked="config.memory.emotion.enabled"
           @change="updateEmotion('enabled', ($event.target as HTMLInputElement).checked)"
         />
-        Enable Emotion Analysis
+        {{ t('settings.memory.emotionEnable') }}
       </label>
-      <p class="card-help">
-        Infer affect signals from recent user messages to guide tone and pacing. Emotion events are
-        stored without message content.
-      </p>
+      <p class="card-help">{{ t('settings.memory.emotionDescription') }}</p>
 
       <template v-if="config.memory.emotion.enabled">
         <label class="checkbox-label">
@@ -225,7 +212,7 @@
               updateEmotion('injectToSystemPrompt', ($event.target as HTMLInputElement).checked)
             "
           />
-          Inject Emotion Context into Agent
+          {{ t('settings.memory.injectEmotionToAgent') }}
         </label>
 
         <label class="checkbox-label">
@@ -234,14 +221,12 @@
             :checked="config.memory.emotion.realtimeAnalysis"
             @change="updateEmotion('realtimeAnalysis', ($event.target as HTMLInputElement).checked)"
           />
-          Analyze Current Message Before Reply (adds latency)
+          {{ t('settings.memory.realtimeAnalysis') }}
         </label>
-        <p class="card-help">
-          Runs one extra model call to include the user's current affect in this response.
-        </p>
+        <p class="card-help">{{ t('settings.memory.realtimeDescription') }}</p>
 
         <div class="slider-field">
-          <span>Minimum Confidence</span>
+          <span>{{ t('settings.memory.minimumConfidence') }}</span>
           <span class="value-badge"
             >{{ Math.round(config.memory.emotion.minConfidence * 100) }}%</span
           >
@@ -259,10 +244,10 @@
             )
           "
         />
-        <p class="slider-hint">Higher values make emotion context more conservative.</p>
+        <p class="slider-hint">{{ t('settings.memory.higherValuesConservative') }}</p>
 
         <div class="slider-field">
-          <span>Minimum Samples</span>
+          <span>{{ t('settings.memory.minimumSamples') }}</span>
           <span class="value-badge">{{ config.memory.emotion.minSampleCount }}</span>
         </div>
         <input
@@ -277,7 +262,7 @@
         />
 
         <div class="slider-field">
-          <span>Window Size</span>
+          <span>{{ t('settings.memory.windowSize') }}</span>
           <span class="value-badge">{{ config.memory.emotion.windowSize }}</span>
         </div>
         <input
@@ -288,10 +273,10 @@
           :value="config.memory.emotion.windowSize"
           @input="updateEmotion('windowSize', parseInt(($event.target as HTMLInputElement).value))"
         />
-        <p class="slider-hint">Number of recent messages used to compute affect state.</p>
+        <p class="slider-hint">{{ t('settings.memory.windowSizeHint') }}</p>
 
         <label class="input-label">
-          <span>Half-life (minutes)</span>
+          <span>{{ t('settings.memory.halfLifeMinutes') }}</span>
           <input
             type="number"
             min="5"
@@ -307,7 +292,7 @@
         </label>
 
         <label class="input-label">
-          <span>Max Age (minutes)</span>
+          <span>{{ t('settings.memory.maxAgeMinutes') }}</span>
           <input
             type="number"
             min="10"
@@ -328,25 +313,22 @@
             :checked="config.memory.emotion.includeNeutral"
             @change="updateEmotion('includeNeutral', ($event.target as HTMLInputElement).checked)"
           />
-          Include Neutral Signals
+          {{ t('settings.memory.includeNeutralSignals') }}
         </label>
       </template>
     </div>
 
     <div v-if="config.memory.emotion.enabled" class="settings-card">
-      <div class="card-title">Tool Guardrails</div>
+      <div class="card-title">{{ t('settings.memory.toolGuardTitle') }}</div>
       <label class="checkbox-label">
         <input
           type="checkbox"
           :checked="config.memory.emotion.toolGuard.enabled"
           @change="updateEmotionGuard('enabled', ($event.target as HTMLInputElement).checked)"
         />
-        Enable Affect-based Guardrails
+        {{ t('settings.memory.toolGuardEnable') }}
       </label>
-      <p class="card-help">
-        When high arousal and negative valence are detected, require approvals or suppress auto
-        tools.
-      </p>
+      <p class="card-help">{{ t('settings.memory.toolGuardDescription') }}</p>
 
       <template v-if="config.memory.emotion.toolGuard.enabled">
         <label class="checkbox-label">
@@ -357,7 +339,7 @@
               updateEmotionGuard('requireApproval', ($event.target as HTMLInputElement).checked)
             "
           />
-          Require Approval for All Tools
+          {{ t('settings.memory.toolGuardRequireApproval') }}
         </label>
 
         <label class="checkbox-label">
@@ -368,11 +350,11 @@
               updateEmotionGuard('disableAutoTools', ($event.target as HTMLInputElement).checked)
             "
           />
-          Disable Auto Tools When Guarded
+          {{ t('settings.memory.toolGuardDisableAuto') }}
         </label>
 
         <div class="slider-field">
-          <span>Guard Confidence Threshold</span>
+          <span>{{ t('settings.memory.toolGuardConfidenceThreshold') }}</span>
           <span class="value-badge">
             {{ Math.round(config.memory.emotion.toolGuard.minConfidence * 100) }}%
           </span>
@@ -392,7 +374,7 @@
         />
 
         <div class="slider-field">
-          <span>Guard Arousal Threshold</span>
+          <span>{{ t('settings.memory.toolGuardArousalThreshold') }}</span>
           <span class="value-badge">
             {{ Math.round(config.memory.emotion.toolGuard.minArousal * 100) }}%
           </span>
@@ -412,7 +394,7 @@
         />
 
         <div class="slider-field">
-          <span>Guard Valence Threshold</span>
+          <span>{{ t('settings.memory.toolGuardValenceThreshold') }}</span>
           <span class="value-badge">
             {{ Math.round(config.memory.emotion.toolGuard.maxValence * 100) }}%
           </span>
@@ -434,20 +416,17 @@
     </div>
 
     <div class="settings-card memory-viewer">
-      <div class="card-title">Memory Viewer</div>
-      <p class="card-help">
-        View short-term and long-term memory entries by chat thread or across all threads, plus
-        long-memory search results.
-      </p>
+      <div class="card-title">{{ t('settings.memory.viewerTitle') }}</div>
+      <p class="card-help">{{ t('settings.memory.viewerDescription') }}</p>
       <div class="memory-controls">
         <label class="input-label">
-          <span>Thread</span>
+          <span>{{ t('common.thread') }}</span>
           <SettingsSelect
             :model-value="selectedMemoryThreadId"
             :options="memoryViewerThreadOptions"
-            placeholder="Select a thread"
-            empty-text="No threads available."
-            aria-label="Memory viewer thread"
+            :placeholder="t('settings.memory.threadPlaceholder')"
+            :empty-text="t('settings.memory.noThreadsAvailable')"
+            :aria-label="t('settings.memory.viewerThreadAria')"
             @update:model-value="selectMemoryThread"
           />
         </label>
@@ -456,27 +435,31 @@
           @click="refreshMemory"
           :disabled="memoryLoading || !selectedMemoryThreadId"
         >
-          {{ memoryLoading ? 'Loading...' : 'Refresh' }}
+          {{ memoryLoading ? t('settings.memory.loading') : t('common.refresh') }}
         </button>
       </div>
       <p v-if="!memoryThreads.length" class="memory-empty">
-        No chat threads yet. Start a chat to generate memory entries.
+        {{ t('settings.memory.noChatThreads') }}
       </p>
       <p v-if="memoryError" class="memory-error">{{ memoryError }}</p>
 
       <div class="memory-panel">
         <div class="memory-panel-header">
-          <span>Affect State</span>
+          <span>{{ t('settings.memory.affectTitle') }}</span>
         </div>
-        <div v-if="affectStateLoading" class="memory-empty">Loading affect state...</div>
+        <div v-if="affectStateLoading" class="memory-empty">
+          {{ t('settings.memory.loadingAffect') }}
+        </div>
         <div v-else-if="affectStateError" class="memory-error">{{ affectStateError }}</div>
         <div v-else-if="!config.memory.emotion.enabled" class="memory-empty">
-          Emotion analysis is disabled.
+          {{ t('settings.memory.emotionDisabled') }}
         </div>
         <div v-else-if="!selectedMemoryThreadId || isAllThreadsSelected" class="memory-empty">
-          Select a thread to view affect state.
+          {{ t('settings.memory.selectThreadForAffect') }}
         </div>
-        <div v-else-if="!parsedAffectState" class="memory-empty">No affect state yet.</div>
+        <div v-else-if="!parsedAffectState" class="memory-empty">
+          {{ t('settings.memory.noAffectState') }}
+        </div>
         <div v-else class="memory-item">
           <div class="memory-item-meta">
             <span class="memory-time">{{
@@ -484,47 +467,63 @@
             }}</span>
           </div>
           <div class="memory-item-content">
-            Primary: {{ parsedAffectState.label }} (confidence
-            {{ formatDecimal(parsedAffectState.confidence) }})
+            {{
+              t('settings.memory.affectPrimary', {
+                label: parsedAffectState.label,
+                confidence: formatMetricDecimal(parsedAffectState.confidence),
+              })
+            }}
           </div>
           <div class="memory-item-sub">
-            Valence: {{ formatDecimal(parsedAffectState.valence) }} · Arousal:
-            {{ formatDecimal(parsedAffectState.arousal) }}
+            {{
+              t('settings.memory.affectValenceArousal', {
+                valence: formatMetricDecimal(parsedAffectState.valence),
+                arousal: formatMetricDecimal(parsedAffectState.arousal),
+              })
+            }}
           </div>
           <div class="memory-item-sub">
-            Samples: {{ parsedAffectState.sampleCount || 0 }} /
-            {{ parsedAffectState.windowSize || 0 }}
+            {{
+              t('settings.memory.affectSamples', {
+                sampleCount: parsedAffectState.sampleCount || 0,
+                windowSize: parsedAffectState.windowSize || 0,
+              })
+            }}
           </div>
           <div class="memory-item-sub">
-            Window: {{ parsedAffectState.startAt || 'n/a' }} →
-            {{ parsedAffectState.endAt || 'n/a' }}
+            {{
+              t('settings.memory.affectWindow', {
+                startAt: parsedAffectState.startAt || t('settings.memory.na'),
+                endAt: parsedAffectState.endAt || t('settings.memory.na'),
+              })
+            }}
           </div>
         </div>
       </div>
 
       <div v-if="memoryThreads.length" class="memory-panel memory-editor">
         <div class="memory-panel-header">
-          <span>New Long Memory</span>
+          <span>{{ t('settings.memory.newLongMemory') }}</span>
         </div>
         <div class="memory-editor-grid">
           <label class="input-label">
-            <span>Thread</span>
+            <span>{{ t('common.thread') }}</span>
             <SettingsSelect
               :model-value="newLongMemoryThreadId"
               :options="memoryEditorThreadOptions"
               :disabled="isMemoryThreadLocked"
-              placeholder="Select a thread"
-              empty-text="No threads available."
-              aria-label="New long memory thread"
+              :placeholder="t('settings.memory.threadPlaceholder')"
+              :empty-text="t('settings.memory.noThreadsAvailable')"
+              :aria-label="t('settings.memory.editorThreadAria')"
               @update:model-value="updateNewLongMemoryThreadSelection"
             />
           </label>
           <label class="input-label">
-            <span>Summary</span>
+            <span>{{ t('common.summary') }}</span>
             <textarea
               class="memory-editor-textarea"
               :value="newLongMemorySummary"
-              placeholder="Add a durable user fact, preference, or project detail."
+              :placeholder="t('settings.memory.summaryPlaceholder')"
               @input="newLongMemorySummary = ($event.target as HTMLTextAreaElement).value"
             />
           </label>
@@ -535,14 +534,16 @@
             @click="createLongMemory"
             :disabled="memoryMutationLoading || !canCreateLongMemory"
           >
-            {{ memoryMutationLoading ? 'Saving...' : 'Add Memory' }}
+            {{
+              memoryMutationLoading ? t('settings.memory.saving') : t('settings.memory.addMemory')
+            }}
           </button>
         </div>
         <p
           v-if="selectedMemoryThreadId === ALL_THREADS && !newLongMemoryThreadId"
           class="memory-empty"
         >
-          Choose a thread to enable manual memory creation.
+          {{ t('settings.memory.chooseThreadToCreate') }}
         </p>
         <p v-if="memoryMutationError" class="memory-error">{{ memoryMutationError }}</p>
       </div>
@@ -550,12 +551,14 @@
       <div class="memory-panels">
         <div class="memory-panel">
           <div class="memory-panel-header">
-            <span>Short Memory</span>
+            <span>{{ t('settings.memory.shortMemory') }}</span>
             <span class="memory-count">{{ shortMemoryEntries.length }}</span>
           </div>
-          <div v-if="memoryLoading" class="memory-empty">Loading short memory...</div>
+          <div v-if="memoryLoading" class="memory-empty">
+            {{ t('settings.memory.loadingShortMemory') }}
+          </div>
           <div v-else-if="shortMemoryEntries.length === 0" class="memory-empty">
-            No short-term memory entries.
+            {{ t('settings.memory.noShortMemory') }}
           </div>
           <ul v-else class="memory-list">
             <li v-for="entry in shortMemoryEntries" :key="entry.id" class="memory-item">
@@ -565,10 +568,10 @@
               </div>
               <div class="memory-item-content">{{ entry.content }}</div>
               <div v-if="isAllThreadsSelected" class="memory-item-sub">
-                Thread: {{ getThreadLabel(entry.thread_id) }}
+                {{ t('common.thread') }}: {{ getThreadLabel(entry.thread_id) }}
               </div>
               <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
-                Emotion: {{ formatJson(entry.emotion) }}
+                {{ t('settings.memory.emotion') }}: {{ formatJson(entry.emotion) }}
               </div>
             </li>
           </ul>
@@ -576,12 +579,14 @@
 
         <div class="memory-panel">
           <div class="memory-panel-header">
-            <span>Long Memory</span>
+            <span>{{ t('settings.memory.longMemory') }}</span>
             <span class="memory-count">{{ longMemoryEntries.length }}</span>
           </div>
-          <div v-if="memoryLoading" class="memory-empty">Loading long memory...</div>
+          <div v-if="memoryLoading" class="memory-empty">
+            {{ t('settings.memory.loadingLongMemory') }}
+          </div>
           <div v-else-if="longMemoryEntries.length === 0" class="memory-empty">
-            No long-term memory entries.
+            {{ t('settings.memory.noLongMemory') }}
           </div>
           <ul v-else class="memory-list">
             <li v-for="entry in longMemoryEntries" :key="entry.id" class="memory-item">
@@ -600,26 +605,26 @@
                     @click="saveLongMemoryEdit(entry)"
                     :disabled="memoryMutationLoading || !canSaveLongMemoryEdit"
                   >
-                    {{ memoryMutationLoading ? 'Saving...' : 'Save' }}
+                    {{ memoryMutationLoading ? t('settings.memory.saving') : t('common.save') }}
                   </button>
                   <button
                     class="secondary-btn memory-inline-btn"
                     @click="cancelEditLongMemory"
                     :disabled="memoryMutationLoading"
                   >
-                    Cancel
+                    {{ t('common.cancel') }}
                   </button>
                 </div>
               </div>
               <div v-else class="memory-item-content">{{ entry.summary }}</div>
               <div v-if="isAllThreadsSelected" class="memory-item-sub">
-                Thread: {{ getThreadLabel(entry.thread_id) }}
+                {{ t('common.thread') }}: {{ getThreadLabel(entry.thread_id) }}
               </div>
               <div v-if="formatJsonList(entry.tags)" class="memory-item-sub">
-                Tags: {{ formatJsonList(entry.tags) }}
+                {{ t('settings.memory.tags') }}: {{ formatJsonList(entry.tags) }}
               </div>
               <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
-                Emotion: {{ formatJson(entry.emotion) }}
+                {{ t('settings.memory.emotion') }}: {{ formatJson(entry.emotion) }}
               </div>
               <div v-if="editingLongMemoryId !== entry.id" class="memory-inline-actions">
                 <button
@@ -627,14 +632,14 @@
                   @click="startEditLongMemory(entry)"
                   :disabled="memoryMutationLoading"
                 >
-                  Edit
+                  {{ t('common.edit') }}
                 </button>
                 <button
                   class="secondary-btn memory-inline-btn memory-danger-btn"
                   @click="deleteLongMemoryEntry(entry)"
                   :disabled="memoryMutationLoading"
                 >
-                  Delete
+                  {{ t('common.delete') }}
                 </button>
               </div>
             </li>
@@ -644,7 +649,7 @@
 
       <div class="memory-panel">
         <div class="memory-panel-header">
-          <span>Search Long Memory</span>
+          <span>{{ t('settings.memory.searchLongMemory') }}</span>
           <span v-if="memorySearchResults.length" class="memory-count">{{
             memorySearchResults.length
           }}</span>
@@ -653,7 +658,7 @@
           <input
             type="text"
             :value="memorySearchQuery"
-            placeholder="Search long memory..."
+            :placeholder="t('settings.memory.searchPlaceholder')"
             @input="memorySearchQuery = ($event.target as HTMLInputElement).value"
           />
           <button
@@ -661,30 +666,32 @@
             @click="runMemorySearch"
             :disabled="memorySearchLoading || !selectedMemoryThreadId"
           >
-            {{ memorySearchLoading ? 'Searching...' : 'Search' }}
+            {{ memorySearchLoading ? t('settings.memory.searching') : t('common.search') }}
           </button>
         </div>
         <p v-if="memorySearchError" class="memory-error">{{ memorySearchError }}</p>
-        <div v-if="memorySearchLoading" class="memory-empty">Searching...</div>
-        <div v-else-if="!hasMemoryQuery" class="memory-empty">Enter a query to search.</div>
+        <div v-if="memorySearchLoading" class="memory-empty">{{ t('settings.memory.searching') }}</div>
+        <div v-else-if="!hasMemoryQuery" class="memory-empty">{{ t('settings.memory.enterQuery') }}</div>
         <div v-else-if="memorySearchResults.length === 0" class="memory-empty">
-          No search results.
+          {{ t('settings.memory.noSearchResults') }}
         </div>
         <ul v-else class="memory-list">
           <li v-for="entry in memorySearchResults" :key="entry.id" class="memory-item">
             <div class="memory-item-meta">
-              <span class="memory-score">Score {{ entry.score.toFixed(3) }}</span>
+              <span class="memory-score">
+                {{ t('settings.memory.score', { value: entry.score.toFixed(3) }) }}
+              </span>
               <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
             </div>
             <div class="memory-item-content">{{ entry.summary }}</div>
             <div v-if="isAllThreadsSelected" class="memory-item-sub">
-              Thread: {{ getThreadLabel(entry.thread_id) }}
+              {{ t('common.thread') }}: {{ getThreadLabel(entry.thread_id) }}
             </div>
             <div v-if="formatJsonList(entry.tags)" class="memory-item-sub">
-              Tags: {{ formatJsonList(entry.tags) }}
+              {{ t('settings.memory.tags') }}: {{ formatJsonList(entry.tags) }}
             </div>
             <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
-              Emotion: {{ formatJson(entry.emotion) }}
+              {{ t('settings.memory.emotion') }}: {{ formatJson(entry.emotion) }}
             </div>
           </li>
         </ul>
@@ -692,7 +699,9 @@
     </div>
 
     <div class="config-actions">
-      <button class="reset-btn" type="button" @click="emit('reset')">Reset Memory</button>
+      <button class="reset-btn" type="button" @click="emit('reset')">
+        {{ t('settings.memory.reset') }}
+      </button>
     </div>
   </section>
 </template>
@@ -702,6 +711,7 @@ import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import SettingsSelect from './SettingsSelect.vue';
+import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type { ChatThread } from '../../../shared/types/chat';
@@ -713,7 +723,6 @@ import type {
 } from '../../../shared/types/memory';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import {
-  formatDecimal,
   formatJson,
   formatJsonList,
   formatTimestamp,
@@ -729,6 +738,7 @@ const props = defineProps<{
   active: boolean;
 }>();
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const { t } = useI18n();
 
 const ALL_THREADS = '__all__';
 
@@ -814,7 +824,7 @@ const threadLabelMap = computed(() => {
 });
 
 const memoryViewerThreadOptions = computed(() => [
-  { value: ALL_THREADS, label: 'All threads' },
+  { value: ALL_THREADS, label: t('settings.memory.allThreads') },
   ...memoryThreads.value.map(thread => ({
     value: thread.id,
     label: thread.title || thread.id,
@@ -829,13 +839,22 @@ const memoryEditorThreadOptions = computed(() =>
 );
 
 const getThreadLabel = (threadId?: string): string => {
-  if (!threadId) return 'Unknown thread';
+  if (!threadId) return t('settings.memory.unknownThread');
   return threadLabelMap.value.get(threadId) || threadId;
 };
 
 const formatRole = (role: string) => {
-  if (!role) return 'Unknown';
-  return role.charAt(0).toUpperCase() + role.slice(1);
+  if (!role) return t('common.unknown');
+  if (role === 'user') return t('settings.memory.role.user');
+  if (role === 'assistant') return t('settings.memory.role.assistant');
+  if (role === 'system') return t('settings.memory.role.system');
+  if (role === 'tool') return t('settings.memory.role.tool');
+  return role;
+};
+
+const formatMetricDecimal = (value: unknown, digits = 2): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return t('settings.memory.na');
+  return value.toFixed(digits);
 };
 
 const syncNewLongMemoryThread = () => {
@@ -869,7 +888,9 @@ const loadMemoryThreads = async () => {
       syncNewLongMemoryThread();
     }
   } catch (error: unknown) {
-    memoryError.value = `Failed to load threads: ${getErrorMessage(error)}`;
+    memoryError.value = t('settings.memory.error.loadThreads', {
+      error: getErrorMessage(error),
+    });
   }
 };
 
@@ -925,8 +946,8 @@ const refreshMemory = async () => {
     }
   } catch (error: unknown) {
     const message = getErrorMessage(error);
-    memoryError.value = `Failed to load memory: ${message}`;
-    affectStateError.value = `Failed to load affect state: ${message}`;
+    memoryError.value = t('settings.memory.error.loadMemory', { error: message });
+    affectStateError.value = t('settings.memory.error.loadAffect', { error: message });
   } finally {
     memoryLoading.value = false;
     affectStateLoading.value = false;
@@ -959,7 +980,9 @@ const runMemorySearch = async () => {
         );
     memorySearchResults.value = Array.isArray(results) ? results : [];
   } catch (error: unknown) {
-    memorySearchError.value = `Search failed: ${getErrorMessage(error)}`;
+    memorySearchError.value = t('settings.memory.error.searchFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     memorySearchLoading.value = false;
   }
@@ -969,11 +992,11 @@ const createLongMemory = async () => {
   const threadId = newLongMemoryThreadId.value.trim();
   const summary = newLongMemorySummary.value.trim();
   if (!threadId) {
-    memoryMutationError.value = 'Select a thread for the new memory.';
+    memoryMutationError.value = t('settings.memory.error.selectThread');
     return;
   }
   if (!summary) {
-    memoryMutationError.value = 'Summary cannot be empty.';
+    memoryMutationError.value = t('settings.memory.error.summaryRequired');
     return;
   }
 
@@ -994,7 +1017,9 @@ const createLongMemory = async () => {
       await runMemorySearch();
     }
   } catch (error: unknown) {
-    memoryMutationError.value = `Failed to add memory: ${getErrorMessage(error)}`;
+    memoryMutationError.value = t('settings.memory.error.addFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     memoryMutationLoading.value = false;
   }
@@ -1017,7 +1042,7 @@ const saveLongMemoryEdit = async (entry: LongMemoryEntry) => {
   if (editingLongMemoryId.value !== entry.id) return;
   const summary = editingLongMemorySummary.value.trim();
   if (!summary) {
-    memoryMutationError.value = 'Summary cannot be empty.';
+    memoryMutationError.value = t('settings.memory.error.summaryRequired');
     return;
   }
   if (summary === editingLongMemoryOriginal.value.trim()) {
@@ -1035,7 +1060,9 @@ const saveLongMemoryEdit = async (entry: LongMemoryEntry) => {
     }
     cancelEditLongMemory();
   } catch (error: unknown) {
-    memoryMutationError.value = `Failed to update memory: ${getErrorMessage(error)}`;
+    memoryMutationError.value = t('settings.memory.error.updateFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     memoryMutationLoading.value = false;
   }
@@ -1043,7 +1070,7 @@ const saveLongMemoryEdit = async (entry: LongMemoryEntry) => {
 
 const deleteLongMemoryEntry = async (entry: LongMemoryEntry) => {
   if (!entry?.id) return;
-  if (!window.confirm('Delete this long-term memory? This cannot be undone.')) return;
+  if (!window.confirm(t('settings.memory.confirmDelete'))) return;
 
   memoryMutationLoading.value = true;
   memoryMutationError.value = '';
@@ -1057,7 +1084,9 @@ const deleteLongMemoryEntry = async (entry: LongMemoryEntry) => {
       await runMemorySearch();
     }
   } catch (error: unknown) {
-    memoryMutationError.value = `Failed to delete memory: ${getErrorMessage(error)}`;
+    memoryMutationError.value = t('settings.memory.error.deleteFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     memoryMutationLoading.value = false;
   }

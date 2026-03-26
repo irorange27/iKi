@@ -1,83 +1,84 @@
 import type { AdvancedThemeSeed, SimpleThemeSeed } from '../../../shared/theme/types';
+import type { TranslationKey } from '../../i18n';
 
 type ThemeFieldDefinition<Key extends string> = {
   key: Key;
-  label: string;
-  hint: string;
+  labelKey: TranslationKey;
+  hintKey: TranslationKey;
 };
 
 export const SIMPLE_THEME_FIELDS = [
   {
     key: 'background',
-    label: 'Background',
-    hint: 'Main background color',
+    labelKey: 'settings.theme.field.background.label',
+    hintKey: 'settings.theme.field.background.hint',
   },
   {
     key: 'text',
-    label: 'Text',
-    hint: 'Main text color',
+    labelKey: 'settings.theme.field.text.label',
+    hintKey: 'settings.theme.field.text.hint',
   },
   {
     key: 'accent',
-    label: 'Accent',
-    hint: 'Buttons, links, highlights',
+    labelKey: 'settings.theme.field.accent.label',
+    hintKey: 'settings.theme.field.accent.hint',
   },
   {
     key: 'secondary',
-    label: 'Secondary',
-    hint: 'Success states, info',
+    labelKey: 'settings.theme.field.secondary.label',
+    hintKey: 'settings.theme.field.secondary.hint',
   },
 ] as const satisfies readonly ThemeFieldDefinition<keyof SimpleThemeSeed>[];
 
 export const ADVANCED_THEME_FIELDS = [
   {
     key: 'background',
-    label: 'Background',
-    hint: 'Main background',
+    labelKey: 'settings.theme.field.background.label',
+    hintKey: 'settings.theme.field.background.hint',
   },
   {
     key: 'surface',
-    label: 'Surface',
-    hint: 'Cards and panels',
+    labelKey: 'settings.theme.field.surface.label',
+    hintKey: 'settings.theme.field.surface.hint',
   },
   {
     key: 'surfaceAlt',
-    label: 'Surface Alt',
-    hint: 'Nested chrome',
+    labelKey: 'settings.theme.field.surfaceAlt.label',
+    hintKey: 'settings.theme.field.surfaceAlt.hint',
   },
   {
     key: 'hover',
-    label: 'Hover',
-    hint: 'Hover or active surfaces',
+    labelKey: 'settings.theme.field.hover.label',
+    hintKey: 'settings.theme.field.hover.hint',
   },
   {
     key: 'text',
-    label: 'Text',
-    hint: 'Primary text',
+    labelKey: 'settings.theme.field.text.label',
+    hintKey: 'settings.theme.field.text.hint',
   },
   {
     key: 'muted',
-    label: 'Muted',
-    hint: 'Secondary text',
+    labelKey: 'settings.theme.field.muted.label',
+    hintKey: 'settings.theme.field.muted.hint',
   },
   {
     key: 'accent',
-    label: 'Accent',
-    hint: 'Buttons and links',
+    labelKey: 'settings.theme.field.accent.label',
+    hintKey: 'settings.theme.field.accent.hint',
   },
   {
     key: 'secondary',
-    label: 'Secondary',
-    hint: 'Success and info',
+    labelKey: 'settings.theme.field.secondary.label',
+    hintKey: 'settings.theme.field.secondary.hint',
   },
   {
     key: 'warning',
-    label: 'Warning',
-    hint: 'Warnings',
+    labelKey: 'settings.theme.field.warning.label',
+    hintKey: 'settings.theme.field.warning.hint',
   },
   {
     key: 'danger',
-    label: 'Danger',
-    hint: 'Destructive actions',
+    labelKey: 'settings.theme.field.danger.label',
+    hintKey: 'settings.theme.field.danger.hint',
   },
 ] as const satisfies readonly ThemeFieldDefinition<keyof AdvancedThemeSeed>[];

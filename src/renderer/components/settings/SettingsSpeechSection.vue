@@ -1,58 +1,55 @@
 <template>
   <section class="config-section">
     <div class="config-group">
-      <h3>Speech Input</h3>
+      <h3>{{ t('settings.speech.inputTitle') }}</h3>
       <label class="checkbox-label">
         <input
           type="checkbox"
           :checked="config.speech.enabled"
           @change="updateSpeech('enabled', ($event.target as HTMLInputElement).checked)"
         />
-        Enable Speech Input
+        {{ t('settings.speech.enable') }}
       </label>
-      <p class="group-description">
-        Speech input uses a dedicated speech provider configuration and does not affect your chat
-        model providers.
-      </p>
+      <p class="group-description">{{ t('settings.speech.inputDescription') }}</p>
     </div>
 
     <div v-if="config.speech.enabled" class="config-group">
-      <h3>Speech Provider</h3>
+      <h3>{{ t('settings.speech.providerTitle') }}</h3>
       <label class="input-label">
-        <span>Provider</span>
+        <span>{{ t('common.provider') }}</span>
         <SettingsSelect
           :model-value="config.speech.providerType"
           :options="speechProviderOptions"
-          aria-label="Speech provider"
+          :aria-label="t('settings.speech.providerAria')"
           @update:model-value="updateSpeechProviderSelection"
         />
       </label>
 
       <template v-if="config.speech.providerType === 'openai'">
         <label class="input-label">
-          <span>API Key</span>
+          <span>{{ t('settings.speech.apiKey') }}</span>
           <input
             type="password"
             :value="config.speech.apiKey"
-            placeholder="sk-..."
+            :placeholder="t('settings.speech.apiKeyPlaceholder')"
             @input="updateSpeech('apiKey', ($event.target as HTMLInputElement).value)"
           />
         </label>
         <label class="input-label">
-          <span>Base URL (optional)</span>
+          <span>{{ t('settings.speech.baseUrlOptional') }}</span>
           <input
             type="text"
             :value="config.speech.baseUrl"
-            placeholder="https://api.openai.com/v1"
+            :placeholder="t('settings.speech.baseUrlPlaceholder')"
             @input="updateSpeech('baseUrl', ($event.target as HTMLInputElement).value)"
           />
         </label>
         <label class="input-label">
-          <span>Model</span>
+          <span>{{ t('settings.speech.model') }}</span>
           <input
             type="text"
             :value="config.speech.model"
-            placeholder="whisper-1"
+            :placeholder="t('settings.speech.modelPlaceholder')"
             @input="updateSpeech('model', ($event.target as HTMLInputElement).value)"
           />
         </label>
@@ -60,55 +57,54 @@
 
       <template v-else-if="config.speech.providerType === 'whisper-node'">
         <label class="input-label">
-          <span>Model Name</span>
+          <span>{{ t('settings.speech.modelName') }}</span>
           <input
             type="text"
             :value="config.speech.model"
-            placeholder="base.en"
+            :placeholder="t('settings.speech.modelNamePlaceholder')"
             @input="updateSpeech('model', ($event.target as HTMLInputElement).value)"
           />
         </label>
         <p v-if="isCustomWhisperModelName" class="group-description warning-text">
-          This model name is not in the built-in whisper-node list. Set a custom Model Path to use
-          it.
+          {{ t('settings.speech.customModelWarning') }}
         </p>
         <label class="input-label">
-          <span>Model Path (optional)</span>
+          <span>{{ t('settings.speech.modelPathOptional') }}</span>
           <input
             type="text"
             :value="config.speech.modelPath"
-            placeholder="/path/to/ggml-base.en.bin"
+            :placeholder="t('settings.speech.modelPathPlaceholder')"
             @input="updateSpeech('modelPath', ($event.target as HTMLInputElement).value)"
           />
         </label>
         <label class="input-label">
-          <span>Download Base URL (optional)</span>
+          <span>{{ t('settings.speech.downloadBaseUrlOptional') }}</span>
           <input
             type="text"
             :value="config.speech.downloadBaseUrl"
-            placeholder="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+            :placeholder="t('settings.speech.downloadBaseUrlPlaceholder')"
             @input="updateSpeech('downloadBaseUrl', ($event.target as HTMLInputElement).value)"
           />
         </label>
-        <p class="group-description">
-          Use a mirror if the default download source is unreachable in your network.
-        </p>
+        <p class="group-description">{{ t('settings.speech.downloadBaseUrlHelp') }}</p>
         <p v-if="hasCustomWhisperModelPath" class="group-description">
-          Using a custom model path. Clear it to pick from downloaded models below.
+          {{ t('settings.speech.customModelPathNotice') }}
         </p>
         <div class="speech-models-card">
           <div class="speech-models-header">
-            <span>Download Models</span>
+            <span>{{ t('settings.speech.downloadModels') }}</span>
             <button
               class="secondary-btn speech-btn"
               @click="loadWhisperModels"
               :disabled="whisperModelsLoading"
             >
               <RefreshCw :size="14" :class="{ 'animate-spin': whisperModelsLoading }" />
-              {{ whisperModelsLoading ? 'Loading' : 'Refresh' }}
+              {{ whisperModelsLoading ? t('settings.speech.loadingModels') : t('settings.speech.refreshModels') }}
             </button>
           </div>
-          <div v-if="whisperModelsLoading" class="speech-models-empty">Loading models...</div>
+          <div v-if="whisperModelsLoading" class="speech-models-empty">
+            {{ t('settings.speech.loadingModelsLong') }}
+          </div>
           <div v-else-if="whisperModelsError" class="speech-models-error">
             {{ whisperModelsError }}
           </div>
@@ -124,10 +120,10 @@
                     v-if="isWhisperModelSelected(model) && model.downloaded"
                     class="speech-model-badge"
                   >
-                    Selected
+                    {{ t('common.selected') }}
                   </div>
                   <div v-if="model.status === 'invalid'" class="speech-model-badge is-danger">
-                    Corrupted
+                    {{ t('settings.speech.badge.corrupted') }}
                   </div>
                   <div v-if="whisperModelDownloadErrors[model.name]" class="speech-model-error">
                     {{ whisperModelDownloadErrors[model.name] }}
@@ -182,9 +178,7 @@
           </div>
         </div>
         <p class="group-description">
-          Click "Download & Use" to fetch a model and switch to it automatically. whisper-node
-          requires local model files and a working <code>make</code> toolchain. Large models can
-          take a while to download and compile.
+          {{ t('settings.speech.downloadHint') }}
         </p>
       </template>
 
@@ -197,28 +191,30 @@
       </div>
 
       <label class="input-label">
-        <span>Recognition Language</span>
+        <span>{{ t('settings.speech.recognitionLanguage') }}</span>
         <SettingsSelect
           :model-value="speechLanguageValue"
           :options="speechLanguageOptions"
-          aria-label="Recognition language"
+          :aria-label="t('settings.speech.recognitionLanguageAria')"
           @update:model-value="updateSpeechLanguageSelection"
         />
       </label>
 
       <label v-if="config.speech.providerType === 'openai'" class="input-label">
-        <span>Prompt (optional)</span>
+        <span>{{ t('settings.speech.promptOptional') }}</span>
         <textarea
           rows="3"
           :value="config.speech.prompt"
-          placeholder="Optional hints to improve transcription accuracy"
+          :placeholder="t('settings.speech.promptPlaceholder')"
           @input="updateSpeech('prompt', ($event.target as HTMLTextAreaElement).value)"
         />
       </label>
     </div>
 
     <div class="config-actions">
-      <button class="reset-btn" type="button" @click="emit('reset')">Reset Speech</button>
+      <button class="reset-btn" type="button" @click="emit('reset')">
+        {{ t('settings.speech.reset') }}
+      </button>
     </div>
   </section>
 </template>
@@ -229,6 +225,7 @@ import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';
 
 import SettingsSelect from './SettingsSelect.vue';
+import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type {
@@ -247,6 +244,7 @@ const props = defineProps<{
   active: boolean;
 }>();
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const { t } = useI18n();
 
 type WhisperDownloadStage = 'idle' | 'downloading' | 'compiling' | 'done' | 'error';
 type WhisperDownloadProgressState = {
@@ -269,10 +267,10 @@ const whisperModelStages = ref<Record<string, WhisperDownloadStage>>({});
 const whisperModelDownloadErrors = ref<Record<string, string>>({});
 const whisperModelProgress = ref<Record<string, WhisperDownloadProgressState>>({});
 
-const speechProviderOptions = [
-  { value: 'openai', label: 'OpenAI (Speech)' },
-  { value: 'whisper-node', label: 'whisper-node (Local)' },
-];
+const speechProviderOptions = computed(() => [
+  { value: 'openai', label: t('settings.speech.provider.openai') },
+  { value: 'whisper-node', label: t('settings.speech.provider.whisperNode') },
+]);
 
 const selectedWhisperModel = computed(() => {
   if (config.value.speech.providerType !== 'whisper-node') return '';
@@ -295,14 +293,14 @@ const hasCustomWhisperModelPath = computed(
 );
 
 const speechStatusTitle = computed(() => {
-  if (!config.value.speech.enabled) return 'Speech input disabled';
-  if (speechStatusLoading.value) return 'Checking speech status...';
-  if (speechStatus.value?.available) return 'Speech input ready';
-  return 'Speech input not ready';
+  if (!config.value.speech.enabled) return t('settings.speech.status.disabledTitle');
+  if (speechStatusLoading.value) return t('settings.speech.status.checkingTitle');
+  if (speechStatus.value?.available) return t('settings.speech.status.readyTitle');
+  return t('settings.speech.status.notReadyTitle');
 });
 
-const baseSpeechLanguages: SpeechLanguageOption[] = [
-  { value: '', label: 'Auto Detect' },
+const baseSpeechLanguages = computed<SpeechLanguageOption[]>(() => [
+  { value: '', label: t('settings.speech.language.autoDetect') },
   { value: 'en', label: 'English' },
   { value: 'zh', label: '中文' },
   { value: 'ja', label: '日本語' },
@@ -311,7 +309,7 @@ const baseSpeechLanguages: SpeechLanguageOption[] = [
   { value: 'fr', label: 'Français' },
   { value: 'es', label: 'Español' },
   { value: 'pt', label: 'Português' },
-];
+]);
 
 const speechLanguageValue = computed(() => {
   const value = config.value.speech.language?.trim() || '';
@@ -319,28 +317,28 @@ const speechLanguageValue = computed(() => {
 });
 
 const speechLanguageOptions = computed(() => {
-  const options = [...baseSpeechLanguages];
+  const options = [...baseSpeechLanguages.value];
   const value = config.value.speech.language?.trim() || '';
   if (value && value.toLowerCase() !== 'auto' && !options.some(option => option.value === value)) {
-    options.push({ value, label: `${value} (Custom)` });
+    options.push({ value, label: t('settings.speech.language.custom', { value }) });
   }
   return options;
 });
 
 const speechStatusDetail = computed(() => {
   if (!config.value.speech.enabled) {
-    return 'Enable speech input to use voice.';
+    return t('settings.speech.status.enableToUseVoice');
   }
   if (speechStatusLoading.value) {
-    return 'Validating provider, model, and local dependencies.';
+    return t('settings.speech.status.validating');
   }
   if (speechStatus.value?.available) {
     const provider =
       speechStatus.value.providerType || config.value.speech.providerType || 'unknown';
     const model = speechStatus.value.model || config.value.speech.model || 'auto';
-    return `Provider: ${provider} | Model: ${model}`;
+    return t('settings.speech.status.providerModel', { provider, model });
   }
-  return speechStatus.value?.reason || 'Check provider settings and try again.';
+  return speechStatus.value?.reason || t('settings.speech.status.checkSettings');
 });
 
 const speechStatusToneClass = computed(() => {
@@ -369,22 +367,22 @@ const updateSpeechLanguageSelection = (value: string) => {
 const loadSpeechStatus = async () => {
   speechStatusLoading.value = true;
   if (!electronAPI?.speech?.getStatus) {
-    speechStatus.value = {
-      available: false,
-      enabled: false,
-      reason: 'Speech service unavailable',
-    };
+      speechStatus.value = {
+        available: false,
+        enabled: false,
+        reason: t('settings.speech.error.serviceUnavailable'),
+      };
     speechStatusLoading.value = false;
     return;
   }
   try {
     speechStatus.value = await electronAPI.speech.getStatus();
   } catch (error: unknown) {
-    speechStatus.value = {
-      available: false,
-      enabled: false,
-      reason: getErrorMessage(error) || 'Speech service unavailable',
-    };
+      speechStatus.value = {
+        available: false,
+        enabled: false,
+        reason: getErrorMessage(error) || t('settings.speech.error.serviceUnavailable'),
+      };
   } finally {
     speechStatusLoading.value = false;
   }
@@ -404,7 +402,7 @@ const loadWhisperModels = async () => {
   whisperModelsLoading.value = true;
   whisperModelsError.value = '';
   if (!electronAPI?.speech?.listModels) {
-    whisperModelsError.value = 'Speech model list unavailable';
+    whisperModelsError.value = t('settings.speech.error.modelListUnavailable');
     whisperModelsLoading.value = false;
     return;
   }
@@ -412,7 +410,9 @@ const loadWhisperModels = async () => {
     const models = await electronAPI.speech.listModels();
     whisperModels.value = Array.isArray(models) ? models : [];
   } catch (error: unknown) {
-    whisperModelsError.value = `Failed to load models: ${getErrorMessage(error)}`;
+    whisperModelsError.value = t('settings.speech.error.loadModelsFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     whisperModelsLoading.value = false;
   }
@@ -424,14 +424,15 @@ const downloadWhisperModel = async (modelName: string) => {
   whisperModelDownloadErrors.value[modelName] = '';
   whisperModelProgress.value[modelName] = {};
   if (!electronAPI?.speech?.downloadModel) {
-    whisperModelDownloadErrors.value[modelName] = 'Model download unavailable';
+    whisperModelDownloadErrors.value[modelName] = t('settings.speech.error.downloadUnavailable');
     whisperModelStages.value[modelName] = 'error';
     return;
   }
   try {
     const result = await electronAPI.speech.downloadModel(modelName);
     if (!result?.success) {
-      whisperModelDownloadErrors.value[modelName] = result?.error || 'Download failed';
+      whisperModelDownloadErrors.value[modelName] =
+        result?.error || t('settings.speech.error.downloadFailed');
       whisperModelStages.value[modelName] = 'error';
     } else {
       whisperModelStages.value[modelName] = 'done';
@@ -440,7 +441,8 @@ const downloadWhisperModel = async (modelName: string) => {
     await loadWhisperModels();
     scheduleSpeechStatusRefresh();
   } catch (error: unknown) {
-    whisperModelDownloadErrors.value[modelName] = getErrorMessage(error) || 'Download failed';
+    whisperModelDownloadErrors.value[modelName] =
+      getErrorMessage(error) || t('settings.speech.error.downloadFailed');
     whisperModelStages.value[modelName] = 'error';
   }
 };
@@ -470,7 +472,9 @@ const handleWhisperDownloadProgress = (payload: WhisperNodeDownloadProgress) => 
   }
   if (stage === 'error') {
     whisperModelDownloadErrors.value[model] =
-      payload.message || whisperModelDownloadErrors.value[model] || 'Download failed';
+      payload.message ||
+      whisperModelDownloadErrors.value[model] ||
+      t('settings.speech.error.downloadFailed');
     whisperModelProgress.value[model] = {};
   }
   if (stage === 'done') {
@@ -540,14 +544,14 @@ const formatBytes = (value?: number): string => {
 };
 
 const getWhisperActionLabel = (model: WhisperNodeModelInfo): string => {
-  if (model.status === 'invalid') return 'Re-download';
-  if (isWhisperModelSelected(model) && model.downloaded) return 'Selected';
-  if (model.downloaded) return 'Use';
+  if (model.status === 'invalid') return t('settings.speech.action.redownload');
+  if (isWhisperModelSelected(model) && model.downloaded) return t('settings.speech.action.selected');
+  if (model.downloaded) return t('settings.speech.action.use');
   const stage = getWhisperModelStage(model);
-  if (stage === 'downloading') return 'Downloading';
-  if (stage === 'compiling') return 'Compiling';
-  if (stage === 'error') return 'Retry';
-  return 'Download & Use';
+  if (stage === 'downloading') return t('settings.speech.action.downloading');
+  if (stage === 'compiling') return t('settings.speech.action.compiling');
+  if (stage === 'error') return t('settings.speech.action.retry');
+  return t('settings.speech.action.downloadAndUse');
 };
 
 const getWhisperProgressText = (
@@ -564,21 +568,28 @@ const getWhisperProgressText = (
       : '';
     const detail = downloaded && total ? `${downloaded} / ${total}` : total || downloaded || '';
     if (progress !== null) {
-      return `Downloading ${model.name} · ${progress}%${detail ? ` (${detail})` : ''}`;
+      return t('settings.speech.progress.downloadingDetailed', {
+        model: model.name,
+        progress,
+        detail,
+      });
     }
-    return `Downloading ${model.name} (${model.sizeMB} MB)...`;
+    return t('settings.speech.progress.downloadingSimple', {
+      model: model.name,
+      size: model.sizeMB,
+    });
   }
   if (stage === 'compiling') {
-    return 'Compiling whisper.cpp (first time only)...';
+    return t('settings.speech.progress.compiling');
   }
   if (stage === 'done') {
-    return 'Ready to use.';
+    return t('settings.speech.progress.ready');
   }
   if (stage === 'error') {
-    return 'Download failed. Please retry.';
+    return t('settings.speech.progress.failed');
   }
   if (model.status === 'invalid') {
-    return 'Model file corrupted. Re-download recommended.';
+    return t('settings.speech.progress.corrupted');
   }
   return '';
 };

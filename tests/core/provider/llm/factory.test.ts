@@ -62,6 +62,7 @@ vi.mock('../../../../src/core/network/http', () => ({
 }));
 
 import {
+  createModel,
   fetchModelCapabilityFromDev,
   generateChatWithUsage,
   streamChat,
@@ -92,6 +93,29 @@ beforeEach(() => {
 });
 
 describe('llm factory', () => {
+  it('instantiates OpenAI models through the OpenAI provider adapter', () => {
+    const modelFactory = vi.fn(() => 'openai-model');
+    createOpenAIMock.mockReturnValue(modelFactory);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_openai',
+        type: 'openai',
+        enabled: true,
+        api_key: 'sk-live',
+        base_url: 'https://api.openai.com/v1',
+        models: JSON.stringify(['gpt-4.1']),
+      },
+    ]);
+
+    expect(createModel('openai', 'gpt-4.1')).toBe('openai-model');
+    expect(createOpenAIMock).toHaveBeenCalledWith({
+      apiKey: 'sk-live',
+      baseURL: 'https://api.openai.com/v1',
+    });
+    expect(modelFactory).toHaveBeenCalledWith('gpt-4.1');
+    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
+  });
+
   it('resolves model capabilities from models.dev metadata', async () => {
     fetchWithTimeoutMock.mockResolvedValue(
       new Response(

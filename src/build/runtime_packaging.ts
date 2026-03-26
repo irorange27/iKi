@@ -94,6 +94,30 @@ const isBuiltinSpecifier = (specifier: string): boolean => {
   return packageName ? BUILTIN_MODULE_SET.has(packageName) : false;
 };
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const addRuntimePackageFromSpecifier = (
+  runtimePackages: Set<string>,
+  specifier: string | undefined
+) => {
+  if (!specifier || isBuiltinSpecifier(specifier)) return;
+  const packageName = extractPackageName(specifier);
+  if (!packageName) return;
+  runtimePackages.add(packageName);
+};
+
+const collectSpecifierMatches = (
+  source: string,
+  pattern: RegExp,
+  runtimePackages: Set<string>
+) => {
+  pattern.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    addRuntimePackageFromSpecifier(runtimePackages, match[2]);
+  }
+};
+
 const collectBuiltRuntimePackageNames = (projectDir: string): string[] => {
   const buildDir = path.join(projectDir, '.vite', 'build');
   if (!fs.existsSync(buildDir)) return [];
@@ -103,18 +127,29 @@ const collectBuiltRuntimePackageNames = (projectDir: string): string[] => {
     .filter(fileName => fileName === 'index.js' || /^main(?:-[^.]+)?\.js$/.test(fileName));
 
   const runtimePackages = new Set<string>();
-  const requirePattern = /require\((['"])([^'"]+)\1\)/g;
+  const requirePattern = /\brequire(?:\.resolve)?\((['"])([^'"]+)\1\)/g;
+  const directCreateRequirePattern =
+    /\bcreateRequire\s*\([^)]*\)(?:\s*\.resolve)?\((['"])([^'"]+)\1\)/g;
+  const createRequireAliasPattern =
+    /(?:^|[,(;])\s*(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*[^,;\n]*\bcreateRequire\s*\(/g;
 
   for (const fileName of entryFiles) {
     const filePath = path.join(buildDir, fileName);
     const source = fs.readFileSync(filePath, 'utf8');
+
+    collectSpecifierMatches(source, requirePattern, runtimePackages);
+    collectSpecifierMatches(source, directCreateRequirePattern, runtimePackages);
+
+    createRequireAliasPattern.lastIndex = 0;
     let match: RegExpExecArray | null;
-    while ((match = requirePattern.exec(source))) {
-      const specifier = match[2];
-      if (!specifier || isBuiltinSpecifier(specifier)) continue;
-      const packageName = extractPackageName(specifier);
-      if (!packageName) continue;
-      runtimePackages.add(packageName);
+    while ((match = createRequireAliasPattern.exec(source))) {
+      const aliasName = match[1];
+      if (!aliasName) continue;
+      const aliasPattern = new RegExp(
+        `\\b${escapeRegExp(aliasName)}(?:\\s*\\.resolve)?\\((['"])([^'"]+)\\1\\)`,
+        'g'
+      );
+      collectSpecifierMatches(source, aliasPattern, runtimePackages);
     }
   }
 

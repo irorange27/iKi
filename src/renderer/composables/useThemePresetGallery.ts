@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from 'vue';
 
+import { translate } from '../i18n';
 import {
   DEFAULT_THEME_PRESET_ID,
   listThemePresetSummaries,
@@ -12,8 +13,12 @@ export type ThemePresetCard = ThemePresetSummary & {
   swatches: string[];
 };
 
-const capitalizeWord = (value: string): string =>
-  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
+const formatThemeModeLabel = (value: string): string => {
+  if (value === 'light') return translate('common.light');
+  if (value === 'dark') return translate('common.dark');
+  if (value === 'system') return translate('common.system');
+  return value;
+};
 
 const createPresetSwatches = (palette: ThemeSlotPalette): string[] => [
   palette.bgPrimary,
@@ -51,7 +56,7 @@ export const useThemePresetGallery = ({
   const selectedPresetLabel = computed(
     () =>
       themePresetSummaries.value.find(preset => preset.id === currentThemePresetId.value)?.label ??
-      'iKi Default'
+      translate('settings.theme.defaultPresetLabel')
   );
 
   const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase());
@@ -75,7 +80,9 @@ export const useThemePresetGallery = ({
   });
 
   const gallerySectionTitle = computed(() =>
-    activeGalleryVariant.value === 'light' ? 'Light Theme Gallery' : 'Dark Theme Gallery'
+    activeGalleryVariant.value === 'light'
+      ? translate('settings.theme.gallery.light')
+      : translate('settings.theme.gallery.dark')
   );
 
   const resolvePaletteForPreset = (presetId: string): ThemeSlotPalette =>
@@ -121,6 +128,6 @@ export const useThemePresetGallery = ({
     selectThemePreset,
     themeOptions,
     themePresetSummaries,
-    capitalizeWord,
+    formatThemeModeLabel,
   };
 };

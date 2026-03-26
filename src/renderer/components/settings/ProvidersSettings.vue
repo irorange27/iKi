@@ -1,201 +1,280 @@
 <template>
   <!-- Providers -->
   <section class="config-section providers-section">
+    <div class="providers-toolbar">
+      <div class="providers-search">
+        <input
+          type="text"
+          v-model="providerSearchQuery"
+          :placeholder="t('settings.providers.searchPlaceholder')"
+          class="search-input"
+        />
+      </div>
+
+      <div class="providers-actions">
+        <button class="action-btn secondary-btn" @click="addCustomProvider">
+          <span>+</span> {{ t('settings.providers.addCustom') }}
+        </button>
+      </div>
+    </div>
+
     <div class="providers-layout">
       <!-- Left Panel: Provider List -->
       <div class="providers-sidebar">
-        <div class="providers-search">
-          <input
-            type="text"
-            v-model="providerSearchQuery"
-            placeholder="Search providers..."
-            class="search-input"
-          />
-        </div>
-
-        <div class="providers-actions">
-          <button class="action-btn secondary-btn" @click="addCustomProvider">
-            <span>+</span> Add Custom Provider
-          </button>
-        </div>
-
         <div class="providers-scroll-list">
-          <!-- Built-in Providers -->
-          <div
-            v-for="bp in filteredBuiltInProviders"
-            :key="bp.id"
-            class="provider-list-item"
-            :class="{
-              active: selectedProviderId === bp.id,
-              configured: isProviderConfigured(bp.id),
-            }"
-            @click="selectProvider(bp.id)"
-          >
-            <span class="provider-icon">
-              <LobeIcon :name="getProviderIconName(bp.id)" :size="24" />
-            </span>
-            <div class="provider-item-main">
-              <span class="provider-item-name">{{ bp.name }}</span>
+          <div class="providers-scroll-list-inner">
+            <!-- Built-in Providers -->
+            <div
+              v-for="bp in filteredBuiltInProviders"
+              :key="bp.id"
+              class="provider-list-item"
+              :class="{
+                active: selectedProviderId === bp.id,
+                configured: isProviderConfigured(bp.id),
+              }"
+              @click="selectProvider(bp.id)"
+            >
+              <span class="provider-icon">
+                <LobeIcon :name="getProviderIconName(bp.id)" :size="24" />
+              </span>
+              <div class="provider-item-main">
+                <span class="provider-item-name">{{ bp.name }}</span>
+              </div>
+              <span
+                class="provider-status-dot"
+                :class="{ active: isProviderEnabled(bp.id) }"
+              ></span>
             </div>
-            <span class="provider-status-dot" :class="{ active: isProviderEnabled(bp.id) }"></span>
-          </div>
 
-          <!-- Custom Providers -->
-          <div v-if="customProviders.length > 0" class="providers-divider">
-            <span>Custom Providers</span>
-          </div>
-          <div
-            v-for="cp in customProviders"
-            :key="cp.id"
-            class="provider-list-item custom"
-            :class="{ active: selectedProviderId === cp.id }"
-            @click="selectProvider(cp.id)"
-          >
-            <span class="provider-icon">
-              <LobeIcon v-bind="getCustomIconProps(cp.icon)" :size="20" />
-            </span>
-            <div class="provider-item-main">
-              <span class="provider-item-name">{{ cp.name }}</span>
-              <span class="provider-item-badge">CUSTOM</span>
+            <!-- Custom Providers -->
+            <div v-if="customProviders.length > 0" class="providers-divider">
+              <span>{{ t('settings.providers.customGroup') }}</span>
             </div>
-            <span class="provider-status-dot" :class="{ active: isProviderEnabled(cp.id) }"></span>
+            <div
+              v-for="cp in customProviders"
+              :key="cp.id"
+              class="provider-list-item custom"
+              :class="{ active: selectedProviderId === cp.id }"
+              @click="selectProvider(cp.id)"
+            >
+              <span class="provider-icon">
+                <LobeIcon v-bind="getCustomIconProps(cp.icon)" :size="20" />
+              </span>
+              <div class="provider-item-main">
+                <span class="provider-item-name">{{ cp.name }}</span>
+                <span class="provider-item-badge">{{ t('settings.providers.customBadge') }}</span>
+              </div>
+              <span
+                class="provider-status-dot"
+                :class="{ active: isProviderEnabled(cp.id) }"
+              ></span>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Right Panel: Provider Details -->
       <div class="provider-details-panel">
-        <template v-if="selectedProviderInfo">
-          <div class="provider-header">
-            <div class="provider-title-row">
-              <h3>{{ selectedProviderInfo.name }}</h3>
-              <span class="status-badge" :class="{ active: isSelectedProviderActive }">
-                {{ isSelectedProviderActive ? 'Active' : 'Inactive' }}
-              </span>
+        <template v-if="selectedProviderInfo && selectedProviderDraft">
+          <div class="provider-header provider-card-header">
+            <div class="provider-heading">
+              <div class="provider-title-row">
+                <h3>{{ selectedProviderInfo.name }}</h3>
+                <span class="status-badge" :class="{ active: selectedProviderDraft.enabled }">
+                  {{ selectedProviderDraft.enabled ? t('common.active') : t('common.inactive') }}
+                </span>
+              </div>
+              <p class="provider-description">
+                {{ selectedProviderInfo.description }}
+              </p>
             </div>
-            <p class="provider-description">
-              {{ selectedProviderInfo.description }}
-            </p>
+
+            <div class="provider-header-actions">
+              <a
+                v-if="selectedProviderInfo.docsUrl"
+                :href="selectedProviderInfo.docsUrl"
+                target="_blank"
+                rel="noreferrer"
+                class="provider-icon-button"
+                :aria-label="t('settings.providers.docsAria')"
+              >
+                <BookOpen :size="16" />
+              </a>
+
+              <label class="provider-switch" :aria-label="t('settings.providers.enableAria')">
+                <input
+                  type="checkbox"
+                  :checked="selectedProviderDraft.enabled"
+                  @change="
+                    setSelectedProviderEnabled(($event.target as HTMLInputElement).checked)
+                  "
+                />
+                <span class="provider-switch-track">
+                  <span class="provider-switch-thumb"></span>
+                </span>
+              </label>
+            </div>
           </div>
 
-          <div class="provider-config-form" v-if="selectedProviderConfig || showConfigForm">
-            <div class="provider-config-group">
-              <label class="input-label"
-                >API Key
-                <input
-                  type="password"
-                  v-model="providerFormData.api_key"
-                  placeholder="Enter your API key"
-                />
-              </label>
-
-              <label class="input-label"
-                >Base URL
-                <input
-                  type="text"
-                  v-model="providerFormData.base_url"
-                  :placeholder="selectedProviderInfo.defaultBaseUrl || 'https://api.example.com/v1'"
-                />
-              </label>
-
-              <label class="input-label">
-                <div class="label-header">
-                  <span>Available Models</span>
-                  <button
-                    class="fetch-models-btn"
-                    @click="fetchLatestModels"
-                    :disabled="isFetchingModels"
-                  >
-                    <RefreshCw :size="14" :class="{ 'animate-spin': isFetchingModels }" />
-                    {{ isFetchingModels ? 'Fetching...' : 'Fetch from models.dev' }}
-                  </button>
-                </div>
-                <div v-if="availableModelsList.length > 0" class="models-selection-container">
-                  <div class="models-selection-header">
-                    <span class="models-count"
-                      >{{ selectedModelsList.length }} of
-                      {{ availableModelsList.length }} selected</span
+          <div class="provider-config-form">
+            <div class="provider-config-group provider-form-stack">
+              <div class="provider-field">
+                <label class="input-label provider-field-label">
+                  <span class="provider-field-title">{{ t('settings.providers.apiKey') }}</span>
+                  <div class="provider-secret-input">
+                    <input
+                      :type="selectedProviderDraft.showApiKey ? 'text' : 'password'"
+                      v-model="selectedProviderDraft.api_key"
+                      :placeholder="t('settings.providers.apiKeyPlaceholder')"
+                    />
+                    <button
+                      type="button"
+                      class="provider-secret-toggle"
+                      @click="toggleSelectedProviderApiKeyVisibility"
                     >
-                    <div class="models-actions">
-                      <button class="select-all-btn" @click="selectAllModels">Select All</button>
-                      <button class="deselect-all-btn" @click="deselectAllModels">
-                        Deselect All
-                      </button>
+                      <EyeOff v-if="selectedProviderDraft.showApiKey" :size="18" />
+                      <Eye v-else :size="18" />
+                    </button>
+                  </div>
+                </label>
+                <p v-if="selectedProviderSupportLink" class="provider-field-help">
+                  {{ selectedProviderSupportLink.prefix }}
+                  <a
+                    :href="selectedProviderSupportLink.url"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="provider-inline-link"
+                  >
+                    {{ selectedProviderSupportLink.label }}
+                    <ExternalLink :size="14" />
+                  </a>
+                </p>
+                <p v-else-if="!selectedProviderRequiresApiKey" class="provider-field-help">
+                  {{ t('settings.providers.noApiKeyRequired') }}
+                </p>
+              </div>
+
+              <div class="provider-field">
+                <label class="input-label provider-field-label">
+                  <span class="provider-field-title">{{ t('settings.providers.baseUrlOptional') }}</span>
+                  <input
+                    type="text"
+                    v-model="selectedProviderDraft.base_url"
+                    :placeholder="selectedProviderInfo.defaultBaseUrl || 'https://api.example.com/v1'"
+                  />
+                </label>
+                <p class="provider-field-help">
+                  {{ selectedProviderBaseUrlHelp }}
+                </p>
+              </div>
+
+              <div class="provider-models-panel">
+                <button type="button" class="provider-models-toggle" @click="modelsPanelOpen = !modelsPanelOpen">
+                  <div class="provider-models-toggle-main">
+                    <span class="provider-models-title">{{ t('settings.providers.models') }}</span>
+                    <span class="provider-models-subtitle">
+                      {{ t('settings.providers.modelsSubtitle') }}
+                    </span>
+                  </div>
+                  <div class="provider-models-toggle-meta">
+                    <span class="provider-models-summary">
+                      {{ t('settings.providers.modelsSelected', { count: selectedModelsList.length }) }}
+                    </span>
+                    <ChevronDown :size="16" :class="{ 'models-toggle-open': modelsPanelOpen }" />
+                  </div>
+                </button>
+
+                <div v-if="modelsPanelOpen" class="provider-models-body">
+                  <div class="label-header">
+                    <span class="provider-field-title">{{ t('settings.providers.availableModels') }}</span>
+                    <button
+                      class="fetch-models-btn"
+                      @click="fetchLatestModels"
+                      :disabled="isFetchingModels"
+                    >
+                      <RefreshCw :size="14" :class="{ 'animate-spin': isFetchingModels }" />
+                      {{ isFetchingModels ? t('settings.providers.fetchingModels') : t('settings.providers.fetchModels') }}
+                    </button>
+                  </div>
+
+                  <div v-if="availableModelsList.length > 0" class="models-selection-container">
+                    <div class="models-selection-header">
+                      <span class="models-count"
+                        >{{
+                          t('settings.providers.selectionCount', {
+                            selected: selectedModelsList.length,
+                            total: availableModelsList.length,
+                          })
+                        }}</span
+                      >
+                      <div class="models-actions">
+                        <button class="select-all-btn" @click="selectAllModels">
+                          {{ t('settings.providers.selectAll') }}
+                        </button>
+                        <button class="deselect-all-btn" @click="deselectAllModels">
+                          {{ t('settings.providers.deselectAll') }}
+                        </button>
+                      </div>
+                    </div>
+                    <div class="models-checkbox-list">
+                      <label
+                        v-for="model in availableModelsList"
+                        :key="model"
+                        class="model-checkbox-item"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="isModelSelected(model)"
+                          @change="toggleModel(model)"
+                        />
+                        <span class="model-name">{{ model }}</span>
+                      </label>
                     </div>
                   </div>
-                  <div class="models-checkbox-list">
-                    <label
-                      v-for="model in availableModelsList"
+
+                  <div v-else class="models-chips">
+                    <button class="add-model-btn" @click="addModel">+</button>
+                    <span
+                      v-for="model in selectedProviderInfo.models"
                       :key="model"
-                      class="model-checkbox-item"
+                      class="model-chip"
+                      :class="{ 'dynamic-chip': dynamicModels[selectedProviderId!] }"
                     >
-                      <input
-                        type="checkbox"
-                        :checked="isModelSelected(model)"
-                        @change="toggleModel(model)"
-                      />
-                      <span class="model-name">{{ model }}</span>
-                    </label>
+                      {{ model }}
+                    </span>
                   </div>
                 </div>
-                <div v-else class="models-chips">
-                  <button class="add-model-btn" @click="addModel">+</button>
-                  <span
-                    v-for="model in selectedProviderInfo.models"
-                    :key="model"
-                    class="model-chip"
-                    :class="{ 'dynamic-chip': dynamicModels[selectedProviderId!] }"
-                  >
-                    {{ model }}
-                  </span>
-                </div>
-              </label>
+              </div>
             </div>
 
-            <div class="provider-form-actions">
+            <div class="provider-card-actions">
               <button
                 v-if="selectedProviderConfig"
                 class="danger-btn"
                 @click="removeProviderConfig"
               >
-                Remove Configuration
+                {{ t('common.delete') }}
               </button>
               <button
-                v-if="showConfigForm && !selectedProviderConfig"
                 class="secondary-btn"
-                @click="showConfigForm = false"
+                @click="resetSelectedProviderDraft"
+                :disabled="!isSelectedProviderDirty"
               >
-                Cancel
+                {{ t('common.cancel') }}
               </button>
-              <button class="primary-btn save-btn" @click="saveProviderConfig">
-                <Save :size="16" />
-                <span>
-                  {{ selectedProviderConfig ? 'Save Changes' : 'Save & Enable Provider' }}
-                </span>
+              <button
+                class="primary-btn"
+                @click="saveProviderConfig"
+                :disabled="!canSaveSelectedProvider"
+              >
+                {{ t('common.save') }}
               </button>
             </div>
-          </div>
-
-          <div class="provider-enable-prompt" v-else>
-            <p>This provider is not configured yet.</p>
-            <button class="primary-btn enable-btn" @click="showConfigForm = true">
-              <Cog :size="16" />
-              Configure Provider
-            </button>
-            <a
-              v-if="selectedProviderInfo.docsUrl"
-              :href="selectedProviderInfo.docsUrl"
-              target="_blank"
-              class="docs-link"
-            >
-              <BookOpen :size="16" />
-              View Documentation
-            </a>
           </div>
         </template>
 
         <div v-else class="no-selection">
-          <p>Select a provider from the list to configure it.</p>
+          <p>{{ t('settings.providers.noSelection') }}</p>
         </div>
       </div>
     </div>
@@ -204,49 +283,65 @@
     <div v-if="showProviderEditor" class="modal-overlay">
       <div class="modal-content provider-editor">
         <h3>
-          {{ editingProvider?.id?.startsWith('custom_') ? 'Edit' : 'Add' }}
-          Custom Provider
+          {{ editingProvider?.id?.startsWith('custom_') ? t('settings.providers.modal.edit') : t('settings.providers.modal.add') }}
+          {{ t('settings.providers.modal.titleSuffix') }}
         </h3>
 
         <div class="provider-config-group">
           <label class="input-label"
-            >Name
-            <input type="text" v-model="editingProvider.name" placeholder="e.g. My Local LLM" />
+            >{{ t('common.name') }}
+            <input
+              type="text"
+              v-model="editingProvider.name"
+              :placeholder="t('settings.providers.modal.namePlaceholder')"
+            />
           </label>
 
           <label class="input-label"
-            >Type
+            >{{ t('common.type') }}
             <SettingsSelect
               :model-value="editingProvider.type"
               :options="providerTypeOptions"
-              aria-label="Custom provider type"
+              :aria-label="t('settings.providers.modal.typeAria')"
               @update:model-value="updateEditingProviderTypeSelection"
             />
           </label>
 
           <label class="input-label"
-            >API Key
-            <input type="password" v-model="editingProvider.api_key" placeholder="Enter API Key" />
-          </label>
-
-          <label class="input-label"
-            >Base URL
+            >{{ t('settings.providers.apiKey') }}
             <input
-              type="text"
-              v-model="editingProvider.base_url"
-              placeholder="https://api.example.com/v1"
+              type="password"
+              v-model="editingProvider.api_key"
+              :placeholder="t('settings.providers.modal.apiKeyPlaceholder')"
             />
           </label>
 
           <label class="input-label"
-            >Models (comma separated)
-            <input type="text" v-model="editingProvider.models" placeholder="model-1, model-2" />
+            >{{ t('settings.providers.modal.baseUrl') }}
+            <input
+              type="text"
+              v-model="editingProvider.base_url"
+              :placeholder="t('settings.providers.modal.baseUrlPlaceholder')"
+            />
+          </label>
+
+          <label class="input-label"
+            >{{ t('settings.providers.modal.models') }}
+            <input
+              type="text"
+              v-model="editingProvider.models"
+              :placeholder="t('settings.providers.modal.modelsPlaceholder')"
+            />
           </label>
         </div>
 
         <div class="modal-footer">
-          <button class="secondary-btn" @click="showProviderEditor = false">Cancel</button>
-          <button class="primary-btn" @click="saveProvider">Save Provider</button>
+          <button class="secondary-btn" @click="showProviderEditor = false">
+            {{ t('common.cancel') }}
+          </button>
+          <button class="primary-btn" @click="saveProvider">
+            {{ t('settings.providers.modal.save') }}
+          </button>
         </div>
       </div>
     </div>
@@ -257,9 +352,10 @@
 // Provider Management Logic
 import { ref, computed, onMounted } from 'vue';
 import LobeIcon from '../../components/Icon/LobeIcon.vue';
-import { BookOpen, Cog, RefreshCw, Save } from 'lucide-vue-next';
+import { BookOpen, ChevronDown, ExternalLink, Eye, EyeOff, RefreshCw } from 'lucide-vue-next';
 import SettingsSelect from './SettingsSelect.vue';
-import { BuiltInProvider } from '../../../shared/types/settings';
+import { useI18n } from '../../i18n';
+import type { BuiltInProvider } from '../../../shared/types/settings';
 import type { Provider } from '../../../shared/types/provider';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
 import { getErrorMessage } from '../../../shared/utils/errors';
@@ -279,32 +375,36 @@ type EditableProvider = Pick<
   available_models: string;
 };
 
+type ProviderDraft = {
+  api_key: string;
+  base_url: string;
+  enabled: boolean;
+  showApiKey: boolean;
+};
+
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const providersSettingsLogger = createLogger({ module: 'providers_settings' });
+const { t } = useI18n();
 
 const providers = ref<ProviderRecord[]>([]);
 const editingProvider = ref<EditableProvider | null>(null);
 const showProviderEditor = ref(false);
 
-// New state for two-panel design
 const providerSearchQuery = ref('');
 const selectedProviderId = ref<string | null>(null);
-const showConfigForm = ref(false);
-const providerFormData = ref({
-  api_key: '',
-  base_url: '',
-});
+const providerDrafts = ref<Record<string, ProviderDraft>>({});
 const isFetchingModels = ref(false);
 const dynamicModels = ref<Record<string, string[]>>({});
 const selectedModels = ref<Record<string, string[]>>({});
+const modelsPanelOpen = ref(false);
 
-const providerTypeOptions = [
-  { value: 'openai', label: 'OpenAI Compatible' },
+const providerTypeOptions = computed(() => [
+  { value: 'openai-compatible', label: t('settings.providers.type.openaiCompatible') },
   { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google Gemini' },
+  { value: 'google', label: t('settings.providers.type.googleGemini') },
   { value: 'ollama', label: 'Ollama' },
-  { value: 'custom', label: 'Custom' },
-];
+  { value: 'custom', label: t('common.custom') },
+]);
 
 const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
 
@@ -315,6 +415,73 @@ const getCustomIconProps = (icon?: string) => {
   return { name: icon, useCdn: true };
 };
 
+const arrayEquals = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const getBuiltInProvider = (providerId: string | null): BuiltInProvider | null => {
+  if (!providerId) return null;
+  return BUILTIN_PROVIDERS.find(provider => provider.id === providerId) || null;
+};
+
+const getProviderRecord = (providerId: string | null): ProviderRecord | null => {
+  if (!providerId) return null;
+  return (
+    providers.value.find(provider => provider.type === providerId || provider.id === providerId) ||
+    null
+  );
+};
+
+const normalizeBaseUrlForDraft = (providerId: string, baseUrl?: string) => {
+  const trimmed = typeof baseUrl === 'string' ? baseUrl.trim() : '';
+  const builtIn = getBuiltInProvider(providerId);
+  if (builtIn?.defaultBaseUrl && trimmed === builtIn.defaultBaseUrl) {
+    return '';
+  }
+  return trimmed;
+};
+
+const getPersistedProviderSnapshot = (providerId: string) => {
+  const record = getProviderRecord(providerId);
+
+  return {
+    api_key: record?.api_key ?? '',
+    base_url: normalizeBaseUrlForDraft(providerId, record?.base_url),
+    enabled: record?.enabled === true,
+    models: parseModelList(record?.models),
+    availableModels: parseModelList(record?.available_models),
+  };
+};
+
+const syncProviderDraft = (providerId: string) => {
+  const snapshot = getPersistedProviderSnapshot(providerId);
+
+  providerDrafts.value[providerId] = {
+    api_key: snapshot.api_key,
+    base_url: snapshot.base_url,
+    enabled: snapshot.enabled,
+    showApiKey: false,
+  };
+  selectedModels.value[providerId] = [...snapshot.models];
+
+  if (snapshot.availableModels.length > 0) {
+    dynamicModels.value[providerId] = [...snapshot.availableModels];
+  } else {
+    delete dynamicModels.value[providerId];
+  }
+};
+
+const ensureProviderDraft = (providerId: string) => {
+  if (!providerDrafts.value[providerId]) {
+    syncProviderDraft(providerId);
+  }
+};
+
+const selectedProviderDraft = computed(() => {
+  const providerId = selectedProviderId.value;
+  if (!providerId) return null;
+  return providerDrafts.value[providerId] || null;
+});
+
 const fetchLatestModels = async () => {
   if (!selectedProviderId.value) return;
 
@@ -323,10 +490,7 @@ const fetchLatestModels = async () => {
     const fetched = await electronAPI.chat.getModels(selectedProviderId.value);
     if (fetched && fetched.length > 0) {
       dynamicModels.value[selectedProviderId.value] = fetched;
-      // Preserve existing selected models that are still in the fetched list
-      const currentSelected =
-        selectedModels.value[selectedProviderId.value] || getSelectedModelsForProvider();
-      // Keep only models that exist in the fetched list
+      const currentSelected = selectedModels.value[selectedProviderId.value] || [];
       selectedModels.value[selectedProviderId.value] = currentSelected.filter(m =>
         fetched.includes(m)
       );
@@ -346,21 +510,9 @@ const fetchLatestModels = async () => {
   }
 };
 
-// Get selected models for current provider
-const getSelectedModelsForProvider = (): string[] => {
-  if (!selectedProviderId.value) return [];
-  const config = selectedProviderConfig.value;
-  if (config?.models) {
-    return parseModelList(config.models);
-  }
-  return [];
-};
-
-// Computed: available models list (from fetch or database)
 const availableModelsList = computed(() => {
   if (!selectedProviderId.value) return [];
 
-  // Priority: 1. dynamicModels (just fetched), 2. available_models from config, 3. built-in default models
   const dynamic = dynamicModels.value[selectedProviderId.value];
   if (dynamic && dynamic.length > 0) return dynamic;
 
@@ -370,34 +522,29 @@ const availableModelsList = computed(() => {
     if (available.length > 0) return available;
   }
 
-  // Fallback to built-in provider's default models if configured
   if (config?.models) {
     const models = parseModelList(config.models);
     if (models.length > 0) return models;
   }
 
-  // Last fallback: built-in provider's default models
   const builtIn = BUILTIN_PROVIDERS.find(p => p.id === selectedProviderId.value);
   return builtIn?.models || [];
 });
 
-// Computed: selected models list
 const selectedModelsList = computed(() => {
-  if (!selectedProviderId.value) return getSelectedModelsForProvider();
-  return selectedModels.value[selectedProviderId.value] || getSelectedModelsForProvider();
+  if (!selectedProviderId.value) return [];
+  return selectedModels.value[selectedProviderId.value] || [];
 });
 
-// Check if a model is selected
 const isModelSelected = (model: string): boolean => {
   return selectedModelsList.value.includes(model);
 };
 
-// Toggle model selection
 const toggleModel = (model: string) => {
   if (!selectedProviderId.value) return;
 
   if (!selectedModels.value[selectedProviderId.value]) {
-    selectedModels.value[selectedProviderId.value] = getSelectedModelsForProvider();
+    selectedModels.value[selectedProviderId.value] = [];
   }
 
   const index = selectedModels.value[selectedProviderId.value].indexOf(model);
@@ -408,13 +555,11 @@ const toggleModel = (model: string) => {
   }
 };
 
-// Select all models
 const selectAllModels = () => {
   if (!selectedProviderId.value) return;
   selectedModels.value[selectedProviderId.value] = [...availableModelsList.value];
 };
 
-// Deselect all models
 const deselectAllModels = () => {
   if (!selectedProviderId.value) return;
   selectedModels.value[selectedProviderId.value] = [];
@@ -422,12 +567,25 @@ const deselectAllModels = () => {
 
 const loadProviders = async () => {
   providers.value = await electronAPI.providers.list();
+
+  const selectionIsValid =
+    selectedProviderId.value !== null &&
+    (getBuiltInProvider(selectedProviderId.value) !== null ||
+      providers.value.some(provider => provider.id === selectedProviderId.value));
+
+  if (!selectionIsValid) {
+    selectedProviderId.value = BUILTIN_PROVIDERS[0]?.id ?? providers.value[0]?.id ?? null;
+  }
+
+  if (selectedProviderId.value) {
+    ensureProviderDraft(selectedProviderId.value);
+  }
 };
 
 const addModel = () => {
   if (!selectedProviderId.value) return;
 
-  const model = prompt('Enter model name:');
+  const model = prompt(t('settings.providers.promptModelName'));
   if (model) {
     if (!dynamicModels.value[selectedProviderId.value]) {
       dynamicModels.value[selectedProviderId.value] = [];
@@ -445,7 +603,6 @@ const addModel = () => {
   }
 };
 
-// Computed: filter built-in providers by search
 const filteredBuiltInProviders = computed(() => {
   const query = providerSearchQuery.value.toLowerCase();
   const filtered = BUILTIN_PROVIDERS.filter(
@@ -461,7 +618,6 @@ const filteredBuiltInProviders = computed(() => {
   });
 });
 
-// Computed: custom providers (not built-in)
 const customProviders = computed(() => {
   const custom = providers.value.filter(
     provider => !BUILTIN_PROVIDERS.some(builtInProvider => builtInProvider.id === provider.type)
@@ -476,29 +632,35 @@ const customProviders = computed(() => {
   });
 });
 
-// Computed: get selected provider info (from built-in or custom)
 const selectedProviderInfo = computed((): BuiltInProvider | null => {
   if (!selectedProviderId.value) return null;
 
-  // Check built-in first
   const builtIn = BUILTIN_PROVIDERS.find(p => p.id === selectedProviderId.value);
   if (builtIn) {
-    // For display purposes, use selected models
-    const selected = selectedModels.value[builtIn.id] || getSelectedModelsForProvider();
+    const selected = selectedModels.value[builtIn.id] || getPersistedProviderSnapshot(builtIn.id).models;
     return {
       ...builtIn,
+      description:
+        builtIn.id === 'openai'
+          ? t('settings.providers.description.openai')
+          : builtIn.id === 'deepseek'
+            ? t('settings.providers.description.deepseek')
+            : builtIn.id === 'kimi'
+              ? t('settings.providers.description.kimi')
+              : builtIn.id === 'ollama'
+                ? t('settings.providers.description.ollama')
+                : builtIn.description,
       models: selected,
     };
   }
 
-  // Check custom providers
   const custom = providers.value.find(p => p.id === selectedProviderId.value);
   if (custom) {
     const selected = selectedModels.value[custom.id] || parseModelList(custom.models);
     return {
       id: custom.id,
       name: custom.name,
-      description: 'Custom provider configuration',
+      description: t('settings.providers.customDescription'),
       models: selected,
       defaultBaseUrl: custom.base_url,
     };
@@ -507,106 +669,163 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
   return null;
 });
 
-// Computed: get saved config for selected provider
 const selectedProviderConfig = computed(() => {
   if (!selectedProviderId.value) return null;
-  return providers.value.find(
-    p => p.type === selectedProviderId.value || p.id === selectedProviderId.value
+  return getProviderRecord(selectedProviderId.value);
+});
+
+const selectedProviderPersistedState = computed(() => {
+  if (!selectedProviderId.value) return null;
+  return getPersistedProviderSnapshot(selectedProviderId.value);
+});
+
+const selectedDraftAvailableModels = computed(() => {
+  if (!selectedProviderId.value) return [];
+  return dynamicModels.value[selectedProviderId.value] || [];
+});
+
+const selectedProviderRequiresApiKey = computed(() => {
+  return selectedProviderInfo.value?.requiresApiKey !== false;
+});
+
+const selectedProviderSupportLink = computed(() => {
+  const info = selectedProviderInfo.value;
+  if (!info) return null;
+
+  if (info.credentialsUrl) {
+    return {
+      prefix: t('settings.providers.support.credentialsPrefix'),
+      url: info.credentialsUrl,
+      label: info.credentialsLabel || info.name,
+    };
+  }
+
+  if (info.docsUrl) {
+    return {
+      prefix: t('settings.providers.support.docsPrefix'),
+      url: info.docsUrl,
+      label: t('settings.providers.support.docsLabel', { name: info.name }),
+    };
+  }
+
+  return null;
+});
+
+const selectedProviderBaseUrlHelp = computed(() => {
+  const info = selectedProviderInfo.value;
+  if (!info?.defaultBaseUrl) {
+    return t('settings.providers.baseUrlHelp.optionalOverride');
+  }
+  return t('settings.providers.baseUrlHelp.useDefault', { name: info.name });
+});
+
+const isSelectedProviderDirty = computed(() => {
+  const draft = selectedProviderDraft.value;
+  const snapshot = selectedProviderPersistedState.value;
+  if (!draft || !snapshot) return false;
+
+  return (
+    draft.api_key !== snapshot.api_key ||
+    draft.base_url.trim() !== snapshot.base_url ||
+    draft.enabled !== snapshot.enabled ||
+    !arrayEquals(selectedModelsList.value, snapshot.models) ||
+    !arrayEquals(selectedDraftAvailableModels.value, snapshot.availableModels)
   );
 });
 
-// Computed: check if selected provider is active
-const isSelectedProviderActive = computed(() => {
-  const config = selectedProviderConfig.value;
-  return config?.enabled === true;
+const canSaveSelectedProvider = computed(() => {
+  const draft = selectedProviderDraft.value;
+  if (!draft || !selectedProviderInfo.value || !isSelectedProviderDirty.value) {
+    return false;
+  }
+
+  if (draft.enabled && selectedProviderRequiresApiKey.value && draft.api_key.trim().length === 0) {
+    return false;
+  }
+
+  return true;
 });
 
-// Check if a built-in provider has been configured
 const isProviderConfigured = (providerId: string) => {
   return providers.value.some(p => p.type === providerId);
 };
 
-// Check if a provider is enabled
 const isProviderEnabled = (providerId: string) => {
   const config = providers.value.find(p => p.type === providerId || p.id === providerId);
   return config?.enabled === true;
 };
 
-// Select a provider to show details
-const selectProvider = (providerId: string) => {
-  selectedProviderId.value = providerId;
-  showConfigForm.value = false;
-
-  // Pre-fill form if already configured
-  const existing = providers.value.find(p => p.type === providerId || p.id === providerId);
-  if (existing) {
-    providerFormData.value = {
-      api_key: existing.api_key || '',
-      base_url: existing.base_url || '',
-    };
-    // Load selected models from config
-    if (existing.models) {
-      selectedModels.value[providerId] = parseModelList(existing.models);
-    }
-    // Load available models if they exist
-    if (existing.available_models) {
-      const available = parseModelList(existing.available_models);
-      if (available.length > 0) {
-        dynamicModels.value[providerId] = available;
-      }
-    }
-  } else {
-    const builtIn = BUILTIN_PROVIDERS.find(p => p.id === providerId);
-    providerFormData.value = {
-      api_key: '',
-      base_url: builtIn?.defaultBaseUrl || '',
-    };
-    selectedModels.value[providerId] = [];
-  }
+const setSelectedProviderEnabled = (enabled: boolean) => {
+  if (!selectedProviderDraft.value) return;
+  selectedProviderDraft.value.enabled = enabled;
 };
 
-// Save provider configuration
+const toggleSelectedProviderApiKeyVisibility = () => {
+  if (!selectedProviderDraft.value) return;
+  selectedProviderDraft.value.showApiKey = !selectedProviderDraft.value.showApiKey;
+};
+
+const selectProvider = (providerId: string) => {
+  selectedProviderId.value = providerId;
+  modelsPanelOpen.value = false;
+  ensureProviderDraft(providerId);
+};
+
+const resetSelectedProviderDraft = () => {
+  if (!selectedProviderId.value) return;
+  syncProviderDraft(selectedProviderId.value);
+};
+
 const saveProviderConfig = async () => {
-  if (!selectedProviderId.value || !selectedProviderInfo.value) {
+  if (!selectedProviderId.value || !selectedProviderInfo.value || !selectedProviderDraft.value) {
     return;
   }
 
   const activeProviderId = selectedProviderId.value;
   const existingConfig = selectedProviderConfig.value;
+  const draft = selectedProviderDraft.value;
+  const modelsToSave = selectedModels.value[activeProviderId] || [];
+  const availableToSave = dynamicModels.value[activeProviderId] || [];
+  const normalizedBaseUrl =
+    draft.base_url.trim() || selectedProviderInfo.value.defaultBaseUrl || '';
 
   try {
     if (existingConfig) {
-      // Update existing
-      const modelsToSave = selectedModels.value[activeProviderId] || getSelectedModelsForProvider();
-      const availableToSave =
-        dynamicModels.value[activeProviderId] || parseModelList(existingConfig.available_models);
       await electronAPI.providers.update(existingConfig.id, {
-        api_key: providerFormData.value.api_key,
-        base_url: providerFormData.value.base_url,
-        enabled: true,
+        api_key: draft.api_key.trim(),
+        base_url: normalizedBaseUrl,
+        enabled: draft.enabled,
         models: JSON.stringify(modelsToSave),
         available_models: JSON.stringify(availableToSave),
       });
     } else {
-      // Create new configuration for built-in provider
       const builtIn = selectedProviderInfo.value;
-      const modelsToSave = selectedModels.value[builtIn.id] || [];
-      const availableToSave = dynamicModels.value[builtIn.id] || [];
+      const hasMeaningfulDraft =
+        draft.api_key.trim().length > 0 ||
+        draft.base_url.trim().length > 0 ||
+        modelsToSave.length > 0 ||
+        availableToSave.length > 0 ||
+        draft.enabled;
+
+      if (!hasMeaningfulDraft) {
+        return;
+      }
+
       const newProvider = {
         id: `${builtIn.id}_${Date.now()}`,
         name: builtIn.name,
         type: builtIn.id,
-        api_key: providerFormData.value.api_key,
-        base_url: providerFormData.value.base_url || builtIn.defaultBaseUrl || '',
+        api_key: draft.api_key.trim(),
+        base_url: normalizedBaseUrl,
         models: JSON.stringify(modelsToSave),
-        enabled: true,
+        enabled: draft.enabled,
         available_models: JSON.stringify(availableToSave),
       };
       await electronAPI.providers.add(newProvider);
     }
 
-    showConfigForm.value = false;
     await loadProviders();
+    syncProviderDraft(activeProviderId);
   } catch (error: unknown) {
     providersSettingsLogger.event({
       level: 'error',
@@ -621,19 +840,17 @@ const saveProviderConfig = async () => {
   }
 };
 
-// Remove provider configuration
 const removeProviderConfig = async () => {
   const config = selectedProviderConfig.value;
   if (!config) return;
 
-  if (confirm('Are you sure you want to remove this provider configuration?')) {
+  if (confirm(t('settings.providers.confirmRemove'))) {
     await electronAPI.providers.delete(config.id);
     await loadProviders();
-    showConfigForm.value = false;
+    resetSelectedProviderDraft();
   }
 };
 
-// Add custom provider
 const addCustomProvider = () => {
   editingProvider.value = {
     id: `custom_${Date.now()}`,
@@ -686,7 +903,7 @@ const saveProvider = async () => {
 };
 
 onMounted(() => {
-  loadProviders();
+  void loadProviders();
 });
 </script>
 
@@ -733,28 +950,39 @@ onMounted(() => {
   max-width: none !important;
 }
 
+.providers-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
 .providers-layout {
   display: flex;
-  gap: 24px;
-  min-height: 500px;
+  gap: 20px;
+  min-height: 460px;
 }
 
 .providers-sidebar {
-  width: 280px;
+  width: 240px;
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+}
+
+.providers-search {
+  flex: 1;
+  max-width: 400px;
 }
 
 .providers-search .search-input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 9px 13px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 14px;
+  min-height: 46px;
 }
 
 .providers-search .search-input:focus {
@@ -764,23 +992,32 @@ onMounted(() => {
 
 .providers-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 .providers-scroll-list {
-  flex: 1;
+  height: 100%;
   overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--surface-radius);
+  background: color-mix(in srgb, var(--bg-tertiary) 88%, var(--bg-secondary));
+  padding: 12px;
+  box-shadow: var(--surface-inset-highlight);
+}
+
+.providers-scroll-list-inner {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 100%;
 }
 
 .provider-list-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 12px;
   cursor: pointer;
   transition:
@@ -811,8 +1048,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -864,7 +1101,7 @@ onMounted(() => {
 }
 
 .providers-divider {
-  padding: 16px 14px 8px;
+  padding: 8px 6px 2px;
   font-size: 12px;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -874,15 +1111,26 @@ onMounted(() => {
 /* Provider Details Panel */
 .provider-details-panel {
   flex: 1;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 18px;
-  padding: 24px 28px;
-  box-shadow: var(--surface-inset-highlight);
+  border-radius: var(--surface-radius);
+  padding: 20px 22px;
+  box-shadow: var(--surface-shadow-md);
 }
 
 .provider-header {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+}
+
+.provider-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.provider-heading {
+  min-width: 0;
 }
 
 .provider-title-row {
@@ -904,70 +1152,230 @@ onMounted(() => {
   line-height: 1.4;
 }
 
-.provider-config-form {
-  margin-top: 20px;
+.provider-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
-.provider-form-actions {
+.provider-icon-button {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.provider-icon-button:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: var(--bg-hover);
+}
+
+.provider-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.provider-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.provider-switch-track {
+  width: 56px;
+  height: 32px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color) 70%, var(--bg-secondary));
+  border: 1px solid var(--border-color);
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.provider-switch-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  box-shadow: var(--surface-shadow-sm);
+  transition: transform 0.2s ease;
+}
+
+.provider-switch input:checked + .provider-switch-track {
+  background: color-mix(in srgb, var(--accent-color) 44%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--accent-color) 60%, transparent);
+}
+
+.provider-switch input:checked + .provider-switch-track .provider-switch-thumb {
+  transform: translateX(24px);
+}
+
+.provider-config-form {
+  margin-top: 16px;
+}
+
+.provider-card-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 18px;
 }
 
-.provider-enable-prompt {
-  text-align: center;
-  padding: 64px 24px;
+.provider-form-stack {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  gap: 18px;
 }
 
-.provider-enable-prompt p {
-  color: var(--text-secondary);
-  margin-bottom: 32px;
-  font-size: 1.1em;
-}
-
-.enable-btn {
-  padding: 12px 32px;
-  font-size: 16px;
+.provider-field {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border-radius: 12px;
-  font-weight: 500;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.enable-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.2);
-}
-
-.enable-btn:active {
-  transform: translateY(0);
-}
-
-.docs-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   gap: 8px;
-  margin-top: 24px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 14px;
-  transition: all 0.2s;
-  opacity: 0.8;
 }
 
-.docs-link:hover {
+.provider-field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.provider-field-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.provider-secret-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-secret-input input {
+  flex: 1;
+}
+
+.provider-secret-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.provider-secret-toggle:hover {
+  border-color: var(--accent-color);
   color: var(--accent-color);
-  opacity: 1;
+  background: var(--bg-hover);
+}
+
+.provider-field-help {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.provider-inline-link {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-color);
   text-decoration: none;
+  margin-top: 6px;
+}
+
+.provider-inline-link:hover {
+  text-decoration: none;
+  color: color-mix(in srgb, var(--accent-color) 82%, white);
+}
+
+.provider-models-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-tertiary));
+}
+
+.provider-models-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.provider-models-toggle-main,
+.provider-models-toggle-meta {
+  display: flex;
+  align-items: center;
+}
+
+.provider-models-toggle-main {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.provider-models-toggle-meta {
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.provider-models-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.provider-models-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.provider-models-summary {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.provider-models-body {
+  padding: 0 16px 16px;
+}
+
+.models-toggle-open {
+  transform: rotate(180deg);
 }
 
 .no-selection {

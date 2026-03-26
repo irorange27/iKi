@@ -21,7 +21,7 @@
           />
         </div>
         <div v-if="kind === 'custom'" class="preset-badges">
-          <span class="preset-badge">Custom</span>
+          <span class="preset-badge">{{ t('settings.theme.badge.custom') }}</span>
           <Check v-if="selectedPresetId === preset.id" :size="16" class="preset-check" />
         </div>
         <Check v-else-if="selectedPresetId === preset.id" :size="18" class="preset-check" />
@@ -37,7 +37,7 @@
           @click.stop="emit('edit', preset.id)"
         >
           <Pencil :size="14" />
-          Edit
+          {{ t('settings.theme.action.edit') }}
         </button>
         <button
           class="danger-btn mini-btn"
@@ -45,7 +45,7 @@
           @click.stop="emit('delete', preset.id)"
         >
           <Trash2 :size="14" />
-          Delete
+          {{ t('settings.theme.action.delete') }}
         </button>
       </div>
     </button>
@@ -55,6 +55,7 @@
 <script setup lang="ts">
 import { Check, Pencil, Trash2 } from 'lucide-vue-next';
 
+import { useI18n } from '../../i18n';
 import type { ThemeVariant } from '../../../shared/theme/types';
 
 type ThemePresetCard = {
@@ -81,11 +82,19 @@ const emit = defineEmits<{
   (event: 'select', presetId: string): void;
 }>();
 
-const capitalizeWord = (value: string): string =>
-  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
+const { t } = useI18n();
+
+const formatVariantLabel = (variant: ThemeVariant): string => {
+  if (variant === 'light') return t('common.light');
+  return t('common.dark');
+};
 
 const formatVariantMeta = (variants: ThemeVariant[]): string =>
-  variants.length === 2 ? 'Light + Dark variants' : `${capitalizeWord(variants[0] || 'dark')} only`;
+  variants.length === 2
+    ? t('settings.theme.meta.bothVariants')
+    : t('settings.theme.meta.onlyVariant', {
+        variant: formatVariantLabel(variants[0] || 'dark'),
+      });
 </script>
 
 <style scoped src="./settings_shared.css"></style>

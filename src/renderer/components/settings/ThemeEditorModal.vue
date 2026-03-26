@@ -4,10 +4,14 @@
       <div class="theme-modal-header">
         <div>
           <div class="theme-modal-title">
-            {{ editor.editingPresetId ? 'Edit Custom Theme' : 'Create Custom Theme' }}
+            {{
+              editor.editingPresetId
+                ? t('settings.theme.modal.editTitle')
+                : t('settings.theme.modal.createTitle')
+            }}
           </div>
           <div class="theme-modal-subtitle">
-            Design your own color scheme with guided Base46 controls and a live preview.
+            {{ t('settings.theme.modal.subtitle') }}
           </div>
         </div>
         <button class="secondary-btn mini-icon-btn" type="button" @click="emit('close')">×</button>
@@ -17,20 +21,20 @@
         <div class="theme-editor-column">
           <div class="theme-editor-grid">
             <label class="input-label">
-              <span>Display Name</span>
+              <span>{{ t('settings.theme.modal.displayName') }}</span>
               <input
                 :value="editor.label"
                 type="text"
-                placeholder="Ocean"
+                :placeholder="t('settings.theme.modal.displayNamePlaceholder')"
                 @input="handleLabelInput"
               />
             </label>
             <label class="input-label">
-              <span>Type</span>
+              <span>{{ t('settings.theme.modal.type') }}</span>
               <SettingsSelect
                 :model-value="editor.type"
                 :options="themeVariantOptions"
-                aria-label="Theme variant"
+                :aria-label="t('settings.theme.modal.typeAria')"
                 @update:model-value="emit('set-editor-type', $event as ThemeVariant)"
               />
             </label>
@@ -44,7 +48,7 @@
               @click="emit('set-editor-mode', 'simple')"
             >
               <Sparkles :size="16" />
-              Simple
+              {{ t('settings.theme.modal.simple') }}
             </button>
             <button
               type="button"
@@ -53,13 +57,13 @@
               @click="emit('set-editor-mode', 'advanced')"
             >
               <SlidersHorizontal :size="16" />
-              Advanced
+              {{ t('settings.theme.modal.advanced') }}
             </button>
           </div>
 
           <template v-if="editor.mode === 'simple'">
             <p class="editor-help">
-              Pick 4 colors and iKi will generate a complete theme for you.
+              {{ t('settings.theme.modal.simpleHelp') }}
             </p>
             <div class="quick-start-row">
               <button
@@ -85,8 +89,8 @@
               <ThemeColorField
                 v-for="field in SIMPLE_THEME_FIELDS"
                 :key="field.key"
-                :label="field.label"
-                :hint="field.hint"
+                :label="t(field.labelKey)"
+                :hint="t(field.hintKey)"
                 :value="editor.simple[field.key]"
                 @update:value="handleSimpleColorUpdate(field.key, $event)"
               />
@@ -95,14 +99,14 @@
 
           <template v-else>
             <p class="editor-help">
-              Fine-tune the core palette and iKi will derive the remaining Base46 fields.
+              {{ t('settings.theme.modal.advancedHelp') }}
             </p>
             <div class="theme-editor-grid advanced-grid">
               <ThemeColorField
                 v-for="field in ADVANCED_THEME_FIELDS"
                 :key="field.key"
-                :label="field.label"
-                :hint="field.hint"
+                :label="t(field.labelKey)"
+                :hint="t(field.hintKey)"
                 :value="editor.advanced[field.key]"
                 @update:value="handleAdvancedColorUpdate(field.key, $event)"
               />
@@ -114,8 +118,8 @@
             <p class="editor-footnote-copy">
               {{
                 editor.mode === 'simple'
-                  ? 'Switch to Advanced mode to fine-tune individual colors.'
-                  : 'Advanced mode edits the core palette while iKi derives the remaining Base46 fields for consistency.'
+                  ? t('settings.theme.modal.footnoteSimple')
+                  : t('settings.theme.modal.footnoteAdvanced')
               }}
             </p>
           </div>
@@ -127,8 +131,8 @@
       </div>
 
       <div class="theme-modal-footer">
-        <button class="secondary-btn" @click="emit('close')">Cancel</button>
-        <button class="primary-btn" @click="emit('save')">Save</button>
+        <button class="secondary-btn" @click="emit('close')">{{ t('common.cancel') }}</button>
+        <button class="primary-btn" @click="emit('save')">{{ t('common.save') }}</button>
       </div>
     </div>
   </div>
@@ -141,6 +145,7 @@ import ThemeColorField from './ThemeColorField.vue';
 import ThemePreview from './ThemePreview.vue';
 import SettingsSelect from './SettingsSelect.vue';
 import { ADVANCED_THEME_FIELDS, SIMPLE_THEME_FIELDS } from './theme_editor_fields';
+import { useI18n } from '../../i18n';
 import type { ThemeEditorMode, ThemeEditorState } from '../../composables/useThemeEditor';
 import type {
   AdvancedThemeSeed,
@@ -155,6 +160,7 @@ const props = defineProps<{
   quickStarts: ThemeQuickStartDefinition[];
   themeVariantOptions: Array<{ value: ThemeVariant; label: string }>;
 }>();
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (event: 'close'): void;

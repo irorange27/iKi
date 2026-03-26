@@ -1,27 +1,25 @@
 <template>
   <section class="config-section">
     <div class="settings-card">
-      <div class="card-title">Proactive Tasks</div>
-      <p class="card-help">
-        Create scheduled tasks that run in the background and push results into a chat thread.
-      </p>
+      <div class="card-title">{{ t('settings.tasks.title') }}</div>
+      <p class="card-help">{{ t('settings.tasks.description') }}</p>
 
       <label class="input-label">
-        <span>Name</span>
-        <input v-model="taskForm.name" type="text" placeholder="Daily briefing" />
+        <span>{{ t('common.name') }}</span>
+        <input v-model="taskForm.name" type="text" :placeholder="t('settings.tasks.namePlaceholder')" />
       </label>
 
       <label class="input-label">
-        <span>Prompt</span>
-        <textarea v-model="taskForm.prompt" placeholder="What should this task do?" />
+        <span>{{ t('settings.tasks.promptLabel') }}</span>
+        <textarea v-model="taskForm.prompt" :placeholder="t('settings.tasks.promptPlaceholder')" />
       </label>
 
       <label class="input-label">
-        <span>Schedule Type</span>
+        <span>{{ t('settings.tasks.scheduleType') }}</span>
         <SettingsSelect
           :model-value="taskForm.schedule_type"
           :options="taskScheduleTypeOptions"
-          aria-label="Task schedule type"
+          :aria-label="t('settings.tasks.scheduleTypeAria')"
           @update:model-value="updateTaskScheduleTypeSelection"
         />
       </label>
@@ -29,7 +27,9 @@
       <div class="task-form-grid">
         <label class="input-label">
           <span>{{
-            taskForm.schedule_type === 'cron' ? 'Cron Expression' : 'Every (minutes)'
+            taskForm.schedule_type === 'cron'
+              ? t('settings.tasks.cronExpression')
+              : t('settings.tasks.everyMinutes')
           }}</span>
           <input
             v-if="taskForm.schedule_type === 'interval'"
@@ -38,73 +38,78 @@
             min="1"
             max="10080"
           />
-          <input v-else v-model="taskForm.cron_expression" type="text" placeholder="*/15 * * * *" />
+          <input
+            v-else
+            v-model="taskForm.cron_expression"
+            type="text"
+            :placeholder="t('settings.tasks.cronPlaceholder')"
+          />
           <div v-if="taskForm.schedule_type === 'cron'" class="input-hint">
-            5-field cron (min hour day month weekday). Example: 0 9 * * 1-5
+            {{ t('settings.tasks.cronHint') }}
           </div>
         </label>
 
         <label class="input-label">
-          <span>Provider</span>
+          <span>{{ t('common.provider') }}</span>
           <SettingsSelect
             :model-value="taskForm.provider_type"
             :options="taskProviderOptions"
             :disabled="taskProviderOptions.length === 0"
-            placeholder="Select a provider"
-            empty-text="No providers available."
-            aria-label="Task provider"
+            :placeholder="t('settings.tasks.selectProvider')"
+            :empty-text="t('settings.tasks.noProviders')"
+            :aria-label="t('settings.tasks.providerAria')"
             @update:model-value="updateTaskProviderSelection"
           />
         </label>
       </div>
 
       <label v-if="taskForm.schedule_type === 'cron'" class="input-label">
-        <span>Time Zone (optional)</span>
+        <span>{{ t('settings.tasks.timezoneOptional') }}</span>
         <input
           v-model="taskForm.schedule_timezone"
           type="text"
-          placeholder="Auto (local time zone)"
+          :placeholder="t('settings.tasks.timezonePlaceholder')"
         />
       </label>
 
       <label class="input-label">
-        <span>Model</span>
+        <span>{{ t('common.model') }}</span>
         <SettingsSelect
           :model-value="taskForm.model"
           :options="taskModelOptions"
           :disabled="taskModelOptions.length === 0"
-          placeholder="Select a model"
-          empty-text="No models available."
-          aria-label="Task model"
+          :placeholder="t('settings.tasks.selectModel')"
+          :empty-text="t('settings.tasks.noModels')"
+          :aria-label="t('settings.tasks.modelAria')"
           @update:model-value="updateTaskModelSelection"
         />
       </label>
 
       <label class="input-label">
-        <span>Push To Thread</span>
+        <span>{{ t('settings.tasks.pushToThread') }}</span>
         <SettingsSelect
           :model-value="taskForm.thread_id"
           :options="taskThreadOptions"
-          aria-label="Push task output to thread"
+          :aria-label="t('settings.tasks.threadAria')"
           @update:model-value="updateTaskThreadSelection"
         />
       </label>
 
       <label class="input-label">
-        <span>Tool Strategy</span>
+        <span>{{ t('settings.tasks.toolStrategy') }}</span>
         <SettingsSelect
           :model-value="taskForm.tool_mode"
           :options="taskToolModeOptions"
-          aria-label="Task tool strategy"
+          :aria-label="t('settings.tasks.toolStrategyAria')"
           @update:model-value="updateTaskToolModeSelection"
         />
         <div class="input-hint">
-          Auto lets the task agent decide when to use safe built-in tools for freshness.
+          {{ t('settings.tasks.toolStrategyHint') }}
         </div>
       </label>
 
       <div v-if="taskForm.tool_mode === 'manual'" class="task-tools">
-        <div class="task-tools-title">Allowed Tools (safe)</div>
+        <div class="task-tools-title">{{ t('settings.tasks.allowedTools') }}</div>
         <div class="task-tools-grid">
           <label v-for="tool in SAFE_TASK_TOOLS" :key="tool" class="checkbox-label">
             <input
@@ -119,27 +124,27 @@
       <p v-else class="input-hint">
         {{
           taskForm.tool_mode === 'disabled'
-            ? 'This task will run without any tools.'
-            : 'This task may autonomously use safe built-in tools when current information matters.'
+            ? t('settings.tasks.disabledHint')
+            : t('settings.tasks.autoHint')
         }}
       </p>
 
       <label class="checkbox-label">
         <input type="checkbox" v-model="taskForm.enabled" />
-        Enabled
+        {{ t('common.enabled') }}
       </label>
 
       <label class="checkbox-label">
         <input type="checkbox" v-model="taskForm.notify" />
-        Desktop notification
+        {{ t('settings.tasks.desktopNotification') }}
       </label>
 
       <div class="task-form-actions">
         <button class="secondary-btn" @click="createProactiveTask" :disabled="taskCreateLoading">
-          {{ taskCreateLoading ? 'Creating...' : 'Create Task' }}
+          {{ taskCreateLoading ? t('settings.tasks.creating') : t('settings.tasks.create') }}
         </button>
         <button class="secondary-btn" @click="refreshTasks" :disabled="tasksLoading">
-          Refresh
+          {{ t('common.refresh') }}
         </button>
       </div>
 
@@ -148,17 +153,19 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">Existing Tasks</div>
+      <div class="card-title">{{ t('settings.tasks.existingTitle') }}</div>
 
-      <div v-if="tasksLoading" class="tasks-empty">Loading...</div>
-      <div v-else-if="proactiveTasks.length === 0" class="tasks-empty">No tasks yet.</div>
+      <div v-if="tasksLoading" class="tasks-empty">{{ t('settings.tasks.loading') }}</div>
+      <div v-else-if="proactiveTasks.length === 0" class="tasks-empty">
+        {{ t('settings.tasks.empty') }}
+      </div>
       <div v-else class="tasks-list">
         <div v-for="task in proactiveTasks" :key="task.id" class="task-item">
           <div class="task-item-header">
             <div class="task-item-title">
               <span class="task-name">{{ task.name }}</span>
               <span class="task-status" :class="`status-${task.last_status || 'idle'}`">
-                {{ task.last_status || 'idle' }}
+                {{ formatTaskStatus(task.last_status || 'idle') }}
               </span>
             </div>
             <div class="task-item-actions">
@@ -167,9 +174,9 @@
                 @click="runTaskNow(task)"
                 :disabled="!!taskRunLoading[task.id]"
               >
-                {{ taskRunLoading[task.id] ? 'Running...' : 'Run now' }}
+                {{ taskRunLoading[task.id] ? t('settings.tasks.running') : t('settings.tasks.runNow') }}
               </button>
-              <button class="skills-mini-btn" @click="deleteTask(task)">Delete</button>
+              <button class="skills-mini-btn" @click="deleteTask(task)">{{ t('common.delete') }}</button>
             </div>
           </div>
 
@@ -180,7 +187,7 @@
                 :checked="task.enabled"
                 @change="toggleTaskEnabled(task, ($event.target as HTMLInputElement).checked)"
               />
-              Enabled
+              {{ t('common.enabled') }}
             </label>
             <label class="checkbox-label task-compact-check">
               <input
@@ -188,30 +195,30 @@
                 :checked="task.notify"
                 @change="toggleTaskNotify(task, ($event.target as HTMLInputElement).checked)"
               />
-              Notify
+              {{ t('settings.tasks.notify') }}
             </label>
             <template v-if="task.schedule_type === 'cron'">
               <label class="input-label task-inline-field task-cron-field">
-                <span>Cron</span>
+                <span>{{ t('settings.tasks.cronShort') }}</span>
                 <input
                   type="text"
                   :value="task.cron_expression || ''"
-                  placeholder="*/15 * * * *"
+                  :placeholder="t('settings.tasks.cronPlaceholder')"
                   @change="updateTaskCron(task, ($event.target as HTMLInputElement).value)"
                 />
               </label>
               <label class="input-label task-inline-field task-timezone-field">
-                <span>TZ</span>
+                <span>{{ t('settings.tasks.tzShort') }}</span>
                 <input
                   type="text"
                   :value="task.schedule_timezone || ''"
-                  placeholder="Local"
+                  :placeholder="t('settings.tasks.local')"
                   @change="updateTaskTimezone(task, ($event.target as HTMLInputElement).value)"
                 />
               </label>
             </template>
             <label v-else class="input-label task-inline-field">
-              <span>Every (min)</span>
+              <span>{{ t('settings.tasks.everyMinShort') }}</span>
               <input
                 type="number"
                 min="1"
@@ -223,22 +230,22 @@
           </div>
 
           <div class="task-item-schedule">
-            <span class="task-meta-label">Schedule:</span>
+            <span class="task-meta-label">{{ t('settings.tasks.scheduleLabel') }}</span>
             {{ formatTaskSchedule(task) }}
           </div>
 
           <div class="task-item-schedule">
-            <span class="task-meta-label">Tool Strategy:</span>
+            <span class="task-meta-label">{{ t('settings.tasks.toolStrategyLabel') }}</span>
             {{ formatTaskToolStrategy(task) }}
           </div>
 
           <div class="task-item-times">
             <div>
-              <span class="task-meta-label">Next:</span>
+              <span class="task-meta-label">{{ t('settings.tasks.next') }}</span>
               {{ task.next_run_at ? formatTimestamp(task.next_run_at) : '-' }}
             </div>
             <div>
-              <span class="task-meta-label">Last:</span>
+              <span class="task-meta-label">{{ t('settings.tasks.last') }}</span>
               {{ task.last_run_at ? formatTimestamp(task.last_run_at) : '-' }}
             </div>
           </div>
@@ -256,6 +263,7 @@
 import { computed, onMounted, onUnmounted, ref, toRaw, watch } from 'vue';
 
 import SettingsSelect from './SettingsSelect.vue';
+import { useI18n } from '../../i18n';
 import type { ChatThread } from '../../../shared/types/chat';
 import type {
   ProactiveTask,
@@ -283,6 +291,7 @@ const props = defineProps<{
   providers: ProviderModels[];
 }>();
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const { t } = useI18n();
 
 const proactiveTasks = ref<ProactiveTask[]>([]);
 const tasksLoading = ref(false);
@@ -293,15 +302,15 @@ const taskRunLoading = ref<Record<string, boolean>>({});
 const taskThreads = ref<ChatThread[]>([]);
 
 const SAFE_TASK_TOOLS = SAFE_PROACTIVE_TASK_TOOLS;
-const taskScheduleTypeOptions = [
-  { value: 'interval', label: 'Interval (minutes)' },
-  { value: 'cron', label: 'Cron expression' },
-];
-const taskToolModeOptions = [
-  { value: 'auto', label: 'Auto (agent decides)' },
-  { value: 'manual', label: 'Manual safe allowlist' },
-  { value: 'disabled', label: 'Disabled' },
-];
+const taskScheduleTypeOptions = computed(() => [
+  { value: 'interval', label: t('settings.tasks.schedule.interval') },
+  { value: 'cron', label: t('settings.tasks.schedule.cron') },
+]);
+const taskToolModeOptions = computed(() => [
+  { value: 'auto', label: t('settings.tasks.toolMode.auto') },
+  { value: 'manual', label: t('settings.tasks.toolMode.manual') },
+  { value: 'disabled', label: t('settings.tasks.toolMode.disabled') },
+]);
 
 const isTaskPushPayload = (payload: unknown): payload is { type?: string } =>
   typeof payload === 'object' && payload !== null && 'type' in payload;
@@ -374,7 +383,7 @@ const taskModelOptions = computed(() =>
 );
 
 const taskThreadOptions = computed(() => [
-  { value: '', label: 'Auto-create dedicated thread' },
+  { value: '', label: t('settings.tasks.autoCreateThread') },
   ...taskThreads.value.map(thread => ({
     value: thread.id,
     label: thread.title || thread.id,
@@ -417,7 +426,7 @@ const loadProactiveTasks = async () => {
     const list = await electronAPI.tasks.list();
     proactiveTasks.value = Array.isArray(list) ? list : [];
   } catch (error: unknown) {
-    tasksError.value = `Failed to load tasks: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.loadFailed', { error: getErrorMessage(error) });
     proactiveTasks.value = [];
   } finally {
     tasksLoading.value = false;
@@ -442,18 +451,27 @@ const toggleTaskTool = (tool: SafeProactiveTaskTool, checked: boolean) => {
 const formatTaskSchedule = (task: ProactiveTask): string => {
   if (task.schedule_type === 'cron') {
     const cron = task.cron_expression || 'cron';
-    const timezone = task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)';
-    return `${cron}${timezone}`;
+    return t('settings.tasks.format.scheduleCron', {
+      cron,
+      timezone: task.schedule_timezone || '',
+    });
   }
-  return `Every ${task.interval_minutes} min`;
+  return t('settings.tasks.format.scheduleInterval', { minutes: task.interval_minutes });
 };
 
 const formatTaskToolStrategy = (task: ProactiveTask): string => {
   const toolMode = inferProactiveTaskToolMode(task);
-  if (toolMode === 'auto') return 'Auto safe tools';
-  if (toolMode === 'disabled') return 'Disabled';
+  if (toolMode === 'auto') return t('settings.tasks.format.toolAuto');
+  if (toolMode === 'disabled') return t('settings.tasks.format.toolDisabled');
   const tools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
-  return tools.length > 0 ? `Manual: ${tools.join(', ')}` : 'Manual (no safe tools)';
+  return t('settings.tasks.format.toolManual', { tools: tools.join(', ') });
+};
+
+const formatTaskStatus = (status: string) => {
+  if (status === 'running') return t('settings.tasks.status.running');
+  if (status === 'success') return t('settings.tasks.status.success');
+  if (status === 'error') return t('settings.tasks.status.error');
+  return t('settings.tasks.status.idle');
 };
 
 const createProactiveTask = async () => {
@@ -462,34 +480,34 @@ const createProactiveTask = async () => {
   const name = form.name.trim();
   const prompt = form.prompt.trim();
   if (!name) {
-    taskCreateError.value = 'Task name is required.';
+    taskCreateError.value = t('settings.tasks.error.nameRequired');
     return;
   }
   if (!prompt) {
-    taskCreateError.value = 'Task prompt is required.';
+    taskCreateError.value = t('settings.tasks.error.promptRequired');
     return;
   }
   if (form.schedule_type === 'interval') {
     if (!Number.isFinite(form.interval_minutes) || form.interval_minutes <= 0) {
-      taskCreateError.value = 'Interval must be a positive number (minutes).';
+      taskCreateError.value = t('settings.tasks.error.intervalPositive');
       return;
     }
   } else if (!form.cron_expression.trim()) {
-    taskCreateError.value = 'Cron expression is required.';
+    taskCreateError.value = t('settings.tasks.error.cronRequired');
     return;
   }
   if (!form.provider_type) {
-    taskCreateError.value = 'Please select a provider.';
+    taskCreateError.value = t('settings.tasks.error.providerRequired');
     return;
   }
   if (!form.model) {
-    taskCreateError.value = 'Please select a model.';
+    taskCreateError.value = t('settings.tasks.error.modelRequired');
     return;
   }
 
   const selectedTools = Array.isArray(form.tools) ? [...form.tools] : [];
   if (form.tool_mode === 'manual' && selectedTools.length === 0) {
-    taskCreateError.value = 'Select at least one safe tool or choose Auto/Disabled.';
+    taskCreateError.value = t('settings.tasks.error.safeToolRequired');
     return;
   }
 
@@ -515,7 +533,8 @@ const createProactiveTask = async () => {
     });
 
     if (result?.success === false) {
-      taskCreateError.value = result?.error || 'Failed to create task.';
+      taskCreateError.value =
+        result?.error || t('settings.tasks.error.createFailed', { error: '' });
       return;
     }
 
@@ -524,7 +543,9 @@ const createProactiveTask = async () => {
     taskForm.value.thread_id = '';
     await loadProactiveTasks();
   } catch (error: unknown) {
-    taskCreateError.value = `Failed to create task: ${getErrorMessage(error)}`;
+    taskCreateError.value = t('settings.tasks.error.createFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     taskCreateLoading.value = false;
   }
@@ -536,10 +557,10 @@ const runTaskNow = async (task: ProactiveTask) => {
   try {
     const result = await electronAPI.tasks.runNow(task.id);
     if (result?.success === false) {
-      tasksError.value = result?.error || 'Task run failed.';
+      tasksError.value = result?.error || t('settings.tasks.error.runFailed', { error: '' });
     }
   } catch (error: unknown) {
-    tasksError.value = `Task run failed: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.runFailed', { error: getErrorMessage(error) });
   } finally {
     taskRunLoading.value = { ...taskRunLoading.value, [task.id]: false };
     await loadProactiveTasks();
@@ -548,17 +569,17 @@ const runTaskNow = async (task: ProactiveTask) => {
 };
 
 const deleteTask = async (task: ProactiveTask) => {
-  const confirmed = window.confirm(`Delete task "${task.name}"?\nThis cannot be undone.`);
+  const confirmed = window.confirm(t('settings.tasks.confirmDelete', { name: task.name }));
   if (!confirmed) return;
   try {
     const result = await electronAPI.tasks.delete(task.id);
     if (result?.success === false) {
-      tasksError.value = result?.error || 'Failed to delete task.';
+      tasksError.value = result?.error || t('settings.tasks.error.deleteFailed', { error: '' });
       return;
     }
     proactiveTasks.value = proactiveTasks.value.filter(item => item.id !== task.id);
   } catch (error: unknown) {
-    tasksError.value = `Failed to delete task: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.deleteFailed', { error: getErrorMessage(error) });
   }
 };
 
@@ -566,12 +587,12 @@ const toggleTaskEnabled = async (task: ProactiveTask, enabled: boolean) => {
   try {
     const result = await electronAPI.tasks.update(task.id, { enabled });
     if (result?.success === false) {
-      tasksError.value = result?.error || 'Failed to update task.';
+      tasksError.value = result?.error || t('settings.tasks.error.updateFailed', { error: '' });
       return;
     }
     await loadProactiveTasks();
   } catch (error: unknown) {
-    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.updateFailed', { error: getErrorMessage(error) });
   }
 };
 
@@ -579,37 +600,37 @@ const toggleTaskNotify = async (task: ProactiveTask, notify: boolean) => {
   try {
     const result = await electronAPI.tasks.update(task.id, { notify });
     if (result?.success === false) {
-      tasksError.value = result?.error || 'Failed to update task.';
+      tasksError.value = result?.error || t('settings.tasks.error.updateFailed', { error: '' });
       return;
     }
     await loadProactiveTasks();
   } catch (error: unknown) {
-    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.updateFailed', { error: getErrorMessage(error) });
   }
 };
 
 const updateTaskInterval = async (task: ProactiveTask, raw: string) => {
   const next = Number.parseInt(raw, 10);
   if (!Number.isFinite(next) || next <= 0) {
-    tasksError.value = 'Interval must be a positive number (minutes).';
+    tasksError.value = t('settings.tasks.error.intervalPositive');
     return;
   }
   try {
     const result = await electronAPI.tasks.update(task.id, { interval_minutes: next });
     if (result?.success === false) {
-      tasksError.value = result?.error || 'Failed to update task.';
+      tasksError.value = result?.error || t('settings.tasks.error.updateFailed', { error: '' });
       return;
     }
     await loadProactiveTasks();
   } catch (error: unknown) {
-    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.updateFailed', { error: getErrorMessage(error) });
   }
 };
 
 const updateTaskCron = async (task: ProactiveTask, raw: string) => {
   const cron = raw.trim();
   if (!cron) {
-    tasksError.value = 'Cron expression is required.';
+    tasksError.value = t('settings.tasks.error.cronRequired');
     return;
   }
   try {
@@ -617,12 +638,12 @@ const updateTaskCron = async (task: ProactiveTask, raw: string) => {
       cron_expression: cron,
     });
     if (result?.success === false) {
-      tasksError.value = result?.error || 'Failed to update task.';
+      tasksError.value = result?.error || t('settings.tasks.error.updateFailed', { error: '' });
       return;
     }
     await loadProactiveTasks();
   } catch (error: unknown) {
-    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.updateFailed', { error: getErrorMessage(error) });
   }
 };
 
@@ -633,12 +654,12 @@ const updateTaskTimezone = async (task: ProactiveTask, raw: string) => {
       schedule_timezone: timezone || null,
     });
     if (result?.success === false) {
-      tasksError.value = result?.error || 'Failed to update task.';
+      tasksError.value = result?.error || t('settings.tasks.error.updateFailed', { error: '' });
       return;
     }
     await loadProactiveTasks();
   } catch (error: unknown) {
-    tasksError.value = `Failed to update task: ${getErrorMessage(error)}`;
+    tasksError.value = t('settings.tasks.error.updateFailed', { error: getErrorMessage(error) });
   }
 };
 
