@@ -1,10 +1,16 @@
 import { ipcMain } from 'electron';
 
 import { createLogger } from '../../core/logger';
-import { getToolModel, generateTitleWithAgent } from '../../core/provider/tool_model';
+import {
+  getToolModel,
+  generateTitleWithAgent,
+  testToolModelLatency,
+} from '../../core/provider/tool_model';
 
 let toolModelIpcRegistered = false;
 const toolModelIpcLogger = createLogger({ module: 'tool_model_ipc' });
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : 'Unknown error';
 
 export const registerToolModelIpc = (): void => {
   if (toolModelIpcRegistered) return;
@@ -37,4 +43,30 @@ export const registerToolModelIpc = (): void => {
       return null;
     }
   });
+
+  ipcMain.handle(
+    'toolModel:testLatency',
+    async (_event, config?: { providerType?: string; model?: string } | null) => {
+      try {
+        const result = await testToolModelLatency(config ?? null);
+        return {
+          success: true,
+          providerType: result.providerType,
+          model: result.model,
+          responseTimeMs: result.responseTimeMs,
+        };
+      } catch (error: unknown) {
+        toolModelIpcLogger.event({
+          level: 'error',
+          event: 'ipc.tool_model.test_latency',
+          outcome: 'failed',
+          error,
+        });
+        return {
+          success: false,
+          error: getErrorMessage(error),
+        };
+      }
+    }
+  );
 };

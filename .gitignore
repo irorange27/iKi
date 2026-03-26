@@ -1,6 +1,7 @@
 dist/
 
 docs/
+dataset/
 
 .vscode/
 .VSCodeCounter/

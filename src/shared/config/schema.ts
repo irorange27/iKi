@@ -169,6 +169,7 @@ const SpeechSchema = z
 
 const ToolModelSchema = z
   .object({
+    providerType: stringField(DEFAULT_APP_CONFIG.toolModel.providerType),
     model: stringField(DEFAULT_APP_CONFIG.toolModel.model),
   })
   .catch(DEFAULT_APP_CONFIG.toolModel);

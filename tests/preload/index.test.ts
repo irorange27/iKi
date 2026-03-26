@@ -258,6 +258,7 @@ describe('preload task IPC payload serialization', () => {
 
     await exposedApi.toolModel.get();
     await exposedApi.toolModel.generateTitle('Conversation');
+    await exposedApi.toolModel.testLatency({ providerType: 'openai', model: 'gpt-4o-mini' });
     await exposedApi.tools.list();
 
     await exposedApi.speech.getStatus();
@@ -356,6 +357,7 @@ describe('preload task IPC payload serialization', () => {
         'promptApps:updateSortOrder',
         'toolModel:get',
         'toolModel:generateTitle',
+        'toolModel:testLatency',
         'tools:list',
         'speech:get-status',
         'speech:transcribe',

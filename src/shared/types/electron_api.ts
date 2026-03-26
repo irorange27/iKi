@@ -80,6 +80,19 @@ export type ChatInvocationResult = {
   error?: string;
 };
 
+export type ToolModelConfig = {
+  providerType: string;
+  model: string;
+};
+
+export type ToolModelLatencyTestResult = {
+  success: boolean;
+  providerType?: string;
+  model?: string;
+  responseTimeMs?: number;
+  error?: string;
+};
+
 export type WindowActionResult = {
   success: boolean;
   error?: string;
@@ -219,8 +232,9 @@ export interface ElectronApi {
     updateSortOrder: (id: string, sortOrder: number) => Promise<unknown>;
   };
   toolModel: {
-    get: () => Promise<unknown>;
-    generateTitle: (conversationContent: string) => Promise<string>;
+    get: () => Promise<ToolModelConfig | null>;
+    generateTitle: (conversationContent: string) => Promise<string | null>;
+    testLatency: (config?: ToolModelConfig | null) => Promise<ToolModelLatencyTestResult>;
   };
   tools: {
     list: () => Promise<ToolMetadata[]>;

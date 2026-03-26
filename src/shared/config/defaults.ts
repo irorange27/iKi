@@ -101,6 +101,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     prompt: '',
   },
   toolModel: {
+    providerType: '',
     model: '',
   },
   toolExecution: {

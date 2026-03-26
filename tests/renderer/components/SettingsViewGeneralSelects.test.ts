@@ -127,6 +127,7 @@ describe('SettingsView general custom selects', () => {
 
     await option.trigger('click');
 
+    expect(store.config.toolModel.providerType).toBe('deepseek');
     expect(store.config.toolModel.model).toBe('deepseek-chat');
 
     await vi.advanceTimersByTimeAsync(300);

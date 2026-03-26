@@ -68,6 +68,7 @@ vi.mock('../../../src/main/services/speech/speech_service', () => ({
 vi.mock('../../../src/core/provider/tool_model', () => ({
   getToolModel: vi.fn(),
   generateTitleWithAgent: vi.fn(),
+  testToolModelLatency: vi.fn(),
 }));
 
 import { registerSkillsIpc } from '../../../src/main/ipc/skills';
@@ -89,7 +90,11 @@ import {
   listWhisperNodeModels,
   transcribeSpeech,
 } from '../../../src/main/services/speech/speech_service';
-import { generateTitleWithAgent, getToolModel } from '../../../src/core/provider/tool_model';
+import {
+  generateTitleWithAgent,
+  getToolModel,
+  testToolModelLatency,
+} from '../../../src/core/provider/tool_model';
 
 const getSkillFolderPathMock = vi.mocked(getSkillFolderPath);
 const getSkillRootsForUiMock = vi.mocked(getSkillRootsForUi);
@@ -103,6 +108,7 @@ const listWhisperNodeModelsMock = vi.mocked(listWhisperNodeModels);
 const transcribeSpeechMock = vi.mocked(transcribeSpeech);
 const generateTitleWithAgentMock = vi.mocked(generateTitleWithAgent);
 const getToolModelMock = vi.mocked(getToolModel);
+const testToolModelLatencyMock = vi.mocked(testToolModelLatency);
 
 beforeAll(() => {
   registerSkillsIpc();
@@ -383,6 +389,38 @@ describe('system IPC modules', () => {
         event: 'ipc.tool_model.generate_title',
         outcome: 'failed',
         error: titleError,
+      })
+    );
+
+    testToolModelLatencyMock.mockResolvedValueOnce({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      responseTimeMs: 1234,
+    } as never);
+    expect(
+      await ipcHandlers.get('toolModel:testLatency')?.(null, {
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+      })
+    ).toEqual({
+      success: true,
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      responseTimeMs: 1234,
+    });
+
+    const latencyError = new Error('latency failed');
+    testToolModelLatencyMock.mockRejectedValueOnce(latencyError);
+    expect(await ipcHandlers.get('toolModel:testLatency')?.(null, null)).toEqual({
+      success: false,
+      error: 'latency failed',
+    });
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'ipc.tool_model.test_latency',
+        outcome: 'failed',
+        error: latencyError,
       })
     );
   });

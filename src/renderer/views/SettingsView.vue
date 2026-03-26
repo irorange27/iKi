@@ -43,7 +43,7 @@
               <div class="label-header">
                 <span>Select Tool Model</span>
                 <button
-                  v-if="selectedToolModel"
+                  v-if="canTestToolModel"
                   class="test-model-btn"
                   @click="testToolModel"
                   :disabled="isTestingModel"
@@ -54,7 +54,7 @@
               </div>
               <SettingsSelect
                 class="tool-model-select"
-                :model-value="config.toolModel.model"
+                :model-value="selectedToolModelOptionValue"
                 :options="toolModelSelectOptions"
                 aria-label="Select Tool Model"
                 @update:model-value="updateToolModelSelection"
@@ -548,6 +548,11 @@ type AvailableProvider = {
   models: string[];
 };
 
+type ToolModelSelection = {
+  providerType: string;
+  model: string;
+};
+
 type NetworkUpdatePath =
   | 'proxy.enable'
   | 'proxy.type'
@@ -569,6 +574,40 @@ const parseRequiredInteger = (value: string): number => Number.parseInt(value ||
 
 const parseOptionalInteger = (value: string): number | null =>
   value ? Number.parseInt(value, 10) : null;
+
+const AUTO_DETECT_TOOL_MODEL_VALUE = '';
+
+const serializeToolModelSelection = (selection: ToolModelSelection): string =>
+  JSON.stringify([selection.providerType, selection.model]);
+
+const parseToolModelSelection = (value: string): ToolModelSelection | null => {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed) || parsed.length !== 2) {
+      return null;
+    }
+
+    const [providerType, model] = parsed;
+    if (typeof providerType !== 'string' || typeof model !== 'string') {
+      return null;
+    }
+
+    const trimmedProviderType = providerType.trim();
+    const trimmedModel = model.trim();
+    if (!trimmedProviderType || !trimmedModel) {
+      return null;
+    }
+
+    return {
+      providerType: trimmedProviderType,
+      model: trimmedModel,
+    };
+  } catch {
+    return null;
+  }
+};
 
 // Load providers
 const loadProviders = async () => {
@@ -609,11 +648,11 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
 });
 
 const toolModelSelectOptions = computed(() => [
-  { value: '', label: 'Auto-detect (Recommended)' },
+  { value: AUTO_DETECT_TOOL_MODEL_VALUE, label: 'Auto-detect (Recommended)' },
   ...availableProvidersWithModels.value.map(provider => ({
     label: provider.name,
     options: provider.models.map(model => ({
-      value: model,
+      value: serializeToolModelSelection({ providerType: provider.type, model }),
       label: model,
     })),
   })),
@@ -639,81 +678,132 @@ const securityLogLevelOptions = [
   { value: 'debug', label: 'Debug' },
 ];
 
-// Computed: Get selected tool model
-const selectedToolModel = computed(() => {
-  return config.value.toolModel.model;
+const resolveConfiguredProviderType = (model: string): string | null => {
+  for (const provider of availableProvidersWithModels.value) {
+    if (provider.models.includes(model)) {
+      return provider.type;
+    }
+  }
+
+  return null;
+};
+
+const configuredToolModelSelection = computed<ToolModelSelection | null>(() => {
+  const configuredModel = config.value.toolModel.model.trim();
+  if (!configuredModel) return null;
+
+  const configuredProviderType =
+    config.value.toolModel.providerType.trim() || resolveConfiguredProviderType(configuredModel);
+  if (!configuredProviderType) return null;
+
+  return {
+    providerType: configuredProviderType,
+    model: configuredModel,
+  };
 });
 
-// Test tool model performance
+const selectedToolModelOptionValue = computed(() => {
+  const configuredModel = config.value.toolModel.model.trim();
+  if (!configuredModel) {
+    return AUTO_DETECT_TOOL_MODEL_VALUE;
+  }
+
+  if (!configuredToolModelSelection.value) {
+    return serializeToolModelSelection({
+      providerType: config.value.toolModel.providerType.trim() || '__unresolved__',
+      model: configuredModel,
+    });
+  }
+
+  return serializeToolModelSelection(configuredToolModelSelection.value);
+});
+
+const canTestToolModel = computed(() => availableProvidersWithModels.value.length > 0);
+
+const formatTestedToolModel = (selection: ToolModelSelection): string =>
+  `${selection.model} (${selection.providerType})`;
+
+// Test tool model latency
 const testToolModel = async () => {
-  if (!selectedToolModel.value) return;
+  if (!canTestToolModel.value) return;
 
   isTestingModel.value = true;
   toolModelTestResult.value = null;
 
   try {
-    const startTime = Date.now();
-    // Send a simple test message
-    const result = await electronAPI.chat.send({
-      providerType: getProviderTypeForModel(selectedToolModel.value),
-      model: selectedToolModel.value,
-      messages: [{ role: 'user', content: 'Say "OK"' }],
-    });
-    const responseTime = (Date.now() - startTime) / 1000;
+    const result = await electronAPI.toolModel.testLatency(configuredToolModelSelection.value);
+    if (
+      !result.success ||
+      typeof result.responseTimeMs !== 'number' ||
+      !result.providerType ||
+      !result.model
+    ) {
+      toolModelTestResult.value = {
+        status: 'error',
+        message: `Latency test failed: ${result.error || 'Unknown error'}`,
+      };
+      return;
+    }
 
-    if (result.success) {
-      if (responseTime < 2.5) {
-        toolModelTestResult.value = {
-          status: 'success',
-          message: `Good! Response time: ${responseTime.toFixed(2)}s - Optimal for tool operations`,
-        };
-      } else if (responseTime < 5) {
-        toolModelTestResult.value = {
-          status: 'warning',
-          message: `Slow. Response time: ${responseTime.toFixed(2)}s - Usable but may feel sluggish`,
-        };
-      } else {
-        toolModelTestResult.value = {
-          status: 'error',
-          message: `Unusable. Response time: ${responseTime.toFixed(2)}s - Too slow for responsive tool use`,
-        };
-      }
+    const testedToolModel = formatTestedToolModel({
+      providerType: result.providerType,
+      model: result.model,
+    });
+    const responseTime = result.responseTimeMs / 1000;
+
+    if (responseTime < 2.5) {
+      toolModelTestResult.value = {
+        status: 'success',
+        message: `Good. ${responseTime.toFixed(2)}s using ${testedToolModel}.`,
+      };
+    } else if (responseTime < 5) {
+      toolModelTestResult.value = {
+        status: 'warning',
+        message: `Slow. ${responseTime.toFixed(2)}s using ${testedToolModel}.`,
+      };
     } else {
       toolModelTestResult.value = {
         status: 'error',
-        message: `Test failed: ${result.error || 'Unknown error'}`,
+        message: `Unusable. ${responseTime.toFixed(2)}s using ${testedToolModel}.`,
       };
     }
   } catch (error: unknown) {
     toolModelTestResult.value = {
       status: 'error',
-      message: `Test failed: ${getErrorMessage(error)}`,
+      message: `Latency test failed: ${getErrorMessage(error)}`,
     };
   } finally {
     isTestingModel.value = false;
   }
 };
 
-// Get provider type for a model
-const getProviderTypeForModel = (model: string): string => {
-  for (const provider of availableProvidersWithModels.value) {
-    if (provider.models.includes(model)) {
-      return provider.type;
-    }
-  }
-  return 'openai'; // Default fallback
-};
-
-const updateToolModel = <K extends keyof AppConfig['toolModel']>(
-  key: K,
-  value: AppConfig['toolModel'][K]
-) => {
-  config.value.toolModel[key] = value;
-  autoSave();
-};
-
 const updateToolModelSelection = (value: string) => {
-  updateToolModel('model', value);
+  toolModelTestResult.value = null;
+
+  if (value === AUTO_DETECT_TOOL_MODEL_VALUE) {
+    config.value.toolModel.providerType = '';
+    config.value.toolModel.model = '';
+    autoSave();
+    return;
+  }
+
+  const selection = parseToolModelSelection(value);
+  if (!selection) {
+    settingsViewLogger.event({
+      level: 'warn',
+      event: 'settings.tool_model.selection',
+      outcome: 'skipped',
+      message: 'Ignoring invalid tool model selection.',
+      data: {
+        raw_value: value,
+      },
+    });
+    return;
+  }
+
+  config.value.toolModel.providerType = selection.providerType;
+  config.value.toolModel.model = selection.model;
+  autoSave();
 };
 
 const updateToolExecution = <K extends keyof AppConfig['toolExecution']>(

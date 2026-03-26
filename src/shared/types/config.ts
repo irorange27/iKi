@@ -168,6 +168,7 @@ export interface AppConfig {
     prompt: string;
   };
   toolModel: {
+    providerType: string;
     model: string;
   };
   toolExecution: {
