@@ -28,11 +28,10 @@
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between">
-          <span class="selector-panel-title ui-text-primary">Skills</span>
+          <span class="selector-panel-title ui-text-primary">{{ t('chat.skills.title') }}</span>
         </div>
         <div class="selector-panel-description ui-text-muted">
-          Inject reusable instructions (workflows, best practices) into the next response. Skills
-          are loaded from your local filesystem.
+          {{ t('chat.skills.description') }}
         </div>
 
         <div class="selector-panel-toolbar">
@@ -41,22 +40,24 @@
             :class="{ active: isAutoSkillMode }"
             @click="toggleAutoSkillMode"
           >
-            Auto
+            {{ t('chat.tools.auto') }}
           </button>
           <div class="selector-toolbar-spacer" />
           <button class="selector-action-btn" :disabled="isAutoSkillMode" @click="selectAllSkills">
-            Select all
+            {{ t('chat.tools.selectAll') }}
           </button>
           <button class="selector-action-btn" :disabled="isAutoSkillMode" @click="clearAllSkills">
-            Clear
+            {{ t('chat.tools.clear') }}
           </button>
         </div>
         <div v-if="isAutoSkillMode" class="ui-text-accent mt-2 text-xs leading-snug">
-          iKi will automatically pick relevant skills based on your message.
+          {{ t('chat.skills.autoHint') }}
         </div>
       </div>
       <div class="selector-list">
-        <div v-if="availableSkills.length === 0" class="selector-empty-state">No skills found.</div>
+        <div v-if="availableSkills.length === 0" class="selector-empty-state">
+          {{ t('chat.skills.noSkills') }}
+        </div>
         <button
           v-for="skill in availableSkills"
           :key="skill.id"
@@ -101,6 +102,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { SkillSummary } from '../../shared/types/skill';
 import { createLogger } from '../logger';
+import { useI18n } from '../i18n';
 
 const props = defineProps<{
   skillIds: string[];
@@ -114,6 +116,7 @@ const emit = defineEmits<{
 
 const electronAPI = window.electronAPI;
 const skillSelectorLogger = createLogger({ module: 'skill_selector' });
+const { t } = useI18n();
 
 const showSkillSelector = ref(false);
 const availableSkills = ref<SkillSummary[]>([]);

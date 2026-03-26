@@ -27,21 +27,18 @@
         </div>
         <div class="settings-header-right" :class="{ 'is-unsaved': !saved }">
           <span class="unsaved-dot" />
-          <span>{{ saved ? 'All changes saved' : 'Unsaved changes' }}</span>
+          <span>{{ saved ? t('settings.saved.all') : t('settings.saved.unsaved') }}</span>
         </div>
       </div>
       <!-- General -->
       <section v-show="activeSection === 'general'" class="config-section">
         <div class="config-group">
-          <h3>Tool Model</h3>
-          <p class="group-description">
-            Used for background AI tasks separate from your main chat model. Prefer a low-latency
-            model.
-          </p>
+          <h3>{{ t('settings.general.toolModel.title') }}</h3>
+          <p class="group-description">{{ t('settings.general.toolModel.description') }}</p>
           <div class="tool-model-selector">
             <div class="input-label">
               <div class="label-header">
-                <span>Select Tool Model</span>
+                <span>{{ t('settings.general.toolModel.select') }}</span>
                 <button
                   v-if="canTestToolModel"
                   class="test-model-btn"
@@ -49,14 +46,18 @@
                   :disabled="isTestingModel"
                 >
                   <RefreshCw :size="14" :class="{ 'animate-spin': isTestingModel }" />
-                  {{ isTestingModel ? 'Testing...' : 'Test' }}
+                  {{
+                    isTestingModel
+                      ? t('settings.general.toolModel.testing')
+                      : t('settings.general.toolModel.test')
+                  }}
                 </button>
               </div>
               <SettingsSelect
                 class="tool-model-select"
                 :model-value="selectedToolModelOptionValue"
                 :options="toolModelSelectOptions"
-                aria-label="Select Tool Model"
+                :aria-label="t('settings.general.toolModel.select')"
                 @update:model-value="updateToolModelSelection"
               />
             </div>
@@ -68,45 +69,45 @@
             </div>
             <div class="tool-model-info">
               <p class="info-text">
-                <strong>Used for:</strong> Thread title generation, tool selection, parameter
-                extraction, memory operations, and other background tasks.
+                <strong>{{ t('settings.general.toolModel.usedForLabel') }}</strong>
+                {{ t('settings.general.toolModel.usedFor') }}
               </p>
             </div>
           </div>
         </div>
 
         <div class="config-group">
-          <h3>Shell Tool Approval</h3>
+          <h3>{{ t('settings.general.shellApproval.title') }}</h3>
           <p class="group-description">{{ shellApprovalDescription }}</p>
           <div class="input-label">
-            <span>Approval Mode</span>
+            <span>{{ t('settings.general.shellApproval.label') }}</span>
             <SettingsSelect
               class="general-shell-approval-select"
               :model-value="config.toolExecution.shellApprovalMode"
               :options="shellApprovalModeOptions"
               :disabled="config.general.autoApproveToolRequests"
-              aria-label="Shell Tool Approval Mode"
+              :aria-label="t('settings.general.shellApproval.label')"
               @update:model-value="updateShellApprovalMode"
             />
           </div>
         </div>
 
         <div class="config-group">
-          <h3>Language</h3>
+          <h3>{{ t('settings.general.language.title') }}</h3>
           <div class="input-label">
-            <span>Language</span>
+            <span>{{ t('settings.general.language.label') }}</span>
             <SettingsSelect
               class="general-language-select"
               :model-value="config.general.language"
               :options="languageOptions"
-              aria-label="Language"
+              :aria-label="t('settings.general.language.label')"
               @update:model-value="updateLanguageSelection"
             />
           </div>
         </div>
 
         <div class="config-group">
-          <h3>Startup Behavior</h3>
+          <h3>{{ t('settings.general.startupBehavior.title') }}</h3>
           <label
             v-for="key in [
               'startMinimized',
@@ -122,14 +123,14 @@
               :checked="config.general[key as keyof typeof config.general] as boolean"
               @change="updateGeneral(key, ($event.target as HTMLInputElement).checked)"
             />
-            {{ formatLabel(key) }}
+            {{ formatSettingLabel(key) }}
           </label>
         </div>
 
         <div class="config-group">
-          <h3>Permission Requests</h3>
+          <h3>{{ t('settings.general.permissionRequests.title') }}</h3>
           <p class="group-description">
-            Automatically continue tool-enabled turns without waiting for approval prompts.
+            {{ t('settings.general.permissionRequests.description') }}
           </p>
           <button
             type="button"
@@ -139,16 +140,19 @@
             }"
             role="switch"
             :aria-checked="config.general.autoApproveToolRequests ? 'true' : 'false'"
-            aria-label="Automatically approve all tool requests"
+            :aria-label="t('settings.general.permissionRequests.autoApproveAria')"
             @click="toggleAutoApproveToolRequests"
           >
             <span class="permission-request-copy">
-              <span class="permission-request-title">Automatically approve all tool requests</span>
-              <span class="permission-request-description">
-                When enabled, built-in and MCP tools continue immediately without waiting for
-                approval prompts, including shell commands.
+              <span class="permission-request-title">
+                {{ t('settings.general.permissionRequests.autoApproveTitle') }}
               </span>
-              <span class="permission-request-warning">Use with caution.</span>
+              <span class="permission-request-description">
+                {{ t('settings.general.permissionRequests.autoApproveDescription') }}
+              </span>
+              <span class="permission-request-warning">
+                {{ t('settings.general.permissionRequests.autoApproveWarning') }}
+              </span>
             </span>
             <span class="permission-request-switch" aria-hidden="true">
               <span class="permission-request-switch-thumb" />
@@ -156,7 +160,9 @@
           </button>
         </div>
 
-        <button class="reset-btn" @click="resetSection('general')">Reset General</button>
+        <button class="reset-btn" @click="resetSection('general')">
+          {{ t('settings.general.reset') }}
+        </button>
       </section>
 
       <ProvidersSettings v-show="activeSection === 'provider'" />
@@ -188,7 +194,7 @@
       <section v-show="activeSection === 'ui'" class="config-section">
         <div class="config-group">
           <h3>
-            Font Size
+            {{ t('settings.ui.fontSize') }}
             <span class="value-badge">{{ config.ui.fontSize }}px</span>
           </h3>
           <input
@@ -202,7 +208,7 @@
 
         <div class="config-group">
           <h3>
-            Chat Content Padding
+            {{ t('settings.ui.chatContentPadding') }}
             <span class="value-badge">{{ config.ui.chatContentPadding }}px</span>
           </h3>
           <input
@@ -218,7 +224,7 @@
 
         <div class="config-group">
           <h3>
-            Composer Padding
+            {{ t('settings.ui.composerPadding') }}
             <span class="value-badge">{{ config.ui.composerPadding }}px</span>
           </h3>
           <input
@@ -234,7 +240,7 @@
 
         <div class="config-group">
           <h3>
-            Bubble Horizontal Padding
+            {{ t('settings.ui.bubbleHorizontalPadding') }}
             <span class="value-badge">{{ config.ui.messageBubblePaddingX }}px</span>
           </h3>
           <input
@@ -253,7 +259,7 @@
 
         <div class="config-group">
           <h3>
-            Bubble Vertical Padding
+            {{ t('settings.ui.bubbleVerticalPadding') }}
             <span class="value-badge">{{ config.ui.messageBubblePaddingY }}px</span>
           </h3>
           <input
@@ -272,7 +278,7 @@
 
         <div class="config-group">
           <h3>
-            Message Gap
+            {{ t('settings.ui.messageGap') }}
             <span class="value-badge">{{ config.ui.messageGap }}px</span>
           </h3>
           <input
@@ -285,7 +291,7 @@
         </div>
 
         <div class="config-group">
-          <h3>Interface Density</h3>
+          <h3>{{ t('settings.ui.interfaceDensity') }}</h3>
           <div class="density-options">
             <div
               v-for="density in densityOptions"
@@ -300,7 +306,7 @@
           </div>
         </div>
 
-        <button class="reset-btn" @click="resetSection('ui')">Reset UI</button>
+        <button class="reset-btn" @click="resetSection('ui')">{{ t('settings.ui.reset') }}</button>
       </section>
 
       <!-- Network -->
@@ -507,10 +513,10 @@
 
       <!-- Footer operabar -->
       <div class="settings-footer">
-        <span v-if="saved" class="save-status">All changes saved</span>
+        <span v-if="saved" class="save-status">{{ t('settings.saved.all') }}</span>
         <div class="footer-actions">
-          <button class="secondary" @click="$emit('close')">Close</button>
-          <button class="primary" @click="saveAndClose">Save</button>
+          <button class="secondary" @click="$emit('close')">{{ t('common.close') }}</button>
+          <button class="primary" @click="saveAndClose">{{ t('common.save') }}</button>
         </div>
       </div>
     </main>
@@ -546,6 +552,7 @@ import SettingsTasksSection from '../components/settings/SettingsTasksSection.vu
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
 import SettingsSelect from '../components/settings/SettingsSelect.vue';
+import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '../../shared/config/defaults';
@@ -556,6 +563,7 @@ import { formatLabel } from '../components/settings/settings_formatters';
 
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const settingsViewLogger = createLogger({ module: 'settings_view' });
+const { t } = useI18n();
 
 const emit = defineEmits(['close']);
 const configStore = useConfigStore();
@@ -677,7 +685,10 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
 });
 
 const toolModelSelectOptions = computed(() => [
-  { value: AUTO_DETECT_TOOL_MODEL_VALUE, label: 'Auto-detect (Recommended)' },
+  {
+    value: AUTO_DETECT_TOOL_MODEL_VALUE,
+    label: t('settings.general.toolModel.autoDetectRecommended'),
+  },
   ...availableProvidersWithModels.value.map(provider => ({
     label: provider.name,
     options: provider.models.map(model => ({
@@ -687,12 +698,14 @@ const toolModelSelectOptions = computed(() => [
   })),
 ]);
 
-const shellApprovalModeOptions = [{ value: 'always', label: 'Always Require Approval (Required)' }];
+const shellApprovalModeOptions = computed(() => [
+  { value: 'always', label: t('settings.general.shellApproval.alwaysRequired') },
+]);
 
-const languageOptions = [
-  { value: 'en', label: 'English' },
-  { value: 'zh-CN', label: '简体中文' },
-];
+const languageOptions = computed(() => [
+  { value: 'en', label: t('language.english') },
+  { value: 'zh-CN', label: t('language.chineseSimplified') },
+]);
 
 const proxyTypeOptions = [
   { value: 'http', label: 'HTTP' },
@@ -750,8 +763,8 @@ const selectedToolModelOptionValue = computed(() => {
 const canTestToolModel = computed(() => availableProvidersWithModels.value.length > 0);
 const shellApprovalDescription = computed(() =>
   config.value.general.autoApproveToolRequests
-    ? 'Shell approval is currently bypassed because automatic tool approval is enabled below.'
-    : 'Shell commands always require manual approval before execution.'
+    ? t('settings.general.shellApproval.bypassed')
+    : t('settings.general.shellApproval.description')
 );
 
 const formatTestedToolModel = (selection: ToolModelSelection): string =>
@@ -774,7 +787,9 @@ const testToolModel = async () => {
     ) {
       toolModelTestResult.value = {
         status: 'error',
-        message: `Latency test failed: ${result.error || 'Unknown error'}`,
+        message: t('settings.general.toolModel.latencyFailed', {
+          error: result.error || 'Unknown error',
+        }),
       };
       return;
     }
@@ -788,23 +803,34 @@ const testToolModel = async () => {
     if (responseTime < 2.5) {
       toolModelTestResult.value = {
         status: 'success',
-        message: `Good. ${responseTime.toFixed(2)}s using ${testedToolModel}.`,
+        message: t('settings.general.toolModel.good', {
+          time: responseTime.toFixed(2),
+          model: testedToolModel,
+        }),
       };
     } else if (responseTime < 5) {
       toolModelTestResult.value = {
         status: 'warning',
-        message: `Slow. ${responseTime.toFixed(2)}s using ${testedToolModel}.`,
+        message: t('settings.general.toolModel.slow', {
+          time: responseTime.toFixed(2),
+          model: testedToolModel,
+        }),
       };
     } else {
       toolModelTestResult.value = {
         status: 'error',
-        message: `Unusable. ${responseTime.toFixed(2)}s using ${testedToolModel}.`,
+        message: t('settings.general.toolModel.unusable', {
+          time: responseTime.toFixed(2),
+          model: testedToolModel,
+        }),
       };
     }
   } catch (error: unknown) {
     toolModelTestResult.value = {
       status: 'error',
-      message: `Latency test failed: ${getErrorMessage(error)}`,
+      message: t('settings.general.toolModel.latencyFailed', {
+        error: getErrorMessage(error),
+      }),
     };
   } finally {
     isTestingModel.value = false;
@@ -854,31 +880,26 @@ const updateShellApprovalMode = (value: string) => {
   }
 };
 
-const menuItems = [
-  { key: 'general', label: 'General', icon: Cog },
-  { key: 'provider', label: 'Providers', icon: Bot },
-  { key: 'mcp', label: 'MCP', icon: Plug },
-  { key: 'bridges', label: 'Bridges', icon: Bot },
-  { key: 'usage', label: 'Usage', icon: BarChart3 },
-  { key: 'skills', label: 'Skills', icon: Wand2 },
-  { key: 'memory', label: 'Memory', icon: Brain },
-  { key: 'life', label: 'Life', icon: Activity },
-  { key: 'ui', label: 'User Interface', icon: SlidersHorizontal },
-  { key: 'colorScheme', label: 'Color Scheme', icon: Palette },
-  { key: 'speech', label: 'Speech', icon: Mic },
-  { key: 'tasks', label: 'Tasks', icon: AlarmClock },
-  // { key: "chat", label: "Chat", icon: MessageCircleMore },
-  // { key: "network", label: "Network", icon: Globe },
-  // { key: "security", label: "Security", icon: Lock },
-  // { key: "advanced", label: "Advanced", icon: Zap },
-  // { key: "keybindings", label: "Keybindings", icon: Keyboard },
-];
+const menuItems = computed(() => [
+  { key: 'general', label: t('settings.menu.general'), icon: Cog },
+  { key: 'provider', label: t('settings.menu.provider'), icon: Bot },
+  { key: 'mcp', label: t('settings.menu.mcp'), icon: Plug },
+  { key: 'bridges', label: t('settings.menu.bridges'), icon: Bot },
+  { key: 'usage', label: t('settings.menu.usage'), icon: BarChart3 },
+  { key: 'skills', label: t('settings.menu.skills'), icon: Wand2 },
+  { key: 'memory', label: t('settings.menu.memory'), icon: Brain },
+  { key: 'life', label: t('settings.menu.life'), icon: Activity },
+  { key: 'ui', label: t('settings.menu.ui'), icon: SlidersHorizontal },
+  { key: 'colorScheme', label: t('settings.menu.colorScheme'), icon: Palette },
+  { key: 'speech', label: t('settings.menu.speech'), icon: Mic },
+  { key: 'tasks', label: t('settings.menu.tasks'), icon: AlarmClock },
+]);
 
 const activeSectionMeta = computed(() => {
   return (
-    menuItems.find(item => item.key === activeSection.value) || {
+    menuItems.value.find(item => item.key === activeSection.value) || {
       key: activeSection.value,
-      label: 'Settings',
+      label: t('settings.fallbackTitle'),
       icon: Cog,
     }
   );
@@ -887,11 +908,23 @@ const activeSectionMeta = computed(() => {
 const activeSectionLabel = computed(() => activeSectionMeta.value.label);
 const activeSectionIcon = computed(() => activeSectionMeta.value.icon);
 
-const densityOptions = [
-  { key: 'compact' as const, label: 'Compact' },
-  { key: 'comfortable' as const, label: 'Comfortable' },
-  { key: 'spacious' as const, label: 'Spacious' },
-];
+const densityOptions = computed(() => [
+  { key: 'compact' as const, label: t('settings.ui.compact') },
+  { key: 'comfortable' as const, label: t('settings.ui.comfortable') },
+  { key: 'spacious' as const, label: t('settings.ui.spacious') },
+]);
+
+const formatSettingLabel = (key: string): string => {
+  const translatedLabels: Record<string, string> = {
+    startMinimized: t('settings.general.startMinimized'),
+    minimizeToTray: t('settings.general.minimizeToTray'),
+    closeToTray: t('settings.general.closeToTray'),
+    autoUpdate: t('settings.general.autoUpdate'),
+    quickChatHideOnBlur: t('settings.general.quickChatHideOnBlur'),
+  };
+
+  return translatedLabels[key] || formatLabel(key);
+};
 
 // 自动保存防抖
 let saveTimer: ReturnType<typeof setTimeout> | undefined;

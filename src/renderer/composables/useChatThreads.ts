@@ -8,6 +8,7 @@ import { isObjectRecord } from '../../shared/utils/guards';
 import type { ChatMessage, ChatThread as StoredChatThread } from '../../shared/types/chat';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import { createLogger } from '../logger';
+import { getCurrentLocale, translateWithLocale } from '../i18n';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 
@@ -20,6 +21,10 @@ type SidebarController = {
 
 const TITLE_REGEN_INTERVAL = 2;
 const chatThreadsLogger = createLogger({ module: 'chat_threads' });
+const DEFAULT_THREAD_TITLES = new Set([
+  translateWithLocale('en', 'chat.thread.newTitle'),
+  translateWithLocale('zh-CN', 'chat.thread.newTitle'),
+]);
 
 export const useChatThreads = (deps: {
   electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
@@ -131,7 +136,7 @@ export const useChatThreads = (deps: {
   const shouldRegenerateThreadTitle = (messages: UIMessage[], currentTitle: string): boolean => {
     const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
     if (assistantMessageCount === 0) return false;
-    if (currentTitle === 'New Chat') return true;
+    if (DEFAULT_THREAD_TITLES.has(currentTitle)) return true;
     return assistantMessageCount % TITLE_REGEN_INTERVAL === 0;
   };
 
@@ -175,7 +180,7 @@ export const useChatThreads = (deps: {
   const createNewThread = async (model?: string) => {
     try {
       const thread = await deps.electronAPI.chat.threads.create({
-        title: 'New Chat',
+        title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
         model: model || null,
         metadata: JSON.stringify({}),
         is_incognito: isIncognito.value ? 1 : 0,

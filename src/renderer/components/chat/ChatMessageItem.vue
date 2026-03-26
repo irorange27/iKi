@@ -1,10 +1,7 @@
 <template>
   <div class="message-wrapper" :class="message.role">
     <div class="message-shell">
-      <ChatMessageReferences
-        v-if="message.role === 'assistant'"
-        :message="message"
-      />
+      <ChatMessageReferences v-if="message.role === 'assistant'" :message="message" />
 
       <div class="message-content">
         <ChatMessageParts
@@ -22,8 +19,8 @@
         <button
           class="message-action-btn"
           type="button"
-          data-tooltip="Edit"
-          aria-label="Edit"
+          :data-tooltip="t('chat.edit.label')"
+          :aria-label="t('chat.edit.label')"
           @click.stop="emit('edit-user-message', message)"
         >
           <Pencil class="message-action-icon" :size="14" />
@@ -36,6 +33,7 @@
 <script setup lang="ts">
 import type { UIMessage } from 'ai';
 import { Pencil } from 'lucide-vue-next';
+import { useI18n } from '../../i18n';
 
 import ChatMessageReferences from './ChatMessageReferences.vue';
 import ChatMessageParts from './ChatMessageParts.vue';
@@ -60,6 +58,8 @@ const emit = defineEmits<{
   ): void;
   (event: 'edit-user-message', message: UIMessage): void;
 }>();
+
+const { t } = useI18n();
 </script>
 
 <style scoped>

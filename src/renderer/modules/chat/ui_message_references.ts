@@ -2,6 +2,7 @@ import type { UIMessage } from 'ai';
 import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
 import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
 import type { AppConfig } from '../../../shared/types/config';
+import { translate } from '../../i18n';
 
 import {
   isAffectSignalPart,
@@ -288,9 +289,7 @@ export const getSelectedSkillReferenceSummary = (
 export const getSkillReferenceSummary = (message: UIMessage | unknown): SkillReferenceSummary => {
   const parts = getMessageParts(message);
   const selectedSummary = getSelectedSkillReferenceSummary(message);
-  const selectedById = new Map(
-    selectedSummary.selectedItems.map(item => [item.id, item] as const)
-  );
+  const selectedById = new Map(selectedSummary.selectedItems.map(item => [item.id, item] as const));
 
   const loadedById = new Map<string, SkillReferenceItem>();
   for (const part of parts) {
@@ -382,7 +381,8 @@ export const getAffectReferenceSummary = (message: UIMessage | unknown): AffectR
   }
 
   return {
-    source: affectPart.source === 'history' || affectPart.source === 'realtime' ? affectPart.source : '',
+    source:
+      affectPart.source === 'history' || affectPart.source === 'realtime' ? affectPart.source : '',
     guardActive: affectPart.guardActive === true,
     label: isAffectLabel(affectPart.label) ? affectPart.label : '',
     confidence: toScore(affectPart.confidence),
@@ -396,7 +396,9 @@ export const getAffectReferenceSummary = (message: UIMessage | unknown): AffectR
   };
 };
 
-export const getContextReferenceSummary = (message: UIMessage | unknown): ContextReferenceSummary => {
+export const getContextReferenceSummary = (
+  message: UIMessage | unknown
+): ContextReferenceSummary => {
   const parts = getMessageParts(message);
   const contextPart = parts.find(part => isContextReportPart(part));
 
@@ -413,9 +415,7 @@ export const getContextReferenceSummary = (message: UIMessage | unknown): Contex
   const items = rawBlocks
     .filter(
       (entry): entry is ContextReportItem =>
-        isObjectRecord(entry) &&
-        typeof entry.kind === 'string' &&
-        typeof entry.status === 'string'
+        isObjectRecord(entry) && typeof entry.kind === 'string' && typeof entry.status === 'string'
     )
     .map(entry => ({
       kind: normalizeText(entry.kind),
@@ -436,7 +436,9 @@ export const getContextReferenceSummary = (message: UIMessage | unknown): Contex
 
 export const formatContextTokenCount = (tokens: number | null): string => {
   if (tokens === null || !Number.isFinite(tokens)) return '';
-  return `${Math.max(0, Math.trunc(tokens)).toLocaleString()} tok`;
+  return translate('chat.contextUsage.tokenCount', {
+    value: Math.max(0, Math.trunc(tokens)).toLocaleString(),
+  });
 };
 
 export const getContextBudgetTokens = (
@@ -479,25 +481,38 @@ export const buildContextUsageIndicator = (
   const tokenLabel = formatContextTokenCount(usedTokens);
 
   const detailLines = summary.items.map(item => {
-    const detailParts = [`${item.kind}: ${item.status}`];
-    if (item.estimatedTokens !== null) {
-      detailParts.push(formatContextTokenCount(item.estimatedTokens));
-    }
-    if (item.reason) {
-      detailParts.push(item.reason);
-    }
-    return detailParts.join(' · ');
+    return translate('chat.contextUsage.detailLine', {
+      kind: item.kind,
+      status: item.status,
+      tokens:
+        item.estimatedTokens !== null ? formatContextTokenCount(item.estimatedTokens) : undefined,
+      reason: item.reason,
+    });
   });
 
   const tooltipLines = [
     budgetTokens > 0
-      ? `Context usage: ${tokenLabel} / ${budgetTokens.toLocaleString()} tok${percentLabel ? ` (${percentLabel})` : ''}`
-      : `Context usage: ${tokenLabel}`,
+      ? translate('chat.contextUsage.headerWithBudget', {
+          used: tokenLabel,
+          budget: budgetTokens.toLocaleString(),
+          percent: percentLabel,
+        })
+      : translate('chat.contextUsage.headerWithoutBudget', {
+          used: tokenLabel,
+        }),
     ...(summary.retainedRecentMessages !== null
-      ? [`Recent messages kept: ${Math.trunc(summary.retainedRecentMessages)}`]
+      ? [
+          translate('chat.contextUsage.recentMessagesKept', {
+            count: Math.trunc(summary.retainedRecentMessages),
+          }),
+        ]
       : []),
     ...(summary.compactedMessages !== null && summary.compactedMessages > 0
-      ? [`Compacted messages: ${Math.trunc(summary.compactedMessages)}`]
+      ? [
+          translate('chat.contextUsage.compactedMessages', {
+            count: Math.trunc(summary.compactedMessages),
+          }),
+        ]
       : []),
     ...detailLines,
   ];

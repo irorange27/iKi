@@ -12,7 +12,7 @@
       <!-- Header -->
       <div class="flex items-center justify-center p-4">
         <div class="ui-text-secondary flex items-center gap-1 text-sm">
-          <span>{{ chatMessages.length }} messages</span>
+          <span>{{ t('chat.messagesCount', { count: chatMessages.length }) }}</span>
           <span v-if="currentThread">·</span>
           <FolderOpen v-if="currentThread" :size="12" />
           <span v-if="currentThread">{{ currentThread.title }}</span>
@@ -55,10 +55,12 @@
       <div class="composer-area">
         <div v-if="editingUserMessageId" class="edit-banner">
           <div class="edit-banner-text">
-            <strong>Editing a previous message.</strong> Resending will remove later messages in
-            this thread.
+            <strong>{{ t('chat.editingBanner.title') }}</strong>
+            {{ t('chat.editingBanner.body') }}
           </div>
-          <button class="edit-banner-cancel" type="button" @click="cancelEditing">Cancel</button>
+          <button class="edit-banner-cancel" type="button" @click="cancelEditing">
+            {{ t('common.cancel') }}
+          </button>
         </div>
         <ChatInput
           ref="chatInputRef"
@@ -86,6 +88,7 @@ import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import { FolderOpen } from 'lucide-vue-next';
+import { useI18n } from '../i18n';
 import {
   buildContextUsageIndicator,
   getContextReferenceSummary,
@@ -109,6 +112,7 @@ type ChatInputExpose = {
 };
 
 const electronAPI = window.electronAPI as ElectronApi;
+const { t } = useI18n();
 
 const configStore = useConfigStore();
 

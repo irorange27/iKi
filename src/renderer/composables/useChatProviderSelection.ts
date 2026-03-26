@@ -4,6 +4,7 @@ import type { ElectronApi } from '../../shared/types/electron_api';
 import type { Provider } from '../../shared/types/provider';
 import { createLogger } from '../logger';
 import { parseModelList } from '../../shared/utils/provider_models';
+import { translate } from '../i18n';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
 
 const providerSelectionLogger = createLogger({ module: 'chat_provider_selection' });
@@ -27,7 +28,8 @@ export const resolveProviderSelection = (params: {
     };
   }
 
-  const preferredModel = typeof params.preferredModel === 'string' ? params.preferredModel.trim() : '';
+  const preferredModel =
+    typeof params.preferredModel === 'string' ? params.preferredModel.trim() : '';
   const currentModel = params.currentModel.trim();
   const previousProviderId = params.currentProvider?.id;
   const previousProvider =
@@ -35,7 +37,9 @@ export const resolveProviderSelection = (params: {
   const previousProviderModels = previousProvider ? parseModelList(previousProvider.models) : [];
   const findProviderForModel = (model: string): Provider | null => {
     if (!model) return null;
-    return availableProviders.find(provider => parseModelList(provider.models).includes(model)) || null;
+    return (
+      availableProviders.find(provider => parseModelList(provider.models).includes(model)) || null
+    );
   };
   const selectedProvider =
     (preferredModel && previousProviderModels.includes(preferredModel) ? previousProvider : null) ||
@@ -82,7 +86,9 @@ export const useChatProviderSelection = (deps: {
   const loadAvailableProviders = async (preferredModel?: string | null) => {
     try {
       const providers = await deps.electronAPI.providers.list();
-      availableProviders.value = Array.isArray(providers) ? providers.filter(provider => provider?.enabled) : [];
+      availableProviders.value = Array.isArray(providers)
+        ? providers.filter(provider => provider?.enabled)
+        : [];
       applyResolvedSelection(preferredModel);
     } catch (error) {
       providerSelectionLogger.event({
@@ -121,7 +127,7 @@ export const useChatProviderSelection = (deps: {
     if (!selectedProvider.value) {
       return {
         ok: false,
-        message: 'Please configure a provider in Settings first.',
+        message: translate('chat.provider.configureFirst'),
       };
     }
 
@@ -142,20 +148,20 @@ export const useChatProviderSelection = (deps: {
       });
       return {
         ok: false,
-        message: `Failed to verify the ${selectedProviderName} provider configuration. Please try again.`,
+        message: translate('chat.provider.verifyFailed', { provider: selectedProviderName }),
       };
     }
     if (!configured) {
       return {
         ok: false,
-        message: `Please configure the ${selectedProviderName} API key in Settings.`,
+        message: translate('chat.provider.configureApiKey', { provider: selectedProviderName }),
       };
     }
 
     if (!selectedModel.value.trim()) {
       return {
         ok: false,
-        message: `Please add at least one model for ${selectedProviderName} in Settings.`,
+        message: translate('chat.provider.modelRequired', { provider: selectedProviderName }),
       };
     }
 

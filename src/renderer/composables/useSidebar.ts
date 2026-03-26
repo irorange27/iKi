@@ -4,6 +4,7 @@ let globalSidebarState: ReturnType<typeof createSidebarState> | null = null;
 
 function createSidebarState(initialState = true) {
   const width = ref<number>(200);
+  const showExternalChats = ref(false);
 
   const setWidth = (newWidth: number): void => {
     width.value = Math.min(Math.max(newWidth, 190), 500);
@@ -25,12 +26,23 @@ function createSidebarState(initialState = true) {
     isExpanded.value = !isExpanded.value;
   };
 
+  const setShowExternalChats = (nextValue: boolean): void => {
+    showExternalChats.value = Boolean(nextValue);
+  };
+
+  const toggleExternalChats = (): void => {
+    showExternalChats.value = !showExternalChats.value;
+  };
+
   return {
     isExpanded: readonly(isExpanded),
     isCollapsed: readonly(isCollapsed),
+    showExternalChats: readonly(showExternalChats),
     expand,
     collapse,
     toggle,
+    setShowExternalChats,
+    toggleExternalChats,
     width: readonly(width),
     setWidth,
   };

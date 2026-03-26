@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 import { useChatThreads } from '../../../src/renderer/composables/useChatThreads';
+import { setLocale } from '../../../src/renderer/i18n';
 import type { ChatThread } from '../../../src/shared/types/chat';
 
 const createStoredThread = (overrides: Partial<ChatThread> = {}): ChatThread => ({
@@ -34,11 +35,7 @@ const createHarness = (initialThreads: ChatThread[] = []) => {
       model: typeof input.model === 'string' ? input.model : undefined,
       metadata: typeof input.metadata === 'string' ? input.metadata : '{}',
       is_incognito:
-        typeof input.is_incognito === 'number'
-          ? input.is_incognito
-          : input.is_incognito
-            ? 1
-            : 0,
+        typeof input.is_incognito === 'number' ? input.is_incognito : input.is_incognito ? 1 : 0,
       workspace_id:
         typeof input.workspace_id === 'string' && input.workspace_id.trim().length > 0
           ? input.workspace_id
@@ -115,6 +112,10 @@ const createHarness = (initialThreads: ChatThread[] = []) => {
 };
 
 describe('useChatThreads', () => {
+  afterEach(() => {
+    setLocale('en');
+  });
+
   it('keeps draft incognito state before thread creation and persists it into the new thread', async () => {
     const { state, createThread, updateThread } = createHarness();
 
@@ -234,5 +235,18 @@ describe('useChatThreads', () => {
 
     await state.selectThread(unscopedThread.id);
     expect(state.selectedWorkspaceId.value).toBeNull();
+  });
+
+  it('creates a localized default thread title when the app locale is Chinese', async () => {
+    setLocale('zh-CN');
+    const { state, createThread } = createHarness();
+
+    await state.createNewThread('gpt-4.1');
+
+    expect(createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '新对话',
+      })
+    );
   });
 });

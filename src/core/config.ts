@@ -1,6 +1,7 @@
 import type { AppConfig } from '../shared/types/config';
 import { createDefaultAppConfig } from '../shared/config/defaults';
 import { normalizeAppConfig } from '../shared/config/normalize';
+import { normalizeAppLocale } from '../shared/i18n/locale';
 import { getConfig, setConfig } from './db/database';
 import { getDisplayScale, getLocale, getTheme } from './platform';
 
@@ -15,7 +16,7 @@ function getSystemConfig(): AppConfig {
   config.ui.fontSize = scale > 1.5 ? 16 : 14;
   // Use spacious layout for high-resolution displays
   config.ui.density = scale > 1.25 ? 'spacious' : scale < 1 ? 'compact' : 'comfortable';
-  config.general.language = locale || config.general.language;
+  config.general.language = normalizeAppLocale(locale);
   config.general.theme = getTheme();
   // Automatically identify OS settings for keybindings
   config.keybindings.openSettings = process.platform === 'darwin' ? 'Cmd+,' : 'Ctrl+,';

@@ -34,11 +34,10 @@
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between">
-          <span class="selector-panel-title ui-text-primary">Tools</span>
+          <span class="selector-panel-title ui-text-primary">{{ t('chat.tools.title') }}</span>
         </div>
         <div class="selector-panel-description ui-text-muted">
-          Allow iKi to use built-in tools for the next response. Auto mode considers all built-in
-          tools plus all tools from enabled MCP servers.
+          {{ t('chat.tools.description') }}
         </div>
 
         <div class="selector-panel-toolbar">
@@ -47,7 +46,7 @@
             :class="{ active: isAutoToolMode }"
             @click="toggleAutoToolMode"
           >
-            Auto
+            {{ t('chat.tools.auto') }}
           </button>
           <div class="selector-toolbar-spacer" />
           <button
@@ -55,21 +54,21 @@
             :disabled="isAutoToolMode"
             @click="selectAllBuiltinTools"
           >
-            Select all
+            {{ t('chat.tools.selectAll') }}
           </button>
           <button class="selector-action-btn" :disabled="isAutoToolMode" @click="clearBuiltinTools">
-            Clear
+            {{ t('chat.tools.clear') }}
           </button>
         </div>
 
         <div v-if="isAutoToolMode" class="ui-text-accent mt-2 text-xs leading-snug">
-          Auto considers all built-in tools plus all tools from the MCP servers enabled below.
+          {{ t('chat.tools.autoDescription') }}
         </div>
       </div>
 
       <div class="selector-list">
         <div v-if="builtinTools.length === 0" class="selector-empty-state">
-          No built-in tools available.
+          {{ t('chat.tools.noBuiltins') }}
         </div>
         <button
           v-for="tool in builtinTools"
@@ -123,7 +122,9 @@
                   d="M8 7V5a2 2 0 114 0v2m4 0h1a2 2 0 012 2v2a2 2 0 01-2 2h-1m-8-6H7a2 2 0 00-2 2v2a2 2 0 002 2h1m8 0v2a2 2 0 11-4 0v-2m-4 0v2a2 2 0 104 0v-2"
                 />
               </svg>
-              <span class="ui-text-primary text-sm font-semibold">MCP Servers</span>
+              <span class="ui-text-primary text-sm font-semibold">{{
+                t('chat.tools.mcpServers')
+              }}</span>
               <svg
                 class="selector-chevron h-4 w-4"
                 :class="{ expanded: isMcpSectionExpanded }"
@@ -143,7 +144,7 @@
             <button
               class="selector-icon-btn"
               :disabled="mcpServersLoading"
-              title="Refresh MCP servers"
+              :title="t('chat.tools.refreshMcpTitle')"
               @click.stop="refreshMcpServers"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,20 +160,23 @@
 
           <template v-if="isMcpSectionExpanded">
             <div class="selector-subsection-description ui-text-muted">
-              Enable MCP servers for this conversation. Manual mode exposes all tools from enabled
-              servers. Auto mode also considers all tools from enabled servers.
+              {{ t('chat.tools.mcpDescription') }}
             </div>
 
             <div class="selector-panel-toolbar">
-              <button class="selector-action-btn" @click="selectAllMcpServers">Select all</button>
-              <button class="selector-action-btn" @click="clearAllMcpServers">Clear</button>
+              <button class="selector-action-btn" @click="selectAllMcpServers">
+                {{ t('chat.tools.selectAll') }}
+              </button>
+              <button class="selector-action-btn" @click="clearAllMcpServers">
+                {{ t('chat.tools.clear') }}
+              </button>
             </div>
 
             <div v-if="mcpServersLoading" class="mt-3 selector-empty-state">
-              Loading MCP servers...
+              {{ t('chat.tools.loadingMcp') }}
             </div>
             <div v-else-if="mcpServerEntries.length === 0" class="mt-3 selector-empty-state">
-              No MCP servers configured.
+              {{ t('chat.tools.noMcp') }}
             </div>
             <div v-else class="mt-3 selector-section-stack">
               <button
@@ -223,6 +227,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { McpServerSummary } from '../../shared/types/mcp';
 import { createLogger } from '../logger';
+import { useI18n } from '../i18n';
 
 interface ToolSummary {
   name: string;
@@ -259,6 +264,7 @@ const emit = defineEmits<{
 
 const electronAPI = window.electronAPI;
 const toolSelectorLogger = createLogger({ module: 'tool_selector' });
+const { t } = useI18n();
 
 const showToolSelector = ref(false);
 const availableTools = ref<ToolSummary[]>([]);
@@ -303,8 +309,7 @@ const normalizeTools = (input: unknown): ToolSummary[] => {
       description: typeof description === 'string' ? description : '',
       displayName: typeof displayName === 'string' ? displayName : undefined,
       autoAllowed: autoAllowed === true,
-      source:
-        source && typeof source === 'object' ? (source as ToolSummary['source']) : undefined,
+      source: source && typeof source === 'object' ? (source as ToolSummary['source']) : undefined,
     });
   }
   return normalized;
@@ -418,16 +423,16 @@ const mcpServerEntries = computed<McpServerEntry[]>(() => {
     const toolCount = toolCountByServer.get(server.id) ?? server.status?.toolCount ?? 0;
     const state = server.status?.state ?? (toolCount > 0 ? 'connected' : 'disconnected');
     const selectable = Boolean(server.enabled) && state === 'connected' && toolCount > 0;
-    const toolLabel = `${toolCount} tool${toolCount === 1 ? '' : 's'}`;
+    const toolLabel = t('chat.tools.toolCount', { count: toolCount });
     const statusLabel = !server.enabled
-      ? 'Disabled'
+      ? t('chat.tools.statusDisabled')
       : state === 'connected'
-        ? 'Connected'
+        ? t('chat.tools.statusConnected')
         : state === 'connecting'
-          ? 'Connecting'
+          ? t('chat.tools.statusConnecting')
           : state === 'error'
-            ? 'Error'
-            : 'Disconnected';
+            ? t('chat.tools.statusError')
+            : t('chat.tools.statusDisconnected');
     const metaParts = [toolLabel];
     if (state === 'error' && server.status?.lastError) {
       metaParts.push(server.status.lastError);
@@ -453,8 +458,8 @@ const mcpServerEntries = computed<McpServerEntry[]>(() => {
     entries.set(serverId, {
       id: serverId,
       name: toolNameByServer.get(serverId) || serverId,
-      meta: `${toolCount} tool${toolCount === 1 ? '' : 's'}`,
-      statusLabel: 'Connected',
+      meta: t('chat.tools.toolCount', { count: toolCount }),
+      statusLabel: t('chat.tools.statusConnected'),
       statusToneClass: 'status-connected',
       selectable: toolCount > 0,
     });

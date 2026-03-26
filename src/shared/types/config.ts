@@ -6,6 +6,7 @@ import type {
   StructuredLogOutcome,
   StructuredLogProcess,
 } from './logging';
+import type { SupportedLocale } from '../i18n/locale';
 
 export interface ConfigRuntimeInfo {
   userDataPath: string;
@@ -69,7 +70,7 @@ export interface DaemonControlResult {
 
 export interface AppConfig {
   general: {
-    language: string | 'zh' | 'en';
+    language: SupportedLocale;
     theme: 'light' | 'dark' | 'system';
     themePresetId: string;
     autoUpdate: boolean;

@@ -9,7 +9,7 @@
     <h1 class="ui-text-primary font-serif text-5xl font-normal">iKi</h1>
 
     <!-- Subtitle -->
-    <p class="ui-text-secondary">An elegant desktop for AI provider orchestration</p>
+    <p class="ui-text-secondary">{{ t('chat.welcome.subtitle') }}</p>
 
     <!-- Buttons -->
     <div class="flex w-full flex-col gap-3">
@@ -17,32 +17,35 @@
         class="w-full rounded-lg px-6 py-3 text-base font-medium text-white transition-colors btn-primary"
         @click="$emit('new-chat')"
       >
-        New Chat
+        {{ t('chat.newChat') }}
       </button>
       <div class="flex gap-3">
         <button
           class="flex-1 rounded-lg border bg-transparent px-6 py-3 text-white text-base font-small transition-colors btn-secondary"
         >
-          Configure Provider
+          {{ t('chat.welcome.configureProvider') }}
         </button>
         <button
           class="flex-1 rounded-lg border bg-transparent px-6 py-3 text-white text-base font-small transition-colors btn-secondary"
           @click="openSettings"
         >
-          Settings
+          {{ t('chat.welcome.settings') }}
         </button>
       </div>
     </div>
 
     <!-- Info Text -->
-    <p class="ui-text-muted text-sm">Please configure at least one AI provider to start chatting</p>
+    <p class="ui-text-muted text-sm">{{ t('chat.welcome.configureHint') }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '../i18n';
+
 defineEmits(['new-chat']);
 
 const electronAPI = window.electronAPI;
+const { t } = useI18n();
 
 const openSettings = () => {
   electronAPI?.openSettings?.();

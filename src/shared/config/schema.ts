@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { AppConfig } from '../types/config';
 import { DEFAULT_APP_CONFIG } from './defaults';
 import { Base46ThemePresetInputSchema } from '../theme/base46_schema';
+import { normalizeAppLocale } from '../i18n/locale';
 
 const booleanField = (value: boolean) => z.boolean().catch(value);
 const numberField = (value: number) => z.number().finite().catch(value);
@@ -12,7 +13,10 @@ const stringArrayField = (value: string[]) => z.array(z.string()).catch(value);
 
 const GeneralSchema = z
   .object({
-    language: stringField(DEFAULT_APP_CONFIG.general.language),
+    language: z
+      .string()
+      .transform(value => normalizeAppLocale(value))
+      .catch(DEFAULT_APP_CONFIG.general.language),
     theme: z.enum(['light', 'dark', 'system']).catch(DEFAULT_APP_CONFIG.general.theme),
     themePresetId: stringField(DEFAULT_APP_CONFIG.general.themePresetId),
     autoUpdate: booleanField(DEFAULT_APP_CONFIG.general.autoUpdate),

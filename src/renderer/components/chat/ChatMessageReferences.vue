@@ -1,13 +1,9 @@
 <template>
   <div v-if="hasSummary" class="chat-message-references">
     <div class="reference-summary">
-      <span
-        v-if="affectSummary.label"
-        class="reference-summary-item"
-        :data-tooltip="affectTooltip"
-      >
+      <span v-if="affectSummary.label" class="reference-summary-item" :data-tooltip="affectTooltip">
         <Heart :size="14" class="reference-summary-icon" />
-        affect
+        {{ t('chat.references.affect') }}
       </span>
       <span
         v-if="memorySummary.items.length > 0"
@@ -15,15 +11,11 @@
         :data-tooltip="memoryTooltip"
       >
         <Brain :size="14" class="reference-summary-icon" />
-        {{ memorySummary.items.length }} memories
+        {{ t('chat.references.memories', { count: memorySummary.items.length }) }}
       </span>
-      <span
-        v-if="toolSummary.count > 0"
-        class="reference-summary-item"
-        :data-tooltip="toolTooltip"
-      >
+      <span v-if="toolSummary.count > 0" class="reference-summary-item" :data-tooltip="toolTooltip">
         <Wrench :size="14" class="reference-summary-icon" />
-        {{ toolSummary.count }} tools
+        {{ t('chat.references.tools', { count: toolSummary.count }) }}
       </span>
       <span
         v-if="skillSummary.items.length > 0"
@@ -31,7 +23,7 @@
         :data-tooltip="skillTooltip"
       >
         <Sparkles :size="14" class="reference-summary-icon" />
-        {{ skillSummary.items.length }} skills
+        {{ t('chat.references.skills', { count: skillSummary.items.length }) }}
       </span>
     </div>
   </div>
@@ -41,6 +33,7 @@
 import { computed } from 'vue';
 import type { UIMessage } from 'ai';
 import { Brain, Heart, Sparkles, Wrench } from 'lucide-vue-next';
+import { useI18n } from '../../i18n';
 
 import {
   getAffectReferenceSummary,
@@ -54,6 +47,8 @@ const props = defineProps<{
   message: UIMessage;
 }>();
 
+const { t } = useI18n();
+
 const hasSummary = computed(
   () => props.message.role === 'assistant' && hasReferenceSummary(props.message)
 );
@@ -63,40 +58,48 @@ const memorySummary = computed(() => getMemoryReferenceSummary(props.message));
 const affectSummary = computed(() => getAffectReferenceSummary(props.message));
 
 const toolTooltip = computed(() =>
-  toolSummary.value.names.length > 0
-    ? `Tools: ${toolSummary.value.names.join(', ')}`
-    : 'Tools used in this reply'
+  t('chat.references.toolTooltip', { names: toolSummary.value.names.join(', ') })
 );
 
 const skillTooltip = computed(() => {
-  if (skillSummary.value.items.length === 0) return 'No skills loaded';
+  if (skillSummary.value.items.length === 0) return t('chat.references.noSkillsLoaded');
 
-  const lines = [`Loaded skills: ${skillSummary.value.items.map(skill => skill.name).join(', ')}`];
+  const lines = [
+    t('chat.references.loadedSkills', {
+      names: skillSummary.value.items.map(skill => skill.name).join(', '),
+    }),
+  ];
   if (skillSummary.value.selectedOnlyItems.length > 0) {
     lines.push(
-      `Selected not loaded: ${skillSummary.value.selectedOnlyItems.map(skill => skill.name).join(', ')}`
+      t('chat.references.selectedNotLoaded', {
+        names: skillSummary.value.selectedOnlyItems.map(skill => skill.name).join(', '),
+      })
     );
   }
   if (skillSummary.value.selectedItems.length > 0) {
-    lines.push(`Selection mode: ${skillSummary.value.mode}`);
+    lines.push(t('chat.references.selectionMode', { mode: skillSummary.value.mode }));
   }
   return lines.join('\n');
 });
 
 const memoryTooltip = computed(() =>
   memorySummary.value.query
-    ? `Memory query: ${memorySummary.value.query}`
-    : 'Memory references used in this reply'
+    ? t('chat.references.memoryQuery', { query: memorySummary.value.query })
+    : t('chat.references.memoryFallback')
 );
 
 const affectTooltip = computed(() => {
-  if (!affectSummary.value.label) return 'No affect signal';
+  if (!affectSummary.value.label) return t('chat.references.noAffect');
   const details: string[] = [affectSummary.value.label];
   if (affectSummary.value.confidence !== null) {
-    details.push(`${formatPercent(affectSummary.value.confidence)} confidence`);
+    details.push(
+      t('chat.references.confidence', {
+        value: formatPercent(affectSummary.value.confidence),
+      })
+    );
   }
   if (affectSummary.value.guardActive) {
-    details.push('guarded');
+    details.push(t('chat.references.guarded'));
   }
   return details.join(' · ');
 });

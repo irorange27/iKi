@@ -18,15 +18,23 @@
         'flex pl-20 p-2 max-h-12 flex-shrink-0': !sidebar.isCollapsed.value,
       }"
     >
-      <button class="sidebar-tool-btn icon-btn" @click="sidebar.toggle" aria-label="Toggle sidebar">
+      <button
+        class="sidebar-tool-btn icon-btn"
+        @click="sidebar.toggle"
+        :aria-label="t('chat.sidebar.toggle')"
+      >
         <PanelLeftDashed :size="18" />
       </button>
 
-      <button class="sidebar-tool-btn icon-btn" aria-label="Search">
+      <button class="sidebar-tool-btn icon-btn" :aria-label="t('chat.sidebar.search')">
         <Search :size="18" />
       </button>
 
-      <button class="sidebar-tool-btn icon-btn" aria-label="New chat" @click="handleNewChat">
+      <button
+        class="sidebar-tool-btn icon-btn"
+        :aria-label="t('chat.sidebar.newChat')"
+        @click="handleNewChat"
+      >
         <SquarePen :size="18" />
       </button>
     </div>
@@ -34,24 +42,60 @@
     <div v-if="sidebar.isExpanded.value" class="flex flex-1 min-h-0 pr-2">
       <!-- Chat History -->
       <div class="flex-1 px-3 py-2 min-w-48 overflow-y-scroll custom-scrollbar overscroll-contain">
-        <div v-for="chat in chatThreads" :key="chat.id" class="chat-item-row group relative mb-1">
+        <div
+          v-for="chat in desktopThreads"
+          :key="chat.id"
+          class="chat-item-row group relative mb-1"
+        >
           <button
             class="chat-item w-full truncate rounded-lg px-3 py-2.5 pr-10 text-left text-sm focus:outline-none"
             :class="{ 'chat-item-active': currentThreadId === chat.id }"
+            :title="chat.title"
             @click="selectThread(chat.id)"
           >
-            {{ chat.title }}
+            <span class="chat-item-title">{{ chat.title }}</span>
           </button>
           <button
             class="chat-delete-btn"
             :class="{ 'chat-delete-btn-visible': deletingThreadIds[chat.id] }"
             :disabled="!!deletingThreadIds[chat.id]"
-            aria-label="Delete chat"
+            :aria-label="t('chat.sidebar.deleteChat')"
             @click="handleDeleteThread(chat, $event)"
           >
             <Trash2 :size="14" />
           </button>
         </div>
+
+        <section v-if="shouldShowExternalSection" class="sidebar-section">
+          <div v-if="desktopThreads.length > 0" class="sidebar-section-divider"></div>
+          <div class="sidebar-section-header">
+            <span>{{ t('chat.sidebar.externalChats') }}</span>
+            <span class="sidebar-section-count">{{ externalThreads.length }}</span>
+          </div>
+
+          <div
+            v-for="chat in externalThreads"
+            :key="chat.id"
+            class="chat-item-row chat-item-row-external mb-1"
+          >
+            <button
+              class="chat-item chat-item-external w-full rounded-lg px-3 py-2.5 text-left text-sm focus:outline-none"
+              :class="{ 'chat-item-active': currentThreadId === chat.id }"
+              :title="chat.title"
+              @click="selectThread(chat.id)"
+            >
+              <span class="chat-item-title">{{ chat.title }}</span>
+              <span class="chat-item-meta">
+                <span v-if="getThreadOrigin(chat).sourceLabel" class="chat-item-badge">
+                  {{ getThreadOrigin(chat).sourceLabel }}
+                </span>
+                <span v-if="getThreadOrigin(chat).channelLabel" class="chat-item-channel">
+                  {{ getThreadOrigin(chat).channelLabel }}
+                </span>
+              </span>
+            </button>
+          </div>
+        </section>
       </div>
       <!-- draggable handle -->
       <div
@@ -68,30 +112,74 @@
 
     <!-- Sidebar Footer -->
     <div v-if="sidebar.isExpanded.value" class="relative p-3 mt-auto flex">
-      <button
-        class="sidebar-settings-btn icon-btn ui-text-secondary flex h-8 w-8 items-center justify-center rounded-lg"
-        @click="openSettings"
+      <div
+        ref="menuAnchorRef"
+        class="sidebar-menu-anchor"
+        @mouseenter="openMenu"
+        @mouseleave="closeMenu"
+        @focusin="openMenu"
+        @focusout="handleMenuFocusOut"
       >
-        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"
-          />
-        </svg>
-      </button>
+        <button
+          class="sidebar-menu-btn icon-btn ui-text-secondary flex h-8 w-8 items-center justify-center rounded-lg"
+          :aria-label="t('chat.sidebar.menu')"
+          aria-haspopup="menu"
+          :aria-expanded="isMenuOpen"
+          @click="toggleMenu"
+        >
+          <MoreHorizontal :size="18" />
+        </button>
+        <div v-if="isMenuOpen" class="sidebar-menu" role="menu">
+          <button class="sidebar-menu-item" role="menuitem" @click="handleOpenSettings">
+            <span class="sidebar-menu-item-icon">
+              <Settings2 :size="14" />
+            </span>
+            <span class="sidebar-menu-item-label text-sm">{{ t('chat.welcome.settings') }}</span>
+          </button>
+          <button
+            class="sidebar-menu-item"
+            role="menuitemcheckbox"
+            :aria-checked="sidebar.showExternalChats.value"
+            @click="toggleExternalChats"
+          >
+            <span class="sidebar-menu-item-icon">
+              <MessageSquareShare :size="16" />
+            </span>
+            <span class="sidebar-menu-item-label text-sm">{{
+              t('chat.sidebar.showExternalChats')
+            }}</span>
+            <span
+              class="sidebar-menu-item-check"
+              :class="{ visible: sidebar.showExternalChats.value }"
+            >
+              <Check :size="14" />
+            </span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
-import { PanelLeftDashed, Search, SquarePen, Trash2 } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  Check,
+  MessageSquareShare,
+  MoreHorizontal,
+  PanelLeftDashed,
+  Search,
+  Settings2,
+  SquarePen,
+  Trash2,
+} from 'lucide-vue-next';
 import { createLogger } from '../logger';
+import { useI18n } from '../i18n';
 import { useSidebar } from '../composables/useSidebar';
+import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
 
 const sidebar = useSidebar();
+const { t } = useI18n();
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const sidebarLogger = createLogger({ module: 'sidebar' });
 
@@ -101,46 +189,14 @@ interface ChatThread {
   model?: string;
   updated_at: string;
   client_id?: string;
-  metadata?: string;
+  metadata: string;
 }
 
 const chatThreads = ref<ChatThread[]>([]);
 const currentThreadId = ref<string | null>(null);
 const deletingThreadIds = ref<Record<string, boolean>>({});
-
-const NON_DESKTOP_SOURCES = new Set(['napcat']);
-const NON_DESKTOP_PREFIXES = ['napcat_'];
-
-const parseThreadSource = (metadataRaw: string | undefined): string => {
-  if (!metadataRaw || typeof metadataRaw !== 'string' || !metadataRaw.trim()) return '';
-  try {
-    const parsed = JSON.parse(metadataRaw) as { source?: unknown };
-    return typeof parsed.source === 'string' ? parsed.source.trim().toLowerCase() : '';
-  } catch {
-    return '';
-  }
-};
-
-const isDesktopMainUiThread = (thread: ChatThread): boolean => {
-  const threadId = typeof thread.id === 'string' ? thread.id.trim() : '';
-  if (!threadId) return false;
-
-  if (NON_DESKTOP_PREFIXES.some(prefix => threadId.startsWith(prefix))) {
-    return false;
-  }
-
-  const clientId = typeof thread.client_id === 'string' ? thread.client_id.trim() : '';
-  if (clientId === 'client_napcat') {
-    return false;
-  }
-
-  const source = parseThreadSource(thread.metadata);
-  if (source && NON_DESKTOP_SOURCES.has(source)) {
-    return false;
-  }
-
-  return true;
-};
+const isMenuOpen = ref(false);
+const menuAnchorRef = ref<HTMLElement | null>(null);
 
 // Emit events to parent
 const emit = defineEmits<{
@@ -153,9 +209,7 @@ const emit = defineEmits<{
 const loadChatThreads = async () => {
   try {
     const threads = await electronAPI.chat.threads.list();
-    chatThreads.value = Array.isArray(threads)
-      ? (threads as ChatThread[]).filter(isDesktopMainUiThread)
-      : [];
+    chatThreads.value = Array.isArray(threads) ? (threads as ChatThread[]) : [];
   } catch (error) {
     sidebarLogger.event({
       level: 'error',
@@ -184,7 +238,7 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
 
   if (deletingThreadIds.value[thread.id]) return;
 
-  const confirmed = window.confirm(`Delete "${thread.title}"?\nThis cannot be undone.`);
+  const confirmed = window.confirm(t('chat.sidebar.deleteConfirm', { title: thread.title }));
   if (!confirmed) return;
 
   deletingThreadIds.value[thread.id] = true;
@@ -213,14 +267,74 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
   }
 };
 
-// Watch for thread updates
-watch(
-  () => chatThreads.value,
-  () => {
-    // Threads updated
-  },
-  { deep: true }
+const desktopThreads = computed(() =>
+  chatThreads.value.filter(thread => !isExternalThread(thread))
 );
+const externalThreads = computed(() => chatThreads.value.filter(isExternalThread));
+const isCurrentThreadExternal = computed(() => {
+  const threadId = typeof currentThreadId.value === 'string' ? currentThreadId.value : '';
+  if (!threadId) return false;
+  const activeThread = chatThreads.value.find(thread => thread.id === threadId);
+  return activeThread ? isExternalThread(activeThread) : false;
+});
+const shouldShowExternalSection = computed(
+  () =>
+    externalThreads.value.length > 0 &&
+    (sidebar.showExternalChats.value || isCurrentThreadExternal.value)
+);
+const threadOriginMap = computed(() => {
+  return new Map(chatThreads.value.map(thread => [thread.id, getThreadOriginInfo(thread)]));
+});
+
+const getThreadOrigin = (thread: ChatThread) =>
+  threadOriginMap.value.get(thread.id) ?? getThreadOriginInfo(thread);
+
+const closeMenu = () => {
+  isMenuOpen.value = false;
+};
+
+const openMenu = () => {
+  isMenuOpen.value = true;
+};
+
+const toggleMenu = () => {
+  isMenuOpen.value = !isMenuOpen.value;
+};
+
+const handleOpenSettings = () => {
+  closeMenu();
+  openSettings();
+};
+
+const toggleExternalChats = () => {
+  sidebar.toggleExternalChats();
+  closeMenu();
+};
+
+const handleDocumentPointerDown = (event: PointerEvent) => {
+  if (!isMenuOpen.value) return;
+  const anchor = menuAnchorRef.value;
+  if (!anchor) {
+    closeMenu();
+    return;
+  }
+
+  const target = event.target;
+  if (target instanceof Node && anchor.contains(target)) return;
+  closeMenu();
+};
+
+const handleMenuFocusOut = (event: FocusEvent) => {
+  const anchor = menuAnchorRef.value;
+  if (!anchor) {
+    closeMenu();
+    return;
+  }
+
+  const nextTarget = event.relatedTarget;
+  if (nextTarget instanceof Node && anchor.contains(nextTarget)) return;
+  closeMenu();
+};
 
 // Expose refresh function for parent
 defineExpose({
@@ -232,8 +346,11 @@ defineExpose({
 
 onMounted(() => {
   loadChatThreads();
-  // Refresh threads periodically or when needed
-  // You can also listen to events from ChatView
+  document.addEventListener('pointerdown', handleDocumentPointerDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown);
 });
 
 const MIN_WIDTH = 210; // 最小宽度 (Tailwind w-64)
@@ -312,7 +429,7 @@ const openSettings = () => {
 }
 
 .sidebar-tool-btn,
-.sidebar-settings-btn {
+.sidebar-menu-btn {
   background: none;
   border: none;
   border-radius: 6px;
@@ -349,7 +466,9 @@ const openSettings = () => {
 /* Chat Item Styles */
 .chat-item {
   color: var(--text-secondary);
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .chat-item-row:hover .chat-delete-btn,
@@ -371,6 +490,83 @@ const openSettings = () => {
   background-color: var(--bg-active);
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.chat-item-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-item-external {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 12px;
+}
+
+.chat-item-external .chat-item-title {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.chat-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-item-badge {
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.chat-item-channel {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.sidebar-section {
+  margin-top: 14px;
+}
+
+.sidebar-section-divider {
+  height: 1px;
+  margin-bottom: 12px;
+  background: var(--border-color);
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-section-count {
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 1px 7px;
+  font-size: 10px;
 }
 
 .chat-delete-btn {
@@ -416,6 +612,74 @@ const openSettings = () => {
 .toolbar-container.fixed {
   z-index: 100;
   pointer-events: auto;
+}
+
+.sidebar-menu-anchor {
+  position: relative;
+}
+
+.sidebar-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  min-width: 220px;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  padding: 8px;
+  box-shadow: var(--app-shell-shadow);
+  backdrop-filter: blur(16px);
+  z-index: 60;
+}
+
+.sidebar-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 10px 12px;
+  text-align: left;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.sidebar-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-menu-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.sidebar-menu-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-menu-item-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-color);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sidebar-menu-item-check.visible {
+  opacity: 1;
 }
 
 /* Custom Scrollbar */

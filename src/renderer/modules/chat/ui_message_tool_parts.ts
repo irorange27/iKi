@@ -29,6 +29,7 @@ import {
   type ParsedToolInput,
   type ParsedToolOutput,
 } from '../../../shared/chat/tool_payloads';
+import { translate } from '../../i18n';
 import { getToolUiState, updateToolUiState } from './tool_ui_state';
 
 export {
@@ -51,20 +52,21 @@ export type WebSearchCitation = {
   domain: string;
 };
 
-const TOOL_STATE_LABELS: Record<string, string> = {
-  'input-streaming': 'Running',
-  'input-available': 'Queued',
-  'approval-requested': 'Awaiting approval',
-  'approval-responded': 'Approved',
-  'output-available': 'Completed',
-  'output-error': 'Failed',
-  'output-denied': 'Denied',
-  done: 'Done',
+const TOOL_STATE_LABEL_KEYS: Record<string, Parameters<typeof translate>[0]> = {
+  'input-streaming': 'chat.tool.state.running',
+  'input-available': 'chat.tool.state.queued',
+  'approval-requested': 'chat.tool.state.awaitingApproval',
+  'approval-responded': 'chat.tool.state.approved',
+  'output-available': 'chat.tool.state.completed',
+  'output-error': 'chat.tool.state.failed',
+  'output-denied': 'chat.tool.state.denied',
+  done: 'chat.tool.state.done',
 };
 
 export const getToolStateLabel = (part: unknown): string => {
   if (!isObjectRecord(part) || typeof part.state !== 'string') return '';
-  return TOOL_STATE_LABELS[part.state] ?? part.state;
+  const key = TOOL_STATE_LABEL_KEYS[part.state];
+  return key ? translate(key) : part.state;
 };
 
 type ToolStateKind = 'success' | 'error' | 'denied' | 'pending' | 'running' | 'neutral';
@@ -339,14 +341,14 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
     if (toolKey === 'shell' && typeof input.command === 'string' && input.command.trim()) {
       const meta: string[] = [];
       if (typeof input.cwd === 'string' && input.cwd.trim()) {
-        meta.push(`cwd: ${normalizeSingleLineText(input.cwd)}`);
+        meta.push(translate('chat.tool.meta.cwd', { value: normalizeSingleLineText(input.cwd) }));
       }
       if (typeof input.timeout === 'number' && Number.isFinite(input.timeout)) {
-        meta.push(`timeout: ${Math.trunc(input.timeout)} ms`);
+        meta.push(translate('chat.tool.meta.timeout', { value: Math.trunc(input.timeout) }));
       }
 
       return {
-        title: 'Command',
+        title: translate('chat.tool.command'),
         value: input.command.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -356,11 +358,11 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
     if (toolKey === 'web' && typeof input.query === 'string' && input.query.trim()) {
       const meta: string[] = [];
       if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-        meta.push(`limit: ${Math.trunc(input.limit)}`);
+        meta.push(translate('chat.tool.meta.limit', { value: Math.trunc(input.limit) }));
       }
 
       return {
-        title: 'Query',
+        title: translate('chat.tool.query'),
         value: input.query.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -370,11 +372,11 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
     if (toolKey === 'fetch' && typeof input.url === 'string' && input.url.trim()) {
       const meta: string[] = [];
       if (typeof input.maxChars === 'number' && Number.isFinite(input.maxChars)) {
-        meta.push(`maxChars: ${Math.trunc(input.maxChars)}`);
+        meta.push(translate('chat.tool.meta.maxChars', { value: Math.trunc(input.maxChars) }));
       }
 
       return {
-        title: 'URL',
+        title: translate('chat.tool.url'),
         value: input.url.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -391,14 +393,20 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
     ) {
       const meta: string[] = [];
       if (toolKey === 'list_dir' && typeof input.recursive === 'boolean') {
-        meta.push(`recursive: ${input.recursive ? 'true' : 'false'}`);
+        meta.push(
+          translate('chat.tool.meta.recursive', { value: input.recursive ? 'true' : 'false' })
+        );
       }
       if (typeof input.encoding === 'string' && input.encoding.trim()) {
-        meta.push(`encoding: ${normalizeSingleLineText(input.encoding)}`);
+        meta.push(
+          translate('chat.tool.meta.encoding', {
+            value: normalizeSingleLineText(input.encoding),
+          })
+        );
       }
 
       return {
-        title: 'Path',
+        title: translate('chat.tool.path'),
         value: input.path.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -409,12 +417,12 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       const query = typeof input.query === 'string' ? input.query.trim() : '';
       const meta: string[] = [];
       if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-        meta.push(`limit: ${Math.trunc(input.limit)}`);
+        meta.push(translate('chat.tool.meta.limit', { value: Math.trunc(input.limit) }));
       }
 
       return {
-        title: 'Query',
-        value: query || 'All todo lists',
+        title: translate('chat.tool.query'),
+        value: query || translate('chat.tool.allTodoLists'),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
       };
@@ -428,7 +436,7 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
         (typeof input.id === 'string' && input.id.trim()))
     ) {
       return {
-        title: 'Todo List',
+        title: translate('chat.tool.todoList'),
         value:
           (typeof input.title === 'string' && input.title.trim()) ||
           (typeof input.id === 'string' && input.id.trim()) ||
@@ -439,16 +447,14 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
   }
 
   return {
-    title: 'Input',
+    title: translate('chat.tool.input'),
     value: input,
     isPrimary: false,
   };
 };
 
-export const getToolInputDisplayTitle = (part: unknown): string =>
-  getToolInputDisplay(part).title;
-export const getToolInputDisplayValue = (part: unknown): unknown =>
-  getToolInputDisplay(part).value;
+export const getToolInputDisplayTitle = (part: unknown): string => getToolInputDisplay(part).title;
+export const getToolInputDisplayValue = (part: unknown): unknown => getToolInputDisplay(part).value;
 export const getToolInputDisplayMetaText = (part: unknown): string =>
   getToolInputDisplay(part).metaText ?? '';
 
@@ -505,9 +511,7 @@ export const getWebSearchCitations = (part: unknown): WebSearchCitation[] => {
     return [];
   }
 
-  const results = Array.isArray(parsedOutput.output.results)
-    ? parsedOutput.output.results
-    : [];
+  const results = Array.isArray(parsedOutput.output.results) ? parsedOutput.output.results : [];
 
   const seen = new Set<string>();
   const citations: WebSearchCitation[] = [];

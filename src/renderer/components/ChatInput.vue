@@ -6,7 +6,7 @@
           ref="inputRef"
           v-model="message"
           type="text"
-          placeholder="Type a message..."
+          :placeholder="t('chat.input.placeholder')"
           class="chat-input-field ui-text-primary w-full border-0 bg-transparent px-4 py-6 placeholder-muted focus:outline-none"
           @keydown.enter="handleEnter"
           @compositionstart="handleCompositionStart"
@@ -42,7 +42,7 @@
               v-if="contextUsage"
               class="composer-context-indicator"
               :title="contextUsage.tooltip"
-              aria-label="Context usage"
+              :aria-label="t('chat.input.contextUsage')"
             >
               <svg
                 class="composer-context-icon"
@@ -147,7 +147,7 @@
                 isStopping ||
                 isTranscribing
               "
-              :aria-label="isRecording ? 'Stop voice input' : 'Start voice input'"
+              :aria-label="isRecording ? t('chat.input.voiceStop') : t('chat.input.voiceStart')"
               @click="toggleVoiceInput"
             >
               <svg v-if="isRecording" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -189,7 +189,7 @@
                 isLoading ? 'ui-text-danger stop-btn' : 'ui-text-accent',
                 isStopping ? 'is-stopping' : '',
               ]"
-              :aria-label="isLoading ? 'Stop generation' : 'Send message'"
+              :aria-label="isLoading ? t('chat.input.stopGeneration') : t('chat.input.send')"
               @click="isLoading ? stopStreaming() : sendMessage()"
               :disabled="isPreparingSend || isStopping || isRecording || isTranscribing"
             >
@@ -227,6 +227,7 @@ import { createLogger } from '../logger';
 import { useChatProviderSelection } from '../composables/useChatProviderSelection';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
+import { useI18n } from '../i18n';
 import ChatModelSelector from './ChatModelSelector.vue';
 import ToolSelector from './ToolSelector.vue';
 import SkillSelector from './SkillSelector.vue';
@@ -234,6 +235,7 @@ import WorkspaceSelector from './WorkspaceSelector.vue';
 
 const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
 const chatInputLogger = createLogger({ module: 'chat_input' });
+const { t } = useI18n();
 const emit = defineEmits<{
   (event: 'incognito-changed', value: boolean): void;
   (event: 'model-selected', payload: { model: string; provider: Provider }): void;
@@ -250,13 +252,10 @@ const props = defineProps<{
     model?: string;
     tools?: string[];
     mcpServerIds?: string[];
-  }) => Promise<
-    | {
-        threadId: string;
-        messagesSnapshot: UIMessage[];
-      }
-    | null
-  >;
+  }) => Promise<{
+    threadId: string;
+    messagesSnapshot: UIMessage[];
+  } | null>;
   contextUsage?: {
     usedTokens: number;
     budgetTokens: number | null;
@@ -278,12 +277,10 @@ const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 const incognitoAriaLabel = computed(() =>
-  props.isIncognito ? 'Disable incognito mode' : 'Enable incognito mode'
+  props.isIncognito ? t('chat.input.disableIncognito') : t('chat.input.enableIncognito')
 );
 const incognitoTooltip = computed(() =>
-  props.isIncognito
-    ? 'Incognito is on. Memory is disabled for this chat.'
-    : 'Incognito is off. Memory is enabled for this chat.'
+  props.isIncognito ? t('chat.input.incognitoOn') : t('chat.input.incognitoOff')
 );
 const isBusy = computed(() => isPreparingSend.value || isLoading.value);
 
@@ -479,7 +476,7 @@ const sendMessage = async () => {
   }
 
   if (!preparedMessageSend) {
-    alert('Failed to prepare the message. Please try again.');
+    alert(t('chat.input.prepareFailed'));
     return;
   }
 

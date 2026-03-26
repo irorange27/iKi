@@ -34,19 +34,19 @@
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between gap-3">
-          <span class="selector-panel-title ui-text-primary">Workspace</span>
+          <span class="selector-panel-title ui-text-primary">{{ t('chat.workspace.title') }}</span>
           <div class="workspace-selector-header-actions">
             <button
               class="selector-action-btn workspace-selector-add"
               :disabled="loadingWorkspaces || isPickingDirectory"
               @click.stop="pickWorkspaceDirectory"
             >
-              {{ isPickingDirectory ? 'Adding...' : 'Add Folder' }}
+              {{ isPickingDirectory ? t('chat.workspace.adding') : t('common.addFolder') }}
             </button>
             <button
               class="selector-icon-btn workspace-selector-refresh flex h-8 w-8 items-center justify-center rounded-[10px]"
               :disabled="loadingWorkspaces || isPickingDirectory"
-              title="Refresh workspaces"
+              :title="t('chat.workspace.refreshTitle')"
               @click.stop="loadWorkspaces"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,8 +61,7 @@
           </div>
         </div>
         <div class="selector-panel-description ui-text-muted">
-          Bind this thread to one workspace root. Relative file paths and the default shell working
-          directory will follow that workspace.
+          {{ t('chat.workspace.description') }}
         </div>
       </div>
 
@@ -73,15 +72,12 @@
           @click="selectWorkspace(null)"
         >
           <div class="selector-item-copy">
-            <span class="font-medium">No workspace</span>
+            <span class="font-medium">{{ t('chat.workspace.noWorkspace') }}</span>
             <span class="selector-item-description selector-item-description-wide">
-              Leave the thread unpinned and use the global visible workspace set instead.
+              {{ t('chat.workspace.noWorkspaceDescription') }}
             </span>
           </div>
-          <div
-            class="selector-check"
-            :class="{ 'selector-check-active': !selectedWorkspaceId }"
-          >
+          <div class="selector-check" :class="{ 'selector-check-active': !selectedWorkspaceId }">
             <svg
               v-if="!selectedWorkspaceId"
               class="h-3 w-3 text-white"
@@ -97,12 +93,14 @@
           </div>
         </button>
 
-        <div v-if="loadingWorkspaces" class="selector-empty-state">Loading workspaces...</div>
+        <div v-if="loadingWorkspaces" class="selector-empty-state">
+          {{ t('chat.workspace.loading') }}
+        </div>
         <div v-else-if="workspaceLoadError" class="selector-empty-state">
           {{ workspaceLoadError }}
         </div>
         <div v-else-if="availableWorkspaces.length === 0" class="selector-empty-state">
-          No visible workspaces available.
+          {{ t('chat.workspace.noneVisible') }}
         </div>
         <button
           v-for="workspace in availableWorkspaces"
@@ -115,7 +113,9 @@
             <span class="font-medium">{{ workspace.name }}</span>
             <span class="selector-item-description selector-item-description-wide">
               {{ workspace.path }}
-              <span v-if="workspace.show_in_list !== 1"> · Hidden from global list</span>
+              <span v-if="workspace.show_in_list !== 1">
+                · {{ t('chat.workspace.hiddenFromGlobal') }}
+              </span>
             </span>
           </div>
           <div
@@ -145,6 +145,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { Workspace } from '../../shared/types/chat';
 import { getErrorMessage } from '../../shared/utils/errors';
+import { useI18n } from '../i18n';
 
 const props = defineProps<{
   selectedWorkspaceId?: string | null;
@@ -155,6 +156,7 @@ const emit = defineEmits<{
 }>();
 
 const electronAPI = window.electronAPI;
+const { t } = useI18n();
 
 const showWorkspaceSelector = ref(false);
 const loadingWorkspaces = ref(false);
@@ -219,9 +221,9 @@ const triggerTitle = computed(() => {
     return `${selectedWorkspace.value.name} · ${selectedWorkspace.value.path}`;
   }
   if (hasWorkspaceSelection.value) {
-    return 'Selected workspace';
+    return t('chat.workspace.selected');
   }
-  return 'Choose a workspace for this thread';
+  return t('chat.workspace.choose');
 });
 
 const loadWorkspaces = async () => {
@@ -232,7 +234,10 @@ const loadWorkspaces = async () => {
     const visibleWorkspaces = normalizeWorkspaces(await electronAPI?.workspaces?.getVisible?.());
     const currentWorkspaceId = selectedWorkspaceId.value;
 
-    if (!currentWorkspaceId || visibleWorkspaces.some(workspace => workspace.id === currentWorkspaceId)) {
+    if (
+      !currentWorkspaceId ||
+      visibleWorkspaces.some(workspace => workspace.id === currentWorkspaceId)
+    ) {
       availableWorkspaces.value = visibleWorkspaces;
       return;
     }
@@ -241,11 +246,16 @@ const loadWorkspaces = async () => {
       await electronAPI?.workspaces?.get?.(currentWorkspaceId)
     );
     availableWorkspaces.value = currentWorkspace
-      ? [currentWorkspace, ...visibleWorkspaces.filter(workspace => workspace.id !== currentWorkspace.id)]
+      ? [
+          currentWorkspace,
+          ...visibleWorkspaces.filter(workspace => workspace.id !== currentWorkspace.id),
+        ]
       : visibleWorkspaces;
   } catch (error) {
     availableWorkspaces.value = [];
-    workspaceLoadError.value = `Failed to load workspaces: ${getErrorMessage(error)}`;
+    workspaceLoadError.value = t('chat.workspace.loadFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     loadingWorkspaces.value = false;
   }
@@ -293,7 +303,9 @@ const pickWorkspaceDirectory = async () => {
       showWorkspaceSelector.value = false;
     }
   } catch (error) {
-    workspaceLoadError.value = `Failed to add workspace: ${getErrorMessage(error)}`;
+    workspaceLoadError.value = t('chat.workspace.addFailed', {
+      error: getErrorMessage(error),
+    });
   } finally {
     isPickingDirectory.value = false;
   }

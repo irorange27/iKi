@@ -19,7 +19,7 @@
         </span>
       </span>
       <span class="model-selector-trigger-label">
-        {{ selectedModel || 'Select Model' }}
+        {{ selectedModel || t('chat.model.selectModel') }}
       </span>
       <svg
         class="model-selector-trigger-chevron"
@@ -28,12 +28,7 @@
         stroke="currentColor"
         viewBox="0 0 24 24"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M19 9l-7 7-7-7"
-        />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
       </svg>
     </button>
 
@@ -57,7 +52,7 @@
           v-model="modelSearchQuery"
           type="text"
           class="model-selector-search-input"
-          placeholder="Search models..."
+          :placeholder="t('chat.model.searchPlaceholder')"
         />
       </div>
 
@@ -66,19 +61,19 @@
           v-if="availableProviders.length === 0"
           class="selector-empty-state model-selector-empty"
         >
-          No providers configured.
+          {{ t('chat.model.noProviders') }}
         </div>
         <div
           v-else-if="providerModelGroups.length === 0"
           class="selector-empty-state model-selector-empty"
         >
-          No enabled provider exposes model metadata.
+          {{ t('chat.model.noProviderMetadata') }}
         </div>
         <div
           v-else-if="filteredProviderGroups.length === 0"
           class="selector-empty-state model-selector-empty"
         >
-          No models match "{{ modelSearchQuery.trim() }}".
+          {{ t('chat.model.noMatchingModels', { query: modelSearchQuery.trim() }) }}
         </div>
         <section
           v-for="group in filteredProviderGroups"
@@ -150,6 +145,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 
 import type { Provider } from '../../shared/types/provider';
 import { parseModelList } from '../../shared/utils/provider_models';
+import { useI18n } from '../i18n';
 import {
   getProviderDisplayName,
   getProviderFallbackText,
@@ -184,6 +180,7 @@ const emit = defineEmits<{
   ): void;
 }>();
 
+const { t } = useI18n();
 const modelSelectorRef = ref<HTMLElement | null>(null);
 const modelSearchInputRef = ref<HTMLInputElement | null>(null);
 const showModelSelector = ref(false);
@@ -480,8 +477,8 @@ onUnmounted(() => {
 .model-option-selected {
   background: rgba(var(--accent-rgb), 0.22);
   border-color: rgba(var(--accent-rgb), 0.34);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--chat-composer-action-foreground) 5%, transparent);
+  box-shadow: inset 0 1px 0
+    color-mix(in srgb, var(--chat-composer-action-foreground) 5%, transparent);
 }
 
 .model-option-main {

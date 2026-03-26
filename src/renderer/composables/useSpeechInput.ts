@@ -2,6 +2,7 @@ import { computed, nextTick, onUnmounted, ref } from 'vue';
 import type { Ref } from 'vue';
 import type { SpeechStatus } from '../../shared/types/speech';
 import { createLogger } from '../logger';
+import { translate } from '../i18n';
 
 type SpeechInputOptions = {
   inputRef: Ref<HTMLInputElement | null>;
@@ -60,7 +61,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
 
   const loadSpeechStatus = async () => {
     if (!electronAPI?.speech?.getStatus) {
-      speechStatus.value = { available: false, reason: 'Speech service unavailable' };
+      speechStatus.value = { available: false, reason: translate('chat.speech.unavailable') };
       return;
     }
     try {
@@ -72,7 +73,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         outcome: 'failed',
         error,
       });
-      speechStatus.value = { available: false, reason: 'Speech service unavailable' };
+      speechStatus.value = { available: false, reason: translate('chat.speech.unavailable') };
     }
   };
 
@@ -263,7 +264,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
   const transcribeRecording = async (blob: Blob) => {
     if (!blob || blob.size === 0) return;
     if (!electronAPI?.speech?.transcribe) {
-      setSpeechError('Speech service unavailable');
+      setSpeechError(translate('chat.speech.unavailable'));
       return;
     }
     isTranscribing.value = true;
@@ -285,7 +286,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       if (text.trim()) {
         await applySpeechText(text);
       } else {
-        setSpeechError('No speech detected');
+        setSpeechError(translate('chat.speech.noSpeechDetected'));
       }
     } catch (error) {
       speechInputLogger.event({
@@ -294,7 +295,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         outcome: 'failed',
         error,
       });
-      setSpeechError('Transcription failed');
+      setSpeechError(translate('chat.speech.transcriptionFailed'));
     } finally {
       isTranscribing.value = false;
     }
@@ -302,7 +303,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
 
   const startNodeRecording = async () => {
     if (!canRecordAudio.value) {
-      setSpeechError('Microphone not available');
+      setSpeechError(translate('chat.speech.microphoneUnavailable'));
       return;
     }
     clearSpeechError();
@@ -332,7 +333,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
             event,
           },
         });
-        setSpeechError('Recording failed');
+        setSpeechError(translate('chat.speech.recordingFailed'));
         isRecording.value = false;
         stopMediaTracks();
       };
@@ -362,7 +363,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         outcome: 'failed',
         error,
       });
-      setSpeechError('Microphone permission denied');
+      setSpeechError(translate('chat.speech.permissionDenied'));
       stopMediaTracks();
     }
   };
@@ -392,12 +393,14 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
     if (!speechEngineAvailable.value) {
       await loadSpeechStatus();
       if (!speechEngineAvailable.value) {
-        setSpeechError(speechStatus.value?.reason || 'Voice input unavailable');
+        setSpeechError(
+          speechStatus.value?.reason || translate('chat.speech.voiceInputUnavailable')
+        );
         return;
       }
     }
     if (speechEngine.value !== 'node') {
-      setSpeechError(speechStatus.value?.reason || 'Voice input unavailable');
+      setSpeechError(speechStatus.value?.reason || translate('chat.speech.voiceInputUnavailable'));
       return;
     }
     await startNodeRecording();

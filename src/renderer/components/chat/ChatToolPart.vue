@@ -15,7 +15,7 @@
           d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
         />
       </svg>
-      <span class="tool-approval-title">Tool Approval Request</span>
+      <span class="tool-approval-title">{{ t('chat.tool.approvalRequest') }}</span>
     </div>
     <div class="tool-approval-body">
       <div class="tool-name">
@@ -26,19 +26,11 @@
       </div>
     </div>
     <div class="tool-approval-actions">
-      <button
-        class="approve-btn"
-        :disabled="approvalProcessing"
-        @click="emitApproval(true)"
-      >
-        Approve
+      <button class="approve-btn" :disabled="approvalProcessing" @click="emitApproval(true)">
+        {{ t('chat.tool.approve') }}
       </button>
-      <button
-        class="reject-btn"
-        :disabled="approvalProcessing"
-        @click="emitApproval(false)"
-      >
-        Reject
+      <button class="reject-btn" :disabled="approvalProcessing" @click="emitApproval(false)">
+        {{ t('chat.tool.reject') }}
       </button>
     </div>
   </div>
@@ -49,12 +41,14 @@
     :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
   >
     <div class="tool-card-header">
-      <span class="tool-card-tag tag-result">Tool Result</span>
+      <span class="tool-card-tag tag-result">{{ t('chat.tool.resultTag') }}</span>
       <div class="tool-card-lead">
         <component :is="getToolIconComponent(part)" :size="16" class="tool-card-lead-icon" />
         <span class="tool-card-title">{{ getToolTitle(part) }}</span>
         <span class="tool-card-tool">{{ getToolName(part) }}</span>
-        <span v-if="mcpServerLabel" class="tool-card-server"> MCP Server: {{ mcpServerLabel }} </span>
+        <span v-if="mcpServerLabel" class="tool-card-server">
+          {{ t('chat.tool.mcpServer', { name: mcpServerLabel }) }}
+        </span>
       </div>
       <div class="tool-card-meta">
         <span
@@ -97,7 +91,9 @@
           v-if="canToggleToolCollapse(part)"
           type="button"
           class="tool-collapse-btn"
-          :aria-label="isToolCollapsed(part) ? 'Expand tool details' : 'Collapse tool details'"
+          :aria-label="
+            isToolCollapsed(part) ? t('chat.tool.expandDetails') : t('chat.tool.collapseDetails')
+          "
           @click.stop="toggleToolCollapse(message, part)"
         >
           <ChevronDown
@@ -110,7 +106,7 @@
     </div>
     <div v-if="!isToolCollapsed(part)">
       <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
-        <div class="tool-card-section-title">References</div>
+        <div class="tool-card-section-title">{{ t('chat.tool.references') }}</div>
         <ol class="tool-citations">
           <li
             v-for="citation in getWebSearchCitations(part)"
@@ -134,13 +130,13 @@
         </div>
       </div>
       <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
-        <div class="tool-card-section-title">Output</div>
+        <div class="tool-card-section-title">{{ t('chat.tool.output') }}</div>
         <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
       </div>
     </div>
     <div v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
       <span class="tool-call-id">
-        Call ID:
+        {{ t('chat.tool.callId') }}:
         <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
       </span>
     </div>
@@ -152,12 +148,14 @@
     :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
   >
     <div class="tool-card-header">
-      <span class="tool-card-tag tag-call">Tool Call</span>
+      <span class="tool-card-tag tag-call">{{ t('chat.tool.callTag') }}</span>
       <div class="tool-card-lead">
         <component :is="getToolIconComponent(part)" :size="16" class="tool-card-lead-icon" />
         <span class="tool-card-title">{{ getToolTitle(part) }}</span>
         <span class="tool-card-tool">{{ getToolName(part) }}</span>
-        <span v-if="mcpServerLabel" class="tool-card-server"> MCP Server: {{ mcpServerLabel }} </span>
+        <span v-if="mcpServerLabel" class="tool-card-server">
+          {{ t('chat.tool.mcpServer', { name: mcpServerLabel }) }}
+        </span>
       </div>
       <div class="tool-card-meta">
         <span
@@ -200,7 +198,9 @@
           v-if="canToggleToolCollapse(part)"
           type="button"
           class="tool-collapse-btn"
-          :aria-label="isToolCollapsed(part) ? 'Expand tool details' : 'Collapse tool details'"
+          :aria-label="
+            isToolCollapsed(part) ? t('chat.tool.expandDetails') : t('chat.tool.collapseDetails')
+          "
           @click.stop="toggleToolCollapse(message, part)"
         >
           <ChevronDown
@@ -213,13 +213,13 @@
     </div>
     <div v-if="!isToolCollapsed(part)">
       <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-        <div class="tool-card-section-title">Arguments</div>
+        <div class="tool-card-section-title">{{ t('chat.tool.arguments') }}</div>
         <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
       </div>
     </div>
     <div v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
       <span class="tool-call-id">
-        Call ID:
+        {{ t('chat.tool.callId') }}:
         <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
       </span>
     </div>
@@ -267,6 +267,7 @@ import {
   isToolResultPart,
   toggleToolCollapse,
 } from '../../modules/chat/ui_message_tool_parts';
+import { useI18n } from '../../i18n';
 
 const props = defineProps<{
   approvalProcessing: boolean;
@@ -278,6 +279,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'approve-tool', payload: { approved: boolean; message: UIMessage; part: unknown }): void;
 }>();
+
+const { t } = useI18n();
 
 const emitApproval = (approved: boolean) => {
   emit('approve-tool', {

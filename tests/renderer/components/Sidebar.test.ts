@@ -12,9 +12,7 @@ const setElectronApi = (api: unknown) => {
   });
 };
 
-const mountSidebar = async (options?: {
-  threads?: Array<Record<string, unknown>>;
-}) => {
+const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>> }) => {
   const list = vi.fn(async () => options?.threads ?? []);
   const del = vi.fn(async () => ({ success: true }));
   const openSettings = vi.fn();
@@ -41,6 +39,10 @@ const mountSidebar = async (options?: {
         Search: true,
         SquarePen: true,
         Trash2: true,
+        MoreHorizontal: true,
+        Settings2: true,
+        MessageSquareShare: true,
+        Check: true,
       },
     },
   });
@@ -71,12 +73,11 @@ describe('Sidebar', () => {
     vi.restoreAllMocks();
   });
 
-  it('loads only desktop main-ui threads and emits selection for visible items', async () => {
+  it('keeps external bridge threads out of the default desktop list and emits selection for visible items', async () => {
     const visibleThread = {
       id: 'thread_desktop',
       title: 'Desktop Thread',
       updated_at: '2026-03-22T00:00:00.000Z',
-      client_id: 'client_desktop',
       metadata: '{}',
     };
 
@@ -116,6 +117,60 @@ describe('Sidebar', () => {
     expect(wrapper.emitted('thread-selected')).toEqual([['thread_desktop']]);
   });
 
+  it('reveals external chats from the footer menu in a dedicated section', async () => {
+    const externalThread = {
+      id: 'napcat_10001_group_30003',
+      title: 'QQ Group 30003',
+      updated_at: '2026-03-22T00:00:00.000Z',
+      client_id: 'client_napcat',
+      metadata: JSON.stringify({ source: 'napcat', message_type: 'group' }),
+    };
+
+    const { wrapper } = await mountSidebar({
+      threads: [
+        {
+          id: 'thread_desktop',
+          title: 'Desktop Thread',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          metadata: '{}',
+        },
+        externalThread,
+      ],
+    });
+
+    expect(wrapper.text()).not.toContain('External Chats');
+    expect(wrapper.findAll('.chat-item-external')).toHaveLength(0);
+
+    await wrapper.find('.sidebar-menu-btn').trigger('click');
+    await wrapper.find('[role="menuitemcheckbox"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('External Chats');
+    expect(wrapper.text()).toContain('QQ Group 30003');
+    expect(wrapper.text()).toContain('NapCat');
+    expect(wrapper.text()).toContain('QQ group');
+
+    const externalButton = wrapper.find('.chat-item-external');
+    expect(externalButton.exists()).toBe(true);
+
+    await externalButton.trigger('click');
+
+    expect(wrapper.emitted('thread-selected')).toEqual([['napcat_10001_group_30003']]);
+  });
+
+  it('opens the footer menu on hover', async () => {
+    const { wrapper } = await mountSidebar({
+      threads: [],
+    });
+
+    expect(wrapper.find('.sidebar-menu').exists()).toBe(false);
+
+    await wrapper.find('.sidebar-menu-anchor').trigger('mouseenter');
+
+    expect(wrapper.find('.sidebar-menu').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Show External Chats');
+  });
+
   it('deletes the confirmed thread, removes it locally, and emits thread-deleted', async () => {
     const { wrapper, del } = await mountSidebar({
       threads: [
@@ -143,7 +198,8 @@ describe('Sidebar', () => {
       threads: [],
     });
 
-    await wrapper.find('.sidebar-settings-btn').trigger('click');
+    await wrapper.find('.sidebar-menu-btn').trigger('click');
+    await wrapper.find('[role="menuitem"]').trigger('click');
 
     expect(openSettings).toHaveBeenCalledTimes(1);
   });
