@@ -29,10 +29,10 @@
 </template>
 
 <script setup lang="ts">
-import type { UIMessage } from 'ai';
 import VueMarkdown from 'vue-markdown-render';
 
 import {
+  type ChatUiMessage,
   isAffectSignalPart,
   isContextReportPart,
   isMemoryPart,
@@ -46,7 +46,7 @@ import ChatToolPart from './ChatToolPart.vue';
 const markdownPlugins = [markdownCodeBlockPlugin];
 
 const props = defineProps<{
-  message: UIMessage;
+  message: ChatUiMessage;
   messageIndex: number;
   activeAssistantMessageId: string | null;
   streamRenderTick: number;
@@ -59,7 +59,7 @@ const emit = defineEmits<{
     event: 'approve-tool',
     payload: {
       approved: boolean;
-      message: UIMessage;
+      message: ChatUiMessage;
       part: unknown;
     }
   ): void;

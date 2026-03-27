@@ -18,6 +18,7 @@ export {
   getToolName,
   getToolOutput,
   normalizeDynamicToolPart,
+  normalizeToolPartForValidation,
   normalizeToolNameKey,
 } from './tool_parts/normalize';
 export { parseMaybeJson, parseToolInputFromText } from './tool_parts/parse';

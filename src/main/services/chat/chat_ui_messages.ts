@@ -38,7 +38,11 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
               partType === 'memory-retrieval' ||
               partType === 'skill-usage' ||
               partType === 'affect-signal' ||
-              partType === 'context-report'
+              partType === 'context-report' ||
+              partType === 'data-memory-retrieval' ||
+              partType === 'data-skill-usage' ||
+              partType === 'data-affect-signal' ||
+              partType === 'data-context-report'
             ) {
               return null;
             }
@@ -66,7 +70,7 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
         id: messageId,
         role,
         ...(message.metadata !== undefined ? { metadata: message.metadata } : {}),
-        parts: parts as ChatUiMessage['parts'],
+        parts,
       },
     ];
   });

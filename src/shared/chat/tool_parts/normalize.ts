@@ -1,6 +1,6 @@
 import type { DynamicToolPart, DynamicToolState } from '../message_parts';
 import { isObjectRecord } from '../message_parts';
-import { getApprovalIdValue } from './ids';
+import { getApprovalIdValue, getToolCallIdFromPart } from './ids';
 
 export const normalizeToolNameKey = (value: string): string =>
   value.trim().toLowerCase().replace(/[-\s]+/g, '_');
@@ -221,4 +221,102 @@ export const normalizeDynamicToolPart = (
         : {}),
     },
   };
+};
+
+export const normalizeToolPartForValidation = (
+  part: Record<string, unknown>,
+  fallbackToolCallId: string
+): DynamicToolPart | null => {
+  const partType = typeof part.type === 'string' ? part.type : '';
+  if (!partType) return null;
+
+  if (partType === 'dynamic-tool') {
+    return normalizeDynamicToolPart(part, fallbackToolCallId);
+  }
+
+  if (!partType.startsWith('tool-')) return null;
+
+  const toolCallId = getToolCallIdFromPart(part) ?? fallbackToolCallId;
+  const baseToolName = getToolName(part) || 'tool';
+  const input = getToolInput(part);
+  const output = getToolOutput(part);
+
+  if (partType === 'tool-call') {
+    return normalizeDynamicToolPart(
+      {
+        ...part,
+        toolCallId,
+        toolName: baseToolName,
+        input: input ?? {},
+        ...(typeof part.state === 'string' ? { state: part.state } : {}),
+      },
+      toolCallId
+    );
+  }
+
+  if (partType === 'tool-result') {
+    return normalizeDynamicToolPart(
+      {
+        ...part,
+        toolCallId,
+        toolName: baseToolName,
+        input: input ?? {},
+        output: output ?? null,
+        state: typeof part.state === 'string' ? part.state : 'output-available',
+      },
+      toolCallId
+    );
+  }
+
+  if (partType === 'tool-approval-request') {
+    const approvalId = getApprovalIdFromPart(part, `${toolCallId}_approval`);
+    return normalizeDynamicToolPart(
+      {
+        ...part,
+        toolCallId,
+        toolName: baseToolName,
+        input: input ?? {},
+        state: 'approval-requested',
+        approval: { id: approvalId },
+      },
+      toolCallId
+    );
+  }
+
+  if (partType === 'tool-approval-response') {
+    const approvalId = getApprovalIdFromPart(part, `${toolCallId}_approval`);
+    const approved = typeof part.approved === 'boolean' ? part.approved : false;
+    const reason =
+      typeof part.reason === 'string' && part.reason.trim().length > 0 ? part.reason : undefined;
+    const approval = {
+      id: approvalId,
+      approved,
+      ...(reason ? { reason } : {}),
+    };
+
+    return normalizeDynamicToolPart(
+      {
+        ...part,
+        toolCallId,
+        toolName: baseToolName,
+        input: input ?? {},
+        state: approved ? 'approval-responded' : 'output-denied',
+        approval,
+      },
+      toolCallId
+    );
+  }
+
+  const inferredToolName = partType.slice(5).trim();
+  return normalizeDynamicToolPart(
+    {
+      ...part,
+      toolCallId,
+      toolName: inferredToolName || baseToolName,
+      input: input ?? {},
+      ...(output !== undefined ? { output } : {}),
+      ...(typeof part.state === 'string' ? { state: part.state } : {}),
+    },
+    toolCallId
+  );
 };

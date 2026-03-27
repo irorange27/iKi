@@ -2,15 +2,20 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import {
+  ensureThreadWorkspaceSelection,
   getThreadWorkspaceSelection,
   type ThreadWorkspaceSelection,
 } from '../workspaces/thread_workspace';
+import { getUserDataPath } from '../platform';
 import { getToolRuntimeContext } from './runtime_context';
 
 export type WorkspaceRoot = {
   resolvedPath: string;
   realPath: string;
 };
+
+const BRAIN_ALIAS_PREFIX = 'brain';
+const getBrainRootPath = (): string => path.resolve(path.join(getUserDataPath(), BRAIN_ALIAS_PREFIX));
 
 const resolveRootRealPath = async (root: string): Promise<string> => {
   try {
@@ -27,7 +32,7 @@ const normalizeWorkspacePath = (rawPath: unknown): string => {
 
 const resolveThreadWorkspaceSelection = (): ThreadWorkspaceSelection | null => {
   const { threadId } = getToolRuntimeContext();
-  return getThreadWorkspaceSelection(threadId);
+  return ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId);
 };
 
 const getWorkspaceSelectionRequirementError = (): Error =>
@@ -62,8 +67,23 @@ const resolveExplicitWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
   return [{ resolvedPath, realPath }];
 };
 
+const resolveBrainRoot = async (): Promise<WorkspaceRoot> => {
+  const resolvedPath = getBrainRootPath();
+  await fs.mkdir(resolvedPath, { recursive: true });
+  const realPath = await resolveRootRealPath(resolvedPath);
+  return { resolvedPath, realPath };
+};
+
 export const resolveWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
-  return await resolveExplicitWorkspaceRoots();
+  const explicitRoots = await resolveExplicitWorkspaceRoots();
+  const brainRoot = await resolveBrainRoot();
+  const deduped = new Map<string, WorkspaceRoot>();
+
+  for (const root of [...explicitRoots, brainRoot]) {
+    deduped.set(root.realPath, root);
+  }
+
+  return [...deduped.values()];
 };
 
 const isPathWithinRoot = (root: string, candidate: string): boolean => {
@@ -74,8 +94,31 @@ const isPathWithinRoot = (root: string, candidate: string): boolean => {
 const formatWorkspaceRoots = (roots: WorkspaceRoot[]): string =>
   roots.map(root => root.resolvedPath).join(', ');
 
-const resolveAbsoluteWorkspacePath = (inputPath: string, primaryRoot: string): string =>
-  path.resolve(path.isAbsolute(inputPath) ? inputPath : path.join(primaryRoot, inputPath));
+const resolveAbsoluteWorkspacePath = (
+  inputPath: string,
+  primaryRoot: string,
+  roots: WorkspaceRoot[]
+): string => {
+  if (path.isAbsolute(inputPath)) {
+    return path.resolve(inputPath);
+  }
+
+  const normalizedInputPath = inputPath.trim().replace(/\\/g, '/');
+  if (
+    normalizedInputPath === BRAIN_ALIAS_PREFIX ||
+    normalizedInputPath.startsWith(`${BRAIN_ALIAS_PREFIX}/`)
+  ) {
+    const brainRoot =
+      roots.find(root => root.resolvedPath === getBrainRootPath())?.resolvedPath || getBrainRootPath();
+    const relativePath =
+      normalizedInputPath === BRAIN_ALIAS_PREFIX
+        ? ''
+        : normalizedInputPath.slice(BRAIN_ALIAS_PREFIX.length + 1);
+    return path.resolve(path.join(brainRoot, relativePath));
+  }
+
+  return path.resolve(path.join(primaryRoot, inputPath));
+};
 
 const ensurePathWithinWorkspaceRoots = (
   inputPath: string,
@@ -120,7 +163,7 @@ export const resolveReadableWorkspacePath = async (inputPath: string): Promise<s
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }
-  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
+  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot, roots);
   const actualPath = await fs.realpath(absolutePath);
   ensurePathWithinWorkspaceRoots(inputPath, actualPath, roots);
   return absolutePath;
@@ -132,7 +175,7 @@ export const resolveWritableWorkspacePath = async (inputPath: string): Promise<s
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }
-  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
+  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot, roots);
 
   const existingTargetRealPath = await tryRealpath(absolutePath);
   if (existingTargetRealPath) {
@@ -153,7 +196,7 @@ export const resolveDeleteWorkspacePath = async (inputPath: string): Promise<str
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }
-  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot);
+  const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot, roots);
   const parentRealPath = await resolveExistingAncestorRealPath(path.dirname(absolutePath));
   ensurePathWithinWorkspaceRoots(inputPath, parentRealPath, roots);
   return absolutePath;
@@ -166,7 +209,7 @@ export const resolveShellWorkingDirectory = async (inputCwd?: string): Promise<s
     throw getWorkspaceSelectionRequirementError();
   }
   const cwd = inputCwd?.trim()
-    ? resolveAbsoluteWorkspacePath(inputCwd.trim(), primaryRoot)
+    ? resolveAbsoluteWorkspacePath(inputCwd.trim(), primaryRoot, roots)
     : primaryRoot;
   const actualPath = await fs.realpath(cwd);
   ensurePathWithinWorkspaceRoots(inputCwd?.trim() || cwd, actualPath, roots);

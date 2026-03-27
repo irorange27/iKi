@@ -553,8 +553,7 @@ export const createChatStreaming = (deps: {
       });
 
       if (preparedTurn.usedSkills.length > 0) {
-        webContents.send('chat:ui-chunk', {
-          type: 'skill-usage',
+        uiChunkEmitter.emitSkillUsage({
           mode: preparedTurn.skillMode,
           skills: preparedTurn.usedSkills.map(skill => ({
             id: skill.id,

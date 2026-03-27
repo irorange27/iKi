@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue';
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage } from '../../shared/chat/message_parts';
 
+import { toUiMessages } from '../modules/chat/ui_message_convert';
 import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
 import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
 import { extractTextFromMessage } from '../modules/chat/ui_message_text';
@@ -107,7 +108,7 @@ export const useChatThreads = (deps: {
     }
   };
 
-  const getConversationContentForTitle = (messages: UIMessage[]): string => {
+  const getConversationContentForTitle = (messages: ChatUiMessage[]): string => {
     const lines: string[] = [];
 
     for (const message of messages) {
@@ -122,7 +123,7 @@ export const useChatThreads = (deps: {
     return lines.join('\n');
   };
 
-  const getFallbackThreadTitle = (messages: UIMessage[]): string | null => {
+  const getFallbackThreadTitle = (messages: ChatUiMessage[]): string | null => {
     const latestUserText = [...messages]
       .reverse()
       .filter(message => message.role === 'user')
@@ -133,14 +134,17 @@ export const useChatThreads = (deps: {
     return fallbackText.slice(0, 50) + (fallbackText.length > 50 ? '...' : '');
   };
 
-  const shouldRegenerateThreadTitle = (messages: UIMessage[], currentTitle: string): boolean => {
+  const shouldRegenerateThreadTitle = (
+    messages: ChatUiMessage[],
+    currentTitle: string
+  ): boolean => {
     const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
     if (assistantMessageCount === 0) return false;
     if (DEFAULT_THREAD_TITLES.has(currentTitle)) return true;
     return assistantMessageCount % TITLE_REGEN_INTERVAL === 0;
   };
 
-  const generateThreadTitle = async (messages: UIMessage[]): Promise<string | null> => {
+  const generateThreadTitle = async (messages: ChatUiMessage[]): Promise<string | null> => {
     try {
       const conversationContent = getConversationContentForTitle(messages);
       if (!conversationContent.trim()) {
@@ -162,7 +166,7 @@ export const useChatThreads = (deps: {
 
   const handleAssistantMessagePersisted = async (params: {
     threadId: string;
-    messagesSnapshot: UIMessage[];
+    messagesSnapshot: ChatUiMessage[];
   }) => {
     if (!currentThread.value || currentThread.value.id !== params.threadId) return;
 
@@ -229,7 +233,7 @@ export const useChatThreads = (deps: {
       deps.persistence.resetPersistedMessageIds(rows.map(row => row.id));
 
       const chatMessages = rows.map(row => parseStoredUiMessage(row));
-      deps.messageStore.setAll(chatMessages as UIMessage[]);
+      deps.messageStore.setAll(chatMessages);
       resetToolUiStateMap();
       deps.scrollToBottom();
     } catch (error) {
@@ -404,7 +408,13 @@ export const useChatThreads = (deps: {
       typeof (message as { id?: unknown }).id === 'string' ? (message as { id: string }).id : '';
     if (messageId && deps.messageStore.hasId(messageId)) return;
 
-    deps.messageStore.append(message as unknown as UIMessage);
+    const [normalizedMessage] = toUiMessages([message]);
+    if (!normalizedMessage) {
+      await loadThreadMessages(threadId);
+      return;
+    }
+
+    deps.messageStore.append(normalizedMessage);
     deps.scrollToBottom();
   };
 

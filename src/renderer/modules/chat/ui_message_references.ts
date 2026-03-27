@@ -1,11 +1,18 @@
-import type { UIMessage } from 'ai';
-import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
+import type {
+  ChatUiMessage,
+  ContextReportItem,
+  SkillUsageEntry,
+} from '../../../shared/chat/message_parts';
 import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
 import type { AppConfig } from '../../../shared/types/config';
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import { translate } from '../../i18n';
 
 import {
+  getAffectSignalPartData,
+  getContextReportPartData,
+  getMemoryPartData,
+  getSkillUsagePartData,
   isAffectSignalPart,
   isContextReportPart,
   isMemoryPart,
@@ -220,7 +227,9 @@ const normalizeSkillItems = (rawSkills: unknown): SkillReferenceItem[] => {
     });
 };
 
-export const getToolReferenceSummary = (message: UIMessage | unknown): ToolReferenceSummary => {
+export const getToolReferenceSummary = (
+  message: ChatUiMessage | unknown
+): ToolReferenceSummary => {
   const parts = getMessageParts(message);
   const toolCallIds = new Set<string>();
   const toolNames: string[] = [];
@@ -268,7 +277,7 @@ export const getToolReferenceSummary = (message: UIMessage | unknown): ToolRefer
 };
 
 export const getSelectedSkillReferenceSummary = (
-  message: UIMessage | unknown
+  message: ChatUiMessage | unknown
 ): Pick<SkillReferenceSummary, 'mode' | 'selectedItems'> => {
   const parts = getMessageParts(message);
   const skillPart = parts.find(part => isSkillUsagePart(part));
@@ -281,12 +290,14 @@ export const getSelectedSkillReferenceSummary = (
   }
 
   return {
-    mode: skillPart.mode === 'auto' ? 'auto' : 'manual',
-    selectedItems: normalizeSkillItems(skillPart.skills),
+    mode: getSkillUsagePartData(skillPart)?.mode === 'auto' ? 'auto' : 'manual',
+    selectedItems: normalizeSkillItems(getSkillUsagePartData(skillPart)?.skills),
   };
 };
 
-export const getSkillReferenceSummary = (message: UIMessage | unknown): SkillReferenceSummary => {
+export const getSkillReferenceSummary = (
+  message: ChatUiMessage | unknown
+): SkillReferenceSummary => {
   const parts = getMessageParts(message);
   const selectedSummary = getSelectedSkillReferenceSummary(message);
   const selectedById = new Map(selectedSummary.selectedItems.map(item => [item.id, item] as const));
@@ -326,7 +337,9 @@ export const getSkillReferenceSummary = (message: UIMessage | unknown): SkillRef
   };
 };
 
-export const getMemoryReferenceSummary = (message: UIMessage | unknown): MemoryReferenceSummary => {
+export const getMemoryReferenceSummary = (
+  message: ChatUiMessage | unknown
+): MemoryReferenceSummary => {
   const parts = getMessageParts(message);
   const memoryPart = parts.find(part => isMemoryPart(part));
 
@@ -337,7 +350,8 @@ export const getMemoryReferenceSummary = (message: UIMessage | unknown): MemoryR
     };
   }
 
-  const rawResults = Array.isArray(memoryPart.results) ? memoryPart.results : [];
+  const memoryData = getMemoryPartData(memoryPart);
+  const rawResults = Array.isArray(memoryData?.results) ? memoryData.results : [];
   const items = rawResults
     .filter(
       (entry): entry is Record<string, unknown> =>
@@ -355,12 +369,14 @@ export const getMemoryReferenceSummary = (message: UIMessage | unknown): MemoryR
     }));
 
   return {
-    query: typeof memoryPart.query === 'string' ? normalizeWhitespace(memoryPart.query) : '',
+    query: typeof memoryData?.query === 'string' ? normalizeWhitespace(memoryData.query) : '',
     items,
   };
 };
 
-export const getAffectReferenceSummary = (message: UIMessage | unknown): AffectReferenceSummary => {
+export const getAffectReferenceSummary = (
+  message: ChatUiMessage | unknown
+): AffectReferenceSummary => {
   const parts = getMessageParts(message);
   const affectPart = parts.find(part => isAffectSignalPart(part));
 
@@ -380,24 +396,28 @@ export const getAffectReferenceSummary = (message: UIMessage | unknown): AffectR
     };
   }
 
+  const affectData = getAffectSignalPartData(affectPart);
+
   return {
     source:
-      affectPart.source === 'history' || affectPart.source === 'realtime' ? affectPart.source : '',
-    guardActive: affectPart.guardActive === true,
-    label: isAffectLabel(affectPart.label) ? affectPart.label : '',
-    confidence: toScore(affectPart.confidence),
-    valence: toScore(affectPart.valence),
-    arousal: toScore(affectPart.arousal),
-    sampleCount: toScore(affectPart.sampleCount),
-    windowSize: toScore(affectPart.windowSize),
-    ageMinutes: toScore(affectPart.ageMinutes),
-    windowMinutes: toScore(affectPart.windowMinutes),
-    emotions: normalizeAffectScores(affectPart.emotions),
+      affectData?.source === 'history' || affectData?.source === 'realtime'
+        ? affectData.source
+        : '',
+    guardActive: affectData?.guardActive === true,
+    label: isAffectLabel(affectData?.label) ? affectData.label : '',
+    confidence: toScore(affectData?.confidence),
+    valence: toScore(affectData?.valence),
+    arousal: toScore(affectData?.arousal),
+    sampleCount: toScore(affectData?.sampleCount),
+    windowSize: toScore(affectData?.windowSize),
+    ageMinutes: toScore(affectData?.ageMinutes),
+    windowMinutes: toScore(affectData?.windowMinutes),
+    emotions: normalizeAffectScores(affectData?.emotions),
   };
 };
 
 export const getContextReferenceSummary = (
-  message: UIMessage | unknown
+  message: ChatUiMessage | unknown
 ): ContextReferenceSummary => {
   const parts = getMessageParts(message);
   const contextPart = parts.find(part => isContextReportPart(part));
@@ -411,7 +431,8 @@ export const getContextReferenceSummary = (
     };
   }
 
-  const rawBlocks = Array.isArray(contextPart.blocks) ? contextPart.blocks : [];
+  const contextData = getContextReportPartData(contextPart);
+  const rawBlocks = Array.isArray(contextData?.blocks) ? contextData.blocks : [];
   const items = rawBlocks
     .filter(
       (entry): entry is ContextReportItem =>
@@ -427,9 +448,9 @@ export const getContextReferenceSummary = (
     }));
 
   return {
-    totalEstimatedTokens: toScore(contextPart.totalEstimatedTokens),
-    retainedRecentMessages: toScore(contextPart.retainedRecentMessages),
-    compactedMessages: toScore(contextPart.compactedMessages),
+    totalEstimatedTokens: toScore(contextData?.totalEstimatedTokens),
+    retainedRecentMessages: toScore(contextData?.retainedRecentMessages),
+    compactedMessages: toScore(contextData?.compactedMessages),
     items,
   };
 };
@@ -527,7 +548,7 @@ export const buildContextUsageIndicator = (
   };
 };
 
-export const hasReferenceSummary = (message: UIMessage | unknown): boolean => {
+export const hasReferenceSummary = (message: ChatUiMessage | unknown): boolean => {
   const toolSummary = getToolReferenceSummary(message);
   if (toolSummary.count > 0) return true;
   if (getSkillReferenceSummary(message).items.length > 0) return true;

@@ -1,6 +1,9 @@
-import type { UIMessage, UIMessageChunk } from 'ai';
 import { ref } from 'vue';
 
+import type {
+  ChatUiMessage,
+  ChatUiMessageChunk,
+} from '../../../shared/chat/message_parts';
 import type { ElectronApi } from '../../../shared/types/electron_api';
 import { isObjectRecord } from '../../../shared/utils/guards';
 import { createLogger } from '../../logger';
@@ -22,42 +25,48 @@ const streamControllerLogger = createLogger({ module: 'ui_stream_controller' });
 
 const isMemoryRetrievalChunk = (
   chunk: Record<string, unknown>
-): chunk is { type: 'memory-retrieval'; query?: unknown; results?: unknown } =>
-  chunk.type === 'memory-retrieval';
+): chunk is Extract<ChatUiMessageChunk, { type: 'data-memory-retrieval' }> =>
+  chunk.type === 'data-memory-retrieval' && isObjectRecord(chunk.data);
 
 const isSkillUsageChunk = (
   chunk: Record<string, unknown>
-): chunk is { type: 'skill-usage'; mode?: unknown; skills?: unknown } =>
-  chunk.type === 'skill-usage';
+): chunk is Extract<ChatUiMessageChunk, { type: 'data-skill-usage' }> =>
+  chunk.type === 'data-skill-usage' && isObjectRecord(chunk.data);
 
 const isAffectSignalChunk = (
   chunk: Record<string, unknown>
-): chunk is {
-  type: 'affect-signal';
-  source?: unknown;
-  guardActive?: unknown;
-  label?: unknown;
-  confidence?: unknown;
-  valence?: unknown;
-  arousal?: unknown;
-  emotions?: unknown;
-  sampleCount?: unknown;
-  windowSize?: unknown;
-  startAt?: unknown;
-  endAt?: unknown;
-  ageMinutes?: unknown;
-  windowMinutes?: unknown;
-} => chunk.type === 'affect-signal';
+): chunk is Extract<ChatUiMessageChunk, { type: 'data-affect-signal' }> =>
+  chunk.type === 'data-affect-signal' && isObjectRecord(chunk.data);
 
 const isContextReportChunk = (
   chunk: Record<string, unknown>
-): chunk is {
-  type: 'context-report';
-  totalEstimatedTokens?: unknown;
-  retainedRecentMessages?: unknown;
-  compactedMessages?: unknown;
-  blocks?: unknown;
-} => chunk.type === 'context-report';
+): chunk is Extract<ChatUiMessageChunk, { type: 'data-context-report' }> =>
+  chunk.type === 'data-context-report' && isObjectRecord(chunk.data);
+
+const isToolChunk = (
+  chunk: Record<string, unknown>
+): chunk is Extract<
+  ChatUiMessageChunk,
+  {
+    type:
+      | 'tool-input-start'
+      | 'tool-input-delta'
+      | 'tool-input-available'
+      | 'tool-input-error'
+      | 'tool-output-available'
+      | 'tool-output-error'
+      | 'tool-output-denied'
+      | 'tool-approval-request';
+  }
+> =>
+  chunk.type === 'tool-input-start' ||
+  chunk.type === 'tool-input-delta' ||
+  chunk.type === 'tool-input-available' ||
+  chunk.type === 'tool-input-error' ||
+  chunk.type === 'tool-output-available' ||
+  chunk.type === 'tool-output-error' ||
+  chunk.type === 'tool-output-denied' ||
+  chunk.type === 'tool-approval-request';
 
 export type ChatUiStreamController = ReturnType<typeof createChatUiStreamController>;
 
@@ -70,7 +79,7 @@ export const createChatUiStreamController = (deps: {
   getCurrentThreadId: () => string | null;
   onAssistantMessagePersisted?: (params: {
     threadId: string;
-    messagesSnapshot: UIMessage[];
+    messagesSnapshot: ChatUiMessage[];
   }) => Promise<void> | void;
 }) => {
   const initialState = createInitialStreamState();
@@ -80,14 +89,14 @@ export const createChatUiStreamController = (deps: {
   const streamingAssistantText = ref(initialState.streamingAssistantText);
   const streamRenderTick = ref(initialState.streamRenderTick);
 
-  const getAssistantMessageById = (id: string | null): UIMessage | undefined =>
+  const getAssistantMessageById = (id: string | null): ChatUiMessage | undefined =>
     deps.messageStore.getById(id);
 
-  const getOrCreateAssistantMessage = (): UIMessage => {
+  const getOrCreateAssistantMessage = (): ChatUiMessage => {
     const existing = getAssistantMessageById(activeAssistantMessageId.value);
     if (existing) return existing;
 
-    const assistantMessage: UIMessage = {
+    const assistantMessage: ChatUiMessage = {
       id: deps.createMessageId(),
       role: 'assistant',
       parts: [],
@@ -268,22 +277,22 @@ export const createChatUiStreamController = (deps: {
     if (!isObjectRecord(chunk) || typeof chunk.type !== 'string') return;
 
     if (isMemoryRetrievalChunk(chunk)) {
-      await dispatch({ type: 'memory_chunk', chunk });
+      await dispatch({ type: 'memory_chunk', chunk: chunk.data });
       return;
     }
 
     if (isSkillUsageChunk(chunk)) {
-      await dispatch({ type: 'skill_chunk', chunk });
+      await dispatch({ type: 'skill_chunk', chunk: chunk.data });
       return;
     }
 
     if (isAffectSignalChunk(chunk)) {
-      await dispatch({ type: 'affect_chunk', chunk });
+      await dispatch({ type: 'affect_chunk', chunk: chunk.data });
       return;
     }
 
     if (isContextReportChunk(chunk)) {
-      await dispatch({ type: 'context_chunk', chunk });
+      await dispatch({ type: 'context_chunk', chunk: chunk.data });
       return;
     }
 
@@ -318,18 +327,8 @@ export const createChatUiStreamController = (deps: {
       return;
     }
 
-    const isToolChunk =
-      chunk.type === 'tool-input-start' ||
-      chunk.type === 'tool-input-delta' ||
-      chunk.type === 'tool-input-available' ||
-      chunk.type === 'tool-input-error' ||
-      chunk.type === 'tool-output-available' ||
-      chunk.type === 'tool-output-error' ||
-      chunk.type === 'tool-output-denied' ||
-      chunk.type === 'tool-approval-request';
-
     if (isToolChunk) {
-      await dispatch({ type: 'tool_chunk', chunk: chunk as UIMessageChunk });
+      await dispatch({ type: 'tool_chunk', chunk });
     }
   };
 
@@ -338,7 +337,7 @@ export const createChatUiStreamController = (deps: {
   });
 
   const handleToolApproval = async (
-    message: UIMessage,
+    message: ChatUiMessage,
     part: unknown,
     approved: boolean
   ): Promise<void> => {

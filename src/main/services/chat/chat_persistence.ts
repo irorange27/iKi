@@ -4,6 +4,7 @@ import { createLogger } from '../../../core/logger';
 import type { ChatMessage, ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/utils/guards';
 import { createPrefixedId } from '../../../shared/utils/id';
+import { ensureThreadWorkspaceSelection } from '../../../core/workspaces/thread_workspace';
 import { getErrorMessage } from '../../utils/errors';
 import { touchThreadRelationshipState } from '../relationship/relationship_service';
 import type { ChatMemory } from './chat_memory';
@@ -13,7 +14,10 @@ const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
 export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   const listThreads = () => chatThreadDb.getChatThreads();
-  const getThread = (id: string) => chatThreadDb.getChatThread(id);
+  const getThread = (id: string) => {
+    ensureThreadWorkspaceSelection(id);
+    return chatThreadDb.getChatThread(id);
+  };
   const createThread = (input: unknown) => {
     const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
     const threadId =
@@ -51,6 +55,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
       artifact_workspace_id: normalizedString(thread.artifact_workspace_id),
       skill_ids: normalizedString(thread.skill_ids),
     });
+    ensureThreadWorkspaceSelection(threadId);
     return chatThreadDb.getChatThread(threadId);
   };
   const updateThread = (id: string, input: unknown) => {

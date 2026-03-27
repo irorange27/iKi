@@ -1,12 +1,19 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import * as chatThreadDb from '../db/chat_thread';
 import * as workspaceDb from '../db/workspaces';
 import type { Workspace } from '../../shared/types/chat';
+import { getUserDataPath } from '../platform';
 
 export type ThreadWorkspaceSelection = {
   threadId: string;
   workspaceId: string | null;
   workspace: Workspace | null;
 };
+
+const THREAD_WORKSPACES_DIR = 'thread-workspaces';
+const BRAIN_DIR = 'brain';
 
 const normalizeThreadId = (threadId?: string | null): string => {
   if (typeof threadId !== 'string') return '';
@@ -17,6 +24,57 @@ const normalizeWorkspaceId = (workspaceId: unknown): string | null => {
   if (typeof workspaceId !== 'string') return null;
   const trimmed = workspaceId.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const toThreadWorkspaceId = (threadId: string): string =>
+  `workspace_thread_${threadId.replace(/[^a-zA-Z0-9_-]+/g, '_')}`;
+
+const getThreadWorkspacePath = (threadId: string): string =>
+  path.join(getUserDataPath(), THREAD_WORKSPACES_DIR, threadId);
+
+const getBrainPath = (): string => path.join(getUserDataPath(), BRAIN_DIR);
+
+const getThreadWorkspaceName = (threadId: string, title: unknown): string => {
+  const trimmedTitle = typeof title === 'string' ? title.trim() : '';
+  return trimmedTitle ? `${trimmedTitle} Scratch` : `Thread ${threadId} Scratch`;
+};
+
+const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
+  const thread = chatThreadDb.getChatThread(threadId);
+  if (!thread) return null;
+
+  const configuredWorkspaceId = normalizeWorkspaceId(thread.workspace_id);
+  if (configuredWorkspaceId) {
+    const existingWorkspace = workspaceDb.getWorkspace(configuredWorkspaceId);
+    if (existingWorkspace) return existingWorkspace;
+  }
+
+  const workspacePath = getThreadWorkspacePath(threadId);
+  fs.mkdirSync(workspacePath, { recursive: true });
+
+  const existingByPath = workspaceDb.getWorkspaceByPath(workspacePath);
+  if (existingByPath) {
+    workspaceDb.updateWorkspace(existingByPath.id, {
+      name: getThreadWorkspaceName(threadId, thread.title),
+      is_temporary: 1,
+      show_in_list: 0,
+    });
+    if (configuredWorkspaceId !== existingByPath.id) {
+      chatThreadDb.updateChatThread(threadId, { workspace_id: existingByPath.id });
+    }
+    return workspaceDb.getWorkspace(existingByPath.id);
+  }
+
+  const workspaceId = toThreadWorkspaceId(threadId);
+  workspaceDb.addWorkspace({
+    id: workspaceId,
+    path: workspacePath,
+    name: getThreadWorkspaceName(threadId, thread.title),
+    is_temporary: 1,
+    show_in_list: 0,
+  });
+  chatThreadDb.updateChatThread(threadId, { workspace_id: workspaceId });
+  return workspaceDb.getWorkspace(workspaceId);
 };
 
 export const getThreadWorkspaceSelection = (
@@ -38,8 +96,24 @@ export const getThreadWorkspaceSelection = (
   };
 };
 
+export const ensureThreadWorkspaceSelection = (
+  threadId?: string | null
+): ThreadWorkspaceSelection | null => {
+  const normalizedThreadId = normalizeThreadId(threadId);
+  if (!normalizedThreadId) return null;
+
+  const workspace = ensureThreadWorkspaceRecord(normalizedThreadId);
+  const workspaceId = normalizeWorkspaceId(workspace?.id);
+
+  return {
+    threadId: normalizedThreadId,
+    workspaceId,
+    workspace: workspaceId ? workspace : null,
+  };
+};
+
 export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): string => {
-  const selection = getThreadWorkspaceSelection(threadId);
+  const selection = ensureThreadWorkspaceSelection(threadId);
   if (!selection?.threadId || !selection.workspaceId) {
     return (
       'No workspace is selected for this conversation. Do not use filesystem or shell tools ' +
@@ -67,8 +141,11 @@ export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): str
   }
 
   const workspaceLabel = workspaceName || selection.workspaceId;
+  const brainPath = getBrainPath();
+  fs.mkdirSync(brainPath, { recursive: true });
   return (
     `Current workspace: ${workspaceLabel} (${workspacePath}). ` +
-    'Prefer relative paths from this root, default shell work to this directory, and do not operate outside it unless the user explicitly changes workspace.'
+    'Prefer relative paths from this root, default shell work to this directory, and do not operate outside it unless the user explicitly changes workspace. ' +
+    `Additional writable app data root: ${brainPath}. Use it for continuity files such as owner.md, relationship.md, and memory_inbox/.`
   );
 };

@@ -31,6 +31,10 @@ A local agent pet for AI provider orchestration.
   (`iki.md`, `owner.md`, `relationship.md`) so iKi continuity and owner identity can start from
   simple files instead of requiring a heavier memory schema first.
 
+- Threads now auto-provision a hidden temporary workspace under the app user-data directory, so
+  local file tools have a safe per-thread scratch area by default while still allowing edits under
+  the app-managed `brain/` continuity folder.
+
 ## Getting Started
 
 1. Install Node.js 20.x and npm 10.x.

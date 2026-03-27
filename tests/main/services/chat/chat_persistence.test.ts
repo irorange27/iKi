@@ -7,6 +7,7 @@ const {
   getChatThreadMock,
   touchChatThreadMock,
   touchThreadRelationshipStateMock,
+  ensureThreadWorkspaceSelectionMock,
 } = vi.hoisted(() => ({
   addChatThreadMock: vi.fn(),
   addChatMessageMock: vi.fn(),
@@ -14,6 +15,7 @@ const {
   getChatThreadMock: vi.fn(),
   touchChatThreadMock: vi.fn(),
   touchThreadRelationshipStateMock: vi.fn(),
+  ensureThreadWorkspaceSelectionMock: vi.fn(),
 }));
 
 vi.mock('../../../../src/core/db/chat_message', () => ({
@@ -29,6 +31,14 @@ vi.mock('../../../../src/core/db/chat_thread', () => ({
 
 vi.mock('../../../../src/main/services/relationship/relationship_service', () => ({
   touchThreadRelationshipState: touchThreadRelationshipStateMock,
+}));
+
+vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
+  ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
+}));
+
+vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
+  sanitizeUiMessageJsonForStorage: vi.fn((value: string) => value),
 }));
 
 describe('chat_persistence', () => {
@@ -85,6 +95,7 @@ describe('chat_persistence', () => {
         skill_ids: '["skill_alpha"]',
       })
     );
+    expect(ensureThreadWorkspaceSelectionMock).toHaveBeenCalledWith('thread_1');
     expect(getChatThreadMock).toHaveBeenCalledWith('thread_1');
     expect(created).toEqual(
       expect.objectContaining({

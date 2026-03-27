@@ -31,8 +31,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { UIMessage } from 'ai';
 import { Brain, Heart, Sparkles, Wrench } from 'lucide-vue-next';
+import type { ChatUiMessage } from '../../../shared/chat/message_parts';
 import { useI18n } from '../../i18n';
 
 import {
@@ -44,7 +44,7 @@ import {
 } from '../../modules/chat/ui_message_references';
 
 const props = defineProps<{
-  message: UIMessage;
+  message: ChatUiMessage;
 }>();
 
 const { t } = useI18n();

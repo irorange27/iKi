@@ -1,6 +1,16 @@
 import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
+import {
+  createAffectSignalPart,
+  createContextReportPart,
+  createMemoryPart,
+  createSkillUsagePart,
+  getAffectSignalPartData,
+  getContextReportPartData,
+  getMemoryPartData,
+  getSkillUsagePartData,
+} from '../../../shared/chat/message_parts';
 import { isAffectLabel } from '../../../shared/emotion/affect';
-import { isObjectRecord, normalizeDynamicToolPart } from '../../../shared/chat/tool_parts';
+import { isObjectRecord, normalizeToolPartForValidation } from '../../../shared/chat/tool_parts';
 
 import { createRuntimeId } from './chat_ui_tool_parts';
 
@@ -35,7 +45,8 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
         }
 
         if (part.type === 'dynamic-tool') {
-          const normalized = normalizeDynamicToolPart(part, createRuntimeId('tool_call'));
+          const normalized = normalizeToolPartForValidation(part, createRuntimeId('tool_call'));
+          if (!normalized) continue;
 
           // Keep only semantically meaningful fields; drop renderer-only UI state.
           delete normalized.callProviderMetadata;
@@ -44,33 +55,31 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
           continue;
         }
 
-        if (part.type === 'memory-retrieval') {
-          const normalized: Record<string, unknown> = {
-            type: 'memory-retrieval',
-          };
-          if (typeof part.query === 'string' && part.query.trim()) {
-            normalized.query = part.query.trim();
+        if (part.type === 'data-memory-retrieval' || part.type === 'memory-retrieval') {
+          const memoryData = getMemoryPartData(part);
+          const normalizedData: Record<string, unknown> = {};
+          if (typeof memoryData?.query === 'string' && memoryData.query.trim()) {
+            normalizedData.query = memoryData.query.trim();
           }
-          if (Array.isArray(part.results)) {
-            normalized.results = part.results.filter(
+          if (Array.isArray(memoryData?.results)) {
+            normalizedData.results = memoryData.results.filter(
               entry => entry && typeof entry === 'object' && 'summary' in entry
             );
           } else {
-            normalized.results = [];
+            normalizedData.results = [];
           }
-          nextParts.push(normalized);
+          nextParts.push(createMemoryPart(normalizedData));
           continue;
         }
 
-        if (part.type === 'skill-usage') {
-          const normalized: Record<string, unknown> = {
-            type: 'skill-usage',
-          };
-          if (part.mode === 'manual' || part.mode === 'auto') {
-            normalized.mode = part.mode;
+        if (part.type === 'data-skill-usage' || part.type === 'skill-usage') {
+          const skillData = getSkillUsagePartData(part);
+          const normalizedData: Record<string, unknown> = {};
+          if (skillData?.mode === 'manual' || skillData?.mode === 'auto') {
+            normalizedData.mode = skillData.mode;
           }
-          if (Array.isArray(part.skills)) {
-            normalized.skills = part.skills
+          if (Array.isArray(skillData?.skills)) {
+            normalizedData.skills = skillData.skills
               .filter(
                 (entry): entry is SkillUsageEntry =>
                   isObjectRecord(entry) &&
@@ -90,36 +99,38 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
                   : {}),
               }));
           } else {
-            normalized.skills = [];
+            normalizedData.skills = [];
           }
-          nextParts.push(normalized);
+          nextParts.push(createSkillUsagePart(normalizedData));
           continue;
         }
 
-        if (part.type === 'affect-signal') {
-          const normalized: Record<string, unknown> = {
-            type: 'affect-signal',
-          };
-          if (part.source === 'history' || part.source === 'realtime') {
-            normalized.source = part.source;
+        if (part.type === 'data-affect-signal' || part.type === 'affect-signal') {
+          const affectData = getAffectSignalPartData(part);
+          const normalizedData: Record<string, unknown> = {};
+          if (affectData?.source === 'history' || affectData?.source === 'realtime') {
+            normalizedData.source = affectData.source;
           }
-          if (typeof part.guardActive === 'boolean') {
-            normalized.guardActive = part.guardActive;
+          if (typeof affectData?.guardActive === 'boolean') {
+            normalizedData.guardActive = affectData.guardActive;
           }
-          if (isAffectLabel(part.label)) {
-            normalized.label = part.label;
+          if (isAffectLabel(affectData?.label)) {
+            normalizedData.label = affectData.label;
           }
-          if (typeof part.confidence === 'number' && Number.isFinite(part.confidence)) {
-            normalized.confidence = Math.min(1, Math.max(0, part.confidence));
+          if (
+            typeof affectData?.confidence === 'number' &&
+            Number.isFinite(affectData.confidence)
+          ) {
+            normalizedData.confidence = Math.min(1, Math.max(0, affectData.confidence));
           }
-          if (typeof part.valence === 'number' && Number.isFinite(part.valence)) {
-            normalized.valence = Math.min(1, Math.max(-1, part.valence));
+          if (typeof affectData?.valence === 'number' && Number.isFinite(affectData.valence)) {
+            normalizedData.valence = Math.min(1, Math.max(-1, affectData.valence));
           }
-          if (typeof part.arousal === 'number' && Number.isFinite(part.arousal)) {
-            normalized.arousal = Math.min(1, Math.max(0, part.arousal));
+          if (typeof affectData?.arousal === 'number' && Number.isFinite(affectData.arousal)) {
+            normalizedData.arousal = Math.min(1, Math.max(0, affectData.arousal));
           }
-          if (Array.isArray(part.emotions)) {
-            normalized.emotions = part.emotions
+          if (Array.isArray(affectData?.emotions)) {
+            normalizedData.emotions = affectData.emotions
               .filter(
                 entry =>
                   isObjectRecord(entry) &&
@@ -129,60 +140,77 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
               )
               .map(entry => ({
                 label: entry.label,
-                score: Math.min(1, Math.max(0, entry.score)),
-              }));
+                  score: Math.min(1, Math.max(0, entry.score)),
+                }));
           } else {
-            normalized.emotions = [];
+            normalizedData.emotions = [];
           }
-          if (typeof part.sampleCount === 'number' && Number.isFinite(part.sampleCount)) {
-            normalized.sampleCount = Math.max(0, Math.trunc(part.sampleCount));
+          if (
+            typeof affectData?.sampleCount === 'number' &&
+            Number.isFinite(affectData.sampleCount)
+          ) {
+            normalizedData.sampleCount = Math.max(0, Math.trunc(affectData.sampleCount));
           }
-          if (typeof part.windowSize === 'number' && Number.isFinite(part.windowSize)) {
-            normalized.windowSize = Math.max(0, Math.trunc(part.windowSize));
+          if (
+            typeof affectData?.windowSize === 'number' &&
+            Number.isFinite(affectData.windowSize)
+          ) {
+            normalizedData.windowSize = Math.max(0, Math.trunc(affectData.windowSize));
           }
-          if (typeof part.startAt === 'string' && part.startAt.trim()) {
-            normalized.startAt = part.startAt.trim();
+          if (typeof affectData?.startAt === 'string' && affectData.startAt.trim()) {
+            normalizedData.startAt = affectData.startAt.trim();
           }
-          if (typeof part.endAt === 'string' && part.endAt.trim()) {
-            normalized.endAt = part.endAt.trim();
+          if (typeof affectData?.endAt === 'string' && affectData.endAt.trim()) {
+            normalizedData.endAt = affectData.endAt.trim();
           }
-          if (typeof part.ageMinutes === 'number' && Number.isFinite(part.ageMinutes)) {
-            normalized.ageMinutes = Math.max(0, part.ageMinutes);
+          if (
+            typeof affectData?.ageMinutes === 'number' &&
+            Number.isFinite(affectData.ageMinutes)
+          ) {
+            normalizedData.ageMinutes = Math.max(0, affectData.ageMinutes);
           }
-          if (typeof part.windowMinutes === 'number' && Number.isFinite(part.windowMinutes)) {
-            normalized.windowMinutes = Math.max(0, part.windowMinutes);
+          if (
+            typeof affectData?.windowMinutes === 'number' &&
+            Number.isFinite(affectData.windowMinutes)
+          ) {
+            normalizedData.windowMinutes = Math.max(0, affectData.windowMinutes);
           }
-          nextParts.push(normalized);
+          nextParts.push(createAffectSignalPart(normalizedData));
           continue;
         }
 
-        if (part.type === 'context-report') {
-          const normalized: Record<string, unknown> = {
-            type: 'context-report',
-          };
+        if (part.type === 'data-context-report' || part.type === 'context-report') {
+          const contextData = getContextReportPartData(part);
+          const normalizedData: Record<string, unknown> = {};
           if (
-            typeof part.totalEstimatedTokens === 'number' &&
-            Number.isFinite(part.totalEstimatedTokens)
+            typeof contextData?.totalEstimatedTokens === 'number' &&
+            Number.isFinite(contextData.totalEstimatedTokens)
           ) {
-            normalized.totalEstimatedTokens = Math.max(0, Math.trunc(part.totalEstimatedTokens));
-          }
-          if (
-            typeof part.retainedRecentMessages === 'number' &&
-            Number.isFinite(part.retainedRecentMessages)
-          ) {
-            normalized.retainedRecentMessages = Math.max(
+            normalizedData.totalEstimatedTokens = Math.max(
               0,
-              Math.trunc(part.retainedRecentMessages)
+              Math.trunc(contextData.totalEstimatedTokens)
             );
           }
           if (
-            typeof part.compactedMessages === 'number' &&
-            Number.isFinite(part.compactedMessages)
+            typeof contextData?.retainedRecentMessages === 'number' &&
+            Number.isFinite(contextData.retainedRecentMessages)
           ) {
-            normalized.compactedMessages = Math.max(0, Math.trunc(part.compactedMessages));
+            normalizedData.retainedRecentMessages = Math.max(
+              0,
+              Math.trunc(contextData.retainedRecentMessages)
+            );
           }
-          if (Array.isArray(part.blocks)) {
-            normalized.blocks = part.blocks
+          if (
+            typeof contextData?.compactedMessages === 'number' &&
+            Number.isFinite(contextData.compactedMessages)
+          ) {
+            normalizedData.compactedMessages = Math.max(
+              0,
+              Math.trunc(contextData.compactedMessages)
+            );
+          }
+          if (Array.isArray(contextData?.blocks)) {
+            normalizedData.blocks = contextData.blocks
               .filter(
                 (entry): entry is ContextReportItem =>
                   isObjectRecord(entry) &&
@@ -207,9 +235,9 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
                   : {}),
               }));
           } else {
-            normalized.blocks = [];
+            normalizedData.blocks = [];
           }
-          nextParts.push(normalized);
+          nextParts.push(createContextReportPart(normalizedData));
         }
       }
 

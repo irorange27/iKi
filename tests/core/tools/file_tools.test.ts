@@ -3,19 +3,35 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getVisibleWorkspacesMock, getWorkspaceMock, getChatThreadMock } = vi.hoisted(() => ({
+const {
+  getVisibleWorkspacesMock,
+  getWorkspaceMock,
+  getWorkspaceByPathMock,
+  addWorkspaceMock,
+  updateWorkspaceMock,
+  getChatThreadMock,
+  updateChatThreadMock,
+} = vi.hoisted(() => ({
   getVisibleWorkspacesMock: vi.fn(),
   getWorkspaceMock: vi.fn(),
+  getWorkspaceByPathMock: vi.fn(),
+  addWorkspaceMock: vi.fn(),
+  updateWorkspaceMock: vi.fn(),
   getChatThreadMock: vi.fn(),
+  updateChatThreadMock: vi.fn(),
 }));
 
 vi.mock('../../../src/core/db/workspaces', () => ({
   getVisibleWorkspaces: getVisibleWorkspacesMock,
   getWorkspace: getWorkspaceMock,
+  getWorkspaceByPath: getWorkspaceByPathMock,
+  addWorkspace: addWorkspaceMock,
+  updateWorkspace: updateWorkspaceMock,
 }));
 
 vi.mock('../../../src/core/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
+  updateChatThread: updateChatThreadMock,
 }));
 
 import {
@@ -47,10 +63,13 @@ describe('file tools workspace boundaries', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     getChatThreadMock.mockReturnValue(null);
+    getWorkspaceByPathMock.mockReturnValue(null);
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-file-tools-'));
+    process.env.IKI_USER_DATA_PATH = path.join(tempRoot, 'user-data');
   });
 
   afterEach(async () => {
+    delete process.env.IKI_USER_DATA_PATH;
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
 
@@ -161,41 +180,105 @@ describe('file tools workspace boundaries', () => {
     expect((result as { content: string }).content).toBe('secondary only');
   });
 
-  it('fails closed when the active thread points to a missing workspace record', async () => {
-    const workspaceRoot = path.join(tempRoot, 'workspace');
-    await fs.mkdir(path.join(workspaceRoot, 'docs'), { recursive: true });
-    await fs.writeFile(path.join(workspaceRoot, 'docs', 'note.txt'), 'hello workspace', 'utf8');
-    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+  it('auto-creates a temporary workspace when the active thread points to a missing workspace record', async () => {
+    const tempWorkspaceRoot = path.join(process.env.IKI_USER_DATA_PATH as string, 'thread-workspaces', 'thread_1');
+    const tempWorkspaceId = 'workspace_thread_thread_1';
     getChatThreadMock.mockReturnValue({
       id: 'thread_1',
       workspace_id: 'workspace_missing',
+      title: 'Recovered thread',
     });
-    getWorkspaceMock.mockReturnValue(null);
+    getWorkspaceMock.mockImplementation((id: string) =>
+      id === tempWorkspaceId
+        ? {
+            id,
+            path: tempWorkspaceRoot,
+            name: 'Recovered thread Scratch',
+            is_temporary: 1,
+            show_in_list: 0,
+          }
+        : null
+    );
 
-    const tool = new ReadFileTool();
+    const tool = new WriteFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      tool.execute({
+        path: 'note.txt',
+        content: 'hello temp workspace',
+      })
+    )) as { path: string; success: boolean };
 
-    await expect(
-      runWithToolRuntimeContext({ threadId: 'thread_1' }, async () =>
-        tool.execute({ path: 'docs/note.txt' })
-      )
-    ).rejects.toThrow(/selected workspace "workspace_missing" is unavailable/i);
+    expect(result.success).toBe(true);
+    expect(result.path).toBe(path.join(tempWorkspaceRoot, 'note.txt'));
+    expect(addWorkspaceMock).toHaveBeenCalledWith({
+      id: tempWorkspaceId,
+      path: tempWorkspaceRoot,
+      name: 'Recovered thread Scratch',
+      is_temporary: 1,
+      show_in_list: 0,
+    });
+    expect(updateChatThreadMock).toHaveBeenCalledWith('thread_1', {
+      workspace_id: tempWorkspaceId,
+    });
   });
 
-  it('fails closed when no workspace is selected for the active thread', async () => {
-    const workspaceRoot = path.join(tempRoot, 'workspace');
-    await fs.mkdir(path.join(workspaceRoot, 'docs'), { recursive: true });
-    await fs.writeFile(path.join(workspaceRoot, 'docs', 'note.txt'), 'hello workspace', 'utf8');
-    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+  it('auto-creates a temporary workspace when no workspace is selected for the active thread', async () => {
+    const tempWorkspaceRoot = path.join(process.env.IKI_USER_DATA_PATH as string, 'thread-workspaces', 'thread_1');
+    const tempWorkspaceId = 'workspace_thread_thread_1';
     getChatThreadMock.mockReturnValue({
       id: 'thread_1',
       workspace_id: null,
+      title: 'Ad hoc thread',
     });
-    getWorkspaceMock.mockReturnValue(null);
+    getWorkspaceMock.mockImplementation((id: string) =>
+      id === tempWorkspaceId
+        ? {
+            id,
+            path: tempWorkspaceRoot,
+            name: 'Ad hoc thread Scratch',
+            is_temporary: 1,
+            show_in_list: 0,
+          }
+        : null
+    );
 
-    const tool = new ReadFileTool();
+    const tool = new WriteFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      tool.execute({
+        path: 'scratch.txt',
+        content: 'auto workspace',
+      })
+    )) as { path: string; success: boolean };
 
-    await expect(
-      runInWorkspaceContext('thread_1', async () => tool.execute({ path: 'docs/note.txt' }))
-    ).rejects.toThrow(/require an active conversation workspace/i);
+    expect(result.success).toBe(true);
+    expect(result.path).toBe(path.join(tempWorkspaceRoot, 'scratch.txt'));
+    expect(updateChatThreadMock).toHaveBeenCalledWith('thread_1', {
+      workspace_id: tempWorkspaceId,
+    });
+  });
+
+  it('allows writes into the app brain folder through the brain/ alias', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const tool = new WriteFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      tool.execute({
+        path: 'brain/owner.md',
+        content: '# Owner\n\n- Preferred name: Nina\n',
+      })
+    )) as { path: string; success: boolean };
+
+    expect(result.success).toBe(true);
+    expect(result.path).toBe(path.join(process.env.IKI_USER_DATA_PATH as string, 'brain', 'owner.md'));
+    expect(
+      await fs.readFile(path.join(process.env.IKI_USER_DATA_PATH as string, 'brain', 'owner.md'), 'utf8')
+    ).toContain('Preferred name: Nina');
   });
 });

@@ -1,27 +1,28 @@
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage } from '../../../shared/chat/message_parts';
 
 export type ChatMessageStore = ReturnType<typeof createChatMessageStore>;
 
 export const createChatMessageStore = (chat: { messages: unknown[] }) => {
-  const messages = chat.messages as UIMessage[];
+  const messages = chat.messages as ChatUiMessage[];
 
   const findIndexById = (id: string | null | undefined): number => {
     if (!id) return -1;
     return messages.findIndex(message => message.id === id);
   };
 
-  const getById = (id: string | null | undefined): UIMessage | undefined => {
+  const getById = (id: string | null | undefined): ChatUiMessage | undefined => {
     if (!id) return undefined;
     return messages.find(message => message.id === id);
   };
 
-  const getAt = (index: number): UIMessage | undefined => messages[index] as UIMessage | undefined;
+  const getAt = (index: number): ChatUiMessage | undefined =>
+    messages[index] as ChatUiMessage | undefined;
 
-  const append = (message: UIMessage) => {
+  const append = (message: ChatUiMessage) => {
     messages.push(message);
   };
 
-  const replaceAt = (index: number, message: UIMessage) => {
+  const replaceAt = (index: number, message: ChatUiMessage) => {
     if (index >= 0) {
       messages.splice(index, 1, message);
     } else {
@@ -35,7 +36,7 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
     }
   };
 
-  const upsert = (message: UIMessage) => {
+  const upsert = (message: ChatUiMessage) => {
     const index = findIndexById(message.id);
     replaceAt(index, message);
     return index;
@@ -51,23 +52,23 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
     messages.splice(0, messages.length);
   };
 
-  const setAll = (next: UIMessage[]) => {
+  const setAll = (next: ChatUiMessage[]) => {
     messages.splice(0, messages.length, ...next);
   };
 
-  const truncateAfterIndex = (index: number): UIMessage[] => {
+  const truncateAfterIndex = (index: number): ChatUiMessage[] => {
     const start = Math.max(index + 1, 0);
     if (start >= messages.length) return [];
-    return messages.splice(start, messages.length - start) as UIMessage[];
+    return messages.splice(start, messages.length - start) as ChatUiMessage[];
   };
 
   const hasId = (id: string | null | undefined): boolean => findIndexById(id) >= 0;
 
-  const snapshot = (): UIMessage[] => [...messages];
+  const snapshot = (): ChatUiMessage[] => [...messages];
 
-  const findLatestUserBefore = (index: number): UIMessage | undefined => {
+  const findLatestUserBefore = (index: number): ChatUiMessage | undefined => {
     for (let i = index - 1; i >= 0; i -= 1) {
-      const message = messages[i] as UIMessage | undefined;
+      const message = messages[i] as ChatUiMessage | undefined;
       if (message && message.role === 'user' && typeof message.id === 'string') {
         return message;
       }

@@ -1,7 +1,10 @@
-import type { UIMessageChunk } from 'ai';
-
 import { defaultToolRegistry } from '../../../core/tools';
-import type { AffectSignalPart, ContextReportItem } from '../../../shared/chat/message_parts';
+import type {
+  AffectSignalPartData,
+  ChatUiMessageChunk,
+  ContextReportItem,
+  SkillUsageEntry,
+} from '../../../shared/chat/message_parts';
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
@@ -58,7 +61,7 @@ const getToolDisplayTitle = (toolName: string): string | undefined => {
   return undefined;
 };
 
-const toUiChunkFromToolEvent = (event: ToolStreamEvent): UIMessageChunk | null => {
+const toUiChunkFromToolEvent = (event: ToolStreamEvent): ChatUiMessageChunk | null => {
   const toolCallId = getToolCallIdFromEvent(event);
   const toolName = getToolNameFromEvent(event);
   const title = getToolDisplayTitle(toolName);
@@ -109,32 +112,26 @@ const toUiChunkFromToolEvent = (event: ToolStreamEvent): UIMessageChunk | null =
     };
   }
   if (event.type === 'tool-result') {
-    const chunk = {
+    return {
       type: 'tool-output-available',
       toolCallId,
-      toolName,
       output: event.output,
       dynamic: true,
-      ...(title ? { title } : {}),
       ...(typeof event.preliminary === 'boolean' ? { preliminary: event.preliminary } : {}),
     };
-    return chunk as unknown as UIMessageChunk;
   }
   if (event.type === 'tool-error') {
-    const chunk = {
+    return {
       type: 'tool-output-error',
       toolCallId,
-      toolName,
       errorText:
         typeof event.error === 'string'
           ? event.error
           : event.error instanceof Error
             ? event.error.message
             : 'Tool execution failed',
-      ...(title ? { title } : {}),
       dynamic: true,
     };
-    return chunk as unknown as UIMessageChunk;
   }
   if (event.type === 'tool-output-denied') {
     return {
@@ -165,17 +162,7 @@ export const createUiChunkEmitter = (
   let terminated = false;
 
   const emitChunk = (
-    chunk:
-      | UIMessageChunk
-      | { type: 'memory-retrieval'; query?: string; results?: Array<Record<string, unknown>> }
-      | AffectSignalPart
-      | {
-          type: 'context-report';
-          totalEstimatedTokens?: number;
-          retainedRecentMessages?: number;
-          compactedMessages?: number;
-          blocks?: ContextReportItem[];
-        }
+    chunk: ChatUiMessageChunk
   ) => {
     webContents.send('chat:ui-chunk', chunk);
   };
@@ -212,20 +199,32 @@ export const createUiChunkEmitter = (
       const uiChunk = toUiChunkFromToolEvent(event);
       if (uiChunk) emitChunk(uiChunk);
     },
+    emitSkillUsage: (payload: { mode?: 'manual' | 'auto'; skills: SkillUsageEntry[] }) => {
+      if (terminated) return;
+      ensureStarted();
+      emitChunk({
+        type: 'data-skill-usage',
+        data: {
+          ...(payload.mode === 'auto' || payload.mode === 'manual' ? { mode: payload.mode } : {}),
+          skills: Array.isArray(payload.skills) ? payload.skills : [],
+        },
+      });
+    },
     emitMemoryRetrieval: payload => {
       if (terminated) return;
       ensureStarted();
       emitChunk({
-        type: 'memory-retrieval',
-        query: payload?.query ?? '',
-        results: Array.isArray(payload?.results) ? payload.results : [],
+        type: 'data-memory-retrieval',
+        data: {
+          query: payload?.query ?? '',
+          results: Array.isArray(payload?.results) ? payload.results : [],
+        },
       });
     },
     emitAffectSignal: (payload: AffectSignal) => {
       if (terminated) return;
       ensureStarted();
-      emitChunk({
-        type: 'affect-signal',
+      const data: AffectSignalPartData = {
         source: payload.source,
         guardActive: payload.guardActive,
         label: payload.state.label,
@@ -239,20 +238,26 @@ export const createUiChunkEmitter = (
         endAt: payload.state.endAt,
         ageMinutes: payload.state.ageMinutes,
         windowMinutes: payload.state.windowMinutes,
+      };
+      emitChunk({
+        type: 'data-affect-signal',
+        data,
       });
     },
     emitContextReport: payload => {
       if (terminated) return;
       ensureStarted();
       emitChunk({
-        type: 'context-report',
-        totalEstimatedTokens:
-          typeof payload?.totalEstimatedTokens === 'number' ? payload.totalEstimatedTokens : 0,
-        retainedRecentMessages:
-          typeof payload?.retainedRecentMessages === 'number' ? payload.retainedRecentMessages : 0,
-        compactedMessages:
-          typeof payload?.compactedMessages === 'number' ? payload.compactedMessages : 0,
-        blocks: Array.isArray(payload?.blocks) ? payload.blocks : [],
+        type: 'data-context-report',
+        data: {
+          totalEstimatedTokens:
+            typeof payload?.totalEstimatedTokens === 'number' ? payload.totalEstimatedTokens : 0,
+          retainedRecentMessages:
+            typeof payload?.retainedRecentMessages === 'number' ? payload.retainedRecentMessages : 0,
+          compactedMessages:
+            typeof payload?.compactedMessages === 'number' ? payload.compactedMessages : 0,
+          blocks: Array.isArray(payload?.blocks) ? payload.blocks : [],
+        },
       });
     },
     finish: () => {

@@ -1,6 +1,10 @@
-import type { ModelMessage, UIMessage } from 'ai';
 import type { ConversationRunnerStreamEvent } from '../../../core/agent';
-import type { ContextReportItem } from '../../../shared/chat/message_parts';
+import type {
+  ChatUiMessage,
+  ContextReportItem,
+  SkillUsageEntry,
+} from '../../../shared/chat/message_parts';
+import type { ModelMessage } from 'ai';
 import type { AffectSignal } from '../../../shared/emotion/affect';
 
 export type ChatWebContents = {
@@ -9,7 +13,6 @@ export type ChatWebContents = {
 };
 
 export type ChatInputMessage = ModelMessage;
-export type ChatUiMessage = UIMessage;
 export type ChatTransportMessage = ChatInputMessage | ChatUiMessage;
 
 export type LlmChatMessage = {
@@ -29,6 +32,10 @@ export type UiChunkEmitter = {
   messageId: string;
   emitTextDelta: (delta: string) => void;
   emitToolEvent: (event: ToolStreamEvent) => void;
+  emitSkillUsage: (payload: {
+    mode?: 'manual' | 'auto';
+    skills: SkillUsageEntry[];
+  }) => void;
   emitMemoryRetrieval: (payload: {
     query: string;
     results: Array<Record<string, unknown>>;

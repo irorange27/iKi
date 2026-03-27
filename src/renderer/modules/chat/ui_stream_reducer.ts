@@ -1,6 +1,8 @@
-import type { UIMessage, UIMessageChunk } from 'ai';
-
 import {
+  createAffectSignalPart,
+  createContextReportPart,
+  createMemoryPart,
+  createSkillUsagePart,
   getToolCallIdFromPart,
   getToolInput,
   getToolName,
@@ -9,21 +11,18 @@ import {
 import type { ToolUiState, ToolUiStatePatch } from './tool_ui_state';
 import {
   isAffectSignalPart,
+  type ChatUiMessage,
+  type ChatUiMessageChunk,
   isContextReportPart,
   isDynamicToolPart,
   isMemoryPart,
   isObjectRecord,
   isSkillUsagePart,
   isTextPart,
-  type AffectSignalPart,
   type ContextReportItem,
-  type ContextReportPart,
   type DynamicToolPart,
-  type MemoryPart,
   type SkillUsageEntry,
-  type SkillUsagePart,
   type TextPart,
-  type UiMessagePart,
 } from '../../../shared/chat/message_parts';
 import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
 
@@ -44,7 +43,7 @@ export const createInitialStreamState = (): StreamState => ({
 });
 
 export type StreamContext = {
-  messages: UIMessage[];
+  messages: ChatUiMessage[];
   createMessageId: () => string;
   currentThreadId: string | null;
   nowMs: number;
@@ -52,15 +51,15 @@ export type StreamContext = {
 };
 
 export type MessageOp =
-  | { type: 'append'; message: UIMessage }
-  | { type: 'replace'; messageId: string; message: UIMessage }
+  | { type: 'append'; message: ChatUiMessage }
+  | { type: 'replace'; messageId: string; message: ChatUiMessage }
   | { type: 'remove'; messageId: string };
 
 export type StreamEffect =
   | { type: 'scroll' }
   | {
       type: 'persist';
-      message: UIMessage;
+      message: ChatUiMessage;
       threadId: string;
       parentId?: string;
       source: string;
@@ -82,7 +81,7 @@ export type StreamAction =
   | { type: 'reset' }
   | { type: 'text_delta'; delta: string }
   | { type: 'finalize_response'; fullText: string }
-  | { type: 'tool_chunk'; chunk: UIMessageChunk }
+  | { type: 'tool_chunk'; chunk: ChatUiMessageChunk }
   | {
       type: 'skill_chunk';
       chunk: { mode?: unknown; skills?: unknown };
@@ -133,19 +132,19 @@ const resetTransientState = (state: StreamState): StreamState => ({
 const updateAssistantMessage = (
   state: StreamState,
   ctx: StreamContext,
-  build: (message: UIMessage) => UIMessage | null
-): { state: StreamState; messageOps: MessageOp[]; updatedMessage?: UIMessage } => {
+  build: (message: ChatUiMessage) => ChatUiMessage | null
+): { state: StreamState; messageOps: MessageOp[]; updatedMessage?: ChatUiMessage } => {
   const messageId = state.activeAssistantMessageId;
   const existingIndex = messageId
     ? ctx.messages.findIndex(message => message.id === messageId)
     : -1;
 
-  let baseMessage: UIMessage;
+  let baseMessage: ChatUiMessage;
   let nextState = state;
   const existed = existingIndex >= 0;
 
   if (existed) {
-    baseMessage = ctx.messages[existingIndex] as UIMessage;
+    baseMessage = ctx.messages[existingIndex] as ChatUiMessage;
   } else {
     baseMessage = {
       id: ctx.createMessageId(),
@@ -303,7 +302,7 @@ const hasRenderableContent = (parts: UiMessagePart[]): boolean =>
 
 const buildToolPartUpdate = (
   part: DynamicToolPart,
-  chunk: UIMessageChunk,
+  chunk: ChatUiMessageChunk,
   inputText?: string
 ): DynamicToolPart => {
   const nextPart = { ...part };
@@ -380,7 +379,7 @@ const buildToolPartUpdate = (
 };
 
 const buildToolUiStatePatch = (
-  chunk: UIMessageChunk,
+  chunk: ChatUiMessageChunk,
   nowMs: number,
   previousState: ToolUiState | undefined,
   nextInputText?: string
@@ -500,10 +499,10 @@ export const reduceStream = (
     };
 
     const updateResult = updateAssistantMessage(nextState, ctx, message => {
-      const nextParts = buildStreamingTextParts(message.parts as UiMessagePart[], action.delta);
+      const nextParts = buildStreamingTextParts(message.parts, action.delta);
       return {
         ...message,
-        parts: nextParts as UIMessage['parts'],
+        parts: nextParts,
       };
     });
 
@@ -544,16 +543,12 @@ export const reduceStream = (
 
     const updateResult = updateAssistantMessage(nextStateBase, ctx, message => {
       const streamedText = state.streamingAssistantText;
-      const finalizeResult = finalizeTextParts(
-        message.parts as UiMessagePart[],
-        action.fullText,
-        streamedText
-      );
+      const finalizeResult = finalizeTextParts(message.parts, action.fullText, streamedText);
       const dedupedParts = dedupeToolBridgedRepeatedTextParts(finalizeResult.parts);
 
-      const updatedMessage: UIMessage = {
+      const updatedMessage: ChatUiMessage = {
         ...message,
-        parts: dedupedParts as UIMessage['parts'],
+        parts: dedupedParts,
       };
 
       if (!hasRenderableContent(dedupedParts)) {
@@ -597,14 +592,13 @@ export const reduceStream = (
   }
 
   if (action.type === 'tool_chunk') {
-    const chunk = action.chunk as UIMessageChunk & { toolCallId: string };
+    const chunk = action.chunk;
     if (chunk.type === 'tool-approval-request') {
-      const approvalChunk = chunk as UIMessageChunk & { toolCallId: string; approvalId: string };
       const existingMessage = state.activeAssistantMessageId
         ? ctx.messages.find(message => message.id === state.activeAssistantMessageId)
         : undefined;
       const existingPart = existingMessage?.parts.find(
-        part => getToolCallIdFromPart(part) === approvalChunk.toolCallId
+        part => getToolCallIdFromPart(part) === chunk.toolCallId
       );
       const existingToolName = getToolName(existingPart);
       const existingInput = getToolInput(existingPart) ?? {};
@@ -613,18 +607,18 @@ export const reduceStream = (
         {
           type: 'approval_request',
           payload: {
-            approvalId: approvalChunk.approvalId,
-            toolCallId: approvalChunk.toolCallId,
+            approvalId: chunk.approvalId,
+            toolCallId: chunk.toolCallId,
             toolCall: {
               toolName: existingToolName,
-              toolCallId: approvalChunk.toolCallId,
+              toolCallId: chunk.toolCallId,
               args: existingInput,
             },
           },
         },
       ];
 
-      const existingUiState = ctx.toolUiStateMap[approvalChunk.toolCallId];
+      const existingUiState = ctx.toolUiStateMap[chunk.toolCallId];
       if (
         !existingUiState ||
         typeof existingUiState.startedAt !== 'number' ||
@@ -632,7 +626,7 @@ export const reduceStream = (
       ) {
         effects.unshift({
           type: 'tool_ui_state',
-          toolCallId: approvalChunk.toolCallId,
+          toolCallId: chunk.toolCallId,
           patch: { startedAt: ctx.nowMs },
         });
       }
@@ -655,7 +649,7 @@ export const reduceStream = (
     }
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
-      const nextParts = [...(message.parts as UiMessagePart[])];
+      const nextParts = [...message.parts];
       for (let i = 0; i < nextParts.length; i += 1) {
         const part = nextParts[i];
         if (!isTextPart(part) || part.state !== 'streaming') continue;
@@ -692,7 +686,7 @@ export const reduceStream = (
 
       return {
         ...message,
-        parts: nextParts as UIMessage['parts'],
+        parts: nextParts,
       };
     });
 
@@ -739,14 +733,13 @@ export const reduceStream = (
       : [];
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
-      const nextParts = [...(message.parts as UiMessagePart[])];
+      const nextParts = [...message.parts];
       const existingIndex = nextParts.findIndex(part => isMemoryPart(part));
 
-      const memoryPart: MemoryPart = {
-        type: 'memory-retrieval',
+      const memoryPart = createMemoryPart({
         query: typeof action.chunk.query === 'string' ? action.chunk.query : '',
         results,
-      };
+      });
 
       if (existingIndex >= 0) {
         nextParts[existingIndex] = memoryPart;
@@ -756,7 +749,7 @@ export const reduceStream = (
 
       return {
         ...message,
-        parts: nextParts as UIMessage['parts'],
+        parts: nextParts,
       };
     });
 
@@ -795,14 +788,13 @@ export const reduceStream = (
     }
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
-      const nextParts = [...(message.parts as UiMessagePart[])];
+      const nextParts = [...message.parts];
       const existingIndex = nextParts.findIndex(part => isSkillUsagePart(part));
 
-      const skillPart: SkillUsagePart = {
-        type: 'skill-usage',
+      const skillPart = createSkillUsagePart({
         mode: action.chunk.mode === 'auto' ? 'auto' : 'manual',
         skills,
-      };
+      });
 
       if (existingIndex >= 0) {
         nextParts[existingIndex] = skillPart;
@@ -812,7 +804,7 @@ export const reduceStream = (
 
       return {
         ...message,
-        parts: nextParts as UIMessage['parts'],
+        parts: nextParts,
       };
     });
 
@@ -845,11 +837,10 @@ export const reduceStream = (
       : [];
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
-      const nextParts = [...(message.parts as UiMessagePart[])];
+      const nextParts = [...message.parts];
       const existingIndex = nextParts.findIndex(part => isAffectSignalPart(part));
 
-      const affectPart: AffectSignalPart = {
-        type: 'affect-signal',
+      const affectPart = createAffectSignalPart({
         label,
         ...(action.chunk.source === 'history' || action.chunk.source === 'realtime'
           ? { source: action.chunk.source }
@@ -883,7 +874,7 @@ export const reduceStream = (
         Number.isFinite(action.chunk.windowMinutes)
           ? { windowMinutes: Math.max(0, action.chunk.windowMinutes) }
           : {}),
-      };
+      });
 
       if (existingIndex >= 0) {
         nextParts[existingIndex] = affectPart;
@@ -893,7 +884,7 @@ export const reduceStream = (
 
       return {
         ...message,
-        parts: nextParts as UIMessage['parts'],
+        parts: nextParts,
       };
     });
 
@@ -932,11 +923,10 @@ export const reduceStream = (
       : [];
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
-      const nextParts = [...(message.parts as UiMessagePart[])];
+      const nextParts = [...message.parts];
       const existingIndex = nextParts.findIndex(part => isContextReportPart(part));
 
-      const contextPart: ContextReportPart = {
-        type: 'context-report',
+      const contextPart = createContextReportPart({
         ...(typeof action.chunk.totalEstimatedTokens === 'number' &&
         Number.isFinite(action.chunk.totalEstimatedTokens)
           ? { totalEstimatedTokens: Math.max(0, Math.trunc(action.chunk.totalEstimatedTokens)) }
@@ -950,7 +940,7 @@ export const reduceStream = (
           ? { compactedMessages: Math.max(0, Math.trunc(action.chunk.compactedMessages)) }
           : {}),
         blocks,
-      };
+      });
 
       if (existingIndex >= 0) {
         nextParts[existingIndex] = contextPart;
@@ -960,7 +950,7 @@ export const reduceStream = (
 
       return {
         ...message,
-        parts: nextParts as UIMessage['parts'],
+        parts: nextParts,
       };
     });
 

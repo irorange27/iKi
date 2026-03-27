@@ -1,4 +1,4 @@
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage } from '../../../shared/chat/message_parts';
 import type { ElectronApi } from '../../../shared/types/electron_api';
 import { createLogger } from '../../logger';
 import type { ChatMessageStore } from './chat_message_store';
@@ -20,7 +20,7 @@ export const createUiMessagePersistence = (deps: { electronAPI: Pick<ElectronApi
   };
 
   const upsertUiMessage = async (params: {
-    message: UIMessage;
+    message: ChatUiMessage;
     threadId: string;
     parentId?: string;
     source?: string;
@@ -131,9 +131,7 @@ export const createUiMessagePersistence = (deps: { electronAPI: Pick<ElectronApi
     messageStore: ChatMessageStore;
     messageIndex: number;
   }): Promise<void> => {
-    const messagesToDelete = params.messageStore.messages.slice(
-      params.messageIndex + 1
-    ) as UIMessage[];
+    const messagesToDelete = params.messageStore.messages.slice(params.messageIndex + 1);
     if (!messagesToDelete.length) return;
 
     const idsToDelete = messagesToDelete
