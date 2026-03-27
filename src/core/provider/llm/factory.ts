@@ -30,6 +30,7 @@ export interface ProviderConfig {
   apiKey: string;
   baseURL: string;
   models: string[];
+  isResponseApi: boolean;
 }
 
 export interface ChatGenerationResult {
@@ -57,7 +58,7 @@ const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
     typeof value.modelId === 'string' &&
     typeof value.doGenerate === 'function' &&
     typeof value.doStream === 'function' &&
-    ('supportedUrls' in value)
+    'supportedUrls' in value
   );
 };
 
@@ -84,6 +85,7 @@ export const getProviderConfig = (providerType: string): ProviderConfig => {
     apiKey: provider.api_key,
     baseURL: provider.base_url || '',
     models,
+    isResponseApi: provider.is_response_api === true,
   };
 };
 
@@ -126,6 +128,15 @@ export const createModel = (providerType: string, modelId: string): LanguageMode
       baseURL: config.baseURL || 'https://api.deepseek.com/v1',
     });
     return client(modelId);
+  }
+
+  if (config.isResponseApi) {
+    const client = createOpenAI({
+      name: providerType,
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    });
+    return client.responses(modelId);
   }
 
   // Default to OpenAI compatible for most other providers

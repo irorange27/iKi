@@ -62,8 +62,24 @@ if (isDaemonMode) {
       port: port || null,
     },
   });
-  startDaemonServer({ port, host });
+  const daemonServer = startDaemonServer({ port, host });
   startBackgroundRuntime();
+  void daemonServer.ready.catch(error => {
+    appLogger.event({
+      level: 'error',
+      event: 'app.start',
+      outcome: 'failed',
+      error,
+      message: 'Daemon process failed during startup.',
+      data: {
+        daemon_mode: true,
+        host: host || null,
+        port: port || null,
+      },
+    });
+    stopBackgroundRuntime();
+    process.exitCode = 1;
+  });
 } else {
   setPlatformInfo({
     userDataPath: app.getPath('userData'),

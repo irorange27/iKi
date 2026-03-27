@@ -173,9 +173,7 @@ describe('ProvidersSettings', () => {
 
     expect(wrapper.text()).toContain('Inactive');
     expect(wrapper.find('input[type="password"]').exists()).toBe(true);
-    expect(
-      wrapper.find('input[placeholder="https://api.openai.com/v1"]').exists()
-    ).toBe(true);
+    expect(wrapper.find('input[placeholder="https://api.openai.com/v1"]').exists()).toBe(true);
 
     const apiKeyInput = wrapper.find('input[type="password"]');
     await apiKeyInput.setValue('sk-test');
@@ -243,9 +241,7 @@ describe('ProvidersSettings', () => {
 
     expect(wrapper.text()).toContain('Inactive');
     expect(wrapper.find('input[type="password"]').exists()).toBe(true);
-    expect(
-      wrapper.find('input[placeholder="https://api.anthropic.com/v1"]').exists()
-    ).toBe(true);
+    expect(wrapper.find('input[placeholder="https://api.anthropic.com/v1"]').exists()).toBe(true);
 
     const apiKeyInput = wrapper.find('input[type="password"]');
     await apiKeyInput.setValue('sk-ant-test');
@@ -353,7 +349,28 @@ describe('ProvidersSettings', () => {
     expect(wrapper.text()).toContain('API Format');
     expect(wrapper.text()).toContain('Chat Completions (/chat/completions)');
     expect(wrapper.text()).toContain(
-      'Custom providers do not support OpenAI Responses (/responses) yet.'
+      'Runtime adapter: AI SDK OpenAI-compatible provider against your custom base URL.'
+    );
+
+    await wrapper.find('.provider-format-section .settings-select-trigger').trigger('click');
+    await flushPromises();
+
+    const responsesOption = wrapper
+      .findAll('.provider-format-section .settings-select-option')
+      .find(candidate => candidate.text().replace(/\s+/g, ' ').includes('Responses (/responses)'));
+
+    if (!responsesOption) {
+      throw new Error('Responses API format option not found');
+    }
+
+    await responsesOption.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      'Use this when your gateway exposes an OpenAI Responses endpoint.'
+    );
+    expect(wrapper.text()).toContain(
+      'Runtime adapter: AI SDK OpenAI Responses provider with your custom base URL.'
     );
 
     await selectSettingsOption(wrapper, 'Type', 'Anthropic Compatible');
@@ -361,6 +378,9 @@ describe('ProvidersSettings', () => {
     expect(wrapper.text()).toContain('Messages (/messages)');
     expect(wrapper.text()).toContain(
       'Use this when your gateway exposes an Anthropic Messages endpoint.'
+    );
+    expect(wrapper.text()).toContain(
+      'Runtime adapter: AI SDK Anthropic provider configured against your custom base URL.'
     );
   });
 
@@ -409,6 +429,69 @@ describe('ProvidersSettings', () => {
         name: 'Proxy Gateway',
         type: 'openai-compatible',
         api_key: 'proxy-key',
+      })
+    );
+  });
+
+  it('persists the responses API format for custom OpenAI-compatible providers', async () => {
+    const list = vi.fn(async () => []);
+    const add = vi.fn(async () => ({ id: 'custom_177' }));
+
+    setElectronApi({
+      providers: {
+        list,
+        add,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await findButtonByText(wrapper, 'Add Custom Provider').trigger('click');
+    await flushPromises();
+
+    await wrapper.find('input[placeholder="e.g. My Local LLM"]').setValue('Responses Gateway');
+    await selectSettingsOption(wrapper, 'Type', 'OpenAI Compatible');
+    await wrapper.find('.provider-format-section .settings-select-trigger').trigger('click');
+    await flushPromises();
+
+    const responsesOption = wrapper
+      .findAll('.provider-format-section .settings-select-option')
+      .find(candidate => candidate.text().replace(/\s+/g, ' ').includes('Responses (/responses)'));
+
+    if (!responsesOption) {
+      throw new Error('Responses API format option not found');
+    }
+
+    await responsesOption.trigger('click');
+    await flushPromises();
+    await wrapper.find('input[placeholder="Enter API Key"]').setValue('responses-key');
+    await findButtonByText(wrapper, 'Save Provider').trigger('click');
+    await flushPromises();
+
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Responses Gateway',
+        type: 'openai-compatible',
+        api_key: 'responses-key',
+        is_response_api: true,
       })
     );
   });

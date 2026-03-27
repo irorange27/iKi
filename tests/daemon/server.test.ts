@@ -43,6 +43,7 @@ const {
   createServerMock,
   getRequestHandler,
   resetHttpHarness,
+  serverMock,
 } = vi.hoisted(() => {
   const clientsById = new Map<string, MockAppClient>();
   const tokenToClientId = new Map<string, string>();
@@ -113,10 +114,34 @@ const {
   const applyAppLoggingConfigMock = vi.fn();
 
   let requestHandler: ((req: unknown, res: unknown) => unknown | Promise<unknown>) | null = null;
+  const serverListeners = new Map<string, Array<(...args: unknown[]) => void>>();
+  let lastListenPort = 0;
+  let lastListenHost = '127.0.0.1';
   const serverMock = {
     listening: false,
-    on: vi.fn(() => serverMock),
+    address: vi.fn(() =>
+      serverMock.listening
+        ? {
+            port: lastListenPort,
+            address: lastListenHost,
+            family: 'IPv4',
+          }
+        : null
+    ),
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      const listeners = serverListeners.get(event) ?? [];
+      listeners.push(handler);
+      serverListeners.set(event, listeners);
+      return serverMock;
+    }),
+    emit: (event: string, ...args: unknown[]) => {
+      for (const handler of serverListeners.get(event) ?? []) {
+        handler(...args);
+      }
+    },
     listen: vi.fn((_port: number, _host: string, callback?: () => void) => {
+      lastListenPort = _port;
+      lastListenHost = _host;
       serverMock.listening = true;
       callback?.();
       return serverMock;
@@ -134,6 +159,9 @@ const {
   const getRequestHandler = () => requestHandler;
   const resetHttpHarness = () => {
     requestHandler = null;
+    serverListeners.clear();
+    lastListenPort = 0;
+    lastListenHost = '127.0.0.1';
     serverMock.listening = false;
   };
 
@@ -225,6 +253,7 @@ const {
     createServerMock,
     getRequestHandler,
     resetHttpHarness,
+    serverMock,
   };
 });
 
@@ -426,6 +455,7 @@ describe('daemon server', () => {
     getChatThreadMock.mockReset();
     getChatThreadMock.mockReturnValue(null);
     vi.spyOn(process, 'on').mockImplementation((() => process) as never);
+    vi.spyOn(process, 'off').mockImplementation((() => process) as never);
   });
 
   afterEach(async () => {
@@ -433,8 +463,7 @@ describe('daemon server', () => {
     while (startedDaemons.length > 0) {
       const started = startedDaemons.pop();
       if (!started) continue;
-      started.wss.close();
-      started.server.close();
+      started.shutdown();
     }
   });
 
@@ -728,5 +757,34 @@ describe('daemon server', () => {
       skillMode: 'manual',
       threadId: 'thread_owned',
     });
+  });
+
+  it('exposes idempotent shutdown that disposes the bridge and unregisters signal handlers', async () => {
+    const started = await startTestDaemon();
+
+    started.shutdown();
+    started.shutdown();
+
+    expect(createNapCatReverseBridgeMock).toHaveBeenCalledTimes(1);
+    expect(createNapCatReverseBridgeMock.mock.results[0]?.value.dispose).toHaveBeenCalledTimes(1);
+    expect(process.off).toHaveBeenCalledWith('SIGINT', expect.any(Function));
+    expect(process.off).toHaveBeenCalledWith('SIGTERM', expect.any(Function));
+    expect(started.server.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects ready and avoids recording daemon location when listen fails', async () => {
+    serverMock.listen.mockImplementationOnce(() => {
+      queueMicrotask(() => {
+        serverMock.emit('error', new Error('EADDRINUSE'));
+      });
+      return serverMock;
+    });
+
+    const started = startDaemonServer({ host: '127.0.0.1', port: 6127 });
+    startedDaemons.push(started);
+
+    await expect(started.ready).rejects.toThrow('EADDRINUSE');
+    expect(writeFileSyncMock).not.toHaveBeenCalled();
+    expect(createNapCatReverseBridgeMock.mock.results[0]?.value.dispose).toHaveBeenCalledTimes(1);
   });
 });

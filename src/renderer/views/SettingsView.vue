@@ -1098,8 +1098,10 @@ const updateToolModelSelection = (value: string) => {
   toolModelTestResult.value = null;
 
   if (value === AUTO_DETECT_TOOL_MODEL_VALUE) {
-    config.value.toolModel.providerType = '';
-    config.value.toolModel.model = '';
+    configStore.setToolModel({
+      providerType: '',
+      model: '',
+    });
     autoSave();
     return;
   }
@@ -1118,8 +1120,10 @@ const updateToolModelSelection = (value: string) => {
     return;
   }
 
-  config.value.toolModel.providerType = selection.providerType;
-  config.value.toolModel.model = selection.model;
+  configStore.setToolModel({
+    providerType: selection.providerType,
+    model: selection.model,
+  });
   autoSave();
 };
 
@@ -1127,7 +1131,7 @@ const updateToolExecution = <K extends keyof AppConfig['toolExecution']>(
   key: K,
   value: AppConfig['toolExecution'][K]
 ) => {
-  config.value.toolExecution[key] = value;
+  configStore.updateToolExecution(key, value);
   autoSave();
 };
 
@@ -1267,22 +1271,22 @@ const toggleAutoApproveToolRequests = () => {
 const updateNetwork = (path: NetworkUpdatePath, value: boolean | string | number | null) => {
   switch (path) {
     case 'proxy.enable':
-      config.value.network.proxy.enable = value as boolean;
+      configStore.updateNetworkProxy('enable', value as boolean);
       break;
     case 'proxy.type':
-      config.value.network.proxy.type = value as AppConfig['network']['proxy']['type'];
+      configStore.updateNetworkProxy('type', value as AppConfig['network']['proxy']['type']);
       break;
     case 'proxy.host':
-      config.value.network.proxy.host = value as string;
+      configStore.updateNetworkProxy('host', value as string);
       break;
     case 'proxy.port':
-      config.value.network.proxy.port = value as number | null;
+      configStore.updateNetworkProxy('port', value as number | null);
       break;
     case 'timeout':
-      config.value.network.timeout = value as number;
+      configStore.updateNetwork('timeout', value as number);
       break;
     case 'retryAttempts':
-      config.value.network.retryAttempts = value as number;
+      configStore.updateNetwork('retryAttempts', value as number);
       break;
   }
   autoSave();
@@ -1298,7 +1302,7 @@ const updateSecurity = <K extends keyof AppConfig['security']>(
   key: K,
   value: AppConfig['security'][K]
 ) => {
-  config.value.security[key] = value;
+  configStore.updateSecurity(key, value);
   autoSave();
 };
 
@@ -1311,11 +1315,11 @@ const updateAdvanced = <K extends keyof AppConfig['advanced']>(
   key: K,
   value: AppConfig['advanced'][K]
 ) => {
-  config.value.advanced[key] = value;
+  configStore.updateAdvanced(key, value);
   autoSave();
 };
 const updateKeybinding = <K extends keyof AppConfig['keybindings']>(key: K, value: string) => {
-  config.value.keybindings[key] = value;
+  configStore.updateKeybinding(key, value);
   autoSave();
 };
 const resetSection = (section: keyof AppConfig) => {

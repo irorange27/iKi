@@ -313,8 +313,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.general.updates.idleManualDescription':
       'Background checks are off, but you can still run a manual check at any time.',
     'settings.general.updates.metaRelease': ({ release }) => `Release: ${asText(release)}`,
-    'settings.general.updates.metaLastChecked': ({ time }) =>
-      `Last checked: ${asText(time)}`,
+    'settings.general.updates.metaLastChecked': ({ time }) => `Last checked: ${asText(time)}`,
     'settings.general.permissionRequests.title': 'Permission Requests',
     'settings.general.permissionRequests.description':
       'Automatically continue tool-enabled turns without waiting for approval prompts.',
@@ -351,7 +350,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.theme.customDescription':
       'Create, edit, and manage your own Base46-derived color schemes.',
     'settings.theme.create': 'Create Theme',
-    'settings.theme.emptyCustomInitial': 'No custom themes yet. Click "Create Theme" to get started.',
+    'settings.theme.emptyCustomInitial':
+      'No custom themes yet. Click "Create Theme" to get started.',
     'settings.theme.emptyCustomSearch': 'No custom themes match your search.',
     'settings.theme.builtinDescription':
       'Built-in presets that resolve through the same semantic renderer token pipeline.',
@@ -393,8 +393,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.theme.preview.primary': 'Primary',
     'settings.theme.preview.secondary': 'Secondary',
     'settings.theme.preview.delete': 'Delete',
-    'settings.theme.error.deleteConfirm':
-      'Delete this custom theme? This action cannot be undone.',
+    'settings.theme.error.deleteConfirm': 'Delete this custom theme? This action cannot be undone.',
     'settings.theme.error.displayNameRequired': 'Display name is required.',
     'settings.theme.error.saveFailed': 'Failed to save theme.',
     'settings.theme.field.background.label': 'Background',
@@ -451,7 +450,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.memory.injectEmotionToAgent': 'Inject Emotion Context into Agent',
     'settings.memory.realtimeAnalysis': 'Analyze Current Message Before Reply (adds latency)',
     'settings.memory.realtimeDescription':
-      'Runs one extra model call to include the user\'s current affect in this response.',
+      "Runs one extra model call to include the user's current affect in this response.",
     'settings.memory.minimumConfidence': 'Minimum Confidence',
     'settings.memory.higherValuesConservative':
       'Higher values make emotion context more conservative.',
@@ -478,7 +477,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.memory.viewerThreadAria': 'Memory viewer thread',
     'settings.memory.editorThreadAria': 'New long memory thread',
     'settings.memory.loading': 'Loading...',
-    'settings.memory.noChatThreads': 'No chat threads yet. Start a chat to generate memory entries.',
+    'settings.memory.noChatThreads':
+      'No chat threads yet. Start a chat to generate memory entries.',
     'settings.memory.affectTitle': 'Affect State',
     'settings.memory.loadingAffect': 'Loading affect state...',
     'settings.memory.emotionDisabled': 'Emotion analysis is disabled.',
@@ -518,8 +518,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.memory.role.assistant': 'Assistant',
     'settings.memory.role.system': 'System',
     'settings.memory.role.tool': 'Tool',
-    'settings.memory.error.loadThreads': ({ error }) =>
-      `Failed to load threads: ${asText(error)}`,
+    'settings.memory.error.loadThreads': ({ error }) => `Failed to load threads: ${asText(error)}`,
     'settings.memory.error.loadMemory': ({ error }) => `Failed to load memory: ${asText(error)}`,
     'settings.memory.error.loadAffect': ({ error }) =>
       `Failed to load affect state: ${asText(error)}`,
@@ -531,8 +530,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
       `Failed to update memory: ${asText(error)}`,
     'settings.memory.error.deleteFailed': ({ error }) =>
       `Failed to delete memory: ${asText(error)}`,
-    'settings.memory.confirmDelete':
-      'Delete this long-term memory? This cannot be undone.',
+    'settings.memory.confirmDelete': 'Delete this long-term memory? This cannot be undone.',
     'settings.memory.reset': 'Reset Memory',
     'settings.life.controlsTitle': 'Owner Controls',
     'settings.life.controlsDescription':
@@ -553,7 +551,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.life.ownerStatus.deferred': 'deferred',
     'settings.life.presenceTitle': 'Current Presence',
     'settings.life.presenceDescription':
-      'Read-only view of iKi\'s daemon-owned life state. This should reflect one shared presence across threads instead of per-thread roleplay.',
+      "Read-only view of iKi's daemon-owned life state. This should reflect one shared presence across threads instead of per-thread roleplay.",
     'settings.life.refreshing': 'Refreshing...',
     'settings.life.recomputeNow': 'Recompute Now',
     'settings.life.runtimeLoading': 'Loading...',
@@ -623,8 +621,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.napcat.enable': 'Enable NapCat reverse WebSocket bridge',
     'settings.napcat.accessTokenOptional': 'Access Token (optional)',
     'settings.napcat.accessTokenPlaceholder': 'Leave empty to disable bridge auth',
-    'settings.napcat.accessTokenHelp':
-      'If set, NapCat must connect with ?access_token=....',
+    'settings.napcat.accessTokenHelp': 'If set, NapCat must connect with ?access_token=....',
     'settings.napcat.daemonHost': 'Daemon Host',
     'settings.napcat.daemonHostPlaceholder': '127.0.0.1',
     'settings.napcat.daemonHostHelp':
@@ -683,7 +680,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.napcat.localUrl': 'Local NapCat URL',
     'settings.napcat.dockerUrl': 'Docker NapCat URL',
     'settings.napcat.runtimePathsHelp':
-      'When the URL already includes access_token=..., leave NapCat\'s separate Token field empty to avoid mixing two auth paths.',
+      "When the URL already includes access_token=..., leave NapCat's separate Token field empty to avoid mixing two auth paths.",
     'settings.napcat.recentLogsTitle': 'Recent Logs',
     'settings.napcat.recentLogsDescription':
       'Recent daemon and NapCat events, including inbound QQ message previews. Auto-refreshes every 5s while open.',
@@ -822,8 +819,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.tasks.cronExpression': 'Cron Expression',
     'settings.tasks.everyMinutes': 'Every (minutes)',
     'settings.tasks.cronPlaceholder': '*/15 * * * *',
-    'settings.tasks.cronHint':
-      '5-field cron (min hour day month weekday). Example: 0 9 * * 1-5',
+    'settings.tasks.cronHint': '5-field cron (min hour day month weekday). Example: 0 9 * * 1-5',
     'settings.tasks.selectProvider': 'Select a provider',
     'settings.tasks.noProviders': 'No providers available.',
     'settings.tasks.providerAria': 'Task provider',
@@ -948,17 +944,26 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.modal.namePlaceholder': 'e.g. My Local LLM',
     'settings.providers.modal.typeAria': 'Custom provider type',
     'settings.providers.modal.apiFormat': 'API Format',
-    'settings.providers.modal.apiFormat.chatCompletions':
-      'Chat Completions (/chat/completions)',
+    'settings.providers.modal.apiFormatAria': 'Custom provider API format',
+    'settings.providers.modal.apiFormat.chatCompletions': 'Chat Completions (/chat/completions)',
+    'settings.providers.modal.apiFormat.responses': 'Responses (/responses)',
     'settings.providers.modal.apiFormat.messages': 'Messages (/messages)',
     'settings.providers.modal.apiFormat.openaiDescription':
       'Use this when your gateway exposes an OpenAI-compatible Chat Completions endpoint.',
+    'settings.providers.modal.apiFormat.responsesDescription':
+      'Use this when your gateway exposes an OpenAI Responses endpoint.',
     'settings.providers.modal.apiFormat.anthropicDescription':
       'Use this when your gateway exposes an Anthropic Messages endpoint.',
     'settings.providers.modal.apiFormat.defaultDescription':
-      'In iKi, this selection currently uses the OpenAI-compatible adapter and sends Chat Completions requests.',
-    'settings.providers.modal.apiFormat.responsesUnsupported':
-      'Custom providers do not support OpenAI Responses (/responses) yet.',
+      'In iKi, this selection sends OpenAI-compatible Chat Completions requests to your configured base URL.',
+    'settings.providers.modal.apiFormat.chatCompletionsAdapter':
+      'Runtime adapter: AI SDK OpenAI-compatible provider.',
+    'settings.providers.modal.apiFormat.responsesAdapter':
+      'Runtime adapter: AI SDK OpenAI Responses provider with your custom base URL.',
+    'settings.providers.modal.apiFormat.anthropicAdapter':
+      'Runtime adapter: AI SDK Anthropic provider configured against your custom base URL.',
+    'settings.providers.modal.apiFormat.defaultAdapter':
+      'Runtime adapter: AI SDK OpenAI-compatible provider against your custom base URL.',
     'settings.providers.modal.apiKeyPlaceholder': 'Enter API Key',
     'settings.providers.modal.baseUrl': 'Base URL',
     'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',
@@ -972,7 +977,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.support.credentialsPrefix': 'Get your API key from',
     'settings.providers.support.docsPrefix': 'Review setup instructions in',
     'settings.providers.support.docsLabel': ({ name }) => `${asText(name)} docs`,
-    'settings.providers.baseUrlHelp.optionalOverride': 'Optional override for the provider endpoint.',
+    'settings.providers.baseUrlHelp.optionalOverride':
+      'Optional override for the provider endpoint.',
     'settings.providers.baseUrlHelp.useDefault': ({ name }) =>
       `Leave empty to use the default ${asText(name)} API endpoint.`,
     'settings.providers.promptModelName': 'Enter model name:',
@@ -1039,8 +1045,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
       'Remote HTTP/SSE servers are disabled. Enable "Allow remote MCP servers" to connect to non-local URLs.',
     'settings.mcp.form.saving': 'Saving...',
     'settings.mcp.form.save': 'Save Server',
-    'settings.mcp.approval.safeOnly':
-      'Require approval unless tool is read-only (Recommended)',
+    'settings.mcp.approval.safeOnly': 'Require approval unless tool is read-only (Recommended)',
     'settings.mcp.approval.always': 'Always require approval',
     'settings.mcp.approval.never': 'Never require approval',
     'settings.mcp.approval.globalDefault': 'Use global default',
@@ -1069,8 +1074,10 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.mcp.error.commandRequired': 'Command is required for stdio servers.',
     'settings.mcp.error.baseUrlRequired': 'Base URL is required for HTTP/SSE servers.',
     'settings.mcp.error.saveFailed': ({ error }) => `Failed to save MCP server: ${asText(error)}`,
-    'settings.mcp.error.deleteFailed': ({ error }) => `Failed to delete MCP server: ${asText(error)}`,
-    'settings.mcp.error.connectFailed': ({ error }) => `Failed to connect MCP server: ${asText(error)}`,
+    'settings.mcp.error.deleteFailed': ({ error }) =>
+      `Failed to delete MCP server: ${asText(error)}`,
+    'settings.mcp.error.connectFailed': ({ error }) =>
+      `Failed to connect MCP server: ${asText(error)}`,
     'settings.mcp.error.disconnectFailed': ({ error }) =>
       `Failed to disconnect MCP server: ${asText(error)}`,
     'settings.mcp.error.refreshFailed': ({ error }) =>
@@ -1367,17 +1374,14 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
       '当前构建无法解析 GitHub 发布仓库，因此没有可用的更新源。',
     'settings.general.updates.unsupportedGeneric': '当前构建暂时没有可用的更新源。',
     'settings.general.updates.checkingTitle': '正在检查更新',
-    'settings.general.updates.checkingDescription':
-      'iKi 正在访问发布通道，确认是否存在更新版本。',
+    'settings.general.updates.checkingDescription': 'iKi 正在访问发布通道，确认是否存在更新版本。',
     'settings.general.updates.downloadingTitle': '正在下载更新',
-    'settings.general.updates.downloadingDescription':
-      '已发现新版本，正在后台下载。',
+    'settings.general.updates.downloadingDescription': '已发现新版本，正在后台下载。',
     'settings.general.updates.downloadedTitle': '更新已准备安装',
     'settings.general.updates.downloadedDescription':
       '新版本已经下载完成。你可以现在重启 iKi，或在下次启动时完成安装。',
     'settings.general.updates.upToDateTitle': '当前已是最新版本',
-    'settings.general.updates.upToDateDescription':
-      '此平台和架构下没有发现更新的已发布版本。',
+    'settings.general.updates.upToDateDescription': '此平台和架构下没有发现更新的已发布版本。',
     'settings.general.updates.errorTitle': '更新检查失败',
     'settings.general.updates.errorDescription': ({ error }) =>
       `更新运行时返回错误：${asText(error) || '未知错误'}`,
@@ -1632,7 +1636,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.life.relationshipLoading': '加载中...',
     'settings.life.relationshipEmpty': '关系记忆还没有产出任何状态。',
     'settings.life.episodesTitle': '最近轨迹',
-    'settings.life.episodesDescription': '最近轨迹日志应解释 iKi 一直在忙什么，但不应虚构物理世界日常。',
+    'settings.life.episodesDescription':
+      '最近轨迹日志应解释 iKi 一直在忙什么，但不应虚构物理世界日常。',
     'settings.life.noEpisodes': '还没有轨迹。',
     'settings.life.reason': '原因',
     'settings.life.task': '任务',
@@ -1674,14 +1679,16 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.napcat.enable': '启用 NapCat 反向 WebSocket 桥接',
     'settings.napcat.accessTokenOptional': '访问令牌（可选）',
     'settings.napcat.accessTokenPlaceholder': '留空则禁用桥接鉴权',
-    'settings.napcat.accessTokenHelp': '如果设置了访问令牌，NapCat 必须通过 ?access_token=... 连接。',
+    'settings.napcat.accessTokenHelp':
+      '如果设置了访问令牌，NapCat 必须通过 ?access_token=... 连接。',
     'settings.napcat.daemonHost': 'Daemon 主机',
     'settings.napcat.daemonHostPlaceholder': '127.0.0.1',
     'settings.napcat.daemonHostHelp':
       '默认使用 127.0.0.1。只有在确实需要局域网 / Docker 访问时才使用 0.0.0.0。',
     'settings.napcat.daemonPort': 'Daemon 端口',
     'settings.napcat.daemonPortPlaceholder': '6127',
-    'settings.napcat.daemonRestartNotice': '修改 daemon host/port 后，保存设置会重启桌面托管的 daemon。',
+    'settings.napcat.daemonRestartNotice':
+      '修改 daemon host/port 后，保存设置会重启桌面托管的 daemon。',
     'settings.napcat.providerType': 'Provider 类型',
     'settings.napcat.providerTypeAria': 'NapCat provider 类型',
     'settings.napcat.providerAuto': '自动选择第一个已启用的 provider',
@@ -1806,7 +1813,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.speech.downloadBaseUrlPlaceholder':
       'https://huggingface.co/ggerganov/whisper.cpp/resolve/main',
     'settings.speech.downloadBaseUrlHelp': '如果默认下载源在你的网络环境中不可达，可以改用镜像。',
-    'settings.speech.customModelPathNotice': '当前正在使用自定义模型路径。清空后可从下方已下载模型中选择。',
+    'settings.speech.customModelPathNotice':
+      '当前正在使用自定义模型路径。清空后可从下方已下载模型中选择。',
     'settings.speech.downloadModels': '下载模型',
     'settings.speech.refreshModels': '刷新',
     'settings.speech.loadingModels': '加载中',
@@ -1926,8 +1934,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.tasks.error.runFailed': ({ error }) => `运行任务失败：${asText(error)}`,
     'settings.tasks.error.deleteFailed': ({ error }) => `删除任务失败：${asText(error)}`,
     'settings.tasks.error.updateFailed': ({ error }) => `更新任务失败：${asText(error)}`,
-    'settings.tasks.confirmDelete': ({ name }) =>
-      `删除任务“${asText(name)}”？\n此操作不可撤销。`,
+    'settings.tasks.confirmDelete': ({ name }) => `删除任务“${asText(name)}”？\n此操作不可撤销。`,
     'settings.usage.title': '用量',
     'settings.usage.description': '按聊天工作流统计模型回复的 token 用量与预估花费。',
     'settings.usage.period': '时间范围',
@@ -1986,17 +1993,26 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.modal.namePlaceholder': '例如：我的本地 LLM',
     'settings.providers.modal.typeAria': '自定义 Provider 类型',
     'settings.providers.modal.apiFormat': 'API 格式',
-    'settings.providers.modal.apiFormat.chatCompletions':
-      'Chat Completions（/chat/completions）',
+    'settings.providers.modal.apiFormatAria': '自定义 Provider API 格式',
+    'settings.providers.modal.apiFormat.chatCompletions': 'Chat Completions（/chat/completions）',
+    'settings.providers.modal.apiFormat.responses': 'Responses（/responses）',
     'settings.providers.modal.apiFormat.messages': 'Messages（/messages）',
     'settings.providers.modal.apiFormat.openaiDescription':
       '当你的网关提供 OpenAI 兼容的 Chat Completions 端点时，选择这个格式。',
+    'settings.providers.modal.apiFormat.responsesDescription':
+      '当你的网关提供 OpenAI Responses 端点时，选择这个格式。',
     'settings.providers.modal.apiFormat.anthropicDescription':
       '当你的网关提供 Anthropic Messages 端点时，选择这个格式。',
     'settings.providers.modal.apiFormat.defaultDescription':
-      '在 iKi 当前实现里，这个选项会走 OpenAI-compatible 适配层，并发送 Chat Completions 请求。',
-    'settings.providers.modal.apiFormat.responsesUnsupported':
-      '自定义 Provider 目前还不支持 OpenAI Responses（/responses）。',
+      '在 iKi 当前实现里，这个选项会向你配置的 Base URL 发送 OpenAI-compatible 的 Chat Completions 请求。',
+    'settings.providers.modal.apiFormat.chatCompletionsAdapter':
+      '运行时适配器：AI SDK OpenAI-compatible provider。',
+    'settings.providers.modal.apiFormat.responsesAdapter':
+      '运行时适配器：AI SDK OpenAI Responses provider，并使用你配置的自定义 Base URL。',
+    'settings.providers.modal.apiFormat.anthropicAdapter':
+      '运行时适配器：AI SDK Anthropic provider，并使用你配置的自定义 Base URL。',
+    'settings.providers.modal.apiFormat.defaultAdapter':
+      '运行时适配器：AI SDK OpenAI-compatible provider，并使用你配置的自定义 Base URL。',
     'settings.providers.modal.apiKeyPlaceholder': '输入 API Key',
     'settings.providers.modal.baseUrl': 'Base URL',
     'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',
@@ -2015,8 +2031,7 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
       `留空以使用默认的 ${asText(name)} API 端点。`,
     'settings.providers.promptModelName': '输入模型名称：',
     'settings.providers.confirmRemove': '确定要移除这个 Provider 配置吗？',
-    'settings.providers.description.openai':
-      '通过 AI SDK 的 OpenAI Provider 使用官方 OpenAI 模型',
+    'settings.providers.description.openai': '通过 AI SDK 的 OpenAI Provider 使用官方 OpenAI 模型',
     'settings.providers.description.anthropic':
       '通过 AI SDK 的 Anthropic Provider 使用官方 Claude 模型',
     'settings.providers.description.deepseek': 'DeepSeek AI 模型，具备更强的推理能力',
@@ -2133,10 +2148,8 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.skills.error.resetUnavailable': '工作流重置功能不可用。',
     'settings.skills.error.resetFailed': ({ error }) => `重置工作流数据失败：${asText(error)}`,
     'settings.skills.error.loadFailed': ({ error }) => `加载技能失败：${asText(error)}`,
-    'settings.skills.error.openFolderFailed': ({ error }) =>
-      `打开技能文件夹失败：${asText(error)}`,
-    'settings.skills.error.openSkillFailed': ({ error }) =>
-      `打开技能目录失败：${asText(error)}`,
+    'settings.skills.error.openFolderFailed': ({ error }) => `打开技能文件夹失败：${asText(error)}`,
+    'settings.skills.error.openSkillFailed': ({ error }) => `打开技能目录失败：${asText(error)}`,
     'settings.skills.error.readFailed': ({ error }) => `读取技能内容失败：${asText(error)}`,
   },
 };

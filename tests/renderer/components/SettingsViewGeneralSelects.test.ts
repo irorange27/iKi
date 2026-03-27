@@ -32,13 +32,16 @@ const buildProvider = (
   acp_model_mapping: overrides.acp_model_mapping,
 });
 
-const mountSettingsView = async () => {
+const mountSettingsView = async (options?: {
+  setupStore?: (store: ReturnType<typeof useConfigStore>) => void;
+}) => {
   const pinia = createPinia();
   setActivePinia(pinia);
 
   const store = useConfigStore();
   store.config = createDefaultAppConfig();
   store.initialized = true;
+  options?.setupStore?.(store);
 
   const saveConfig = vi.spyOn(store, 'saveConfig').mockResolvedValue(undefined);
   const providersList = vi.fn(async () => [
@@ -149,6 +152,7 @@ describe('SettingsView general custom selects', () => {
 
   it('renders grouped tool model options in the shared settings select and updates the config', async () => {
     const { wrapper, store, saveConfig, providersList } = await mountSettingsView();
+    const setToolModel = vi.spyOn(store, 'setToolModel');
 
     expect(providersList).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain('Prefer a low-latency model.');
@@ -173,6 +177,10 @@ describe('SettingsView general custom selects', () => {
 
     await option.trigger('click');
 
+    expect(setToolModel).toHaveBeenCalledWith({
+      providerType: 'deepseek',
+      model: 'deepseek-chat',
+    });
     expect(store.config.toolModel.providerType).toBe('deepseek');
     expect(store.config.toolModel.model).toBe('deepseek-chat');
 

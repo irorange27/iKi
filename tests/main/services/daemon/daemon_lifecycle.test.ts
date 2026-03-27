@@ -122,6 +122,8 @@ const setupDaemonServerReturn = () => {
     },
     host: '127.0.0.1',
     port: 6127,
+    ready: Promise.resolve(),
+    shutdown: vi.fn(),
   });
 };
 
@@ -199,5 +201,91 @@ describe('daemon lifecycle', () => {
 
     expect(startDaemonServerMock).toHaveBeenCalledTimes(1);
     expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '127.0.0.1', port: 6127 });
+  });
+
+  it('uses the daemon shutdown hook when stopping an embedded daemon', async () => {
+    let requestCount = 0;
+    requestMock.mockImplementation(
+      (_options: unknown, callback: (response: HealthResponseMock) => void) => {
+        const listeners: Partial<Record<RequestEvent, (...args: unknown[]) => void>> = {};
+        const req = {
+          on: vi.fn((event: RequestEvent, handler: (...args: unknown[]) => void) => {
+            listeners[event] = handler;
+            return req;
+          }),
+          destroy: vi.fn(),
+          end: vi.fn(() => {
+            requestCount += 1;
+            if (requestCount === 1) {
+              listeners.error?.(new Error('ECONNREFUSED'));
+              return;
+            }
+
+            const response: HealthResponseMock = {
+              statusCode: 200,
+              setEncoding: vi.fn(),
+              on: (event, handler) => {
+                if (event === 'data') {
+                  handler(JSON.stringify({ status: 'ok', host: '127.0.0.1', port: 6127 }));
+                }
+                if (event === 'end') {
+                  handler();
+                }
+                return response;
+              },
+            };
+            callback(response);
+          }),
+        };
+        return req;
+      }
+    );
+    const { startDesktopDaemon, stopDesktopDaemon } = await import(
+      '../../../../src/main/services/daemon/daemon_lifecycle'
+    );
+
+    const started = startDesktopDaemon();
+    await vi.runAllTimersAsync();
+    await started;
+
+    expect(stopDesktopDaemon()).toBe(true);
+    expect(startDaemonServerMock.mock.results[0]?.value.shutdown).toHaveBeenCalledTimes(1);
+    expect(startDaemonServerMock.mock.results[0]?.value.server.close).not.toHaveBeenCalled();
+    expect(startDaemonServerMock.mock.results[0]?.value.wss.close).not.toHaveBeenCalled();
+  });
+
+  it('stops and clears the embedded daemon when startup readiness rejects', async () => {
+    mockHealthOffline();
+    const startupError = new Error('EADDRINUSE');
+    startDaemonServerMock.mockReturnValueOnce({
+      server: {
+        close: vi.fn(),
+      },
+      wss: {
+        close: vi.fn(),
+      },
+      host: '127.0.0.1',
+      port: 6127,
+      ready: Promise.reject(startupError),
+      shutdown: vi.fn(),
+    });
+
+    const { startDesktopDaemon, isDesktopDaemonEmbeddedRunning } = await import(
+      '../../../../src/main/services/daemon/daemon_lifecycle'
+    );
+
+    await startDesktopDaemon();
+
+    expect(startDaemonServerMock.mock.results[0]?.value.shutdown).toHaveBeenCalledTimes(1);
+    expect(isDesktopDaemonEmbeddedRunning()).toBe(false);
+    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'daemon.lifecycle.start',
+        outcome: 'failed',
+        message: 'Embedded daemon failed during startup.',
+        error: startupError,
+      })
+    );
   });
 });

@@ -155,6 +155,37 @@ describe('llm factory', () => {
     expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
   });
 
+  it('routes custom response-api providers through the OpenAI responses adapter', () => {
+    const responsesModel = 'responses-model';
+    const responsesFactory = Object.assign(
+      vi.fn(() => 'unused-chat-model'),
+      {
+        responses: vi.fn(() => responsesModel),
+      }
+    );
+    createOpenAIMock.mockReturnValue(responsesFactory as never);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'custom_gateway',
+        type: 'openai-compatible',
+        enabled: true,
+        api_key: 'sk-gateway',
+        base_url: 'https://gateway.example.com/v1',
+        models: JSON.stringify(['gpt-4.1']),
+        is_response_api: true,
+      },
+    ]);
+
+    expect(createModel('openai-compatible', 'gpt-4.1')).toBe(responsesModel);
+    expect(createOpenAIMock).toHaveBeenCalledWith({
+      name: 'openai-compatible',
+      apiKey: 'sk-gateway',
+      baseURL: 'https://gateway.example.com/v1',
+    });
+    expect(responsesFactory.responses).toHaveBeenCalledWith('gpt-4.1');
+    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid anthropic adapter results at the runtime boundary', () => {
     createAnthropicMock.mockReturnValue(() => ({ provider: 'anthropic' }));
     getProvidersMock.mockReturnValue([

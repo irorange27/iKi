@@ -89,9 +89,7 @@
                 <input
                   type="checkbox"
                   :checked="selectedProviderDraft.enabled"
-                  @change="
-                    setSelectedProviderEnabled(($event.target as HTMLInputElement).checked)
-                  "
+                  @change="setSelectedProviderEnabled(($event.target as HTMLInputElement).checked)"
                 />
                 <span class="provider-switch-track">
                   <span class="provider-switch-thumb"></span>
@@ -140,11 +138,15 @@
 
               <div class="provider-field">
                 <label class="input-label provider-field-label">
-                  <span class="provider-field-title">{{ t('settings.providers.baseUrlOptional') }}</span>
+                  <span class="provider-field-title">{{
+                    t('settings.providers.baseUrlOptional')
+                  }}</span>
                   <input
                     type="text"
                     v-model="selectedProviderDraft.base_url"
-                    :placeholder="selectedProviderInfo.defaultBaseUrl || 'https://api.example.com/v1'"
+                    :placeholder="
+                      selectedProviderInfo.defaultBaseUrl || 'https://api.example.com/v1'
+                    "
                   />
                 </label>
                 <p class="provider-field-help">
@@ -153,7 +155,11 @@
               </div>
 
               <div class="provider-models-panel">
-                <button type="button" class="provider-models-toggle" @click="modelsPanelOpen = !modelsPanelOpen">
+                <button
+                  type="button"
+                  class="provider-models-toggle"
+                  @click="modelsPanelOpen = !modelsPanelOpen"
+                >
                   <div class="provider-models-toggle-main">
                     <span class="provider-models-title">{{ t('settings.providers.models') }}</span>
                     <span class="provider-models-subtitle">
@@ -162,7 +168,9 @@
                   </div>
                   <div class="provider-models-toggle-meta">
                     <span class="provider-models-summary">
-                      {{ t('settings.providers.modelsSelected', { count: selectedModelsList.length }) }}
+                      {{
+                        t('settings.providers.modelsSelected', { count: selectedModelsList.length })
+                      }}
                     </span>
                     <ChevronDown :size="16" :class="{ 'models-toggle-open': modelsPanelOpen }" />
                   </div>
@@ -170,27 +178,31 @@
 
                 <div v-if="modelsPanelOpen" class="provider-models-body">
                   <div class="label-header">
-                    <span class="provider-field-title">{{ t('settings.providers.availableModels') }}</span>
+                    <span class="provider-field-title">{{
+                      t('settings.providers.availableModels')
+                    }}</span>
                     <button
                       class="fetch-models-btn"
                       @click="fetchLatestModels"
                       :disabled="isFetchingModels"
                     >
                       <RefreshCw :size="14" :class="{ 'animate-spin': isFetchingModels }" />
-                      {{ isFetchingModels ? t('settings.providers.fetchingModels') : t('settings.providers.fetchModels') }}
+                      {{
+                        isFetchingModels
+                          ? t('settings.providers.fetchingModels')
+                          : t('settings.providers.fetchModels')
+                      }}
                     </button>
                   </div>
 
                   <div v-if="availableModelsList.length > 0" class="models-selection-container">
                     <div class="models-selection-header">
-                      <span class="models-count"
-                        >{{
-                          t('settings.providers.selectionCount', {
-                            selected: selectedModelsList.length,
-                            total: availableModelsList.length,
-                          })
-                        }}</span
-                      >
+                      <span class="models-count">{{
+                        t('settings.providers.selectionCount', {
+                          selected: selectedModelsList.length,
+                          total: availableModelsList.length,
+                        })
+                      }}</span>
                       <div class="models-actions">
                         <button class="select-all-btn" @click="selectAllModels">
                           {{ t('settings.providers.selectAll') }}
@@ -268,7 +280,11 @@
       <div class="modal-content provider-editor">
         <div class="provider-editor-header">
           <h3>
-            {{ editingProvider?.id?.startsWith('custom_') ? t('settings.providers.modal.edit') : t('settings.providers.modal.add') }}
+            {{
+              editingProvider?.id?.startsWith('custom_')
+                ? t('settings.providers.modal.edit')
+                : t('settings.providers.modal.add')
+            }}
             {{ t('settings.providers.modal.titleSuffix') }}
           </h3>
         </div>
@@ -298,13 +314,23 @@
               <span class="provider-field-title">
                 {{ t('settings.providers.modal.apiFormat') }}
               </span>
+              <SettingsSelect
+                class="provider-format-select"
+                :model-value="editingProviderApiFormat.value"
+                :options="editingProviderApiFormat.options"
+                :disabled="editingProviderApiFormat.locked"
+                :aria-label="t('settings.providers.modal.apiFormatAria')"
+                @update:model-value="updateEditingProviderApiFormatSelection"
+              />
               <div class="provider-format-card">
-                <span class="provider-format-endpoint">{{ editingProviderApiFormat.endpoint }}</span>
+                <span class="provider-format-endpoint">{{
+                  editingProviderApiFormat.endpoint
+                }}</span>
                 <p class="provider-field-help">
                   {{ editingProviderApiFormat.description }}
                 </p>
-                <p class="provider-field-help provider-format-warning">
-                  {{ editingProviderApiFormat.warning }}
+                <p class="provider-field-help provider-format-note">
+                  {{ editingProviderApiFormat.note }}
                 </p>
               </div>
             </div>
@@ -373,7 +399,7 @@ type ProviderRecord = Provider & {
 
 type EditableProvider = Pick<
   ProviderRecord,
-  'id' | 'name' | 'type' | 'api_key' | 'base_url' | 'enabled' | 'icon'
+  'id' | 'name' | 'type' | 'api_key' | 'base_url' | 'enabled' | 'icon' | 'is_response_api'
 > & {
   models: string;
   available_models: string;
@@ -387,9 +413,12 @@ type ProviderDraft = {
 };
 
 type EditableProviderApiFormat = {
+  value: 'chat-completions' | 'responses' | 'messages';
+  options: Array<{ value: 'chat-completions' | 'responses' | 'messages'; label: string }>;
   endpoint: string;
   description: string;
-  warning: string;
+  note: string;
+  locked: boolean;
 };
 
 type SidebarProvider = {
@@ -431,29 +460,63 @@ const editingProviderApiFormat = computed<EditableProviderApiFormat | null>(() =
 
   if (providerType === 'anthropic-compatible') {
     return {
+      value: 'messages',
+      options: [
+        {
+          value: 'messages',
+          label: t('settings.providers.modal.apiFormat.messages'),
+        },
+      ],
       endpoint: t('settings.providers.modal.apiFormat.messages'),
       description: t('settings.providers.modal.apiFormat.anthropicDescription'),
-      warning: t('settings.providers.modal.apiFormat.responsesUnsupported'),
+      note: t('settings.providers.modal.apiFormat.anthropicAdapter'),
+      locked: true,
     };
   }
 
-  if (providerType === 'openai-compatible') {
+  const isResponseApi = editingProvider.value?.is_response_api === true;
+  const usesOpenAICompatibleType = providerType === 'openai-compatible';
+  const value = isResponseApi ? 'responses' : 'chat-completions';
+  const options = [
+    {
+      value: 'chat-completions' as const,
+      label: t('settings.providers.modal.apiFormat.chatCompletions'),
+    },
+    {
+      value: 'responses' as const,
+      label: t('settings.providers.modal.apiFormat.responses'),
+    },
+  ];
+
+  if (isResponseApi) {
     return {
-      endpoint: t('settings.providers.modal.apiFormat.chatCompletions'),
-      description: t('settings.providers.modal.apiFormat.openaiDescription'),
-      warning: t('settings.providers.modal.apiFormat.responsesUnsupported'),
+      value,
+      options,
+      endpoint: t('settings.providers.modal.apiFormat.responses'),
+      description: t('settings.providers.modal.apiFormat.responsesDescription'),
+      note: t('settings.providers.modal.apiFormat.responsesAdapter'),
+      locked: false,
     };
   }
 
   return {
+    value,
+    options,
     endpoint: t('settings.providers.modal.apiFormat.chatCompletions'),
-    description: t('settings.providers.modal.apiFormat.defaultDescription'),
-    warning: t('settings.providers.modal.apiFormat.responsesUnsupported'),
+    description: usesOpenAICompatibleType
+      ? t('settings.providers.modal.apiFormat.openaiDescription')
+      : t('settings.providers.modal.apiFormat.defaultDescription'),
+    note: usesOpenAICompatibleType
+      ? t('settings.providers.modal.apiFormat.chatCompletionsAdapter')
+      : t('settings.providers.modal.apiFormat.defaultAdapter'),
+    locked: false,
   };
 });
 
 const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
-const BUILTIN_PROVIDER_ORDER = new Map(BUILTIN_PROVIDERS.map((provider, index) => [provider.id, index]));
+const BUILTIN_PROVIDER_ORDER = new Map(
+  BUILTIN_PROVIDERS.map((provider, index) => [provider.id, index])
+);
 
 const getCustomIconProps = (icon?: string) => {
   if (!icon || icon === 'custom') {
@@ -545,7 +608,8 @@ const fetchLatestModels = async () => {
 
   isFetchingModels.value = true;
   try {
-    const fetched = await electronAPI.chat.getModels(selectedProviderId.value);
+    const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
+    const fetched = await electronAPI.chat.getModels(providerLookupKey);
     if (fetched && fetched.length > 0) {
       dynamicModels.value[selectedProviderId.value] = fetched;
       const currentSelected = selectedModels.value[selectedProviderId.value] || [];
@@ -689,26 +753,24 @@ const sidebarProviders = computed<SidebarProvider[]>(() => {
   const matchesQuery = (provider: SidebarProvider) =>
     query.length === 0 || provider.searchText.includes(query);
 
-  return [...builtInItems, ...customItems]
-    .filter(matchesQuery)
-    .sort((left, right) => {
-      if (left.enabled !== right.enabled) {
-        return left.enabled ? -1 : 1;
-      }
+  return [...builtInItems, ...customItems].filter(matchesQuery).sort((left, right) => {
+    if (left.enabled !== right.enabled) {
+      return left.enabled ? -1 : 1;
+    }
 
-      if (left.isCustom !== right.isCustom) {
-        return left.isCustom ? 1 : -1;
-      }
+    if (left.isCustom !== right.isCustom) {
+      return left.isCustom ? 1 : -1;
+    }
 
-      if (!left.isCustom && !right.isCustom) {
-        return (
-          (BUILTIN_PROVIDER_ORDER.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
-          (BUILTIN_PROVIDER_ORDER.get(right.id) ?? Number.MAX_SAFE_INTEGER)
-        );
-      }
+    if (!left.isCustom && !right.isCustom) {
+      return (
+        (BUILTIN_PROVIDER_ORDER.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+        (BUILTIN_PROVIDER_ORDER.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+      );
+    }
 
-      return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
-    });
+    return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+  });
 });
 
 const selectedProviderInfo = computed((): BuiltInProvider | null => {
@@ -716,7 +778,8 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
 
   const builtIn = BUILTIN_PROVIDERS.find(p => p.id === selectedProviderId.value);
   if (builtIn) {
-    const selected = selectedModels.value[builtIn.id] || getPersistedProviderSnapshot(builtIn.id).models;
+    const selected =
+      selectedModels.value[builtIn.id] || getPersistedProviderSnapshot(builtIn.id).models;
     const descriptionByProviderId: Record<string, string> = {
       openai: t('settings.providers.description.openai'),
       anthropic: t('settings.providers.description.anthropic'),
@@ -943,6 +1006,7 @@ const addCustomProvider = () => {
     models: '',
     base_url: '',
     enabled: true,
+    is_response_api: false,
     available_models: '[]',
   };
   showProviderEditor.value = true;
@@ -951,6 +1015,14 @@ const addCustomProvider = () => {
 const updateEditingProviderTypeSelection = (value: string) => {
   if (!editingProvider.value) return;
   editingProvider.value.type = value;
+  if (value === 'anthropic-compatible') {
+    editingProvider.value.is_response_api = false;
+  }
+};
+
+const updateEditingProviderApiFormatSelection = (value: string) => {
+  if (!editingProvider.value) return;
+  editingProvider.value.is_response_api = value === 'responses';
 };
 
 const saveProvider = async () => {
@@ -972,6 +1044,10 @@ const saveProvider = async () => {
     ...editingProvider.value,
     models: JSON.stringify(modelsArray),
     available_models: JSON.stringify(modelsArray),
+    is_response_api:
+      editingProvider.value.type === 'anthropic-compatible'
+        ? false
+        : editingProvider.value.is_response_api === true,
   };
 
   if (providers.value.some(p => p.id === editingProvider.value.id)) {
@@ -1398,6 +1474,10 @@ onMounted(() => {
   gap: 10px;
 }
 
+.provider-format-select {
+  width: 100%;
+}
+
 .provider-format-card {
   display: flex;
   flex-direction: column;
@@ -1405,12 +1485,11 @@ onMounted(() => {
   padding: 14px 16px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, rgba(var(--accent-rgb), 0.34) 40%, var(--border-color));
-  background:
-    linear-gradient(
-      180deg,
-      rgba(var(--accent-rgb), 0.08) 0%,
-      color-mix(in srgb, var(--bg-secondary) 92%, transparent) 100%
-    );
+  background: linear-gradient(
+    180deg,
+    rgba(var(--accent-rgb), 0.08) 0%,
+    color-mix(in srgb, var(--bg-secondary) 92%, transparent) 100%
+  );
 }
 
 .provider-format-endpoint {
@@ -1427,8 +1506,8 @@ onMounted(() => {
   letter-spacing: 0.01em;
 }
 
-.provider-format-warning {
-  color: var(--warning-color);
+.provider-format-note {
+  color: var(--text-secondary);
 }
 
 .provider-inline-link {
@@ -1621,7 +1700,11 @@ onMounted(() => {
   flex-shrink: 0;
   padding-top: 20px;
   border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 0%, transparent), var(--bg-primary));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 0%, transparent),
+    var(--bg-primary)
+  );
 }
 
 .status-badge {

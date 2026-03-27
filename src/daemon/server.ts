@@ -270,8 +270,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       userDataPath,
     });
 
-    writePortFile(userDataPath, port);
-    writeHostFile(userDataPath, host);
     initializeDatabase();
     applyAppLoggingConfig(getAppConfig());
     registerStandardTools();
@@ -286,6 +284,14 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     const napcatBridge = createNapCatReverseBridge({
       chatService,
       clientId: napcatClientId,
+    });
+    let startupSettled = false;
+    let shuttingDown = false;
+    let resolveReady: () => void = () => undefined;
+    let rejectReady: (reason?: unknown) => void = () => undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
     });
 
     const server = http.createServer(async (req, res) => {
@@ -724,6 +730,86 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
 
     const wss = new WebSocketServer({ noServer: true });
 
+    const resolveListeningPort = (): number => {
+      const address = server.address();
+      return typeof address === 'object' && address ? address.port : port;
+    };
+
+    const markReady = () => {
+      if (startupSettled) return;
+      startupSettled = true;
+      resolveReady();
+    };
+
+    const markFailed = (error: unknown) => {
+      if (startupSettled) return;
+      startupSettled = true;
+      rejectReady(error);
+    };
+
+    const shutdown = () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      process.off('SIGINT', shutdown);
+      process.off('SIGTERM', shutdown);
+      napcatBridge.dispose();
+
+      try {
+        server.close();
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'ERR_SERVER_NOT_RUNNING') {
+          serverLogger.event({
+            level: 'warn',
+            event: 'daemon.server.shutdown',
+            outcome: 'degraded',
+            error,
+            message: 'Failed to close HTTP server cleanly.',
+          });
+        }
+      }
+
+      try {
+        wss.close();
+      } catch (error) {
+        serverLogger.event({
+          level: 'warn',
+          event: 'daemon.server.shutdown',
+          outcome: 'degraded',
+          error,
+          message: 'Failed to close WebSocket server cleanly.',
+        });
+      }
+    };
+
+    const started = {
+      server,
+      wss,
+      port,
+      host,
+      bootstrapToken,
+      shutdown,
+      ready,
+    };
+
+    server.on('error', error => {
+      if (shuttingDown) return;
+      serverLogger.event({
+        level: 'error',
+        event: startupSettled ? 'daemon.server.runtime' : 'daemon.server.listen',
+        outcome: 'failed',
+        error,
+        message: startupSettled
+          ? 'Daemon server encountered a runtime error.'
+          : 'Daemon server failed to bind.',
+        data: {
+          host,
+          port: resolveListeningPort(),
+        },
+      });
+      markFailed(error);
+      shutdown();
+    });
+
     server.on('upgrade', (req, socket, head) => {
       const url = new URL(req.url || '/', 'http://127.0.0.1');
 
@@ -926,27 +1012,25 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     });
 
     server.listen(port, host, () => {
+      started.port = resolveListeningPort();
+      writePortFile(userDataPath, started.port);
+      writeHostFile(userDataPath, host);
       serverLogger.event({
         level: 'info',
         event: 'daemon.server.listen',
         outcome: 'succeeded',
-        message: `Listening on http://${host}:${port}.`,
+        message: `Listening on http://${host}:${started.port}.`,
         data: {
           host,
-          port,
+          port: started.port,
         },
       });
+      markReady();
     });
-
-    const shutdown = () => {
-      napcatBridge.dispose();
-      server.close();
-      wss.close();
-    };
 
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
 
-    return { server, wss, port, host, bootstrapToken };
+    return started;
   });
 };

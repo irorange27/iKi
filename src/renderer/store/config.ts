@@ -60,6 +60,47 @@ export const useConfigStore = defineStore('config', {
     updateGeneral<K extends keyof AppConfig['general']>(key: K, value: AppConfig['general'][K]) {
       this.config.general[key] = value;
     },
+    setToolModel(value: AppConfig['toolModel']) {
+      this.config.toolModel = {
+        ...value,
+      };
+    },
+    updateToolExecution<K extends keyof AppConfig['toolExecution']>(
+      key: K,
+      value: AppConfig['toolExecution'][K]
+    ) {
+      this.config.toolExecution[key] = value;
+    },
+    updateNetwork<K extends Exclude<keyof AppConfig['network'], 'proxy'>>(
+      key: K,
+      value: AppConfig['network'][K]
+    ) {
+      this.config.network[key] = value;
+    },
+    updateNetworkProxy<K extends keyof AppConfig['network']['proxy']>(
+      key: K,
+      value: AppConfig['network']['proxy'][K]
+    ) {
+      this.config.network.proxy[key] = value;
+    },
+    updateSecurity<K extends keyof AppConfig['security']>(
+      key: K,
+      value: AppConfig['security'][K]
+    ) {
+      this.config.security[key] = value;
+    },
+    updateAdvanced<K extends keyof AppConfig['advanced']>(
+      key: K,
+      value: AppConfig['advanced'][K]
+    ) {
+      this.config.advanced[key] = value;
+    },
+    updateKeybinding<K extends keyof AppConfig['keybindings']>(
+      key: K,
+      value: AppConfig['keybindings'][K]
+    ) {
+      this.config.keybindings[key] = value;
+    },
 
     resetConfig() {
       // 重新读取系统配置（获取当前最新系统设置）

@@ -149,8 +149,7 @@ const sameBinding = (
 const stopEmbeddedDaemon = () => {
   if (!embeddedDaemon) return;
   try {
-    embeddedDaemon.server.close();
-    embeddedDaemon.wss.close();
+    embeddedDaemon.shutdown();
   } catch (error) {
     getDaemonLifecycleLogger().event({
       level: 'warn',
@@ -166,13 +165,14 @@ const stopEmbeddedDaemon = () => {
 };
 
 const startEmbeddedDaemon = (binding: { host: string; port: number }) => {
-  if (embeddedDaemon) return;
+  if (embeddedDaemon) return embeddedDaemon;
   process.env.IKI_USER_DATA_PATH = app.getPath('userData');
   process.env.IKI_LOCALE = app.getLocale();
   process.env.IKI_DAEMON_HOST = binding.host;
   process.env.IKI_DAEMON_PORT = String(binding.port);
   embeddedDaemon = startDaemonServer({ host: binding.host, port: binding.port });
   embeddedBinding = binding;
+  return embeddedDaemon;
 };
 
 export const isDesktopDaemonEmbeddedRunning = (): boolean => Boolean(embeddedDaemon);
@@ -266,9 +266,27 @@ export const startDesktopDaemon = async (options?: { ignoreAutostartEnv?: boolea
       return;
     }
 
-    startEmbeddedDaemon(binding);
+    const startedDaemon = startEmbeddedDaemon(binding);
 
-    const healthy = await waitForDaemonHealthy(binding.port, probeHost);
+    try {
+      await startedDaemon.ready;
+    } catch (error) {
+      getDaemonLifecycleLogger().event({
+        level: 'warn',
+        event: 'daemon.lifecycle.start',
+        outcome: 'failed',
+        error,
+        message: 'Embedded daemon failed during startup.',
+        data: {
+          host: binding.host,
+          port: binding.port,
+        },
+      });
+      stopEmbeddedDaemon();
+      return;
+    }
+
+    const healthy = await waitForDaemonHealthy(startedDaemon.port, probeHost);
     if (!healthy) {
       getDaemonLifecycleLogger().event({
         level: 'warn',
