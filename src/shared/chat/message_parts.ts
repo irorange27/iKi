@@ -125,6 +125,12 @@ type LegacyAffectSignalPart = {
   windowMinutes?: number;
 };
 
+type LegacyChatUiMetadataPart =
+  | LegacyMemoryPart
+  | LegacySkillUsagePart
+  | LegacyContextReportPart
+  | LegacyAffectSignalPart;
+
 export type ToolApproval = {
   id: string;
   approved?: boolean;
@@ -199,6 +205,25 @@ export type ToolPart =
   | ToolApprovalRequestPart
   | ToolApprovalResponsePart;
 
+export type ChatUiMetadataPart =
+  | MemoryPart
+  | SkillUsagePart
+  | ContextReportPart
+  | AffectSignalPart;
+
+type ChatUiMetadataPartType = LegacyChatUiMetadataPart['type'] | ChatUiMetadataPart['type'];
+
+const CHAT_UI_METADATA_PART_TYPES = new Set<ChatUiMetadataPartType>([
+  'memory-retrieval',
+  'skill-usage',
+  'context-report',
+  'affect-signal',
+  'data-memory-retrieval',
+  'data-skill-usage',
+  'data-context-report',
+  'data-affect-signal',
+]);
+
 export const createMemoryPart = (data: MemoryPartData): MemoryPart => ({
   type: 'data-memory-retrieval',
   data,
@@ -246,6 +271,13 @@ export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
   part.type === 'dynamic-tool' &&
   typeof part.toolCallId === 'string' &&
   typeof part.toolName === 'string';
+
+export const isChatUiMetadataPart = (
+  part: unknown
+): part is ChatUiMetadataPart | LegacyChatUiMetadataPart =>
+  isObjectRecord(part) &&
+  typeof part.type === 'string' &&
+  CHAT_UI_METADATA_PART_TYPES.has(part.type as ChatUiMetadataPartType);
 
 export const getMemoryPartData = (part: unknown): MemoryPartData | null => {
   if (!isMemoryPart(part)) return null;
@@ -312,4 +344,24 @@ export const getAffectSignalPartData = (part: unknown): AffectSignalPartData | n
     ...(typeof part.ageMinutes === 'number' ? { ageMinutes: part.ageMinutes } : {}),
     ...(typeof part.windowMinutes === 'number' ? { windowMinutes: part.windowMinutes } : {}),
   };
+};
+
+export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart | null => {
+  if (isMemoryPart(part)) {
+    return createMemoryPart(getMemoryPartData(part) ?? {});
+  }
+
+  if (isSkillUsagePart(part)) {
+    return createSkillUsagePart(getSkillUsagePartData(part) ?? {});
+  }
+
+  if (isContextReportPart(part)) {
+    return createContextReportPart(getContextReportPartData(part) ?? {});
+  }
+
+  if (isAffectSignalPart(part)) {
+    return createAffectSignalPart(getAffectSignalPartData(part) ?? {});
+  }
+
+  return null;
 };

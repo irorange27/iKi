@@ -7,6 +7,7 @@ import type {
   TextPart,
   UiMessagePart,
 } from '../../../shared/chat/message_parts';
+import { isChatUiMetadataPart } from '../../../shared/chat/message_parts';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_types';
 import { createRuntimeId, normalizeToolPartForValidation } from './chat_ui_tool_parts';
@@ -34,16 +35,7 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             if (partType === 'dynamic-tool' || partType.startsWith('tool-')) {
               return normalizeToolPartForValidation(partRecord, `${messageId}_tool_${partIndex}`);
             }
-            if (
-              partType === 'memory-retrieval' ||
-              partType === 'skill-usage' ||
-              partType === 'affect-signal' ||
-              partType === 'context-report' ||
-              partType === 'data-memory-retrieval' ||
-              partType === 'data-skill-usage' ||
-              partType === 'data-affect-signal' ||
-              partType === 'data-context-report'
-            ) {
+            if (isChatUiMetadataPart(partRecord)) {
               return null;
             }
             if (partType === 'text' && typeof partRecord.text === 'string') {

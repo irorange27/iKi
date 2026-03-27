@@ -1,15 +1,8 @@
 import {
-  createAffectSignalPart,
-  createContextReportPart,
-  createMemoryPart,
-  createSkillUsagePart,
-  getAffectSignalPartData,
-  getContextReportPartData,
-  getMemoryPartData,
-  getSkillUsagePartData,
   type ChatUiMessage,
   type TextPart,
   type UiMessagePart,
+  normalizeChatUiMetadataPart,
 } from './message_parts';
 import { isObjectRecord } from './message_parts';
 import { normalizeToolPartForValidation } from './tool_parts';
@@ -47,20 +40,9 @@ const normalizePart = (
     return normalizeToolPartForValidation(part, fallbackToolCallId);
   }
 
-  if (part.type === 'data-memory-retrieval' || part.type === 'memory-retrieval') {
-    return createMemoryPart(getMemoryPartData(part) ?? {});
-  }
-
-  if (part.type === 'data-skill-usage' || part.type === 'skill-usage') {
-    return createSkillUsagePart(getSkillUsagePartData(part) ?? {});
-  }
-
-  if (part.type === 'data-affect-signal' || part.type === 'affect-signal') {
-    return createAffectSignalPart(getAffectSignalPartData(part) ?? {});
-  }
-
-  if (part.type === 'data-context-report' || part.type === 'context-report') {
-    return createContextReportPart(getContextReportPartData(part) ?? {});
+  const normalizedMetadataPart = normalizeChatUiMetadataPart(part);
+  if (normalizedMetadataPart) {
+    return normalizedMetadataPart;
   }
 
   return null;
