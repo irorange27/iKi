@@ -1,10 +1,8 @@
 import { getDb } from './database';
 import type { IdentityProfile } from '../../shared/types/identity';
+import { createPrefixedId } from '../../shared/utils/id';
 
 const nowIso = () => new Date().toISOString();
-
-const createRuntimeId = (prefix: string) =>
-  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 const toJsonString = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
@@ -76,7 +74,7 @@ export const addIdentityProfile = (entry: {
   const name = typeof entry.name === 'string' ? entry.name.trim() : '';
   if (!name) return null;
 
-  const id = entry.id?.trim() || createRuntimeId('identity');
+  const id = entry.id?.trim() || createPrefixedId('identity');
   const now = nowIso();
   const active = normalizeActive(entry.active);
 

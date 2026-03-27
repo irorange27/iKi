@@ -9,6 +9,7 @@ import {
   type ProactiveTask,
 } from '../../shared/types/tasks';
 import { isObjectRecord } from '../../shared/utils/guards';
+import { createPrefixedId } from '../../shared/utils/id';
 import { toIpcSerializable } from '../../shared/utils/ipc_serialization';
 import { getErrorMessage } from '../utils/errors';
 import { runProactiveTask } from '../services/tasks/proactive_tasks';
@@ -22,9 +23,6 @@ import {
 } from '../services/tasks/task_schedule';
 
 let tasksIpcRegistered = false;
-
-const createRuntimeId = (prefix: string) =>
-  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 const computeNextRunAtFromNow = (
   schedule: {
@@ -74,7 +72,7 @@ export const registerTasksIpc = (): void => {
       const id =
         typeof taskInput.id === 'string' && taskInput.id.trim()
           ? taskInput.id.trim()
-          : createRuntimeId('task');
+          : createPrefixedId('task');
       const name = typeof taskInput.name === 'string' ? taskInput.name.trim() : '';
       const prompt = typeof taskInput.prompt === 'string' ? taskInput.prompt.trim() : '';
       const provider_type =

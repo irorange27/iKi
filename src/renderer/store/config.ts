@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import type { AppConfig } from '../../shared/types/config';
 import { createDefaultAppConfig, mergeAppConfig } from '../../shared/config/defaults';
+import { clonePlainData } from '../../shared/utils/clone';
 import { createLogger } from '../logger';
 import { configService } from '../services/config_service';
 
@@ -46,7 +47,7 @@ export const useConfigStore = defineStore('config', {
 
     async saveConfig() {
       // De-proxy config before sending to IPC
-      const rawConfig = JSON.parse(JSON.stringify(this.config));
+      const rawConfig = clonePlainData(this.config);
       await configService.set(rawConfig);
     },
 

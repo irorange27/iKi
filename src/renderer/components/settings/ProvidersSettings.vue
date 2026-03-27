@@ -42,7 +42,7 @@
               </div>
               <span
                 class="provider-status-dot"
-                :class="{ active: isProviderEnabled(bp.id) }"
+                :class="{ enabled: isProviderEnabled(bp.id) }"
               ></span>
             </div>
 
@@ -66,7 +66,7 @@
               </div>
               <span
                 class="provider-status-dot"
-                :class="{ active: isProviderEnabled(cp.id) }"
+                :class="{ enabled: isProviderEnabled(cp.id) }"
               ></span>
             </div>
           </div>
@@ -80,7 +80,7 @@
             <div class="provider-heading">
               <div class="provider-title-row">
                 <h3>{{ selectedProviderInfo.name }}</h3>
-                <span class="status-badge" :class="{ active: selectedProviderDraft.enabled }">
+                <span class="status-badge" :class="{ enabled: selectedProviderDraft.enabled }">
                   {{ selectedProviderDraft.enabled ? t('common.active') : t('common.inactive') }}
                 </span>
               </div>
@@ -282,60 +282,79 @@
     <!-- Custom Provider Editor Modal -->
     <div v-if="showProviderEditor" class="modal-overlay">
       <div class="modal-content provider-editor">
-        <h3>
-          {{ editingProvider?.id?.startsWith('custom_') ? t('settings.providers.modal.edit') : t('settings.providers.modal.add') }}
-          {{ t('settings.providers.modal.titleSuffix') }}
-        </h3>
-
-        <div class="provider-config-group">
-          <label class="input-label"
-            >{{ t('common.name') }}
-            <input
-              type="text"
-              v-model="editingProvider.name"
-              :placeholder="t('settings.providers.modal.namePlaceholder')"
-            />
-          </label>
-
-          <label class="input-label"
-            >{{ t('common.type') }}
-            <SettingsSelect
-              :model-value="editingProvider.type"
-              :options="providerTypeOptions"
-              :aria-label="t('settings.providers.modal.typeAria')"
-              @update:model-value="updateEditingProviderTypeSelection"
-            />
-          </label>
-
-          <label class="input-label"
-            >{{ t('settings.providers.apiKey') }}
-            <input
-              type="password"
-              v-model="editingProvider.api_key"
-              :placeholder="t('settings.providers.modal.apiKeyPlaceholder')"
-            />
-          </label>
-
-          <label class="input-label"
-            >{{ t('settings.providers.modal.baseUrl') }}
-            <input
-              type="text"
-              v-model="editingProvider.base_url"
-              :placeholder="t('settings.providers.modal.baseUrlPlaceholder')"
-            />
-          </label>
-
-          <label class="input-label"
-            >{{ t('settings.providers.modal.models') }}
-            <input
-              type="text"
-              v-model="editingProvider.models"
-              :placeholder="t('settings.providers.modal.modelsPlaceholder')"
-            />
-          </label>
+        <div class="provider-editor-header">
+          <h3>
+            {{ editingProvider?.id?.startsWith('custom_') ? t('settings.providers.modal.edit') : t('settings.providers.modal.add') }}
+            {{ t('settings.providers.modal.titleSuffix') }}
+          </h3>
         </div>
 
-        <div class="modal-footer">
+        <div class="provider-editor-scroll">
+          <div class="provider-config-group">
+            <label class="input-label"
+              >{{ t('common.name') }}
+              <input
+                type="text"
+                v-model="editingProvider.name"
+                :placeholder="t('settings.providers.modal.namePlaceholder')"
+              />
+            </label>
+
+            <label class="input-label"
+              >{{ t('common.type') }}
+              <SettingsSelect
+                :model-value="editingProvider.type"
+                :options="providerTypeOptions"
+                :aria-label="t('settings.providers.modal.typeAria')"
+                @update:model-value="updateEditingProviderTypeSelection"
+              />
+            </label>
+
+            <div v-if="editingProviderApiFormat" class="provider-field provider-format-section">
+              <span class="provider-field-title">
+                {{ t('settings.providers.modal.apiFormat') }}
+              </span>
+              <div class="provider-format-card">
+                <span class="provider-format-endpoint">{{ editingProviderApiFormat.endpoint }}</span>
+                <p class="provider-field-help">
+                  {{ editingProviderApiFormat.description }}
+                </p>
+                <p class="provider-field-help provider-format-warning">
+                  {{ editingProviderApiFormat.warning }}
+                </p>
+              </div>
+            </div>
+
+            <label class="input-label"
+              >{{ t('settings.providers.apiKey') }}
+              <input
+                type="password"
+                v-model="editingProvider.api_key"
+                :placeholder="t('settings.providers.modal.apiKeyPlaceholder')"
+              />
+            </label>
+
+            <label class="input-label"
+              >{{ t('settings.providers.modal.baseUrl') }}
+              <input
+                type="text"
+                v-model="editingProvider.base_url"
+                :placeholder="t('settings.providers.modal.baseUrlPlaceholder')"
+              />
+            </label>
+
+            <label class="input-label"
+              >{{ t('settings.providers.modal.models') }}
+              <input
+                type="text"
+                v-model="editingProvider.models"
+                :placeholder="t('settings.providers.modal.modelsPlaceholder')"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer provider-editor-footer">
           <button class="secondary-btn" @click="showProviderEditor = false">
             {{ t('common.cancel') }}
           </button>
@@ -362,6 +381,7 @@ import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
 import { createLogger } from '../../logger';
 import { getProviderIconName } from '../../modules/providers/provider_icons';
+import { getElectronAPI } from '../../services/electron_api';
 
 type ProviderRecord = Provider & {
   icon?: string | null;
@@ -382,7 +402,13 @@ type ProviderDraft = {
   showApiKey: boolean;
 };
 
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+type EditableProviderApiFormat = {
+  endpoint: string;
+  description: string;
+  warning: string;
+};
+
+const electronAPI = getElectronAPI();
 const providersSettingsLogger = createLogger({ module: 'providers_settings' });
 const { t } = useI18n();
 
@@ -405,6 +431,33 @@ const providerTypeOptions = computed(() => [
   { value: 'ollama', label: 'Ollama' },
   { value: 'custom', label: t('common.custom') },
 ]);
+
+const editingProviderApiFormat = computed<EditableProviderApiFormat | null>(() => {
+  const providerType = editingProvider.value?.type?.trim();
+  if (!providerType) return null;
+
+  if (providerType === 'anthropic-compatible') {
+    return {
+      endpoint: t('settings.providers.modal.apiFormat.messages'),
+      description: t('settings.providers.modal.apiFormat.anthropicDescription'),
+      warning: t('settings.providers.modal.apiFormat.responsesUnsupported'),
+    };
+  }
+
+  if (providerType === 'openai-compatible') {
+    return {
+      endpoint: t('settings.providers.modal.apiFormat.chatCompletions'),
+      description: t('settings.providers.modal.apiFormat.openaiDescription'),
+      warning: t('settings.providers.modal.apiFormat.responsesUnsupported'),
+    };
+  }
+
+  return {
+    endpoint: t('settings.providers.modal.apiFormat.chatCompletions'),
+    description: t('settings.providers.modal.apiFormat.defaultDescription'),
+    warning: t('settings.providers.modal.apiFormat.responsesUnsupported'),
+  };
+});
 
 const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
 
@@ -457,6 +510,10 @@ const getPersistedProviderSnapshot = (providerId: string) => {
     models: parseModelList(record?.models),
     availableModels: parseModelList(record?.available_models),
   };
+};
+
+const isProviderPersistedEnabled = (providerId: string) => {
+  return getProviderRecord(providerId)?.enabled === true;
 };
 
 const syncProviderDraft = (providerId: string) => {
@@ -617,8 +674,8 @@ const filteredBuiltInProviders = computed(() => {
   );
 
   return [...filtered].sort((a, b) => {
-    const aEnabled = isProviderEnabled(a.id);
-    const bEnabled = isProviderEnabled(b.id);
+    const aEnabled = isProviderPersistedEnabled(a.id);
+    const bEnabled = isProviderPersistedEnabled(b.id);
     if (aEnabled && !bEnabled) return -1;
     if (!aEnabled && bEnabled) return 1;
     return 0;
@@ -631,8 +688,8 @@ const customProviders = computed(() => {
   );
 
   return [...custom].sort((a, b) => {
-    const aEnabled = a.enabled === true;
-    const bEnabled = b.enabled === true;
+    const aEnabled = isProviderPersistedEnabled(a.id);
+    const bEnabled = isProviderPersistedEnabled(b.id);
     if (aEnabled && !bEnabled) return -1;
     if (!aEnabled && bEnabled) return 1;
     return 0;
@@ -756,7 +813,11 @@ const isProviderConfigured = (providerId: string) => {
 };
 
 const isProviderEnabled = (providerId: string) => {
-  return getProviderRecord(providerId)?.enabled === true;
+  const draft = providerDrafts.value[providerId];
+  if (draft) {
+    return draft.enabled;
+  }
+  return isProviderPersistedEnabled(providerId);
 };
 
 const setSelectedProviderEnabled = (enabled: boolean) => {
@@ -1101,10 +1162,19 @@ onMounted(() => {
 }
 
 .provider-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--border-color);
+  background: color-mix(in srgb, var(--border-color) 82%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.provider-status-dot.enabled {
+  background: var(--status-success-color);
 }
 
 .providers-divider {
@@ -1309,6 +1379,43 @@ onMounted(() => {
   line-height: 1.5;
 }
 
+.provider-format-section {
+  gap: 10px;
+}
+
+.provider-format-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, rgba(var(--accent-rgb), 0.34) 40%, var(--border-color));
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--accent-rgb), 0.08) 0%,
+      color-mix(in srgb, var(--bg-secondary) 92%, transparent) 100%
+    );
+}
+
+.provider-format-endpoint {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.14);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.provider-format-warning {
+  color: var(--warning-color);
+}
+
 .provider-inline-link {
   display: flex;
   width: fit-content;
@@ -1430,6 +1537,8 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  overflow-y: auto;
+  padding: 24px;
   z-index: 1000;
   backdrop-filter: blur(4px);
 }
@@ -1441,11 +1550,49 @@ onMounted(() => {
   padding: 32px;
   width: 100%;
   max-width: 500px;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  box-sizing: border-box;
   box-shadow: var(--surface-shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.provider-editor-header {
+  flex-shrink: 0;
+  padding-bottom: 24px;
 }
 
 .provider-editor h3 {
-  margin-bottom: 24px;
+  margin: 0;
+}
+
+.provider-editor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 10px;
+  margin-right: -10px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border-color) 88%, transparent) transparent;
+}
+
+.provider-editor-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.provider-editor-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+
+.provider-editor-scroll::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--border-color) 88%, transparent);
+  border-radius: 999px;
+}
+
+.provider-editor-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
 }
 
 .modal-footer {
@@ -1455,20 +1602,31 @@ onMounted(() => {
   gap: 12px;
 }
 
+.provider-editor-footer {
+  flex-shrink: 0;
+  padding-top: 20px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 0%, transparent), var(--bg-primary));
+}
+
 .status-badge {
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   background: var(--bg-secondary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.status-badge.active {
-  background: color-mix(in srgb, var(--success-color) 18%, transparent);
-  color: var(--success-color);
-  border-color: color-mix(in srgb, var(--success-color) 40%, transparent);
+.status-badge.enabled {
+  background: color-mix(in srgb, var(--status-success-color) 16%, var(--bg-secondary));
+  color: var(--status-success-color);
 }
 
 .label-header {

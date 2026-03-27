@@ -187,10 +187,11 @@ import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { useSidebar } from '../composables/useSidebar';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
+import { getElectronAPI } from '../services/electron_api';
 
 const sidebar = useSidebar();
 const { t } = useI18n();
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const sidebarLogger = createLogger({ module: 'sidebar' });
 
 interface ChatThread {

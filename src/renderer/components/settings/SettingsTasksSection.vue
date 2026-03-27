@@ -278,6 +278,7 @@ import {
 } from '../../../shared/types/tasks';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { formatTimestamp } from './settings_formatters';
+import { getElectronAPI } from '../../services/electron_api';
 
 type ProviderModels = {
   id: string;
@@ -290,7 +291,7 @@ const props = defineProps<{
   active: boolean;
   providers: ProviderModels[];
 }>();
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const proactiveTasks = ref<ProactiveTask[]>([]);

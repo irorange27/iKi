@@ -2,6 +2,7 @@ import { promises as fs, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { createPrefixedId } from '../../../shared/utils/id';
 
 const runFfmpeg = async (args: string[], ffmpegPath: string): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
@@ -75,7 +76,7 @@ const ensureTempDir = async (): Promise<string> => {
 export const writeTempFile = async (buffer: Buffer, extension: string): Promise<string> => {
   const dir = await ensureTempDir();
   const safeExt = extension.replace(/[^a-z0-9]/gi, '') || 'audio';
-  const filename = `speech_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+  const filename = `${createPrefixedId('speech', { randomLength: 6 })}.${safeExt}`;
   const filePath = path.join(dir, filename);
   await fs.writeFile(filePath, buffer);
   return filePath;

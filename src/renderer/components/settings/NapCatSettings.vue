@@ -292,12 +292,13 @@ import {
 } from '../../../shared/logging/console_formatter';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
+import { getElectronAPI } from '../../services/electron_api';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;
   (event: 'reset'): void;
 }>();
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const props = defineProps<{
   active: boolean;
 }>();

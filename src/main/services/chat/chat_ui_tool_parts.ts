@@ -7,9 +7,9 @@ import {
   getToolOutput,
   normalizeDynamicToolPart,
 } from '../../../shared/chat/tool_parts';
+import { createPrefixedId } from '../../../shared/utils/id';
 
-export const createRuntimeId = (prefix: string) =>
-  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+export const createRuntimeId = (prefix: string) => createPrefixedId(prefix);
 
 const DYNAMIC_TOOL_STATES = new Set<DynamicToolState>([
   'input-streaming',

@@ -1,4 +1,5 @@
 import type { AppConfig } from '../types/config';
+import { clonePlainData } from '../utils/clone';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../constants/daemon';
 import { createDefaultThemeConfig } from '../theme/registry';
 
@@ -152,8 +153,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   },
 };
 
-export const createDefaultAppConfig = (): AppConfig =>
-  JSON.parse(JSON.stringify(DEFAULT_APP_CONFIG)) as AppConfig;
+export const createDefaultAppConfig = (): AppConfig => clonePlainData(DEFAULT_APP_CONFIG);
 
 export const mergeAppConfigWithBase = (
   base: AppConfig,

@@ -6,6 +6,7 @@ import type {
   ChatUsageSummary,
   TokenUsageMetrics,
 } from '../../../shared/types/chat_usage';
+import { createPrefixedId } from '../../../shared/utils/id';
 
 const PERIOD_DAYS: Record<Exclude<ChatUsagePeriod, 'all'>, number> = {
   '7d': 7,
@@ -116,7 +117,7 @@ export const createChatUsage = () => {
     const usage = normalizeUsage(params.usage);
 
     chatUsageDb.addChatUsageEvent({
-      id: `usage_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      id: createPrefixedId('usage', { randomLength: 8 }),
       thread_id: params.threadId,
       message_id: params.messageId,
       provider_type: providerType,

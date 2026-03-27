@@ -95,7 +95,7 @@ import {
 } from '../modules/chat/ui_message_references';
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import { createChatMessageStore } from '../modules/chat/chat_message_store';
-import type { ElectronApi } from '../../shared/types/electron_api';
+import { createPrefixedId } from '../../shared/utils/id';
 import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';
 import { useMarkdownCopy } from '../composables/useMarkdownCopy';
@@ -103,6 +103,7 @@ import { useChatThreads } from '../composables/useChatThreads';
 import { useChatStreaming } from '../composables/useChatStreaming';
 import { useToolMetadata } from '../composables/useToolMetadata';
 import { getThreadOriginInfo } from '../modules/chat/thread_origin';
+import { getElectronAPI } from '../services/electron_api';
 
 type ChatInputExpose = {
   setDraftMessage: (
@@ -111,7 +112,7 @@ type ChatInputExpose = {
   ) => Promise<void> | void;
 };
 
-const electronAPI = window.electronAPI as ElectronApi;
+const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const configStore = useConfigStore();
@@ -126,7 +127,7 @@ const persistence = createUiMessagePersistence({ electronAPI });
 const messageStore = createChatMessageStore(chat);
 const { handleMarkdownClick } = useMarkdownCopy();
 
-const createMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+const createMessageId = () => createPrefixedId('msg');
 const { loadToolSources, getMcpServerLabel } = useToolMetadata({
   electronAPI,
 });

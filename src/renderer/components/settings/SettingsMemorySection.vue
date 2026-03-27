@@ -728,6 +728,7 @@ import {
   formatTimestamp,
   parseAffectStateSnapshot,
 } from './settings_formatters';
+import { getElectronAPI } from '../../services/electron_api';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;
@@ -737,7 +738,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const ALL_THREADS = '__all__';

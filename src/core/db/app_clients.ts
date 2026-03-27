@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { getDb } from './database';
+import { createPrefixedId } from '../../shared/utils/id';
 
 type AppClientRow = {
   id: string;
@@ -77,7 +78,7 @@ export const createAppClient = (input: CreateAppClientInput) => {
   const id =
     typeof input.id === 'string' && input.id.trim()
       ? input.id.trim()
-      : `client_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      : createPrefixedId('client');
 
   const scopes = toStringArray(input.scopes);
   const allowedTools = toStringArray(input.allowedTools);

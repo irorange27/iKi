@@ -24,6 +24,7 @@ import {
 } from '../db/mcp_servers';
 import { createTool, defaultToolRegistry } from '../tools';
 import { resolveMcpToolResult } from './tool_results';
+import { createPrefixedId } from '../../shared/utils/id';
 import type {
   McpApprovalMode,
   McpServer,
@@ -452,7 +453,7 @@ export class McpManager extends EventEmitter {
   }
 
   async addServer(input: McpServerInput): Promise<McpServer> {
-    const id = `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const id = createPrefixedId('mcp', { randomLength: 6 });
     addMcpServer({ ...input, id });
     const server = getMcpServer(id);
     if (!server) {

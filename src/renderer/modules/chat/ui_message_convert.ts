@@ -1,12 +1,13 @@
 import type { UIMessage } from 'ai';
 import { isObjectRecord, type ObjectRecord } from '../../../shared/utils/guards';
+import { createPrefixedId } from '../../../shared/utils/id';
 
 type MessageRole = 'system' | 'user' | 'assistant';
 
 const isValidRole = (role: unknown): role is MessageRole =>
   role === 'system' || role === 'user' || role === 'assistant';
 
-const makeUiMessageId = () => `ui_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const makeUiMessageId = () => createPrefixedId('ui', { randomLength: 6 });
 
 const normalizeParts = (parts: unknown, content: unknown): Array<Record<string, unknown>> => {
   if (Array.isArray(parts)) {

@@ -4,11 +4,9 @@ import type {
   RelationshipSourceKind,
   RelationshipStateRecord,
 } from '../../shared/types/relationship';
+import { createPrefixedId } from '../../shared/utils/id';
 
 const nowIso = () => new Date().toISOString();
-
-const createRuntimeId = (prefix: string) =>
-  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 const normalizeScopeType = (value: unknown): RelationshipScopeType =>
   value === 'thread' ? 'thread' : 'thread';
@@ -128,7 +126,7 @@ export const upsertRelationshipState = (
 
   const existing = getRelationshipState(profileId, entry.scope_type, scopeId);
   const timestamp = nowIso();
-  const id = existing?.id || normalizeText(entry.id) || createRuntimeId('relationship');
+  const id = existing?.id || normalizeText(entry.id) || createPrefixedId('relationship');
   const createdAt = existing?.created_at || entry.created_at || timestamp;
 
   getDb()

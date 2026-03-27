@@ -213,6 +213,28 @@ describe('renderer style system foundation', () => {
     expect(combinedColorSchemeSource).not.toMatch(/background:\s*#22c55e/);
   });
 
+  it('styles enabled provider affordances with semantic status tokens', () => {
+    const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+
+    expect(providersSource).toMatch(/\.provider-status-dot\.enabled\s*\{/);
+    expect(providersSource).toMatch(/\.status-badge\.enabled\s*\{/);
+    expect(providersSource).toMatch(/var\(--status-success-color\)/);
+  });
+
+  it('keeps the custom provider modal viewport-safe with scrollable bounds', () => {
+    const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+
+    expect(providersSource).toMatch(
+      /\.modal-overlay\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*padding:\s*24px;/i
+    );
+    expect(providersSource).toMatch(
+      /\.modal-content\s*\{[\s\S]*max-height:\s*calc\(100vh - 48px\);[\s\S]*overflow:\s*hidden;[\s\S]*display:\s*flex;/i
+    );
+    expect(providersSource).toMatch(
+      /\.provider-editor-scroll\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*scrollbar-width:\s*thin;/i
+    );
+  });
+
   it('centralizes app-shell text and selector affordances in globals.css', () => {
     const globalsSource = readFileSync(GLOBALS_CSS_PATH, 'utf8');
 

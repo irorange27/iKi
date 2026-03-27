@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 
 import * as promptAppDb from '../../core/db/prompt_apps';
+import { createPrefixedId } from '../../shared/utils/id';
 
 let promptAppsIpcRegistered = false;
 
@@ -12,7 +13,7 @@ export const registerPromptAppsIpc = (): void => {
   ipcMain.handle('promptApps:get', (_event, id) => promptAppDb.getPromptApp(id));
   ipcMain.handle('promptApps:getEnabled', () => promptAppDb.getEnabledPromptApps());
   ipcMain.handle('promptApps:create', (_event, app) => {
-    const appId = app.id || `promptApp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const appId = app.id || createPrefixedId('promptApp');
     promptAppDb.addPromptApp({
       id: appId,
       name: app.name,
@@ -41,4 +42,3 @@ export const registerPromptAppsIpc = (): void => {
     promptAppDb.updatePromptAppSortOrder(id, sortOrder)
   );
 };
-

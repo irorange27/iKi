@@ -947,6 +947,18 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.modal.titleSuffix': 'Custom Provider',
     'settings.providers.modal.namePlaceholder': 'e.g. My Local LLM',
     'settings.providers.modal.typeAria': 'Custom provider type',
+    'settings.providers.modal.apiFormat': 'API Format',
+    'settings.providers.modal.apiFormat.chatCompletions':
+      'Chat Completions (/chat/completions)',
+    'settings.providers.modal.apiFormat.messages': 'Messages (/messages)',
+    'settings.providers.modal.apiFormat.openaiDescription':
+      'Use this when your gateway exposes an OpenAI-compatible Chat Completions endpoint.',
+    'settings.providers.modal.apiFormat.anthropicDescription':
+      'Use this when your gateway exposes an Anthropic Messages endpoint.',
+    'settings.providers.modal.apiFormat.defaultDescription':
+      'In iKi, this selection currently uses the OpenAI-compatible adapter and sends Chat Completions requests.',
+    'settings.providers.modal.apiFormat.responsesUnsupported':
+      'Custom providers do not support OpenAI Responses (/responses) yet.',
     'settings.providers.modal.apiKeyPlaceholder': 'Enter API Key',
     'settings.providers.modal.baseUrl': 'Base URL',
     'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',
@@ -1973,6 +1985,18 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.modal.titleSuffix': '自定义 Provider',
     'settings.providers.modal.namePlaceholder': '例如：我的本地 LLM',
     'settings.providers.modal.typeAria': '自定义 Provider 类型',
+    'settings.providers.modal.apiFormat': 'API 格式',
+    'settings.providers.modal.apiFormat.chatCompletions':
+      'Chat Completions（/chat/completions）',
+    'settings.providers.modal.apiFormat.messages': 'Messages（/messages）',
+    'settings.providers.modal.apiFormat.openaiDescription':
+      '当你的网关提供 OpenAI 兼容的 Chat Completions 端点时，选择这个格式。',
+    'settings.providers.modal.apiFormat.anthropicDescription':
+      '当你的网关提供 Anthropic Messages 端点时，选择这个格式。',
+    'settings.providers.modal.apiFormat.defaultDescription':
+      '在 iKi 当前实现里，这个选项会走 OpenAI-compatible 适配层，并发送 Chat Completions 请求。',
+    'settings.providers.modal.apiFormat.responsesUnsupported':
+      '自定义 Provider 目前还不支持 OpenAI Responses（/responses）。',
     'settings.providers.modal.apiKeyPlaceholder': '输入 API Key',
     'settings.providers.modal.baseUrl': 'Base URL',
     'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',

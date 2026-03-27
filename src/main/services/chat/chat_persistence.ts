@@ -3,6 +3,7 @@ import * as chatThreadDb from '../../../core/db/chat_thread';
 import { createLogger } from '../../../core/logger';
 import type { ChatMessage, ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/utils/guards';
+import { createPrefixedId } from '../../../shared/utils/id';
 import { getErrorMessage } from '../../utils/errors';
 import { touchThreadRelationshipState } from '../relationship/relationship_service';
 import type { ChatMemory } from './chat_memory';
@@ -18,7 +19,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     const threadId =
       typeof thread.id === 'string' && thread.id.trim()
         ? thread.id.trim()
-        : `thread_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        : createPrefixedId('thread');
     const title =
       typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat';
     const normalizedString = (value: unknown): string | null => {
@@ -65,7 +66,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     const messageId =
       typeof message.id === 'string' && message.id.trim()
         ? message.id.trim()
-        : `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        : createPrefixedId('msg');
     const timestamp =
       typeof message.timestamp === 'string' && message.timestamp.trim()
         ? message.timestamp

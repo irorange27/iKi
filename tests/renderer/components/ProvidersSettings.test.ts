@@ -317,6 +317,53 @@ describe('ProvidersSettings', () => {
     );
   });
 
+  it('shows an API format note for custom providers and updates it when the type changes', async () => {
+    const list = vi.fn(async () => []);
+
+    setElectronApi({
+      providers: {
+        list,
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await findButtonByText(wrapper, 'Add Custom Provider').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('API Format');
+    expect(wrapper.text()).toContain('Chat Completions (/chat/completions)');
+    expect(wrapper.text()).toContain(
+      'Custom providers do not support OpenAI Responses (/responses) yet.'
+    );
+
+    await selectSettingsOption(wrapper, 'Type', 'Anthropic Compatible');
+
+    expect(wrapper.text()).toContain('Messages (/messages)');
+    expect(wrapper.text()).toContain(
+      'Use this when your gateway exposes an Anthropic Messages endpoint.'
+    );
+  });
+
   it('keeps OpenAI-compatible endpoints on the custom-provider path', async () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'custom_176' }));
@@ -425,5 +472,61 @@ describe('ProvidersSettings', () => {
     );
     expect(findButtonByText(wrapper, 'Cancel').attributes('disabled')).toBeDefined();
     expect(findButtonByText(wrapper, 'Save').attributes('disabled')).toBeDefined();
+  });
+
+  it('shows enabled status feedback in the sidebar dot and details badge before saving', async () => {
+    setElectronApi({
+      providers: {
+        list: vi.fn(async () => []),
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const findDeepSeekRow = () => {
+      const match = wrapper
+        .findAll('.provider-list-item')
+        .find(item => item.text().includes('DeepSeek'));
+
+      if (!match) {
+        throw new Error('DeepSeek provider row not found');
+      }
+
+      return match;
+    };
+
+    await findDeepSeekRow().trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.status-badge').text()).toContain('Inactive');
+    expect(wrapper.find('.status-badge').classes()).not.toContain('enabled');
+    expect(findDeepSeekRow().find('.provider-status-dot').classes()).not.toContain('enabled');
+
+    await wrapper.find('.provider-switch input').setValue(true);
+    await flushPromises();
+
+    expect(wrapper.find('.status-badge').text()).toContain('Active');
+    expect(wrapper.find('.status-badge').classes()).toContain('enabled');
+    expect(findDeepSeekRow().find('.provider-status-dot').classes()).toContain('enabled');
   });
 });

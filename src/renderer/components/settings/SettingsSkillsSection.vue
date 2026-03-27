@@ -165,6 +165,7 @@ import { RefreshCw } from 'lucide-vue-next';
 
 import { useConfigStore } from '../../store/config';
 import { useI18n } from '../../i18n';
+import { getElectronAPI } from '../../services/electron_api';
 import type { AppConfig } from '../../../shared/types/config';
 import type { SkillSummary } from '../../../shared/types/skill';
 import { getErrorMessage } from '../../../shared/utils/errors';
@@ -176,7 +177,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const configStore = useConfigStore();

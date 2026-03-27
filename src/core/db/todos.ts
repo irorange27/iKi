@@ -6,6 +6,7 @@ import type {
   TodoListItemDraft,
   TodoListSummary,
 } from '../../shared/types/todos';
+import { createPrefixedId } from '../../shared/utils/id';
 
 type TodoListRow = {
   id: string;
@@ -26,9 +27,6 @@ const DEFAULT_TODO_LIST_LIMIT = 20;
 const MAX_TODO_LIST_LIMIT = 100;
 
 const nowIso = () => new Date().toISOString();
-
-const createRuntimeId = (prefix: string) =>
-  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 const normalizeText = (value: unknown): string =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
@@ -166,7 +164,7 @@ const insertTodoItems = (listId: string, items: TodoListItemDraft[], timestamp: 
 
   for (const [index, item] of items.entries()) {
     insertItem.run({
-      id: createRuntimeId('todo_item'),
+      id: createPrefixedId('todo_item'),
       list_id: listId,
       content: item.content,
       notes: item.notes ?? null,
@@ -280,7 +278,7 @@ export const writeTodoList = (input: {
       return { action: 'updated' as const, listId: existing.id };
     }
 
-    const listId = normalizedId || createRuntimeId('todo_list');
+    const listId = normalizedId || createPrefixedId('todo_list');
     database
       .prepare(
         `

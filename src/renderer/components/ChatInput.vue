@@ -222,18 +222,20 @@
 import { ref, onMounted, watch, nextTick, computed } from 'vue';
 import type { UIMessage } from 'ai';
 import type { Provider } from '../../shared/types/provider';
+import { clonePlainData } from '../../shared/utils/clone';
 import { getErrorMessage } from '../../shared/utils/errors';
 import { createLogger } from '../logger';
 import { useChatProviderSelection } from '../composables/useChatProviderSelection';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import { useI18n } from '../i18n';
+import { getElectronAPI } from '../services/electron_api';
 import ChatModelSelector from './ChatModelSelector.vue';
 import ToolSelector from './ToolSelector.vue';
 import SkillSelector from './SkillSelector.vue';
 import WorkspaceSelector from './WorkspaceSelector.vue';
 
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const chatInputLogger = createLogger({ module: 'chat_input' });
 const { t } = useI18n();
 const emit = defineEmits<{
@@ -485,7 +487,7 @@ const sendMessage = async () => {
   isStopping.value = false;
 
   try {
-    const transportMessages = JSON.parse(JSON.stringify(preparedMessageSend.messagesSnapshot));
+    const transportMessages = clonePlainData(preparedMessageSend.messagesSnapshot);
 
     if (!Array.isArray(transportMessages) || transportMessages.length === 0) {
       chatInputLogger.event({
@@ -506,13 +508,13 @@ const sendMessage = async () => {
       tools: isAutoToolMode.value
         ? undefined
         : selectedTools.value.length > 0
-          ? JSON.parse(JSON.stringify(selectedTools.value))
+          ? clonePlainData(selectedTools.value)
           : [],
-      mcpServerIds: JSON.parse(JSON.stringify(resolvedMcpServerIds)),
+      mcpServerIds: clonePlainData(resolvedMcpServerIds),
       skillMode: isAutoSkillMode.value ? 'auto' : 'manual',
       skillIds: isAutoSkillMode.value
         ? undefined
-        : JSON.parse(JSON.stringify(selectedSkillIds.value)),
+        : clonePlainData(selectedSkillIds.value),
       threadId: preparedMessageSend.threadId,
     });
 

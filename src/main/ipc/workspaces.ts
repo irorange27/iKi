@@ -3,6 +3,7 @@ import path from 'node:path';
 import { dialog, ipcMain } from 'electron';
 
 import * as workspaceDb from '../../core/db/workspaces';
+import { createPrefixedId } from '../../shared/utils/id';
 
 let workspacesIpcRegistered = false;
 
@@ -10,8 +11,7 @@ export const registerWorkspacesIpc = (): void => {
   if (workspacesIpcRegistered) return;
   workspacesIpcRegistered = true;
 
-  const createWorkspaceId = () =>
-    `workspace_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const createWorkspaceId = () => createPrefixedId('workspace');
 
   const normalizeDirectoryPath = async (inputPath: string): Promise<string> => {
     const resolvedPath = path.resolve(inputPath);

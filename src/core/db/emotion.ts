@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { createPrefixedId } from '../../shared/utils/id';
 
 export type EmotionEventEntry = {
   id: string;
@@ -52,7 +53,7 @@ export const addEmotionEvent = (entry: {
   `);
 
   const data = {
-    id: entry.id || `emoe_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    id: entry.id || createPrefixedId('emoe'),
     thread_id: entry.thread_id,
     message_id: entry.message_id,
     role: entry.role,

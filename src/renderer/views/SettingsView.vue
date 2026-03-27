@@ -611,6 +611,7 @@ import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.
 import SettingsSelect from '../components/settings/SettingsSelect.vue';
 import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
+import { getElectronAPI } from '../services/electron_api';
 import { updateService } from '../services/update_service';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '../../shared/config/defaults';
@@ -620,7 +621,7 @@ import type { AppUpdateStatus } from '../../shared/types/update';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
 
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
 const { t } = useI18n();
 

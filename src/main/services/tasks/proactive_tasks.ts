@@ -10,6 +10,7 @@ import {
   parseProactiveTaskTools,
   type ProactiveTask,
 } from '../../../shared/types/tasks';
+import { createPrefixedId } from '../../../shared/utils/id';
 import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
@@ -94,9 +95,6 @@ const buildProactiveTaskPrompt = (
   return sections.filter(Boolean).join('\n\n');
 };
 
-const createRuntimeId = (prefix: string) =>
-  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
 const sendPushEventToRenderers = (payload: unknown) => {
   for (const win of BrowserWindow.getAllWindows()) {
     try {
@@ -179,7 +177,7 @@ const ensureTaskThread = async (task: {
   ].join('\n');
 
   const introUiMessage = {
-    id: createRuntimeId('msg'),
+    id: createPrefixedId('msg'),
     role: 'assistant',
     parts: [{ type: 'text', text: introText }],
   };
@@ -292,7 +290,7 @@ export const runProactiveTask = async (
       ].join('\n');
 
       const uiMessage = {
-        id: createRuntimeId('msg'),
+        id: createPrefixedId('msg'),
         role: 'assistant',
         parts: [{ type: 'text', text: errorMessageText }],
       };
@@ -382,7 +380,7 @@ export const runProactiveTask = async (
       ].join('\n');
 
       const failedDeliveryMessage = {
-        id: createRuntimeId('msg'),
+        id: createPrefixedId('msg'),
         role: 'assistant',
         parts: [{ type: 'text', text: failedDeliveryText }],
       };
@@ -442,7 +440,7 @@ export const runProactiveTask = async (
     });
 
     const uiMessage = {
-      id: createRuntimeId('msg'),
+      id: createPrefixedId('msg'),
       role: 'assistant',
       parts: [{ type: 'text', text: messageText }],
     };

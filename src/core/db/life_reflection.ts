@@ -3,11 +3,9 @@ import type {
   LifeReflectionPeriodType,
   LifeReflectionRecord,
 } from '../../shared/types/life';
+import { createPrefixedId } from '../../shared/utils/id';
 
 const nowIso = () => new Date().toISOString();
-
-const createRuntimeId = (prefix: string) =>
-  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
 export const getLifeReflection = (
   profileId: string,
@@ -127,7 +125,7 @@ export const addLifeReflection = (entry: {
   insights_json?: string | null;
   plan_json?: string | null;
 }): LifeReflectionRecord => {
-  const id = entry.id?.trim() || createRuntimeId('reflection');
+  const id = entry.id?.trim() || createPrefixedId('reflection');
   const createdAt = nowIso();
 
   getDb()

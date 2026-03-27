@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import { getAppConfig } from '../config';
+import { createPrefixedId } from '../../shared/utils/id';
 
 export type ShortMemoryEntry = {
   id: string;
@@ -152,7 +153,7 @@ export const addShortMemory = (
   `);
 
   const data = {
-    id: entry.id || `mems_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    id: entry.id || createPrefixedId('mems'),
     thread_id: entry.thread_id,
     message_id: entry.message_id,
     role: entry.role,
@@ -286,7 +287,7 @@ export const addLongMemory = (
   `);
 
   const data = {
-    id: entry.id || `meml_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    id: entry.id || createPrefixedId('meml'),
     thread_id: entry.thread_id,
     summary: entry.summary,
     embedding,

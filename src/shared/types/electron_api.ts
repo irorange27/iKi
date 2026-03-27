@@ -68,7 +68,7 @@ export type ProactiveTaskInput = Omit<Partial<ProactiveTask>, 'tools'> &
 export type ChatInvocationOptions = {
   providerType: string;
   model: string;
-  messages: Array<Record<string, unknown>>;
+  messages: unknown[];
   tools?: string[];
   mcpServerIds?: string[];
   skillIds?: string[];

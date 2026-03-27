@@ -6,6 +6,7 @@ import {
 } from '../../../core/db/workflow_profile';
 import { normalizeSkillIds } from '../../../core/skills';
 import type { WorkflowOptimizationConfig, WorkflowProfile } from '../../../shared/types/workflow';
+import { clonePlainData } from '../../../shared/utils/clone';
 
 const DEFAULT_PROFILE: WorkflowProfile = {
   version: 1,
@@ -16,8 +17,7 @@ const DEFAULT_PROFILE: WorkflowProfile = {
   pinnedSkills: [],
 };
 
-const cloneDefaultProfile = (): WorkflowProfile =>
-  JSON.parse(JSON.stringify(DEFAULT_PROFILE)) as WorkflowProfile;
+const cloneDefaultProfile = (): WorkflowProfile => clonePlainData(DEFAULT_PROFILE);
 
 const normalizeProfile = (profile: WorkflowProfile | null): WorkflowProfile => {
   if (!profile) return cloneDefaultProfile();

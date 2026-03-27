@@ -297,6 +297,7 @@ import { RefreshCw } from 'lucide-vue-next';
 
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
+import { getElectronAPI } from '../../services/electron_api';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type {
@@ -310,7 +311,7 @@ import { getErrorMessage } from '../../../shared/utils/errors';
 const emit = defineEmits<{
   (event: 'config-change'): void;
 }>();
-const electronAPI = window.electronAPI as NonNullable<typeof window.electronAPI>;
+const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const configStore = useConfigStore();
