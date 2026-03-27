@@ -583,6 +583,81 @@ describe('createChatStreaming', () => {
     );
   });
 
+  it('preserves explicit approval requirements for locked-approval tools even when auto-approve is enabled', async () => {
+    getAppConfigMock.mockReturnValue({
+      general: {
+        autoApproveToolRequests: true,
+      },
+      memory: {
+        enabled: false,
+        autoSummarize: false,
+        context: {
+          enabled: true,
+        },
+        emotion: {
+          enabled: false,
+          injectToSystemPrompt: false,
+          realtimeAnalysis: false,
+        },
+      },
+      mcp: {
+        defaultApprovalMode: 'safe-only',
+      },
+    });
+
+    resolveToolNamesMock.mockResolvedValue({
+      mode: 'manual',
+      explicitTools: ['write_personal_skill'],
+      resolvedTools: ['write_personal_skill'],
+    });
+    toModelInputMessagesMock.mockResolvedValue([{ role: 'user', content: 'update skill' }]);
+
+    const runner = {
+      registerTool: vi.fn(),
+      generate: vi.fn().mockResolvedValue({
+        response: '',
+        iterations: 1,
+        toolApprovalRequests: [
+          {
+            approvalId: 'approval_skill_1',
+            toolCall: { toolName: 'write_personal_skill', args: { id: 'user:planner' } },
+          },
+        ],
+      }),
+    };
+    createChatConversationRunnerMock.mockReturnValue(runner);
+
+    defaultToolRegistryGetMock.mockReturnValue({
+      name: 'write_personal_skill',
+      description: 'Update a personal skill',
+      needsApproval: true,
+      approvalMode: 'always',
+      parameters: {},
+      handler: vi.fn(async () => ({ ok: true })),
+    });
+
+    const { streaming } = createDeps();
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'update skill' }],
+      tools: ['write_personal_skill'],
+      threadId: 'thread_locked_approve',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Tool approval required for non-interactive chat: write_personal_skill',
+    });
+    expect(runner.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'write_personal_skill',
+        needsApproval: true,
+        approvalMode: 'always',
+      })
+    );
+  });
+
   it('stream() persists pending approval sessions when tool events request approval', async () => {
     assembleContextMock.mockResolvedValue({
       messages: [

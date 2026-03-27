@@ -30,6 +30,21 @@ describe('tool approval policy helpers', () => {
     });
   });
 
+  it('does not downgrade tools with locked approval mode', () => {
+    expect(
+      applyToolApprovalPolicy(
+        { name: 'write_personal_skill', needsApproval: true, approvalMode: 'always' },
+        {
+          autoApproveToolRequests: true,
+        }
+      )
+    ).toEqual({
+      name: 'write_personal_skill',
+      needsApproval: true,
+      approvalMode: 'always',
+    });
+  });
+
   it('updates tool metadata lists without touching already-safe tools', () => {
     expect(
       applyToolApprovalPolicyList(

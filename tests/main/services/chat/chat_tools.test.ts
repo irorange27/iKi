@@ -32,12 +32,14 @@ const TEST_TOOL_NAMES = [
   'read_todo_list',
   'write_todo_list',
   'delete_todo_list',
+  'write_personal_skill',
 ];
 
 const registerTool = (options: {
   name: string;
   autoAllowed?: boolean;
   needsApproval?: boolean;
+  approvalMode?: 'configurable' | 'always';
   source?: { kind: 'builtin' | 'mcp'; id?: string; name?: string };
 }) => {
   defaultToolRegistry.register(
@@ -48,6 +50,7 @@ const registerTool = (options: {
       parameters: { type: 'object', properties: {} },
       autoAllowed: options.autoAllowed,
       needsApproval: options.needsApproval,
+      approvalMode: options.approvalMode,
       source: options.source,
       handler: async () => ({ ok: true }),
     })
@@ -196,6 +199,37 @@ describe('resolveToolNames', () => {
           expect.objectContaining({
             name: 'shell',
             needsApproval: false,
+          }),
+        ],
+      })
+    );
+  });
+
+  it('keeps locked-approval tools marked as approval-required even when auto-approve is enabled', async () => {
+    getAppConfigMock.mockReturnValue({
+      general: {
+        autoApproveToolRequests: true,
+      },
+    } as never);
+    selectToolsWithAgentMock.mockResolvedValue(['write_personal_skill']);
+    registerTool({
+      name: 'write_personal_skill',
+      needsApproval: true,
+      approvalMode: 'always',
+      source: { kind: 'builtin' },
+    });
+
+    const result = await resolveToolNames({
+      inputMessages: [{ role: 'user', content: 'Update the planner skill.' }],
+    });
+
+    expect(result.resolvedTools).toEqual(['write_personal_skill']);
+    expect(selectToolsWithAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        availableTools: [
+          expect.objectContaining({
+            name: 'write_personal_skill',
+            needsApproval: true,
           }),
         ],
       })

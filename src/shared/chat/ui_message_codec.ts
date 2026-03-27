@@ -23,6 +23,40 @@ const createTextPart = (text: string, state?: TextPart['state']): TextPart => ({
   ...(state ? { state } : {}),
 });
 
+export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
+  if (typeof raw !== 'string') return String(raw);
+  const trimmed = raw.trim();
+  if (!trimmed) return raw;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!isObjectRecord(parsed)) return raw;
+
+    const role =
+      parsed.role === 'system' || parsed.role === 'assistant' || parsed.role === 'user'
+        ? parsed.role
+        : null;
+    if (!role) return raw;
+
+    const sanitized: Record<string, unknown> = { role };
+    const parts = Array.isArray(parsed.parts) ? parsed.parts : null;
+
+    if (parts) {
+      const nextParts = parts
+        .map((part, index) => normalizePart(part, `${role}_tool_${index}`))
+        .filter((part): part is UiMessagePart => part !== null);
+
+      sanitized.parts = nextParts;
+    } else if (typeof parsed.content === 'string') {
+      sanitized.parts = [createTextPart(parsed.content)];
+    }
+
+    return JSON.stringify(sanitized);
+  } catch {
+    return raw;
+  }
+};
+
 const normalizePart = (
   part: unknown,
   fallbackToolCallId: string

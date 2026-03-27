@@ -27,6 +27,10 @@ A local agent pet for AI provider orchestration.
 - Persistent ToDoList tools so iKi can create, read, and maintain local structured checklists
   instead of scattering todos across chat text or ad hoc files.
 
+- First-class personal-skill management tools so iKi can list, inspect, create, update, and
+  delete user-managed `SKILL.md` files under the Personal skills root without needing workspace
+  hacks; destructive skill changes remain explicitly approval-gated.
+
 - A user-editable local `brain/` markdown folder under the app user-data directory
   (`iki.md`, `owner.md`, `relationship.md`) so iKi continuity and owner identity can start from
   simple files instead of requiring a heavier memory schema first.

@@ -9,6 +9,11 @@ export const DEFAULT_SHELL_TIMEOUT_MS = 30000;
 export const DEFAULT_FILE_ENCODING = 'utf-8';
 export const DEFAULT_TODO_LIST_LIMIT = 20;
 export const MAX_TODO_LIST_LIMIT = 100;
+export const DEFAULT_PERSONAL_SKILL_LIST_LIMIT = 20;
+export const MAX_PERSONAL_SKILL_LIST_LIMIT = 100;
+export const DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS = 20000;
+export const MIN_PERSONAL_SKILL_READ_MAX_CHARS = 500;
+export const MAX_PERSONAL_SKILL_READ_MAX_CHARS = 120000;
 
 const toolCallDescriptionField = z
   .string()
@@ -58,6 +63,12 @@ const deleteFileInputFields = {
 
 const loadSkillInputFields = {
   id: z.string().describe('Exact selected skill id to load'),
+};
+
+const personalSkillIdInputFields = {
+  id: z
+    .string()
+    .describe('Exact personal skill id, for example "user:planner" or "user:team/planner"'),
 };
 
 const todoListLookupInputFields = {
@@ -166,6 +177,53 @@ export const DeleteFileInputSchema = z.object({
 
 export const LoadSkillInputSchema = z.object({
   id: loadSkillInputFields.id,
+  description: toolCallDescriptionField,
+});
+
+export const ListPersonalSkillsInputSchema = z.object({
+  query: z.string().trim().describe('Optional search text for matching personal skills').optional(),
+  limit: z
+    .number()
+    .int()
+    .describe('Maximum number of personal skills to return')
+    .optional()
+    .default(DEFAULT_PERSONAL_SKILL_LIST_LIMIT),
+  description: toolCallDescriptionField,
+});
+
+export const ReadPersonalSkillInputSchema = z.object({
+  id: personalSkillIdInputFields.id,
+  maxChars: z
+    .number()
+    .int()
+    .describe('Maximum number of characters to return from the personal skill file')
+    .optional()
+    .default(DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS),
+  description: toolCallDescriptionField,
+});
+
+export const WritePersonalSkillInputSchema = z.object({
+  id: personalSkillIdInputFields.id,
+  skillName: z
+    .string()
+    .trim()
+    .describe('Optional display name to store in the skill frontmatter')
+    .optional(),
+  skillDescription: z
+    .string()
+    .trim()
+    .describe('Optional short summary to store in the skill frontmatter')
+    .optional(),
+  instructions: z
+    .string()
+    .trim()
+    .min(1)
+    .describe('Markdown instructions body to store below the generated frontmatter'),
+  description: toolCallDescriptionField,
+});
+
+export const DeletePersonalSkillInputSchema = z.object({
+  id: personalSkillIdInputFields.id,
   description: toolCallDescriptionField,
 });
 
@@ -288,6 +346,39 @@ export const LoadSkillInputSchemaUi = z
   })
   .passthrough();
 
+export const ListPersonalSkillsInputSchemaUi = z
+  .object({
+    query: z.string().optional(),
+    limit: z.number().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const ReadPersonalSkillInputSchemaUi = z
+  .object({
+    id: personalSkillIdInputFields.id.optional(),
+    maxChars: z.number().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const WritePersonalSkillInputSchemaUi = z
+  .object({
+    id: personalSkillIdInputFields.id.optional(),
+    skillName: z.string().optional(),
+    skillDescription: z.string().optional(),
+    instructions: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const DeletePersonalSkillInputSchemaUi = z
+  .object({
+    id: personalSkillIdInputFields.id.optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
 const TodoItemOutputSchema = z
   .object({
     id: z.string().optional(),
@@ -402,6 +493,56 @@ export const LoadSkillOutputSchema = z
     source: z.enum(['user', 'codex']).optional(),
     content: z.string().optional(),
     truncated: z.boolean().optional(),
+  })
+  .passthrough();
+
+const PersonalSkillSummaryOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    source: z.literal('user').optional(),
+    path: z.string().optional(),
+  })
+  .passthrough();
+
+export const ListPersonalSkillsOutputSchema = z
+  .object({
+    rootPath: z.string().optional(),
+    skills: z.array(PersonalSkillSummaryOutputSchema).optional(),
+    resultCount: z.number().optional(),
+  })
+  .passthrough();
+
+export const ReadPersonalSkillOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    source: z.literal('user').optional(),
+    filePath: z.string().optional(),
+    content: z.string().optional(),
+    truncated: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const WritePersonalSkillOutputSchema = z
+  .object({
+    action: z.enum(['created', 'updated']).optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    source: z.literal('user').optional(),
+    filePath: z.string().optional(),
+    content: z.string().optional(),
+  })
+  .passthrough();
+
+export const DeletePersonalSkillOutputSchema = z
+  .object({
+    deleted: z.boolean().optional(),
+    id: z.string().optional(),
+    filePath: z.string().optional(),
   })
   .passthrough();
 

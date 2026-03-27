@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { jsonSchema, tool, type Tool } from 'ai';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
-import type { AgentTool } from '../agent/types';
+import type { AgentTool, ToolApprovalMode } from '../agent/types';
 import { zodSchemaToJsonSchema } from './json_schema';
 
 type ApprovalPolicy = boolean | ToolNeedsApprovalFunction<unknown>;
@@ -15,6 +15,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   abstract needsApproval?: ApprovalPolicy;
   abstract description: string;
   abstract paramSchema: P;
+  approvalMode?: ToolApprovalMode;
   displayName?: string;
   autoAllowed = true;
   outputSchema?: Record<string, unknown>;
@@ -48,6 +49,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       inputSchema: this.paramSchema,
       ...(this.outputSchema ? { outputSchema: jsonSchema(this.outputSchema as object) } : {}),
       needsApproval: this.needsApproval ?? false,
+      ...(this.approvalMode ? { approvalMode: this.approvalMode } : {}),
       execute: async (args: z.infer<P>) => await this.handler(args),
     };
 
@@ -66,6 +68,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       outputSchema: this.outputSchema,
       paramSchema: this.paramSchema,
       needsApproval: this.needsApproval ?? false,
+      ...(this.approvalMode ? { approvalMode: this.approvalMode } : {}),
       autoAllowed: this.autoAllowed === true,
       displayName: this.displayName ?? this.name,
       source: { kind: 'builtin' },
@@ -137,6 +140,7 @@ export class ToolRegistry {
     displayName?: string;
     source?: AgentTool['source'];
     needsApproval?: boolean;
+    approvalMode?: ToolApprovalMode;
     autoAllowed?: boolean;
   }> {
     return Array.from(this.tools.values()).map(t => ({
@@ -148,6 +152,7 @@ export class ToolRegistry {
       displayName: t.displayName,
       source: t.source,
       autoAllowed: t.autoAllowed === true,
+      ...(t.approvalMode ? { approvalMode: t.approvalMode } : {}),
       needsApproval:
         typeof t.needsApproval === 'boolean' ? t.needsApproval : t.needsApproval ? true : undefined,
     }));
@@ -165,6 +170,7 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   outputSchema?: Record<string, unknown>;
   paramSchema?: P;
   needsApproval?: ApprovalPolicy;
+  approvalMode?: ToolApprovalMode;
   autoAllowed?: boolean;
   displayName?: string;
   source?: AgentTool['source'];
@@ -176,6 +182,7 @@ export function createTool<P extends z.ZodTypeAny>(options: {
     ...options,
     parameters,
     needsApproval: options.needsApproval ?? false,
+    ...(options.approvalMode ? { approvalMode: options.approvalMode } : {}),
     autoAllowed: options.autoAllowed !== false,
     paramSchema: options.paramSchema,
     displayName: options.displayName ?? options.name,

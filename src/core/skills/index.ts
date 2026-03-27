@@ -11,6 +11,7 @@ type SkillRecord = SkillSummary & {
 };
 
 const SKILL_FILENAME = 'SKILL.md';
+const PERSONAL_SKILL_ID_PREFIX = 'user:';
 
 const MAX_SCAN_DEPTH = 8;
 const SKIP_DIRS = new Set([
@@ -55,6 +56,14 @@ const getSkillRootsInternal = (): Array<{ source: SkillSource; root: string }> =
 
 export const getSkillRootsForUi = (): Array<{ source: SkillSource; path: string }> => {
   return getSkillRootsInternal().map(root => ({ source: root.source, path: root.root }));
+};
+
+export const getSkillRootPath = (source: SkillSource): string => {
+  const root = getSkillRootsInternal().find(entry => entry.source === source)?.root;
+  if (root) return root;
+  return source === 'codex'
+    ? path.join(getCodexHome(), 'skills')
+    : path.join(getUserDataPath(), 'skills');
 };
 
 const normalizeSummaryText = (value: string): string => value.replace(/\s+/g, ' ').trim();
@@ -241,6 +250,12 @@ let cachedAtMs = 0;
 let cachedRootsSignature = '';
 const CACHE_TTL_MS = 5_000;
 
+const invalidateSkillCache = () => {
+  cachedRecords = null;
+  cachedAtMs = 0;
+  cachedRootsSignature = '';
+};
+
 const listSkillRecords = async (options?: { forceRefresh?: boolean }): Promise<SkillRecord[]> => {
   const forceRefresh = options?.forceRefresh === true;
   const now = Date.now();
@@ -291,6 +306,136 @@ const listSkillRecords = async (options?: { forceRefresh?: boolean }): Promise<S
   return records;
 };
 
+const isPathWithinRoot = (root: string, candidate: string): boolean => {
+  const relativePath = path.relative(root, candidate);
+  return !(relativePath.startsWith('..') || path.isAbsolute(relativePath));
+};
+
+const normalizeRelativeSkillPath = (value: string): string =>
+  normalizeIdPath(value)
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+    .replace(/\/{2,}/g, '/');
+
+const parsePersonalSkillId = (id: string): string => {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed.startsWith(PERSONAL_SKILL_ID_PREFIX)) {
+    throw new Error(
+      `Personal skill id must start with "${PERSONAL_SKILL_ID_PREFIX}". Received: ${id}`
+    );
+  }
+
+  const relativePath = normalizeRelativeSkillPath(trimmed.slice(PERSONAL_SKILL_ID_PREFIX.length));
+  if (!relativePath || relativePath === '.') {
+    throw new Error('Personal skill id must include a relative path after "user:"');
+  }
+
+  const segments = relativePath.split('/');
+  if (segments.some(segment => !segment || segment === '.' || segment === '..')) {
+    throw new Error(`Personal skill id "${id}" contains an invalid path segment`);
+  }
+
+  return relativePath;
+};
+
+const tryRealpath = async (targetPath: string): Promise<string | null> => {
+  try {
+    return await fs.realpath(targetPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return null;
+    throw error;
+  }
+};
+
+const resolveExistingAncestorRealPath = async (targetPath: string): Promise<string> => {
+  let currentPath = path.resolve(targetPath);
+  while (true) {
+    const realPath = await tryRealpath(currentPath);
+    if (realPath) return realPath;
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) break;
+    currentPath = parentPath;
+  }
+
+  throw new Error(`Path "${targetPath}" does not have an existing ancestor`);
+};
+
+const resolvePersonalSkillLocation = async (id: string) => {
+  const relativePath = parsePersonalSkillId(id);
+  const rootPath = path.resolve(getSkillRootPath('user'));
+  await fs.mkdir(rootPath, { recursive: true });
+  const rootRealPath = await fs.realpath(rootPath);
+  const folderPath = path.resolve(path.join(rootPath, relativePath));
+  const filePath = path.join(folderPath, SKILL_FILENAME);
+  return {
+    id: `${PERSONAL_SKILL_ID_PREFIX}${relativePath}`,
+    relativePath,
+    rootPath,
+    rootRealPath,
+    folderPath,
+    filePath,
+  };
+};
+
+const ensureSkillPathInsideRoot = async (
+  rootRealPath: string,
+  targetPath: string
+): Promise<void> => {
+  const resolvedTarget = await tryRealpath(targetPath);
+  if (resolvedTarget) {
+    if (!isPathWithinRoot(rootRealPath, resolvedTarget)) {
+      throw new Error(`Resolved path "${resolvedTarget}" is outside the personal skills root`);
+    }
+    return;
+  }
+
+  const ancestorRealPath = await resolveExistingAncestorRealPath(targetPath);
+  if (!isPathWithinRoot(rootRealPath, ancestorRealPath)) {
+    throw new Error(`Resolved path "${ancestorRealPath}" is outside the personal skills root`);
+  }
+};
+
+const quoteFrontmatterValue = (value: string): string => JSON.stringify(value);
+
+const buildSkillDocument = (params: {
+  skillName: string;
+  skillDescription?: string;
+  instructions: string;
+}): string => {
+  const frontmatterLines = ['---', `name: ${quoteFrontmatterValue(params.skillName)}`];
+  const description =
+    typeof params.skillDescription === 'string' ? params.skillDescription.trim() : '';
+  if (description) {
+    frontmatterLines.push(`description: ${quoteFrontmatterValue(description)}`);
+  }
+  frontmatterLines.push('---', '');
+
+  const rawInstructions = params.instructions.trim();
+  const body = rawInstructions.startsWith('#')
+    ? rawInstructions
+    : `# ${params.skillName}\n\n${rawInstructions}`;
+
+  return `${frontmatterLines.join('\n')}${body.endsWith('\n') ? body : `${body}\n`}`;
+};
+
+const readRawSkillFile = async (
+  filePath: string,
+  options?: { maxChars?: number }
+): Promise<{ content: string; truncated: boolean }> => {
+  const raw = await safeReadTextFile(filePath);
+  const maxChars =
+    typeof options?.maxChars === 'number' && Number.isFinite(options.maxChars)
+      ? Math.max(200, Math.trunc(options.maxChars))
+      : 20000;
+  const truncated = truncateText(raw, maxChars);
+  return {
+    content: truncated.text,
+    truncated: truncated.truncated,
+  };
+};
+
 export const listSkills = async (options?: { forceRefresh?: boolean }): Promise<SkillSummary[]> => {
   const records = await listSkillRecords({ forceRefresh: options?.forceRefresh === true });
   return records.map(record => ({
@@ -328,18 +473,13 @@ export const readSkillContent = async (
 } | null> => {
   const record = await getSkillRecordById(id);
   if (!record) return null;
-  const raw = await safeReadTextFile(record.filePath);
-  const maxChars =
-    typeof options?.maxChars === 'number' && Number.isFinite(options.maxChars)
-      ? Math.max(200, Math.trunc(options.maxChars))
-      : 20000;
-  const truncated = truncateText(raw, maxChars);
+  const truncated = await readRawSkillFile(record.filePath, options);
   return {
     id: record.id,
     name: record.name,
     source: record.source,
     filePath: record.filePath,
-    content: truncated.text,
+    content: truncated.content,
     truncated: truncated.truncated,
   };
 };
@@ -372,6 +512,131 @@ export const readSkillInstructions = async (
     content: truncated.text,
     truncated: truncated.truncated,
   };
+};
+
+export const listPersonalSkills = async (options?: {
+  forceRefresh?: boolean;
+}): Promise<{ rootPath: string; skills: SkillSummary[] }> => {
+  const skills = await listSkills({ forceRefresh: options?.forceRefresh === true });
+  return {
+    rootPath: getSkillRootPath('user'),
+    skills: skills.filter(skill => skill.source === 'user'),
+  };
+};
+
+export const readPersonalSkill = async (
+  id: string,
+  options?: { maxChars?: number }
+): Promise<{
+  id: string;
+  name: string;
+  description: string;
+  source: 'user';
+  filePath: string;
+  content: string;
+  truncated: boolean;
+} | null> => {
+  const location = await resolvePersonalSkillLocation(id);
+  const existingPath = await tryRealpath(location.filePath);
+  if (!existingPath) return null;
+  if (!isPathWithinRoot(location.rootRealPath, existingPath)) {
+    throw new Error(`Personal skill "${location.id}" resolves outside the personal skills root`);
+  }
+
+  const truncated = await readRawSkillFile(location.filePath, options);
+  const metadata = extractTitleAndDescription(truncated.content);
+  return {
+    id: location.id,
+    name: metadata.title || filePathToNameFallback(location.filePath),
+    description: metadata.description || '',
+    source: 'user',
+    filePath: location.filePath,
+    content: truncated.content,
+    truncated: truncated.truncated,
+  };
+};
+
+export const writePersonalSkill = async (params: {
+  id: string;
+  skillName?: string;
+  skillDescription?: string;
+  instructions: string;
+}): Promise<{
+  action: 'created' | 'updated';
+  id: string;
+  name: string;
+  description: string;
+  source: 'user';
+  filePath: string;
+  content: string;
+}> => {
+  const location = await resolvePersonalSkillLocation(params.id);
+  await ensureSkillPathInsideRoot(location.rootRealPath, location.folderPath);
+
+  const existing = await readPersonalSkill(location.id);
+  const nextName =
+    typeof params.skillName === 'string' && params.skillName.trim().length > 0
+      ? params.skillName.trim()
+      : existing?.name || filePathToNameFallback(location.filePath);
+  const nextDescription =
+    typeof params.skillDescription === 'string'
+      ? params.skillDescription.trim()
+      : existing?.description || '';
+
+  const nextContent = buildSkillDocument({
+    skillName: nextName,
+    skillDescription: nextDescription,
+    instructions: params.instructions,
+  });
+
+  await fs.mkdir(location.folderPath, { recursive: true });
+  const tempFilePath = path.join(
+    location.folderPath,
+    `.skill.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+  );
+  await fs.writeFile(tempFilePath, nextContent, 'utf-8');
+  await fs.rename(tempFilePath, location.filePath);
+  invalidateSkillCache();
+
+  return {
+    action: existing ? 'updated' : 'created',
+    id: location.id,
+    name: nextName,
+    description: nextDescription,
+    source: 'user',
+    filePath: location.filePath,
+    content: nextContent,
+  };
+};
+
+const pruneEmptyDirectories = async (startDir: string, stopDir: string) => {
+  let currentDir = path.resolve(startDir);
+  const rootDir = path.resolve(stopDir);
+
+  while (currentDir !== rootDir && isPathWithinRoot(rootDir, currentDir)) {
+    const entries = await fs.readdir(currentDir);
+    if (entries.length > 0) return;
+    await fs.rmdir(currentDir);
+    currentDir = path.dirname(currentDir);
+  }
+};
+
+export const deletePersonalSkill = async (
+  id: string
+): Promise<{ deleted: boolean; id: string; filePath: string }> => {
+  const location = await resolvePersonalSkillLocation(id);
+  const existingPath = await tryRealpath(location.filePath);
+  if (!existingPath) {
+    return { deleted: false, id: location.id, filePath: location.filePath };
+  }
+  if (!isPathWithinRoot(location.rootRealPath, existingPath)) {
+    throw new Error(`Personal skill "${location.id}" resolves outside the personal skills root`);
+  }
+
+  await fs.unlink(location.filePath);
+  await pruneEmptyDirectories(location.folderPath, location.rootPath);
+  invalidateSkillCache();
+  return { deleted: true, id: location.id, filePath: location.filePath };
 };
 
 export const getSkillFolderPath = async (id: string): Promise<string | null> => {

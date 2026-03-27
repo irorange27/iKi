@@ -4,7 +4,13 @@ import fs from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { LoadSkillTool } from '../../../src/core/tools/skill_tools';
+import {
+  DeletePersonalSkillTool,
+  ListPersonalSkillsTool,
+  LoadSkillTool,
+  ReadPersonalSkillTool,
+  WritePersonalSkillTool,
+} from '../../../src/core/tools/skill_tools';
 import { runWithToolRuntimeContext } from '../../../src/core/tools/runtime_context';
 
 describe('load skill tool', () => {
@@ -116,5 +122,121 @@ Step 2: Plan.
         }),
       })
     );
+  });
+
+  it('lists and reads personal skills without requiring workspace hacks', async () => {
+    const listTool = new ListPersonalSkillsTool();
+    const readTool = new ReadPersonalSkillTool();
+
+    const listed = (await listTool.execute({ query: 'planner' })) as {
+      rootPath: string;
+      resultCount: number;
+      skills: Array<{ id: string; name: string }>;
+    };
+
+    expect(listed.rootPath).toBe(path.join(userDataPath(), 'skills'));
+    expect(listed.resultCount).toBe(1);
+    expect(listed.skills[0]).toEqual(
+      expect.objectContaining({
+        id: 'user:planner',
+        name: 'Planner',
+      })
+    );
+
+    const read = (await readTool.execute({ id: 'user:planner' })) as {
+      id: string;
+      name: string;
+      description: string;
+      content: string;
+    };
+
+    expect(read).toEqual(
+      expect.objectContaining({
+        id: 'user:planner',
+        name: 'Planner',
+        description: 'Planning support',
+      })
+    );
+    expect(read.content).toContain('# Planner');
+  });
+
+  it('writes a personal skill and marks the tool as always requiring approval', async () => {
+    const tool = new WritePersonalSkillTool();
+    const result = (await tool.execute({
+      id: 'user:writer',
+      skillName: 'Writer',
+      skillDescription: 'Writing support',
+      instructions: 'Draft, revise, and tighten prose.',
+    })) as {
+      action: string;
+      id: string;
+      name: string;
+      description: string;
+      content: string;
+      filePath: string;
+    };
+
+    expect(tool.needsApproval).toBe(true);
+    expect(tool.approvalMode).toBe('always');
+    expect(result).toEqual(
+      expect.objectContaining({
+        action: 'created',
+        id: 'user:writer',
+        name: 'Writer',
+        description: 'Writing support',
+      })
+    );
+    expect(result.content).toContain('name: "Writer"');
+    expect(result.content).toContain('# Writer');
+    expect(await fs.readFile(result.filePath, 'utf-8')).toContain(
+      'Draft, revise, and tighten prose.'
+    );
+  });
+
+  it('updates an existing personal skill while preserving metadata when omitted', async () => {
+    const tool = new WritePersonalSkillTool();
+
+    const result = (await tool.execute({
+      id: 'user:planner',
+      instructions: 'Step 1: Inspect.\nStep 2: Plan.\nStep 3: Verify.',
+    })) as {
+      action: string;
+      name: string;
+      description: string;
+      content: string;
+    };
+
+    expect(result.action).toBe('updated');
+    expect(result.name).toBe('Planner');
+    expect(result.description).toBe('Planning support');
+    expect(result.content).toContain('description: "Planning support"');
+    expect(result.content).toContain('Step 3: Verify.');
+  });
+
+  it('deletes a personal skill and reports whether anything was removed', async () => {
+    const tool = new DeletePersonalSkillTool();
+
+    expect(tool.needsApproval).toBe(true);
+    expect(tool.approvalMode).toBe('always');
+
+    await expect(
+      fs.access(path.join(userDataPath(), 'skills', 'planner', 'SKILL.md'))
+    ).resolves.toBeUndefined();
+
+    await expect(tool.execute({ id: 'user:planner' })).resolves.toEqual({
+      deleted: true,
+      id: 'user:planner',
+      filePath: path.join(userDataPath(), 'skills', 'planner', 'SKILL.md'),
+    });
+
+    await expect(
+      fs.access(path.join(userDataPath(), 'skills', 'planner', 'SKILL.md'))
+    ).rejects.toBeTruthy();
+
+    await expect(tool.execute({ id: 'user:planner' })).resolves.toEqual({
+      deleted: false,
+      id: 'user:planner',
+      filePath: path.join(userDataPath(), 'skills', 'planner', 'SKILL.md'),
+    });
   });
 });

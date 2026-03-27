@@ -15,11 +15,7 @@ import type {
   LongMemorySearchResult,
   ShortMemoryEntry,
 } from './memory';
-import type {
-  LifeOverview,
-  LifeOwnerMode,
-  LifeSnapshot,
-} from './life';
+import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from './life';
 import type { RelationshipOverview } from './relationship';
 import type { ProactiveTask } from './tasks';
 import type { McpServerInput, McpServerSummary } from './mcp';
@@ -127,6 +123,7 @@ export type ToolMetadata = {
     name?: string;
   };
   needsApproval?: boolean;
+  approvalMode?: 'configurable' | 'always';
   autoAllowed?: boolean;
 };
 
@@ -268,7 +265,9 @@ export interface ElectronApi {
   tasks: {
     list: () => Promise<ProactiveTask[]>;
     get: (id: string) => Promise<ProactiveTask | null>;
-    create: (task: ProactiveTaskInput) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
+    create: (
+      task: ProactiveTaskInput
+    ) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
     update: (
       id: string,
       updates: Omit<Partial<ProactiveTask>, 'tools'> & { tools?: string[] | string | null }

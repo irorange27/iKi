@@ -60,4 +60,27 @@ describe('chat_ui message serialization', () => {
       { type: 'text', text: 'Final answer.' },
     ]);
   });
+
+  it('canonicalizes legacy content-only messages into AI SDK text parts', () => {
+    const raw = JSON.stringify({
+      role: 'user',
+      content: 'hello from history',
+    });
+
+    expect(sanitizeUiMessageJsonForStorage(raw)).toBe(
+      JSON.stringify({
+        role: 'user',
+        parts: [{ type: 'text', text: 'hello from history' }],
+      })
+    );
+  });
+
+  it('leaves unsupported non-UI roles unchanged instead of coercing them', () => {
+    const raw = JSON.stringify({
+      role: 'tool',
+      content: [{ type: 'tool-result', toolCallId: 'tool_1', output: { ok: true } }],
+    });
+
+    expect(sanitizeUiMessageJsonForStorage(raw)).toBe(raw);
+  });
 });

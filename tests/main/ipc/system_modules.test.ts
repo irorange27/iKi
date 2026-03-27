@@ -262,6 +262,18 @@ describe('system IPC modules', () => {
       { name: 'shell', needsApproval: false },
     ]);
 
+    getAppConfigRuntimeMock.mockReturnValueOnce({
+      general: {
+        autoApproveToolRequests: true,
+      },
+    } as never);
+    getToolMetadataMock.mockReturnValueOnce([
+      { name: 'write_personal_skill', needsApproval: true, approvalMode: 'always' } as never,
+    ]);
+    expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([
+      { name: 'write_personal_skill', needsApproval: true, approvalMode: 'always' },
+    ]);
+
     const metadataError = new Error('metadata failed');
     getToolMetadataMock.mockImplementationOnce(() => {
       throw metadataError;

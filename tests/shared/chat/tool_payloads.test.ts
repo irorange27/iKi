@@ -36,6 +36,20 @@ describe('parseToolInput', () => {
     if (parsed.kind !== 'load_skill') throw new Error('Expected load_skill payload');
     expect(parsed.input.id).toBe('user:planner');
   });
+
+  it('parses personal skill write inputs from JSON', () => {
+    const parsed = parseToolInput(
+      'write_personal_skill',
+      '{"id":"user:planner","skillName":"Planner","instructions":"# Planner\\n\\nStep 1."}'
+    );
+
+    expect(parsed.kind).toBe('write_personal_skill');
+    if (parsed.kind !== 'write_personal_skill') {
+      throw new Error('Expected write_personal_skill payload');
+    }
+    expect(parsed.input.id).toBe('user:planner');
+    expect(parsed.input.skillName).toBe('Planner');
+  });
 });
 
 describe('parseToolOutput', () => {
@@ -74,6 +88,21 @@ describe('parseToolOutput', () => {
     if (parsed.kind !== 'load_skill') throw new Error('Expected load_skill payload');
     expect(parsed.output.id).toBe('user:planner');
     expect(parsed.output.name).toBe('Planner');
+    expect(parsed.output.truncated).toBe(false);
+  });
+
+  it('parses personal skill outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'read_personal_skill',
+      '{"id":"user:planner","name":"Planner","description":"Planning support","source":"user","content":"---\\nname: \\"Planner\\"\\n---","truncated":false}'
+    );
+
+    expect(parsed.kind).toBe('read_personal_skill');
+    if (parsed.kind !== 'read_personal_skill') {
+      throw new Error('Expected read_personal_skill payload');
+    }
+    expect(parsed.output.id).toBe('user:planner');
+    expect(parsed.output.description).toBe('Planning support');
     expect(parsed.output.truncated).toBe(false);
   });
 });

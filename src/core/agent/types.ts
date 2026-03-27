@@ -21,6 +21,9 @@ export const AgentConfigSchema = z.object({
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
+export const ToolApprovalModeSchema = z.enum(['configurable', 'always']);
+export type ToolApprovalMode = z.infer<typeof ToolApprovalModeSchema>;
+
 // Agent Tool Schema
 // Note: handler function type and paramSchema are defined separately due to Zod limitations
 export const AgentToolSchema = z.object({
@@ -31,6 +34,7 @@ export const AgentToolSchema = z.object({
   outputSchema: z.record(z.string(), z.unknown()).optional(),
   paramSchema: z.unknown().optional(), // Optional Zod schema (z.ZodTypeAny) for parameter validation
   needsApproval: z.unknown().optional().default(false),
+  approvalMode: ToolApprovalModeSchema.optional(),
   autoAllowed: z.boolean().optional(),
   displayName: z.string().optional(),
   source: z
@@ -45,6 +49,7 @@ export const AgentToolSchema = z.object({
 
 export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> & {
   needsApproval?: boolean | ToolNeedsApprovalFunction<unknown>;
+  approvalMode?: ToolApprovalMode;
   handler: (args: unknown) => Promise<unknown>;
   paramSchema?: z.ZodTypeAny;
 };

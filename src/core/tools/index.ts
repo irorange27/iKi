@@ -10,6 +10,12 @@ import { defaultToolRegistry } from './base';
 import { ReadFileTool, WriteFileTool, ListDirTool, DeleteFileTool } from './file_tools';
 import { ShellExecutionTool } from './shell_tools';
 import {
+  DeletePersonalSkillTool,
+  ListPersonalSkillsTool,
+  ReadPersonalSkillTool,
+  WritePersonalSkillTool,
+} from './skill_tools';
+import {
   DeleteTodoListTool,
   ListTodoListsTool,
   ReadTodoListTool,
@@ -28,6 +34,10 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new ShellExecutionTool());
   defaultToolRegistry.register(new WebSearchTool());
   defaultToolRegistry.register(new FetchTool());
+  defaultToolRegistry.register(new ListPersonalSkillsTool());
+  defaultToolRegistry.register(new ReadPersonalSkillTool());
+  defaultToolRegistry.register(new WritePersonalSkillTool());
+  defaultToolRegistry.register(new DeletePersonalSkillTool());
   defaultToolRegistry.register(new ListTodoListsTool());
   defaultToolRegistry.register(new ReadTodoListTool());
   defaultToolRegistry.register(new WriteTodoListTool());

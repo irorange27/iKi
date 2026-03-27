@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DeletePersonalSkillInputSchema,
   DeleteTodoListInputSchema,
   DeleteFileInputSchema,
   FetchToolInputSchema,
+  ListPersonalSkillsInputSchema,
   ListTodoListsInputSchema,
   ListDirInputSchema,
+  ReadPersonalSkillInputSchema,
   ReadTodoListInputSchema,
   ReadFileInputSchema,
   ShellToolInputSchema,
   WebToolInputSchema,
+  WritePersonalSkillInputSchema,
   WriteTodoListInputSchema,
   WriteFileInputSchema,
 } from '../../../src/core/tools/schemas';
@@ -65,6 +69,35 @@ describe('tool input schemas', () => {
         description: 'Remove temporary artifact file.',
       }).description
     ).toBe('Remove temporary artifact file.');
+
+    expect(
+      ListPersonalSkillsInputSchema.parse({
+        query: 'planner',
+        description: 'Find the personal skill to update.',
+      }).description
+    ).toBe('Find the personal skill to update.');
+
+    expect(
+      ReadPersonalSkillInputSchema.parse({
+        id: 'user:planner',
+        description: 'Inspect the current personal skill before editing it.',
+      }).description
+    ).toBe('Inspect the current personal skill before editing it.');
+
+    expect(
+      WritePersonalSkillInputSchema.parse({
+        id: 'user:planner',
+        instructions: '# Planner\n\nStep 1.',
+        description: 'Write the revised personal skill definition.',
+      }).description
+    ).toBe('Write the revised personal skill definition.');
+
+    expect(
+      DeletePersonalSkillInputSchema.parse({
+        id: 'user:old-skill',
+        description: 'Remove a stale personal skill the user no longer wants.',
+      }).description
+    ).toBe('Remove a stale personal skill the user no longer wants.');
 
     expect(
       ListTodoListsInputSchema.parse({

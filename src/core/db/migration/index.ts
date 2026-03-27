@@ -21,6 +21,7 @@ import { migration as migration019LifeReflections } from './019_add_life_reflect
 import { migration as migration020RelationshipStates } from './020_add_relationship_states_table';
 import { migration as migration021ChatToolApprovalSkillIds } from './021_add_chat_tool_approval_skill_ids';
 import { migration as migration022ChatToolApprovalMaxOutputTokens } from './022_add_chat_tool_approval_max_output_tokens';
+import { migration as migration023CanonicalizeChatUiMessages } from './023_canonicalize_chat_ui_messages';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -46,6 +47,7 @@ export const registeredMigrations = [
   migration020RelationshipStates,
   migration021ChatToolApprovalSkillIds,
   migration022ChatToolApprovalMaxOutputTokens,
+  migration023CanonicalizeChatUiMessages,
   // Add more migrations here as needed
 ];
 

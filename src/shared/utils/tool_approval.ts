@@ -1,5 +1,6 @@
 type ApprovalAnnotated = {
   needsApproval?: unknown;
+  approvalMode?: unknown;
 };
 
 export type ToolApprovalPolicyOptions = {
@@ -11,6 +12,7 @@ export const applyToolApprovalPolicy = <T extends ApprovalAnnotated>(
   options: ToolApprovalPolicyOptions
 ): T => {
   if (!options.autoApproveToolRequests) return value;
+  if (value.approvalMode === 'always') return value;
   if (value.needsApproval === false || value.needsApproval === undefined) return value;
   return { ...value, needsApproval: false } as T;
 };
