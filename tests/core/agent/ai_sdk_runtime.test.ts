@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 
 const { getFullSystemPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(() => ({
   getFullSystemPromptMock: vi.fn(),
@@ -29,6 +30,7 @@ import {
   appendApprovalResponsesToHistory,
   appendResponseMessages,
   appendUserPromptToHistory,
+  buildAiToolSet,
   buildPromptContext,
   cloneModelMessages,
   collectApprovalRequests,
@@ -196,5 +198,63 @@ describe('ai_sdk_runtime', () => {
         error,
       })
     );
+  });
+
+  it('builds executable AI SDK tools from both Zod and JSON schemas', async () => {
+    const zodHandler = vi.fn(async (args: unknown) => ({ source: 'zod', args }));
+    const jsonHandler = vi.fn(async (args: unknown) => ({ source: 'json', args }));
+
+    const tools = buildAiToolSet({ enableTools: true }, [
+      {
+        name: 'lookup',
+        type: 'function',
+        description: 'Lookup tool',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+          },
+          required: ['query'],
+        },
+        paramSchema: z.object({
+          query: z.string(),
+        }),
+        needsApproval: false,
+        autoAllowed: true,
+        displayName: 'Lookup',
+        source: { kind: 'builtin' },
+        handler: zodHandler,
+      },
+      {
+        name: 'fetch_json',
+        type: 'function',
+        description: 'JSON tool',
+        parameters: {
+          type: 'object',
+          properties: {
+            url: { type: 'string' },
+          },
+          required: ['url'],
+        },
+        needsApproval: false,
+        autoAllowed: true,
+        displayName: 'Fetch Json',
+        source: { kind: 'builtin' },
+        handler: jsonHandler,
+      },
+    ]);
+
+    expect(tools).toBeDefined();
+    expect(Object.keys(tools ?? {})).toEqual(['lookup', 'fetch_json']);
+    expect(await tools?.lookup.execute?.({ query: 'hello' }, {} as never)).toEqual({
+      source: 'zod',
+      args: { query: 'hello' },
+    });
+    expect(await tools?.fetch_json.execute?.({ url: 'https://example.com' }, {} as never)).toEqual({
+      source: 'json',
+      args: { url: 'https://example.com' },
+    });
+    expect(zodHandler).toHaveBeenCalledWith({ query: 'hello' });
+    expect(jsonHandler).toHaveBeenCalledWith({ url: 'https://example.com' });
   });
 });

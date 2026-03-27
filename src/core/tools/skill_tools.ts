@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { readSkillInstructions } from '../skills';
 import { BaseTool } from './base';
+import { zodSchemaToJsonSchema } from './json_schema';
 import { getToolRuntimeContext } from './runtime_context';
 import { LoadSkillInputSchema, LoadSkillOutputSchema } from './schemas';
 
@@ -38,13 +38,9 @@ export class LoadSkillTool extends BaseTool {
   override description =
     'Load the full instructions for a skill that was already selected for this turn. Use the exact skill id from the skill metadata in the prompt.';
   override paramSchema = LoadSkillInputSchema;
-  override outputSchema = zodToJsonSchema(
-    LoadSkillOutputSchema as unknown as Parameters<typeof zodToJsonSchema>[0],
-    {
-      $refStrategy: 'none',
-      name: 'load_skill_output',
-    }
-  ) as Record<string, unknown>;
+  override outputSchema = zodSchemaToJsonSchema(LoadSkillOutputSchema, {
+    title: 'load_skill_output',
+  });
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const allowedSkillIds = (getToolRuntimeContext().availableSkillIds || [])

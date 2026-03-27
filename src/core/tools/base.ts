@@ -1,51 +1,10 @@
 import { z } from 'zod';
-import { jsonSchema, tool } from 'ai';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { jsonSchema, tool, type Tool } from 'ai';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 import type { AgentTool } from '../agent/types';
-import { createLogger } from '../logger';
+import { zodSchemaToJsonSchema } from './json_schema';
 
 type ApprovalPolicy = boolean | ToolNeedsApprovalFunction<unknown>;
-const toolBaseLogger = createLogger({ module: 'tool_base' });
-
-const deriveJsonSchema = (
-  schema: z.ZodTypeAny | undefined,
-  fallbackTitle?: string
-): Record<string, unknown> => {
-  if (!schema) {
-    return {
-      type: 'object',
-      title: fallbackTitle,
-      properties: {},
-    };
-  }
-
-  try {
-    const jsonSchema = zodToJsonSchema(schema as unknown as Parameters<typeof zodToJsonSchema>[0], {
-      $refStrategy: 'none',
-      name: fallbackTitle,
-    });
-    if (jsonSchema && typeof jsonSchema === 'object') {
-      return jsonSchema as Record<string, unknown>;
-    }
-  } catch (error) {
-    toolBaseLogger.event({
-      level: 'warn',
-      event: 'tool.schema.derive',
-      outcome: 'failed',
-      error,
-      data: {
-        title: fallbackTitle || null,
-      },
-    });
-  }
-
-  return {
-    type: 'object',
-    title: fallbackTitle,
-    properties: {},
-  };
-};
 
 /**
  * Base class for all tools with built-in validation
@@ -69,7 +28,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
    * Get parameters in JSON Schema format (derived from Zod)
    */
   get parameters(): Record<string, unknown> {
-    return deriveJsonSchema(this.paramSchema, this.name);
+    return zodSchemaToJsonSchema(this.paramSchema, { title: this.name });
   }
 
   /**
@@ -84,13 +43,15 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
    * Convert to AI SDK Tool definition
    */
   toAiSdkTool() {
-    return tool({
+    const definition: Tool<z.infer<P>, unknown> = {
       description: this.description,
       inputSchema: this.paramSchema,
       ...(this.outputSchema ? { outputSchema: jsonSchema(this.outputSchema as object) } : {}),
       needsApproval: this.needsApproval ?? false,
       execute: async (args: z.infer<P>) => await this.handler(args),
-    } as unknown as Parameters<typeof tool>[0]);
+    };
+
+    return tool(definition);
   }
 
   /**
@@ -156,7 +117,8 @@ export class ToolRegistry {
       { description: string; parameters: unknown; outputSchema?: unknown }
     > = {};
     for (const tool of this.tools.values()) {
-      const parameters = tool.parameters ?? deriveJsonSchema(tool.paramSchema, tool.name);
+      const parameters =
+        tool.parameters ?? zodSchemaToJsonSchema(tool.paramSchema, { title: tool.name });
       definitions[tool.name] = {
         description: tool.description,
         parameters,
@@ -181,7 +143,7 @@ export class ToolRegistry {
       name: t.name,
       type: t.type,
       description: t.description,
-      parameters: t.parameters ?? deriveJsonSchema(t.paramSchema, t.name),
+      parameters: t.parameters ?? zodSchemaToJsonSchema(t.paramSchema, { title: t.name }),
       outputSchema: t.outputSchema,
       displayName: t.displayName,
       source: t.source,
@@ -208,13 +170,14 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   source?: AgentTool['source'];
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
-  const parameters = options.parameters ?? deriveJsonSchema(options.paramSchema, options.name);
+  const parameters =
+    options.parameters ?? zodSchemaToJsonSchema(options.paramSchema, { title: options.name });
   return {
     ...options,
     parameters,
     needsApproval: options.needsApproval ?? false,
     autoAllowed: options.autoAllowed !== false,
-    paramSchema: options.paramSchema as unknown as AgentTool['paramSchema'],
+    paramSchema: options.paramSchema,
     displayName: options.displayName ?? options.name,
     source: options.source ?? { kind: 'builtin' },
   };

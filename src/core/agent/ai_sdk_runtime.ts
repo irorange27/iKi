@@ -1,4 +1,12 @@
-import { jsonSchema, tool, type ModelMessage, type ToolApprovalResponse, type ToolSet } from 'ai';
+import {
+  jsonSchema,
+  tool,
+  type FlexibleSchema,
+  type ModelMessage,
+  type Tool,
+  type ToolApprovalResponse,
+  type ToolSet,
+} from 'ai';
 
 import { getAppConfig } from '../config';
 import { createLogger } from '../logger';
@@ -128,27 +136,34 @@ export const buildAiToolSet = (
   });
 
   for (const agentTool of registeredTools) {
-    if (agentTool.paramSchema) {
+    const schemaSource = agentTool.paramSchema ? 'zod' : agentTool.parameters ? 'json' : null;
+    const inputSchema = agentTool.paramSchema
+      ? agentTool.paramSchema
+      : agentTool.parameters
+        ? jsonSchema(agentTool.parameters as object)
+        : null;
+
+    if (schemaSource && inputSchema) {
       try {
-        const toolDef = tool({
+        const definition: Tool<unknown, unknown> = {
           description: agentTool.description,
-          inputSchema: agentTool.paramSchema,
+          inputSchema: inputSchema as FlexibleSchema<unknown>,
           ...(agentTool.outputSchema
             ? { outputSchema: jsonSchema(agentTool.outputSchema as object) }
             : {}),
           needsApproval: agentTool.needsApproval,
-          execute: agentTool.handler,
-        } as unknown as Parameters<typeof tool>[0]);
+          execute: async input => await agentTool.handler(input),
+        };
+        const toolDef = tool(definition);
 
-        const toolDefWithExecute = toolDef as unknown as { execute?: unknown };
         agentRuntimeLogger.event({
           level: 'debug',
           event: 'agent.tool.prepare',
           outcome: 'succeeded',
           data: {
             tool_name: agentTool.name,
-            schema_source: 'zod',
-            has_execute: typeof toolDefWithExecute.execute === 'function',
+            schema_source: schemaSource,
+            has_execute: true,
           },
         });
 
@@ -161,49 +176,8 @@ export const buildAiToolSet = (
           error,
           data: {
             tool_name: agentTool.name,
-            schema_source: 'zod',
-          },
-        });
-        throw error;
-      }
-      continue;
-    }
-
-    if (agentTool.parameters) {
-      try {
-        const toolDef = tool({
-          description: agentTool.description,
-          inputSchema: jsonSchema(agentTool.parameters as object),
-          ...(agentTool.outputSchema
-            ? { outputSchema: jsonSchema(agentTool.outputSchema as object) }
-            : {}),
-          needsApproval: agentTool.needsApproval,
-          execute: agentTool.handler,
-        } as unknown as Parameters<typeof tool>[0]);
-
-        const toolDefWithExecute = toolDef as unknown as { execute?: unknown };
-        agentRuntimeLogger.event({
-          level: 'debug',
-          event: 'agent.tool.prepare',
-          outcome: 'succeeded',
-          data: {
-            tool_name: agentTool.name,
-            schema_source: 'json',
-            has_execute: typeof toolDefWithExecute.execute === 'function',
-          },
-        });
-
-        tools[agentTool.name] = toolDef;
-      } catch (error: unknown) {
-        agentRuntimeLogger.event({
-          level: 'error',
-          event: 'agent.tool.prepare',
-          outcome: 'failed',
-          error,
-          data: {
-            tool_name: agentTool.name,
-            schema_source: 'json',
-            parameters: agentTool.parameters,
+            schema_source: schemaSource,
+            ...(schemaSource === 'json' ? { parameters: agentTool.parameters } : {}),
           },
         });
         throw error;

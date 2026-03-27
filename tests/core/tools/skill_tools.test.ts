@@ -85,4 +85,36 @@ Step 2: Plan.
       )
     ).rejects.toThrow(/not enabled for this turn/i);
   });
+
+  it('publishes concrete input and output JSON schemas for the AI tool boundary', () => {
+    const tool = new LoadSkillTool();
+    const agentTool = tool.toAgentTool();
+
+    expect(agentTool.parameters).toEqual(
+      expect.objectContaining({
+        type: 'object',
+        title: 'load_skill',
+        properties: expect.objectContaining({
+          id: expect.objectContaining({
+            type: 'string',
+          }),
+        }),
+        required: expect.arrayContaining(['id']),
+      })
+    );
+
+    expect(tool.outputSchema).toEqual(
+      expect.objectContaining({
+        type: 'object',
+        title: 'load_skill_output',
+        properties: expect.objectContaining({
+          id: expect.objectContaining({ type: 'string' }),
+          name: expect.objectContaining({ type: 'string' }),
+          source: expect.objectContaining({ type: 'string' }),
+          content: expect.objectContaining({ type: 'string' }),
+          truncated: expect.objectContaining({ type: 'boolean' }),
+        }),
+      })
+    );
+  });
 });

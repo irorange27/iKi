@@ -4,6 +4,8 @@ import { chatService, type ChatWebContents } from '../services/chat/chat_service
 
 let chatIpcRegistered = false;
 
+const toChatWebContents = (sender: Pick<ChatWebContents, 'id' | 'send'>): ChatWebContents => sender;
+
 export const registerChatIpc = (): void => {
   if (chatIpcRegistered) return;
   chatIpcRegistered = true;
@@ -42,12 +44,12 @@ export const registerChatIpc = (): void => {
   });
 
   ipcMain.handle('chat:stream', async (event, options) => {
-    const webContents = event.sender as unknown as ChatWebContents;
+    const webContents = toChatWebContents(event.sender);
     return await chatService.stream(webContents, options);
   });
 
   ipcMain.handle('chat:approve-tool', async (event, approvalId: string, approved: boolean) => {
-    const webContents = event.sender as unknown as ChatWebContents;
+    const webContents = toChatWebContents(event.sender);
     return await chatService.approveTool(webContents, approvalId, approved);
   });
 
