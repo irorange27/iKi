@@ -639,7 +639,7 @@ const toolModelTestResult = ref<{
   message: string;
 } | null>(null);
 const updateStatus = ref<AppUpdateStatus | null>(null);
-let removeProviderUpdateListener = () => undefined;
+let removeProviderUpdateListener: () => void = () => undefined;
 
 type AvailableProvider = {
   id: string;

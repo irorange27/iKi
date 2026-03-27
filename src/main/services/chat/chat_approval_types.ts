@@ -3,6 +3,7 @@ export type ApprovalRecoveryContext = {
   threadId: string;
   assistantMessageId: string;
   providerType: string;
+  providerId?: string;
   model: string;
   systemPrompt: string;
   maxOutputTokens?: number;

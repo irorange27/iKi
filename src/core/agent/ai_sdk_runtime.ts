@@ -27,6 +27,7 @@ export const getDefaultAgentConfig = (): AgentConfig =>
     enabled: false,
     systemPrompt: 'You are a helpful AI assistant. You are capable, autonomous, and helpful.',
     providerType: '',
+    providerId: '',
     model: '',
     temperature: 0.1,
     maxTokens: 2000,
@@ -210,10 +211,10 @@ export const buildAiToolSet = (
 };
 
 export const buildPromptContext = (
-  config: Pick<AgentConfig, 'providerType' | 'systemPrompt'>,
+  config: Pick<AgentConfig, 'providerType' | 'providerId' | 'systemPrompt'>,
   history: ModelMessage[]
 ): { systemPrompt: string; messages: ModelMessage[] } => {
-  const systemParts: string[] = [getFullSystemPrompt(config.providerType)];
+  const systemParts: string[] = [getFullSystemPrompt(config.providerType, config.providerId)];
 
   if (config.systemPrompt.trim()) {
     systemParts.push(config.systemPrompt.trim());

@@ -247,11 +247,13 @@ const emit = defineEmits<{
 const props = defineProps<{
   threadId?: string;
   activeModel?: string;
+  activeProviderId?: string | null;
   isIncognito?: boolean;
   selectedWorkspaceId?: string | null;
   prepareMessageSend?: (payload: {
     content: string;
     model?: string;
+    providerId?: string;
     tools?: string[];
     mcpServerIds?: string[];
   }) => Promise<{
@@ -285,7 +287,7 @@ const incognitoTooltip = computed(() =>
   props.isIncognito ? t('chat.input.incognitoOn') : t('chat.input.incognitoOff')
 );
 const isBusy = computed(() => isPreparingSend.value || isLoading.value);
-let removeProviderUpdateListener = () => undefined;
+let removeProviderUpdateListener: () => void = () => undefined;
 
 const {
   selectedProvider,
@@ -348,10 +350,12 @@ watch(
 );
 
 watch(
-  () => props.activeModel,
-  (activeModel, previousActiveModel) => {
-    if (activeModel === previousActiveModel) return;
-    syncPreferredModel(activeModel);
+  () => [props.activeModel, props.activeProviderId] as const,
+  ([activeModel, activeProviderId], [previousActiveModel, previousActiveProviderId]) => {
+    if (activeModel === previousActiveModel && activeProviderId === previousActiveProviderId) {
+      return;
+    }
+    syncPreferredModel(activeModel, activeProviderId);
   }
 );
 
@@ -463,6 +467,7 @@ const sendMessage = async () => {
       preparedMessageSend = await props.prepareMessageSend({
         content: userMessage,
         model: providerReady.model,
+        providerId: providerReady.provider.id,
         tools: selectedTools.value,
         mcpServerIds: resolvedMcpServerIds,
       });
@@ -504,6 +509,7 @@ const sendMessage = async () => {
     // Start streaming via IPC
     const streamResult = await electronAPI.chat.stream({
       providerType: providerReady.provider.type,
+      providerId: providerReady.provider.id,
       model: providerReady.model,
       messages: transportMessages,
       tools: isAutoToolMode.value
@@ -540,6 +546,7 @@ const sendMessage = async () => {
       outcome: 'degraded',
       message: getErrorMessage(error),
     });
+    alert(getErrorMessage(error));
     // Remove the user message if failed (it was already added to chat.messages in ChatView)
     // The error handler will clean up the state
   }
@@ -552,7 +559,7 @@ onMounted(async () => {
     });
   }
 
-  await loadAvailableProviders(props.activeModel);
+  await loadAvailableProviders(props.activeModel, props.activeProviderId);
   await loadSpeechStatus();
   await syncToolSelectionFromThread(props.threadId);
 });

@@ -127,6 +127,35 @@ describe('chat provider selection', () => {
     });
   });
 
+  it('prefers the explicitly selected provider instance when provider ids differ', () => {
+    const gatewayA = buildProvider({
+      id: 'gateway-a',
+      name: 'Gateway A',
+      type: 'openai-compatible',
+      models: '["shared-model"]',
+    });
+    const gatewayB = buildProvider({
+      id: 'gateway-b',
+      name: 'Gateway B',
+      type: 'openai-compatible',
+      models: '["shared-model"]',
+    });
+
+    expect(
+      resolveProviderSelection({
+        providers: [gatewayA, gatewayB],
+        currentProvider: gatewayA,
+        currentModel: 'shared-model',
+        preferredModel: 'shared-model',
+        preferredProviderId: 'gateway-b',
+      })
+    ).toEqual({
+      availableProviders: [gatewayA, gatewayB],
+      selectedProvider: gatewayB,
+      selectedModel: 'shared-model',
+    });
+  });
+
   it('surfaces provider configuration failures before send', async () => {
     const openai = buildProvider({
       id: 'openai',
@@ -152,7 +181,7 @@ describe('chat provider selection', () => {
     const result = await selection.ensureProviderReady();
 
     expect(providerList).toHaveBeenCalledTimes(1);
-    expect(isProviderConfigured).toHaveBeenCalledWith('openai');
+    expect(isProviderConfigured).toHaveBeenCalledWith('openai', 'openai');
     expect(result).toEqual({
       ok: false,
       message: 'Please configure the OpenAI API key in Settings.',
@@ -187,7 +216,7 @@ describe('chat provider selection', () => {
     const result = await selection.ensureProviderReady();
 
     expect(providerList).toHaveBeenCalledTimes(1);
-    expect(isProviderConfigured).toHaveBeenCalledWith('openai');
+    expect(isProviderConfigured).toHaveBeenCalledWith('openai', 'openai');
     expect(loggerEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'error',

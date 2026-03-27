@@ -8,6 +8,12 @@ import {
 
 export type ThreadToolSelectionMode = 'manual' | 'auto';
 
+export type ThreadLlmSelectionState = {
+  providerType?: string;
+  providerId?: string;
+  model?: string;
+};
+
 export type ThreadToolSelectionState = {
   mode?: ThreadToolSelectionMode;
   mcpServerIds: string[];
@@ -69,6 +75,27 @@ export const parseThreadToolSelectionState = (metadataRaw: unknown): ThreadToolS
   return {
     mode,
     mcpServerIds: normalizeStringArray(toolSelection.mcpServerIds),
+  };
+};
+
+export const parseThreadLlmSelectionState = (metadataRaw: unknown): ThreadLlmSelectionState => {
+  const metadata = parseJsonRecord(metadataRaw);
+  const llm = isObjectRecord(metadata.llm) ? metadata.llm : {};
+  const providerType =
+    typeof llm.providerType === 'string' && llm.providerType.trim().length > 0
+      ? llm.providerType.trim()
+      : undefined;
+  const providerId =
+    typeof llm.providerId === 'string' && llm.providerId.trim().length > 0
+      ? llm.providerId.trim()
+      : undefined;
+  const model =
+    typeof llm.model === 'string' && llm.model.trim().length > 0 ? llm.model.trim() : undefined;
+
+  return {
+    ...(providerType ? { providerType } : {}),
+    ...(providerId ? { providerId } : {}),
+    ...(model ? { model } : {}),
   };
 };
 
@@ -141,6 +168,7 @@ export const parseThreadAffectState = (metadataRaw: unknown): ThreadAffectState 
 export const buildThreadRuntimeMetadata = (params: {
   existingMetadata: unknown;
   providerType: string;
+  providerId?: string;
   model: string;
   toolMode: ThreadToolSelectionMode;
   mcpServerIds?: string[];
@@ -158,6 +186,9 @@ export const buildThreadRuntimeMetadata = (params: {
     llm: {
       ...nextLlm,
       providerType: params.providerType,
+      ...(typeof params.providerId === 'string' && params.providerId.trim().length > 0
+        ? { providerId: params.providerId.trim() }
+        : {}),
       model: params.model,
       updatedAt,
     },

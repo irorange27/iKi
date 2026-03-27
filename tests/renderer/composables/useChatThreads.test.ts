@@ -27,6 +27,7 @@ const createStoredThread = (overrides: Partial<ChatThread> = {}): ChatThread => 
 
 const createHarness = (initialThreads: ChatThread[] = []) => {
   const threadsById = new Map(initialThreads.map(thread => [thread.id, thread]));
+  const generateTitle = vi.fn(async () => 'Generated title');
 
   const createThread = vi.fn(async (input: Partial<ChatThread>) => {
     const thread = createStoredThread({
@@ -82,7 +83,7 @@ const createHarness = (initialThreads: ChatThread[] = []) => {
         },
       },
       toolModel: {
-        generateTitle: vi.fn(async () => 'Generated title'),
+        generateTitle,
       },
       tasks: {},
     } as never,
@@ -108,6 +109,7 @@ const createHarness = (initialThreads: ChatThread[] = []) => {
     listMessages,
     refreshSidebar,
     setCurrentThread,
+    generateTitle,
   };
 };
 
@@ -248,5 +250,43 @@ describe('useChatThreads', () => {
         title: '新对话',
       })
     );
+  });
+
+  it('builds thread titles from user text instead of assistant/tool narration', async () => {
+    const thread = createStoredThread({
+      id: 'thread_1',
+      title: 'New Chat',
+    });
+    const { state, generateTitle, updateThread } = createHarness([thread]);
+
+    await state.selectThread(thread.id);
+    await state.handleAssistantMessagePersisted({
+      threadId: thread.id,
+      messagesSnapshot: [
+        {
+          id: 'user_1',
+          role: 'user',
+          parts: [{ type: 'text', text: '请告诉我现在几点' }],
+        },
+        {
+          id: 'assistant_1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: '我先调用系统时间工具。' },
+            {
+              type: 'dynamic-tool',
+              toolCallId: 'call_1',
+              toolName: 'shell',
+              state: 'output-available',
+              input: { cmd: 'date' },
+              output: { stdout: '17:53' },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(generateTitle).toHaveBeenCalledWith('User: 请告诉我现在几点');
+    expect(updateThread).toHaveBeenCalledWith(thread.id, { title: 'Generated title' });
   });
 });

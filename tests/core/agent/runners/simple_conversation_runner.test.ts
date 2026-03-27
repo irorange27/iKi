@@ -191,7 +191,7 @@ describe('SimpleConversationRunner', () => {
       iterations: 1,
     });
 
-    expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini');
+    expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', '');
     expect(stepCountIsMock).toHaveBeenCalledWith(3);
     expect(toolMock).toHaveBeenCalledTimes(1);
     expect(generateTextMock).toHaveBeenCalledWith(

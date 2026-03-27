@@ -78,4 +78,49 @@ describe('ChatModelSelector', () => {
       [{ provider: openai, model: 'gpt-4o' }],
     ]);
   });
+
+  it('uses the shared custom-provider icon fallback for custom providers', async () => {
+    const customProvider = buildProvider({
+      id: 'custom_proxy',
+      name: 'Proxy Gateway',
+      type: 'openai-compatible',
+      models: '["proxy-model"]',
+    });
+
+    const wrapper = mount(ChatModelSelector, {
+      props: {
+        availableProviders: [customProvider],
+        selectedProvider: customProvider,
+        selectedModel: 'proxy-model',
+      },
+      global: {
+        stubs: {
+          LobeIcon: {
+            props: ['name', 'cdnPrefix', 'useCdn', 'fallbackText'],
+            template:
+              '<div class="lobe-icon-stub" :data-name="name" :data-cdn-prefix="cdnPrefix || \'\'" :data-use-cdn="useCdn === undefined ? \'\' : String(useCdn)" :data-fallback-text="fallbackText || \'\'"></div>',
+          },
+        },
+      },
+    });
+
+    const triggerIcon = wrapper.find('.model-selector-trigger-icon .lobe-icon-stub');
+    expect(triggerIcon.attributes('data-name')).toBe('grid-2x2');
+    expect(triggerIcon.attributes('data-cdn-prefix')).toBe(
+      'https://unpkg.com/lucide-static@latest/icons'
+    );
+    expect(triggerIcon.attributes('data-use-cdn')).toBe('true');
+    expect(triggerIcon.attributes('data-fallback-text')).toBe('PR');
+
+    await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+
+    const groupIcon = wrapper.find('.model-provider-icon .lobe-icon-stub');
+    expect(groupIcon.attributes('data-name')).toBe('grid-2x2');
+    expect(groupIcon.attributes('data-cdn-prefix')).toBe(
+      'https://unpkg.com/lucide-static@latest/icons'
+    );
+    expect(groupIcon.attributes('data-use-cdn')).toBe('true');
+    expect(groupIcon.attributes('data-fallback-text')).toBe('PR');
+  });
 });

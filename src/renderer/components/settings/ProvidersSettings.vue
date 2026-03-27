@@ -40,7 +40,7 @@
                   :name="getProviderIconName(provider.id)"
                   :size="24"
                 />
-                <LobeIcon v-else v-bind="getCustomIconProps(provider.icon)" :size="20" />
+                <LobeIcon v-else v-bind="getCustomProviderIconProps(provider.icon)" :size="20" />
               </span>
               <div class="provider-item-main">
                 <span class="provider-item-name">{{ provider.name }}</span>
@@ -390,7 +390,11 @@ import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
 import { createLogger } from '../../logger';
-import { getProviderIconName } from '../../modules/providers/provider_icons';
+import {
+  getCustomProviderIconProps,
+  getProviderIconName,
+  isCanonicalBuiltInProvider,
+} from '../../modules/providers/provider_icons';
 import { getElectronAPI } from '../../services/electron_api';
 
 type ProviderRecord = Provider & {
@@ -513,17 +517,9 @@ const editingProviderApiFormat = computed<EditableProviderApiFormat | null>(() =
   };
 });
 
-const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
 const BUILTIN_PROVIDER_ORDER = new Map(
   BUILTIN_PROVIDERS.map((provider, index) => [provider.id, index])
 );
-
-const getCustomIconProps = (icon?: string) => {
-  if (!icon || icon === 'custom') {
-    return { name: 'grid-2x2', cdnPrefix: CUSTOM_ICON_CDN, useCdn: true };
-  }
-  return { name: icon, useCdn: true };
-};
 
 const arrayEquals = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -533,9 +529,12 @@ const getBuiltInProvider = (providerId: string | null): BuiltInProvider | null =
   return BUILTIN_PROVIDERS.find(provider => provider.id === providerId) || null;
 };
 
-const isCanonicalBuiltInConfig = (provider: ProviderRecord, providerId: string) => {
-  const builtIn = getBuiltInProvider(providerId);
-  return builtIn ? provider.type === providerId && provider.name === builtIn.name : false;
+const isCanonicalBuiltInConfig = (provider: ProviderRecord, providerId?: string) => {
+  if (!isCanonicalBuiltInProvider(provider)) {
+    return false;
+  }
+
+  return providerId ? provider.type === providerId : true;
 };
 
 const getProviderRecord = (providerId: string | null): ProviderRecord | null => {
@@ -735,12 +734,7 @@ const sidebarProviders = computed<SidebarProvider[]>(() => {
     searchText: `${provider.name} ${provider.id}`.toLowerCase(),
   }));
   const customItems: SidebarProvider[] = providers.value
-    .filter(
-      provider =>
-        !BUILTIN_PROVIDERS.some(builtInProvider =>
-          isCanonicalBuiltInConfig(provider, builtInProvider.id)
-        )
-    )
+    .filter(provider => !isCanonicalBuiltInConfig(provider))
     .map(provider => ({
       id: provider.id,
       name: provider.name,

@@ -2,6 +2,7 @@ import { createSimpleConversationRunner, type ConversationRunner } from '../../.
 
 type CreateChatConversationRunnerParams = {
   providerType: string;
+  providerId?: string;
   model: string;
   systemPrompt: string;
   enableTools: boolean;
@@ -15,6 +16,9 @@ export const createChatConversationRunner = (
   createSimpleConversationRunner({
     enabled: true,
     providerType: params.providerType,
+    ...(typeof params.providerId === 'string' && params.providerId.trim()
+      ? { providerId: params.providerId.trim() }
+      : {}),
     model: params.model,
     systemPrompt: params.systemPrompt,
     enableTools: params.enableTools,

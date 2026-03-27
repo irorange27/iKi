@@ -9,9 +9,8 @@
       <span class="model-selector-trigger-icon">
         <LobeIcon
           v-if="selectedProvider"
-          :name="selectedProviderIconName"
-          :size="16"
-          :fallback-text="selectedProviderFallbackText"
+          v-bind="selectedProviderIconProps"
+          :size="14"
           class-name="model-selector-provider-icon"
         />
         <span v-else class="model-selector-trigger-initials">
@@ -82,12 +81,7 @@
         >
           <header class="model-provider-header selector-section-title">
             <span class="model-provider-icon">
-              <LobeIcon
-                :name="group.iconName"
-                :size="16"
-                :fallback-text="group.fallbackText"
-                class-name="model-selector-provider-icon"
-              />
+              <LobeIcon v-bind="group.iconProps" :size="16" class-name="model-selector-provider-icon" />
             </span>
             <div class="model-provider-copy">
               <span class="model-provider-name">{{ group.name }}</span>
@@ -150,7 +144,10 @@ import {
   getProviderDisplayName,
   getProviderFallbackText,
 } from '../modules/providers/provider_display';
-import { getProviderIconName } from '../modules/providers/provider_icons';
+import {
+  getProviderIconProps,
+  type ProviderIconProps,
+} from '../modules/providers/provider_icons';
 import LobeIcon from './Icon/LobeIcon.vue';
 
 type ProviderModelGroup = {
@@ -158,8 +155,7 @@ type ProviderModelGroup = {
   provider: Provider;
   name: string;
   typeLabel: string;
-  iconName: string;
-  fallbackText: string;
+  iconProps: ProviderIconProps;
   models: string[];
   providerSearchText: string;
 };
@@ -197,8 +193,7 @@ const providerModelGroups = computed<ProviderModelGroup[]>(() =>
         provider,
         name,
         typeLabel,
-        iconName: getProviderIconName(typeLabel),
-        fallbackText: getProviderFallbackText(provider),
+        iconProps: getProviderIconProps(provider),
         models: parseModelList(provider.models),
         providerSearchText: `${name} ${typeLabel}`.toLowerCase(),
       };
@@ -223,8 +218,8 @@ const filteredProviderGroups = computed<ProviderModelGroup[]>(() => {
     .filter(group => group.models.length > 0);
 });
 
-const selectedProviderIconName = computed(() =>
-  props.selectedProvider ? getProviderIconName(props.selectedProvider.type || '') : 'openai'
+const selectedProviderIconProps = computed<ProviderIconProps | null>(() =>
+  props.selectedProvider ? getProviderIconProps(props.selectedProvider) : null
 );
 
 const selectedProviderFallbackText = computed(() =>
@@ -286,7 +281,7 @@ onUnmounted(() => {
   max-width: min(220px, calc(100vw - 192px));
   height: 40px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 2px 0 6px;
   border: 1px solid transparent;
   background: transparent;

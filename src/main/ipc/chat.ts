@@ -31,8 +31,8 @@ export const registerChatIpc = (): void => {
     return await chatService.getModels(providerType);
   });
 
-  ipcMain.handle('chat:isProviderConfigured', (_, providerType: string) => {
-    return chatService.isProviderConfigured(providerType);
+  ipcMain.handle('chat:isProviderConfigured', (_, providerType: string, providerId?: string) => {
+    return chatService.isProviderConfigured(providerType, providerId);
   });
 
   ipcMain.handle('chat:stop-stream', event => {

@@ -14,6 +14,7 @@ export const resolveProviderSelection = (params: {
   currentProvider: Provider | null;
   currentModel: string;
   preferredModel?: string | null;
+  preferredProviderId?: string | null;
 }): {
   availableProviders: Provider[];
   selectedProvider: Provider | null;
@@ -30,10 +31,16 @@ export const resolveProviderSelection = (params: {
 
   const preferredModel =
     typeof params.preferredModel === 'string' ? params.preferredModel.trim() : '';
+  const preferredProviderId =
+    typeof params.preferredProviderId === 'string' ? params.preferredProviderId.trim() : '';
   const currentModel = params.currentModel.trim();
   const previousProviderId = params.currentProvider?.id;
   const previousProvider =
     availableProviders.find(provider => provider.id === previousProviderId) || null;
+  const preferredProvider =
+    preferredProviderId.length > 0
+      ? availableProviders.find(provider => provider.id === preferredProviderId) || null
+      : null;
   const previousProviderModels = previousProvider ? parseModelList(previousProvider.models) : [];
   const findProviderForModel = (model: string): Provider | null => {
     if (!model) return null;
@@ -42,6 +49,9 @@ export const resolveProviderSelection = (params: {
     );
   };
   const selectedProvider =
+    (preferredProvider && parseModelList(preferredProvider.models).length > 0
+      ? preferredProvider
+      : null) ||
     (preferredModel && previousProviderModels.includes(preferredModel) ? previousProvider : null) ||
     findProviderForModel(preferredModel) ||
     (previousProvider && previousProviderModels.length > 0 ? previousProvider : null) ||
@@ -69,13 +79,18 @@ export const useChatProviderSelection = (deps: {
   const selectedProvider = ref<Provider | null>(null);
   const selectedModel = ref('');
   const availableProviders = ref<Provider[]>([]);
+  const preferredProviderId = ref<string | null>(null);
 
-  const applyResolvedSelection = (preferredModel?: string | null) => {
+  const applyResolvedSelection = (
+    preferredModel?: string | null,
+    nextPreferredProviderId?: string | null
+  ) => {
     const resolved = resolveProviderSelection({
       providers: availableProviders.value,
       currentProvider: selectedProvider.value,
       currentModel: selectedModel.value,
       preferredModel,
+      preferredProviderId: nextPreferredProviderId ?? preferredProviderId.value,
     });
 
     availableProviders.value = resolved.availableProviders;
@@ -83,13 +98,19 @@ export const useChatProviderSelection = (deps: {
     selectedModel.value = resolved.selectedModel;
   };
 
-  const loadAvailableProviders = async (preferredModel?: string | null) => {
+  const loadAvailableProviders = async (
+    preferredModel?: string | null,
+    nextPreferredProviderId?: string | null
+  ) => {
     try {
       const providers = await deps.electronAPI.providers.list();
       availableProviders.value = Array.isArray(providers)
         ? providers.filter(provider => provider?.enabled)
         : [];
-      applyResolvedSelection(preferredModel);
+      if (nextPreferredProviderId !== undefined) {
+        preferredProviderId.value = nextPreferredProviderId;
+      }
+      applyResolvedSelection(preferredModel, preferredProviderId.value);
     } catch (error) {
       providerSelectionLogger.event({
         level: 'error',
@@ -100,17 +121,25 @@ export const useChatProviderSelection = (deps: {
       availableProviders.value = [];
       selectedProvider.value = null;
       selectedModel.value = '';
+      preferredProviderId.value = null;
     }
   };
 
-  const syncPreferredModel = (preferredModel?: string | null) => {
+  const syncPreferredModel = (
+    preferredModel?: string | null,
+    nextPreferredProviderId?: string | null
+  ) => {
     if (availableProviders.value.length === 0) return;
-    applyResolvedSelection(preferredModel);
+    if (nextPreferredProviderId !== undefined) {
+      preferredProviderId.value = nextPreferredProviderId;
+    }
+    applyResolvedSelection(preferredModel, preferredProviderId.value);
   };
 
   const selectProviderModel = (payload: { provider: Provider; model: string }) => {
     selectedProvider.value = payload.provider;
     selectedModel.value = payload.model;
+    preferredProviderId.value = payload.provider.id;
   };
 
   const ensureProviderReady = async (): Promise<
@@ -134,7 +163,10 @@ export const useChatProviderSelection = (deps: {
     const selectedProviderName = getProviderDisplayName(selectedProvider.value);
     let configured = false;
     try {
-      configured = await deps.electronAPI.chat.isProviderConfigured(selectedProvider.value.type);
+      configured = await deps.electronAPI.chat.isProviderConfigured(
+        selectedProvider.value.type,
+        selectedProvider.value.id
+      );
     } catch (error) {
       providerSelectionLogger.event({
         level: 'error',

@@ -50,7 +50,7 @@ describe('SimplePromptTextGenerator', () => {
 
     await expect(generator.generate('hello')).resolves.toEqual({ response: 'generated text' });
 
-    expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini');
+    expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', '');
     expect(generateTextMock).toHaveBeenCalledWith({
       model: 'mock-model',
       system: 'persona prompt\n\nsystem prompt',

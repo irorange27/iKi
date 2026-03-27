@@ -260,6 +260,7 @@ export const createChatStreaming = (deps: {
     threadId?: string;
     sessionId: string;
     providerType: string;
+    providerId?: string;
     model: string;
     systemPrompt: string;
     maxOutputTokens?: number;
@@ -275,6 +276,9 @@ export const createChatStreaming = (deps: {
       threadId,
       assistantMessageId: sessionId,
       providerType: params.providerType,
+      ...(typeof params.providerId === 'string' && params.providerId.trim()
+        ? { providerId: params.providerId.trim() }
+        : {}),
       model: params.model,
       systemPrompt: params.systemPrompt,
       ...(typeof params.maxOutputTokens === 'number'
@@ -300,9 +304,9 @@ export const createChatStreaming = (deps: {
     }
   };
 
-  const isProviderConfigured = (providerType: string) => {
+  const isProviderConfigured = (providerType: string, providerId?: string) => {
     try {
-      const config = llmFactory.getProviderConfig(providerType);
+      const config = llmFactory.getProviderConfig(providerType, providerId);
       return !!config.apiKey;
     } catch {
       return false;
@@ -323,6 +327,7 @@ export const createChatStreaming = (deps: {
 
   type ChatTurnOptions = {
     providerType: string;
+    providerId?: string;
     model: string;
     messages: ChatTransportMessage[];
     tools?: string[];
@@ -397,6 +402,7 @@ export const createChatStreaming = (deps: {
     persistThreadRuntimeHints({
       threadId: options.threadId ?? '',
       providerType: options.providerType,
+      providerId: options.providerId,
       model: options.model,
       tools: guardedTools,
       toolMode: mode,
@@ -437,6 +443,7 @@ export const createChatStreaming = (deps: {
       if (preparedTurn.enableTools) {
         const runner = createChatConversationRunner({
           providerType: options.providerType,
+          providerId: options.providerId,
           model: options.model,
           systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
           enableTools: true,
@@ -503,6 +510,7 @@ export const createChatStreaming = (deps: {
       // Fallback to simple LLM call
       const result = await llmFactory.generateChatWithUsage({
         providerType: options.providerType,
+        providerId: options.providerId,
         modelId: options.model,
         messages: toLlmChatMessages(preparedTurn.finalMessages),
         ...(typeof preparedTurn.maxOutputTokens === 'number'
@@ -576,6 +584,7 @@ export const createChatStreaming = (deps: {
             threadId: options.threadId,
             sessionId: uiChunkEmitter.messageId,
             providerType: options.providerType,
+            providerId: options.providerId,
             model: options.model,
             systemPrompt,
             maxOutputTokens: preparedTurn.maxOutputTokens,
@@ -586,6 +595,7 @@ export const createChatStreaming = (deps: {
 
       const runner = createChatConversationRunner({
         providerType: options.providerType,
+        providerId: options.providerId,
         model: options.model,
         systemPrompt,
         enableTools: preparedTurn.enableTools,

@@ -33,7 +33,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
 
     const history = appendUserPromptToHistory([], prompt);
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
-    const model = createModel(this.config.providerType, this.config.model);
+    const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
     const result = await generateText({
       model,
       system: systemPrompt,

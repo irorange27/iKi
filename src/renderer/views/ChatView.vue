@@ -66,6 +66,7 @@
           ref="chatInputRef"
           :thread-id="currentThread?.id || ''"
           :active-model="currentModel"
+          :active-provider-id="currentProviderId"
           :is-incognito="isIncognito"
           :selected-workspace-id="selectedWorkspaceId"
           :context-usage="composerContextUsage"
@@ -179,6 +180,7 @@ const scrollToBottom = () => {
 const {
   currentThread,
   currentModel,
+  currentProviderId,
   isIncognito,
   selectedWorkspaceId,
   selectedTools,

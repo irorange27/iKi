@@ -69,12 +69,25 @@ const toModelMessages = (messages: ChatTextMessage[]): ModelMessage[] => {
   }));
 };
 
-export const getProviderConfig = (providerType: string): ProviderConfig => {
+export const getProviderConfig = (providerType: string, providerId?: string | null): ProviderConfig => {
   const providers = getProviders();
-  const provider = providers.find(p => p.type === providerType && p.enabled);
+  const normalizedProviderId =
+    typeof providerId === 'string' && providerId.trim().length > 0 ? providerId.trim() : '';
+  const provider = normalizedProviderId
+    ? providers.find(p => p.id === normalizedProviderId && p.enabled)
+    : providers.find(p => p.type === providerType && p.enabled);
 
   if (!provider) {
+    if (normalizedProviderId) {
+      throw new Error(`Provider ${normalizedProviderId} is not configured or not enabled`);
+    }
     throw new Error(`Provider ${providerType} not configured or not enabled`);
+  }
+
+  if (providerType && provider.type !== providerType) {
+    throw new Error(
+      `Provider ${provider.id} is type "${provider.type}", not the requested "${providerType}".`
+    );
   }
 
   const models = parseModelList(provider.models);
@@ -89,8 +102,12 @@ export const getProviderConfig = (providerType: string): ProviderConfig => {
   };
 };
 
-export const createModel = (providerType: string, modelId: string): LanguageModel => {
-  const config = getProviderConfig(providerType);
+export const createModel = (
+  providerType: string,
+  modelId: string,
+  providerId?: string | null
+): LanguageModel => {
+  const config = getProviderConfig(providerType, providerId);
 
   // Validations: If no modelId, try to pick the first one from config
   if (!modelId && config.models.length > 0) {
@@ -148,8 +165,8 @@ export const createModel = (providerType: string, modelId: string): LanguageMode
   return client(modelId);
 };
 
-export const getFullSystemPrompt = (providerType: string) => {
-  getProviderConfig(providerType);
+export const getFullSystemPrompt = (providerType: string, providerId?: string | null) => {
+  getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();
   return personaPrompt;
 };
@@ -157,6 +174,7 @@ export const getFullSystemPrompt = (providerType: string) => {
 export const streamChat = async (
   options: {
     providerType: string;
+    providerId?: string;
     modelId: string;
     messages: ChatTextMessage[];
     extraSystemPrompt?: string;
@@ -173,6 +191,7 @@ export const streamChat = async (
 export const streamChatWithUsage = async (
   options: {
     providerType: string;
+    providerId?: string;
     modelId: string;
     messages: ChatTextMessage[];
     extraSystemPrompt?: string;
@@ -182,8 +201,11 @@ export const streamChatWithUsage = async (
   shouldCancel?: () => boolean,
   abortSignal?: AbortSignal
 ) => {
-  const model = createModel(options.providerType, options.modelId);
-  const systemPrompt = [getFullSystemPrompt(options.providerType), options.extraSystemPrompt]
+  const model = createModel(options.providerType, options.modelId, options.providerId);
+  const systemPrompt = [
+    getFullSystemPrompt(options.providerType, options.providerId),
+    options.extraSystemPrompt,
+  ]
     .filter(value => typeof value === 'string' && value.trim().length > 0)
     .join('\n\n');
 
@@ -224,6 +246,7 @@ export const streamChatWithUsage = async (
 
 export const generateChat = async (options: {
   providerType: string;
+  providerId?: string;
   modelId: string;
   messages: ChatTextMessage[];
   extraSystemPrompt?: string;
@@ -235,13 +258,17 @@ export const generateChat = async (options: {
 
 export const generateChatWithUsage = async (options: {
   providerType: string;
+  providerId?: string;
   modelId: string;
   messages: ChatTextMessage[];
   extraSystemPrompt?: string;
   maxOutputTokens?: number;
 }): Promise<ChatGenerationResult> => {
-  const model = createModel(options.providerType, options.modelId);
-  const systemPrompt = [getFullSystemPrompt(options.providerType), options.extraSystemPrompt]
+  const model = createModel(options.providerType, options.modelId, options.providerId);
+  const systemPrompt = [
+    getFullSystemPrompt(options.providerType, options.providerId),
+    options.extraSystemPrompt,
+  ]
     .filter(value => typeof value === 'string' && value.trim().length > 0)
     .join('\n\n');
 

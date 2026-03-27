@@ -11,6 +11,7 @@ export const AgentConfigSchema = z.object({
   enabled: z.boolean(),
   systemPrompt: z.string(),
   providerType: z.string(),
+  providerId: z.string().default(''),
   model: z.string(),
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().int().positive().default(2000),

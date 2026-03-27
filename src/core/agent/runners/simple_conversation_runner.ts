@@ -71,7 +71,7 @@ export class SimpleConversationRunner implements ConversationRunner {
   async generate(request: ConversationRunnerGenerateRequest): Promise<AgentResult> {
     validateAgentConfig(this.config);
 
-    const model = createModel(this.config.providerType, this.config.model);
+    const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
     const tools = this.buildToolSet();
     const history = this.buildTurnHistory(request.history, request.prompt);
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
@@ -151,7 +151,7 @@ export class SimpleConversationRunner implements ConversationRunner {
   ): AsyncGenerator<string, AgentResult, unknown> {
     validateAgentConfig(this.config);
 
-    const model = createModel(this.config.providerType, this.config.model);
+    const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
     const tools = this.buildToolSet();
     const history = this.buildTurnHistory(
       request.history,

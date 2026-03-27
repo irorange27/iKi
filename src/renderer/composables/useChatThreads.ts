@@ -12,6 +12,10 @@ import { createLogger } from '../logger';
 import { getCurrentLocale, translateWithLocale } from '../i18n';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
+import {
+  parseJsonRecord,
+  parseThreadLlmSelectionState,
+} from '../../shared/chat/thread_runtime_hints';
 
 export type ChatThread = StoredChatThread;
 
@@ -36,6 +40,7 @@ export const useChatThreads = (deps: {
 }) => {
   const currentThread = ref<ChatThread | null>(null);
   const currentModel = ref<string>('');
+  const currentProviderId = ref<string | null>(null);
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
   const selectedTools = ref<string[]>([]);
@@ -45,6 +50,11 @@ export const useChatThreads = (deps: {
 
   const syncIncognitoState = (thread: ChatThread | null) => {
     isIncognito.value = Boolean(thread?.is_incognito);
+  };
+
+  const syncProviderState = (thread: ChatThread | null) => {
+    const providerId = thread ? parseThreadLlmSelectionState(thread.metadata).providerId : undefined;
+    currentProviderId.value = providerId ?? null;
   };
 
   const syncWorkspaceState = (thread: ChatThread | null) => {
@@ -109,18 +119,23 @@ export const useChatThreads = (deps: {
   };
 
   const getConversationContentForTitle = (messages: ChatUiMessage[]): string => {
-    const lines: string[] = [];
+    const userLines: string[] = [];
+    const fallbackLines: string[] = [];
 
     for (const message of messages) {
       const text = extractTextFromMessage(message).trim();
       if (!text) continue;
 
-      const role =
-        message.role === 'assistant' ? 'Assistant' : message.role === 'system' ? 'System' : 'User';
-      lines.push(`${role}: ${text}`);
+      if (message.role === 'user') {
+        userLines.push(`User: ${text}`);
+        continue;
+      }
+
+      const role = message.role === 'system' ? 'System' : 'Assistant';
+      fallbackLines.push(`${role}: ${text}`);
     }
 
-    return lines.join('\n');
+    return (userLines.length > 0 ? userLines : fallbackLines).join('\n');
   };
 
   const getFallbackThreadTitle = (messages: ChatUiMessage[]): string | null => {
@@ -192,6 +207,7 @@ export const useChatThreads = (deps: {
       });
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
+      syncProviderState(thread);
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
       deps.messageStore.clear();
@@ -271,6 +287,7 @@ export const useChatThreads = (deps: {
 
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : '';
+      syncProviderState(thread);
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
       showWelcome.value = false;
@@ -297,6 +314,7 @@ export const useChatThreads = (deps: {
 
     currentThread.value = null;
     currentModel.value = '';
+    currentProviderId.value = null;
     isIncognito.value = false;
     selectedWorkspaceId.value = null;
     deps.messageStore.clear();
@@ -313,10 +331,28 @@ export const useChatThreads = (deps: {
     await createNewThread(currentModel.value);
   };
 
-  const handleModelSelected = (data: { model: string }) => {
+  const handleModelSelected = (data: { model: string; provider: { id: string; type: string } }) => {
     currentModel.value = data.model;
+    currentProviderId.value = data.provider.id;
     if (currentThread.value) {
-      deps.electronAPI.chat.threads.update(currentThread.value.id, { model: data.model });
+      const metadata = parseJsonRecord(currentThread.value.metadata);
+      const llm = isObjectRecord(metadata.llm) ? metadata.llm : {};
+      const updatedMetadata = {
+        ...metadata,
+        llm: {
+          ...llm,
+          providerType: data.provider.type,
+          providerId: data.provider.id,
+          model: data.model,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      const nextMetadata = JSON.stringify(updatedMetadata);
+      currentThread.value.metadata = nextMetadata;
+      deps.electronAPI.chat.threads.update(currentThread.value.id, {
+        model: data.model,
+        metadata: nextMetadata,
+      });
     }
   };
 
@@ -421,6 +457,7 @@ export const useChatThreads = (deps: {
   return {
     currentThread,
     currentModel,
+    currentProviderId,
     isIncognito,
     selectedWorkspaceId,
     selectedTools,

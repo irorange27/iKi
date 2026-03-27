@@ -42,6 +42,8 @@ describe('LlmTitleRuntime', () => {
         maxIterations: 1,
       })
     );
-    expect(generate).toHaveBeenCalledWith('conversation text');
+    expect(generate).toHaveBeenCalledWith(
+      expect.stringContaining('<transcript>\nconversation text\n</transcript>')
+    );
   });
 });

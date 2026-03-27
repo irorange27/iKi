@@ -23,6 +23,7 @@ export type PreparedMessageSend = {
 type PrepareMessageSendPayload = {
   content: string;
   model?: string;
+  providerId?: string;
   tools?: string[];
   mcpServerIds?: string[];
 };

@@ -63,6 +63,7 @@ export type ProactiveTaskInput = Omit<Partial<ProactiveTask>, 'tools'> &
 
 export type ChatInvocationOptions = {
   providerType: string;
+  providerId?: string;
   model: string;
   messages: unknown[];
   tools?: string[];
@@ -154,7 +155,7 @@ export interface ElectronApi {
   };
   chat: {
     getModels: (providerType: string) => Promise<string[]>;
-    isProviderConfigured: (providerType: string) => Promise<boolean>;
+    isProviderConfigured: (providerType: string, providerId?: string) => Promise<boolean>;
     send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stopStream: () => Promise<ChatInvocationResult>;

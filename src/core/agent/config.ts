@@ -10,7 +10,11 @@ const agentConfigLogger = createLogger({ module: 'agent_config' });
 export function getConversationRunnerConfig(): AgentConfig | null {
   try {
     const appConfig = getAppConfig();
-    return appConfig?.agent || null;
+    if (!appConfig?.agent) return null;
+    return {
+      ...appConfig.agent,
+      providerId: '',
+    };
   } catch (error) {
     agentConfigLogger.error('Failed to get agent config', error);
     return null;

@@ -151,6 +151,7 @@ const mountChatInput = async (options?: {
   prepareMessageSend?: (payload: {
     content: string;
     model?: string;
+    providerId?: string;
     tools?: string[];
     mcpServerIds?: string[];
   }) => Promise<
@@ -169,6 +170,7 @@ const mountChatInput = async (options?: {
   const prepareMessageSend = vi.fn(async (payload: {
     content: string;
     model?: string;
+    providerId?: string;
     tools?: string[];
     mcpServerIds?: string[];
   }) => {
@@ -304,12 +306,14 @@ describe('ChatInput', () => {
       expect.objectContaining({
         content: 'Use the saved model',
         model: 'gpt-4o',
+        providerId: 'openai',
       })
     );
 
     expect(stream).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
+        providerId: 'openai',
         model: 'gpt-4o',
       })
     );
@@ -388,6 +392,7 @@ describe('ChatInput', () => {
       expect.objectContaining({
         content: 'Need help with the repo',
         model: 'gpt-4.1',
+        providerId: 'openai',
         tools: [],
         mcpServerIds: [],
       })
@@ -397,6 +402,7 @@ describe('ChatInput', () => {
     expect(stream).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
+        providerId: 'openai',
         model: 'gpt-4.1',
         tools: undefined,
         mcpServerIds: [],

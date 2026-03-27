@@ -54,6 +54,7 @@ describe('ai_sdk_runtime', () => {
       buildPromptContext(
         {
           providerType: 'openai',
+          providerId: '',
           systemPrompt: 'runtime system',
         },
         history
@@ -143,6 +144,7 @@ describe('ai_sdk_runtime', () => {
       ...getDefaultAgentConfig(),
       enabled: true,
       providerType: 'openai',
+      providerId: '',
       model: 'gpt-4o-mini',
       systemPrompt: 'runtime prompt',
       enableTools: false,
@@ -170,6 +172,7 @@ describe('ai_sdk_runtime', () => {
     expect(loadAgentConfig()).toEqual({
       enabled: true,
       providerType: 'deepseek',
+      providerId: '',
       model: 'deepseek-chat',
       systemPrompt: 'stored prompt',
       temperature: 0.3,

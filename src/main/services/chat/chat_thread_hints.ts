@@ -12,6 +12,7 @@ const chatThreadHintsLogger = createLogger({ module: 'chat_thread_hints' });
 export const persistThreadRuntimeHints = (params: {
   threadId: string;
   providerType: string;
+  providerId?: string;
   model: string;
   tools: string[];
   toolMode: 'manual' | 'auto';
@@ -32,6 +33,7 @@ export const persistThreadRuntimeHints = (params: {
         buildThreadRuntimeMetadata({
           existingMetadata: thread?.metadata,
           providerType: params.providerType,
+          providerId: params.providerId,
           model: params.model,
           toolMode: params.toolMode,
           mcpServerIds: params.mcpServerIds,
