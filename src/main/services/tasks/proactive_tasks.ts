@@ -11,6 +11,7 @@ import {
   type ProactiveTask,
 } from '../../../shared/types/tasks';
 import { createPrefixedId } from '../../../shared/utils/id';
+import { toIsoNow } from '../../../shared/utils/text';
 import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
@@ -22,8 +23,6 @@ const proactiveTaskLogger = createLogger({ module: 'proactive_tasks' });
 let schedulerTimer: NodeJS.Timeout | null = null;
 let tickInFlight = false;
 const taskInFlight = new Set<string>();
-
-const nowIso = () => new Date().toISOString();
 
 const PROACTIVE_TASK_AGENT_SYSTEM_PROMPT = [
   'You are executing a scheduled proactive task for the user.',
@@ -188,7 +187,7 @@ const ensureTaskThread = async (task: {
     parent_id: null,
     depth: 0,
     message: JSON.stringify(introUiMessage),
-    timestamp: nowIso(),
+    timestamp: toIsoNow(),
     metadata: JSON.stringify({
       format: 'ai-ui-message-v1',
       source: 'proactive-task',
@@ -214,7 +213,7 @@ export const runProactiveTask = async (
   }
 
   taskInFlight.add(taskId);
-  const startedAt = nowIso();
+  const startedAt = toIsoNow();
   let threadId: string | null = null;
   tasksDb.updateProactiveTask(taskId, {
     last_status: 'running',
@@ -331,7 +330,7 @@ export const runProactiveTask = async (
 
       recordLifeRuntimeEvent({
         type: 'task-failed',
-        at: nowIso(),
+        at: toIsoNow(),
         taskId: task.id,
         threadId,
         triggerRef: options?.reason || 'schedule',
@@ -422,7 +421,7 @@ export const runProactiveTask = async (
 
       recordLifeRuntimeEvent({
         type: 'task-failed',
-        at: nowIso(),
+        at: toIsoNow(),
         taskId: task.id,
         threadId,
         triggerRef: 'bridge-delivery',
@@ -481,7 +480,7 @@ export const runProactiveTask = async (
 
     recordLifeRuntimeEvent({
       type: 'task-finished',
-      at: nowIso(),
+      at: toIsoNow(),
       taskId: task.id,
       threadId,
       triggerRef: options?.reason || 'schedule',
@@ -499,7 +498,7 @@ export const runProactiveTask = async (
     });
     recordLifeRuntimeEvent({
       type: 'task-failed',
-      at: nowIso(),
+      at: toIsoNow(),
       taskId: task.id,
       threadId,
       triggerRef: options?.reason || 'schedule',
@@ -514,7 +513,7 @@ const tick = async () => {
   if (tickInFlight) return;
   tickInFlight = true;
   try {
-    const due = tasksDb.listDueProactiveTasks(nowIso());
+    const due = tasksDb.listDueProactiveTasks(toIsoNow());
     for (const task of due) {
       if (!task.enabled) continue;
       // Avoid overlap between scheduler ticks.

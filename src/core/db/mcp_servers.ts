@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import type { McpServer, McpServerInput, McpServerUpdate } from '../../shared/types/mcp';
+import { toIsoNow } from '../../shared/utils/text';
 
 type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'headers' | 'env'> & {
   enabled: number | boolean;
@@ -8,8 +9,6 @@ type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'hea
   headers?: string | null;
   env?: string | null;
 };
-
-const nowIso = () => new Date().toISOString();
 
 const toStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -77,7 +76,7 @@ export const getMcpServer = (id: string): McpServer | null => {
 };
 
 export const addMcpServer = (input: McpServerInput & { id: string }) => {
-  const now = nowIso();
+  const now = toIsoNow();
   const stmt = getDb().prepare(`
     INSERT INTO mcp_servers (
       id,
@@ -145,7 +144,7 @@ export const addMcpServer = (input: McpServerInput & { id: string }) => {
 };
 
 export const updateMcpServer = (id: string, updates: McpServerUpdate) => {
-  const now = nowIso();
+  const now = toIsoNow();
   const fields = Object.keys(updates)
     .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
     .map(key => `${key} = @${key}`)

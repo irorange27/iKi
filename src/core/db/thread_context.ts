@@ -1,9 +1,9 @@
 import { getDb } from './database';
 import type { ThreadContextEntry } from '../../shared/types/memory';
+import { toIsoNow } from '../../shared/utils/text';
 import { createLogger } from '../logger';
 import { CHAT_THREAD_CONTEXT_SCHEMA_SQL } from './thread_context_schema';
 
-const nowIso = () => new Date().toISOString();
 let threadContextSchemaEnsured = false;
 const threadContextLogger = createLogger({ module: 'thread_context_db' });
 
@@ -78,7 +78,7 @@ export const upsertThreadContext = (entry: {
 }) => {
   if (!entry.thread_id || !entry.summary.trim()) return null;
 
-  const now = nowIso();
+  const now = toIsoNow();
   return withThreadContextTable(() => {
     const stmt = getDb().prepare(`
       INSERT INTO chat_thread_context (

@@ -17,6 +17,7 @@ import {
 import type { AffectState } from '../../../core/emotion/affect_state';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
+import { normalizeWhitespace } from '../../../shared/utils/text';
 import type { ChatInputMessage } from './chat_types';
 import type { ChatMemory } from './chat_memory';
 import { deriveModelAwareContextConfig, type EffectiveContextConfig } from './chat_context_budget';
@@ -131,8 +132,6 @@ type SkillContext = {
   skillMode: 'manual' | 'auto';
   block: ContextReportBlock;
 };
-
-const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 const getContextConfig = (): ContextConfig => {
   const configured = getAppConfig()?.memory?.context;
@@ -308,7 +307,7 @@ const buildMemorySystemMessage = (
   const lines = results.map(entry => {
     const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
     const dateText = entry.updated_at ? new Date(entry.updated_at).toLocaleDateString() : '';
-    const summary = normalizeText(entry.summary);
+    const summary = normalizeWhitespace(entry.summary);
     return dateText ? `- (${score}, ${dateText}) ${summary}` : `- (${score}) ${summary}`;
   });
   return ['Long-term memory (use only if relevant; ignore if unrelated):', ...lines].join('\n');

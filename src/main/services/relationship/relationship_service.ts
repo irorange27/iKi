@@ -8,10 +8,8 @@ import type {
   RelationshipStateRecord,
 } from '../../../shared/types/relationship';
 import { isObjectRecord } from '../../../shared/utils/guards';
+import { normalizeWhitespace } from '../../../shared/utils/text';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
-
-const normalizeText = (value: unknown): string =>
-  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
 
 const parseJsonObject = (value: string | null | undefined): Record<string, unknown> => {
   if (!value?.trim()) return {};
@@ -30,7 +28,7 @@ const parseJsonStringArray = (value: string | null | undefined): string[] => {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => normalizeText(entry))
+      .map(entry => normalizeWhitespace(entry))
       .filter(Boolean);
   } catch {
     return [];
@@ -40,9 +38,9 @@ const parseJsonStringArray = (value: string | null | undefined): string[] => {
 const getOwnerBaseline = (): RelationshipOwnerBaseline => {
   const profile = getOrCreateActiveIdentityProfile();
   return {
-    owner_label: normalizeText(profile?.owner_name) || 'the user',
+    owner_label: normalizeWhitespace(profile?.owner_name) || 'the user',
     relationship_to_owner:
-      normalizeText(profile?.relationship_to_owner) || 'trusted personal AI companion',
+      normalizeWhitespace(profile?.relationship_to_owner) || 'trusted personal AI companion',
   };
 };
 
@@ -56,8 +54,8 @@ type ParsedThreadFacts = {
 
 const parseThreadFacts = (thread: ChatThread): ParsedThreadFacts => {
   const metadata = parseJsonObject(thread.metadata);
-  const source = normalizeText(metadata.source);
-  const messageType = normalizeText(metadata.message_type);
+  const source = normalizeWhitespace(metadata.source);
+  const messageType = normalizeWhitespace(metadata.message_type);
   const userId =
     typeof metadata.user_id === 'string' || typeof metadata.user_id === 'number'
       ? String(metadata.user_id).trim()
@@ -70,7 +68,7 @@ const parseThreadFacts = (thread: ChatThread): ParsedThreadFacts => {
   if (source === 'napcat' && messageType === 'private') {
     return {
       sourceKind: 'napcat-private',
-      subjectLabel: normalizeText(thread.title) || `QQ User ${userId || thread.id}`,
+      subjectLabel: normalizeWhitespace(thread.title) || `QQ User ${userId || thread.id}`,
       relationshipSummary:
         'QQ private thread. Treat it as a direct external conversation, but do not assume the sender is the owner unless that is explicitly established.',
       preferredAddress: 'Keep replies concise and direct in a one-to-one chat style.',
@@ -86,7 +84,7 @@ const parseThreadFacts = (thread: ChatThread): ParsedThreadFacts => {
   if (source === 'napcat' && messageType === 'group') {
     return {
       sourceKind: 'napcat-group',
-      subjectLabel: normalizeText(thread.title) || `QQ Group ${groupId || thread.id}`,
+      subjectLabel: normalizeWhitespace(thread.title) || `QQ Group ${groupId || thread.id}`,
       relationshipSummary:
         'QQ group thread. Treat it as shared group context rather than a one-to-one owner conversation, and avoid over-personal assumptions about any single participant.',
       preferredAddress: 'Address the group context briefly and avoid assuming shared private context.',
@@ -99,10 +97,10 @@ const parseThreadFacts = (thread: ChatThread): ParsedThreadFacts => {
     };
   }
 
-  if (normalizeText(thread.client_id)) {
+  if (normalizeWhitespace(thread.client_id)) {
     return {
       sourceKind: 'external-client-thread',
-      subjectLabel: normalizeText(thread.title) || thread.id,
+      subjectLabel: normalizeWhitespace(thread.title) || thread.id,
       relationshipSummary:
         'External client thread. Treat it as a distinct access layer and avoid assuming it is a direct owner conversation unless persisted relationship state says so.',
       preferredAddress: '',
@@ -115,7 +113,7 @@ const parseThreadFacts = (thread: ChatThread): ParsedThreadFacts => {
 
   return {
     sourceKind: 'desktop-owner-thread',
-    subjectLabel: normalizeText(thread.title) || 'Desktop thread',
+    subjectLabel: normalizeWhitespace(thread.title) || 'Desktop thread',
     relationshipSummary:
       'Desktop-local direct conversation with the owner. This thread is the closest thing to the owner control plane unless persisted context says otherwise.',
     preferredAddress: 'Respond as a direct ongoing conversation with the owner.',
@@ -142,9 +140,10 @@ const mergeSeedWithExisting = (
   const existingMetadata = parseJsonObject(existing?.metadata);
   return {
     source_kind: seed.sourceKind,
-    subject_label: normalizeText(existing?.subject_label) || seed.subjectLabel,
-    relationship_summary: normalizeText(existing?.relationship_summary) || seed.relationshipSummary,
-    preferred_address: normalizeText(existing?.preferred_address) || seed.preferredAddress,
+    subject_label: normalizeWhitespace(existing?.subject_label) || seed.subjectLabel,
+    relationship_summary:
+      normalizeWhitespace(existing?.relationship_summary) || seed.relationshipSummary,
+    preferred_address: normalizeWhitespace(existing?.preferred_address) || seed.preferredAddress,
     boundaries_json: existing?.boundaries_json ?? null,
     notes_json: existing?.notes_json ?? null,
     metadata: JSON.stringify({
@@ -156,7 +155,7 @@ const mergeSeedWithExisting = (
 };
 
 export const ensureThreadRelationshipState = (threadId: string): RelationshipStateRecord | null => {
-  const normalizedThreadId = normalizeText(threadId);
+  const normalizedThreadId = normalizeWhitespace(threadId);
   if (!normalizedThreadId) return null;
 
   const profile = getOrCreateActiveIdentityProfile();
@@ -204,7 +203,7 @@ export const touchThreadRelationshipState = (
     boundaries_json: existing.boundaries_json,
     notes_json: existing.notes_json,
     metadata: existing.metadata,
-    last_interaction_at: normalizeText(atIso) || new Date().toISOString(),
+    last_interaction_at: normalizeWhitespace(atIso) || new Date().toISOString(),
   });
 };
 
@@ -224,7 +223,7 @@ export const getRelationshipOverview = (limit = 8): RelationshipOverview => ({
 });
 
 export const getRelationshipContextMessage = (threadId?: string): string => {
-  const normalizedThreadId = normalizeText(threadId);
+  const normalizedThreadId = normalizeWhitespace(threadId);
   if (!normalizedThreadId) return '';
 
   const owner = getOwnerBaseline();

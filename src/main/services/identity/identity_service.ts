@@ -3,9 +3,8 @@ import {
   getActiveIdentityProfile,
 } from '../../../core/db/identity';
 import type { IdentityProfile } from '../../../shared/types/identity';
+import { normalizeWhitespace } from '../../../shared/utils/text';
 import { getIdentityBrainContextMessage } from './identity_brain';
-
-const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 const parseStringArray = (value: string | null | undefined): string[] => {
   if (!value || !value.trim()) return [];
@@ -14,7 +13,7 @@ const parseStringArray = (value: string | null | undefined): string[] => {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => normalizeText(entry))
+      .map(entry => normalizeWhitespace(entry))
       .filter(Boolean);
   } catch {
     return [];
@@ -59,18 +58,18 @@ export const buildIdentitySystemMessage = (profile: IdentityProfile): string => 
   const boundaries = parseStringArray(profile.boundaries);
   const sections = [
     'Identity profile for iKi:',
-    `- Name: ${normalizeText(profile.name || 'iKi')}`,
-    `- Core role: ${normalizeText(profile.self_description || DEFAULT_IDENTITY_PROFILE.self_description)}`,
-    `- Relationship to owner: ${normalizeText(profile.relationship_to_owner || DEFAULT_IDENTITY_PROFILE.relationship_to_owner)}`,
+    `- Name: ${normalizeWhitespace(profile.name || 'iKi')}`,
+    `- Core role: ${normalizeWhitespace(profile.self_description || DEFAULT_IDENTITY_PROFILE.self_description)}`,
+    `- Relationship to owner: ${normalizeWhitespace(profile.relationship_to_owner || DEFAULT_IDENTITY_PROFILE.relationship_to_owner)}`,
     ...(profile.owner_name.trim()
-      ? [`- Owner label: ${normalizeText(profile.owner_name)}`]
+      ? [`- Owner label: ${normalizeWhitespace(profile.owner_name)}`]
       : []),
     ...(values.length > 0 ? ['- Core values:', ...values.map(value => `  - ${value}`)] : []),
     ...(boundaries.length > 0
       ? ['- Boundaries:', ...boundaries.map(value => `  - ${value}`)]
       : []),
     ...(profile.tone_guidance.trim()
-      ? [`- Tone guidance: ${normalizeText(profile.tone_guidance)}`]
+      ? [`- Tone guidance: ${normalizeWhitespace(profile.tone_guidance)}`]
       : []),
   ];
 

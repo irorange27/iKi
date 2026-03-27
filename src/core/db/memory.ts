@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { getAppConfig } from '../config';
 import { createPrefixedId } from '../../shared/utils/id';
+import { toIsoNow } from '../../shared/utils/text';
 
 export type ShortMemoryEntry = {
   id: string;
@@ -31,8 +32,6 @@ export type LongMemorySearchResult = LongMemoryEntry & { score: number };
 
 const EMBEDDING_DIM = 128;
 const SHORT_MEMORY_LIMIT = 200;
-
-const nowIso = () => new Date().toISOString();
 
 const isMemoryEnabled = (): boolean => {
   const appConfig = getAppConfig();
@@ -137,7 +136,7 @@ export const addShortMemory = (
   if (!entry.content || !entry.content.trim()) return null;
   if (!isMemoryEnabled() && !options?.force) return null;
 
-  const now = nowIso();
+  const now = toIsoNow();
   const stmt = getDb().prepare(`
     INSERT INTO memory_short (
       id, thread_id, message_id, role, content, emotion, importance, created_at, updated_at
@@ -276,7 +275,7 @@ export const addLongMemory = (
   if (!entry.thread_id || !entry.summary || !entry.summary.trim()) return null;
   if (!isMemoryEnabled() && !options?.force) return null;
 
-  const now = nowIso();
+  const now = toIsoNow();
   const embedding = JSON.stringify(textToEmbedding(entry.summary));
   const stmt = getDb().prepare(`
     INSERT INTO memory_long (
@@ -350,7 +349,7 @@ export const listLongMemoryAcrossThreads = (
 
 export const updateLongMemory = (id: string, updates: Partial<LongMemoryEntry>) => {
   if (!id) return null;
-  const now = nowIso();
+  const now = toIsoNow();
   const fields = Object.keys(updates)
     .filter(key => key !== 'id' && key !== 'created_at')
     .map(key => `${key} = @${key}`)

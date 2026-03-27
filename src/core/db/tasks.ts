@@ -1,12 +1,11 @@
 import { getDb } from './database';
 import { inferProactiveTaskToolMode, type ProactiveTask } from '../../shared/types/tasks';
+import { toIsoNow } from '../../shared/utils/text';
 
 type ProactiveTaskRow = Omit<ProactiveTask, 'enabled' | 'notify'> & {
   enabled: number | boolean;
   notify: number | boolean;
 };
-
-const nowIso = () => new Date().toISOString();
 
 const normalizeRow = (row: ProactiveTaskRow): ProactiveTask => ({
   ...row,
@@ -53,7 +52,7 @@ export const addProactiveTask = (
     model: string;
   }
 ) => {
-  const now = nowIso();
+  const now = toIsoNow();
   const intervalMinutes =
     typeof task.interval_minutes === 'number' ? Math.trunc(task.interval_minutes) : 60;
   const nextRunAt =
@@ -136,7 +135,7 @@ export const addProactiveTask = (
 };
 
 export const updateProactiveTask = (id: string, updates: Partial<ProactiveTask>) => {
-  const now = nowIso();
+  const now = toIsoNow();
   const fields = Object.keys(updates)
     .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
     .map(key => `${key} = @${key}`)

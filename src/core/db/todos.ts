@@ -7,6 +7,11 @@ import type {
   TodoListSummary,
 } from '../../shared/types/todos';
 import { createPrefixedId } from '../../shared/utils/id';
+import {
+  normalizeOptionalWhitespace,
+  normalizeWhitespace,
+  toIsoNow,
+} from '../../shared/utils/text';
 
 type TodoListRow = {
   id: string;
@@ -26,17 +31,7 @@ type TodoItemRow = Omit<TodoItem, 'status'> & {
 const DEFAULT_TODO_LIST_LIMIT = 20;
 const MAX_TODO_LIST_LIMIT = 100;
 
-const nowIso = () => new Date().toISOString();
-
-const normalizeText = (value: unknown): string =>
-  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
-
-const normalizeOptionalText = (value: unknown): string | null => {
-  const normalized = normalizeText(value);
-  return normalized ? normalized : null;
-};
-
-const normalizeTitleKey = (title: string): string => normalizeText(title).toLowerCase();
+const normalizeTitleKey = (title: string): string => normalizeWhitespace(title).toLowerCase();
 
 const normalizeStatus = (value: unknown): TodoItemStatus =>
   value === 'completed' ? 'completed' : 'pending';
@@ -116,18 +111,18 @@ const getTodoListSummaryByClause = (
 
 const normalizeDraftItems = (items: TodoListItemDraft[]): TodoListItemDraft[] =>
   items.map(item => ({
-    content: normalizeText(item.content),
-    notes: normalizeOptionalText(item.notes),
+    content: normalizeWhitespace(item.content),
+    notes: normalizeOptionalWhitespace(item.notes),
     completed: Boolean(item.completed),
   }));
 
 const resolveExistingTodoList = (params: { id?: string | null; title?: string | null }) => {
-  const id = normalizeText(params.id);
+  const id = normalizeWhitespace(params.id);
   if (id) {
     return getTodoListSummaryByClause('WHERE l.id = @id', { id });
   }
 
-  const title = normalizeText(params.title);
+  const title = normalizeWhitespace(params.title);
   if (title) {
     return getTodoListSummaryByClause('WHERE l.title_key = @titleKey', {
       titleKey: normalizeTitleKey(title),
@@ -178,7 +173,7 @@ const insertTodoItems = (listId: string, items: TodoListItemDraft[], timestamp: 
 };
 
 export const listTodoLists = (options?: { query?: string; limit?: number }): TodoListSummary[] => {
-  const query = normalizeText(options?.query);
+  const query = normalizeWhitespace(options?.query);
   const limit = clampLimit(options?.limit);
 
   const rows = getDb()
@@ -227,9 +222,9 @@ export const writeTodoList = (input: {
   summary?: string | null;
   items?: TodoListItemDraft[];
 }): { action: 'created' | 'updated'; list: TodoList } => {
-  const normalizedId = normalizeText(input.id);
-  const normalizedTitle = normalizeText(input.title);
-  const summary = normalizeOptionalText(input.summary);
+  const normalizedId = normalizeWhitespace(input.id);
+  const normalizedTitle = normalizeWhitespace(input.title);
+  const summary = normalizeOptionalWhitespace(input.summary);
   const items = normalizeDraftItems(Array.isArray(input.items) ? input.items : []);
 
   if (!normalizedId && !normalizedTitle) {
@@ -243,7 +238,7 @@ export const writeTodoList = (input: {
     id: normalizedId || null,
     title: normalizedTitle || null,
   });
-  const timestamp = nowIso();
+  const timestamp = toIsoNow();
   const nextTitle = normalizedTitle || existing?.title || '';
   const nextTitleKey = normalizeTitleKey(nextTitle);
 

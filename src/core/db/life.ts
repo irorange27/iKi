@@ -6,8 +6,7 @@ import type {
   LifeStateRecord,
 } from '../../shared/types/life';
 import { createPrefixedId } from '../../shared/utils/id';
-
-const nowIso = () => new Date().toISOString();
+import { toIsoNow } from '../../shared/utils/text';
 
 const clampUnit = (value: unknown, fallback: number): number => {
   const parsed = Number(value);
@@ -55,7 +54,7 @@ export const upsertLifeState = (
 ): LifeStateRecord => {
   const profileId = entry.profile_id.trim();
   const existing = getLifeState(profileId);
-  const timestamp = nowIso();
+  const timestamp = toIsoNow();
   const id = existing?.id || entry.id?.trim() || createPrefixedId('life');
   const createdAt = existing?.created_at || entry.created_at || timestamp;
 
@@ -184,7 +183,7 @@ export const addLifeEpisode = (
     transition_reason: string;
   }
 ): LifeEpisodeRecord => {
-  const timestamp = nowIso();
+  const timestamp = toIsoNow();
   const id = entry.id?.trim() || createPrefixedId('episode');
 
   getDb()
@@ -272,6 +271,6 @@ export const updateLifeEpisode = (id: string, updates: Partial<LifeEpisodeRecord
     .run({
       ...updates,
       id,
-      updated_at: nowIso(),
+      updated_at: toIsoNow(),
     });
 };

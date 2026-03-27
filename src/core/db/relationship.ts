@@ -5,8 +5,11 @@ import type {
   RelationshipStateRecord,
 } from '../../shared/types/relationship';
 import { createPrefixedId } from '../../shared/utils/id';
-
-const nowIso = () => new Date().toISOString();
+import {
+  normalizeOptionalWhitespace,
+  normalizeWhitespace,
+  toIsoNow,
+} from '../../shared/utils/text';
 
 const normalizeScopeType = (value: unknown): RelationshipScopeType =>
   value === 'thread' ? 'thread' : 'thread';
@@ -24,14 +27,6 @@ const normalizeSourceKind = (value: unknown): RelationshipSourceKind => {
   return 'unknown-thread';
 };
 
-const normalizeText = (value: unknown): string =>
-  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
-
-const normalizeOptionalText = (value: unknown): string | null => {
-  const normalized = normalizeText(value);
-  return normalized || null;
-};
-
 const normalizeRow = (
   row: RelationshipStateRecord | null | undefined
 ): RelationshipStateRecord | null => {
@@ -40,13 +35,13 @@ const normalizeRow = (
     ...row,
     scope_type: normalizeScopeType(row.scope_type),
     source_kind: normalizeSourceKind(row.source_kind),
-    subject_label: normalizeText(row.subject_label),
-    relationship_summary: normalizeText(row.relationship_summary),
-    preferred_address: normalizeText(row.preferred_address),
-    boundaries_json: normalizeOptionalText(row.boundaries_json),
-    notes_json: normalizeOptionalText(row.notes_json),
-    metadata: normalizeOptionalText(row.metadata),
-    last_interaction_at: normalizeOptionalText(row.last_interaction_at),
+    subject_label: normalizeWhitespace(row.subject_label),
+    relationship_summary: normalizeWhitespace(row.relationship_summary),
+    preferred_address: normalizeWhitespace(row.preferred_address),
+    boundaries_json: normalizeOptionalWhitespace(row.boundaries_json),
+    notes_json: normalizeOptionalWhitespace(row.notes_json),
+    metadata: normalizeOptionalWhitespace(row.metadata),
+    last_interaction_at: normalizeOptionalWhitespace(row.last_interaction_at),
   };
 };
 
@@ -55,8 +50,8 @@ export const getRelationshipState = (
   scopeType: RelationshipScopeType,
   scopeId: string
 ): RelationshipStateRecord | null => {
-  const normalizedProfileId = normalizeText(profileId);
-  const normalizedScopeId = normalizeText(scopeId);
+  const normalizedProfileId = normalizeWhitespace(profileId);
+  const normalizedScopeId = normalizeWhitespace(scopeId);
   if (!normalizedProfileId || !normalizedScopeId) return null;
 
   const row = getDb()
@@ -77,7 +72,7 @@ export const listRelationshipStates = (params: {
   scopeType?: RelationshipScopeType;
   limit?: number;
 }): RelationshipStateRecord[] => {
-  const normalizedProfileId = normalizeText(params.profileId);
+  const normalizedProfileId = normalizeWhitespace(params.profileId);
   if (!normalizedProfileId) return [];
 
   const normalizedLimit = Number.isFinite(params.limit)
@@ -118,15 +113,15 @@ export const upsertRelationshipState = (
     source_kind: RelationshipSourceKind;
   }
 ): RelationshipStateRecord => {
-  const profileId = normalizeText(entry.profile_id);
-  const scopeId = normalizeText(entry.scope_id);
+  const profileId = normalizeWhitespace(entry.profile_id);
+  const scopeId = normalizeWhitespace(entry.scope_id);
   if (!profileId || !scopeId) {
     throw new Error('profile_id and scope_id are required');
   }
 
   const existing = getRelationshipState(profileId, entry.scope_type, scopeId);
-  const timestamp = nowIso();
-  const id = existing?.id || normalizeText(entry.id) || createPrefixedId('relationship');
+  const timestamp = toIsoNow();
+  const id = existing?.id || normalizeWhitespace(entry.id) || createPrefixedId('relationship');
   const createdAt = existing?.created_at || entry.created_at || timestamp;
 
   getDb()
@@ -181,13 +176,13 @@ export const upsertRelationshipState = (
       scope_type: entry.scope_type,
       scope_id: scopeId,
       source_kind: normalizeSourceKind(entry.source_kind),
-      subject_label: normalizeText(entry.subject_label),
-      relationship_summary: normalizeText(entry.relationship_summary),
-      preferred_address: normalizeText(entry.preferred_address),
-      boundaries_json: normalizeOptionalText(entry.boundaries_json),
-      notes_json: normalizeOptionalText(entry.notes_json),
-      metadata: normalizeOptionalText(entry.metadata),
-      last_interaction_at: normalizeOptionalText(entry.last_interaction_at),
+      subject_label: normalizeWhitespace(entry.subject_label),
+      relationship_summary: normalizeWhitespace(entry.relationship_summary),
+      preferred_address: normalizeWhitespace(entry.preferred_address),
+      boundaries_json: normalizeOptionalWhitespace(entry.boundaries_json),
+      notes_json: normalizeOptionalWhitespace(entry.notes_json),
+      metadata: normalizeOptionalWhitespace(entry.metadata),
+      last_interaction_at: normalizeOptionalWhitespace(entry.last_interaction_at),
       created_at: createdAt,
       updated_at: timestamp,
     });

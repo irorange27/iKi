@@ -1,8 +1,7 @@
 import { getDb } from './database';
 import type { IdentityProfile } from '../../shared/types/identity';
 import { createPrefixedId } from '../../shared/utils/id';
-
-const nowIso = () => new Date().toISOString();
+import { toIsoNow } from '../../shared/utils/text';
 
 const toJsonString = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
@@ -75,7 +74,7 @@ export const addIdentityProfile = (entry: {
   if (!name) return null;
 
   const id = entry.id?.trim() || createPrefixedId('identity');
-  const now = nowIso();
+  const now = toIsoNow();
   const active = normalizeActive(entry.active);
 
   const insert = getDb().transaction(() => {
@@ -136,7 +135,7 @@ export const setActiveIdentityProfile = (id: string): IdentityProfile | null => 
       )
       .run({
         id: normalizedId,
-        updated_at: nowIso(),
+        updated_at: toIsoNow(),
       });
     return getIdentityProfile(normalizedId);
   });

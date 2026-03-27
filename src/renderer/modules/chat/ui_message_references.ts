@@ -2,6 +2,7 @@ import type { UIMessage } from 'ai';
 import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
 import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
 import type { AppConfig } from '../../../shared/types/config';
+import { normalizeWhitespace } from '../../../shared/utils/text';
 import { translate } from '../../i18n';
 
 import {
@@ -114,13 +115,11 @@ type ContextBudgetConfig = Pick<
 const getMessageParts = (message: unknown): unknown[] =>
   isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
 
-const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim();
-
 const parseStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
       .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => normalizeText(entry))
+      .map(entry => normalizeWhitespace(entry))
       .filter(Boolean);
   }
 
@@ -130,11 +129,11 @@ const parseStringArray = (value: unknown): string[] => {
       if (Array.isArray(parsed)) {
         return parsed
           .filter((entry): entry is string => typeof entry === 'string')
-          .map(entry => normalizeText(entry))
+          .map(entry => normalizeWhitespace(entry))
           .filter(Boolean);
       }
     } catch {
-      return [normalizeText(value)];
+      return [normalizeWhitespace(value)];
     }
   }
 
@@ -208,8 +207,9 @@ const normalizeSkillItems = (rawSkills: unknown): SkillReferenceItem[] => {
     )
     .map(entry => ({
       id: entry.id.trim(),
-      name: normalizeText(entry.name),
-      description: typeof entry.description === 'string' ? normalizeText(entry.description) : '',
+      name: normalizeWhitespace(entry.name),
+      description:
+        typeof entry.description === 'string' ? normalizeWhitespace(entry.description) : '',
       source: normalizeSkillSource(entry.source),
       sourceLabel: formatSkillSourceLabel(entry.source),
     }))
@@ -232,7 +232,7 @@ export const getToolReferenceSummary = (message: UIMessage | unknown): ToolRefer
     if (!isToolPart(part)) continue;
 
     const toolCallId = getToolCallIdFromPart(part);
-    const toolName = normalizeText(getToolName(part));
+    const toolName = normalizeWhitespace(getToolName(part));
     if (toolName && normalizeToolNameKey(toolName) === 'load_skill') {
       continue;
     }
@@ -301,7 +301,7 @@ export const getSkillReferenceSummary = (message: UIMessage | unknown): SkillRef
 
     const output = parsedOutput.output;
     const id = typeof output.id === 'string' ? output.id.trim() : '';
-    const name = typeof output.name === 'string' ? normalizeText(output.name) : '';
+    const name = typeof output.name === 'string' ? normalizeWhitespace(output.name) : '';
     if (!id || !name || loadedById.has(id)) continue;
 
     const selected = selectedById.get(id);
@@ -347,7 +347,7 @@ export const getMemoryReferenceSummary = (message: UIMessage | unknown): MemoryR
     )
     .map(entry => ({
       ...(typeof entry.id === 'string' && entry.id.trim() ? { id: entry.id.trim() } : {}),
-      summary: normalizeText(entry.summary as string),
+      summary: normalizeWhitespace(entry.summary as string),
       score: toScore(entry.score),
       updatedAt: typeof entry.updated_at === 'string' ? entry.updated_at : '',
       tags: parseStringArray(entry.tags),
@@ -355,7 +355,7 @@ export const getMemoryReferenceSummary = (message: UIMessage | unknown): MemoryR
     }));
 
   return {
-    query: typeof memoryPart.query === 'string' ? normalizeText(memoryPart.query) : '',
+    query: typeof memoryPart.query === 'string' ? normalizeWhitespace(memoryPart.query) : '',
     items,
   };
 };
@@ -418,11 +418,11 @@ export const getContextReferenceSummary = (
         isObjectRecord(entry) && typeof entry.kind === 'string' && typeof entry.status === 'string'
     )
     .map(entry => ({
-      kind: normalizeText(entry.kind),
-      status: normalizeText(entry.status),
+      kind: normalizeWhitespace(entry.kind),
+      status: normalizeWhitespace(entry.status),
       estimatedTokens: toScore(entry.estimatedTokens),
       charCount: toScore(entry.charCount),
-      reason: typeof entry.reason === 'string' ? normalizeText(entry.reason) : '',
+      reason: typeof entry.reason === 'string' ? normalizeWhitespace(entry.reason) : '',
       sourceCount: toScore(entry.sourceCount),
     }));
 

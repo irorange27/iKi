@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { toIsoNow } from '../../shared/utils/text';
 
 export type AffectStateEntry = {
   thread_id: string;
@@ -6,8 +7,6 @@ export type AffectStateEntry = {
   created_at: string;
   updated_at: string;
 };
-
-const nowIso = () => new Date().toISOString();
 
 const serializeState = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
@@ -27,7 +26,7 @@ export const upsertAffectState = (threadId: string, state: unknown) => {
   const serialized = serializeState(state);
   if (!serialized) return null;
 
-  const now = nowIso();
+  const now = toIsoNow();
   const stmt = getDb().prepare(`
     INSERT INTO affect_states (
       thread_id, state, created_at, updated_at

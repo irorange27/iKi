@@ -1,5 +1,6 @@
 import type { ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/utils/guards';
+import { normalizeWhitespace } from '../../../shared/utils/text';
 
 export type ThreadOriginInfo = {
   isExternal: boolean;
@@ -8,13 +9,10 @@ export type ThreadOriginInfo = {
   channelLabel: string | null;
 };
 
-const normalizeText = (value: unknown): string =>
-  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
-
 export const parseThreadMetadata = (
   metadataRaw: string | null | undefined
 ): Record<string, unknown> => {
-  const metadata = normalizeText(metadataRaw);
+  const metadata = normalizeWhitespace(metadataRaw);
   if (!metadata) return {};
 
   try {
@@ -45,11 +43,11 @@ const inferNapCatMessageType = (
 export const getThreadOriginInfo = (
   thread: Pick<ChatThread, 'id' | 'client_id' | 'metadata'>
 ): ThreadOriginInfo => {
-  const threadId = normalizeText(thread.id);
-  const clientId = normalizeText(thread.client_id);
+  const threadId = normalizeWhitespace(thread.id);
+  const clientId = normalizeWhitespace(thread.client_id);
   const metadata = parseThreadMetadata(thread.metadata);
-  const source = normalizeText(metadata.source).toLowerCase();
-  const messageType = normalizeText(metadata.message_type).toLowerCase();
+  const source = normalizeWhitespace(metadata.source).toLowerCase();
+  const messageType = normalizeWhitespace(metadata.message_type).toLowerCase();
 
   const isNapCatThread =
     source === 'napcat' || clientId === 'client_napcat' || threadId.startsWith('napcat_');

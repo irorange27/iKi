@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { getDb } from './database';
 import { createPrefixedId } from '../../shared/utils/id';
+import { toIsoNow } from '../../shared/utils/text';
 
 type AppClientRow = {
   id: string;
@@ -30,8 +31,6 @@ export type CreateAppClientInput = {
   allowedTools?: string[];
   id?: string;
 };
-
-const nowIso = () => new Date().toISOString();
 
 const toStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -74,7 +73,7 @@ const generateToken = (): string => `iki_${randomBytes(24).toString('hex')}`;
 export const createAppClient = (input: CreateAppClientInput) => {
   const token = generateToken();
   const tokenHash = hashToken(token);
-  const now = nowIso();
+  const now = toIsoNow();
   const id =
     typeof input.id === 'string' && input.id.trim()
       ? input.id.trim()
@@ -129,7 +128,7 @@ export const getAppClientByToken = (token: string): AppClient | null => {
 };
 
 export const touchAppClient = (id: string) => {
-  const now = nowIso();
+  const now = toIsoNow();
   return getDb()
     .prepare('UPDATE app_clients SET last_seen = ?, updated_at = ? WHERE id = ?')
     .run(now, now, id);

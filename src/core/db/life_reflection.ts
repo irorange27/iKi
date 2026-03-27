@@ -4,8 +4,7 @@ import type {
   LifeReflectionRecord,
 } from '../../shared/types/life';
 import { createPrefixedId } from '../../shared/utils/id';
-
-const nowIso = () => new Date().toISOString();
+import { toIsoNow } from '../../shared/utils/text';
 
 export const getLifeReflection = (
   profileId: string,
@@ -126,7 +125,7 @@ export const addLifeReflection = (entry: {
   plan_json?: string | null;
 }): LifeReflectionRecord => {
   const id = entry.id?.trim() || createPrefixedId('reflection');
-  const createdAt = nowIso();
+  const createdAt = toIsoNow();
 
   getDb()
     .prepare(

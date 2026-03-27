@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import type { WorkflowProfile } from '../../shared/types/workflow';
+import { toIsoNow } from '../../shared/utils/text';
 
 type WorkflowProfileRow = {
   thread_id: string;
@@ -7,8 +8,6 @@ type WorkflowProfileRow = {
   created_at: string;
   updated_at: string;
 };
-
-const nowIso = (): string => new Date().toISOString();
 
 const parseProfile = (raw: string): WorkflowProfile | null => {
   if (!raw || typeof raw !== 'string') return null;
@@ -30,7 +29,7 @@ export const getWorkflowProfile = (threadId: string): WorkflowProfile | null => 
 };
 
 export const upsertWorkflowProfile = (threadId: string, profile: WorkflowProfile): void => {
-  const now = nowIso();
+  const now = toIsoNow();
   const stmt = getDb().prepare(`
     INSERT INTO workflow_profiles (thread_id, profile, created_at, updated_at)
     VALUES (@thread_id, @profile, @created_at, @updated_at)

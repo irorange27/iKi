@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import { createPrefixedId } from '../../shared/utils/id';
+import { toIsoNow } from '../../shared/utils/text';
 
 export type EmotionEventEntry = {
   id: string;
@@ -12,8 +13,6 @@ export type EmotionEventEntry = {
 };
 
 const EMOTION_EVENT_LIMIT = 200;
-
-const nowIso = () => new Date().toISOString();
 
 const serializeEmotion = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
@@ -39,7 +38,7 @@ export const addEmotionEvent = (entry: {
   const emotion = serializeEmotion(entry.emotion);
   if (!emotion) return null;
 
-  const now = nowIso();
+  const now = toIsoNow();
   const stmt = getDb().prepare(`
     INSERT INTO emotion_events (
       id, thread_id, message_id, role, emotion, created_at, updated_at

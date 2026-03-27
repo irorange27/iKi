@@ -1,18 +1,18 @@
 import { CronExpressionParser } from 'cron-parser';
 
 import type { ProactiveTaskScheduleType } from '../../../shared/types/tasks';
+import { toIsoNow } from '../../../shared/utils/text';
 import { createLogger } from '../../../core/logger';
 import { getErrorMessage } from '../../utils/errors';
 
 export const MIN_INTERVAL_MINUTES = 1;
 export const MAX_INTERVAL_MINUTES = 60 * 24 * 7; // 7 days
 
-const nowIso = () => new Date().toISOString();
 const taskScheduleLogger = createLogger({ module: 'task_schedule' });
 
 const addMinutes = (baseIso: string, minutes: number): string => {
   const base = new Date(baseIso);
-  if (Number.isNaN(base.getTime())) return nowIso();
+  if (Number.isNaN(base.getTime())) return toIsoNow();
   base.setMinutes(base.getMinutes() + minutes);
   return base.toISOString();
 };
@@ -76,7 +76,7 @@ export const validateCronExpression = (
   timezone?: string | null
 ): string | null => {
   try {
-    computeNextCronRunAt(expression, nowIso(), timezone);
+    computeNextCronRunAt(expression, toIsoNow(), timezone);
     return null;
   } catch (error) {
     return getErrorMessage(error);
