@@ -89,6 +89,8 @@ const mountSettingsView = async (options?: {
   const installUpdate = vi.fn(async () => undefined);
   const onUpdateStatusChanged = vi.fn();
   const removeUpdateStatusListeners = vi.fn();
+  const onProvidersUpdated = vi.fn();
+  const removeProviderListener = vi.fn();
 
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
@@ -102,6 +104,10 @@ const mountSettingsView = async (options?: {
       },
       providers: {
         list: providersList,
+        onUpdated: vi.fn((callback: unknown) => {
+          onProvidersUpdated(callback);
+          return removeProviderListener;
+        }),
       },
     },
   });
@@ -135,6 +141,8 @@ const mountSettingsView = async (options?: {
     getUpdateStatus,
     checkUpdates,
     installUpdate,
+    onProvidersUpdated,
+    removeProviderListener,
   };
 };
 
@@ -259,5 +267,46 @@ describe('SettingsView general custom selects', () => {
     expect(checkUpdates).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
+  });
+
+  it('reloads provider-backed selects after a provider update broadcast', async () => {
+    const { wrapper, providersList, onProvidersUpdated, removeProviderListener } =
+      await mountSettingsView();
+
+    const providerUpdateHandler = onProvidersUpdated.mock.calls[0]?.[0];
+    if (typeof providerUpdateHandler !== 'function') {
+      throw new Error('provider update handler was not registered');
+    }
+
+    vi.mocked(providersList).mockResolvedValueOnce([
+      buildProvider({
+        id: 'provider-openai',
+        name: 'OpenAI',
+        type: 'openai',
+        models: JSON.stringify(['gpt-4o-mini']),
+      }),
+      buildProvider({
+        id: 'provider-custom',
+        name: 'Custom Gateway',
+        type: 'openai-compatible',
+        models: JSON.stringify(['my-model']),
+      }),
+    ]);
+
+    await providerUpdateHandler({
+      action: 'added',
+      providerId: 'provider-custom',
+    });
+    await flushPromises();
+
+    expect(providersList).toHaveBeenCalledTimes(2);
+
+    await wrapper.find('.tool-model-select .settings-select-trigger').trigger('click');
+
+    expect(wrapper.text()).toContain('Custom Gateway');
+
+    wrapper.unmount();
+
+    expect(removeProviderListener).toHaveBeenCalledTimes(1);
   });
 });

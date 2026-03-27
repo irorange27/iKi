@@ -89,6 +89,8 @@ const createElectronApi = (options?: {
   } | null;
 }) => {
   const stream = vi.fn(async () => ({ success: true }));
+  const onProvidersUpdated = vi.fn();
+  const removeProviderListener = vi.fn();
 
   return {
     api: {
@@ -108,6 +110,10 @@ const createElectronApi = (options?: {
       },
       providers: {
         list: vi.fn(async () => options?.providers ?? []),
+        onUpdated: vi.fn((callback: unknown) => {
+          onProvidersUpdated(callback);
+          return removeProviderListener;
+        }),
       },
       workspaces: {
         getVisible: vi.fn(async () => options?.workspaces ?? []),
@@ -124,6 +130,8 @@ const createElectronApi = (options?: {
       },
     },
     stream,
+    onProvidersUpdated,
+    removeProviderListener,
   };
 };
 
@@ -154,7 +162,7 @@ const mountChatInput = async (options?: {
   >;
   props?: Record<string, unknown>;
 }) => {
-  const { api, stream } = createElectronApi(options);
+  const { api, stream, onProvidersUpdated, removeProviderListener } = createElectronApi(options);
   setElectronApi(api);
   vi.resetModules();
 
@@ -204,7 +212,14 @@ const mountChatInput = async (options?: {
 
   await flushPromises();
 
-  return { wrapper, api, stream, prepareMessageSend };
+  return {
+    wrapper,
+    api,
+    stream,
+    prepareMessageSend,
+    onProvidersUpdated,
+    removeProviderListener,
+  };
 };
 
 describe('ChatInput', () => {
@@ -298,6 +313,52 @@ describe('ChatInput', () => {
         model: 'gpt-4o',
       })
     );
+  });
+
+  it('reloads providers when the renderer receives a provider update broadcast', async () => {
+    const initialProvider = buildProvider({
+      id: 'provider-openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4o-mini"]',
+    });
+    const addedProvider = buildProvider({
+      id: 'provider-custom',
+      name: 'Custom Gateway',
+      type: 'openai-compatible',
+      models: '["my-model"]',
+    });
+
+    const { wrapper, api, onProvidersUpdated, removeProviderListener } = await mountChatInput({
+      providers: [initialProvider],
+    });
+
+    expect(api.providers.list).toHaveBeenCalledTimes(1);
+    expect(onProvidersUpdated).toHaveBeenCalledTimes(1);
+
+    const providerUpdateHandler = onProvidersUpdated.mock.calls[0]?.[0];
+    if (typeof providerUpdateHandler !== 'function') {
+      throw new Error('provider update handler was not registered');
+    }
+
+    vi.mocked(api.providers.list).mockResolvedValueOnce([initialProvider, addedProvider]);
+    await providerUpdateHandler({
+      action: 'added',
+      providerId: addedProvider.id,
+    });
+    await flushPromises();
+
+    expect(api.providers.list).toHaveBeenCalledTimes(2);
+
+    await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.findAll('.model-provider-group')).toHaveLength(2);
+    expect(wrapper.text()).toContain('Custom Gateway');
+
+    wrapper.unmount();
+
+    expect(removeProviderListener).toHaveBeenCalledTimes(1);
   });
 
   it('sends the current draft through IPC and appends the unsaved user message to transport data', async () => {

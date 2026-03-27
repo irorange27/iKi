@@ -6,7 +6,7 @@ import type {
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from './config';
-import type { Provider } from './provider';
+import type { Provider, ProviderUpdatedEvent } from './provider';
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
 import type {
@@ -150,6 +150,7 @@ export interface ElectronApi {
     add: (provider: ProviderInput) => Promise<unknown>;
     update: (id: string, provider: Partial<Provider>) => Promise<unknown>;
     delete: (id: string) => Promise<unknown>;
+    onUpdated: (callback: (event: ProviderUpdatedEvent) => void) => () => void;
   };
   chat: {
     getModels: (providerType: string) => Promise<string[]>;

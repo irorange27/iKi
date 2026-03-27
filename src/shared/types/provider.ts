@@ -18,3 +18,10 @@ export interface Provider {
   acp_api_provider_id?: string;
   acp_model_mapping?: string;
 }
+
+export type ProviderUpdatedAction = 'added' | 'updated' | 'deleted';
+
+export interface ProviderUpdatedEvent {
+  action: ProviderUpdatedAction;
+  providerId: string;
+}

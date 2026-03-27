@@ -4,6 +4,7 @@ import type { ElectronApi } from '../../src/shared/types/electron_api';
 
 const invokeMock = vi.fn();
 const onMock = vi.fn();
+const removeListenerMock = vi.fn();
 const removeAllListenersMock = vi.fn();
 const sendMock = vi.fn();
 
@@ -18,6 +19,7 @@ vi.mock('electron', () => ({
   ipcRenderer: {
     invoke: (...args: unknown[]) => invokeMock(...args),
     on: (...args: unknown[]) => onMock(...args),
+    removeListener: (...args: unknown[]) => removeListenerMock(...args),
     removeAllListeners: (...args: unknown[]) => removeAllListenersMock(...args),
     send: (...args: unknown[]) => sendMock(...args),
   },
@@ -34,6 +36,7 @@ describe('preload task IPC payload serialization', () => {
     vi.resetModules();
     invokeMock.mockReset();
     onMock.mockReset();
+    removeListenerMock.mockReset();
     removeAllListenersMock.mockReset();
     sendMock.mockReset();
     await loadPreload();
@@ -186,6 +189,8 @@ describe('preload task IPC payload serialization', () => {
     });
     await exposedApi.providers.update('provider_1', { enabled: true });
     await exposedApi.providers.delete('provider_1');
+    const removeProviderListener = exposedApi.providers.onUpdated(vi.fn());
+    removeProviderListener();
 
     await exposedApi.chat.getModels('openai');
     await exposedApi.chat.isProviderConfigured('openai');
@@ -394,6 +399,7 @@ describe('preload task IPC payload serialization', () => {
       expect.arrayContaining([
         'config:updated',
         'updates:status-changed',
+        'providers:updated',
         'chat:ui-chunk',
         'life:push',
         'speech:download-progress',
@@ -409,6 +415,7 @@ describe('preload task IPC payload serialization', () => {
         'tasks:push',
       ])
     );
+    expect(removeListenerMock).toHaveBeenCalledWith('providers:updated', expect.any(Function));
     expect(sendMock.mock.calls).toEqual(
       expect.arrayContaining([
         ['open-settings'],

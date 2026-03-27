@@ -10,7 +10,7 @@ import {
   DaemonStatusInfo,
 } from '../shared/types/config';
 import type { AppUpdateStatus } from '../shared/types/update';
-import type { Provider } from '../shared/types/provider';
+import type { Provider, ProviderUpdatedEvent } from '../shared/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
 import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from '../shared/types/life';
@@ -76,6 +76,15 @@ const electronApi: ElectronApi = {
     update: (id: string, provider: Partial<Provider>) =>
       ipcRenderer.invoke('providers:update', id, provider),
     delete: (id: string) => ipcRenderer.invoke('providers:delete', id),
+    onUpdated: callback => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: ProviderUpdatedEvent) => {
+        callback(payload);
+      };
+      ipcRenderer.on('providers:updated', handler);
+      return () => {
+        ipcRenderer.removeListener('providers:updated', handler);
+      };
+    },
   },
   chat: {
     getModels: (providerType: string) => ipcRenderer.invoke('chat:getModels', providerType),

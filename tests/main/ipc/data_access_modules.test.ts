@@ -13,6 +13,11 @@ const { showOpenDialogMock } = vi.hoisted(() => ({
   showOpenDialogMock: vi.fn(),
 }));
 
+const { browserWindowGetAllWindowsMock, providerWindowSendMock } = vi.hoisted(() => ({
+  browserWindowGetAllWindowsMock: vi.fn(),
+  providerWindowSendMock: vi.fn(),
+}));
+
 const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
@@ -23,6 +28,9 @@ vi.mock('electron', () => ({
   },
   dialog: {
     showOpenDialog: showOpenDialogMock,
+  },
+  BrowserWindow: {
+    getAllWindows: (...args: unknown[]) => browserWindowGetAllWindowsMock(...args),
   },
 }));
 
@@ -139,6 +147,13 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  browserWindowGetAllWindowsMock.mockReturnValue([
+    {
+      webContents: {
+        send: providerWindowSendMock,
+      },
+    },
+  ]);
 });
 
 afterEach(() => {
@@ -228,6 +243,18 @@ describe('data access IPC modules', () => {
       success: true,
     });
     expect(await ipcHandlers.get('providers:delete')?.(null, 'provider_1')).toEqual({ success: true });
+    expect(providerWindowSendMock).toHaveBeenNthCalledWith(1, 'providers:updated', {
+      action: 'added',
+      providerId: 'provider_new',
+    });
+    expect(providerWindowSendMock).toHaveBeenNthCalledWith(2, 'providers:updated', {
+      action: 'updated',
+      providerId: 'provider_1',
+    });
+    expect(providerWindowSendMock).toHaveBeenNthCalledWith(3, 'providers:updated', {
+      action: 'deleted',
+      providerId: 'provider_1',
+    });
 
     const addError = new Error('add failed');
     addProviderMock.mockImplementationOnce(() => {

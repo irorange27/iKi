@@ -219,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, onBeforeUnmount, onMounted, watch, nextTick, computed } from 'vue';
 import type { ChatUiMessage } from '../../shared/chat/message_parts';
 import type { Provider } from '../../shared/types/provider';
 import { clonePlainData } from '../../shared/utils/clone';
@@ -285,6 +285,7 @@ const incognitoTooltip = computed(() =>
   props.isIncognito ? t('chat.input.incognitoOn') : t('chat.input.incognitoOff')
 );
 const isBusy = computed(() => isPreparingSend.value || isLoading.value);
+let removeProviderUpdateListener = () => undefined;
 
 const {
   selectedProvider,
@@ -545,9 +546,19 @@ const sendMessage = async () => {
 };
 
 onMounted(async () => {
+  if (typeof electronAPI.providers.onUpdated === 'function') {
+    removeProviderUpdateListener = electronAPI.providers.onUpdated(() => {
+      void loadAvailableProviders();
+    });
+  }
+
   await loadAvailableProviders(props.activeModel);
   await loadSpeechStatus();
   await syncToolSelectionFromThread(props.threadId);
+});
+
+onBeforeUnmount(() => {
+  removeProviderUpdateListener();
 });
 </script>
 <style scoped>

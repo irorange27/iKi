@@ -639,6 +639,7 @@ const toolModelTestResult = ref<{
   message: string;
 } | null>(null);
 const updateStatus = ref<AppUpdateStatus | null>(null);
+let removeProviderUpdateListener = () => undefined;
 
 type AvailableProvider = {
   id: string;
@@ -1352,6 +1353,11 @@ onMounted(async () => {
     updateStatus.value = status;
     isLoadingUpdateStatus.value = false;
   });
+  if (typeof electronAPI.providers.onUpdated === 'function') {
+    removeProviderUpdateListener = electronAPI.providers.onUpdated(() => {
+      void loadProviders();
+    });
+  }
   if (!configStore.initialized) {
     await configStore.initialize();
   }
@@ -1361,6 +1367,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   removeUpdateStatusListener();
+  removeProviderUpdateListener();
 });
 </script>
 

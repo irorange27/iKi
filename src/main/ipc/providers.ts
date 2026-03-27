@@ -1,10 +1,18 @@
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 
 import * as providerDb from '../../core/db/providers';
 import { createLogger } from '../../core/logger';
+import type { ProviderUpdatedEvent } from '../../shared/types/provider';
 
 let providersIpcRegistered = false;
 const providersIpcLogger = createLogger({ module: 'providers_ipc' });
+const PROVIDERS_UPDATED_CHANNEL = 'providers:updated';
+
+const broadcastProviderUpdate = (payload: ProviderUpdatedEvent): void => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(PROVIDERS_UPDATED_CHANNEL, payload);
+  }
+};
 
 export const registerProvidersIpc = (): void => {
   if (providersIpcRegistered) return;
@@ -20,6 +28,10 @@ export const registerProvidersIpc = (): void => {
   ipcMain.handle('providers:add', (_event, provider) => {
     try {
       const result = providerDb.addProvider(provider);
+      broadcastProviderUpdate({
+        action: 'added',
+        providerId: provider.id,
+      });
       return result;
     } catch (error) {
       providersIpcLogger.event({
@@ -35,6 +47,10 @@ export const registerProvidersIpc = (): void => {
   ipcMain.handle('providers:update', (_event, id, provider) => {
     try {
       const result = providerDb.updateProvider(id, provider);
+      broadcastProviderUpdate({
+        action: 'updated',
+        providerId: id,
+      });
       return result;
     } catch (error) {
       providersIpcLogger.event({
@@ -50,5 +66,12 @@ export const registerProvidersIpc = (): void => {
     }
   });
 
-  ipcMain.handle('providers:delete', (_event, id) => providerDb.deleteProvider(id));
+  ipcMain.handle('providers:delete', (_event, id) => {
+    const result = providerDb.deleteProvider(id);
+    broadcastProviderUpdate({
+      action: 'deleted',
+      providerId: id,
+    });
+    return result;
+  });
 };
