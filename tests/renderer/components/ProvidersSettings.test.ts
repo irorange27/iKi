@@ -529,4 +529,53 @@ describe('ProvidersSettings', () => {
     expect(wrapper.find('.status-badge').classes()).toContain('enabled');
     expect(findDeepSeekRow().find('.provider-status-dot').classes()).toContain('enabled');
   });
+
+  it('places enabled providers at the top of the sidebar even when they are custom providers', async () => {
+    setElectronApi({
+      providers: {
+        list: vi.fn(async () => [
+          {
+            id: 'custom_proxy_1',
+            name: 'Proxy Gateway',
+            type: 'openai-compatible',
+            api_key: 'proxy-key',
+            models: '["proxy-model"]',
+            base_url: 'https://proxy.example.com/v1',
+            enabled: true,
+            created_at: '2026-03-21T12:00:00.000Z',
+            updated_at: '2026-03-21T12:00:00.000Z',
+            available_models: '["proxy-model"]',
+          },
+        ]),
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const providerNames = wrapper
+      .findAll('.provider-list-item')
+      .map(item => item.find('.provider-item-name').text().trim());
+
+    expect(providerNames[0]).toBe('Proxy Gateway');
+  });
 });

@@ -23,50 +23,34 @@
       <div class="providers-sidebar">
         <div class="providers-scroll-list">
           <div class="providers-scroll-list-inner">
-            <!-- Built-in Providers -->
             <div
-              v-for="bp in filteredBuiltInProviders"
-              :key="bp.id"
+              v-for="provider in sidebarProviders"
+              :key="provider.id"
               class="provider-list-item"
               :class="{
-                active: selectedProviderId === bp.id,
-                configured: isProviderConfigured(bp.id),
+                active: selectedProviderId === provider.id,
+                configured: !provider.isCustom && isProviderConfigured(provider.id),
+                custom: provider.isCustom,
               }"
-              @click="selectProvider(bp.id)"
+              @click="selectProvider(provider.id)"
             >
               <span class="provider-icon">
-                <LobeIcon :name="getProviderIconName(bp.id)" :size="24" />
+                <LobeIcon
+                  v-if="!provider.isCustom"
+                  :name="getProviderIconName(provider.id)"
+                  :size="24"
+                />
+                <LobeIcon v-else v-bind="getCustomIconProps(provider.icon)" :size="20" />
               </span>
               <div class="provider-item-main">
-                <span class="provider-item-name">{{ bp.name }}</span>
+                <span class="provider-item-name">{{ provider.name }}</span>
+                <span v-if="provider.isCustom" class="provider-item-badge">
+                  {{ t('settings.providers.customBadge') }}
+                </span>
               </div>
               <span
                 class="provider-status-dot"
-                :class="{ enabled: isProviderEnabled(bp.id) }"
-              ></span>
-            </div>
-
-            <!-- Custom Providers -->
-            <div v-if="customProviders.length > 0" class="providers-divider">
-              <span>{{ t('settings.providers.customGroup') }}</span>
-            </div>
-            <div
-              v-for="cp in customProviders"
-              :key="cp.id"
-              class="provider-list-item custom"
-              :class="{ active: selectedProviderId === cp.id }"
-              @click="selectProvider(cp.id)"
-            >
-              <span class="provider-icon">
-                <LobeIcon v-bind="getCustomIconProps(cp.icon)" :size="20" />
-              </span>
-              <div class="provider-item-main">
-                <span class="provider-item-name">{{ cp.name }}</span>
-                <span class="provider-item-badge">{{ t('settings.providers.customBadge') }}</span>
-              </div>
-              <span
-                class="provider-status-dot"
-                :class="{ enabled: isProviderEnabled(cp.id) }"
+                :class="{ enabled: isProviderEnabled(provider.id) }"
               ></span>
             </div>
           </div>
@@ -408,6 +392,15 @@ type EditableProviderApiFormat = {
   warning: string;
 };
 
+type SidebarProvider = {
+  id: string;
+  name: string;
+  isCustom: boolean;
+  icon?: string | null;
+  enabled: boolean;
+  searchText: string;
+};
+
 const electronAPI = getElectronAPI();
 const providersSettingsLogger = createLogger({ module: 'providers_settings' });
 const { t } = useI18n();
@@ -460,6 +453,7 @@ const editingProviderApiFormat = computed<EditableProviderApiFormat | null>(() =
 });
 
 const CUSTOM_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
+const BUILTIN_PROVIDER_ORDER = new Map(BUILTIN_PROVIDERS.map((provider, index) => [provider.id, index]));
 
 const getCustomIconProps = (icon?: string) => {
   if (!icon || icon === 'custom') {
@@ -667,33 +661,54 @@ const addModel = () => {
   }
 };
 
-const filteredBuiltInProviders = computed(() => {
-  const query = providerSearchQuery.value.toLowerCase();
-  const filtered = BUILTIN_PROVIDERS.filter(
-    p => p.name.toLowerCase().includes(query) || p.id.toLowerCase().includes(query)
-  );
+const sidebarProviders = computed<SidebarProvider[]>(() => {
+  const query = providerSearchQuery.value.trim().toLowerCase();
+  const builtInItems: SidebarProvider[] = BUILTIN_PROVIDERS.map(provider => ({
+    id: provider.id,
+    name: provider.name,
+    isCustom: false,
+    enabled: isProviderEnabled(provider.id),
+    searchText: `${provider.name} ${provider.id}`.toLowerCase(),
+  }));
+  const customItems: SidebarProvider[] = providers.value
+    .filter(
+      provider =>
+        !BUILTIN_PROVIDERS.some(builtInProvider =>
+          isCanonicalBuiltInConfig(provider, builtInProvider.id)
+        )
+    )
+    .map(provider => ({
+      id: provider.id,
+      name: provider.name,
+      isCustom: true,
+      icon: provider.icon,
+      enabled: isProviderEnabled(provider.id),
+      searchText: `${provider.name} ${provider.type} ${provider.id}`.toLowerCase(),
+    }));
 
-  return [...filtered].sort((a, b) => {
-    const aEnabled = isProviderPersistedEnabled(a.id);
-    const bEnabled = isProviderPersistedEnabled(b.id);
-    if (aEnabled && !bEnabled) return -1;
-    if (!aEnabled && bEnabled) return 1;
-    return 0;
-  });
-});
+  const matchesQuery = (provider: SidebarProvider) =>
+    query.length === 0 || provider.searchText.includes(query);
 
-const customProviders = computed(() => {
-  const custom = providers.value.filter(
-    provider => !BUILTIN_PROVIDERS.some(builtInProvider => isCanonicalBuiltInConfig(provider, builtInProvider.id))
-  );
+  return [...builtInItems, ...customItems]
+    .filter(matchesQuery)
+    .sort((left, right) => {
+      if (left.enabled !== right.enabled) {
+        return left.enabled ? -1 : 1;
+      }
 
-  return [...custom].sort((a, b) => {
-    const aEnabled = isProviderPersistedEnabled(a.id);
-    const bEnabled = isProviderPersistedEnabled(b.id);
-    if (aEnabled && !bEnabled) return -1;
-    if (!aEnabled && bEnabled) return 1;
-    return 0;
-  });
+      if (left.isCustom !== right.isCustom) {
+        return left.isCustom ? 1 : -1;
+      }
+
+      if (!left.isCustom && !right.isCustom) {
+        return (
+          (BUILTIN_PROVIDER_ORDER.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+          (BUILTIN_PROVIDER_ORDER.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+        );
+      }
+
+      return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+    });
 });
 
 const selectedProviderInfo = computed((): BuiltInProvider | null => {
