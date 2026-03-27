@@ -68,28 +68,30 @@ describe('ui_message_references', () => {
       role: 'assistant',
       parts: [
         {
-          type: 'skill-usage',
-          mode: 'auto',
-          skills: [
-            {
-              id: 'codex:.system/openai-docs',
-              name: 'openai-docs',
-              description: 'Official OpenAI docs guidance',
-              source: 'codex',
-            },
-            {
-              id: 'codex:.system/openai-docs',
-              name: 'openai-docs',
-              description: 'Duplicate',
-              source: 'codex',
-            },
-            {
-              id: 'user:planner',
-              name: 'Planner',
-              description: 'Planning workflow',
-              source: 'user',
-            },
-          ],
+          type: 'data-skill-usage',
+          data: {
+            mode: 'auto',
+            skills: [
+              {
+                id: 'codex:.system/openai-docs',
+                name: 'openai-docs',
+                description: 'Official OpenAI docs guidance',
+                source: 'codex',
+              },
+              {
+                id: 'codex:.system/openai-docs',
+                name: 'openai-docs',
+                description: 'Duplicate',
+                source: 'codex',
+              },
+              {
+                id: 'user:planner',
+                name: 'Planner',
+                description: 'Planning workflow',
+                source: 'user',
+              },
+            ],
+          },
         },
         {
           type: 'dynamic-tool',
@@ -150,18 +152,20 @@ describe('ui_message_references', () => {
       role: 'assistant',
       parts: [
         {
-          type: 'memory-retrieval',
-          query: 'project constraints',
-          results: [
-            {
-              id: 'mem_1',
-              summary: 'User prefers long-term maintainable solutions.',
-              score: '0.834',
-              updated_at: '2026-03-19T12:00:00.000Z',
-              tags: '["preference","engineering"]',
-              sourceMessageCount: 2,
-            },
-          ],
+          type: 'data-memory-retrieval',
+          data: {
+            query: 'project constraints',
+            results: [
+              {
+                id: 'mem_1',
+                summary: 'User prefers long-term maintainable solutions.',
+                score: '0.834',
+                updated_at: '2026-03-19T12:00:00.000Z',
+                tags: '["preference","engineering"]',
+                sourceMessageCount: 2,
+              },
+            ],
+          },
         },
       ],
     } as never);
@@ -183,7 +187,9 @@ describe('ui_message_references', () => {
       hasReferenceSummary({
         id: 'assistant_1',
         role: 'assistant',
-        parts: [{ type: 'memory-retrieval', results: [{ summary: 'hello' }] }],
+        parts: [
+          { type: 'data-memory-retrieval', data: { results: [{ summary: 'hello' }] } },
+        ],
       } as never)
     ).toBe(true);
   });
@@ -194,27 +200,29 @@ describe('ui_message_references', () => {
       role: 'assistant',
       parts: [
         {
-          type: 'context-report',
-          totalEstimatedTokens: 640,
-          retainedRecentMessages: 6,
-          compactedMessages: 12,
-          blocks: [
-            {
-              kind: 'recent-history',
-              status: 'truncated',
-              estimatedTokens: 220,
-              charCount: 880,
-              reason: 'compacted older turns into summary/recent window',
-              sourceCount: 6,
-            },
-            {
-              kind: 'thread-summary',
-              status: 'included',
-              estimatedTokens: 180,
-              charCount: 720,
-              sourceCount: 12,
-            },
-          ],
+          type: 'data-context-report',
+          data: {
+            totalEstimatedTokens: 640,
+            retainedRecentMessages: 6,
+            compactedMessages: 12,
+            blocks: [
+              {
+                kind: 'recent-history',
+                status: 'truncated',
+                estimatedTokens: 220,
+                charCount: 880,
+                reason: 'compacted older turns into summary/recent window',
+                sourceCount: 6,
+              },
+              {
+                kind: 'thread-summary',
+                status: 'included',
+                estimatedTokens: 180,
+                charCount: 720,
+                sourceCount: 12,
+              },
+            ],
+          },
         },
       ],
     } as never);
@@ -250,18 +258,20 @@ describe('ui_message_references', () => {
       role: 'assistant',
       parts: [
         {
-          type: 'affect-signal',
-          source: 'realtime',
-          guardActive: true,
-          label: 'anger',
-          confidence: 0.82,
-          valence: -0.64,
-          arousal: 0.77,
-          emotions: [{ label: 'anger', score: 0.82 }],
-          sampleCount: 3,
-          windowSize: 8,
-          ageMinutes: 1,
-          windowMinutes: 5,
+          type: 'data-affect-signal',
+          data: {
+            source: 'realtime',
+            guardActive: true,
+            label: 'anger',
+            confidence: 0.82,
+            valence: -0.64,
+            arousal: 0.77,
+            emotions: [{ label: 'anger', score: 0.82 }],
+            sampleCount: 3,
+            windowSize: 8,
+            ageMinutes: 1,
+            windowMinutes: 5,
+          },
         },
       ],
     } as never);
@@ -283,7 +293,12 @@ describe('ui_message_references', () => {
       hasReferenceSummary({
         id: 'assistant_3',
         role: 'assistant',
-        parts: [{ type: 'affect-signal', label: 'anger', confidence: 0.5 }],
+        parts: [
+          {
+            type: 'data-affect-signal',
+            data: { label: 'anger', confidence: 0.5 },
+          },
+        ],
       } as never)
     ).toBe(true);
   });
@@ -295,16 +310,18 @@ describe('ui_message_references', () => {
         role: 'assistant',
         parts: [
           {
-            type: 'skill-usage',
-            mode: 'manual',
-            skills: [
-              {
-                id: 'user:planner',
-                name: 'Planner',
-                description: 'Planning workflow',
-                source: 'user',
-              },
-            ],
+            type: 'data-skill-usage',
+            data: {
+              mode: 'manual',
+              skills: [
+                {
+                  id: 'user:planner',
+                  name: 'Planner',
+                  description: 'Planning workflow',
+                  source: 'user',
+                },
+              ],
+            },
           },
         ],
       } as never)
@@ -365,9 +382,11 @@ describe('ui_message_references', () => {
         role: 'assistant',
         parts: [
           {
-            type: 'context-report',
-            totalEstimatedTokens: 640,
-            blocks: [{ kind: 'recent-history', status: 'included' }],
+            type: 'data-context-report',
+            data: {
+              totalEstimatedTokens: 640,
+              blocks: [{ kind: 'recent-history', status: 'included' }],
+            },
           },
         ],
       } as never)

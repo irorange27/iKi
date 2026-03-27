@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isChatUiMetadataPart,
+  isSkillUsagePart,
   normalizeChatUiMetadataPart,
 } from '../../../src/shared/chat/message_parts';
 
 describe('message_parts', () => {
-  it('recognizes both canonical and legacy chat metadata parts', () => {
-    expect(isChatUiMetadataPart({ type: 'skill-usage', skills: [] })).toBe(true);
+  it('recognizes canonical chat metadata parts but not legacy flat runtime parts', () => {
+    expect(isChatUiMetadataPart({ type: 'skill-usage', skills: [] })).toBe(false);
     expect(isChatUiMetadataPart({ type: 'data-skill-usage', data: { skills: [] } })).toBe(true);
     expect(isChatUiMetadataPart({ type: 'text', text: 'hello' })).toBe(false);
+    expect(isSkillUsagePart({ type: 'skill-usage', skills: [] })).toBe(false);
   });
 
   it('canonicalizes legacy metadata parts into AI SDK data parts', () => {
@@ -68,5 +70,23 @@ describe('message_parts', () => {
         },
       },
     ]);
+  });
+
+  it('keeps canonical metadata parts canonical through the boundary normalizer', () => {
+    const part = normalizeChatUiMetadataPart({
+      type: 'data-memory-retrieval',
+      data: {
+        query: 'constraints',
+        results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
+      },
+    });
+
+    expect(part).toEqual({
+      type: 'data-memory-retrieval',
+      data: {
+        query: 'constraints',
+        results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
+      },
+    });
   });
 });

@@ -349,14 +349,13 @@ const tryRealpath = async (targetPath: string): Promise<string | null> => {
 };
 
 const resolveExistingAncestorRealPath = async (targetPath: string): Promise<string> => {
-  let currentPath = path.resolve(targetPath);
-  while (true) {
+  let currentPath: string | null = path.resolve(targetPath);
+  while (currentPath) {
     const realPath = await tryRealpath(currentPath);
     if (realPath) return realPath;
 
     const parentPath = path.dirname(currentPath);
-    if (parentPath === currentPath) break;
-    currentPath = parentPath;
+    currentPath = parentPath === currentPath ? null : parentPath;
   }
 
   throw new Error(`Path "${targetPath}" does not have an existing ancestor`);

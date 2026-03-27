@@ -12,11 +12,13 @@ const createMessage = (): UIMessage =>
     role: 'assistant',
     parts: [
       {
-        type: 'affect-signal',
-        source: 'realtime',
-        label: 'sadness',
-        confidence: 0.85,
-        guardActive: false,
+        type: 'data-affect-signal',
+        data: {
+          source: 'realtime',
+          label: 'sadness',
+          confidence: 0.85,
+          guardActive: false,
+        },
       },
       {
         type: 'text',

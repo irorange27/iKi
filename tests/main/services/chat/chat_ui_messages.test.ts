@@ -3,16 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { toModelInputMessages } from '../../../../src/main/services/chat/chat_ui';
 
 describe('chat_ui message conversion', () => {
-  it('strips canonical and legacy metadata parts before AI SDK model conversion', async () => {
+  it('strips canonical metadata parts before AI SDK model conversion', async () => {
     const converted = await toModelInputMessages([
       {
         id: 'assistant_1',
         role: 'assistant',
         parts: [
           {
-            type: 'skill-usage',
-            mode: 'auto',
-            skills: [{ id: 'user:planner', name: 'Planner' }],
+            type: 'data-skill-usage',
+            data: {
+              mode: 'auto',
+              skills: [{ id: 'user:planner', name: 'Planner' }],
+            },
           },
           {
             type: 'data-memory-retrieval',

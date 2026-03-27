@@ -12,22 +12,24 @@ const createMessage = (): UIMessage =>
     role: 'assistant',
     parts: [
       {
-        type: 'skill-usage',
-        mode: 'auto',
-        skills: [
-          {
-            id: 'codex:.system/openai-docs',
-            name: 'openai-docs',
-            description: 'Official OpenAI docs guidance',
-            source: 'codex',
-          },
-          {
-            id: 'user:planner',
-            name: 'Planner',
-            description: 'Planning workflow',
-            source: 'user',
-          },
-        ],
+        type: 'data-skill-usage',
+        data: {
+          mode: 'auto',
+          skills: [
+            {
+              id: 'codex:.system/openai-docs',
+              name: 'openai-docs',
+              description: 'Official OpenAI docs guidance',
+              source: 'codex',
+            },
+            {
+              id: 'user:planner',
+              name: 'Planner',
+              description: 'Planning workflow',
+              source: 'user',
+            },
+          ],
+        },
       },
       {
         type: 'dynamic-tool',
@@ -44,16 +46,20 @@ const createMessage = (): UIMessage =>
         },
       },
       {
-        type: 'memory-retrieval',
-        query: 'project constraints',
-        results: [{ id: 'mem_1', summary: 'Long-term maintainability matters.' }],
+        type: 'data-memory-retrieval',
+        data: {
+          query: 'project constraints',
+          results: [{ id: 'mem_1', summary: 'Long-term maintainability matters.' }],
+        },
       },
       {
-        type: 'affect-signal',
-        source: 'realtime',
-        label: 'anger',
-        confidence: 0.82,
-        guardActive: true,
+        type: 'data-affect-signal',
+        data: {
+          source: 'realtime',
+          label: 'anger',
+          confidence: 0.82,
+          guardActive: true,
+        },
       },
       {
         type: 'tool-result',

@@ -211,17 +211,21 @@ export type ChatUiMetadataPart =
   | ContextReportPart
   | AffectSignalPart;
 
-type ChatUiMetadataPartType = LegacyChatUiMetadataPart['type'] | ChatUiMetadataPart['type'];
+type ChatUiMetadataPartType = ChatUiMetadataPart['type'];
+type LegacyChatUiMetadataPartType = LegacyChatUiMetadataPart['type'];
 
 const CHAT_UI_METADATA_PART_TYPES = new Set<ChatUiMetadataPartType>([
-  'memory-retrieval',
-  'skill-usage',
-  'context-report',
-  'affect-signal',
   'data-memory-retrieval',
   'data-skill-usage',
   'data-context-report',
   'data-affect-signal',
+]);
+
+const LEGACY_CHAT_UI_METADATA_PART_TYPES = new Set<LegacyChatUiMetadataPartType>([
+  'memory-retrieval',
+  'skill-usage',
+  'context-report',
+  'affect-signal',
 ]);
 
 export const createMemoryPart = (data: MemoryPartData): MemoryPart => ({
@@ -247,24 +251,17 @@ export const createAffectSignalPart = (data: AffectSignalPartData): AffectSignal
 export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
 
-export const isMemoryPart = (part: unknown): part is MemoryPart | LegacyMemoryPart =>
-  isObjectRecord(part) &&
-  (part.type === 'data-memory-retrieval' || part.type === 'memory-retrieval');
+export const isMemoryPart = (part: unknown): part is MemoryPart =>
+  isObjectRecord(part) && part.type === 'data-memory-retrieval';
 
-export const isSkillUsagePart = (
-  part: unknown
-): part is SkillUsagePart | LegacySkillUsagePart =>
-  isObjectRecord(part) && (part.type === 'data-skill-usage' || part.type === 'skill-usage');
+export const isSkillUsagePart = (part: unknown): part is SkillUsagePart =>
+  isObjectRecord(part) && part.type === 'data-skill-usage';
 
-export const isContextReportPart = (
-  part: unknown
-): part is ContextReportPart | LegacyContextReportPart =>
-  isObjectRecord(part) && (part.type === 'data-context-report' || part.type === 'context-report');
+export const isContextReportPart = (part: unknown): part is ContextReportPart =>
+  isObjectRecord(part) && part.type === 'data-context-report';
 
-export const isAffectSignalPart = (
-  part: unknown
-): part is AffectSignalPart | LegacyAffectSignalPart =>
-  isObjectRecord(part) && (part.type === 'data-affect-signal' || part.type === 'affect-signal');
+export const isAffectSignalPart = (part: unknown): part is AffectSignalPart =>
+  isObjectRecord(part) && part.type === 'data-affect-signal';
 
 export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
   isObjectRecord(part) &&
@@ -274,76 +271,29 @@ export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
 
 export const isChatUiMetadataPart = (
   part: unknown
-): part is ChatUiMetadataPart | LegacyChatUiMetadataPart =>
+): part is ChatUiMetadataPart =>
   isObjectRecord(part) &&
   typeof part.type === 'string' &&
   CHAT_UI_METADATA_PART_TYPES.has(part.type as ChatUiMetadataPartType);
 
 export const getMemoryPartData = (part: unknown): MemoryPartData | null => {
   if (!isMemoryPart(part)) return null;
-  if (part.type === 'data-memory-retrieval') {
-    return isObjectRecord(part.data) ? (part.data as MemoryPartData) : {};
-  }
-
-  return {
-    ...(typeof part.query === 'string' ? { query: part.query } : {}),
-    ...(Array.isArray(part.results) ? { results: part.results } : {}),
-  };
+  return isObjectRecord(part.data) ? (part.data as MemoryPartData) : {};
 };
 
 export const getSkillUsagePartData = (part: unknown): SkillUsagePartData | null => {
   if (!isSkillUsagePart(part)) return null;
-  if (part.type === 'data-skill-usage') {
-    return isObjectRecord(part.data) ? (part.data as SkillUsagePartData) : {};
-  }
-
-  return {
-    ...(part.mode === 'auto' || part.mode === 'manual' ? { mode: part.mode } : {}),
-    ...(Array.isArray(part.skills) ? { skills: part.skills } : {}),
-  };
+  return isObjectRecord(part.data) ? (part.data as SkillUsagePartData) : {};
 };
 
 export const getContextReportPartData = (part: unknown): ContextReportPartData | null => {
   if (!isContextReportPart(part)) return null;
-  if (part.type === 'data-context-report') {
-    return isObjectRecord(part.data) ? (part.data as ContextReportPartData) : {};
-  }
-
-  return {
-    ...(typeof part.totalEstimatedTokens === 'number'
-      ? { totalEstimatedTokens: part.totalEstimatedTokens }
-      : {}),
-    ...(typeof part.retainedRecentMessages === 'number'
-      ? { retainedRecentMessages: part.retainedRecentMessages }
-      : {}),
-    ...(typeof part.compactedMessages === 'number'
-      ? { compactedMessages: part.compactedMessages }
-      : {}),
-    ...(Array.isArray(part.blocks) ? { blocks: part.blocks } : {}),
-  };
+  return isObjectRecord(part.data) ? (part.data as ContextReportPartData) : {};
 };
 
 export const getAffectSignalPartData = (part: unknown): AffectSignalPartData | null => {
   if (!isAffectSignalPart(part)) return null;
-  if (part.type === 'data-affect-signal') {
-    return isObjectRecord(part.data) ? (part.data as AffectSignalPartData) : {};
-  }
-
-  return {
-    ...(part.source === 'history' || part.source === 'realtime' ? { source: part.source } : {}),
-    ...(typeof part.guardActive === 'boolean' ? { guardActive: part.guardActive } : {}),
-    ...(isAffectLabel(part.label) ? { label: part.label } : {}),
-    ...(typeof part.confidence === 'number' ? { confidence: part.confidence } : {}),
-    ...(typeof part.valence === 'number' ? { valence: part.valence } : {}),
-    ...(typeof part.arousal === 'number' ? { arousal: part.arousal } : {}),
-    ...(Array.isArray(part.emotions) ? { emotions: part.emotions } : {}),
-    ...(typeof part.sampleCount === 'number' ? { sampleCount: part.sampleCount } : {}),
-    ...(typeof part.windowSize === 'number' ? { windowSize: part.windowSize } : {}),
-    ...(typeof part.startAt === 'string' ? { startAt: part.startAt } : {}),
-    ...(typeof part.endAt === 'string' ? { endAt: part.endAt } : {}),
-    ...(typeof part.ageMinutes === 'number' ? { ageMinutes: part.ageMinutes } : {}),
-    ...(typeof part.windowMinutes === 'number' ? { windowMinutes: part.windowMinutes } : {}),
-  };
+  return isObjectRecord(part.data) ? (part.data as AffectSignalPartData) : {};
 };
 
 export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart | null => {
@@ -361,6 +311,61 @@ export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart |
 
   if (isAffectSignalPart(part)) {
     return createAffectSignalPart(getAffectSignalPartData(part) ?? {});
+  }
+
+  if (
+    isObjectRecord(part) &&
+    typeof part.type === 'string' &&
+    LEGACY_CHAT_UI_METADATA_PART_TYPES.has(part.type as LegacyChatUiMetadataPartType)
+  ) {
+    if (part.type === 'memory-retrieval') {
+      return createMemoryPart({
+        ...(typeof part.query === 'string' ? { query: part.query } : {}),
+        ...(Array.isArray(part.results) ? { results: part.results } : {}),
+      });
+    }
+
+    if (part.type === 'skill-usage') {
+      return createSkillUsagePart({
+        ...(part.mode === 'auto' || part.mode === 'manual' ? { mode: part.mode } : {}),
+        ...(Array.isArray(part.skills) ? { skills: part.skills } : {}),
+      });
+    }
+
+    if (part.type === 'context-report') {
+      return createContextReportPart({
+        ...(typeof part.totalEstimatedTokens === 'number'
+          ? { totalEstimatedTokens: part.totalEstimatedTokens }
+          : {}),
+        ...(typeof part.retainedRecentMessages === 'number'
+          ? { retainedRecentMessages: part.retainedRecentMessages }
+          : {}),
+        ...(typeof part.compactedMessages === 'number'
+          ? { compactedMessages: part.compactedMessages }
+          : {}),
+        ...(Array.isArray(part.blocks) ? { blocks: part.blocks } : {}),
+      });
+    }
+
+    if (part.type === 'affect-signal') {
+      return createAffectSignalPart({
+        ...(part.source === 'history' || part.source === 'realtime'
+          ? { source: part.source }
+          : {}),
+        ...(typeof part.guardActive === 'boolean' ? { guardActive: part.guardActive } : {}),
+        ...(isAffectLabel(part.label) ? { label: part.label } : {}),
+        ...(typeof part.confidence === 'number' ? { confidence: part.confidence } : {}),
+        ...(typeof part.valence === 'number' ? { valence: part.valence } : {}),
+        ...(typeof part.arousal === 'number' ? { arousal: part.arousal } : {}),
+        ...(Array.isArray(part.emotions) ? { emotions: part.emotions } : {}),
+        ...(typeof part.sampleCount === 'number' ? { sampleCount: part.sampleCount } : {}),
+        ...(typeof part.windowSize === 'number' ? { windowSize: part.windowSize } : {}),
+        ...(typeof part.startAt === 'string' ? { startAt: part.startAt } : {}),
+        ...(typeof part.endAt === 'string' ? { endAt: part.endAt } : {}),
+        ...(typeof part.ageMinutes === 'number' ? { ageMinutes: part.ageMinutes } : {}),
+        ...(typeof part.windowMinutes === 'number' ? { windowMinutes: part.windowMinutes } : {}),
+      });
+    }
   }
 
   return null;
