@@ -1,9 +1,33 @@
 const hasStructuredClone = typeof structuredClone === 'function';
 
-const cloneTypedArray = <T extends Exclude<ArrayBufferView, DataView>>(value: T): T => {
-  return new (value.constructor as new (input: ArrayLike<number>) => T)(
-    value as unknown as ArrayLike<number>
-  );
+type NumberTypedArray =
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray
+  | Int16Array
+  | Uint16Array
+  | Int32Array
+  | Uint32Array
+  | Float32Array
+  | Float64Array;
+
+type BigIntTypedArray = BigInt64Array | BigUint64Array;
+type TypedArray = NumberTypedArray | BigIntTypedArray;
+
+const isTypedArray = (value: unknown): value is TypedArray =>
+  ArrayBuffer.isView(value) && !(value instanceof DataView);
+
+const isBigIntTypedArray = (value: TypedArray): value is BigIntTypedArray =>
+  value instanceof BigInt64Array || value instanceof BigUint64Array;
+
+const cloneTypedArray = <T extends TypedArray>(value: T): T => {
+  if (isBigIntTypedArray(value)) {
+    const TypedArrayConstructor = value.constructor as new (input: ArrayLike<bigint>) => T;
+    return new TypedArrayConstructor(value);
+  }
+
+  const TypedArrayConstructor = value.constructor as new (input: ArrayLike<number>) => T;
+  return new TypedArrayConstructor(value);
 };
 
 const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): unknown => {
@@ -40,7 +64,7 @@ const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): un
     return new DataView(value.buffer.slice(0) as ArrayBufferLike, value.byteOffset, value.byteLength);
   }
 
-  if (ArrayBuffer.isView(value)) {
+  if (isTypedArray(value)) {
     return cloneTypedArray(value);
   }
 

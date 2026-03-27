@@ -82,6 +82,15 @@ const createAsyncIterable = <T>(values: T[]) =>
     }
   })();
 
+const createMockLanguageModel = () => ({
+  specificationVersion: 'v3' as const,
+  provider: 'anthropic',
+  modelId: 'claude-sonnet-4-5',
+  supportedUrls: {},
+  doGenerate: vi.fn(),
+  doStream: vi.fn(),
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   getProvidersMock.mockReturnValue([
@@ -123,7 +132,8 @@ describe('llm factory', () => {
   });
 
   it('instantiates Anthropic models through the Anthropic provider adapter', () => {
-    const modelFactory = vi.fn(() => 'anthropic-model');
+    const anthropicModel = createMockLanguageModel();
+    const modelFactory = vi.fn(() => anthropicModel);
     createAnthropicMock.mockReturnValue(modelFactory);
     getProvidersMock.mockReturnValue([
       {
@@ -136,13 +146,31 @@ describe('llm factory', () => {
       },
     ]);
 
-    expect(createModel('anthropic', 'claude-sonnet-4-5')).toBe('anthropic-model');
+    expect(createModel('anthropic', 'claude-sonnet-4-5')).toBe(anthropicModel);
     expect(createAnthropicMock).toHaveBeenCalledWith({
       apiKey: 'sk-ant',
       baseURL: 'https://api.anthropic.com/v1',
     });
     expect(modelFactory).toHaveBeenCalledWith('claude-sonnet-4-5');
     expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid anthropic adapter results at the runtime boundary', () => {
+    createAnthropicMock.mockReturnValue(() => ({ provider: 'anthropic' }));
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_anthropic',
+        type: 'anthropic',
+        enabled: true,
+        api_key: 'sk-ant',
+        base_url: 'https://api.anthropic.com/v1',
+        models: JSON.stringify(['claude-sonnet-4-5']),
+      },
+    ]);
+
+    expect(() => createModel('anthropic', 'claude-sonnet-4-5')).toThrow(
+      'Anthropic provider returned an invalid language model'
+    );
   });
 
   it('resolves model capabilities from models.dev metadata', async () => {

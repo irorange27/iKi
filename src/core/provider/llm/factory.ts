@@ -44,6 +44,23 @@ export type ChatTextMessage = {
   content: string;
 };
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
+  if (typeof value === 'string') return true;
+  if (!isObjectRecord(value)) return false;
+
+  return (
+    value.specificationVersion === 'v3' &&
+    typeof value.provider === 'string' &&
+    typeof value.modelId === 'string' &&
+    typeof value.doGenerate === 'function' &&
+    typeof value.doStream === 'function' &&
+    ('supportedUrls' in value)
+  );
+};
+
 const toModelMessages = (messages: ChatTextMessage[]): ModelMessage[] => {
   return messages.map(message => ({
     role: message.role,
@@ -97,10 +114,11 @@ export const createModel = (providerType: string, modelId: string): LanguageMode
       baseURL: config.baseURL || 'https://api.anthropic.com/v1',
       ...(providerType === 'anthropic-compatible' ? { name: providerType } : {}),
     });
-    // Some package trees currently hoist a second copy of `@ai-sdk/provider` under
-    // `@ai-sdk/anthropic`, which makes the runtime-compatible model surface appear
-    // structurally incompatible to TypeScript even though the adapter works correctly.
-    return client(modelId) as unknown as LanguageModel;
+    const model = client(modelId);
+    if (!isLanguageModelInstance(model)) {
+      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
+    }
+    return model;
   }
   if (providerType === 'deepseek') {
     const client = createDeepSeek({

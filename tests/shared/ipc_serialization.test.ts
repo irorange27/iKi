@@ -52,4 +52,16 @@ describe('toIpcSerializable', () => {
     expect(Array.from(serialized.buffer)).toEqual([1, 2, 3]);
     expect(() => structuredClone(serialized)).not.toThrow();
   });
+
+  it('clones bigint typed arrays without falling back to JSON', () => {
+    const payload = {
+      buffer: new BigUint64Array([1n, 2n, 3n]),
+    };
+
+    const serialized = toIpcSerializable(payload);
+
+    expect(serialized.buffer).toBeInstanceOf(BigUint64Array);
+    expect(Array.from(serialized.buffer)).toEqual([1n, 2n, 3n]);
+    expect(serialized.buffer).not.toBe(payload.buffer);
+  });
 });

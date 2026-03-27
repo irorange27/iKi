@@ -10,6 +10,22 @@ const intField = (value: number) => z.number().int().nonnegative().catch(value);
 const ratioField = (value: number) => z.number().min(0).max(1).catch(value);
 const stringField = (value: string) => z.string().catch(value);
 const stringArrayField = (value: string[]) => z.array(z.string()).catch(value);
+const toCatchRecord = (value: AppConfig): Record<string, unknown> =>
+  Object.entries(value).reduce<Record<string, unknown>>((record, [key, entryValue]) => {
+    record[key] = entryValue;
+    return record;
+  }, {});
+
+const defaultBase46Presets: Record<string, z.output<typeof Base46ThemePresetInputSchema>> =
+  Object.fromEntries(
+    Object.entries(DEFAULT_APP_CONFIG.themes.base46Presets).map(([presetId, preset]) => [
+      presetId,
+      Base46ThemePresetInputSchema.parse(preset),
+    ])
+  );
+const defaultThemeConfig = {
+  base46Presets: defaultBase46Presets,
+};
 
 const GeneralSchema = z
   .object({
@@ -44,18 +60,9 @@ const ThemesSchema = z
   .object({
     base46Presets: z
       .record(z.string(), Base46ThemePresetInputSchema)
-      .catch(
-        DEFAULT_APP_CONFIG.themes.base46Presets as unknown as Record<
-          string,
-          z.infer<typeof Base46ThemePresetInputSchema>
-        >
-      ),
+      .catch(defaultBase46Presets),
   })
-  .catch(
-    DEFAULT_APP_CONFIG.themes as unknown as {
-      base46Presets: Record<string, z.infer<typeof Base46ThemePresetInputSchema>>;
-    }
-  );
+  .catch(defaultThemeConfig);
 
 const NetworkSchema = z
   .object({
@@ -268,6 +275,6 @@ export const AppConfigSchema = z
     agent: AgentSchema,
   })
   .passthrough()
-  .catch(DEFAULT_APP_CONFIG as unknown as Record<string, unknown>);
+  .catch(toCatchRecord(DEFAULT_APP_CONFIG));
 
 export type AppConfigSchemaType = AppConfig;

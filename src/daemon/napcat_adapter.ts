@@ -78,6 +78,11 @@ type NapCatThreadTarget = {
   groupId?: string;
 };
 
+type StoredUiTextMessage = {
+  role: 'system' | 'user' | 'assistant';
+  parts: Array<{ type: 'text'; text: string }>;
+};
+
 type PendingAction = {
   action: string;
   resolve: (value: NapCatActionResponse) => void;
@@ -345,7 +350,7 @@ const resolveNapCatModel = (
   return { providerType: provider.type, model };
 };
 
-const buildSystemMessage = (event: NapCatMessageEvent): Record<string, unknown> => {
+const buildSystemMessage = (event: NapCatMessageEvent): ChatTransportMessage => {
   const selfId = normalizeId(event.self_id);
   const userId = normalizeId(event.user_id);
   const groupId = normalizeId(event.group_id);
@@ -361,16 +366,16 @@ const buildSystemMessage = (event: NapCatMessageEvent): Record<string, unknown> 
 
   return {
     role: 'system',
-    parts: [{ type: 'text', text: lines.join('\n') }],
+    content: lines.join('\n'),
   };
 };
 
-const buildUserMessage = (text: string): Record<string, unknown> => ({
+const buildUserMessage = (text: string): StoredUiTextMessage => ({
   role: 'user',
   parts: [{ type: 'text', text }],
 });
 
-const buildAssistantMessage = (text: string): Record<string, unknown> => ({
+const buildAssistantMessage = (text: string): StoredUiTextMessage => ({
   role: 'assistant',
   parts: [{ type: 'text', text }],
 });
@@ -620,7 +625,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     const uiMessages = rows.map(row =>
       parseStoredUiMessageRow({ id: row.id, message: row.message })
     );
-    const messages: Array<Record<string, unknown> | ParsedUiMessage> = [
+    const messages: Array<ChatTransportMessage | ParsedUiMessage> = [
       buildSystemMessage(event),
       ...uiMessages,
     ];
@@ -628,7 +633,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     const result = await options.chatService.send({
       providerType: modelConfig.providerType,
       model: modelConfig.model,
-      messages: messages as unknown as ChatTransportMessage[],
+      messages,
       tools: napcatTools,
       threadId,
     });
