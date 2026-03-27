@@ -1,6 +1,6 @@
-import type { UIMessage, UIMessageChunk } from 'ai';
 import { describe, expect, it } from 'vitest';
 
+import type { ChatUiMessage, ChatUiMessageChunk } from '../../src/shared/chat/message_parts';
 import {
   createInitialStreamState,
   reduceStream,
@@ -9,7 +9,7 @@ import {
   type StreamState,
 } from '../../src/renderer/modules/chat/ui_stream_reducer';
 
-const applyMessageOps = (messages: UIMessage[], ops: MessageOp[]) => {
+const applyMessageOps = (messages: ChatUiMessage[], ops: MessageOp[]) => {
   for (const op of ops) {
     if (op.type === 'append') {
       messages.push(op.message);
@@ -35,8 +35,8 @@ const applyMessageOps = (messages: UIMessage[], ops: MessageOp[]) => {
 const runReducer = (
   initialState: StreamState,
   actions: StreamAction[]
-): { state: StreamState; messages: UIMessage[] } => {
-  const messages: UIMessage[] = [];
+): { state: StreamState; messages: ChatUiMessage[] } => {
+  const messages: ChatUiMessage[] = [];
   let state = initialState;
   let idSequence = 0;
 
@@ -84,16 +84,18 @@ describe('ui_stream_reducer', () => {
     expect(messages).toHaveLength(1);
     const [assistant] = messages;
     expect(assistant.parts[0]).toEqual({
-      type: 'skill-usage',
-      mode: 'auto',
-      skills: [
-        {
-          id: 'codex:.system/openai-docs',
-          name: 'openai-docs',
-          description: 'Official docs',
-          source: 'codex',
-        },
-      ],
+      type: 'data-skill-usage',
+      data: {
+        mode: 'auto',
+        skills: [
+          {
+            id: 'codex:.system/openai-docs',
+            name: 'openai-docs',
+            description: 'Official docs',
+            source: 'codex',
+          },
+        ],
+      },
     });
   });
 
@@ -124,19 +126,21 @@ describe('ui_stream_reducer', () => {
     expect(messages).toHaveLength(1);
     const [assistant] = messages;
     expect(assistant.parts[0]).toEqual({
-      type: 'context-report',
-      totalEstimatedTokens: 320,
-      retainedRecentMessages: 5,
-      compactedMessages: 9,
-      blocks: [
-        {
-          kind: 'thread-summary',
-          status: 'included',
-          estimatedTokens: 120,
-          charCount: 480,
-          sourceCount: 9,
-        },
-      ],
+      type: 'data-context-report',
+      data: {
+        totalEstimatedTokens: 320,
+        retainedRecentMessages: 5,
+        compactedMessages: 9,
+        blocks: [
+          {
+            kind: 'thread-summary',
+            status: 'included',
+            estimatedTokens: 120,
+            charCount: 480,
+            sourceCount: 9,
+          },
+        ],
+      },
     });
   });
 
@@ -168,20 +172,22 @@ describe('ui_stream_reducer', () => {
     expect(messages).toHaveLength(1);
     const [assistant] = messages;
     expect(assistant.parts[0]).toEqual({
-      type: 'affect-signal',
-      source: 'realtime',
-      guardActive: true,
-      label: 'anger',
-      confidence: 0.82,
-      valence: -0.64,
-      arousal: 0.77,
-      emotions: [{ label: 'anger', score: 0.82 }],
-      sampleCount: 3,
-      windowSize: 8,
-      startAt: '2026-03-22T00:00:00.000Z',
-      endAt: '2026-03-22T00:05:00.000Z',
-      ageMinutes: 1,
-      windowMinutes: 5,
+      type: 'data-affect-signal',
+      data: {
+        source: 'realtime',
+        guardActive: true,
+        label: 'anger',
+        confidence: 0.82,
+        valence: -0.64,
+        arousal: 0.77,
+        emotions: [{ label: 'anger', score: 0.82 }],
+        sampleCount: 3,
+        windowSize: 8,
+        startAt: '2026-03-22T00:00:00.000Z',
+        endAt: '2026-03-22T00:05:00.000Z',
+        ageMinutes: 1,
+        windowMinutes: 5,
+      },
     });
   });
 
@@ -198,7 +204,7 @@ describe('ui_stream_reducer', () => {
           toolCallId: 'tool_1',
           toolName: 'shell',
           input: { command: 'echo stop' },
-        } as UIMessageChunk,
+        } as ChatUiMessageChunk,
       },
       {
         type: 'tool_chunk',
@@ -208,7 +214,7 @@ describe('ui_stream_reducer', () => {
           toolName: 'shell',
           output: { stdout: 'stopped' },
           preliminary: false,
-        } as UIMessageChunk,
+        } as ChatUiMessageChunk,
       },
       { type: 'text_delta', delta: duplicateText },
       { type: 'finalize_response', fullText: `${duplicateText}${duplicateText}` },
@@ -239,7 +245,7 @@ describe('ui_stream_reducer', () => {
           toolCallId: 'tool_2',
           toolName: 'shell',
           input: { command: 'echo run' },
-        } as UIMessageChunk,
+        } as ChatUiMessageChunk,
       },
       {
         type: 'tool_chunk',
@@ -249,7 +255,7 @@ describe('ui_stream_reducer', () => {
           toolName: 'shell',
           output: { stdout: 'ok' },
           preliminary: false,
-        } as UIMessageChunk,
+        } as ChatUiMessageChunk,
       },
       { type: 'text_delta', delta: afterText },
       { type: 'finalize_response', fullText: `${beforeText}${afterText}` },

@@ -1,6 +1,11 @@
 import type { UIMessage, UIMessageChunk } from 'ai';
 
-import type { AffectLabel, AffectScore, AffectSignalSource } from '../emotion/affect';
+import {
+  isAffectLabel,
+  type AffectLabel,
+  type AffectScore,
+  type AffectSignalSource,
+} from '../emotion/affect';
 import type { SkillSource } from '../types/skill';
 import { isObjectRecord } from '../utils/guards';
 
@@ -244,8 +249,8 @@ export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
 
 export const getMemoryPartData = (part: unknown): MemoryPartData | null => {
   if (!isMemoryPart(part)) return null;
-  if (part.type === 'data-memory-retrieval' && isObjectRecord(part.data)) {
-    return part.data as MemoryPartData;
+  if (part.type === 'data-memory-retrieval') {
+    return isObjectRecord(part.data) ? (part.data as MemoryPartData) : {};
   }
 
   return {
@@ -256,8 +261,8 @@ export const getMemoryPartData = (part: unknown): MemoryPartData | null => {
 
 export const getSkillUsagePartData = (part: unknown): SkillUsagePartData | null => {
   if (!isSkillUsagePart(part)) return null;
-  if (part.type === 'data-skill-usage' && isObjectRecord(part.data)) {
-    return part.data as SkillUsagePartData;
+  if (part.type === 'data-skill-usage') {
+    return isObjectRecord(part.data) ? (part.data as SkillUsagePartData) : {};
   }
 
   return {
@@ -268,8 +273,8 @@ export const getSkillUsagePartData = (part: unknown): SkillUsagePartData | null 
 
 export const getContextReportPartData = (part: unknown): ContextReportPartData | null => {
   if (!isContextReportPart(part)) return null;
-  if (part.type === 'data-context-report' && isObjectRecord(part.data)) {
-    return part.data as ContextReportPartData;
+  if (part.type === 'data-context-report') {
+    return isObjectRecord(part.data) ? (part.data as ContextReportPartData) : {};
   }
 
   return {
@@ -288,14 +293,14 @@ export const getContextReportPartData = (part: unknown): ContextReportPartData |
 
 export const getAffectSignalPartData = (part: unknown): AffectSignalPartData | null => {
   if (!isAffectSignalPart(part)) return null;
-  if (part.type === 'data-affect-signal' && isObjectRecord(part.data)) {
-    return part.data as AffectSignalPartData;
+  if (part.type === 'data-affect-signal') {
+    return isObjectRecord(part.data) ? (part.data as AffectSignalPartData) : {};
   }
 
   return {
     ...(part.source === 'history' || part.source === 'realtime' ? { source: part.source } : {}),
     ...(typeof part.guardActive === 'boolean' ? { guardActive: part.guardActive } : {}),
-    ...(typeof part.label === 'string' ? { label: part.label as AffectLabel } : {}),
+    ...(isAffectLabel(part.label) ? { label: part.label } : {}),
     ...(typeof part.confidence === 'number' ? { confidence: part.confidence } : {}),
     ...(typeof part.valence === 'number' ? { valence: part.valence } : {}),
     ...(typeof part.arousal === 'number' ? { arousal: part.arousal } : {}),

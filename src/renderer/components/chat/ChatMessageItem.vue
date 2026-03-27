@@ -31,15 +31,15 @@
 </template>
 
 <script setup lang="ts">
-import type { UIMessage } from 'ai';
 import { Pencil } from 'lucide-vue-next';
+import type { ChatUiMessage } from '../../../shared/chat/message_parts';
 import { useI18n } from '../../i18n';
 
 import ChatMessageReferences from './ChatMessageReferences.vue';
 import ChatMessageParts from './ChatMessageParts.vue';
 
 defineProps<{
-  message: UIMessage;
+  message: ChatUiMessage;
   messageIndex: number;
   activeAssistantMessageId: string | null;
   streamRenderTick: number;
@@ -52,11 +52,11 @@ const emit = defineEmits<{
     event: 'approve-tool',
     payload: {
       approved: boolean;
-      message: UIMessage;
+      message: ChatUiMessage;
       part: unknown;
     }
   ): void;
-  (event: 'edit-user-message', message: UIMessage): void;
+  (event: 'edit-user-message', message: ChatUiMessage): void;
 }>();
 
 const { t } = useI18n();

@@ -81,7 +81,6 @@
 
 <script setup lang="ts">
 import { Chat } from '@ai-sdk/vue';
-import type { UIMessage } from 'ai';
 import { computed, ref, nextTick } from 'vue';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
@@ -104,6 +103,7 @@ import { useChatStreaming } from '../composables/useChatStreaming';
 import { useToolMetadata } from '../composables/useToolMetadata';
 import { getThreadOriginInfo } from '../modules/chat/thread_origin';
 import { getElectronAPI } from '../services/electron_api';
+import type { ChatUiMessage } from '../../shared/chat/message_parts';
 
 type ChatInputExpose = {
   setDraftMessage: (
@@ -118,8 +118,8 @@ const { t } = useI18n();
 const configStore = useConfigStore();
 
 // Create Chat instance for message management (without API endpoint for Electron)
-const chat = new Chat<UIMessage>({});
-const chatMessages = computed<UIMessage[]>(() => chat.messages as UIMessage[]);
+const chat = new Chat<ChatUiMessage>({});
+const chatMessages = computed<ChatUiMessage[]>(() => chat.messages);
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
@@ -162,7 +162,7 @@ const externalThreadNotice = computed(() => {
 
 const handleToolApprovalEvent = (payload: {
   approved: boolean;
-  message: UIMessage;
+  message: ChatUiMessage;
   part: unknown;
 }) => {
   void handleToolApproval(payload.message, payload.part, payload.approved);
@@ -237,7 +237,7 @@ const selectThread = streaming.selectThread;
 const handleThreadDeleted = streaming.handleThreadDeleted;
 const handleNewChat = streaming.handleNewChat;
 
-const beginEditMessage = async (message: UIMessage) => {
+const beginEditMessage = async (message: ChatUiMessage) => {
   const setDraft = async (text: string) => {
     await chatInputRef.value?.setDraftMessage(text, { focus: true, select: true });
   };

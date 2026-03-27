@@ -1,3 +1,5 @@
+import type { ProviderMetadata } from 'ai';
+
 import type { DynamicToolPart, DynamicToolState } from '../message_parts';
 import { isObjectRecord } from '../message_parts';
 import { getApprovalIdValue, getToolCallIdFromPart } from './ids';
@@ -106,6 +108,49 @@ const getDeniedReasonFromToolPart = (part: Record<string, unknown>): string | un
   return undefined;
 };
 
+type DynamicToolBase = {
+  type: 'dynamic-tool';
+  toolCallId: string;
+  toolName: string;
+  title?: string;
+  providerExecuted?: boolean;
+};
+
+const getCallProviderMetadata = (part: Record<string, unknown>): ProviderMetadata | undefined =>
+  isObjectRecord(part.callProviderMetadata)
+    ? (part.callProviderMetadata as ProviderMetadata)
+    : undefined;
+
+const toNormalizedDynamicToolState = (
+  part: Record<string, unknown>
+):
+  | 'input-streaming'
+  | 'input-available'
+  | 'approval-requested'
+  | 'approval-responded'
+  | 'output-available'
+  | 'output-error'
+  | 'output-denied' => {
+  const rawState = typeof part.state === 'string' ? part.state : 'input-available';
+
+  if (rawState === 'done') {
+    if (isObjectRecord(part.approval) && part.approval.approved === false) {
+      return 'output-denied';
+    }
+    if (typeof part.errorText === 'string' && part.errorText.trim()) {
+      return 'output-error';
+    }
+    if (part.output !== undefined || part.result !== undefined) {
+      return 'output-available';
+    }
+    return 'input-available';
+  }
+
+  return DYNAMIC_TOOL_STATES.has(rawState as DynamicToolState)
+    ? (rawState as Exclude<DynamicToolState, 'done'>)
+    : 'input-available';
+};
+
 export const normalizeDynamicToolPart = (
   part: Record<string, unknown>,
   fallbackToolCallId: string
@@ -117,39 +162,37 @@ export const normalizeDynamicToolPart = (
   const toolName =
     typeof part.toolName === 'string' && part.toolName.length > 0 ? part.toolName : 'tool';
 
-  const rawState = typeof part.state === 'string' ? part.state : 'input-available';
-  const state = DYNAMIC_TOOL_STATES.has(rawState as DynamicToolState)
-    ? (rawState as DynamicToolState)
-    : 'input-available';
+  const state = toNormalizedDynamicToolState(part);
   const input = part.input ?? {};
+  const providerMetadata = getCallProviderMetadata(part);
 
-  const normalizedBase: DynamicToolPart = {
+  const normalizedBase: DynamicToolBase = {
     type: 'dynamic-tool',
     toolCallId,
     toolName,
+    ...(typeof part.title === 'string' && part.title.trim() ? { title: part.title } : {}),
+    ...(typeof part.providerExecuted === 'boolean'
+      ? { providerExecuted: part.providerExecuted }
+      : {}),
   };
-
-  if (typeof part.title === 'string' && part.title.trim()) {
-    normalizedBase.title = part.title;
-  }
-  if (typeof part.providerExecuted === 'boolean') {
-    normalizedBase.providerExecuted = part.providerExecuted;
-  }
-  if (isObjectRecord(part.callProviderMetadata)) {
-    normalizedBase.callProviderMetadata = part.callProviderMetadata;
-  }
 
   if (state === 'input-streaming') {
     return { ...normalizedBase, state, input };
   }
   if (state === 'input-available') {
-    return { ...normalizedBase, state, input };
+    return {
+      ...normalizedBase,
+      state,
+      input,
+      ...(providerMetadata ? { callProviderMetadata: providerMetadata } : {}),
+    };
   }
   if (state === 'approval-requested') {
     return {
       ...normalizedBase,
       state,
       input,
+      ...(providerMetadata ? { callProviderMetadata: providerMetadata } : {}),
       approval: {
         id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
       },
@@ -169,6 +212,7 @@ export const normalizeDynamicToolPart = (
       ...normalizedBase,
       state,
       input,
+      ...(providerMetadata ? { callProviderMetadata: providerMetadata } : {}),
       approval: {
         id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
         approved,
@@ -195,16 +239,32 @@ export const normalizeDynamicToolPart = (
       state,
       input,
       output: part.output ?? null,
+      ...(providerMetadata ? { callProviderMetadata: providerMetadata } : {}),
       ...(typeof part.preliminary === 'boolean' ? { preliminary: part.preliminary } : {}),
       ...(approval ? { approval } : {}),
     };
   }
   if (state === 'output-error') {
+    const approval =
+      isObjectRecord(part.approval) &&
+      typeof part.approval.id === 'string' &&
+      part.approval.approved === true
+        ? {
+            id: part.approval.id,
+            approved: true as const,
+            ...(typeof part.approval.reason === 'string' && part.approval.reason.length > 0
+              ? { reason: part.approval.reason }
+              : {}),
+          }
+        : undefined;
+
     return {
       ...normalizedBase,
       state,
       input,
       errorText: getErrorTextFromToolPart(part),
+      ...(providerMetadata ? { callProviderMetadata: providerMetadata } : {}),
+      ...(approval ? { approval } : {}),
     };
   }
 
@@ -213,6 +273,7 @@ export const normalizeDynamicToolPart = (
     ...normalizedBase,
     state: 'output-denied',
     input,
+    ...(providerMetadata ? { callProviderMetadata: providerMetadata } : {}),
     approval: {
       id: getApprovalIdFromPart(part, `${toolCallId}_approval`),
       approved: false,

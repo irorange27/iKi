@@ -231,7 +231,6 @@
 </template>
 
 <script setup lang="ts">
-import type { UIMessage } from 'ai';
 import {
   CheckCircle,
   ChevronDown,
@@ -241,6 +240,7 @@ import {
   ShieldBan,
   XCircle,
 } from 'lucide-vue-next';
+import type { ChatUiMessage } from '../../../shared/chat/message_parts';
 
 import {
   canToggleToolCollapse,
@@ -272,12 +272,15 @@ import { useI18n } from '../../i18n';
 const props = defineProps<{
   approvalProcessing: boolean;
   mcpServerLabel: string;
-  message: UIMessage;
+  message: ChatUiMessage;
   part: unknown;
 }>();
 
 const emit = defineEmits<{
-  (event: 'approve-tool', payload: { approved: boolean; message: UIMessage; part: unknown }): void;
+  (
+    event: 'approve-tool',
+    payload: { approved: boolean; message: ChatUiMessage; part: unknown }
+  ): void;
 }>();
 
 const { t } = useI18n();

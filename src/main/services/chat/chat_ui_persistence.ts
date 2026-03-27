@@ -1,5 +1,10 @@
-import type { ContextReportItem, SkillUsageEntry } from '../../../shared/chat/message_parts';
 import {
+  type AffectSignalPartData,
+  type ContextReportItem,
+  type ContextReportPartData,
+  type MemoryPartData,
+  type SkillUsageEntry,
+  type SkillUsagePartData,
   createAffectSignalPart,
   createContextReportPart,
   createMemoryPart,
@@ -48,16 +53,13 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
           const normalized = normalizeToolPartForValidation(part, createRuntimeId('tool_call'));
           if (!normalized) continue;
 
-          // Keep only semantically meaningful fields; drop renderer-only UI state.
-          delete normalized.callProviderMetadata;
-
           nextParts.push(normalized);
           continue;
         }
 
         if (part.type === 'data-memory-retrieval' || part.type === 'memory-retrieval') {
           const memoryData = getMemoryPartData(part);
-          const normalizedData: Record<string, unknown> = {};
+          const normalizedData: MemoryPartData = {};
           if (typeof memoryData?.query === 'string' && memoryData.query.trim()) {
             normalizedData.query = memoryData.query.trim();
           }
@@ -74,7 +76,7 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
 
         if (part.type === 'data-skill-usage' || part.type === 'skill-usage') {
           const skillData = getSkillUsagePartData(part);
-          const normalizedData: Record<string, unknown> = {};
+          const normalizedData: SkillUsagePartData = {};
           if (skillData?.mode === 'manual' || skillData?.mode === 'auto') {
             normalizedData.mode = skillData.mode;
           }
@@ -107,7 +109,7 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
 
         if (part.type === 'data-affect-signal' || part.type === 'affect-signal') {
           const affectData = getAffectSignalPartData(part);
-          const normalizedData: Record<string, unknown> = {};
+          const normalizedData: AffectSignalPartData = {};
           if (affectData?.source === 'history' || affectData?.source === 'realtime') {
             normalizedData.source = affectData.source;
           }
@@ -181,7 +183,7 @@ export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
 
         if (part.type === 'data-context-report' || part.type === 'context-report') {
           const contextData = getContextReportPartData(part);
-          const normalizedData: Record<string, unknown> = {};
+          const normalizedData: ContextReportPartData = {};
           if (
             typeof contextData?.totalEstimatedTokens === 'number' &&
             Number.isFinite(contextData.totalEstimatedTokens)

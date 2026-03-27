@@ -1,12 +1,11 @@
-import type { UIMessage } from 'ai';
 import { ref, type Ref } from 'vue';
 
 import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
 import {
+  type ChatUiMessage,
   isDynamicToolPart,
-  type DynamicToolPart,
-  type UiMessagePart,
 } from '../../../shared/chat/message_parts';
+import { normalizeToolPartForValidation } from '../../../shared/chat/tool_parts';
 
 export type ApprovalRequestPayload = {
   approvalId: string;
@@ -35,7 +34,7 @@ export type ApprovalResolvedEvent = {
 export type ApprovalEvent = ApprovalRequestedEvent | ApprovalResolvedEvent;
 
 export type ApprovalPatch = {
-  message: UIMessage;
+  message: ChatUiMessage;
   didChange: boolean;
 };
 
@@ -58,12 +57,12 @@ export const createToolApprovalService = (deps: { createMessageId: () => string 
     approvalProcessing.value = {};
   };
 
-  const applyApprovalEvent = (message: UIMessage, event: ApprovalEvent): ApprovalPatch => {
+  const applyApprovalEvent = (message: ChatUiMessage, event: ApprovalEvent): ApprovalPatch => {
     if (!message || !Array.isArray(message.parts)) {
       return { message, didChange: false };
     }
 
-    const parts = [...(message.parts as UiMessagePart[])];
+    const parts = [...message.parts];
 
     if (event.type === 'approval_requested') {
       const request = event.request;
@@ -80,17 +79,24 @@ export const createToolApprovalService = (deps: { createMessageId: () => string 
 
       const toolCallId =
         requestedToolCallId || getToolCallIdFromPart(existingPart) || deps.createMessageId();
-      const approvalPart: DynamicToolPart = {
-        ...(existingToolPart || {}),
-        type: 'dynamic-tool',
-        toolName: request.toolCall?.toolName || existingToolPart?.toolName || 'tool',
-        toolCallId,
-        input: request.toolCall?.args ?? existingToolPart?.input ?? {},
-        state: 'approval-requested',
-        approval: {
-          id: request.approvalId,
+      const approvalPart = normalizeToolPartForValidation(
+        {
+          ...(existingToolPart || {}),
+          type: 'dynamic-tool',
+          toolName: request.toolCall?.toolName || existingToolPart?.toolName || 'tool',
+          toolCallId,
+          input: request.toolCall?.args ?? existingToolPart?.input ?? {},
+          state: 'approval-requested',
+          approval: {
+            id: request.approvalId,
+          },
         },
-      };
+        toolCallId
+      );
+
+      if (!approvalPart) {
+        return { message, didChange: false };
+      }
 
       if (existingPartIndex >= 0) {
         parts[existingPartIndex] = approvalPart;
@@ -99,7 +105,7 @@ export const createToolApprovalService = (deps: { createMessageId: () => string 
       }
 
       return {
-        message: { ...message, parts: parts as UIMessage['parts'] },
+        message: { ...message, parts },
         didChange: true,
       };
     }
@@ -114,34 +120,38 @@ export const createToolApprovalService = (deps: { createMessageId: () => string 
       return { message, didChange: false };
     }
 
-    const part: DynamicToolPart = isDynamicToolPart(parts[partIndex])
-      ? { ...(parts[partIndex] as DynamicToolPart) }
-      : {
-          type: 'dynamic-tool',
-          toolCallId: getToolCallIdFromPart(parts[partIndex]) || deps.createMessageId(),
-          toolName: 'tool',
-        };
+    const existingPart = parts[partIndex];
+    const existingToolPart = isDynamicToolPart(existingPart) ? existingPart : undefined;
+    const toolCallId = getToolCallIdFromPart(existingPart) || deps.createMessageId();
+    const part = normalizeToolPartForValidation(
+      {
+        ...(existingToolPart || {}),
+        type: 'dynamic-tool',
+        toolCallId,
+        toolName: existingToolPart?.toolName || 'tool',
+        input: existingToolPart?.input ?? {},
+        state: event.approved ? 'approval-responded' : 'output-denied',
+        approval: {
+          id: approvalId,
+          approved: event.approved,
+          reason:
+            event.reason ||
+            (event.approved
+              ? 'User approved tool execution.'
+              : 'User rejected tool execution.'),
+        },
+      },
+      toolCallId
+    );
 
-    if (event.approved) {
-      part.state = 'approval-responded';
-      part.approval = {
-        id: approvalId,
-        approved: true,
-        reason: event.reason || 'User approved tool execution.',
-      };
-    } else {
-      part.state = 'output-denied';
-      part.approval = {
-        id: approvalId,
-        approved: false,
-        reason: event.reason || 'User rejected tool execution.',
-      };
+    if (!part) {
+      return { message, didChange: false };
     }
 
     parts[partIndex] = part;
 
     return {
-      message: { ...message, parts: parts as UIMessage['parts'] },
+      message: { ...message, parts },
       didChange: true,
     };
   };

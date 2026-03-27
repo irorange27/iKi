@@ -3,6 +3,10 @@ import {
   createContextReportPart,
   createMemoryPart,
   createSkillUsagePart,
+  getAffectSignalPartData,
+  getContextReportPartData,
+  getMemoryPartData,
+  getSkillUsagePartData,
   type ChatUiMessage,
   type TextPart,
   type UiMessagePart,
@@ -43,63 +47,20 @@ const normalizePart = (
     return normalizeToolPartForValidation(part, fallbackToolCallId);
   }
 
-  if (part.type === 'data-memory-retrieval' && isObjectRecord(part.data)) {
-    return createMemoryPart(part.data);
-  }
-  if (part.type === 'memory-retrieval') {
-    return createMemoryPart({
-      ...(typeof part.query === 'string' ? { query: part.query } : {}),
-      ...(Array.isArray(part.results) ? { results: part.results } : {}),
-    });
+  if (part.type === 'data-memory-retrieval' || part.type === 'memory-retrieval') {
+    return createMemoryPart(getMemoryPartData(part) ?? {});
   }
 
-  if (part.type === 'data-skill-usage' && isObjectRecord(part.data)) {
-    return createSkillUsagePart(part.data);
-  }
-  if (part.type === 'skill-usage') {
-    return createSkillUsagePart({
-      ...(part.mode === 'manual' || part.mode === 'auto' ? { mode: part.mode } : {}),
-      ...(Array.isArray(part.skills) ? { skills: part.skills } : {}),
-    });
+  if (part.type === 'data-skill-usage' || part.type === 'skill-usage') {
+    return createSkillUsagePart(getSkillUsagePartData(part) ?? {});
   }
 
-  if (part.type === 'data-affect-signal' && isObjectRecord(part.data)) {
-    return createAffectSignalPart(part.data);
-  }
-  if (part.type === 'affect-signal') {
-    return createAffectSignalPart({
-      ...(part.source === 'history' || part.source === 'realtime' ? { source: part.source } : {}),
-      ...(typeof part.guardActive === 'boolean' ? { guardActive: part.guardActive } : {}),
-      ...(typeof part.label === 'string' ? { label: part.label } : {}),
-      ...(typeof part.confidence === 'number' ? { confidence: part.confidence } : {}),
-      ...(typeof part.valence === 'number' ? { valence: part.valence } : {}),
-      ...(typeof part.arousal === 'number' ? { arousal: part.arousal } : {}),
-      ...(Array.isArray(part.emotions) ? { emotions: part.emotions } : {}),
-      ...(typeof part.sampleCount === 'number' ? { sampleCount: part.sampleCount } : {}),
-      ...(typeof part.windowSize === 'number' ? { windowSize: part.windowSize } : {}),
-      ...(typeof part.startAt === 'string' ? { startAt: part.startAt } : {}),
-      ...(typeof part.endAt === 'string' ? { endAt: part.endAt } : {}),
-      ...(typeof part.ageMinutes === 'number' ? { ageMinutes: part.ageMinutes } : {}),
-      ...(typeof part.windowMinutes === 'number' ? { windowMinutes: part.windowMinutes } : {}),
-    });
+  if (part.type === 'data-affect-signal' || part.type === 'affect-signal') {
+    return createAffectSignalPart(getAffectSignalPartData(part) ?? {});
   }
 
-  if (part.type === 'data-context-report' && isObjectRecord(part.data)) {
-    return createContextReportPart(part.data);
-  }
-  if (part.type === 'context-report') {
-    return createContextReportPart({
-      ...(typeof part.totalEstimatedTokens === 'number'
-        ? { totalEstimatedTokens: part.totalEstimatedTokens }
-        : {}),
-      ...(typeof part.retainedRecentMessages === 'number'
-        ? { retainedRecentMessages: part.retainedRecentMessages }
-        : {}),
-      ...(typeof part.compactedMessages === 'number'
-        ? { compactedMessages: part.compactedMessages }
-        : {}),
-      ...(Array.isArray(part.blocks) ? { blocks: part.blocks } : {}),
-    });
+  if (part.type === 'data-context-report' || part.type === 'context-report') {
+    return createContextReportPart(getContextReportPartData(part) ?? {});
   }
 
   return null;

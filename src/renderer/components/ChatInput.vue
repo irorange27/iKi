@@ -220,7 +220,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, computed } from 'vue';
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage } from '../../shared/chat/message_parts';
 import type { Provider } from '../../shared/types/provider';
 import { clonePlainData } from '../../shared/utils/clone';
 import { getErrorMessage } from '../../shared/utils/errors';
@@ -256,7 +256,7 @@ const props = defineProps<{
     mcpServerIds?: string[];
   }) => Promise<{
     threadId: string;
-    messagesSnapshot: UIMessage[];
+    messagesSnapshot: ChatUiMessage[];
   } | null>;
   contextUsage?: {
     usedTokens: number;
@@ -449,7 +449,7 @@ const sendMessage = async () => {
   selectedMcpServerIds.value = resolvedMcpServerIds;
   isPreparingSend.value = true;
 
-  let preparedMessageSend: { threadId: string; messagesSnapshot: UIMessage[] } | null = null;
+  let preparedMessageSend: { threadId: string; messagesSnapshot: ChatUiMessage[] } | null = null;
   try {
     if (!props.prepareMessageSend) {
       chatInputLogger.event({

@@ -1,12 +1,10 @@
-import type { UIMessage } from 'ai';
-
-import type { TextPart } from '../../../shared/chat/message_parts';
+import type { ChatUiMessage, TextPart } from '../../../shared/chat/message_parts';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
 export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
 
-export const extractTextFromMessage = (message: UIMessage | undefined): string => {
+export const extractTextFromMessage = (message: ChatUiMessage | undefined): string => {
   if (!message || !Array.isArray(message.parts)) return '';
   return message.parts
     .filter(isTextPart)
@@ -15,10 +13,10 @@ export const extractTextFromMessage = (message: UIMessage | undefined): string =
 };
 
 export const upsertTextIntoMessageParts = (
-  parts: UIMessage['parts'],
+  parts: ChatUiMessage['parts'],
   nextText: string
-): UIMessage['parts'] => {
-  const nextParts: UIMessage['parts'] = [];
+): ChatUiMessage['parts'] => {
+  const nextParts: ChatUiMessage['parts'] = [];
   let replaced = false;
 
   for (const part of parts) {

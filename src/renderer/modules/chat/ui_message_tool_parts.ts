@@ -1,4 +1,3 @@
-import type { UIMessage } from 'ai';
 import type { Component } from 'vue';
 import {
   Download,
@@ -23,6 +22,7 @@ import {
   isToolResultPart,
   normalizeToolNameKey,
 } from '../../../shared/chat/tool_parts';
+import type { ChatUiMessage } from '../../../shared/chat/message_parts';
 import {
   parseToolInput,
   parseToolOutput,
@@ -471,7 +471,7 @@ export const isToolCollapsed = (part: unknown): boolean => {
 export const canToggleToolCollapse = (part: unknown): boolean =>
   isToolCallPart(part) || isToolResultPart(part);
 
-export const toggleToolCollapse = (_message: UIMessage, part: unknown) => {
+export const toggleToolCollapse = (_message: ChatUiMessage, part: unknown) => {
   // Collapse state is a purely UI concern; do not persist it.
   const toolCallId = getToolCallIdFromPart(part);
   if (!toolCallId) return;

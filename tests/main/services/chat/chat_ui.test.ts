@@ -37,21 +37,25 @@ describe('chat_ui message serialization', () => {
 
     expect(parsed.parts).toEqual([
       {
-        type: 'skill-usage',
-        mode: 'auto',
-        skills: [
-          {
-            id: 'codex:.system/openai-docs',
-            name: 'openai-docs',
-            description: 'Official docs guidance',
-            source: 'codex',
-          },
-        ],
+        type: 'data-skill-usage',
+        data: {
+          mode: 'auto',
+          skills: [
+            {
+              id: 'codex:.system/openai-docs',
+              name: 'openai-docs',
+              description: 'Official docs guidance',
+              source: 'codex',
+            },
+          ],
+        },
       },
       {
-        type: 'memory-retrieval',
-        query: 'project constraints',
-        results: [{ id: 'mem_1', summary: 'Prefer maintainable changes.', score: 0.82 }],
+        type: 'data-memory-retrieval',
+        data: {
+          query: 'project constraints',
+          results: [{ id: 'mem_1', summary: 'Prefer maintainable changes.', score: 0.82 }],
+        },
       },
       { type: 'text', text: 'Final answer.' },
     ]);

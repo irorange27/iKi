@@ -2,7 +2,6 @@ import { defaultToolRegistry } from '../../../core/tools';
 import type {
   AffectSignalPartData,
   ChatUiMessageChunk,
-  ContextReportItem,
   SkillUsageEntry,
 } from '../../../shared/chat/message_parts';
 import type { AffectSignal } from '../../../shared/emotion/affect';

@@ -1,8 +1,4 @@
 import {
-  createAffectSignalPart,
-  createContextReportPart,
-  createMemoryPart,
-  createSkillUsagePart,
   getToolCallIdFromPart,
   getToolInput,
   getToolName,
@@ -13,6 +9,10 @@ import {
   isAffectSignalPart,
   type ChatUiMessage,
   type ChatUiMessageChunk,
+  createAffectSignalPart,
+  createContextReportPart,
+  createMemoryPart,
+  createSkillUsagePart,
   isContextReportPart,
   isDynamicToolPart,
   isMemoryPart,
@@ -23,7 +23,9 @@ import {
   type DynamicToolPart,
   type SkillUsageEntry,
   type TextPart,
+  type UiMessagePart,
 } from '../../../shared/chat/message_parts';
+import { normalizeToolPartForValidation } from '../../../shared/chat/tool_parts';
 import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
 
 export type StreamState = {
@@ -81,7 +83,7 @@ export type StreamAction =
   | { type: 'reset' }
   | { type: 'text_delta'; delta: string }
   | { type: 'finalize_response'; fullText: string }
-  | { type: 'tool_chunk'; chunk: ChatUiMessageChunk }
+  | { type: 'tool_chunk'; chunk: ToolUiChunk }
   | {
       type: 'skill_chunk';
       chunk: { mode?: unknown; skills?: unknown };
@@ -121,6 +123,23 @@ export type ReduceResult = {
   effects: StreamEffect[];
 };
 
+type ToolUiChunk = Extract<
+  ChatUiMessageChunk,
+  {
+    type:
+      | 'tool-input-start'
+      | 'tool-input-delta'
+      | 'tool-input-available'
+      | 'tool-input-error'
+      | 'tool-output-available'
+      | 'tool-output-error'
+      | 'tool-output-denied'
+      | 'tool-approval-request';
+  }
+>;
+
+type StatefulToolUiChunk = Exclude<ToolUiChunk, { type: 'tool-approval-request' }>;
+
 const resetTransientState = (state: StreamState): StreamState => ({
   ...state,
   activeAssistantMessageId: null,
@@ -144,7 +163,7 @@ const updateAssistantMessage = (
   const existed = existingIndex >= 0;
 
   if (existed) {
-    baseMessage = ctx.messages[existingIndex] as ChatUiMessage;
+    baseMessage = ctx.messages[existingIndex];
   } else {
     baseMessage = {
       id: ctx.createMessageId(),
@@ -302,84 +321,69 @@ const hasRenderableContent = (parts: UiMessagePart[]): boolean =>
 
 const buildToolPartUpdate = (
   part: DynamicToolPart,
-  chunk: ChatUiMessageChunk,
+  chunk: StatefulToolUiChunk,
   inputText?: string
 ): DynamicToolPart => {
-  const nextPart = { ...part };
+  const mergeInput = (currentInput: unknown, incomingInput: unknown): unknown => {
+    if (isObjectRecord(currentInput) && isObjectRecord(incomingInput)) {
+      return { ...currentInput, ...incomingInput };
+    }
+    return incomingInput ?? currentInput ?? {};
+  };
+
+  const nextPartRecord: Record<string, unknown> = {
+    ...part,
+    type: 'dynamic-tool',
+    toolCallId: part.toolCallId,
+    toolName: part.toolName,
+  };
 
   if ('providerExecuted' in chunk && typeof chunk.providerExecuted === 'boolean') {
-    nextPart.providerExecuted = chunk.providerExecuted;
+    nextPartRecord.providerExecuted = chunk.providerExecuted;
   }
   if ('title' in chunk && typeof chunk.title === 'string') {
-    nextPart.title = chunk.title;
+    nextPartRecord.title = chunk.title;
+  }
+  if ('providerMetadata' in chunk && isObjectRecord(chunk.providerMetadata)) {
+    nextPartRecord.callProviderMetadata = chunk.providerMetadata;
   }
 
   if (chunk.type === 'tool-input-start') {
-    nextPart.state = 'input-streaming';
-    if (nextPart.input === undefined) {
-      nextPart.input = {};
+    nextPartRecord.state = 'input-streaming';
+    nextPartRecord.input = part.input ?? {};
+  } else if (chunk.type === 'tool-input-delta') {
+    nextPartRecord.state = 'input-streaming';
+    nextPartRecord.input = parseToolInputFromText(
+      typeof inputText === 'string' ? inputText : ''
+    );
+  } else if (chunk.type === 'tool-input-available') {
+    nextPartRecord.state = 'input-available';
+    nextPartRecord.input = mergeInput(part.input, chunk.input);
+  } else if (chunk.type === 'tool-input-error') {
+    nextPartRecord.state = 'output-error';
+    nextPartRecord.input = mergeInput(part.input, chunk.input);
+    nextPartRecord.errorText = chunk.errorText || 'Invalid tool input';
+  } else if (chunk.type === 'tool-output-available') {
+    nextPartRecord.state = 'output-available';
+    nextPartRecord.input = part.input ?? {};
+    nextPartRecord.output = chunk.output;
+    if (typeof chunk.preliminary === 'boolean') {
+      nextPartRecord.preliminary = chunk.preliminary;
     }
-    return nextPart;
+  } else if (chunk.type === 'tool-output-error') {
+    nextPartRecord.state = 'output-error';
+    nextPartRecord.input = part.input ?? {};
+    nextPartRecord.errorText = chunk.errorText || 'Tool execution failed';
+  } else if (chunk.type === 'tool-output-denied') {
+    nextPartRecord.state = 'output-denied';
+    nextPartRecord.input = part.input ?? {};
   }
 
-  if (chunk.type === 'tool-input-delta') {
-    const nextInputText = typeof inputText === 'string' ? inputText : '';
-    nextPart.input = parseToolInputFromText(nextInputText);
-    nextPart.state = 'input-streaming';
-    return nextPart;
-  }
-
-  if (chunk.type === 'tool-input-available') {
-    if (isObjectRecord(nextPart.input) && isObjectRecord(chunk.input)) {
-      nextPart.input = { ...nextPart.input, ...chunk.input };
-    } else {
-      nextPart.input = chunk.input ?? nextPart.input ?? {};
-    }
-    nextPart.state = 'input-available';
-    return nextPart;
-  }
-
-  if (chunk.type === 'tool-input-error') {
-    if (isObjectRecord(nextPart.input) && isObjectRecord(chunk.input)) {
-      nextPart.input = { ...nextPart.input, ...chunk.input };
-    } else {
-      nextPart.input = chunk.input ?? nextPart.input ?? {};
-    }
-    nextPart.output = {
-      error: chunk.errorText || 'Invalid tool input',
-    };
-    nextPart.state = 'output-error';
-    return nextPart;
-  }
-
-  if (chunk.type === 'tool-output-available') {
-    nextPart.output = chunk.output;
-    nextPart.state = chunk.preliminary ? 'input-streaming' : 'output-available';
-    return nextPart;
-  }
-
-  if (chunk.type === 'tool-output-error') {
-    nextPart.output = {
-      error: chunk.errorText || 'Tool execution failed',
-    };
-    nextPart.state = 'output-error';
-    return nextPart;
-  }
-
-  if (chunk.type === 'tool-output-denied') {
-    nextPart.state = 'output-denied';
-    nextPart.output = {
-      message: 'Tool execution denied',
-      toolCallId: nextPart.toolCallId,
-    };
-    return nextPart;
-  }
-
-  return nextPart;
+  return normalizeToolPartForValidation(nextPartRecord, part.toolCallId) ?? part;
 };
 
 const buildToolUiStatePatch = (
-  chunk: ChatUiMessageChunk,
+  chunk: StatefulToolUiChunk,
   nowMs: number,
   previousState: ToolUiState | undefined,
   nextInputText?: string
@@ -668,15 +672,25 @@ export const reduceStream = (
         'toolName' in chunk && typeof chunk.toolName === 'string' && chunk.toolName.trim()
           ? chunk.toolName
           : undefined;
+      const basePart =
+        normalizeToolPartForValidation(
+          {
+            ...(existingToolPart || {}),
+            type: 'dynamic-tool',
+            toolCallId,
+            toolName: chunkToolName || (existingToolPart ? existingToolPart.toolName : 'tool'),
+            input: existingToolPart?.input ?? {},
+          },
+          toolCallId
+        ) ?? {
+          type: 'dynamic-tool',
+          toolCallId,
+          toolName: chunkToolName || (existingToolPart ? existingToolPart.toolName : 'tool'),
+          state: 'input-available',
+          input: existingToolPart?.input ?? {},
+        };
 
-      const nextPart: DynamicToolPart = {
-        ...(existingToolPart || {}),
-        type: 'dynamic-tool',
-        toolCallId,
-        toolName: chunkToolName || (existingToolPart ? existingToolPart.toolName : 'tool'),
-      };
-
-      const updatedPart = buildToolPartUpdate(nextPart, chunk, nextInputText);
+      const updatedPart = buildToolPartUpdate(basePart, chunk, nextInputText);
 
       if (existingPartIndex >= 0) {
         nextParts[existingPartIndex] = updatedPart;

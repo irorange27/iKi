@@ -327,7 +327,7 @@ export const createChatUiStreamController = (deps: {
       return;
     }
 
-    if (isToolChunk) {
+    if (isToolChunk(chunk)) {
       await dispatch({ type: 'tool_chunk', chunk });
     }
   };

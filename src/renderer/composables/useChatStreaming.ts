@@ -1,6 +1,5 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
-import type { UIMessage } from 'ai';
 
 import { createChatUiStreamController } from '../modules/chat/ui_stream_controller';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
@@ -9,6 +8,7 @@ import {
   upsertTextIntoMessageParts,
   extractTextFromMessage,
 } from '../modules/chat/ui_message_text';
+import type { ChatUiMessage } from '../../shared/chat/message_parts';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import { createLogger } from '../logger';
 import type { ChatThread } from './useChatThreads';
@@ -17,7 +17,7 @@ const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
 export type PreparedMessageSend = {
   threadId: string;
-  messagesSnapshot: UIMessage[];
+  messagesSnapshot: ChatUiMessage[];
 };
 
 type PrepareMessageSendPayload = {
@@ -36,7 +36,7 @@ export const useChatStreaming = (deps: {
   getCurrentThreadId: () => string | null;
   onAssistantMessagePersisted: (params: {
     threadId: string;
-    messagesSnapshot: UIMessage[];
+    messagesSnapshot: ChatUiMessage[];
   }) => Promise<void>;
   currentThread: Ref<ChatThread | null>;
   currentModel: Ref<string>;
@@ -50,7 +50,7 @@ export const useChatStreaming = (deps: {
   const editingUserMessageId = ref<string | null>(null);
 
   const upsertUiMessage = async (
-    message: UIMessage,
+    message: ChatUiMessage,
     parentId?: string,
     source = 'unknown',
     threadIdOverride?: string
@@ -113,7 +113,7 @@ export const useChatStreaming = (deps: {
   };
 
   const beginEditMessage = async (
-    message: UIMessage,
+    message: ChatUiMessage,
     setDraftMessage: (text: string) => Promise<void>
   ) => {
     if (!message || message.role !== 'user' || typeof message.id !== 'string') return;
@@ -178,38 +178,42 @@ export const useChatStreaming = (deps: {
       const messageIndex = deps.messageStore.findIndexById(pendingEditMessageId);
 
       if (messageIndex >= 0) {
-        const currentUserMessage = deps.messageStore.getAt(messageIndex) as UIMessage;
-        const updatedUserMessage: UIMessage = {
-          ...currentUserMessage,
-          parts: upsertTextIntoMessageParts(currentUserMessage.parts, content),
-        };
+        const currentUserMessage = deps.messageStore.getAt(messageIndex);
+        if (!currentUserMessage) {
+          editingUserMessageId.value = null;
+        } else {
+          const updatedUserMessage: ChatUiMessage = {
+            ...currentUserMessage,
+            parts: upsertTextIntoMessageParts(currentUserMessage.parts, content),
+          };
 
-        deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
-        await upsertUiMessage(
-          updatedUserMessage,
-          undefined,
-          'user-message-edit',
-          deps.currentThread.value.id
-        );
-        await truncateConversationAfterIndex(messageIndex);
+          deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
+          await upsertUiMessage(
+            updatedUserMessage,
+            undefined,
+            'user-message-edit',
+            deps.currentThread.value.id
+          );
+          await truncateConversationAfterIndex(messageIndex);
 
-        streamController.beginTurn({
-          threadId: deps.currentThread.value.id,
-          parentId: updatedUserMessage.id,
-        });
+          streamController.beginTurn({
+            threadId: deps.currentThread.value.id,
+            parentId: updatedUserMessage.id,
+          });
 
-        editingUserMessageId.value = null;
-        deps.scrollToBottom();
-        return {
-          threadId: deps.currentThread.value.id,
-          messagesSnapshot: deps.messageStore.snapshot(),
-        };
+          editingUserMessageId.value = null;
+          deps.scrollToBottom();
+          return {
+            threadId: deps.currentThread.value.id,
+            messagesSnapshot: deps.messageStore.snapshot(),
+          };
+        }
       }
 
       editingUserMessageId.value = null;
     }
 
-    const userMessage: UIMessage = {
+    const userMessage: ChatUiMessage = {
       id: deps.createMessageId(),
       role: 'user',
       parts: [{ type: 'text', text: content, state: 'done' }],

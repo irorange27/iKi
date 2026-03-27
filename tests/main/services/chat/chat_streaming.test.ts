@@ -261,6 +261,7 @@ beforeEach(() => {
     messageId: 'assistant_1',
     emitTextDelta: vi.fn(),
     emitToolEvent: vi.fn(),
+    emitSkillUsage: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
     emitAffectSignal: vi.fn(),
     emitContextReport: vi.fn(),
@@ -307,8 +308,7 @@ describe('createChatStreaming', () => {
       awaitingApproval: false,
       stopped: false,
     });
-    expect(webContents.send).toHaveBeenCalledWith('chat:ui-chunk', {
-      type: 'skill-usage',
+    expect(createUiChunkEmitterMock.mock.results[0]?.value.emitSkillUsage).toHaveBeenCalledWith({
       mode: 'auto',
       skills: [
         {
@@ -620,6 +620,7 @@ describe('createChatStreaming', () => {
       messageId: 'assistant_stream',
       emitTextDelta: vi.fn(),
       emitToolEvent: vi.fn(),
+      emitSkillUsage: vi.fn(),
       emitMemoryRetrieval: vi.fn(),
       emitAffectSignal: vi.fn(),
       emitContextReport: vi.fn(),

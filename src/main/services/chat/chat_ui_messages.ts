@@ -1,14 +1,14 @@
 import { convertToModelMessages, validateUIMessages } from 'ai';
 
 import { extractTextFromModelMessageContent } from '../../../core/agent/model_messages';
-import type { DynamicToolPart, TextPart, UiMessagePart } from '../../../shared/chat/message_parts';
-import { getErrorMessage } from '../../utils/errors';
 import type {
-  ChatInputMessage,
-  ChatTransportMessage,
   ChatUiMessage,
-  LlmChatMessage,
-} from './chat_types';
+  DynamicToolPart,
+  TextPart,
+  UiMessagePart,
+} from '../../../shared/chat/message_parts';
+import { getErrorMessage } from '../../utils/errors';
+import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_types';
 import { createRuntimeId, normalizeToolPartForValidation } from './chat_ui_tool_parts';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
