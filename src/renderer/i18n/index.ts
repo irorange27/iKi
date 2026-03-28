@@ -1,8 +1,8 @@
 import { computed, ref } from 'vue';
 import { DEFAULT_LOCALE, normalizeAppLocale, type SupportedLocale } from '../../shared/i18n/locale';
-import { messages, type TranslationParams } from './messages';
+import { messages, type TranslationKey, type TranslationParams } from './messages';
 
-export type TranslationKey = keyof (typeof messages)['en'];
+export type { TranslationKey } from './messages';
 
 const currentLocale = ref<SupportedLocale>(DEFAULT_LOCALE);
 
