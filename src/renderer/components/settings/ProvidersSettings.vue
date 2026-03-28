@@ -154,111 +154,22 @@
                 </p>
               </div>
 
-              <div class="provider-models-panel">
-                <button
-                  type="button"
-                  class="provider-models-toggle"
-                  @click="modelsPanelOpen = !modelsPanelOpen"
-                >
-                  <div class="provider-models-toggle-main">
-                    <span class="provider-models-title">{{ t('settings.providers.models') }}</span>
-                    <span class="provider-models-subtitle">
-                      {{ t('settings.providers.modelsSubtitle') }}
-                    </span>
-                  </div>
-                  <div class="provider-models-toggle-meta">
-                    <span class="provider-models-summary">
-                      {{
-                        t('settings.providers.modelsSelected', { count: selectedModelsList.length })
-                      }}
-                    </span>
-                    <ChevronDown :size="16" :class="{ 'models-toggle-open': modelsPanelOpen }" />
-                  </div>
-                </button>
-
-                <div v-if="modelsPanelOpen" class="provider-models-body">
-                  <div class="label-header">
-                    <span class="provider-field-title">{{
-                      t('settings.providers.availableModels')
-                    }}</span>
-                    <button
-                      class="fetch-models-btn"
-                      @click="fetchLatestModels"
-                      :disabled="isFetchingModels"
-                    >
-                      <RefreshCw :size="14" :class="{ 'animate-spin': isFetchingModels }" />
-                      {{
-                        isFetchingModels
-                          ? t('settings.providers.fetchingModels')
-                          : t('settings.providers.fetchModels')
-                      }}
-                    </button>
-                  </div>
-
-                  <div v-if="availableModelsList.length > 0" class="models-selection-container">
-                    <div class="models-selection-header">
-                      <span class="models-count">{{
-                        t('settings.providers.selectionCount', {
-                          selected: selectedModelsList.length,
-                          total: availableModelsList.length,
-                        })
-                      }}</span>
-                      <div class="models-actions">
-                        <button class="select-all-btn" @click="selectAllModels">
-                          {{ t('settings.providers.selectAll') }}
-                        </button>
-                        <button class="deselect-all-btn" @click="deselectAllModels">
-                          {{ t('settings.providers.deselectAll') }}
-                        </button>
-                      </div>
-                    </div>
-                    <div class="models-checkbox-list">
-                      <div
-                        v-for="model in availableModelsList"
-                        :key="model"
-                        class="model-checkbox-item"
-                      >
-                        <label class="model-checkbox-main">
-                          <input
-                            type="checkbox"
-                            :checked="isModelSelected(model)"
-                            @change="toggleModel(model)"
-                          />
-                          <span class="model-copy">
-                            <span class="model-name">{{ getModelLabel(model) }}</span>
-                            <span v-if="getModelCaption(model)" class="model-caption">{{
-                              getModelCaption(model)
-                            }}</span>
-                            <span v-if="getModelOptionSummary(model)" class="model-summary">{{
-                              getModelOptionSummary(model)
-                            }}</span>
-                          </span>
-                        </label>
-                        <button
-                          type="button"
-                          class="model-options-btn"
-                          @click="openModelOptionsEditor(model)"
-                        >
-                          <SlidersHorizontal :size="14" />
-                          {{ t('settings.providers.modelOptions.edit') }}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-else class="models-chips">
-                    <button class="add-model-btn" @click="addModel">+</button>
-                    <span
-                      v-for="model in selectedProviderInfo.models"
-                      :key="model"
-                      class="model-chip"
-                      :class="{ 'dynamic-chip': dynamicModels[selectedProviderId!] }"
-                    >
-                      {{ model }}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <ProviderModelsPanel
+                :open="modelsPanelOpen"
+                :is-fetching-models="isFetchingModels"
+                :available-models="availableModelsList"
+                :selected-models="selectedModelsList"
+                :fallback-models="selectedProviderInfo.models"
+                :model-options="selectedProviderDraft.model_options"
+                :has-dynamic-models="Boolean(dynamicModels[selectedProviderId!])"
+                @toggle-open="modelsPanelOpen = !modelsPanelOpen"
+                @fetch-models="fetchLatestModels"
+                @toggle-model="toggleModel"
+                @select-all="selectAllModels(availableModelsList)"
+                @deselect-all="deselectAllModels"
+                @edit-model-options="openModelOptionsEditor"
+                @add-model="addModel"
+              />
             </div>
 
             <div class="provider-card-actions">
@@ -393,126 +304,14 @@
       </div>
     </div>
 
-    <div v-if="modelOptionsEditor" class="modal-overlay">
-      <div class="modal-content provider-editor model-options-editor">
-        <div class="provider-editor-header">
-          <h3>
-            {{ t('settings.providers.modelOptions.title', { model: modelOptionsEditor.modelId }) }}
-          </h3>
-        </div>
-
-        <div class="provider-editor-scroll">
-          <div class="provider-config-group model-options-grid">
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.displayName') }}
-              <input
-                type="text"
-                v-model="modelOptionsEditor.displayName"
-                :placeholder="t('settings.providers.modelOptions.displayNamePlaceholder')"
-              />
-            </label>
-
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.contextWindow') }}
-              <input
-                type="number"
-                min="1"
-                step="1"
-                v-model="modelOptionsEditor.contextWindow"
-                :placeholder="t('settings.providers.modelOptions.autoPlaceholder')"
-              />
-            </label>
-
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.maxInputTokens') }}
-              <input
-                type="number"
-                min="1"
-                step="1"
-                v-model="modelOptionsEditor.maxInputTokens"
-                :placeholder="t('settings.providers.modelOptions.autoPlaceholder')"
-              />
-            </label>
-
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.maxOutputTokens') }}
-              <input
-                type="number"
-                min="1"
-                step="1"
-                v-model="modelOptionsEditor.maxOutputTokens"
-                :placeholder="t('settings.providers.modelOptions.autoPlaceholder')"
-              />
-            </label>
-
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.supportsToolCalls') }}
-              <SettingsSelect
-                :model-value="modelOptionsEditor.supportsToolCalls"
-                :options="modelCapabilityOverrideOptions"
-                :aria-label="t('settings.providers.modelOptions.supportsToolCalls')"
-                @update:model-value="updateModelCapabilityOverride('supportsToolCalls', $event)"
-              />
-            </label>
-
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.supportsReasoning') }}
-              <SettingsSelect
-                :model-value="modelOptionsEditor.supportsReasoning"
-                :options="modelCapabilityOverrideOptions"
-                :aria-label="t('settings.providers.modelOptions.supportsReasoning')"
-                @update:model-value="updateModelCapabilityOverride('supportsReasoning', $event)"
-              />
-            </label>
-
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.supportsVision') }}
-              <SettingsSelect
-                :model-value="modelOptionsEditor.supportsVision"
-                :options="modelCapabilityOverrideOptions"
-                :aria-label="t('settings.providers.modelOptions.supportsVision')"
-                @update:model-value="updateModelCapabilityOverride('supportsVision', $event)"
-              />
-            </label>
-
-            <label class="input-label">
-              {{ t('settings.providers.modelOptions.supportsStructuredOutputs') }}
-              <SettingsSelect
-                :model-value="modelOptionsEditor.supportsStructuredOutputs"
-                :options="modelCapabilityOverrideOptions"
-                :aria-label="t('settings.providers.modelOptions.supportsStructuredOutputs')"
-                @update:model-value="updateModelCapabilityOverride('supportsStructuredOutputs', $event)"
-              />
-            </label>
-
-            <label class="input-label model-options-json-field">
-              {{ t('settings.providers.modelOptions.providerOptions') }}
-              <textarea
-                v-model="modelOptionsEditor.providerOptionsJson"
-                :placeholder="t('settings.providers.modelOptions.providerOptionsPlaceholder')"
-                rows="8"
-              ></textarea>
-            </label>
-
-            <p class="provider-field-help model-options-help">
-              {{ t('settings.providers.modelOptions.providerOptionsHelp') }}
-            </p>
-            <p v-if="modelOptionsEditor.error" class="provider-field-help model-options-error">
-              {{ modelOptionsEditor.error }}
-            </p>
-          </div>
-        </div>
-
-        <div class="modal-footer provider-editor-footer">
-          <button class="secondary-btn" @click="closeModelOptionsEditor">
-            {{ t('common.cancel') }}
-          </button>
-          <button class="primary-btn" @click="saveModelOptionsEditor">
-            {{ t('common.save') }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ProviderModelOptionsModal
+      v-if="modelOptionsEditor && selectedProviderDraft"
+      :provider-id="modelOptionsEditor.providerId"
+      :model-id="modelOptionsEditor.modelId"
+      :model-options="selectedProviderDraft.model_options[modelOptionsEditor.modelId] || null"
+      @cancel="closeModelOptionsEditor"
+      @save="saveModelOptions"
+    />
   </section>
 </template>
 
@@ -520,39 +319,26 @@
 // Provider Management Logic
 import { ref, computed, onMounted } from 'vue';
 import LobeIcon from '../../components/Icon/LobeIcon.vue';
-import type { JSONValue } from '@ai-sdk/provider';
-import {
-  BookOpen,
-  ChevronDown,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  RefreshCw,
-  SlidersHorizontal,
-} from 'lucide-vue-next';
+import { BookOpen, ExternalLink, Eye, EyeOff } from 'lucide-vue-next';
 import SettingsSelect from './SettingsSelect.vue';
+import ProviderModelOptionsModal from './providers/ProviderModelOptionsModal.vue';
+import ProviderModelsPanel from './providers/ProviderModelsPanel.vue';
 import { useI18n } from '../../i18n';
 import type { BuiltInProvider } from '../../../shared/types/settings';
-import type { Provider, ProviderModelOptions, ProviderModelOptionsMap } from '../../../shared/types/provider';
+import type { ProviderModelOptions } from '../../../shared/types/provider';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import {
-  getProviderModelOptions,
   parseModelList,
-  parseProviderModelOptionsMap,
   serializeProviderModelOptionsMap,
 } from '../../../shared/utils/provider_models';
 import { createLogger } from '../../logger';
 import {
   getCustomProviderIconProps,
   getProviderIconName,
-  isCanonicalBuiltInProvider,
 } from '../../modules/providers/provider_icons';
+import { useProviderDrafts, type ProviderRecord } from '../../composables/useProviderDrafts';
 import { getElectronAPI } from '../../services/electron_api';
-
-type ProviderRecord = Provider & {
-  icon?: string | null;
-};
 
 type EditableProvider = Pick<
   ProviderRecord,
@@ -560,14 +346,6 @@ type EditableProvider = Pick<
 > & {
   models: string;
   available_models: string;
-};
-
-type ProviderDraft = {
-  api_key: string;
-  base_url: string;
-  enabled: boolean;
-  showApiKey: boolean;
-  model_options: ProviderModelOptionsMap;
 };
 
 type EditableProviderApiFormat = {
@@ -588,30 +366,9 @@ type SidebarProvider = {
   searchText: string;
 };
 
-type PersistedProviderSnapshot = {
-  api_key: string;
-  base_url: string;
-  enabled: boolean;
-  models: string[];
-  availableModels: string[];
-  modelOptions: ProviderModelOptionsMap;
-};
-
-type ModelBooleanOverride = 'default' | 'true' | 'false';
-
-type ModelOptionsEditorState = {
+type ActiveModelOptionsEditor = {
   providerId: string;
   modelId: string;
-  displayName: string;
-  contextWindow: string;
-  maxInputTokens: string;
-  maxOutputTokens: string;
-  supportsToolCalls: ModelBooleanOverride;
-  supportsReasoning: ModelBooleanOverride;
-  supportsVision: ModelBooleanOverride;
-  supportsStructuredOutputs: ModelBooleanOverride;
-  providerOptionsJson: string;
-  error: string;
 };
 
 const electronAPI = getElectronAPI();
@@ -624,12 +381,9 @@ const showProviderEditor = ref(false);
 
 const providerSearchQuery = ref('');
 const selectedProviderId = ref<string | null>(null);
-const providerDrafts = ref<Record<string, ProviderDraft>>({});
 const isFetchingModels = ref(false);
-const dynamicModels = ref<Record<string, string[]>>({});
-const selectedModels = ref<Record<string, string[]>>({});
 const modelsPanelOpen = ref(false);
-const modelOptionsEditor = ref<ModelOptionsEditorState | null>(null);
+const modelOptionsEditor = ref<ActiveModelOptionsEditor | null>(null);
 
 const providerTypeOptions = computed(() => [
   { value: 'openai-compatible', label: t('settings.providers.type.openaiCompatible') },
@@ -637,12 +391,6 @@ const providerTypeOptions = computed(() => [
   { value: 'google', label: t('settings.providers.type.googleGemini') },
   { value: 'ollama', label: 'Ollama' },
   { value: 'custom', label: t('common.custom') },
-]);
-
-const modelCapabilityOverrideOptions = computed(() => [
-  { value: 'default', label: t('settings.providers.modelOptions.capability.default') },
-  { value: 'true', label: t('settings.providers.modelOptions.capability.enabled') },
-  { value: 'false', label: t('settings.providers.modelOptions.capability.disabled') },
 ]);
 
 const editingProviderApiFormat = computed<EditableProviderApiFormat | null>(() => {
@@ -711,195 +459,41 @@ const BUILTIN_PROVIDER_ORDER = new Map(
 const arrayEquals = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-const toBooleanOverride = (value?: boolean | null): ModelBooleanOverride => {
-  if (value === true) return 'true';
-  if (value === false) return 'false';
-  return 'default';
-};
-
-const fromBooleanOverride = (value: ModelBooleanOverride): boolean | undefined => {
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return undefined;
-};
-
-const formatCompactTokenCount = (value: number): string => {
-  if (value >= 1000000) {
-    const rounded = Math.round((value / 1000000) * 10) / 10;
-    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}M`;
-  }
-
-  if (value >= 1000) {
-    const rounded = Math.round((value / 1000) * 10) / 10;
-    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}K`;
-  }
-
-  return String(value);
-};
-
-const parseOptionalPositiveIntegerInput = (value: string | number | null | undefined): number | undefined => {
-  const trimmed = String(value ?? '').trim();
-  if (!trimmed) return undefined;
-
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return undefined;
-  }
-
-  return Math.trunc(parsed);
-};
-
-const formatProviderOptionsJson = (value?: Record<string, JSONValue> | null): string =>
-  value && Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : '';
-
-const getModelOptionsForEditor = (
-  modelOptions: ProviderModelOptionsMap,
-  modelId: string
-): ProviderModelOptions | null => getProviderModelOptions(modelOptions, modelId);
-
-const getBuiltInProvider = (providerId: string | null): BuiltInProvider | null => {
-  if (!providerId) return null;
-  return BUILTIN_PROVIDERS.find(provider => provider.id === providerId) || null;
-};
-
-const isCanonicalBuiltInConfig = (provider: ProviderRecord, providerId?: string) => {
-  if (!isCanonicalBuiltInProvider(provider)) {
-    return false;
-  }
-
-  return providerId ? provider.type === providerId : true;
-};
-
-const getProviderRecord = (providerId: string | null): ProviderRecord | null => {
-  if (!providerId) return null;
-
-  if (getBuiltInProvider(providerId)) {
-    return providers.value.find(provider => isCanonicalBuiltInConfig(provider, providerId)) || null;
-  }
-
-  return providers.value.find(provider => provider.id === providerId) || null;
-};
-
-const normalizeBaseUrlForDraft = (providerId: string, baseUrl?: string) => {
-  const trimmed = typeof baseUrl === 'string' ? baseUrl.trim() : '';
-  const builtIn = getBuiltInProvider(providerId);
-  if (builtIn?.defaultBaseUrl && trimmed === builtIn.defaultBaseUrl) {
-    return '';
-  }
-  return trimmed;
-};
-
-const getPersistedProviderSnapshot = (providerId: string): PersistedProviderSnapshot => {
-  const record = getProviderRecord(providerId);
-
-  return {
-    api_key: record?.api_key ?? '',
-    base_url: normalizeBaseUrlForDraft(providerId, record?.base_url),
-    enabled: record?.enabled === true,
-    models: parseModelList(record?.models),
-    availableModels: parseModelList(record?.available_models),
-    modelOptions: parseProviderModelOptionsMap(record?.model_options),
-  };
-};
-
-const isProviderPersistedEnabled = (providerId: string) => {
-  return getProviderRecord(providerId)?.enabled === true;
-};
-
-const syncProviderDraft = (providerId: string) => {
-  const snapshot = getPersistedProviderSnapshot(providerId);
-
-  providerDrafts.value[providerId] = {
-    api_key: snapshot.api_key,
-    base_url: snapshot.base_url,
-    enabled: snapshot.enabled,
-    showApiKey: false,
-    model_options: structuredClone(snapshot.modelOptions),
-  };
-  selectedModels.value[providerId] = [...snapshot.models];
-
-  if (snapshot.availableModels.length > 0) {
-    dynamicModels.value[providerId] = [...snapshot.availableModels];
-  } else {
-    delete dynamicModels.value[providerId];
-  }
-};
-
-const ensureProviderDraft = (providerId: string) => {
-  if (!providerDrafts.value[providerId]) {
-    syncProviderDraft(providerId);
-  }
-};
-
-const selectedProviderDraft = computed(() => {
-  const providerId = selectedProviderId.value;
-  if (!providerId) return null;
-  return providerDrafts.value[providerId] || null;
+const {
+  dynamicModels,
+  selectedModels,
+  selectedProviderDraft,
+  selectedProviderConfig,
+  selectedProviderPersistedState,
+  selectedDraftAvailableModels,
+  selectedModelsList,
+  getBuiltInProvider,
+  getPersistedProviderSnapshot,
+  ensureProviderDraft,
+  syncProviderDraft,
+  resetSelectedProviderDraft,
+  isCanonicalBuiltInConfig,
+  isProviderConfigured,
+  isProviderEnabled,
+  setSelectedProviderEnabled,
+  toggleSelectedProviderApiKeyVisibility,
+  setFetchedModels,
+  toggleModel,
+  selectAllModels,
+  deselectAllModels,
+  addDynamicModel,
+} = useProviderDrafts({
+  providers,
+  selectedProviderId,
+  builtInProviders: BUILTIN_PROVIDERS,
 });
-
-const getSelectedModelOptions = (modelId: string): ProviderModelOptions | null => {
-  if (!selectedProviderDraft.value) return null;
-  return getModelOptionsForEditor(selectedProviderDraft.value.model_options, modelId);
-};
-
-const getModelLabel = (modelId: string): string =>
-  getSelectedModelOptions(modelId)?.displayName || modelId;
-
-const getModelCaption = (modelId: string): string => {
-  const label = getModelLabel(modelId);
-  return label === modelId ? '' : modelId;
-};
-
-const getModelOptionSummary = (modelId: string): string => {
-  const options = getSelectedModelOptions(modelId);
-  if (!options) return '';
-
-  const parts: string[] = [];
-  if (options.supportsVision === true) {
-    parts.push(t('settings.providers.modelOptions.summary.vision'));
-  }
-  if (options.supportsToolCalls === true) {
-    parts.push(t('settings.providers.modelOptions.summary.tools'));
-  }
-  if (options.supportsReasoning === true) {
-    parts.push(t('settings.providers.modelOptions.summary.reasoning'));
-  }
-  if (options.supportsStructuredOutputs === true) {
-    parts.push(t('settings.providers.modelOptions.summary.structuredOutputs'));
-  }
-  if (typeof options.contextWindow === 'number' && options.contextWindow > 0) {
-    parts.push(
-      t('settings.providers.modelOptions.summary.contextWindow', {
-        count: formatCompactTokenCount(options.contextWindow),
-      })
-    );
-  }
-
-  return parts.join(' · ');
-};
 
 const openModelOptionsEditor = (modelId: string) => {
   if (!selectedProviderId.value || !selectedProviderDraft.value) return;
 
-  const modelOptions = getModelOptionsForEditor(selectedProviderDraft.value.model_options, modelId);
   modelOptionsEditor.value = {
     providerId: selectedProviderId.value,
     modelId,
-    displayName: modelOptions?.displayName || '',
-    contextWindow:
-      typeof modelOptions?.contextWindow === 'number' ? String(modelOptions.contextWindow) : '',
-    maxInputTokens:
-      typeof modelOptions?.maxInputTokens === 'number' ? String(modelOptions.maxInputTokens) : '',
-    maxOutputTokens:
-      typeof modelOptions?.maxOutputTokens === 'number'
-        ? String(modelOptions.maxOutputTokens)
-        : '',
-    supportsToolCalls: toBooleanOverride(modelOptions?.supportsToolCalls),
-    supportsReasoning: toBooleanOverride(modelOptions?.supportsReasoning),
-    supportsVision: toBooleanOverride(modelOptions?.supportsVision),
-    supportsStructuredOutputs: toBooleanOverride(modelOptions?.supportsStructuredOutputs),
-    providerOptionsJson: formatProviderOptionsJson(modelOptions?.providerOptions),
-    error: '',
   };
 };
 
@@ -907,98 +501,21 @@ const closeModelOptionsEditor = () => {
   modelOptionsEditor.value = null;
 };
 
-const updateModelCapabilityOverride = (
-  field:
-    | 'supportsToolCalls'
-    | 'supportsReasoning'
-    | 'supportsVision'
-    | 'supportsStructuredOutputs',
-  value: string
-) => {
-  if (!modelOptionsEditor.value) return;
-  modelOptionsEditor.value[field] = value as ModelBooleanOverride;
-};
-
-const parseModelProviderOptions = (
-  modelId: string,
-  providerOptionsJson: string
-): { providerOptions?: Record<string, JSONValue>; error?: string } => {
-  const trimmed = providerOptionsJson.trim();
-  if (!trimmed) return {};
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    return {
-      error: t('settings.providers.modelOptions.errors.invalidJson'),
-    };
-  }
-
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {
-      error: t('settings.providers.modelOptions.errors.objectRequired'),
-    };
-  }
-
-  const normalized = parseProviderModelOptionsMap({
-    [modelId]: {
-      providerOptions: parsed,
-    },
-  });
-
-  const providerOptions = normalized[modelId]?.providerOptions;
-  return providerOptions && Object.keys(providerOptions).length > 0 ? { providerOptions } : {};
-};
-
-const saveModelOptionsEditor = () => {
-  if (!modelOptionsEditor.value || !selectedProviderDraft.value) return;
-
-  const editor = modelOptionsEditor.value;
-  const { providerOptions, error } = parseModelProviderOptions(
-    editor.modelId,
-    editor.providerOptionsJson
-  );
-  if (error) {
-    modelOptionsEditor.value = {
-      ...editor,
-      error,
-    };
-    return;
-  }
-
-  const nextOptions: ProviderModelOptions = {};
-  const displayName = editor.displayName.trim();
-  const contextWindow = parseOptionalPositiveIntegerInput(editor.contextWindow);
-  const maxInputTokens = parseOptionalPositiveIntegerInput(editor.maxInputTokens);
-  const maxOutputTokens = parseOptionalPositiveIntegerInput(editor.maxOutputTokens);
-  const supportsToolCalls = fromBooleanOverride(editor.supportsToolCalls);
-  const supportsReasoning = fromBooleanOverride(editor.supportsReasoning);
-  const supportsVision = fromBooleanOverride(editor.supportsVision);
-  const supportsStructuredOutputs = fromBooleanOverride(editor.supportsStructuredOutputs);
-
-  if (displayName) nextOptions.displayName = displayName;
-  if (contextWindow !== undefined) nextOptions.contextWindow = contextWindow;
-  if (maxInputTokens !== undefined) nextOptions.maxInputTokens = maxInputTokens;
-  if (maxOutputTokens !== undefined) nextOptions.maxOutputTokens = maxOutputTokens;
-  if (supportsToolCalls !== undefined) nextOptions.supportsToolCalls = supportsToolCalls;
-  if (supportsReasoning !== undefined) nextOptions.supportsReasoning = supportsReasoning;
-  if (supportsVision !== undefined) nextOptions.supportsVision = supportsVision;
-  if (supportsStructuredOutputs !== undefined) {
-    nextOptions.supportsStructuredOutputs = supportsStructuredOutputs;
-  }
-  if (providerOptions && Object.keys(providerOptions).length > 0) {
-    nextOptions.providerOptions = providerOptions;
-  }
+const saveModelOptions = (payload: {
+  providerId: string;
+  modelId: string;
+  options: ProviderModelOptions | null;
+}) => {
+  if (!selectedProviderDraft.value || selectedProviderId.value !== payload.providerId) return;
 
   const nextModelOptions = {
     ...selectedProviderDraft.value.model_options,
   };
 
-  if (Object.keys(nextOptions).length > 0) {
-    nextModelOptions[editor.modelId] = nextOptions;
+  if (payload.options) {
+    nextModelOptions[payload.modelId] = payload.options;
   } else {
-    delete nextModelOptions[editor.modelId];
+    delete nextModelOptions[payload.modelId];
   }
 
   selectedProviderDraft.value.model_options = nextModelOptions;
@@ -1013,11 +530,7 @@ const fetchLatestModels = async () => {
     const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
     const fetched = await electronAPI.chat.getModels(providerLookupKey);
     if (fetched && fetched.length > 0) {
-      dynamicModels.value[selectedProviderId.value] = fetched;
-      const currentSelected = selectedModels.value[selectedProviderId.value] || [];
-      selectedModels.value[selectedProviderId.value] = currentSelected.filter(m =>
-        fetched.includes(m)
-      );
+      setFetchedModels(fetched);
     }
   } catch (error) {
     providersSettingsLogger.event({
@@ -1055,40 +568,6 @@ const availableModelsList = computed(() => {
   return builtIn?.models || [];
 });
 
-const selectedModelsList = computed(() => {
-  if (!selectedProviderId.value) return [];
-  return selectedModels.value[selectedProviderId.value] || [];
-});
-
-const isModelSelected = (model: string): boolean => {
-  return selectedModelsList.value.includes(model);
-};
-
-const toggleModel = (model: string) => {
-  if (!selectedProviderId.value) return;
-
-  if (!selectedModels.value[selectedProviderId.value]) {
-    selectedModels.value[selectedProviderId.value] = [];
-  }
-
-  const index = selectedModels.value[selectedProviderId.value].indexOf(model);
-  if (index > -1) {
-    selectedModels.value[selectedProviderId.value].splice(index, 1);
-  } else {
-    selectedModels.value[selectedProviderId.value].push(model);
-  }
-};
-
-const selectAllModels = () => {
-  if (!selectedProviderId.value) return;
-  selectedModels.value[selectedProviderId.value] = [...availableModelsList.value];
-};
-
-const deselectAllModels = () => {
-  if (!selectedProviderId.value) return;
-  selectedModels.value[selectedProviderId.value] = [];
-};
-
 const loadProviders = async () => {
   providers.value = await electronAPI.providers.list();
 
@@ -1107,23 +586,9 @@ const loadProviders = async () => {
 };
 
 const addModel = () => {
-  if (!selectedProviderId.value) return;
-
   const model = prompt(t('settings.providers.promptModelName'));
   if (model) {
-    if (!dynamicModels.value[selectedProviderId.value]) {
-      dynamicModels.value[selectedProviderId.value] = [];
-    }
-    if (!dynamicModels.value[selectedProviderId.value].includes(model)) {
-      dynamicModels.value[selectedProviderId.value].push(model);
-    }
-    // Also add to selected models
-    if (!selectedModels.value[selectedProviderId.value]) {
-      selectedModels.value[selectedProviderId.value] = [];
-    }
-    if (!selectedModels.value[selectedProviderId.value].includes(model)) {
-      selectedModels.value[selectedProviderId.value].push(model);
-    }
+    addDynamicModel(model);
   }
 };
 
@@ -1206,21 +671,6 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
   return null;
 });
 
-const selectedProviderConfig = computed(() => {
-  if (!selectedProviderId.value) return null;
-  return getProviderRecord(selectedProviderId.value);
-});
-
-const selectedProviderPersistedState = computed(() => {
-  if (!selectedProviderId.value) return null;
-  return getPersistedProviderSnapshot(selectedProviderId.value);
-});
-
-const selectedDraftAvailableModels = computed(() => {
-  if (!selectedProviderId.value) return [];
-  return dynamicModels.value[selectedProviderId.value] || [];
-});
-
 const selectedProviderRequiresApiKey = computed(() => {
   return selectedProviderInfo.value?.requiresApiKey !== false;
 });
@@ -1285,38 +735,11 @@ const canSaveSelectedProvider = computed(() => {
   return true;
 });
 
-const isProviderConfigured = (providerId: string) => {
-  return providers.value.some(provider => isCanonicalBuiltInConfig(provider, providerId));
-};
-
-const isProviderEnabled = (providerId: string) => {
-  const draft = providerDrafts.value[providerId];
-  if (draft) {
-    return draft.enabled;
-  }
-  return isProviderPersistedEnabled(providerId);
-};
-
-const setSelectedProviderEnabled = (enabled: boolean) => {
-  if (!selectedProviderDraft.value) return;
-  selectedProviderDraft.value.enabled = enabled;
-};
-
-const toggleSelectedProviderApiKeyVisibility = () => {
-  if (!selectedProviderDraft.value) return;
-  selectedProviderDraft.value.showApiKey = !selectedProviderDraft.value.showApiKey;
-};
-
 const selectProvider = (providerId: string) => {
   selectedProviderId.value = providerId;
   modelsPanelOpen.value = false;
   closeModelOptionsEditor();
   ensureProviderDraft(providerId);
-};
-
-const resetSelectedProviderDraft = () => {
-  if (!selectedProviderId.value) return;
-  syncProviderDraft(selectedProviderId.value);
 };
 
 const saveProviderConfig = async () => {
@@ -1496,122 +919,8 @@ onMounted(() => {
   margin-bottom: 32px;
 }
 
-.models-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.model-chip {
-  background: var(--bg-active);
-  color: var(--text-primary);
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: monospace;
-}
-
 .providers-section {
   max-width: none !important;
-}
-
-.model-checkbox-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
-}
-
-.model-checkbox-main {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  flex: 1;
-  cursor: pointer;
-}
-
-.model-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.model-caption,
-.model-summary {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.model-options-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.model-options-btn:hover {
-  border-color: var(--accent-color);
-  color: var(--text-primary);
-}
-
-.model-options-editor {
-  max-width: 720px;
-}
-
-.model-options-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.model-options-json-field,
-.model-options-help,
-.model-options-error {
-  grid-column: 1 / -1;
-}
-
-.model-options-json-field textarea {
-  min-height: 180px;
-  resize: vertical;
-}
-
-.model-options-help {
-  margin: -8px 0 0;
-}
-
-.model-options-error {
-  margin: 0;
-  color: var(--accent-color);
-}
-
-@media (max-width: 900px) {
-  .model-checkbox-item {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .model-options-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .model-options-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .providers-toolbar {
@@ -2030,67 +1339,6 @@ onMounted(() => {
   color: color-mix(in srgb, var(--accent-color) 82%, white);
 }
 
-.provider-models-panel {
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-tertiary));
-}
-
-.provider-models-toggle {
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  cursor: pointer;
-}
-
-.provider-models-toggle-main,
-.provider-models-toggle-meta {
-  display: flex;
-  align-items: center;
-}
-
-.provider-models-toggle-main {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-}
-
-.provider-models-toggle-meta {
-  gap: 10px;
-  color: var(--text-secondary);
-}
-
-.provider-models-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.provider-models-subtitle {
-  font-size: 11px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.provider-models-summary {
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.provider-models-body {
-  padding: 0 16px 16px;
-}
-
-.models-toggle-open {
-  transform: rotate(180deg);
-}
-
 .no-selection {
   display: flex;
   align-items: center;
@@ -2230,160 +1478,5 @@ onMounted(() => {
 .status-badge.enabled {
   background: color-mix(in srgb, var(--status-success-color) 16%, var(--bg-secondary));
   color: var(--status-success-color);
-}
-
-.label-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.fetch-models-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.fetch-models-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-}
-
-.fetch-models-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-.dynamic-chip {
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.15) !important;
-  border-color: var(--accent-color) !important;
-  color: var(--accent-color) !important;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Models Selection Styles */
-.models-selection-container {
-  margin-top: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 14px;
-  background: var(--bg-secondary);
-  max-height: 400px;
-  display: flex;
-  flex-direction: column;
-}
-
-.models-selection-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
-}
-
-.models-count {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.models-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.select-all-btn,
-.deselect-all-btn {
-  padding: 4px 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border-radius: 999px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.select-all-btn:hover,
-.deselect-all-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-}
-
-.models-checkbox-list {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
-}
-
-.model-checkbox-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-  user-select: none;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-}
-
-.model-checkbox-item:hover {
-  background: var(--bg-hover);
-  border-color: color-mix(in srgb, var(--accent-color) 25%, var(--border-color));
-}
-
-.model-checkbox-item input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  accent-color: var(--accent-color);
-  flex-shrink: 0;
-}
-
-.model-name {
-  font-family: monospace;
-  font-size: 13px;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-.model-checkbox-item:has(input:checked) {
-  background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-tertiary));
-  border-color: var(--accent-color);
-}
-
-.model-checkbox-item:has(input:checked) .model-name {
-  color: var(--accent-color);
-  font-weight: 500;
 }
 </style>
