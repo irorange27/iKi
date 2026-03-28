@@ -63,6 +63,10 @@ const CHAT_COMPOSER_ACTIONS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/ChatComposerActions.vue'
 );
+const CHAT_COMPOSER_SELECTORS_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/ChatComposerSelectors.vue'
+);
 const TOOL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ToolSelector.vue');
 const SKILL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/SkillSelector.vue');
 const WORKSPACE_SELECTOR_VUE_PATH = resolve(
@@ -261,6 +265,7 @@ describe('renderer style system foundation', () => {
   it('removes local duplicate shell/text primitives and hardcoded badge colors from renderer consumers', () => {
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
     const chatComposerActionsSource = readFileSync(CHAT_COMPOSER_ACTIONS_VUE_PATH, 'utf8');
+    const chatComposerSelectorsSource = readFileSync(CHAT_COMPOSER_SELECTORS_VUE_PATH, 'utf8');
     const toolSelectorSource = readFileSync(TOOL_SELECTOR_VUE_PATH, 'utf8');
     const skillSelectorSource = readFileSync(SKILL_SELECTOR_VUE_PATH, 'utf8');
     const workspaceSelectorSource = readFileSync(WORKSPACE_SELECTOR_VUE_PATH, 'utf8');
@@ -268,7 +273,6 @@ describe('renderer style system foundation', () => {
     const chatViewSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
 
     expect(chatInputSource).toMatch(/ui-text-primary/);
-    expect(chatInputSource).toMatch(/<WorkspaceSelector/);
     expect(chatInputSource).not.toMatch(/bg-\[#4a9eff\]/);
     expect(chatInputSource).not.toMatch(/\.icon-btn(?::hover|:disabled|\s*\{)/);
     expect(chatInputSource).not.toMatch(/rgba\(96,\s*165,\s*250/);
@@ -290,6 +294,10 @@ describe('renderer style system foundation', () => {
     expect(chatComposerActionsSource).not.toMatch(/rgba\(239,\s*68,\s*68/);
     expect(chatComposerActionsSource).not.toMatch(/color:\s*#ffffff;/);
     expect(chatComposerActionsSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
+    expect(chatComposerSelectorsSource).toMatch(/<WorkspaceSelector/);
+    expect(chatComposerSelectorsSource).toMatch(/<SkillSelector/);
+    expect(chatComposerSelectorsSource).toMatch(/<ToolSelector/);
+    expect(chatComposerSelectorsSource).toMatch(/<ChatModelSelector/);
     expect(workspaceSelectorSource).toMatch(/selector-badge/);
     expect(workspaceSelectorSource).toMatch(/composer-control-btn/);
     expect(workspaceSelectorSource).toMatch(/ui-text-secondary/);

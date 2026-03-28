@@ -17,26 +17,20 @@
         <div
           class="composer-toolbar flex items-center justify-between border-t border-color px-3 py-2"
         >
-          <div class="composer-toolbar-left flex items-center gap-2">
-            <WorkspaceSelector
-              :selected-workspace-id="props.selectedWorkspaceId ?? null"
-              :locked="props.workspaceLocked"
-              @update:selected-workspace-id="handleWorkspaceChanged"
-            />
-            <SkillSelector v-model:skill-ids="selectedSkillIds" v-model:mode="skillMode" />
-            <!-- tool choose -->
-            <ToolSelector
-              v-model:tools="selectedTools"
-              v-model:mcp-server-ids="selectedMcpServerIds"
-              v-model:mode="toolMode"
-            />
-            <ChatModelSelector
-              :available-providers="availableProviders"
-              :selected-provider="selectedProvider"
-              :selected-model="selectedModel"
-              @select="handleProviderModelSelect"
-            />
-          </div>
+          <ChatComposerSelectors
+            :selected-workspace-id="props.selectedWorkspaceId ?? null"
+            :workspace-locked="props.workspaceLocked"
+            v-model:selected-skill-ids="selectedSkillIds"
+            v-model:skill-mode="skillMode"
+            v-model:selected-tools="selectedTools"
+            v-model:selected-mcp-server-ids="selectedMcpServerIds"
+            v-model:tool-mode="toolMode"
+            :available-providers="availableProviders"
+            :selected-provider="selectedProvider"
+            :selected-model="selectedModel"
+            @update:selected-workspace-id="handleWorkspaceChanged"
+            @select-provider-model="handleProviderModelSelect"
+          />
 
           <ChatComposerActions
             :context-usage="props.contextUsage ?? null"
@@ -74,6 +68,7 @@ import type {
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
 import ChatComposerActions from './ChatComposerActions.vue';
+import ChatComposerSelectors from './ChatComposerSelectors.vue';
 import { useChatComposerDraft } from '../composables/useChatComposerDraft';
 import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
 import { useChatComposerSend } from '../composables/useChatComposerSend';
@@ -82,10 +77,6 @@ import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import { useI18n } from '../i18n';
 import { getElectronAPI } from '../services/electron_api';
-import ChatModelSelector from './ChatModelSelector.vue';
-import ToolSelector from './ToolSelector.vue';
-import SkillSelector from './SkillSelector.vue';
-import WorkspaceSelector from './WorkspaceSelector.vue';
 
 const electronAPI = getElectronAPI();
 const { t } = useI18n();
@@ -256,11 +247,6 @@ defineExpose({
   padding: 10px 12px 12px;
   border-top-color: var(--chat-composer-toolbar-border-color);
   background: var(--chat-composer-toolbar-background);
-}
-
-.composer-toolbar-left {
-  gap: 8px;
-  min-width: 0;
 }
 
 .placeholder-muted::placeholder {
