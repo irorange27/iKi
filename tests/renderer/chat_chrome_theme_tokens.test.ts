@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 const VARIABLES_CSS_PATH = resolve(process.cwd(), 'src/renderer/assets/styles/variables.css');
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
+const CHAT_COMPOSER_ACTIONS_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/ChatComposerActions.vue'
+);
 const CHAT_MESSAGE_ITEM_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/chat/ChatMessageItem.vue'
@@ -36,6 +40,7 @@ describe('chat chrome theme tokens', () => {
 
   it('routes composer and outgoing bubble styles through semantic theme vars', () => {
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
+    const chatComposerActionsSource = readFileSync(CHAT_COMPOSER_ACTIONS_VUE_PATH, 'utf8');
     const chatMessageItemSource = readFileSync(CHAT_MESSAGE_ITEM_VUE_PATH, 'utf8');
     const chatMessagePartsSource = readFileSync(CHAT_MESSAGE_PARTS_VUE_PATH, 'utf8');
 
@@ -47,17 +52,19 @@ describe('chat chrome theme tokens', () => {
       /border-top-color:\s*var\(--chat-composer-toolbar-border-color\);/
     );
     expect(chatInputSource).toMatch(/background:\s*var\(--chat-composer-toolbar-background\);/);
-    expect(chatInputSource).toMatch(
+    expect(chatComposerActionsSource).toMatch(
       /border:\s*1px solid var\(--chat-composer-control-border-color\);/
     );
-    expect(chatInputSource).toMatch(/background:\s*var\(--chat-composer-control-background\);/);
-    expect(chatInputSource).toMatch(
+    expect(chatComposerActionsSource).toMatch(
+      /background:\s*var\(--chat-composer-control-background\);/
+    );
+    expect(chatComposerActionsSource).toMatch(
       /border-color:\s*var\(--chat-composer-control-hover-border-color\);/
     );
-    expect(chatInputSource).toMatch(
+    expect(chatComposerActionsSource).toMatch(
       /border-color:\s*var\(--chat-composer-control-disabled-border-color\);/
     );
-    expect(chatInputSource).toMatch(/speech-btn-unavailable/);
+    expect(chatComposerActionsSource).toMatch(/speech-btn-unavailable/);
 
     expect(chatMessageItemSource).toMatch(/background:\s*var\(--chat-user-bubble-background\);/);
     expect(chatMessageItemSource).toMatch(

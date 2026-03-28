@@ -59,6 +59,10 @@ const THEME_PREVIEW_VUE_PATH = resolve(
 );
 const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/SettingsView.vue');
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
+const CHAT_COMPOSER_ACTIONS_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/ChatComposerActions.vue'
+);
 const TOOL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ToolSelector.vue');
 const SKILL_SELECTOR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/SkillSelector.vue');
 const WORKSPACE_SELECTOR_VUE_PATH = resolve(
@@ -256,6 +260,7 @@ describe('renderer style system foundation', () => {
 
   it('removes local duplicate shell/text primitives and hardcoded badge colors from renderer consumers', () => {
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
+    const chatComposerActionsSource = readFileSync(CHAT_COMPOSER_ACTIONS_VUE_PATH, 'utf8');
     const toolSelectorSource = readFileSync(TOOL_SELECTOR_VUE_PATH, 'utf8');
     const skillSelectorSource = readFileSync(SKILL_SELECTOR_VUE_PATH, 'utf8');
     const workspaceSelectorSource = readFileSync(WORKSPACE_SELECTOR_VUE_PATH, 'utf8');
@@ -263,14 +268,7 @@ describe('renderer style system foundation', () => {
     const chatViewSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
 
     expect(chatInputSource).toMatch(/ui-text-primary/);
-    expect(chatInputSource).toMatch(/ui-text-secondary/);
-    expect(chatInputSource).toMatch(/ui-text-accent/);
-    expect(chatInputSource).toMatch(/ui-text-danger/);
-    expect(chatInputSource).toMatch(/ui-text-muted/);
-    expect(chatInputSource).toMatch(/composer-icon-btn/);
     expect(chatInputSource).toMatch(/<WorkspaceSelector/);
-    expect(chatInputSource).toMatch(/--chat-composer-send-background/);
-    expect(chatInputSource).toMatch(/--chat-composer-stop-background/);
     expect(chatInputSource).not.toMatch(/bg-\[#4a9eff\]/);
     expect(chatInputSource).not.toMatch(/\.icon-btn(?::hover|:disabled|\s*\{)/);
     expect(chatInputSource).not.toMatch(/rgba\(96,\s*165,\s*250/);
@@ -278,6 +276,20 @@ describe('renderer style system foundation', () => {
     expect(chatInputSource).not.toMatch(/color:\s*#ffffff;/);
     expect(chatInputSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
     expect(chatInputSource).not.toMatch(/model-selector-trigger composer-icon-btn/);
+
+    expect(chatComposerActionsSource).toMatch(/ui-text-secondary/);
+    expect(chatComposerActionsSource).toMatch(/ui-text-accent/);
+    expect(chatComposerActionsSource).toMatch(/ui-text-danger/);
+    expect(chatComposerActionsSource).toMatch(/ui-text-muted/);
+    expect(chatComposerActionsSource).toMatch(/composer-icon-btn/);
+    expect(chatComposerActionsSource).toMatch(/--chat-composer-send-background/);
+    expect(chatComposerActionsSource).toMatch(/--chat-composer-stop-background/);
+    expect(chatComposerActionsSource).not.toMatch(/bg-\[#4a9eff\]/);
+    expect(chatComposerActionsSource).not.toMatch(/\.icon-btn(?::hover|:disabled|\s*\{)/);
+    expect(chatComposerActionsSource).not.toMatch(/rgba\(96,\s*165,\s*250/);
+    expect(chatComposerActionsSource).not.toMatch(/rgba\(239,\s*68,\s*68/);
+    expect(chatComposerActionsSource).not.toMatch(/color:\s*#ffffff;/);
+    expect(chatComposerActionsSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
     expect(workspaceSelectorSource).toMatch(/selector-badge/);
     expect(workspaceSelectorSource).toMatch(/composer-control-btn/);
     expect(workspaceSelectorSource).toMatch(/ui-text-secondary/);
