@@ -105,7 +105,7 @@ existing packaged output under `out/`.
 - CI quality gate runs `npm run -s ci:quality` (`eslint --ext .ts,.tsx,.vue .` + `tsc` +
   `vue-tsc --noEmit` + tests with coverage)
 - Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; the
-  current repository-wide floor is `lines 62 / functions 59 / branches 46 / statements 59`, and it
+  current repository-wide floor is `lines 60 / functions 59 / branches 46 / statements 59`, and it
   should continue to ratchet upward over time
 - TypeScript discipline is tightened incrementally rather than via a one-shot `strict` flip:
   the repository now enforces `allowJs: false`, `useUnknownInCatchVariables`,

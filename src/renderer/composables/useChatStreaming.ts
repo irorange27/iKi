@@ -44,6 +44,7 @@ export const useChatStreaming = (deps: {
   selectedTools: Ref<string[]>;
   showWelcome: Ref<boolean>;
   createNewThread: (model?: string) => Promise<ChatThread | null>;
+  ensureWorkspaceForCurrentThread: () => Promise<ChatThread | null>;
   selectThread: (threadId: string) => Promise<void>;
   handleThreadDeleted: (threadId: string) => Promise<void>;
   handleNewChat: () => Promise<void>;
@@ -159,6 +160,15 @@ export const useChatStreaming = (deps: {
         message: 'No thread available after send preparation.',
       });
       return null;
+    }
+
+    const activeWorkspaceId =
+      typeof deps.currentThread.value.workspace_id === 'string' &&
+      deps.currentThread.value.workspace_id.trim().length > 0
+        ? deps.currentThread.value.workspace_id.trim()
+        : '';
+    if (!activeWorkspaceId) {
+      await deps.ensureWorkspaceForCurrentThread();
     }
 
     if (model && deps.currentThread.value.model !== model) {

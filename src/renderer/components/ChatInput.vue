@@ -20,6 +20,7 @@
           <div class="composer-toolbar-left flex items-center gap-2">
             <WorkspaceSelector
               :selected-workspace-id="props.selectedWorkspaceId ?? null"
+              :locked="props.workspaceLocked"
               @update:selected-workspace-id="handleWorkspaceChanged"
             />
             <SkillSelector v-model:skill-ids="selectedSkillIds" v-model:mode="skillMode" />
@@ -250,6 +251,7 @@ const props = defineProps<{
   activeProviderId?: string | null;
   isIncognito?: boolean;
   selectedWorkspaceId?: string | null;
+  workspaceLocked?: boolean;
   prepareMessageSend?: (payload: {
     content: string;
     model?: string;
@@ -332,6 +334,7 @@ const handleProviderModelSelect = (payload: { provider: Provider; model: string 
 };
 
 const handleWorkspaceChanged = (workspaceId: string | null) => {
+  if (props.workspaceLocked) return;
   emit('workspace-changed', workspaceId);
 };
 

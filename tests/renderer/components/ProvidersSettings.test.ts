@@ -661,4 +661,88 @@ describe('ProvidersSettings', () => {
 
     expect(providerNames[0]).toBe('Proxy Gateway');
   });
+
+  it('persists per-model options alongside the provider configuration', async () => {
+    const update = vi.fn(async () => ({}));
+    const list = vi.fn(async () => [
+      {
+        id: 'openai_1',
+        name: 'OpenAI',
+        type: 'openai',
+        api_key: 'saved-key',
+        models: '["gpt-5.4"]',
+        model_options: '{}',
+        base_url: 'https://api.openai.com/v1',
+        enabled: true,
+        created_at: '2026-03-21T12:00:00.000Z',
+        updated_at: '2026-03-21T12:00:00.000Z',
+        available_models: '["gpt-5.4"]',
+      },
+    ]);
+
+    setElectronApi({
+      providers: {
+        list,
+        add: vi.fn(),
+        update,
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await wrapper.find('.provider-models-toggle').trigger('click');
+    await flushPromises();
+    await findButtonByText(wrapper, 'Model Options').trigger('click');
+    await flushPromises();
+
+    await findLabelByText(wrapper, 'Display Name').find('input').setValue('GPT-5.4 Gateway');
+    await findLabelByText(wrapper, 'Context Window').find('input').setValue('400000');
+    await selectSettingsOption(wrapper, 'Tool Calling', 'Enabled');
+    await selectSettingsOption(wrapper, 'Reasoning', 'Enabled');
+    await wrapper
+      .find('.model-options-json-field textarea')
+      .setValue('{"reasoningEffort":"medium","parallelToolCalls":true}');
+    await wrapper.find('.model-options-editor .primary-btn').trigger('click');
+    await flushPromises();
+
+    await findButtonByText(wrapper, 'Save').trigger('click');
+    await flushPromises();
+
+    expect(update).toHaveBeenCalledTimes(1);
+    const [, payload] = update.mock.calls[0];
+    expect(payload).toEqual(
+      expect.objectContaining({
+        models: '["gpt-5.4"]',
+      })
+    );
+    expect(JSON.parse(payload.model_options as string)).toEqual({
+      'gpt-5.4': {
+        contextWindow: 400000,
+        displayName: 'GPT-5.4 Gateway',
+        providerOptions: {
+          parallelToolCalls: true,
+          reasoningEffort: 'medium',
+        },
+        supportsReasoning: true,
+        supportsToolCalls: true,
+      },
+    });
+  });
 });

@@ -46,11 +46,11 @@ export const addProvider = (
   const now = new Date().toISOString();
   const stmt = getDb().prepare(`
     INSERT INTO providers (
-      id, name, type, api_key, models, base_url, enabled, created_at, updated_at,
+      id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at,
       available_models, api_version, is_response_api, acp_command, acp_args,
       acp_mcp_server_ids, acp_auth_method_id, acp_api_provider_id, acp_model_mapping
     ) VALUES (
-      @id, @name, @type, @api_key, @models, @base_url, @enabled, @created_at, @updated_at,
+      @id, @name, @type, @api_key, @models, @model_options, @base_url, @enabled, @created_at, @updated_at,
       @available_models, @api_version, @is_response_api, @acp_command, @acp_args,
       @acp_mcp_server_ids, @acp_auth_method_id, @acp_api_provider_id, @acp_model_mapping
     )
@@ -63,6 +63,7 @@ export const addProvider = (
     type: provider.type,
     api_key: provider.api_key,
     models: provider.models,
+    model_options: provider.model_options || '{}',
     base_url: provider.base_url || '',
     enabled: provider.enabled ? 1 : 0,
     created_at: now,

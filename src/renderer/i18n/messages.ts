@@ -132,6 +132,11 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'chat.workspace.hiddenFromGlobal': 'Hidden from global list',
     'chat.workspace.selected': 'Selected workspace',
     'chat.workspace.choose': 'Choose a workspace for this thread',
+    'chat.workspace.temporary': 'Temporary workspace',
+    'chat.workspace.temporaryHint': 'Temporary workspace for this thread',
+    'chat.workspace.lockedHint': 'Workspace locked after the first message in this thread',
+    'chat.workspace.tempCompact': '(Temp)',
+    'chat.workspace.lockedNote': 'Workspace cannot be changed after sending messages',
     'chat.tools.title': 'Tools',
     'chat.tools.description':
       'Allow iKi to use built-in tools for the next response. Auto mode considers all built-in tools plus all tools from enabled MCP servers.',
@@ -984,6 +989,37 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'settings.providers.promptModelName': 'Enter model name:',
     'settings.providers.confirmRemove':
       'Are you sure you want to remove this provider configuration?',
+    'settings.providers.modelOptions.edit': 'Model Options',
+    'settings.providers.modelOptions.title': ({ model }) =>
+      `Model Options · ${asText(model)}`,
+    'settings.providers.modelOptions.displayName': 'Display Name',
+    'settings.providers.modelOptions.displayNamePlaceholder': 'Optional friendly label',
+    'settings.providers.modelOptions.contextWindow': 'Context Window',
+    'settings.providers.modelOptions.maxInputTokens': 'Max Input Tokens',
+    'settings.providers.modelOptions.maxOutputTokens': 'Max Output Tokens',
+    'settings.providers.modelOptions.autoPlaceholder': 'Auto',
+    'settings.providers.modelOptions.supportsToolCalls': 'Tool Calling',
+    'settings.providers.modelOptions.supportsReasoning': 'Reasoning',
+    'settings.providers.modelOptions.supportsVision': 'Vision',
+    'settings.providers.modelOptions.supportsStructuredOutputs': 'Structured Outputs',
+    'settings.providers.modelOptions.providerOptions': 'Advanced Provider Options (JSON)',
+    'settings.providers.modelOptions.providerOptionsPlaceholder':
+      '{\n  "reasoningEffort": "medium",\n  "parallelToolCalls": true\n}',
+    'settings.providers.modelOptions.providerOptionsHelp':
+      'Optional provider-specific AI SDK call options. Leave blank to use default runtime behavior.',
+    'settings.providers.modelOptions.capability.default': 'Use Default',
+    'settings.providers.modelOptions.capability.enabled': 'Enabled',
+    'settings.providers.modelOptions.capability.disabled': 'Disabled',
+    'settings.providers.modelOptions.summary.vision': 'Vision',
+    'settings.providers.modelOptions.summary.tools': 'Tools',
+    'settings.providers.modelOptions.summary.reasoning': 'Reasoning',
+    'settings.providers.modelOptions.summary.structuredOutputs': 'Structured',
+    'settings.providers.modelOptions.summary.contextWindow': ({ count }) =>
+      `${asText(count)} ctx`,
+    'settings.providers.modelOptions.errors.invalidJson':
+      'Provider options must be valid JSON.',
+    'settings.providers.modelOptions.errors.objectRequired':
+      'Provider options JSON must be an object.',
     'settings.providers.description.openai':
       'Official OpenAI models via the AI SDK OpenAI provider',
     'settings.providers.description.anthropic':
@@ -1221,6 +1257,11 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
     'chat.workspace.hiddenFromGlobal': '已从全局列表隐藏',
     'chat.workspace.selected': '已选择工作区',
     'chat.workspace.choose': '为当前线程选择工作区',
+    'chat.workspace.temporary': '临时工作区',
+    'chat.workspace.temporaryHint': '该线程的临时工作区',
+    'chat.workspace.lockedHint': '该线程在首条消息后已锁定工作区',
+    'chat.workspace.tempCompact': '（临时）',
+    'chat.workspace.lockedNote': '发送消息后不可再切换工作区',
     'chat.tools.title': '工具',
     'chat.tools.description':
       '允许 iKi 在下一次回复中使用内置工具。自动模式会同时考虑所有内置工具和已启用 MCP 服务器提供的全部工具。',
@@ -2031,6 +2072,36 @@ export const messages: Record<SupportedLocale, MessageCatalog> = {
       `留空以使用默认的 ${asText(name)} API 端点。`,
     'settings.providers.promptModelName': '输入模型名称：',
     'settings.providers.confirmRemove': '确定要移除这个 Provider 配置吗？',
+    'settings.providers.modelOptions.edit': '模型选项',
+    'settings.providers.modelOptions.title': ({ model }) => `模型选项 · ${asText(model)}`,
+    'settings.providers.modelOptions.displayName': '显示名称',
+    'settings.providers.modelOptions.displayNamePlaceholder': '可选的友好名称',
+    'settings.providers.modelOptions.contextWindow': '上下文窗口',
+    'settings.providers.modelOptions.maxInputTokens': '最大输入 Tokens',
+    'settings.providers.modelOptions.maxOutputTokens': '最大输出 Tokens',
+    'settings.providers.modelOptions.autoPlaceholder': '自动',
+    'settings.providers.modelOptions.supportsToolCalls': '工具调用',
+    'settings.providers.modelOptions.supportsReasoning': '推理能力',
+    'settings.providers.modelOptions.supportsVision': '视觉能力',
+    'settings.providers.modelOptions.supportsStructuredOutputs': '结构化输出',
+    'settings.providers.modelOptions.providerOptions': '高级 Provider 选项（JSON）',
+    'settings.providers.modelOptions.providerOptionsPlaceholder':
+      '{\n  "reasoningEffort": "medium",\n  "parallelToolCalls": true\n}',
+    'settings.providers.modelOptions.providerOptionsHelp':
+      '可选的 Provider 专属 AI SDK 调用参数。留空时使用默认运行时行为。',
+    'settings.providers.modelOptions.capability.default': '使用默认值',
+    'settings.providers.modelOptions.capability.enabled': '启用',
+    'settings.providers.modelOptions.capability.disabled': '禁用',
+    'settings.providers.modelOptions.summary.vision': '视觉',
+    'settings.providers.modelOptions.summary.tools': '工具',
+    'settings.providers.modelOptions.summary.reasoning': '推理',
+    'settings.providers.modelOptions.summary.structuredOutputs': '结构化',
+    'settings.providers.modelOptions.summary.contextWindow': ({ count }) =>
+      `${asText(count)} 上下文`,
+    'settings.providers.modelOptions.errors.invalidJson':
+      'Provider 选项必须是有效的 JSON。',
+    'settings.providers.modelOptions.errors.objectRequired':
+      'Provider 选项 JSON 必须是一个对象。',
     'settings.providers.description.openai': '通过 AI SDK 的 OpenAI Provider 使用官方 OpenAI 模型',
     'settings.providers.description.anthropic':
       '通过 AI SDK 的 Anthropic Provider 使用官方 Claude 模型',

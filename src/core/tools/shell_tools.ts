@@ -12,10 +12,10 @@ const execAsync = promisify(exec);
 export class ShellExecutionTool extends BaseTool {
   override name = 'shell';
   override type = 'function';
-  override autoAllowed = false;
+  override autoAllowed = true;
   override needsApproval = true;
   override description =
-    'Execute a shell command inside the conversation workspace. Every invocation requires manual approval.';
+    'Execute a shell command inside the conversation workspace. Auto mode may choose it when live local inspection is materially necessary, and every invocation still requires manual approval.';
 
   override paramSchema = ShellToolInputSchema;
 

@@ -79,6 +79,7 @@ const createHarness = (options?: {
   });
   const onAssistantMessagePersisted = vi.fn(async () => undefined);
   const scrollToBottom = vi.fn();
+  const ensureWorkspaceForCurrentThread = vi.fn(async () => currentThread.value);
 
   const state = useChatStreaming({
     electronAPI: {
@@ -103,6 +104,7 @@ const createHarness = (options?: {
     selectedTools,
     showWelcome,
     createNewThread,
+    ensureWorkspaceForCurrentThread,
     selectThread,
     handleThreadDeleted,
     handleNewChat,
@@ -120,6 +122,7 @@ const createHarness = (options?: {
     stopStream,
     updateThread,
     createNewThread,
+    ensureWorkspaceForCurrentThread,
     selectThread,
     handleThreadDeleted,
     handleNewChat,
@@ -233,5 +236,23 @@ describe('useChatStreaming', () => {
     expect(getTextPart(messageStore.messages[0] as UIMessage)).toBe('Hello from a fresh composer');
     expect(result?.threadId).toBe('thread_new');
     expect(result?.messagesSnapshot).toHaveLength(1);
+  });
+
+  it('refreshes workspace binding before sending on an existing unscoped thread', async () => {
+    const { state, ensureWorkspaceForCurrentThread } = createHarness({
+      currentThread: createStoredThread({
+        id: 'thread_blank',
+        workspace_id: undefined,
+      }),
+      currentModel: 'gpt-4.1',
+    });
+
+    await state.prepareMessageSend({
+      content: 'Bind workspace before first turn',
+      model: 'gpt-4.1',
+    });
+    await flushMicrotasks();
+
+    expect(ensureWorkspaceForCurrentThread).toHaveBeenCalledTimes(1);
   });
 });

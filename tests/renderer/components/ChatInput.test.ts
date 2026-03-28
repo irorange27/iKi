@@ -537,6 +537,82 @@ describe('ChatInput', () => {
     expect(wrapper.emitted('workspace-changed')).toEqual([['workspace_app']]);
   });
 
+  it('marks temporary workspaces with a T badge on the composer trigger', async () => {
+    const tempWorkspace = buildWorkspace({
+      id: 'workspace_thread_1',
+      name: 'Thread Scratch',
+      path: '/tmp/thread-1',
+      is_temporary: 1,
+      show_in_list: 0,
+    });
+
+    const { wrapper } = await mountChatInput({
+      workspaces: [tempWorkspace],
+      props: {
+        selectedWorkspaceId: 'workspace_thread_1',
+      },
+    });
+
+    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
+    expect(workspaceTrigger.find('.selector-badge').text()).toBe('T');
+    expect(workspaceTrigger.attributes('title')).toContain('Temporary workspace');
+  });
+
+  it('disables workspace switching once the thread workspace is locked', async () => {
+    const docsWorkspace = buildWorkspace({
+      id: 'workspace_docs',
+      name: 'Docs',
+      path: '/tmp/docs',
+    });
+
+    const { wrapper } = await mountChatInput({
+      workspaces: [docsWorkspace],
+      props: {
+        selectedWorkspaceId: 'workspace_docs',
+        workspaceLocked: true,
+      },
+    });
+
+    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
+    expect(workspaceTrigger.attributes('disabled')).toBeDefined();
+    expect(workspaceTrigger.attributes('title')).toContain('locked');
+
+    await workspaceTrigger.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.workspace-selector-panel').exists()).toBe(false);
+    expect(wrapper.emitted('workspace-changed')).toBeUndefined();
+  });
+
+  it('shows a rich workspace tip for locked temporary workspace bindings', async () => {
+    const tempWorkspace = buildWorkspace({
+      id: 'workspace_thread_1',
+      name: 'Temp Workspace',
+      path: '/tmp/thread-1',
+      is_temporary: 1,
+      show_in_list: 0,
+    });
+
+    const { wrapper } = await mountChatInput({
+      workspaces: [tempWorkspace],
+      props: {
+        selectedWorkspaceId: 'workspace_thread_1',
+        workspaceLocked: true,
+      },
+    });
+
+    await wrapper.find('.workspace-selector-root').trigger('mouseenter');
+    await flushPromises();
+
+    const tip = wrapper.find('.workspace-selector-tip');
+    expect(tip.exists()).toBe(true);
+    expect(tip.text()).toContain('Temp Workspace');
+    expect(tip.text()).toContain('/tmp/thread-1');
+    expect(tip.text()).toContain('(Temp)');
+    expect(tip.text()).toContain('Hidden from global list');
+    expect(tip.text()).toContain('Workspace cannot be changed after sending messages');
+  });
+
   it('uses the same accent visual state as the other selector buttons when workspaces are available', async () => {
     const docsWorkspace = buildWorkspace({
       id: 'workspace_docs',

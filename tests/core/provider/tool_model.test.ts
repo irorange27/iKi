@@ -8,12 +8,14 @@ const {
   generateTextMock,
   getAppConfigMock,
   getFullSystemPromptMock,
+  getModelCallSettingsMock,
   getProvidersMock,
 } = vi.hoisted(() => ({
   createModelMock: vi.fn(),
   generateTextMock: vi.fn(),
   getAppConfigMock: vi.fn(),
   getFullSystemPromptMock: vi.fn(),
+  getModelCallSettingsMock: vi.fn(() => ({})),
   getProvidersMock: vi.fn(),
 }));
 
@@ -24,6 +26,7 @@ vi.mock('ai', () => ({
 vi.mock('../../../src/core/provider/llm/factory', () => ({
   createModel: createModelMock,
   getFullSystemPrompt: getFullSystemPromptMock,
+  getModelCallSettings: getModelCallSettingsMock,
 }));
 
 vi.mock('../../../src/core/config', () => ({
@@ -73,6 +76,7 @@ const buildProvider = (
 beforeEach(() => {
   vi.clearAllMocks();
   createModelMock.mockReturnValue('mock-model');
+  getModelCallSettingsMock.mockReturnValue({});
   generateTextMock.mockResolvedValue({ text: 'OK' });
   getFullSystemPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockReturnValue(createDefaultAppConfig());

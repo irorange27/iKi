@@ -31,6 +31,12 @@ const DEFAULT_THREAD_TITLES = new Set([
   translateWithLocale('zh-CN', 'chat.thread.newTitle'),
 ]);
 
+const normalizeWorkspaceId = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 export const useChatThreads = (deps: {
   electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
   messageStore: ChatMessageStore;
@@ -58,11 +64,7 @@ export const useChatThreads = (deps: {
   };
 
   const syncWorkspaceState = (thread: ChatThread | null) => {
-    const workspaceId =
-      typeof thread?.workspace_id === 'string' && thread.workspace_id.trim().length > 0
-        ? thread.workspace_id.trim()
-        : null;
-    selectedWorkspaceId.value = workspaceId;
+    selectedWorkspaceId.value = normalizeWorkspaceId(thread?.workspace_id);
   };
 
   const refreshThreads = async () => {
@@ -390,8 +392,7 @@ export const useChatThreads = (deps: {
   };
 
   const setWorkspace = async (nextValue: string | null) => {
-    const normalizedValue =
-      typeof nextValue === 'string' && nextValue.trim().length > 0 ? nextValue.trim() : null;
+    const normalizedValue = normalizeWorkspaceId(nextValue);
     const previousValue = selectedWorkspaceId.value;
     const activeThread = currentThread.value;
 
@@ -421,6 +422,35 @@ export const useChatThreads = (deps: {
       if (currentThread.value?.id === activeThread.id) {
         currentThread.value.workspace_id = previousValue ?? undefined;
       }
+    }
+  };
+
+  const ensureWorkspaceForCurrentThread = async () => {
+    const activeThread = currentThread.value;
+    if (!activeThread) return null;
+    if (normalizeWorkspaceId(activeThread.workspace_id)) return activeThread;
+
+    try {
+      const refreshedThread = await deps.electronAPI.chat.threads.get(activeThread.id);
+      if (!refreshedThread) return activeThread;
+
+      currentThread.value = refreshedThread;
+      currentModel.value = typeof refreshedThread.model === 'string' ? refreshedThread.model : '';
+      syncProviderState(refreshedThread);
+      syncIncognitoState(refreshedThread);
+      syncWorkspaceState(refreshedThread);
+      return refreshedThread;
+    } catch (error) {
+      chatThreadsLogger.event({
+        level: 'warn',
+        event: 'chat.thread.workspace_refresh',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: activeThread.id,
+        },
+      });
+      return activeThread;
     }
   };
 
@@ -473,6 +503,7 @@ export const useChatThreads = (deps: {
     handleModelSelected,
     setIncognito,
     setWorkspace,
+    ensureWorkspaceForCurrentThread,
     handleAssistantMessagePersisted,
     handleTaskPush,
   };

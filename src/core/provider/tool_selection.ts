@@ -32,6 +32,7 @@ const SYSTEM_PROMPT =
   'Rules:\n' +
   '- Output ONLY valid JSON.\n' +
   '- Prefer using NO tools when possible.\n' +
+  '- If the user asks about current local machine state or other live information the model cannot know reliably on its own (for example current time, filesystem contents, git status, installed tools, running processes, or live web data), include the tool needed to verify it instead of guessing.\n' +
   '- Prefer 1-3 tools; only exceed that when a multi-step workflow clearly needs it.\n' +
   '- If a task likely needs sequential tool use in one turn (for example list -> read -> write), include each needed tool.\n' +
   '- Prefer tools that do not require approval unless approval-gated tools are clearly necessary.\n' +

@@ -25,7 +25,7 @@ import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thre
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import { getErrorMessage } from '../../utils/errors';
-import { TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
+import { NO_TOOLS_SYSTEM_PROMPT, TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import { createChatContextAssembler } from './chat_context';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
@@ -358,9 +358,10 @@ export const createChatStreaming = (deps: {
     }
   ): Promise<PreparedChatTurn> => {
     const modelMessages = await toModelInputMessages(options.messages);
-    const modelCapability = await llmFactory.fetchModelCapabilityFromDev(
+    const modelCapability = await llmFactory.resolveModelCapability(
       options.providerType,
-      options.model
+      options.model,
+      options.providerId
     );
     const lastModelMessage = modelMessages[modelMessages.length - 1];
     const emotionConfig = getEmotionConfig();
@@ -513,6 +514,7 @@ export const createChatStreaming = (deps: {
         providerId: options.providerId,
         modelId: options.model,
         messages: toLlmChatMessages(preparedTurn.finalMessages),
+        extraSystemPrompt: NO_TOOLS_SYSTEM_PROMPT,
         ...(typeof preparedTurn.maxOutputTokens === 'number'
           ? { maxOutputTokens: preparedTurn.maxOutputTokens }
           : {}),
@@ -578,7 +580,9 @@ export const createChatStreaming = (deps: {
 
       uiChunkEmitter.emitContextReport(preparedTurn.report);
 
-      const systemPrompt = preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : '';
+      const systemPrompt = preparedTurn.enableTools
+        ? TOOL_AGENT_SYSTEM_PROMPT
+        : NO_TOOLS_SYSTEM_PROMPT;
       const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
             threadId: options.threadId,

@@ -1,4 +1,5 @@
 import { generateText, streamText, type LanguageModel, type ModelMessage } from 'ai';
+import type { SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
@@ -8,12 +9,16 @@ import { createLogger } from '../../logger';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import {
+  getProviderModelOptions,
   listModelsDevProviderModels,
   lookupModelsDevModelCapability,
+  mergeModelCapability,
   parseModelList,
+  parseProviderModelOptionsMap,
   type ModelCapability,
   type ModelsDevCatalog,
 } from '../../../shared/utils/provider_models';
+import type { ProviderModelOptionsMap } from '../../../shared/types/provider';
 import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
 import { normalizeLanguageModelUsage } from './usage';
 
@@ -30,6 +35,7 @@ export interface ProviderConfig {
   apiKey: string;
   baseURL: string;
   models: string[];
+  modelOptions: ProviderModelOptionsMap;
   isResponseApi: boolean;
 }
 
@@ -98,7 +104,39 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     apiKey: provider.api_key,
     baseURL: provider.base_url || '',
     models,
+    modelOptions: parseProviderModelOptionsMap(provider.model_options),
     isResponseApi: provider.is_response_api === true,
+  };
+};
+
+const getStoredProviderModelOptions = (
+  providerType: string,
+  modelId: string,
+  providerId?: string | null
+) => {
+  try {
+    const config = getProviderConfig(providerType, providerId);
+    return getProviderModelOptions(config.modelOptions, modelId);
+  } catch {
+    return null;
+  }
+};
+
+export const getModelCallSettings = (
+  providerType: string,
+  modelId: string,
+  providerId?: string | null
+): { providerOptions?: SharedV3ProviderOptions } => {
+  const modelOptions = getStoredProviderModelOptions(providerType, modelId, providerId);
+  const providerOptions = modelOptions?.providerOptions;
+  if (!providerOptions || Object.keys(providerOptions).length === 0) {
+    return {};
+  }
+
+  return {
+    providerOptions: {
+      [providerType]: providerOptions,
+    },
   };
 };
 
@@ -119,6 +157,8 @@ export const createModel = (
       `Model not specified for provider "${providerType}". Please select a model in chat or update settings.`
     );
   }
+
+  const storedModelOptions = getProviderModelOptions(config.modelOptions, modelId);
 
   if (providerType === 'openai') {
     const client = createOpenAI({
@@ -162,6 +202,12 @@ export const createModel = (
     apiKey: config.apiKey,
     baseURL: config.baseURL,
   });
+  if (typeof storedModelOptions?.supportsStructuredOutputs === 'boolean') {
+    return client.languageModel(modelId, {
+      supportsStructuredOutputs: storedModelOptions.supportsStructuredOutputs,
+    });
+  }
+
   return client(modelId);
 };
 
@@ -213,6 +259,7 @@ export const streamChatWithUsage = async (
     model,
     system: systemPrompt,
     messages: toModelMessages(options.messages),
+    ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
     ...(typeof options.maxOutputTokens === 'number'
       ? { maxOutputTokens: options.maxOutputTokens }
       : {}),
@@ -276,6 +323,7 @@ export const generateChatWithUsage = async (options: {
     model,
     system: systemPrompt,
     messages: toModelMessages(options.messages),
+    ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
     ...(typeof options.maxOutputTokens === 'number'
       ? { maxOutputTokens: options.maxOutputTokens }
       : {}),
@@ -340,4 +388,18 @@ export const fetchModelCapabilityFromDev = async (
     );
     return null;
   }
+};
+
+export const resolveModelCapability = async (
+  providerType: string,
+  modelId: string,
+  providerId?: string | null
+): Promise<ModelCapability | null> => {
+  const trimmedModelId = modelId.trim();
+  if (!trimmedModelId) return null;
+
+  const modelOptions = getStoredProviderModelOptions(providerType, trimmedModelId, providerId);
+  const baseCapability = await fetchModelCapabilityFromDev(providerType, trimmedModelId);
+
+  return mergeModelCapability(baseCapability, providerType, trimmedModelId, modelOptions);
 };

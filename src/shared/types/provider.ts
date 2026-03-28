@@ -1,9 +1,26 @@
+import type { JSONValue } from '@ai-sdk/provider';
+
+export interface ProviderModelOptions {
+  displayName?: string;
+  contextWindow?: number | null;
+  maxInputTokens?: number | null;
+  maxOutputTokens?: number | null;
+  supportsToolCalls?: boolean | null;
+  supportsReasoning?: boolean | null;
+  supportsVision?: boolean | null;
+  supportsStructuredOutputs?: boolean | null;
+  providerOptions?: Record<string, JSONValue> | null;
+}
+
+export type ProviderModelOptionsMap = Record<string, ProviderModelOptions>;
+
 export interface Provider {
   id: string;
   name: string;
   type: string;
   api_key: string;
   models: string; // JSON string of models
+  model_options?: string; // JSON string keyed by model id
   base_url?: string;
   enabled: boolean;
   created_at: string;

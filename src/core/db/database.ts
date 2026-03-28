@@ -31,6 +31,7 @@ const initCoreTables = (database: Database.Database) => {
       type TEXT NOT NULL,
       api_key TEXT NOT NULL,
       models TEXT NOT NULL,
+      model_options TEXT NOT NULL DEFAULT '{}',
       base_url TEXT,
       enabled BOOLEAN NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,

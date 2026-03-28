@@ -12,6 +12,12 @@ import { sanitizeUiMessageJsonForStorage } from './chat_ui';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
+const normalizedString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => {
@@ -26,11 +32,6 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
         : createPrefixedId('thread');
     const title =
       typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat';
-    const normalizedString = (value: unknown): string | null => {
-      if (typeof value !== 'string') return null;
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    };
 
     const normalizeFlag = (value: unknown): number => {
       if (typeof value === 'number') return value ? 1 : 0;
@@ -60,6 +61,39 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   };
   const updateThread = (id: string, input: unknown) => {
     const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
+    const hasWorkspaceUpdate = Object.prototype.hasOwnProperty.call(thread, 'workspace_id');
+    const existingThread = hasWorkspaceUpdate ? chatThreadDb.getChatThread(id) : null;
+    const nextWorkspaceId = hasWorkspaceUpdate ? normalizedString(thread.workspace_id) : null;
+    const currentWorkspaceId = normalizedString(existingThread?.workspace_id);
+    const workspaceChanged = hasWorkspaceUpdate && nextWorkspaceId !== currentWorkspaceId;
+
+    if (workspaceChanged) {
+      const messageCount = chatMessageDb.countChatMessagesByThread(id);
+      if (messageCount > 0) {
+        chatPersistenceLogger.event({
+          level: 'warn',
+          event: 'chat.thread.workspace_update',
+          outcome: 'skipped',
+          message: 'Refused to change workspace after the thread already has messages.',
+          entity: {
+            thread_id: id,
+            workspace_id: nextWorkspaceId,
+          },
+          data: {
+            previous_workspace_id: currentWorkspaceId,
+            message_count: messageCount,
+          },
+        });
+
+        const nextThread = { ...thread };
+        delete nextThread.workspace_id;
+        if (Object.keys(nextThread).length === 0) {
+          return { changes: 0 };
+        }
+        return chatThreadDb.updateChatThread(id, nextThread);
+      }
+    }
+
     return chatThreadDb.updateChatThread(id, thread);
   };
   const deleteThread = (id: string) => chatThreadDb.deleteChatThread(id);

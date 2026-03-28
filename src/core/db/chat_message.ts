@@ -10,6 +10,13 @@ export const getChatMessages = (threadId: string): ChatMessage[] => {
   return rows;
 };
 
+export const countChatMessagesByThread = (threadId: string): number => {
+  const row = getDb()
+    .prepare('SELECT COUNT(*) as count FROM chat_messages WHERE thread_id = ?')
+    .get(threadId) as { count?: number } | undefined;
+  return typeof row?.count === 'number' ? row.count : 0;
+};
+
 export const getChatMessage = (id: string): ChatMessage | null => {
   const row = getDb().prepare('SELECT * FROM chat_messages WHERE id = ?').get(id) as
     | ChatMessage

@@ -101,4 +101,28 @@ describe('selectToolsWithAgent', () => {
     expect(generate).toHaveBeenCalledWith(expect.stringContaining('first-class user-state signal'));
     expect(generate).toHaveBeenCalledWith(expect.stringContaining('primary=anger'));
   });
+
+  it('tells the router to verify live local state with tools instead of guessing', async () => {
+    const generate = vi.fn().mockResolvedValue({ response: '["shell"]' });
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({ generate });
+
+    await selectToolsWithAgent({
+      messages: [{ role: 'user', content: '现在几点了？' }],
+      availableTools: [{ name: 'shell' }],
+    });
+
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining(
+          'include the tool needed to verify it instead of guessing'
+        ),
+      })
+    );
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('current local machine state'),
+      })
+    );
+  });
 });

@@ -11,6 +11,7 @@ const {
   streamTextMock,
   toolMock,
   createModelMock,
+  getModelCallSettingsMock,
   getFullSystemPromptMock,
 } = vi.hoisted(() => {
   const loggerEventMock = vi.fn();
@@ -32,6 +33,7 @@ const {
     streamTextMock: vi.fn(),
     toolMock: vi.fn((definition: unknown) => definition),
     createModelMock: vi.fn(),
+    getModelCallSettingsMock: vi.fn(() => ({})),
     getFullSystemPromptMock: vi.fn(),
   };
 });
@@ -46,6 +48,7 @@ vi.mock('ai', () => ({
 
 vi.mock('../../../../src/core/provider/llm/factory', () => ({
   createModel: createModelMock,
+  getModelCallSettings: getModelCallSettingsMock,
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
@@ -76,6 +79,7 @@ const createAsyncIterable = <T>(values: T[]) =>
 beforeEach(() => {
   vi.clearAllMocks();
   createModelMock.mockReturnValue('mock-model');
+  getModelCallSettingsMock.mockReturnValue({});
   getFullSystemPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockImplementation(() => {
     throw new Error('app config should not be loaded');
@@ -211,6 +215,53 @@ describe('SimpleConversationRunner', () => {
     );
     expect(getAppConfigMock).not.toHaveBeenCalled();
     expect(loggerSpanFailMock).not.toHaveBeenCalled();
+  });
+
+  it('passes stored provider call settings through to AI SDK generation', async () => {
+    generateTextMock.mockResolvedValue({
+      text: 'done',
+      content: [],
+      steps: [],
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+      },
+      response: {
+        messages: [],
+      },
+    });
+    getModelCallSettingsMock.mockReturnValue({
+      providerOptions: {
+        openai: {
+          reasoningEffort: 'medium',
+        },
+      },
+    });
+
+    const runner = createSimpleConversationRunner({
+      enabled: true,
+      providerType: 'openai',
+      model: 'gpt-5.4',
+      systemPrompt: 'system prompt',
+      enableTools: false,
+      maxIterations: 1,
+      temperature: 0.2,
+      maxTokens: 128,
+    });
+
+    await runner.generate({ prompt: 'hello' });
+
+    expect(getModelCallSettingsMock).toHaveBeenCalledWith('openai', 'gpt-5.4', '');
+    expect(generateTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'medium',
+          },
+        },
+      })
+    );
   });
 
   it('reuses persisted history for approval continuation without requiring explicit history', async () => {

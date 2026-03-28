@@ -1,7 +1,7 @@
 import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai';
 
 import { createLogger } from '../../logger';
-import { createModel } from '../../provider/llm/factory';
+import { createModel, getModelCallSettings } from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import { ToolRegistry } from '../../tools/base';
 import {
@@ -93,6 +93,7 @@ export class SimpleConversationRunner implements ConversationRunner {
         system: systemPrompt,
         messages,
         tools,
+        ...getModelCallSettings(this.config.providerType, this.config.model, this.config.providerId),
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxTokens,
         stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
@@ -165,6 +166,7 @@ export class SimpleConversationRunner implements ConversationRunner {
       system: systemPrompt,
       messages,
       tools,
+      ...getModelCallSettings(this.config.providerType, this.config.model, this.config.providerId),
       temperature: this.config.temperature,
       maxOutputTokens: this.config.maxTokens,
       stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),

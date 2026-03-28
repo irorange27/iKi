@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NO_TOOLS_SYSTEM_PROMPT } from '../../../../src/main/services/chat/chat_constants';
 
 const {
   dbPrepareMock,
@@ -8,7 +9,7 @@ const {
   getAppConfigMock,
   shouldGuardToolsMock,
   generateChatWithUsageMock,
-  fetchModelCapabilityFromDevMock,
+  resolveModelCapabilityMock,
   assembleContextMock,
   createChatConversationRunnerMock,
   persistThreadRuntimeHintsMock,
@@ -45,7 +46,7 @@ const {
   })),
   shouldGuardToolsMock: vi.fn(() => false),
   generateChatWithUsageMock: vi.fn(),
-  fetchModelCapabilityFromDevMock: vi.fn(async () => null),
+  resolveModelCapabilityMock: vi.fn(async () => null),
   assembleContextMock: vi.fn(),
   createChatConversationRunnerMock: vi.fn(),
   persistThreadRuntimeHintsMock: vi.fn(),
@@ -107,7 +108,7 @@ vi.mock('../../../../src/core/provider/emotion_model', () => ({
 vi.mock('../../../../src/core/provider/llm/factory', () => ({
   generateChatWithUsage: generateChatWithUsageMock,
   fetchModelsFromDev: vi.fn(async () => []),
-  fetchModelCapabilityFromDev: fetchModelCapabilityFromDevMock,
+  resolveModelCapability: resolveModelCapabilityMock,
   getProviderConfig: vi.fn(() => ({ apiKey: 'test-key' })),
 }));
 
@@ -364,6 +365,7 @@ describe('createChatStreaming', () => {
       providerType: 'openai',
       modelId: 'gpt-4o-mini',
       messages: [{ role: 'user', content: 'hello' }],
+      extraSystemPrompt: NO_TOOLS_SYSTEM_PROMPT,
       maxOutputTokens: 700,
     });
     expect(createChatConversationRunnerMock).not.toHaveBeenCalled();

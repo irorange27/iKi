@@ -3,16 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   addChatThreadMock,
   addChatMessageMock,
+  countChatMessagesByThreadMock,
   getChatMessageMock,
   getChatThreadMock,
+  updateChatThreadMock,
   touchChatThreadMock,
   touchThreadRelationshipStateMock,
   ensureThreadWorkspaceSelectionMock,
 } = vi.hoisted(() => ({
   addChatThreadMock: vi.fn(),
   addChatMessageMock: vi.fn(),
+  countChatMessagesByThreadMock: vi.fn(),
   getChatMessageMock: vi.fn(),
   getChatThreadMock: vi.fn(),
+  updateChatThreadMock: vi.fn(),
   touchChatThreadMock: vi.fn(),
   touchThreadRelationshipStateMock: vi.fn(),
   ensureThreadWorkspaceSelectionMock: vi.fn(),
@@ -20,12 +24,14 @@ const {
 
 vi.mock('../../../../src/core/db/chat_message', () => ({
   addChatMessage: addChatMessageMock,
+  countChatMessagesByThread: countChatMessagesByThreadMock,
   getChatMessage: getChatMessageMock,
 }));
 
 vi.mock('../../../../src/core/db/chat_thread', () => ({
   addChatThread: addChatThreadMock,
   getChatThread: getChatThreadMock,
+  updateChatThread: updateChatThreadMock,
   touchChatThread: touchChatThreadMock,
 }));
 
@@ -59,6 +65,8 @@ describe('chat_persistence', () => {
       thread_id: 'thread_1',
       message: JSON.stringify({ role: 'user', content: 'hello' }),
     });
+    countChatMessagesByThreadMock.mockReturnValue(0);
+    updateChatThreadMock.mockReturnValue({ changes: 1 });
   });
 
   it('persists thread creation fields that drive composer state and workspace scoping', async () => {
@@ -131,5 +139,30 @@ describe('chat_persistence', () => {
       expect.any(String)
     );
     expect(onMessagePersisted).toHaveBeenCalled();
+  });
+
+  it('rejects workspace rebinding once a thread already has persisted messages', async () => {
+    countChatMessagesByThreadMock.mockReturnValue(3);
+
+    const { createChatPersistence } = await import(
+      '../../../../src/main/services/chat/chat_persistence'
+    );
+
+    const persistence = createChatPersistence({
+      memory: {
+        onMessagePersisted: vi.fn(),
+      } as never,
+    });
+
+    const result = persistence.updateThread('thread_1', {
+      workspace_id: 'workspace_beta',
+      title: 'Renamed thread',
+    });
+
+    expect(countChatMessagesByThreadMock).toHaveBeenCalledWith('thread_1');
+    expect(updateChatThreadMock).toHaveBeenCalledWith('thread_1', {
+      title: 'Renamed thread',
+    });
+    expect(result).toEqual({ changes: 1 });
   });
 });

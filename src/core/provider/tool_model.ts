@@ -6,7 +6,7 @@ import { createLogger } from '../logger';
 import { TitleAgent } from '../agents/title_agent';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
-import { createModel } from './llm/factory';
+import { createModel, getModelCallSettings } from './llm/factory';
 import { parseModelList } from '../../shared/utils/provider_models';
 
 export interface ToolModelConfig {
@@ -150,6 +150,7 @@ export const testToolModelLatency = async (
   await generateText({
     model,
     messages: [{ role: 'user', content: 'Reply with OK.' }],
+    ...getModelCallSettings(resolvedToolModel.providerType, resolvedToolModel.model),
     maxOutputTokens: 8,
   });
 

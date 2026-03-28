@@ -69,6 +69,7 @@
           :active-provider-id="currentProviderId"
           :is-incognito="isIncognito"
           :selected-workspace-id="selectedWorkspaceId"
+          :workspace-locked="isWorkspaceLocked"
           :context-usage="composerContextUsage"
           :prepare-message-send="prepareMessageSend"
           @incognito-changed="handleIncognitoChanged"
@@ -161,6 +162,10 @@ const externalThreadNotice = computed(() => {
   return t('chat.external.notice', { channel: channelLabel });
 });
 
+const isWorkspaceLocked = computed(
+  () => Boolean(currentThread.value?.id) && chatMessages.value.length > 0
+);
+
 const handleToolApprovalEvent = (payload: {
   approved: boolean;
   message: ChatUiMessage;
@@ -193,6 +198,7 @@ const {
   handleModelSelected,
   setIncognito,
   setWorkspace,
+  ensureWorkspaceForCurrentThread,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
   handleTaskPush,
@@ -225,6 +231,7 @@ const streaming = useChatStreaming({
   selectedTools,
   showWelcome,
   createNewThread,
+  ensureWorkspaceForCurrentThread,
   selectThread: selectThreadBase,
   handleThreadDeleted: handleThreadDeletedBase,
   handleNewChat: handleNewChatBase,

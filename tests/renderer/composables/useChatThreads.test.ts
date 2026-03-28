@@ -239,6 +239,30 @@ describe('useChatThreads', () => {
     expect(state.selectedWorkspaceId.value).toBeNull();
   });
 
+  it('refreshes the active thread when a temporary workspace binding is materialized on demand', async () => {
+    const blankThread = createStoredThread({
+      id: 'thread_blank',
+      title: 'Blank thread',
+      workspace_id: undefined,
+    });
+    const reboundThread = createStoredThread({
+      ...blankThread,
+      workspace_id: 'workspace_thread_thread_blank',
+    });
+    const { state, getThread } = createHarness([blankThread]);
+
+    await state.selectThread(blankThread.id);
+    expect(state.selectedWorkspaceId.value).toBeNull();
+
+    getThread.mockResolvedValueOnce(reboundThread);
+    const refreshed = await state.ensureWorkspaceForCurrentThread();
+
+    expect(getThread).toHaveBeenLastCalledWith(blankThread.id);
+    expect(refreshed?.workspace_id).toBe('workspace_thread_thread_blank');
+    expect(state.currentThread.value?.workspace_id).toBe('workspace_thread_thread_blank');
+    expect(state.selectedWorkspaceId.value).toBe('workspace_thread_thread_blank');
+  });
+
   it('creates a localized default thread title when the app locale is Chinese', async () => {
     setLocale('zh-CN');
     const { state, createThread } = createHarness();

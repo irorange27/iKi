@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative"
+    class="workspace-selector-root relative"
     @mouseenter="openWorkspaceSelector"
     @mouseleave="scheduleCloseWorkspaceSelector"
   >
@@ -9,6 +9,7 @@
       :class="{ 'ui-text-accent': isWorkspaceSelectorActive }"
       :title="triggerTitle"
       :aria-label="triggerTitle"
+      :disabled="isLocked"
       @click="toggleWorkspaceSelector"
       @mouseenter="openWorkspaceSelector"
       @mouseleave="scheduleCloseWorkspaceSelector"
@@ -21,10 +22,28 @@
           d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
         />
       </svg>
-      <span v-if="workspaceBadgeLabel" class="selector-badge">
+      <span v-if="workspaceBadgeLabel" class="selector-badge workspace-selector-badge">
         {{ workspaceBadgeLabel }}
       </span>
     </button>
+
+    <div v-if="showWorkspaceTip" class="workspace-selector-tip" role="tooltip">
+      <div class="workspace-selector-tip-title ui-text-primary">
+        {{ selectedWorkspace?.name }}
+      </div>
+      <div class="workspace-selector-tip-path ui-text-secondary">
+        {{ selectedWorkspace?.path }}
+      </div>
+      <div v-if="workspaceTipMetaLines.length > 0" class="workspace-selector-tip-meta ui-text-muted">
+        <div v-for="line in workspaceTipMetaLines" :key="line">
+          {{ line }}
+        </div>
+      </div>
+      <div v-if="workspaceTipNote" class="workspace-selector-tip-divider" />
+      <div v-if="workspaceTipNote" class="workspace-selector-tip-note ui-text-secondary">
+        {{ workspaceTipNote }}
+      </div>
+    </div>
 
     <div
       v-if="showWorkspaceSelector"
@@ -113,6 +132,9 @@
             <span class="font-medium">{{ workspace.name }}</span>
             <span class="selector-item-description selector-item-description-wide">
               {{ workspace.path }}
+              <span v-if="workspace.is_temporary === 1">
+                · {{ t('chat.workspace.temporary') }}
+              </span>
               <span v-if="workspace.show_in_list !== 1">
                 · {{ t('chat.workspace.hiddenFromGlobal') }}
               </span>
@@ -149,6 +171,7 @@ import { useI18n } from '../i18n';
 
 const props = defineProps<{
   selectedWorkspaceId?: string | null;
+  locked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -159,6 +182,7 @@ const electronAPI = window.electronAPI;
 const { t } = useI18n();
 
 const showWorkspaceSelector = ref(false);
+const isWorkspaceTriggerHovered = ref(false);
 const loadingWorkspaces = ref(false);
 const isPickingDirectory = ref(false);
 const workspaceLoadError = ref('');
@@ -205,21 +229,52 @@ const normalizeWorkspaces = (value: unknown): Workspace[] => {
 };
 
 const selectedWorkspaceId = computed(() => normalizeWorkspaceId(props.selectedWorkspaceId));
+const isLocked = computed(() => props.locked === true);
 const selectedWorkspace = computed(
   () =>
     availableWorkspaces.value.find(workspace => workspace.id === selectedWorkspaceId.value) ?? null
 );
 const hasWorkspaceSelection = computed(() => selectedWorkspaceId.value !== null);
+const currentWorkspaceIsTemporary = computed(() => selectedWorkspace.value?.is_temporary === 1);
+const workspaceTipMetaLines = computed(() => {
+  const lines: string[] = [];
+  if (currentWorkspaceIsTemporary.value) {
+    lines.push(t('chat.workspace.tempCompact'));
+  }
+  if (selectedWorkspace.value?.show_in_list !== 1) {
+    lines.push(t('chat.workspace.hiddenFromGlobal'));
+  }
+  return lines;
+});
+const workspaceTipNote = computed(() =>
+  isLocked.value ? t('chat.workspace.lockedNote') : ''
+);
+const showWorkspaceTip = computed(
+  () =>
+    isLocked.value &&
+    isWorkspaceTriggerHovered.value &&
+    Boolean(selectedWorkspace.value) &&
+    !showWorkspaceSelector.value
+);
 const isWorkspaceSelectorActive = computed(
   () => hasWorkspaceSelection.value || availableWorkspaces.value.length > 0
 );
 const workspaceBadgeLabel = computed(() => {
-  return hasWorkspaceSelection.value ? '1' : '';
+  if (!hasWorkspaceSelection.value) return '';
+  return currentWorkspaceIsTemporary.value ? 'T' : '1';
 });
 const triggerTitle = computed(() => {
   if (selectedWorkspace.value) {
-    return `${selectedWorkspace.value.name} · ${selectedWorkspace.value.path}`;
+    const titleParts = [`${selectedWorkspace.value.name} · ${selectedWorkspace.value.path}`];
+    if (currentWorkspaceIsTemporary.value) {
+      titleParts.push(t('chat.workspace.temporaryHint'));
+    }
+    if (isLocked.value) {
+      titleParts.push(t('chat.workspace.lockedHint'));
+    }
+    return titleParts.join(' · ');
   }
+  if (isLocked.value) return t('chat.workspace.lockedHint');
   if (hasWorkspaceSelection.value) {
     return t('chat.workspace.selected');
   }
@@ -262,6 +317,8 @@ const loadWorkspaces = async () => {
 };
 
 const openWorkspaceSelector = () => {
+  isWorkspaceTriggerHovered.value = true;
+  if (isLocked.value) return;
   if (workspaceSelectorCloseTimer.value !== null) {
     window.clearTimeout(workspaceSelectorCloseTimer.value);
     workspaceSelectorCloseTimer.value = null;
@@ -274,12 +331,14 @@ const scheduleCloseWorkspaceSelector = () => {
     window.clearTimeout(workspaceSelectorCloseTimer.value);
   }
   workspaceSelectorCloseTimer.value = window.setTimeout(() => {
+    isWorkspaceTriggerHovered.value = false;
     showWorkspaceSelector.value = false;
     workspaceSelectorCloseTimer.value = null;
   }, 180);
 };
 
 const toggleWorkspaceSelector = () => {
+  if (isLocked.value) return;
   showWorkspaceSelector.value = !showWorkspaceSelector.value;
   if (showWorkspaceSelector.value) {
     void loadWorkspaces();
@@ -287,11 +346,13 @@ const toggleWorkspaceSelector = () => {
 };
 
 const selectWorkspace = (workspaceId: string | null) => {
+  if (isLocked.value) return;
   emit('update:selectedWorkspaceId', normalizeWorkspaceId(workspaceId));
   showWorkspaceSelector.value = false;
 };
 
 const pickWorkspaceDirectory = async () => {
+  if (isLocked.value) return;
   isPickingDirectory.value = true;
   workspaceLoadError.value = '';
 
@@ -315,6 +376,16 @@ watch(selectedWorkspaceId, () => {
   void loadWorkspaces();
 });
 
+watch(isLocked, locked => {
+  if (!locked) return;
+  showWorkspaceSelector.value = false;
+  isWorkspaceTriggerHovered.value = false;
+  if (workspaceSelectorCloseTimer.value !== null) {
+    window.clearTimeout(workspaceSelectorCloseTimer.value);
+    workspaceSelectorCloseTimer.value = null;
+  }
+});
+
 onMounted(() => {
   void loadWorkspaces();
 });
@@ -330,6 +401,49 @@ onUnmounted(() => {
 <style scoped>
 .workspace-selector-panel {
   width: 360px;
+}
+
+.workspace-selector-tip {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  z-index: 55;
+  margin-bottom: 8px;
+  width: min(320px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+  box-shadow: var(--surface-shadow-lg);
+  padding: 12px 14px;
+}
+
+.workspace-selector-tip-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.workspace-selector-tip-path,
+.workspace-selector-tip-meta,
+.workspace-selector-tip-note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.workspace-selector-tip-divider {
+  margin-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.workspace-selector-tip-note {
+  margin-top: 10px;
+}
+
+.workspace-selector-badge {
+  left: -5px;
+  right: auto;
 }
 
 .workspace-selector-refresh {

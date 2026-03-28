@@ -70,7 +70,9 @@ vi.mock('../../../../src/core/network/http', () => ({
 import {
   createModel,
   fetchModelCapabilityFromDev,
+  getModelCallSettings,
   generateChatWithUsage,
+  resolveModelCapability,
   streamChat,
   streamChatWithUsage,
 } from '../../../../src/core/provider/llm/factory';
@@ -184,6 +186,37 @@ describe('llm factory', () => {
     });
     expect(responsesFactory.responses).toHaveBeenCalledWith('gpt-4.1');
     expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
+  });
+
+  it('passes structured output support into OpenAI-compatible language model creation', () => {
+    const languageModel = 'compatible-language-model';
+    const compatibleFactory = Object.assign(
+      vi.fn(() => 'unused-compatible-model'),
+      {
+        languageModel: vi.fn(() => languageModel),
+      }
+    );
+    createOpenAICompatibleMock.mockReturnValue(compatibleFactory as never);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'custom_gateway',
+        type: 'openai-compatible',
+        enabled: true,
+        api_key: 'sk-gateway',
+        base_url: 'https://gateway.example.com/v1',
+        models: JSON.stringify(['gpt-5.4']),
+        model_options: JSON.stringify({
+          'gpt-5.4': {
+            supportsStructuredOutputs: true,
+          },
+        }),
+      },
+    ]);
+
+    expect(createModel('openai-compatible', 'gpt-5.4')).toBe(languageModel);
+    expect(compatibleFactory.languageModel).toHaveBeenCalledWith('gpt-5.4', {
+      supportsStructuredOutputs: true,
+    });
   });
 
   it('rejects invalid anthropic adapter results at the runtime boundary', () => {
@@ -354,5 +387,68 @@ describe('llm factory', () => {
         vi.fn()
       )
     ).resolves.toBe('fallback text');
+  });
+
+  it('builds provider-scoped call settings from stored model options', () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_openai',
+        type: 'openai',
+        enabled: true,
+        api_key: 'sk-test',
+        base_url: '',
+        models: JSON.stringify(['gpt-5.4']),
+        model_options: JSON.stringify({
+          'gpt-5.4': {
+            providerOptions: {
+              reasoningEffort: 'medium',
+              parallelToolCalls: true,
+            },
+          },
+        }),
+      },
+    ]);
+
+    expect(getModelCallSettings('openai', 'gpt-5.4')).toEqual({
+      providerOptions: {
+        openai: {
+          parallelToolCalls: true,
+          reasoningEffort: 'medium',
+        },
+      },
+    });
+  });
+
+  it('merges stored provider model options over models.dev capability metadata', async () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_openai',
+        type: 'openai',
+        enabled: true,
+        api_key: 'sk-test',
+        base_url: '',
+        models: JSON.stringify(['gpt-4o-mini']),
+        model_options: JSON.stringify({
+          'gpt-4o-mini': {
+            contextWindow: 400000,
+            supportsToolCalls: true,
+            supportsReasoning: true,
+          },
+        }),
+      },
+    ]);
+
+    await expect(resolveModelCapability('openai', 'gpt-4o-mini')).resolves.toEqual({
+      providerType: 'openai',
+      providerKey: 'openai',
+      modelId: 'gpt-4o-mini',
+      displayName: 'gpt-4o-mini',
+      contextWindow: 400000,
+      maxInputTokens: 400000,
+      maxOutputTokens: 16384,
+      supportsToolCalls: true,
+      supportsReasoning: true,
+      source: 'provider',
+    });
   });
 });

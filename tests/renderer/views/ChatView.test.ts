@@ -225,6 +225,7 @@ const ChatInputStub = defineComponent({
     activeModel: { type: String, default: '' },
     isIncognito: { type: Boolean, default: false },
     selectedWorkspaceId: { type: String, default: null },
+    workspaceLocked: { type: Boolean, default: false },
     contextUsage: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
   },
@@ -330,6 +331,7 @@ describe('ChatView', () => {
       handleModelSelected: vi.fn(),
       setIncognito: setIncognitoMock,
       setWorkspace: setWorkspaceMock,
+      ensureWorkspaceForCurrentThread: vi.fn(async () => currentThreadRef.value),
       getCurrentThreadId: () => currentThreadRef.value?.id ?? null,
       handleAssistantMessagePersisted: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
@@ -459,6 +461,21 @@ describe('ChatView', () => {
       label: '3 kept',
       tone: 'neutral',
     });
+  });
+
+  it('locks workspace switching once the selected thread already has messages', async () => {
+    chatState.messages = [
+      {
+        id: 'user_1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'First turn' }],
+      },
+    ];
+
+    const wrapper = await mountChatView();
+    const chatInput = wrapper.findComponent(ChatInputStub);
+
+    expect(chatInput.props('workspaceLocked')).toBe(true);
   });
 
   it('shows an external-thread control-plane notice when viewing bridge-owned chats', async () => {
