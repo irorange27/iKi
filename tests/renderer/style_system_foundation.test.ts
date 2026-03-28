@@ -63,6 +63,10 @@ const CHAT_COMPOSER_ACTIONS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/ChatComposerActions.vue'
 );
+const CHAT_COMPOSER_SHELL_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/ChatComposerShell.vue'
+);
 const CHAT_COMPOSER_SELECTORS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/ChatComposerSelectors.vue'
@@ -265,6 +269,7 @@ describe('renderer style system foundation', () => {
   it('removes local duplicate shell/text primitives and hardcoded badge colors from renderer consumers', () => {
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
     const chatComposerActionsSource = readFileSync(CHAT_COMPOSER_ACTIONS_VUE_PATH, 'utf8');
+    const chatComposerShellSource = readFileSync(CHAT_COMPOSER_SHELL_VUE_PATH, 'utf8');
     const chatComposerSelectorsSource = readFileSync(CHAT_COMPOSER_SELECTORS_VUE_PATH, 'utf8');
     const toolSelectorSource = readFileSync(TOOL_SELECTOR_VUE_PATH, 'utf8');
     const skillSelectorSource = readFileSync(SKILL_SELECTOR_VUE_PATH, 'utf8');
@@ -272,7 +277,6 @@ describe('renderer style system foundation', () => {
     const welcomeScreenSource = readFileSync(WELCOME_SCREEN_VUE_PATH, 'utf8');
     const chatViewSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
 
-    expect(chatInputSource).toMatch(/ui-text-primary/);
     expect(chatInputSource).not.toMatch(/bg-\[#4a9eff\]/);
     expect(chatInputSource).not.toMatch(/\.icon-btn(?::hover|:disabled|\s*\{)/);
     expect(chatInputSource).not.toMatch(/rgba\(96,\s*165,\s*250/);
@@ -280,6 +284,13 @@ describe('renderer style system foundation', () => {
     expect(chatInputSource).not.toMatch(/color:\s*#ffffff;/);
     expect(chatInputSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
     expect(chatInputSource).not.toMatch(/model-selector-trigger composer-icon-btn/);
+    expect(chatComposerShellSource).toMatch(/ui-text-primary/);
+    expect(chatComposerShellSource).not.toMatch(/bg-\[#4a9eff\]/);
+    expect(chatComposerShellSource).not.toMatch(/\.icon-btn(?::hover|:disabled|\s*\{)/);
+    expect(chatComposerShellSource).not.toMatch(/rgba\(96,\s*165,\s*250/);
+    expect(chatComposerShellSource).not.toMatch(/rgba\(239,\s*68,\s*68/);
+    expect(chatComposerShellSource).not.toMatch(/color:\s*#ffffff;/);
+    expect(chatComposerShellSource).not.toMatch(/var\(--accent-rgb,\s*74,\s*158,\s*255\)/);
 
     expect(chatComposerActionsSource).toMatch(/ui-text-secondary/);
     expect(chatComposerActionsSource).toMatch(/ui-text-accent/);

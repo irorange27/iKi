@@ -1,22 +1,16 @@
 <template>
   <div class="chat-input-outer">
     <div class="mx-auto max-w-4xl">
-      <div class="relative rounded-[22px] border chat-input-container">
-        <input
-          ref="inputRef"
-          v-model="message"
-          type="text"
-          :placeholder="t('chat.input.placeholder')"
-          class="chat-input-field ui-text-primary w-full border-0 bg-transparent px-4 py-6 placeholder-muted focus:outline-none"
-          @keydown.enter="handleEnter"
-          @compositionstart="handleCompositionStart"
-          @compositionend="handleCompositionEnd"
-        />
-
-        <!-- Bottom toolbar -->
-        <div
-          class="composer-toolbar flex items-center justify-between border-t border-color px-3 py-2"
-        >
+      <ChatComposerShell
+        :set-input-ref="setInputRef"
+        v-model="message"
+        :placeholder="t('chat.input.placeholder')"
+        :feedback="composerFeedback"
+        @keydown-enter="handleEnter"
+        @composition-start="handleCompositionStart"
+        @composition-end="handleCompositionEnd"
+      >
+        <template #toolbar-left>
           <ChatComposerSelectors
             :selected-workspace-id="props.selectedWorkspaceId ?? null"
             :workspace-locked="props.workspaceLocked"
@@ -31,7 +25,9 @@
             @update:selected-workspace-id="handleWorkspaceChanged"
             @select-provider-model="handleProviderModelSelect"
           />
+        </template>
 
+        <template #toolbar-right>
           <ChatComposerActions
             :context-usage="props.contextUsage ?? null"
             :is-incognito="props.isIncognito ?? false"
@@ -50,11 +46,8 @@
             @send-message="sendMessage"
             @stop-streaming="stopStreaming"
           />
-        </div>
-      </div>
-      <p v-if="composerFeedback" class="composer-feedback" role="alert" aria-live="assertive">
-        {{ composerFeedback }}
-      </p>
+        </template>
+      </ChatComposerShell>
     </div>
   </div>
 </template>
@@ -69,6 +62,7 @@ import type {
 } from '../modules/chat/chat_prepare_send';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatComposerSelectors from './ChatComposerSelectors.vue';
+import ChatComposerShell from './ChatComposerShell.vue';
 import { useChatComposerDraft } from '../composables/useChatComposerDraft';
 import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
 import { useChatComposerSend } from '../composables/useChatComposerSend';
@@ -98,6 +92,9 @@ const props = defineProps<{
 }>();
 
 const inputRef = ref<HTMLInputElement | null>(null);
+const setInputRef = (element: HTMLInputElement | null) => {
+  inputRef.value = element;
+};
 const message = ref('');
 const isBusy = ref(false);
 const selectedSkillIds = ref<string[]>([]);
@@ -216,44 +213,5 @@ defineExpose({
 <style scoped>
 .chat-input-outer {
   padding: var(--chat-composer-padding, 10px);
-}
-
-.chat-input-container {
-  border-color: var(--chat-composer-border-color);
-  border-radius: 12px;
-  background: var(--chat-composer-background);
-  box-shadow: var(--chat-composer-shadow);
-  backdrop-filter: var(--chat-composer-backdrop-filter);
-}
-
-.composer-feedback {
-  margin-top: 10px;
-  border: 1px solid color-mix(in srgb, var(--danger-color) 34%, var(--border-color));
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--danger-color) 9%, var(--bg-secondary));
-  color: var(--danger-color);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.chat-input-field {
-  padding-top: 28px;
-  padding-bottom: 28px;
-  font-size: 15px;
-}
-
-.composer-toolbar {
-  padding: 10px 12px 12px;
-  border-top-color: var(--chat-composer-toolbar-border-color);
-  background: var(--chat-composer-toolbar-background);
-}
-
-.placeholder-muted::placeholder {
-  color: var(--text-muted);
-}
-
-.border-color {
-  border-color: var(--border-color);
 }
 </style>
