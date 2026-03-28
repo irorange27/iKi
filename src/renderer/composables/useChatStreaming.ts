@@ -8,25 +8,16 @@ import {
   upsertTextIntoMessageParts,
   extractTextFromMessage,
 } from '../modules/chat/ui_message_text';
-import type { ChatUiMessage } from '../../shared/chat/message_parts';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import { createLogger } from '../logger';
 import type { ChatThread } from './useChatThreads';
+import type {
+  PreparedMessageSend,
+  PrepareMessageSendPayload,
+} from '../modules/chat/chat_prepare_send';
+import type { ChatUiMessage } from '../../shared/chat/message_parts';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
-
-export type PreparedMessageSend = {
-  threadId: string;
-  messagesSnapshot: ChatUiMessage[];
-};
-
-type PrepareMessageSendPayload = {
-  content: string;
-  model?: string;
-  providerId?: string;
-  tools?: string[];
-  mcpServerIds?: string[];
-};
 
 export const useChatStreaming = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;

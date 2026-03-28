@@ -117,8 +117,9 @@ const createElectronApi = (options?: {
       },
       workspaces: {
         getVisible: vi.fn(async () => options?.workspaces ?? []),
-        get: vi.fn(async (id: string) =>
-          (options?.workspaces ?? []).find(workspace => workspace.id === id) ?? null
+        get: vi.fn(
+          async (id: string) =>
+            (options?.workspaces ?? []).find(workspace => workspace.id === id) ?? null
         ),
         pickDirectory: vi.fn(async () => options?.pickedWorkspace ?? null),
       },
@@ -154,45 +155,46 @@ const mountChatInput = async (options?: {
     providerId?: string;
     tools?: string[];
     mcpServerIds?: string[];
-  }) => Promise<
-    | {
-        threadId: string;
-        messagesSnapshot: unknown[];
-      }
-    | null
-  >;
+  }) => Promise<{
+    threadId: string;
+    messagesSnapshot: unknown[];
+  } | null>;
   props?: Record<string, unknown>;
 }) => {
   const { api, stream, onProvidersUpdated, removeProviderListener } = createElectronApi(options);
   setElectronApi(api);
   vi.resetModules();
 
-  const prepareMessageSend = vi.fn(async (payload: {
-    content: string;
-    model?: string;
-    providerId?: string;
-    tools?: string[];
-    mcpServerIds?: string[];
-  }) => {
-    if (options?.prepareMessageSend) {
-      return await options.prepareMessageSend(payload);
-    }
+  const prepareMessageSend = vi.fn(
+    async (payload: {
+      content: string;
+      model?: string;
+      providerId?: string;
+      tools?: string[];
+      mcpServerIds?: string[];
+    }) => {
+      if (options?.prepareMessageSend) {
+        return await options.prepareMessageSend(payload);
+      }
 
-    const baseMessages = Array.isArray(options?.messages) ? options.messages : [];
-    return {
-      threadId:
-        options?.thread?.id ||
-        (typeof options?.props?.threadId === 'string' ? options.props.threadId : 'thread_prepared'),
-      messagesSnapshot: [
-        ...baseMessages,
-        {
-          id: `user_${baseMessages.length + 1}`,
-          role: 'user',
-          parts: [{ type: 'text', text: payload.content }],
-        },
-      ],
-    };
-  });
+      const baseMessages = Array.isArray(options?.messages) ? options.messages : [];
+      return {
+        threadId:
+          options?.thread?.id ||
+          (typeof options?.props?.threadId === 'string'
+            ? options.props.threadId
+            : 'thread_prepared'),
+        messagesSnapshot: [
+          ...baseMessages,
+          {
+            id: `user_${baseMessages.length + 1}`,
+            role: 'user',
+            parts: [{ type: 'text', text: payload.content }],
+          },
+        ],
+      };
+    }
+  );
 
   const mountProps = { ...(options?.props ?? {}) };
   delete mountProps.chat;
@@ -227,7 +229,6 @@ const mountChatInput = async (options?: {
 describe('ChatInput', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
-    Reflect.deleteProperty(window, 'alert');
     vi.restoreAllMocks();
   });
 
@@ -266,9 +267,7 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(wrapper.find('.model-selector-panel').exists()).toBe(false);
-    expect(wrapper.emitted('model-selected')).toEqual([
-      [{ provider: openai, model: 'gpt-4o' }],
-    ]);
+    expect(wrapper.emitted('model-selected')).toEqual([[{ provider: openai, model: 'gpt-4o' }]]);
   });
 
   it('aligns the composer selection with the active thread model before send', async () => {
@@ -700,7 +699,7 @@ describe('ChatInput', () => {
     expect(stream).toHaveBeenCalledTimes(1);
   });
 
-  it('alerts and aborts send when provider verification throws', async () => {
+  it('surfaces inline feedback and aborts send when provider verification throws', async () => {
     const provider = buildProvider({
       id: 'openai',
       name: 'OpenAI',
@@ -708,11 +707,6 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
     const configuredError = new Error('ipc failed');
-    const alertSpy = vi.fn();
-    Object.defineProperty(window, 'alert', {
-      configurable: true,
-      value: alertSpy,
-    });
 
     const { wrapper, stream, prepareMessageSend } = await mountChatInput({
       providers: [provider],
@@ -733,7 +727,7 @@ describe('ChatInput', () => {
         error: configuredError,
       })
     );
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(wrapper.find('.composer-feedback').text()).toBe(
       'Failed to verify the OpenAI provider configuration. Please try again.'
     );
     expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe(

@@ -78,6 +78,7 @@ export const en = defineCatalog({
   'chat.input.voiceStop': 'Stop voice input',
   'chat.input.send': 'Send message',
   'chat.input.stopGeneration': 'Stop generation',
+  'chat.input.stopFailed': 'Failed to stop generation. Please try again.',
   'chat.input.prepareFailed': 'Failed to prepare the message. Please try again.',
   'chat.speech.unavailable': 'Speech service unavailable',
   'chat.speech.noSpeechDetected': 'No speech detected',

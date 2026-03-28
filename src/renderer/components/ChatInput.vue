@@ -215,17 +215,21 @@
           </div>
         </div>
       </div>
+      <p v-if="composerFeedback" class="composer-feedback" role="alert" aria-live="assertive">
+        {{ composerFeedback }}
+      </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onBeforeUnmount, onMounted, watch, nextTick, computed } from 'vue';
-import type { ChatUiMessage } from '../../shared/chat/message_parts';
 import type { Provider } from '../../shared/types/provider';
-import { clonePlainData } from '../../shared/utils/clone';
-import { getErrorMessage } from '../../shared/utils/errors';
-import { createLogger } from '../logger';
+import type {
+  PreparedMessageSend,
+  PrepareMessageSendPayload,
+} from '../modules/chat/chat_prepare_send';
+import { useChatComposerSend } from '../composables/useChatComposerSend';
 import { useChatProviderSelection } from '../composables/useChatProviderSelection';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
@@ -237,7 +241,6 @@ import SkillSelector from './SkillSelector.vue';
 import WorkspaceSelector from './WorkspaceSelector.vue';
 
 const electronAPI = getElectronAPI();
-const chatInputLogger = createLogger({ module: 'chat_input' });
 const { t } = useI18n();
 const emit = defineEmits<{
   (event: 'incognito-changed', value: boolean): void;
@@ -252,16 +255,7 @@ const props = defineProps<{
   isIncognito?: boolean;
   selectedWorkspaceId?: string | null;
   workspaceLocked?: boolean;
-  prepareMessageSend?: (payload: {
-    content: string;
-    model?: string;
-    providerId?: string;
-    tools?: string[];
-    mcpServerIds?: string[];
-  }) => Promise<{
-    threadId: string;
-    messagesSnapshot: ChatUiMessage[];
-  } | null>;
+  prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
   contextUsage?: {
     usedTokens: number;
     budgetTokens: number | null;
@@ -274,9 +268,6 @@ const props = defineProps<{
 
 const inputRef = ref<HTMLInputElement | null>(null);
 const message = ref('');
-const isPreparingSend = ref(false);
-const isLoading = ref(false);
-const isStopping = ref(false);
 const isComposing = ref(false);
 const justEndedComposition = ref(false);
 const selectedSkillIds = ref<string[]>([]);
@@ -328,7 +319,34 @@ const {
   stopVoiceInput,
 } = useSpeechInput({ inputRef, message });
 
+const {
+  composerFeedback,
+  isPreparingSend,
+  isLoading,
+  isStopping,
+  dismissComposerFeedback,
+  sendMessage,
+  stopStreaming,
+} = useChatComposerSend({
+  electronAPI,
+  message,
+  isRecording,
+  isTranscribing,
+  selectedTools,
+  selectedMcpServerIds,
+  selectedSkillIds,
+  isAutoToolMode,
+  isAutoSkillMode,
+  prepareFailedMessage: t('chat.input.prepareFailed'),
+  stopFailedMessage: t('chat.input.stopFailed'),
+  prepareMessageSend: props.prepareMessageSend,
+  ensureProviderReady,
+  resolveSelectedMcpServerIds,
+  stopVoiceInput,
+});
+
 const handleProviderModelSelect = (payload: { provider: Provider; model: string }) => {
+  dismissComposerFeedback();
   selectProviderModel(payload);
   emit('model-selected', payload);
 };
@@ -380,35 +398,6 @@ defineExpose({
   setDraftMessage,
 });
 
-const stopStreaming = async () => {
-  if (!isLoading.value || isStopping.value) return;
-
-  isStopping.value = true;
-
-  try {
-    const result = await electronAPI.chat.stopStream();
-    if (!result?.success) {
-      chatInputLogger.event({
-        level: 'warn',
-        event: 'chat.stream.stop',
-        outcome: 'failed',
-        message: typeof result?.error === 'string' ? result.error : 'Unknown error',
-      });
-      isLoading.value = false;
-      isStopping.value = false;
-    }
-  } catch (error) {
-    chatInputLogger.event({
-      level: 'error',
-      event: 'chat.stream.stop',
-      outcome: 'failed',
-      error,
-    });
-    isLoading.value = false;
-    isStopping.value = false;
-  }
-};
-
 const handleCompositionStart = () => {
   isComposing.value = true;
 };
@@ -439,122 +428,6 @@ const handleEnter = (event: KeyboardEvent) => {
   sendMessage();
 };
 
-const sendMessage = async () => {
-  if (isRecording.value || isTranscribing.value) {
-    stopVoiceInput();
-    return;
-  }
-  if (!message.value.trim() || isPreparingSend.value || isLoading.value) return;
-
-  const providerReady = await ensureProviderReady();
-  if (providerReady.ok === false) {
-    alert(providerReady.message);
-    return;
-  }
-
-  const userMessage = message.value.trim();
-  const resolvedMcpServerIds = await resolveSelectedMcpServerIds();
-  selectedMcpServerIds.value = resolvedMcpServerIds;
-  isPreparingSend.value = true;
-
-  let preparedMessageSend: { threadId: string; messagesSnapshot: ChatUiMessage[] } | null = null;
-  try {
-    if (!props.prepareMessageSend) {
-      chatInputLogger.event({
-        level: 'error',
-        event: 'chat.send.prepare',
-        outcome: 'failed',
-        message: 'Missing prepareMessageSend handler.',
-      });
-    } else {
-      preparedMessageSend = await props.prepareMessageSend({
-        content: userMessage,
-        model: providerReady.model,
-        providerId: providerReady.provider.id,
-        tools: selectedTools.value,
-        mcpServerIds: resolvedMcpServerIds,
-      });
-    }
-  } catch (error) {
-    chatInputLogger.event({
-      level: 'error',
-      event: 'chat.send.prepare',
-      outcome: 'failed',
-      error,
-    });
-  } finally {
-    isPreparingSend.value = false;
-  }
-
-  if (!preparedMessageSend) {
-    alert(t('chat.input.prepareFailed'));
-    return;
-  }
-
-  message.value = '';
-  isLoading.value = true;
-  isStopping.value = false;
-
-  try {
-    const transportMessages = clonePlainData(preparedMessageSend.messagesSnapshot);
-
-    if (!Array.isArray(transportMessages) || transportMessages.length === 0) {
-      chatInputLogger.event({
-        level: 'warn',
-        event: 'chat.send',
-        outcome: 'skipped',
-        message: 'No valid messages to send.',
-      });
-      isLoading.value = false;
-      return;
-    }
-
-    // Start streaming via IPC
-    const streamResult = await electronAPI.chat.stream({
-      providerType: providerReady.provider.type,
-      providerId: providerReady.provider.id,
-      model: providerReady.model,
-      messages: transportMessages,
-      tools: isAutoToolMode.value
-        ? undefined
-        : selectedTools.value.length > 0
-          ? clonePlainData(selectedTools.value)
-          : [],
-      mcpServerIds: clonePlainData(resolvedMcpServerIds),
-      skillMode: isAutoSkillMode.value ? 'auto' : 'manual',
-      skillIds: isAutoSkillMode.value
-        ? undefined
-        : clonePlainData(selectedSkillIds.value),
-      threadId: preparedMessageSend.threadId,
-    });
-
-    if (streamResult?.success === false) {
-      throw new Error(streamResult?.error || 'Stream failed');
-    }
-
-    isLoading.value = false;
-    isStopping.value = false;
-  } catch (error: unknown) {
-    chatInputLogger.event({
-      level: 'error',
-      event: 'chat.send',
-      outcome: 'failed',
-      error,
-    });
-    isLoading.value = false;
-    isStopping.value = false;
-    chatInputLogger.event({
-      level: 'warn',
-      event: 'chat.send',
-      outcome: 'degraded',
-      message: getErrorMessage(error),
-    });
-    alert(getErrorMessage(error));
-    // Remove the user message if failed (it was already added to chat.messages in ChatView)
-    // The error handler will clean up the state
-  }
-};
-
 onMounted(async () => {
   if (typeof electronAPI.providers.onUpdated === 'function') {
     removeProviderUpdateListener = electronAPI.providers.onUpdated(() => {
@@ -582,6 +455,17 @@ onBeforeUnmount(() => {
   background: var(--chat-composer-background);
   box-shadow: var(--chat-composer-shadow);
   backdrop-filter: var(--chat-composer-backdrop-filter);
+}
+
+.composer-feedback {
+  margin-top: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger-color) 34%, var(--border-color));
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--danger-color) 9%, var(--bg-secondary));
+  color: var(--danger-color);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .chat-input-field {

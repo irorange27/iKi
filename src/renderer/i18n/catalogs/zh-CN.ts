@@ -79,6 +79,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.voiceStop': '停止语音输入',
   'chat.input.send': '发送消息',
   'chat.input.stopGeneration': '停止生成',
+  'chat.input.stopFailed': '停止生成失败，请重试。',
   'chat.input.prepareFailed': '准备消息失败，请重试。',
   'chat.speech.unavailable': '语音服务不可用',
   'chat.speech.noSpeechDetected': '没有检测到语音',
