@@ -110,6 +110,17 @@ const KeybindingsSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.keybindings);
 
+const ChatSchema = z
+  .object({
+    composer: z
+      .object({
+        preferredProviderId: stringField(DEFAULT_APP_CONFIG.chat.composer.preferredProviderId),
+        preferredModel: stringField(DEFAULT_APP_CONFIG.chat.composer.preferredModel),
+      })
+      .catch(DEFAULT_APP_CONFIG.chat.composer),
+  })
+  .catch(DEFAULT_APP_CONFIG.chat);
+
 const MemorySchema = z
   .object({
     enabled: booleanField(DEFAULT_APP_CONFIG.memory.enabled),
@@ -264,6 +275,7 @@ export const AppConfigSchema = z
     security: SecuritySchema,
     advanced: AdvancedSchema,
     keybindings: KeybindingsSchema,
+    chat: ChatSchema,
     memory: MemorySchema,
     speech: SpeechSchema,
     toolModel: ToolModelSchema,

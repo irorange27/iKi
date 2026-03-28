@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ref } from 'vue';
+import { nextTick, ref } from 'vue';
 
 import { useChatThreads } from '../../../src/renderer/composables/useChatThreads';
 import { setLocale } from '../../../src/renderer/i18n';
@@ -25,9 +25,20 @@ const createStoredThread = (overrides: Partial<ChatThread> = {}): ChatThread => 
   skill_ids: overrides.skill_ids,
 });
 
-const createHarness = (initialThreads: ChatThread[] = []) => {
+const createHarness = (
+  initialThreads: ChatThread[] = [],
+  options?: {
+    preferredModel?: string;
+    preferredProviderId?: string | null;
+    persistDraftModelSelection?: ReturnType<typeof vi.fn>;
+  }
+) => {
   const threadsById = new Map(initialThreads.map(thread => [thread.id, thread]));
   const generateTitle = vi.fn(async () => 'Generated title');
+  const preferredDraftModel = ref(options?.preferredModel ?? '');
+  const preferredDraftProviderId = ref(options?.preferredProviderId ?? null);
+  const persistDraftModelSelection =
+    options?.persistDraftModelSelection ?? vi.fn(async () => undefined);
 
   const createThread = vi.fn(async (input: Partial<ChatThread>) => {
     const thread = createStoredThread({
@@ -99,6 +110,9 @@ const createHarness = (initialThreads: ChatThread[] = []) => {
       setCurrentThread,
     }),
     scrollToBottom: vi.fn(),
+    preferredDraftModel,
+    preferredDraftProviderId,
+    persistDraftModelSelection,
   });
 
   return {
@@ -110,6 +124,9 @@ const createHarness = (initialThreads: ChatThread[] = []) => {
     refreshSidebar,
     setCurrentThread,
     generateTitle,
+    preferredDraftModel,
+    preferredDraftProviderId,
+    persistDraftModelSelection,
   };
 };
 
@@ -217,6 +234,67 @@ describe('useChatThreads', () => {
 
     await state.selectThread(openaiThread.id);
     expect(state.currentModel.value).toBe('gpt-4o');
+  });
+
+  it('hydrates and restores the draft composer selection from persisted preferences', async () => {
+    const thread = createStoredThread({
+      id: 'thread_deepseek',
+      title: 'DeepSeek thread',
+      model: 'deepseek-chat',
+      metadata: JSON.stringify({
+        llm: {
+          providerId: 'deepseek',
+        },
+      }),
+    });
+    const { state, preferredDraftModel, preferredDraftProviderId } = createHarness([thread]);
+
+    expect(state.currentModel.value).toBe('');
+    expect(state.currentProviderId.value).toBeNull();
+
+    preferredDraftModel.value = 'gpt-4o';
+    preferredDraftProviderId.value = 'openai';
+    await nextTick();
+
+    expect(state.currentModel.value).toBe('gpt-4o');
+    expect(state.currentProviderId.value).toBe('openai');
+
+    await state.selectThread(thread.id);
+    expect(state.currentModel.value).toBe('deepseek-chat');
+    expect(state.currentProviderId.value).toBe('deepseek');
+
+    preferredDraftModel.value = 'gpt-5.4';
+    preferredDraftProviderId.value = 'gateway-a';
+    await nextTick();
+
+    expect(state.currentModel.value).toBe('deepseek-chat');
+    expect(state.currentProviderId.value).toBe('deepseek');
+
+    await state.handleThreadDeleted(thread.id);
+
+    expect(state.currentModel.value).toBe('gpt-5.4');
+    expect(state.currentProviderId.value).toBe('gateway-a');
+  });
+
+  it('persists explicit draft model selections for later chats', async () => {
+    const persistDraftModelSelection = vi.fn(async () => undefined);
+    const { state } = createHarness([], { persistDraftModelSelection });
+
+    state.handleModelSelected({
+      model: 'gpt-4o',
+      provider: {
+        id: 'openai',
+        type: 'openai',
+      },
+    });
+    await Promise.resolve();
+
+    expect(state.currentModel.value).toBe('gpt-4o');
+    expect(state.currentProviderId.value).toBe('openai');
+    expect(persistDraftModelSelection).toHaveBeenCalledWith({
+      model: 'gpt-4o',
+      providerId: 'openai',
+    });
   });
 
   it('syncs the composer workspace state from the selected thread', async () => {

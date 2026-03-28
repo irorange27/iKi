@@ -118,6 +118,35 @@ const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const configStore = useConfigStore();
+const preferredDraftModel = computed(() => configStore.config.chat.composer.preferredModel);
+const preferredDraftProviderId = computed(
+  () => configStore.config.chat.composer.preferredProviderId
+);
+
+const persistDraftModelSelection = async (selection: {
+  model: string;
+  providerId: string | null;
+}) => {
+  if (!configStore.initialized) {
+    await configStore.initialize();
+  }
+
+  const preferredModel = selection.model.trim();
+  const preferredProviderId = typeof selection.providerId === 'string' ? selection.providerId : '';
+  const currentSelection = configStore.config.chat.composer;
+  if (
+    currentSelection.preferredModel === preferredModel &&
+    currentSelection.preferredProviderId === preferredProviderId
+  ) {
+    return;
+  }
+
+  configStore.setChatComposerSelection({
+    preferredModel,
+    preferredProviderId,
+  });
+  await configStore.saveConfig();
+};
 
 // Create Chat instance for message management (without API endpoint for Electron)
 const chat = new Chat<ChatUiMessage>({});
@@ -208,6 +237,9 @@ const {
   persistence,
   sidebarRef,
   scrollToBottom,
+  preferredDraftModel,
+  preferredDraftProviderId,
+  persistDraftModelSelection,
 });
 
 const handleIncognitoChanged = async (nextValue: boolean) => {

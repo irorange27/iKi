@@ -36,6 +36,10 @@ describe('config store settings write actions', () => {
     store.updateSecurity('logLevel', 'debug');
     store.updateAdvanced('developerMode', true);
     store.updateKeybinding('sendMessage', 'Ctrl+Enter');
+    store.setChatComposerSelection({
+      preferredProviderId: 'openai',
+      preferredModel: 'gpt-4o',
+    });
 
     expect(store.config.toolModel).toEqual({
       providerType: 'deepseek',
@@ -55,6 +59,10 @@ describe('config store settings write actions', () => {
     expect(store.config.security.logLevel).toBe('debug');
     expect(store.config.advanced.developerMode).toBe(true);
     expect(store.config.keybindings.sendMessage).toBe('Ctrl+Enter');
+    expect(store.config.chat.composer).toEqual({
+      preferredProviderId: 'openai',
+      preferredModel: 'gpt-4o',
+    });
   });
 
   it('replaces the tool model atomically when clearing auto-detect state', () => {

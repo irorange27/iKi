@@ -51,6 +51,12 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     sendMessage: 'Enter',
     openSettings: 'Cmd+,',
   },
+  chat: {
+    composer: {
+      preferredProviderId: '',
+      preferredModel: '',
+    },
+  },
   memory: {
     enabled: false,
     autoSummarize: false,
@@ -199,6 +205,14 @@ export const mergeAppConfigWithBase = (
     keybindings: {
       ...base.keybindings,
       ...(rawConfig.keybindings ?? {}),
+    },
+    chat: {
+      ...base.chat,
+      ...(rawConfig.chat ?? {}),
+      composer: {
+        ...base.chat.composer,
+        ...((rawConfig.chat ?? {}).composer ?? {}),
+      },
     },
     memory: {
       ...base.memory,

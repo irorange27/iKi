@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue';
+import { ref, watch, type Ref } from 'vue';
 import type { ChatUiMessage } from '../../shared/chat/message_parts';
 
 import { toUiMessages } from '../modules/chat/ui_message_convert';
@@ -24,6 +24,11 @@ type SidebarController = {
   setCurrentThread?: (id: string | null) => void;
 };
 
+type DraftComposerSelection = {
+  model: string;
+  providerId: string | null;
+};
+
 const TITLE_REGEN_INTERVAL = 2;
 const chatThreadsLogger = createLogger({ module: 'chat_threads' });
 const DEFAULT_THREAD_TITLES = new Set([
@@ -37,16 +42,35 @@ const normalizeWorkspaceId = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const normalizeModelId = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const normalizeProviderId = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 export const useChatThreads = (deps: {
   electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
   messageStore: ChatMessageStore;
   persistence: UiMessagePersistence;
   sidebarRef: Ref<SidebarController | null>;
   scrollToBottom: () => void;
+  preferredDraftModel?: Pick<Ref<string | null | undefined>, 'value'>;
+  preferredDraftProviderId?: Pick<Ref<string | null | undefined>, 'value'>;
+  persistDraftModelSelection?: (selection: DraftComposerSelection) => Promise<void> | void;
 }) => {
+  const readPreferredDraftSelection = (): DraftComposerSelection => ({
+    model: normalizeModelId(deps.preferredDraftModel?.value),
+    providerId: normalizeProviderId(deps.preferredDraftProviderId?.value),
+  });
+
   const currentThread = ref<ChatThread | null>(null);
-  const currentModel = ref<string>('');
-  const currentProviderId = ref<string | null>(null);
+  const currentModel = ref<string>(readPreferredDraftSelection().model);
+  const currentProviderId = ref<string | null>(readPreferredDraftSelection().providerId);
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
   const selectedTools = ref<string[]>([]);
@@ -66,6 +90,45 @@ export const useChatThreads = (deps: {
   const syncWorkspaceState = (thread: ChatThread | null) => {
     selectedWorkspaceId.value = normalizeWorkspaceId(thread?.workspace_id);
   };
+
+  const restoreDraftComposerSelection = () => {
+    if (currentThread.value) return;
+    const preferred = readPreferredDraftSelection();
+    currentModel.value = preferred.model;
+    currentProviderId.value = preferred.providerId;
+  };
+
+  const persistDraftComposerSelection = async (selection: DraftComposerSelection) => {
+    if (!deps.persistDraftModelSelection) return;
+
+    try {
+      await deps.persistDraftModelSelection({
+        model: normalizeModelId(selection.model),
+        providerId: normalizeProviderId(selection.providerId),
+      });
+    } catch (error) {
+      chatThreadsLogger.event({
+        level: 'warn',
+        event: 'chat.composer_selection.persist',
+        outcome: 'failed',
+        error,
+      });
+    }
+  };
+
+  watch(
+    () =>
+      [
+        deps.preferredDraftModel?.value,
+        deps.preferredDraftProviderId?.value,
+        currentThread.value?.id ?? null,
+      ] as const,
+    ([, , activeThreadId]) => {
+      if (activeThreadId) return;
+      restoreDraftComposerSelection();
+    },
+    { immediate: true }
+  );
 
   const refreshThreads = async () => {
     if (deps.sidebarRef.value?.refresh) {
@@ -200,6 +263,7 @@ export const useChatThreads = (deps: {
 
   const createNewThread = async (model?: string) => {
     try {
+      const draftProviderId = currentProviderId.value;
       const thread = await deps.electronAPI.chat.threads.create({
         title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
         model: model || null,
@@ -210,6 +274,9 @@ export const useChatThreads = (deps: {
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
       syncProviderState(thread);
+      if (!currentProviderId.value && draftProviderId) {
+        currentProviderId.value = draftProviderId;
+      }
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
       deps.messageStore.clear();
@@ -315,14 +382,13 @@ export const useChatThreads = (deps: {
     if (currentThread.value?.id !== threadId) return;
 
     currentThread.value = null;
-    currentModel.value = '';
-    currentProviderId.value = null;
     isIncognito.value = false;
     selectedWorkspaceId.value = null;
     deps.messageStore.clear();
     deps.persistence.resetPersistedMessageIds();
     resetToolUiStateMap();
     showWelcome.value = true;
+    restoreDraftComposerSelection();
 
     if (deps.sidebarRef.value?.setCurrentThread) {
       deps.sidebarRef.value.setCurrentThread(null);
@@ -336,6 +402,11 @@ export const useChatThreads = (deps: {
   const handleModelSelected = (data: { model: string; provider: { id: string; type: string } }) => {
     currentModel.value = data.model;
     currentProviderId.value = data.provider.id;
+    void persistDraftComposerSelection({
+      model: data.model,
+      providerId: data.provider.id,
+    });
+
     if (currentThread.value) {
       const metadata = parseJsonRecord(currentThread.value.metadata);
       const llm = isObjectRecord(metadata.llm) ? metadata.llm : {};
@@ -350,11 +421,25 @@ export const useChatThreads = (deps: {
         },
       };
       const nextMetadata = JSON.stringify(updatedMetadata);
+      const threadId = currentThread.value.id;
       currentThread.value.metadata = nextMetadata;
-      deps.electronAPI.chat.threads.update(currentThread.value.id, {
-        model: data.model,
-        metadata: nextMetadata,
-      });
+      currentThread.value.model = data.model;
+      void deps.electronAPI.chat.threads
+        .update(threadId, {
+          model: data.model,
+          metadata: nextMetadata,
+        })
+        .catch(error => {
+          chatThreadsLogger.event({
+            level: 'warn',
+            event: 'chat.thread.model_selection_update',
+            outcome: 'failed',
+            error,
+            entity: {
+              thread_id: threadId,
+            },
+          });
+        });
     }
   };
 

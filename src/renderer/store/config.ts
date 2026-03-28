@@ -101,6 +101,11 @@ export const useConfigStore = defineStore('config', {
     ) {
       this.config.keybindings[key] = value;
     },
+    setChatComposerSelection(value: AppConfig['chat']['composer']) {
+      this.config.chat.composer = {
+        ...value,
+      };
+    },
 
     resetConfig() {
       // 重新读取系统配置（获取当前最新系统设置）

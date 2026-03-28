@@ -118,6 +118,12 @@ export interface AppConfig {
     sendMessage: string; // e.g. "Enter"
     openSettings: string; // e.g. "Cmd+," or "Ctrl+,"
   };
+  chat: {
+    composer: {
+      preferredProviderId: string;
+      preferredModel: string;
+    };
+  };
   memory: {
     enabled: boolean;
     autoSummarize: boolean;
