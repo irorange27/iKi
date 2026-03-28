@@ -33,9 +33,11 @@ const {
   readOrCreateBootstrapTokenMock,
   rotateBootstrapTokenMock,
   getMcpManagerMock,
+  mcpManagerMock,
   readRequestedMcpServerIdsMock,
   resolveMcpServerIdsForClientMock,
   resolveToolsForClientMock,
+  searchLongMemoryAcrossThreadsMock,
   mkdirSyncMock,
   writeFileSyncMock,
   daemonLoggerEventMock,
@@ -197,6 +199,7 @@ const {
     updateServer: vi.fn(async (_id: string, input: unknown) => input),
   };
   const getMcpManagerMock = vi.fn(() => mcpManagerMock);
+  const searchLongMemoryAcrossThreadsMock = vi.fn(() => []);
   const defaultAllowedTools = [
     'web',
     'fetch',
@@ -277,9 +280,11 @@ const {
     readOrCreateBootstrapTokenMock,
     rotateBootstrapTokenMock,
     getMcpManagerMock,
+    mcpManagerMock,
     readRequestedMcpServerIdsMock,
     resolveMcpServerIdsForClientMock,
     resolveToolsForClientMock,
+    searchLongMemoryAcrossThreadsMock,
     mkdirSyncMock,
     writeFileSyncMock,
     daemonLoggerEventMock,
@@ -353,7 +358,7 @@ vi.mock('../../src/core/db/chat_thread', () => ({
 vi.mock('../../src/core/db/memory', () => ({
   listShortMemory: vi.fn(() => []),
   listLongMemory: vi.fn(() => []),
-  searchLongMemoryAcrossThreads: vi.fn(() => []),
+  searchLongMemoryAcrossThreads: searchLongMemoryAcrossThreadsMock,
 }));
 
 vi.mock('../../src/core/db/app_clients', () => ({
@@ -487,6 +492,8 @@ describe('daemon server', () => {
     chatServiceMock.listThreads.mockReturnValue([]);
     chatServiceMock.listMessages.mockReturnValue([]);
     chatServiceMock.send.mockResolvedValue({ success: true });
+    searchLongMemoryAcrossThreadsMock.mockReturnValue([]);
+    mcpManagerMock.addServer.mockImplementation(async (input: unknown) => input);
     getChatThreadMock.mockReset();
     getChatThreadMock.mockReturnValue(null);
     vi.spyOn(process, 'on').mockImplementation((() => process) as never);
@@ -599,6 +606,20 @@ describe('daemon server', () => {
     expect(assignClientToLegacyThreadsMock).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects non-object registration payloads instead of silently creating a client', async () => {
+    const started = await startTestDaemon();
+
+    const result = await requestJson(started, '/v1/clients/register', {
+      method: 'POST',
+      headers: { 'x-iki-setup-token': 'setup-token' },
+      body: ['Desktop Client'],
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.json).toEqual({ success: false, error: 'Invalid registration payload' });
+    expect(createAppClientMock).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects chat thread listing without auth and when chat:read scope is missing', async () => {
     const started = await startTestDaemon();
 
@@ -695,6 +716,24 @@ describe('daemon server', () => {
         client_id: issued.client.id,
       },
     });
+  });
+
+  it('rejects invalid non-object chat thread payloads', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:write'] });
+
+    const result = await requestJson(started, '/v1/chat/threads', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: ['Owned Thread'],
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.json).toEqual({ success: false, error: 'Invalid thread payload' });
+    expect(chatServiceMock.createThread).not.toHaveBeenCalled();
   });
 
   it('rejects chat send when tools are requested without tools:run scope', async () => {
@@ -809,6 +848,51 @@ describe('daemon server', () => {
       skillMode: 'manual',
       threadId: 'thread_owned',
     });
+  });
+
+  it('rejects invalid search payload types instead of coercing them', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['memory:read'] });
+
+    const result = await requestJson(started, '/v1/memory/search', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: {
+        query: 'memory',
+        include_incognito: 'yes',
+      },
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.json).toEqual({ success: false, error: 'Invalid search payload' });
+    expect(searchLongMemoryAcrossThreadsMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid MCP server payloads before reaching the manager', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['mcp:write'] });
+
+    const result = await requestJson(started, '/v1/mcp/servers', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: {
+        name: 'Remote Docs',
+        transport: 'streamable-http',
+      },
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.json).toEqual({
+      success: false,
+      error: 'base_url: base_url is required for remote servers',
+    });
+    expect(mcpManagerMock.addServer).not.toHaveBeenCalled();
   });
 
   it('exposes idempotent shutdown that disposes the bridge and unregisters signal handlers', async () => {

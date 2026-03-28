@@ -11,6 +11,7 @@ import { initializeDatabase } from '../core/db/database';
 import { applyAppLoggingConfig, withLogContext } from '../core/logger';
 import { getUserDataPath, setPlatformInfo } from '../core/platform';
 import { createChatService } from '../main/services/chat/chat_service';
+import type { ChatTransportMessage } from '../main/services/chat/chat_types';
 import * as chatThreadDb from '../core/db/chat_thread';
 import * as memoryDb from '../core/db/memory';
 import {
@@ -24,11 +25,21 @@ import {
 import { createNapCatReverseBridge } from './napcat_adapter';
 import { readOrCreateBootstrapToken, rotateBootstrapToken } from './bootstrap_token';
 import {
-  getDefaultAllowedTools,
   readRequestedMcpServerIds,
   resolveMcpServerIdsForClient,
   resolveToolsForClient,
 } from './tool_access';
+import {
+  getSchemaErrorMessage,
+  parseApproveToolPayload,
+  parseChatSendPayload,
+  parseChatThreadCreatePayload,
+  parseClientRegistrationPayload,
+  parseDaemonWebSocketMessage,
+  parseMcpServerCreatePayload,
+  parseMcpServerUpdatePayload,
+  parseMemorySearchPayload,
+} from './server_schemas';
 import type { McpServerInput } from '../shared/types/mcp';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../shared/constants/daemon';
 
@@ -75,36 +86,7 @@ type WsSession = {
   webContents: { id: number; send: (channel: string, ...args: unknown[]) => void };
 };
 
-const DEFAULT_SCOPES = [
-  'chat:read',
-  'chat:write',
-  'memory:read',
-  'memory:write',
-  'tools:run',
-  'tools:approve',
-  'mcp:read',
-  'mcp:write',
-];
-
 const MAX_BODY_BYTES = 1024 * 1024 * 2;
-
-const normalizeScopes = (scopes: unknown): string[] => {
-  if (!Array.isArray(scopes)) return DEFAULT_SCOPES;
-  const cleaned = scopes
-    .filter((value): value is string => typeof value === 'string')
-    .map(value => value.trim())
-    .filter(Boolean);
-  return cleaned;
-};
-
-const normalizeAllowedTools = (tools: unknown): string[] => {
-  if (!Array.isArray(tools)) return getDefaultAllowedTools();
-  const cleaned = tools
-    .filter((value): value is string => typeof value === 'string')
-    .map(value => value.trim())
-    .filter(Boolean);
-  return cleaned;
-};
 
 const ensureNapCatClient = (): string => {
   const existing = getAppClientById('client_napcat');
@@ -328,13 +310,9 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
 
         try {
           const isFirstClient = isFirstUserClientRegistration(napcatClientId);
-          const body = (await parseJsonBody(req)) as Record<string, unknown>;
-          const name =
-            typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'iKi Client';
-          const scopes = normalizeScopes(body.scopes);
-          const allowedTools = normalizeAllowedTools(body.allowed_tools);
+          const body = parseClientRegistrationPayload(await parseJsonBody(req));
 
-          const created = createAppClient({ name, scopes, allowedTools });
+          const created = createAppClient(body);
           if (isFirstClient) {
             chatThreadDb.assignClientToLegacyThreads(created.client.id);
           }
@@ -397,7 +375,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
           return;
         }
         try {
-          const body = (await parseJsonBody(req)) as Record<string, unknown>;
+          const body = parseChatThreadCreatePayload(await parseJsonBody(req));
           const thread = chatService.createThread({
             ...(body || {}),
             client_id: client.id,
@@ -436,8 +414,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
           return;
         }
         try {
-          const body = (await parseJsonBody(req)) as Record<string, unknown>;
-          const threadId = typeof body.thread_id === 'string' ? body.thread_id : undefined;
+          const body = parseChatSendPayload(await parseJsonBody(req));
+          const threadId = body.threadId;
           if (threadId) {
             const access = getThreadOrError(threadId, client.id);
             if (!access.thread) {
@@ -446,13 +424,9 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
             }
           }
 
-          const providerType = typeof body.providerType === 'string' ? body.providerType : '';
-          const model = typeof body.model === 'string' ? body.model : '';
-          if (!providerType || !model) {
-            writeJson(res, 400, { success: false, error: 'Missing providerType or model' });
-            return;
-          }
-          const messages = Array.isArray(body.messages) ? body.messages : [];
+          const providerType = body.providerType;
+          const model = body.model;
+          const messages = body.messages as ChatTransportMessage[];
           const tools = resolveToolsForClient(body.tools, client.allowedTools);
           const requestedMcpServerIds = readRequestedMcpServerIds(body);
           const mcpServerIds = resolveMcpServerIdsForClient(
@@ -470,9 +444,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
             messages,
             tools,
             mcpServerIds,
-            skillIds: Array.isArray(body.skillIds) ? (body.skillIds as string[]) : undefined,
-            skillMode:
-              body.skillMode === 'manual' || body.skillMode === 'auto' ? body.skillMode : undefined,
+            skillIds: body.skillIds,
+            skillMode: body.skillMode,
             threadId,
           });
 
@@ -490,20 +463,15 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
           return;
         }
         try {
-          const body = (await parseJsonBody(req)) as Record<string, unknown>;
-          const approvalId = typeof body.approval_id === 'string' ? body.approval_id : '';
-          const approved = Boolean(body.approved);
+          const body = parseApproveToolPayload(await parseJsonBody(req));
+          const approvalId = body.approvalId;
+          const approved = body.approved;
           const connectionId =
-            typeof body.connection_id === 'number'
-              ? body.connection_id
+            typeof body.connectionId === 'number'
+              ? body.connectionId
               : typeof req.headers['x-iki-connection'] === 'string'
                 ? Number(req.headers['x-iki-connection'])
                 : null;
-
-          if (!approvalId) {
-            writeJson(res, 400, { success: false, error: 'Missing approval_id' });
-            return;
-          }
 
           const session = connectionId ? sessions.get(connectionId) : null;
           if (!session || session.client.id !== client.id) {
@@ -591,19 +559,11 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
           return;
         }
         try {
-          const body = (await parseJsonBody(req)) as Record<string, unknown>;
-          const query = typeof body.query === 'string' ? body.query : '';
-          if (!query.trim()) {
-            writeJson(res, 400, { success: false, error: 'Missing query' });
-            return;
-          }
-          const limit = typeof body.limit === 'number' ? body.limit : undefined;
-          const threshold = typeof body.threshold === 'number' ? body.threshold : undefined;
-          const includeIncognito = Boolean(body.include_incognito);
-          const results = memoryDb.searchLongMemoryAcrossThreads(query, {
-            limit,
-            threshold,
-            includeIncognito,
+          const body = parseMemorySearchPayload(await parseJsonBody(req));
+          const results = memoryDb.searchLongMemoryAcrossThreads(body.query, {
+            limit: body.limit,
+            threshold: body.threshold,
+            includeIncognito: body.includeIncognito,
             clientId: client.id,
           });
           writeJson(res, 200, { success: true, results });
@@ -630,14 +590,14 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
           return;
         }
         try {
-          const body = (await parseJsonBody(req)) as McpServerInput;
+          const body = parseMcpServerCreatePayload(await parseJsonBody(req));
           const created = await mcpManager.addServer(body);
           writeJson(res, 200, { success: true, server: created });
           return;
         } catch (error) {
           writeJson(res, 400, {
             success: false,
-            error: error instanceof Error ? error.message : 'Invalid MCP server payload',
+            error: getSchemaErrorMessage(error, 'Invalid MCP server payload'),
           });
           return;
         }
@@ -712,13 +672,13 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
             return;
           }
           try {
-            const body = (await parseJsonBody(req)) as Partial<McpServerInput>;
+            const body = parseMcpServerUpdatePayload(await parseJsonBody(req));
             const updated = await mcpManager.updateServer(serverId, body);
             writeJson(res, 200, { success: true, server: updated });
           } catch (error) {
             writeJson(res, 400, {
               success: false,
-              error: error instanceof Error ? error.message : 'Invalid MCP server update',
+              error: getSchemaErrorMessage(error, 'Invalid MCP server update'),
             });
           }
           return;
@@ -870,8 +830,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
 
       ws.on('message', async (data: unknown) => {
         try {
-          const parsed = JSON.parse(String(data)) as Record<string, unknown>;
-          const messageType = typeof parsed.type === 'string' ? parsed.type : '';
+          const parsed = parseDaemonWebSocketMessage(JSON.parse(String(data)));
+          const messageType = parsed.type;
 
           if (messageType === 'start') {
             if (!hasScope(session.client, 'chat:write')) {
@@ -883,8 +843,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
               );
               return;
             }
-            const payload = (parsed.payload ?? {}) as Record<string, unknown>;
-            const threadId = typeof payload.thread_id === 'string' ? payload.thread_id : undefined;
+            const payload = parsed.payload;
+            const threadId = payload.threadId;
             if (threadId) {
               const access = getThreadOrError(threadId, session.client.id);
               if (!access.thread) {
@@ -898,19 +858,9 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
               }
             }
 
-            const providerType =
-              typeof payload.providerType === 'string' ? payload.providerType : '';
-            const model = typeof payload.model === 'string' ? payload.model : '';
-            if (!providerType || !model) {
-              ws.send(
-                JSON.stringify({
-                  channel: 'daemon',
-                  payload: { type: 'error', error: 'Missing providerType or model' },
-                })
-              );
-              return;
-            }
-            const messages = Array.isArray(payload.messages) ? payload.messages : [];
+            const providerType = payload.providerType;
+            const model = payload.model;
+            const messages = payload.messages as ChatTransportMessage[];
             const tools = resolveToolsForClient(payload.tools, session.client.allowedTools);
             const requestedMcpServerIds = readRequestedMcpServerIds(payload);
             const mcpServerIds = resolveMcpServerIdsForClient(
@@ -936,13 +886,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
               messages,
               tools,
               mcpServerIds,
-              skillIds: Array.isArray(payload.skillIds)
-                ? (payload.skillIds as string[])
-                : undefined,
-              skillMode:
-                payload.skillMode === 'manual' || payload.skillMode === 'auto'
-                  ? payload.skillMode
-                  : undefined,
+              skillIds: payload.skillIds,
+              skillMode: payload.skillMode,
               threadId,
             });
 
@@ -969,17 +914,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
               );
               return;
             }
-            const approvalId = typeof parsed.approval_id === 'string' ? parsed.approval_id : '';
-            const approved = Boolean(parsed.approved);
-            if (!approvalId) {
-              ws.send(
-                JSON.stringify({
-                  channel: 'daemon',
-                  payload: { type: 'error', error: 'Missing approval_id' },
-                })
-              );
-              return;
-            }
+            const approvalId = parsed.approval_id;
+            const approved = parsed.approved;
             const result = await chatService.approveTool(session.webContents, approvalId, approved);
             ws.send(
               JSON.stringify({
