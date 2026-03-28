@@ -223,12 +223,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount, onMounted, watch, nextTick, computed } from 'vue';
+import { computed, ref, toRef, watchEffect } from 'vue';
 import type { Provider } from '../../shared/types/provider';
 import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
+import { useChatComposerDraft } from '../composables/useChatComposerDraft';
+import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
 import { useChatComposerSend } from '../composables/useChatComposerSend';
 import { useChatProviderSelection } from '../composables/useChatProviderSelection';
 import { useSpeechInput } from '../composables/useSpeechInput';
@@ -268,8 +270,7 @@ const props = defineProps<{
 
 const inputRef = ref<HTMLInputElement | null>(null);
 const message = ref('');
-const isComposing = ref(false);
-const justEndedComposition = ref(false);
+const isBusy = ref(false);
 const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
@@ -279,8 +280,6 @@ const incognitoAriaLabel = computed(() =>
 const incognitoTooltip = computed(() =>
   props.isIncognito ? t('chat.input.incognitoOn') : t('chat.input.incognitoOff')
 );
-const isBusy = computed(() => isPreparingSend.value || isLoading.value);
-let removeProviderUpdateListener: () => void = () => undefined;
 
 const {
   selectedProvider,
@@ -319,6 +318,16 @@ const {
   stopVoiceInput,
 } = useSpeechInput({ inputRef, message });
 
+let sendMessageHandler: () => Promise<void> | void = () => undefined;
+const { setDraftMessage, handleCompositionStart, handleCompositionEnd, handleEnter } =
+  useChatComposerDraft({
+    inputRef,
+    message,
+    sendMessage: () => sendMessageHandler(),
+    isRecording,
+    isTranscribing,
+  });
+
 const {
   composerFeedback,
   isPreparingSend,
@@ -344,6 +353,22 @@ const {
   resolveSelectedMcpServerIds,
   stopVoiceInput,
 });
+sendMessageHandler = sendMessage;
+watchEffect(() => {
+  isBusy.value = isPreparingSend.value || isLoading.value;
+});
+
+useChatComposerLifecycle({
+  electronAPI,
+  threadId: toRef(() => props.threadId),
+  activeModel: toRef(() => props.activeModel),
+  activeProviderId: toRef(() => props.activeProviderId),
+  isBusy,
+  loadAvailableProviders,
+  syncPreferredModel,
+  syncToolSelectionFromThread,
+  loadSpeechStatus,
+});
 
 const handleProviderModelSelect = (payload: { provider: Provider; model: string }) => {
   dismissComposerFeedback();
@@ -361,87 +386,8 @@ const toggleIncognitoMode = () => {
   emit('incognito-changed', !props.isIncognito);
 };
 
-watch(
-  () => [props.threadId, isBusy.value] as const,
-  async ([threadId, busy], [previousThreadId, previousBusy]) => {
-    if (busy) return;
-    if (threadId === previousThreadId && previousBusy === busy) return;
-    await syncToolSelectionFromThread(threadId);
-  }
-);
-
-watch(
-  () => [props.activeModel, props.activeProviderId] as const,
-  ([activeModel, activeProviderId], [previousActiveModel, previousActiveProviderId]) => {
-    if (activeModel === previousActiveModel && activeProviderId === previousActiveProviderId) {
-      return;
-    }
-    syncPreferredModel(activeModel, activeProviderId);
-  }
-);
-
-const setDraftMessage = async (
-  nextValue: string,
-  options?: { focus?: boolean; select?: boolean }
-) => {
-  message.value = nextValue;
-  await nextTick();
-  if (options?.focus) {
-    inputRef.value?.focus();
-  }
-  if (options?.select) {
-    inputRef.value?.select();
-  }
-};
-
 defineExpose({
   setDraftMessage,
-});
-
-const handleCompositionStart = () => {
-  isComposing.value = true;
-};
-
-const handleCompositionEnd = () => {
-  isComposing.value = false;
-  justEndedComposition.value = true;
-  window.setTimeout(() => {
-    justEndedComposition.value = false;
-  }, 0);
-};
-
-const handleEnter = (event: KeyboardEvent) => {
-  if (
-    event.isComposing ||
-    event.keyCode === 229 ||
-    event.which === 229 ||
-    isComposing.value ||
-    justEndedComposition.value
-  ) {
-    return;
-  }
-
-  if (isRecording.value || isTranscribing.value) {
-    return;
-  }
-
-  sendMessage();
-};
-
-onMounted(async () => {
-  if (typeof electronAPI.providers.onUpdated === 'function') {
-    removeProviderUpdateListener = electronAPI.providers.onUpdated(() => {
-      void loadAvailableProviders();
-    });
-  }
-
-  await loadAvailableProviders(props.activeModel, props.activeProviderId);
-  await loadSpeechStatus();
-  await syncToolSelectionFromThread(props.threadId);
-});
-
-onBeforeUnmount(() => {
-  removeProviderUpdateListener();
 });
 </script>
 <style scoped>
