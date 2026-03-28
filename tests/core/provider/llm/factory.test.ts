@@ -71,6 +71,7 @@ import {
   createModel,
   fetchModelCapabilityFromDev,
   getModelCallSettings,
+  getModelGenerationSettings,
   generateChatWithUsage,
   resolveModelCapability,
   streamChat,
@@ -416,6 +417,100 @@ describe('llm factory', () => {
           reasoningEffort: 'medium',
         },
       },
+    });
+  });
+
+  it('omits temperature for OpenAI reasoning-model calls while preserving provider options', () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_openai',
+        type: 'openai',
+        enabled: true,
+        api_key: 'sk-test',
+        base_url: '',
+        models: JSON.stringify(['gpt-5.4']),
+        model_options: JSON.stringify({
+          'gpt-5.4': {
+            providerOptions: {
+              reasoningEffort: 'medium',
+              parallelToolCalls: true,
+            },
+          },
+        }),
+      },
+    ]);
+
+    expect(
+      getModelGenerationSettings({
+        providerType: 'openai',
+        modelId: 'gpt-5.4',
+        temperature: 0.2,
+      })
+    ).toEqual({
+      providerOptions: {
+        openai: {
+          parallelToolCalls: true,
+          reasoningEffort: 'medium',
+        },
+      },
+    });
+  });
+
+  it('omits temperature for custom responses-model calls even without explicit reasoning metadata', () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'custom_gateway',
+        type: 'openai-compatible',
+        enabled: true,
+        api_key: 'sk-gateway',
+        base_url: 'https://gateway.example.com/v1',
+        models: JSON.stringify(['gpt-5.4']),
+        is_response_api: true,
+      },
+    ]);
+
+    expect(
+      getModelGenerationSettings({
+        providerType: 'openai-compatible',
+        providerId: 'custom_gateway',
+        modelId: 'gpt-5.4',
+        temperature: 0.2,
+      })
+    ).toEqual({});
+  });
+
+  it('keeps temperature when a compatible GPT-5 model explicitly disables reasoning effort', () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_openai',
+        type: 'openai',
+        enabled: true,
+        api_key: 'sk-test',
+        base_url: '',
+        models: JSON.stringify(['gpt-5.2']),
+        model_options: JSON.stringify({
+          'gpt-5.2': {
+            providerOptions: {
+              reasoningEffort: 'none',
+            },
+          },
+        }),
+      },
+    ]);
+
+    expect(
+      getModelGenerationSettings({
+        providerType: 'openai',
+        modelId: 'gpt-5.2',
+        temperature: 0.2,
+      })
+    ).toEqual({
+      providerOptions: {
+        openai: {
+          reasoningEffort: 'none',
+        },
+      },
+      temperature: 0.2,
     });
   });
 

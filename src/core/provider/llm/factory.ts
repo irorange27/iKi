@@ -18,7 +18,7 @@ import {
   type ModelCapability,
   type ModelsDevCatalog,
 } from '../../../shared/utils/provider_models';
-import type { ProviderModelOptionsMap } from '../../../shared/types/provider';
+import type { ProviderModelOptions, ProviderModelOptionsMap } from '../../../shared/types/provider';
 import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
 import { normalizeLanguageModelUsage } from './usage';
 
@@ -122,6 +122,85 @@ const getStoredProviderModelOptions = (
   }
 };
 
+const getStoredProviderModelContext = (
+  providerType: string,
+  modelId: string,
+  providerId?: string | null
+): { config: ProviderConfig; modelOptions: ProviderModelOptions | null } | null => {
+  try {
+    const config = getProviderConfig(providerType, providerId);
+    return {
+      config,
+      modelOptions: getProviderModelOptions(config.modelOptions, modelId),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const normalizeOptionalLowercaseString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+// Mirror the OpenAI SDK 3.0.2 reasoning-model capability contract so our call assembly stays
+// aligned with the provider's own parameter-compatibility rules for OpenAI-backed runtimes.
+const isOpenAIReasoningModelBySdkContract = (modelId: string): boolean => {
+  const normalizedModelId = modelId.trim().toLowerCase();
+  if (!normalizedModelId) return false;
+
+  return (
+    normalizedModelId.startsWith('o1') ||
+    normalizedModelId.startsWith('o3') ||
+    normalizedModelId.startsWith('o4-mini') ||
+    normalizedModelId.startsWith('codex-mini') ||
+    normalizedModelId.startsWith('computer-use-preview') ||
+    (normalizedModelId.startsWith('gpt-5') && !normalizedModelId.startsWith('gpt-5-chat'))
+  );
+};
+
+const openAIModelSupportsNonReasoningParameters = (modelId: string): boolean => {
+  const normalizedModelId = modelId.trim().toLowerCase();
+  return normalizedModelId.startsWith('gpt-5.1') || normalizedModelId.startsWith('gpt-5.2');
+};
+
+const shouldOmitTemperatureForModelCall = (params: {
+  providerType: string;
+  modelId: string;
+  providerId?: string | null;
+  temperature?: number;
+}): boolean => {
+  if (typeof params.temperature !== 'number') return false;
+
+  const storedContext = getStoredProviderModelContext(
+    params.providerType,
+    params.modelId,
+    params.providerId
+  );
+  const usesOpenAISdkCompatibilityRules =
+    params.providerType === 'openai' || storedContext?.config.isResponseApi === true;
+
+  if (!usesOpenAISdkCompatibilityRules) {
+    return false;
+  }
+
+  const providerOptions = storedContext?.modelOptions?.providerOptions;
+  const reasoningEffort = normalizeOptionalLowercaseString(providerOptions?.reasoningEffort);
+  const isReasoningModel =
+    providerOptions?.forceReasoning === true ||
+    storedContext?.modelOptions?.supportsReasoning === true ||
+    isOpenAIReasoningModelBySdkContract(params.modelId);
+
+  if (!isReasoningModel) {
+    return false;
+  }
+
+  return !(
+    reasoningEffort === 'none' && openAIModelSupportsNonReasoningParameters(params.modelId)
+  );
+};
+
 export const getModelCallSettings = (
   providerType: string,
   modelId: string,
@@ -138,6 +217,26 @@ export const getModelCallSettings = (
       [providerType]: providerOptions,
     },
   };
+};
+
+export const getModelGenerationSettings = (params: {
+  providerType: string;
+  modelId: string;
+  providerId?: string | null;
+  temperature?: number;
+}): { providerOptions?: SharedV3ProviderOptions; temperature?: number } => {
+  const callSettings = getModelCallSettings(params.providerType, params.modelId, params.providerId);
+
+  if (shouldOmitTemperatureForModelCall(params)) {
+    return callSettings;
+  }
+
+  return typeof params.temperature === 'number'
+    ? {
+        ...callSettings,
+        temperature: params.temperature,
+      }
+    : callSettings;
 };
 
 export const createModel = (

@@ -1,7 +1,7 @@
 import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai';
 
 import { createLogger } from '../../logger';
-import { createModel, getModelCallSettings } from '../../provider/llm/factory';
+import { createModel, getModelGenerationSettings } from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import { ToolRegistry } from '../../tools/base';
 import {
@@ -93,8 +93,12 @@ export class SimpleConversationRunner implements ConversationRunner {
         system: systemPrompt,
         messages,
         tools,
-        ...getModelCallSettings(this.config.providerType, this.config.model, this.config.providerId),
-        temperature: this.config.temperature,
+        ...getModelGenerationSettings({
+          providerType: this.config.providerType,
+          modelId: this.config.model,
+          providerId: this.config.providerId,
+          temperature: this.config.temperature,
+        }),
         maxOutputTokens: this.config.maxTokens,
         stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
         onStepFinish: async ({
@@ -166,8 +170,12 @@ export class SimpleConversationRunner implements ConversationRunner {
       system: systemPrompt,
       messages,
       tools,
-      ...getModelCallSettings(this.config.providerType, this.config.model, this.config.providerId),
-      temperature: this.config.temperature,
+      ...getModelGenerationSettings({
+        providerType: this.config.providerType,
+        modelId: this.config.model,
+        providerId: this.config.providerId,
+        temperature: this.config.temperature,
+      }),
       maxOutputTokens: this.config.maxTokens,
       stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
       abortSignal: request.abortSignal,

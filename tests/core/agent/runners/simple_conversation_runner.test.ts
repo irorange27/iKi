@@ -11,7 +11,7 @@ const {
   streamTextMock,
   toolMock,
   createModelMock,
-  getModelCallSettingsMock,
+  getModelGenerationSettingsMock,
   getFullSystemPromptMock,
 } = vi.hoisted(() => {
   const loggerEventMock = vi.fn();
@@ -33,7 +33,7 @@ const {
     streamTextMock: vi.fn(),
     toolMock: vi.fn((definition: unknown) => definition),
     createModelMock: vi.fn(),
-    getModelCallSettingsMock: vi.fn(() => ({})),
+    getModelGenerationSettingsMock: vi.fn(() => ({})),
     getFullSystemPromptMock: vi.fn(),
   };
 });
@@ -48,7 +48,7 @@ vi.mock('ai', () => ({
 
 vi.mock('../../../../src/core/provider/llm/factory', () => ({
   createModel: createModelMock,
-  getModelCallSettings: getModelCallSettingsMock,
+  getModelGenerationSettings: getModelGenerationSettingsMock,
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
@@ -79,7 +79,10 @@ const createAsyncIterable = <T>(values: T[]) =>
 beforeEach(() => {
   vi.clearAllMocks();
   createModelMock.mockReturnValue('mock-model');
-  getModelCallSettingsMock.mockReturnValue({});
+  getModelGenerationSettingsMock.mockImplementation(
+    ({ temperature }: { temperature?: number }) =>
+      typeof temperature === 'number' ? { temperature } : {}
+  );
   getFullSystemPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockImplementation(() => {
     throw new Error('app config should not be loaded');
@@ -231,7 +234,7 @@ describe('SimpleConversationRunner', () => {
         messages: [],
       },
     });
-    getModelCallSettingsMock.mockReturnValue({
+    getModelGenerationSettingsMock.mockReturnValue({
       providerOptions: {
         openai: {
           reasoningEffort: 'medium',
@@ -252,7 +255,12 @@ describe('SimpleConversationRunner', () => {
 
     await runner.generate({ prompt: 'hello' });
 
-    expect(getModelCallSettingsMock).toHaveBeenCalledWith('openai', 'gpt-5.4', '');
+    expect(getModelGenerationSettingsMock).toHaveBeenCalledWith({
+      providerType: 'openai',
+      modelId: 'gpt-5.4',
+      providerId: '',
+      temperature: 0.2,
+    });
     expect(generateTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerOptions: {

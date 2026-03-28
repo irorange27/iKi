@@ -29,8 +29,16 @@ afterEach(() => {
 });
 
 describe('tool_access', () => {
-  it('uses low-risk defaults when client omits tool names', () => {
-    expect(resolveToolsForClient(undefined, ['web', 'fetch', 'shell'])).toEqual(['web', 'fetch']);
+  it('uses the broader auto-capable builtin defaults when client omits tool names', () => {
+    expect(resolveToolsForClient(undefined, ['web', 'fetch', 'shell'])).toEqual([
+      'web',
+      'fetch',
+      'shell',
+    ]);
+  });
+
+  it('treats explicit empty tool arrays as an intentional disable', () => {
+    expect(resolveToolsForClient([], ['web', 'fetch', 'shell'])).toEqual([]);
   });
 
   it('reads requested MCP server ids from camelCase and snake_case payload fields', () => {
@@ -39,6 +47,7 @@ describe('tool_access', () => {
       'alpha',
       'beta',
     ]);
+    expect(readRequestedMcpServerIds({ tools: ['web'] })).toBeUndefined();
   });
 
   it('allows all requested MCP server ids when mcp:* is in allowlist', () => {
@@ -46,9 +55,27 @@ describe('tool_access', () => {
     expect(resolved).toEqual(['alpha', 'beta']);
   });
 
+  it('defaults omitted MCP server ids to all currently allowed MCP servers', () => {
+    registerMcpTool('mcp_alpha_lookup', 'alpha');
+    registerMcpTool('mcp_beta_lookup', 'beta');
+
+    expect(resolveMcpServerIdsForClient(undefined, ['mcp:*'])).toEqual(['alpha', 'beta']);
+  });
+
+  it('treats explicit empty MCP server arrays as an intentional disable', () => {
+    expect(resolveMcpServerIdsForClient([], ['mcp:*'])).toEqual([]);
+  });
+
   it('allows only explicitly scoped MCP server ids when mcp:server:<id> is used', () => {
     const resolved = resolveMcpServerIdsForClient(['alpha', 'beta'], ['mcp:server:alpha']);
     expect(resolved).toEqual(['alpha']);
+  });
+
+  it('permits explicit MCP tool names when the server token authorizes that server', () => {
+    registerMcpTool('mcp_alpha_lookup', 'alpha');
+
+    const resolved = resolveToolsForClient(['mcp_alpha_lookup'], ['mcp:server:alpha']);
+    expect(resolved).toEqual(['mcp_alpha_lookup']);
   });
 
   it('derives MCP server permissions from explicitly allowed MCP tool names', () => {

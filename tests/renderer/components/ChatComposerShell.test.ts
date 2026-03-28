@@ -13,7 +13,9 @@ const mountComponent = (overrides?: Record<string, unknown>) => {
       modelValue: '',
       placeholder: 'Type a message',
       feedback: '',
-      inputRef,
+      setInputRef: (element: HTMLInputElement | null) => {
+        inputRef.value = element;
+      },
       ...(overrides ?? {}),
     },
     slots: {

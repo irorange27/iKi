@@ -24,7 +24,7 @@ import {
 import { createNapCatReverseBridge } from './napcat_adapter';
 import { readOrCreateBootstrapToken, rotateBootstrapToken } from './bootstrap_token';
 import {
-  DEFAULT_ALLOWED_TOOLS,
+  getDefaultAllowedTools,
   readRequestedMcpServerIds,
   resolveMcpServerIdsForClient,
   resolveToolsForClient,
@@ -98,7 +98,7 @@ const normalizeScopes = (scopes: unknown): string[] => {
 };
 
 const normalizeAllowedTools = (tools: unknown): string[] => {
-  if (!Array.isArray(tools)) return DEFAULT_ALLOWED_TOOLS;
+  if (!Array.isArray(tools)) return getDefaultAllowedTools();
   const cleaned = tools
     .filter((value): value is string => typeof value === 'string')
     .map(value => value.trim())

@@ -7,7 +7,7 @@ import {
   validateAgentConfig,
 } from '../agent/ai_sdk_runtime';
 import type { AgentConfig, AgentResult, PartialAgentConfig } from '../agent/types';
-import { createModel, getModelCallSettings } from '../provider/llm/factory';
+import { createModel, getModelGenerationSettings } from '../provider/llm/factory';
 
 export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
 
@@ -38,8 +38,12 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
       model,
       system: systemPrompt,
       messages,
-      ...getModelCallSettings(this.config.providerType, this.config.model, this.config.providerId),
-      temperature: this.config.temperature,
+      ...getModelGenerationSettings({
+        providerType: this.config.providerType,
+        modelId: this.config.model,
+        providerId: this.config.providerId,
+        temperature: this.config.temperature,
+      }),
       maxOutputTokens: this.config.maxTokens,
     });
 

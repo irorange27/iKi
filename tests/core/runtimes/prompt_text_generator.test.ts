@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   generateTextMock,
   createModelMock,
-  getModelCallSettingsMock,
+  getModelGenerationSettingsMock,
   getFullSystemPromptMock,
   getAppConfigMock,
 } =
   vi.hoisted(() => ({
     generateTextMock: vi.fn(),
     createModelMock: vi.fn(),
-    getModelCallSettingsMock: vi.fn(() => ({})),
+    getModelGenerationSettingsMock: vi.fn(() => ({})),
     getFullSystemPromptMock: vi.fn(),
     getAppConfigMock: vi.fn(),
   }));
@@ -21,7 +21,7 @@ vi.mock('ai', () => ({
 
 vi.mock('../../../src/core/provider/llm/factory', () => ({
   createModel: createModelMock,
-  getModelCallSettings: getModelCallSettingsMock,
+  getModelGenerationSettings: getModelGenerationSettingsMock,
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
@@ -34,7 +34,10 @@ import { createSimplePromptTextGenerator } from '../../../src/core/runtimes/prom
 beforeEach(() => {
   vi.clearAllMocks();
   createModelMock.mockReturnValue('mock-model');
-  getModelCallSettingsMock.mockReturnValue({});
+  getModelGenerationSettingsMock.mockImplementation(
+    ({ temperature }: { temperature?: number }) =>
+      typeof temperature === 'number' ? { temperature } : {}
+  );
   getFullSystemPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockImplementation(() => {
     throw new Error('app config should not be loaded');

@@ -29,6 +29,7 @@ const {
   chatServiceMock,
   getChatThreadMock,
   assignClientToLegacyThreadsMock,
+  getDefaultAllowedToolsMock,
   readOrCreateBootstrapTokenMock,
   rotateBootstrapTokenMock,
   getMcpManagerMock,
@@ -196,23 +197,56 @@ const {
     updateServer: vi.fn(async (_id: string, input: unknown) => input),
   };
   const getMcpManagerMock = vi.fn(() => mcpManagerMock);
+  const defaultAllowedTools = [
+    'web',
+    'fetch',
+    'list_dir',
+    'read_file',
+    'write_file',
+    'delete_file',
+    'shell',
+    'list_personal_skills',
+    'read_personal_skill',
+    'write_personal_skill',
+    'delete_personal_skill',
+    'list_todo_lists',
+    'read_todo_list',
+    'write_todo_list',
+    'delete_todo_list',
+    'mcp:*',
+  ];
+  const getDefaultAllowedToolsMock = vi.fn(() => [...defaultAllowedTools]);
 
   const readRequestedMcpServerIdsMock = vi.fn((payload: Record<string, unknown>) =>
-    Array.isArray(payload.mcpServerIds) ? [...(payload.mcpServerIds as string[])] : []
+    Array.isArray(payload.mcpServerIds) ? [...(payload.mcpServerIds as string[])] : undefined
   );
   const resolveToolsForClientMock = vi.fn((requested: unknown, allowedTools: string[]) => {
     const requestedTools = Array.isArray(requested)
       ? requested.filter((value): value is string => typeof value === 'string')
-      : [];
-    if (requestedTools.length === 0) {
-      return ['web', 'fetch'].filter(tool => allowedTools.includes(tool));
+      : null;
+    if (requestedTools && requestedTools.length === 0) {
+      return [];
+    }
+    if (requestedTools === null) {
+      return defaultAllowedTools
+        .filter(tool => !tool.startsWith('mcp:'))
+        .filter(tool => allowedTools.includes(tool));
     }
     return requestedTools.filter(tool => allowedTools.includes(tool));
   });
   const resolveMcpServerIdsForClientMock = vi.fn((requested: unknown, allowedTools: string[]) => {
     const requestedIds = Array.isArray(requested)
       ? requested.filter((value): value is string => typeof value === 'string')
-      : [];
+      : null;
+    if (requestedIds && requestedIds.length === 0) {
+      return [];
+    }
+    if (requestedIds === null) {
+      return allowedTools.includes('mcp:*') ? ['docs'] : [];
+    }
+    if (allowedTools.includes('mcp:*')) {
+      return requestedIds;
+    }
     return requestedIds.filter(serverId => allowedTools.includes(`mcp:server:${serverId}`));
   });
 
@@ -239,6 +273,7 @@ const {
     chatServiceMock,
     getChatThreadMock,
     assignClientToLegacyThreadsMock,
+    getDefaultAllowedToolsMock,
     readOrCreateBootstrapTokenMock,
     rotateBootstrapTokenMock,
     getMcpManagerMock,
@@ -339,7 +374,7 @@ vi.mock('../../src/daemon/bootstrap_token', () => ({
 }));
 
 vi.mock('../../src/daemon/tool_access', () => ({
-  DEFAULT_ALLOWED_TOOLS: ['web', 'fetch'],
+  getDefaultAllowedTools: getDefaultAllowedToolsMock,
   readRequestedMcpServerIds: readRequestedMcpServerIdsMock,
   resolveMcpServerIdsForClient: resolveMcpServerIdsForClientMock,
   resolveToolsForClient: resolveToolsForClientMock,
@@ -542,7 +577,24 @@ describe('daemon server', () => {
         'mcp:read',
         'mcp:write',
       ],
-      allowed_tools: ['web', 'fetch'],
+      allowed_tools: [
+        'web',
+        'fetch',
+        'list_dir',
+        'read_file',
+        'write_file',
+        'delete_file',
+        'shell',
+        'list_personal_skills',
+        'read_personal_skill',
+        'write_personal_skill',
+        'delete_personal_skill',
+        'list_todo_lists',
+        'read_todo_list',
+        'write_todo_list',
+        'delete_todo_list',
+        'mcp:*',
+      ],
     });
     expect(assignClientToLegacyThreadsMock).toHaveBeenCalledTimes(1);
   });
