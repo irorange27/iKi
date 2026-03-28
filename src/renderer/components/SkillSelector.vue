@@ -103,6 +103,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { SkillSummary } from '../../shared/types/skill';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
+import { getElectronApiSliceMethod } from '../services/electron_api';
 
 const props = defineProps<{
   skillIds: string[];
@@ -114,7 +115,7 @@ const emit = defineEmits<{
   (event: 'update:mode', value: 'manual' | 'auto'): void;
 }>();
 
-const electronAPI = window.electronAPI;
+const listSkills = getElectronApiSliceMethod('skills', 'list');
 const skillSelectorLogger = createLogger({ module: 'skill_selector' });
 const { t } = useI18n();
 
@@ -145,7 +146,7 @@ const normalizeSkills = (input: unknown): SkillSummary[] => {
 
 const loadAvailableSkills = async () => {
   try {
-    const skills = await electronAPI?.skills?.list?.();
+    const skills = listSkills ? await listSkills() : [];
     availableSkills.value = normalizeSkills(skills);
   } catch (error) {
     skillSelectorLogger.event({

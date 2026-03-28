@@ -165,7 +165,7 @@ import { RefreshCw } from 'lucide-vue-next';
 
 import { useConfigStore } from '../../store/config';
 import { useI18n } from '../../i18n';
-import { getElectronAPI } from '../../services/electron_api';
+import { getElectronApiSlice, getElectronApiSliceMethod } from '../../services/electron_api';
 import type { AppConfig } from '../../../shared/types/config';
 import type { SkillSummary } from '../../../shared/types/skill';
 import { getErrorMessage } from '../../../shared/utils/errors';
@@ -177,8 +177,9 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
-const electronAPI = getElectronAPI();
 const { t } = useI18n();
+const skillsApi = getElectronApiSlice('skills', ['list', 'roots', 'openRoot', 'openSkill', 'read']);
+const resetAutoPinnedSkills = getElectronApiSliceMethod('workflow', 'resetAutoPinnedSkills');
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -205,13 +206,13 @@ const updateWorkflowOptimization = <K extends keyof AppConfig['workflowOptimizat
 
 const resetWorkflowOptimization = async () => {
   workflowResetError.value = '';
-  if (!electronAPI?.workflow?.resetAutoPinnedSkills) {
+  if (!resetAutoPinnedSkills) {
     workflowResetError.value = t('settings.skills.error.resetUnavailable');
     return;
   }
   workflowResetting.value = true;
   try {
-    const result = await electronAPI.workflow.resetAutoPinnedSkills();
+    const result = await resetAutoPinnedSkills();
     if (!result?.success) {
       workflowResetError.value =
         result?.error || t('settings.skills.error.resetFailed', { error: '' });
@@ -226,8 +227,12 @@ const resetWorkflowOptimization = async () => {
 };
 
 const loadSkillRoots = async () => {
+  if (!skillsApi) {
+    skillRoots.value = [];
+    return;
+  }
   try {
-    const roots = await electronAPI.skills.roots();
+    const roots = await skillsApi.roots();
     skillRoots.value = Array.isArray(roots) ? roots : [];
   } catch {
     skillRoots.value = [];
@@ -237,8 +242,16 @@ const loadSkillRoots = async () => {
 const refreshSkills = async () => {
   skillsLoading.value = true;
   skillsError.value = '';
+  if (!skillsApi) {
+    skills.value = [];
+    skillsError.value = t('settings.skills.error.loadFailed', {
+      error: t('common.unavailable'),
+    });
+    skillsLoading.value = false;
+    return;
+  }
   try {
-    const list = await electronAPI.skills.list();
+    const list = await skillsApi.list();
     skills.value = Array.isArray(list) ? list : [];
   } catch (error: unknown) {
     skillsError.value = t('settings.skills.error.loadFailed', { error: getErrorMessage(error) });
@@ -249,8 +262,14 @@ const refreshSkills = async () => {
 };
 
 const openSkillsFolder = async (source?: 'user' | 'codex') => {
+  if (!skillsApi) {
+    skillsError.value = t('settings.skills.error.openFolderFailed', {
+      error: t('common.unavailable'),
+    });
+    return;
+  }
   try {
-    const result = await electronAPI.skills.openRoot(source);
+    const result = await skillsApi.openRoot(source);
     if (result?.success === false) {
       skillsError.value =
         result?.error || t('settings.skills.error.openFolderFailed', { error: '' });
@@ -263,8 +282,14 @@ const openSkillsFolder = async (source?: 'user' | 'codex') => {
 };
 
 const openSkillFolder = async (id: string) => {
+  if (!skillsApi) {
+    skillsError.value = t('settings.skills.error.openSkillFailed', {
+      error: t('common.unavailable'),
+    });
+    return;
+  }
   try {
-    const result = await electronAPI.skills.openSkill(id);
+    const result = await skillsApi.openSkill(id);
     if (result?.success === false) {
       skillsError.value = result?.error || t('settings.skills.error.openSkillFailed', { error: '' });
     }
@@ -291,8 +316,15 @@ const toggleSkillContent = async (id: string) => {
   }
 
   skillContentLoading.value = { ...skillContentLoading.value, [id]: true };
+  if (!skillsApi) {
+    skillsError.value = t('settings.skills.error.readFailed', {
+      error: t('common.unavailable'),
+    });
+    skillContentLoading.value = { ...skillContentLoading.value, [id]: false };
+    return;
+  }
   try {
-    const result = await electronAPI.skills.read(id, { maxChars: 20000 });
+    const result = await skillsApi.read(id, { maxChars: 20000 });
     if (result?.success === false) {
       skillsError.value = result?.error || t('settings.skills.error.readFailed', { error: '' });
       skillContents.value = { ...skillContents.value, [id]: '' };

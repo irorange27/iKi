@@ -187,11 +187,12 @@ import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { useSidebar } from '../composables/useSidebar';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
-import { getElectronAPI } from '../services/electron_api';
+import { getElectronApiMethod, getElectronApiSlice } from '../services/electron_api';
 
 const sidebar = useSidebar();
 const { t } = useI18n();
-const electronAPI = getElectronAPI();
+const chatApi = getElectronApiSlice('chat');
+const openSettingsWindow = getElectronApiMethod('openSettings');
 const sidebarLogger = createLogger({ module: 'sidebar' });
 
 interface ChatThread {
@@ -224,8 +225,9 @@ const emit = defineEmits<{
 
 // Load chat threads from database
 const loadChatThreads = async () => {
+  if (!chatApi?.threads?.list) return;
   try {
-    const threads = await electronAPI.chat.threads.list();
+    const threads = await chatApi.threads.list();
     chatThreads.value = Array.isArray(threads) ? (threads as ChatThread[]) : [];
   } catch (error) {
     sidebarLogger.event({
@@ -259,8 +261,15 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
   if (!confirmed) return;
 
   deletingThreadIds.value[thread.id] = true;
+  if (!chatApi?.threads?.delete) {
+    deletingThreadIds.value = {
+      ...deletingThreadIds.value,
+      [thread.id]: false,
+    };
+    return;
+  }
   try {
-    await electronAPI.chat.threads.delete(thread.id);
+    await chatApi.threads.delete(thread.id);
     chatThreads.value = chatThreads.value.filter(chat => chat.id !== thread.id);
     if (currentThreadId.value === thread.id) {
       currentThreadId.value = null;
@@ -482,7 +491,7 @@ const startResize = (e: StartResizeEvent) => {
 };
 
 const openSettings = () => {
-  electronAPI?.openSettings?.();
+  openSettingsWindow?.();
 };
 </script>
 

@@ -168,6 +168,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { Workspace } from '../../shared/types/chat';
 import { getErrorMessage } from '../../shared/utils/errors';
 import { useI18n } from '../i18n';
+import { getElectronApiSliceMethod } from '../services/electron_api';
 
 const props = defineProps<{
   selectedWorkspaceId?: string | null;
@@ -178,7 +179,9 @@ const emit = defineEmits<{
   (event: 'update:selectedWorkspaceId', value: string | null): void;
 }>();
 
-const electronAPI = window.electronAPI;
+const getVisibleWorkspaces = getElectronApiSliceMethod('workspaces', 'getVisible');
+const getWorkspace = getElectronApiSliceMethod('workspaces', 'get');
+const pickWorkspaceDirectoryFromApi = getElectronApiSliceMethod('workspaces', 'pickDirectory');
 const { t } = useI18n();
 
 const showWorkspaceSelector = ref(false);
@@ -286,7 +289,9 @@ const loadWorkspaces = async () => {
   workspaceLoadError.value = '';
 
   try {
-    const visibleWorkspaces = normalizeWorkspaces(await electronAPI?.workspaces?.getVisible?.());
+    const visibleWorkspaces = normalizeWorkspaces(
+      getVisibleWorkspaces ? await getVisibleWorkspaces() : []
+    );
     const currentWorkspaceId = selectedWorkspaceId.value;
 
     if (
@@ -298,7 +303,7 @@ const loadWorkspaces = async () => {
     }
 
     const currentWorkspace = normalizeWorkspace(
-      await electronAPI?.workspaces?.get?.(currentWorkspaceId)
+      getWorkspace ? await getWorkspace(currentWorkspaceId) : null
     );
     availableWorkspaces.value = currentWorkspace
       ? [
@@ -357,7 +362,9 @@ const pickWorkspaceDirectory = async () => {
   workspaceLoadError.value = '';
 
   try {
-    const workspace = normalizeWorkspace(await electronAPI?.workspaces?.pickDirectory?.());
+    const workspace = normalizeWorkspace(
+      pickWorkspaceDirectoryFromApi ? await pickWorkspaceDirectoryFromApi() : null
+    );
     await loadWorkspaces();
     if (workspace?.id) {
       emit('update:selectedWorkspaceId', workspace.id);

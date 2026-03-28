@@ -228,6 +228,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { McpServerSummary } from '../../shared/types/mcp';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
+import { getElectronApiSliceMethod } from '../services/electron_api';
 
 interface ToolSummary {
   name: string;
@@ -262,7 +263,8 @@ const emit = defineEmits<{
   (event: 'update:mode', value: 'manual' | 'auto'): void;
 }>();
 
-const electronAPI = window.electronAPI;
+const listTools = getElectronApiSliceMethod('tools', 'list');
+const listMcpServers = getElectronApiSliceMethod('mcp', 'list');
 const toolSelectorLogger = createLogger({ module: 'tool_selector' });
 const { t } = useI18n();
 
@@ -470,7 +472,7 @@ const mcpServerEntries = computed<McpServerEntry[]>(() => {
 
 const showMcpSection = computed(
   () =>
-    Boolean(electronAPI?.mcp?.list) ||
+    Boolean(listMcpServers) ||
     availableMcpServers.value.length > 0 ||
     mcpServerEntries.value.length > 0
 );
@@ -486,7 +488,7 @@ const loadAvailableTools = async (options?: { force?: boolean }) => {
   if (!options?.force && now - lastLoadedAt.value < 800) return;
 
   try {
-    const tools = await electronAPI?.tools?.list?.();
+    const tools = listTools ? await listTools() : [];
     const normalized = normalizeTools(tools);
     availableTools.value = normalized;
     lastLoadedAt.value = now;
@@ -502,14 +504,14 @@ const loadAvailableTools = async (options?: { force?: boolean }) => {
 };
 
 const loadAvailableMcpServers = async () => {
-  if (!electronAPI?.mcp?.list) {
+  if (!listMcpServers) {
     availableMcpServers.value = [];
     return;
   }
 
   mcpServersLoading.value = true;
   try {
-    const servers = await electronAPI.mcp.list();
+    const servers = await listMcpServers();
     availableMcpServers.value = normalizeMcpServers(servers);
   } catch (error) {
     toolSelectorLogger.event({

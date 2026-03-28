@@ -41,14 +41,15 @@
 
 <script setup lang="ts">
 import { useI18n } from '../i18n';
+import { getElectronApiMethod } from '../services/electron_api';
 
 defineEmits(['new-chat']);
 
-const electronAPI = window.electronAPI;
+const openSettingsWindow = getElectronApiMethod('openSettings');
 const { t } = useI18n();
 
 const openSettings = () => {
-  electronAPI?.openSettings?.();
+  openSettingsWindow?.();
 };
 </script>
 

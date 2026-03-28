@@ -15,6 +15,8 @@ const toolMetadataLogger = createLogger({ module: 'tool_metadata' });
 export const useToolMetadata = (deps: {
   electronAPI: Pick<ElectronApi, 'tools' | 'skills'>;
 }) => {
+  const listTools = deps.electronAPI.tools?.list;
+  const openSkill = deps.electronAPI.skills?.openSkill;
   const toolSourceMap = ref<Map<string, ToolSource>>(new Map());
   const toolSourceLoading = ref(false);
 
@@ -22,8 +24,8 @@ export const useToolMetadata = (deps: {
     if (toolSourceLoading.value) return;
     toolSourceLoading.value = true;
     try {
-      if (!deps.electronAPI?.tools?.list) return;
-      const list = await deps.electronAPI.tools.list();
+      if (!listTools) return;
+      const list = await listTools();
       if (!Array.isArray(list)) return;
       const next = new Map<string, ToolSource>();
       for (const item of list) {
@@ -61,7 +63,7 @@ export const useToolMetadata = (deps: {
 
   const openSkillReference = async (skillId: string) => {
     try {
-      const result = await deps.electronAPI?.skills?.openSkill?.(skillId);
+      const result = openSkill ? await openSkill(skillId) : null;
       if (result?.success) return;
       toolMetadataLogger.event({
         level: 'warn',

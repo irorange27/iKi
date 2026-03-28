@@ -3,6 +3,7 @@ import type { Ref } from 'vue';
 import type { SpeechStatus } from '../../shared/types/speech';
 import { createLogger } from '../logger';
 import { translate } from '../i18n';
+import { getElectronApiSliceMethod } from '../services/electron_api';
 
 type SpeechInputOptions = {
   inputRef: Ref<HTMLInputElement | null>;
@@ -27,7 +28,8 @@ const WAVEFORM_BAR_COUNT = 5;
 const speechInputLogger = createLogger({ module: 'speech_input' });
 
 export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): SpeechInputState => {
-  const electronAPI = window.electronAPI;
+  const getSpeechStatus = getElectronApiSliceMethod('speech', 'getStatus');
+  const transcribeSpeech = getElectronApiSliceMethod('speech', 'transcribe');
   const speechStatus = ref<SpeechStatus | null>(null);
   const isRecording = ref(false);
   const isTranscribing = ref(false);
@@ -60,12 +62,12 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
   );
 
   const loadSpeechStatus = async () => {
-    if (!electronAPI?.speech?.getStatus) {
+    if (!getSpeechStatus) {
       speechStatus.value = { available: false, reason: translate('chat.speech.unavailable') };
       return;
     }
     try {
-      speechStatus.value = await electronAPI.speech.getStatus();
+      speechStatus.value = await getSpeechStatus();
     } catch (error) {
       speechInputLogger.event({
         level: 'error',
@@ -263,7 +265,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
 
   const transcribeRecording = async (blob: Blob) => {
     if (!blob || blob.size === 0) return;
-    if (!electronAPI?.speech?.transcribe) {
+    if (!transcribeSpeech) {
       setSpeechError(translate('chat.speech.unavailable'));
       return;
     }
@@ -275,7 +277,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         providerType === 'openai'
           ? speechStatus.value?.language || getTranscriptionLanguage()
           : speechStatus.value?.language;
-      const result = await electronAPI.speech.transcribe({
+      const result = await transcribeSpeech({
         audioBase64,
         mimeType: blob.type || 'audio/webm',
         language: languageHint,

@@ -133,6 +133,7 @@ import { computed, ref, watch } from 'vue';
 
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
+import { getElectronApiSlice } from '../../services/electron_api';
 import type {
   ChatUsageHeatmapCell,
   ChatUsagePeriod,
@@ -143,7 +144,7 @@ import { getErrorMessage } from '../../../shared/utils/errors';
 const props = defineProps<{
   active: boolean;
 }>();
-const electronAPI = window.electronAPI;
+const chatApi = getElectronApiSlice('chat');
 const { t, locale } = useI18n();
 
 const usagePeriod = ref<ChatUsagePeriod>('30d');
@@ -246,14 +247,14 @@ const getMonthlyCostBarStyle = (cost: number): Record<string, string> => {
 const loadUsageSummary = async () => {
   usageLoading.value = true;
   usageError.value = '';
-  if (!electronAPI?.chat?.usage?.summary) {
+  if (!chatApi?.usage?.summary) {
     usageError.value = t('settings.usage.error.unavailable');
     usageLoading.value = false;
     return;
   }
 
   try {
-    usageSummary.value = await electronAPI.chat.usage.summary(usagePeriod.value);
+    usageSummary.value = await chatApi.usage.summary(usagePeriod.value);
   } catch (error: unknown) {
     usageError.value = t('settings.usage.error.loadFailed', { error: getErrorMessage(error) });
   } finally {

@@ -272,6 +272,7 @@ import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
 import { configService } from '../../services/config_service';
 import { useConfigStore } from '../../store/config';
+import { getElectronApiSliceMethod } from '../../services/electron_api';
 import type {
   AppConfig,
   ConfigRuntimeInfo,
@@ -292,17 +293,16 @@ import {
 } from '../../../shared/logging/console_formatter';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
-import { getElectronAPI } from '../../services/electron_api';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;
   (event: 'reset'): void;
 }>();
-const electronAPI = getElectronAPI();
 const props = defineProps<{
   active: boolean;
 }>();
 const { t } = useI18n();
+const listProviders = getElectronApiSliceMethod('providers', 'list');
 
 type ProviderOption = {
   type: string;
@@ -625,12 +625,12 @@ const loadProviders = async () => {
   providersLoading.value = true;
   providersError.value = '';
   try {
-    if (!electronAPI?.providers?.list) {
+    if (!listProviders) {
       providers.value = [];
       providersError.value = t('settings.napcat.error.providerApiUnavailable');
       return;
     }
-    const list = await electronAPI.providers.list();
+    const list = await listProviders();
     providers.value = Array.isArray(list) ? (list as Provider[]) : [];
   } catch (error: unknown) {
     providers.value = [];
