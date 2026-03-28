@@ -87,20 +87,24 @@ const mountSettingsView = async (options?: {
     unsupportedReason: null,
   }));
   const installUpdate = vi.fn(async () => undefined);
-  const onUpdateStatusChanged = vi.fn();
-  const removeUpdateStatusListeners = vi.fn();
+  const removeUpdateStatusListener = vi.fn();
+  const onUpdateStatusChanged = vi.fn(() => removeUpdateStatusListener);
   const onProvidersUpdated = vi.fn();
   const removeProviderListener = vi.fn();
+  const setConfig = vi.fn(async () => ({ success: true }));
 
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
     value: {
+      config: {
+        set: setConfig,
+      },
       updates: {
         getStatus: getUpdateStatus,
         check: checkUpdates,
         install: installUpdate,
         onStatusChanged: onUpdateStatusChanged,
-        removeAllListeners: removeUpdateStatusListeners,
+        removeAllListeners: vi.fn(),
       },
       providers: {
         list: providersList,

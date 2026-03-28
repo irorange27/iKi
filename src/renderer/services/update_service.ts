@@ -3,6 +3,7 @@ import type { ElectronApi } from '../../shared/types/electron_api';
 
 type UpdateStatusChangedHandler = (status: AppUpdateStatus) => void;
 type ElectronUpdatesApi = ElectronApi['updates'];
+const noop = (): void => undefined;
 
 const getUpdatesApi = (): ElectronUpdatesApi | null => {
   if (typeof window === 'undefined') return null;
@@ -39,10 +40,7 @@ export const updateService = {
   },
   onStatusChanged(callback: UpdateStatusChangedHandler): () => void {
     const api = getUpdatesApi();
-    if (!api) return () => undefined;
-    api.onStatusChanged(callback);
-    return () => {
-      api.removeAllListeners?.();
-    };
+    if (!api) return noop;
+    return api.onStatusChanged(callback);
   },
 };

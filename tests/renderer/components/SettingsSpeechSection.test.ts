@@ -103,6 +103,7 @@ const mountSettingsSpeechSection = async (options?: {
       removeAllListeners: vi.fn(),
       onDownloadProgress: vi.fn((handler: (payload: WhisperNodeDownloadProgress) => void) => {
         progressHandler = handler;
+        return () => undefined;
       }),
     },
   });

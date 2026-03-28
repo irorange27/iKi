@@ -80,7 +80,6 @@ export const configService = {
       });
       return noop;
     }
-    api.onUpdated(callback);
-    return noop;
+    return api.onUpdated(callback);
   },
 };

@@ -39,7 +39,8 @@ describe('configService', () => {
     const getDaemonStatus = vi.fn(async () => ({ running: true, managed: true }));
     const getDaemonLogs = vi.fn(async (limit?: number) => ({ lines: [], limit: limit ?? 0 }));
     const controlDaemon = vi.fn(async (action: string) => ({ success: true, action }));
-    const onUpdated = vi.fn();
+    const removeListener = vi.fn();
+    const onUpdated = vi.fn(() => removeListener);
 
     Object.defineProperty(window, 'electronAPI', {
       configurable: true,
@@ -77,7 +78,8 @@ describe('configService', () => {
     expect(controlDaemon).toHaveBeenCalledWith('restart');
     expect(onUpdated).toHaveBeenCalledWith(callback);
     expect(unsubscribe).toBeTypeOf('function');
-    expect(() => unsubscribe()).not.toThrow();
+    unsubscribe();
+    expect(removeListener).toHaveBeenCalledTimes(1);
   });
 
   it('throws clear errors for required config methods when the bridge is missing', async () => {

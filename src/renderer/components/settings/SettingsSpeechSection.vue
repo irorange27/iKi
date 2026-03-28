@@ -261,6 +261,7 @@ const { config } = storeToRefs(configStore);
 const speechStatus = ref<SpeechStatus | null>(null);
 const speechStatusLoading = ref(false);
 let speechStatusTimer: number | null = null;
+let removeDownloadProgressListener: () => void = () => undefined;
 const whisperModels = ref<WhisperNodeModelInfo[]>([]);
 const whisperModelsLoading = ref(false);
 const whisperModelsError = ref('');
@@ -634,10 +635,11 @@ watch(
 
 onMounted(() => {
   try {
-    electronAPI?.speech?.removeAllListeners?.();
-    electronAPI?.speech?.onDownloadProgress?.((payload: WhisperNodeDownloadProgress) => {
-      handleWhisperDownloadProgress(payload);
-    });
+    removeDownloadProgressListener();
+    removeDownloadProgressListener =
+      electronAPI?.speech?.onDownloadProgress?.((payload: WhisperNodeDownloadProgress) => {
+        handleWhisperDownloadProgress(payload);
+      }) ?? (() => undefined);
   } catch {
     // ignore
   }
@@ -645,7 +647,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   try {
-    electronAPI?.speech?.removeAllListeners?.();
+    removeDownloadProgressListener();
   } catch {
     // ignore
   }

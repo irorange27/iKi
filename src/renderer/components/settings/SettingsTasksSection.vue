@@ -299,6 +299,7 @@ const tasksLoading = ref(false);
 const tasksError = ref('');
 const taskCreateLoading = ref(false);
 const taskCreateError = ref('');
+let removeTaskPushListener: () => void = () => undefined;
 const taskRunLoading = ref<Record<string, boolean>>({});
 const taskThreads = ref<ChatThread[]>([]);
 
@@ -701,12 +702,13 @@ watch(
 
 onMounted(() => {
   try {
-    electronAPI.tasks.removeAllListeners?.();
-    electronAPI.tasks.onPush((payload: unknown) => {
-      if (isTaskPushPayload(payload) && payload.type === 'task-result') {
-        void loadProactiveTasks();
-      }
-    });
+    removeTaskPushListener();
+    removeTaskPushListener =
+      electronAPI.tasks.onPush((payload: unknown) => {
+        if (isTaskPushPayload(payload) && payload.type === 'task-result') {
+          void loadProactiveTasks();
+        }
+      }) ?? (() => undefined);
   } catch {
     // Ignore missing tasks IPC when running older builds.
   }
@@ -714,7 +716,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   try {
-    electronAPI.tasks.removeAllListeners?.();
+    removeTaskPushListener();
   } catch {
     // ignore
   }

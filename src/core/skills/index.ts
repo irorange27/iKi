@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 
 import type { SkillSummary, SkillSource } from '../../shared/types/skill';
 import { getUserDataPath } from '../platform';
+import { isPathWithinRoot } from '../utils/path_boundary';
 
 type SkillRecord = SkillSummary & {
   filePath: string;
@@ -304,11 +305,6 @@ const listSkillRecords = async (options?: { forceRefresh?: boolean }): Promise<S
   cachedAtMs = now;
   cachedRootsSignature = rootsSignature;
   return records;
-};
-
-const isPathWithinRoot = (root: string, candidate: string): boolean => {
-  const relativePath = path.relative(root, candidate);
-  return !(relativePath.startsWith('..') || path.isAbsolute(relativePath));
 };
 
 const normalizeRelativeSkillPath = (value: string): string =>

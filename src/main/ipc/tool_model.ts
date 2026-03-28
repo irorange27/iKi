@@ -6,11 +6,10 @@ import {
   generateTitleWithAgent,
   testToolModelLatency,
 } from '../../core/provider/tool_model';
+import { getErrorMessage } from '../../shared/utils/errors';
 
 let toolModelIpcRegistered = false;
 const toolModelIpcLogger = createLogger({ module: 'tool_model_ipc' });
-const getErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : 'Unknown error';
 
 export const registerToolModelIpc = (): void => {
   if (toolModelIpcRegistered) return;

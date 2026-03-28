@@ -32,8 +32,8 @@ describe('updateService', () => {
     const getStatus = vi.fn(async () => status);
     const check = vi.fn(async () => ({ ...status, state: 'checking' as const }));
     const install = vi.fn(async () => undefined);
-    const onStatusChanged = vi.fn();
-    const removeAllListeners = vi.fn();
+    const unsubscribe = vi.fn();
+    const onStatusChanged = vi.fn(() => unsubscribe);
 
     Object.defineProperty(window, 'electronAPI', {
       configurable: true,
@@ -43,7 +43,7 @@ describe('updateService', () => {
           check,
           install,
           onStatusChanged,
-          removeAllListeners,
+          removeAllListeners: vi.fn(),
         },
       },
     });
@@ -53,16 +53,16 @@ describe('updateService', () => {
     await updateService.install();
 
     const callback = vi.fn();
-    const unsubscribe = updateService.onStatusChanged(callback);
+    const removeListener = updateService.onStatusChanged(callback);
 
     expect(getStatus).toHaveBeenCalledTimes(1);
     expect(check).toHaveBeenCalledTimes(1);
     expect(install).toHaveBeenCalledTimes(1);
     expect(onStatusChanged).toHaveBeenCalledWith(callback);
 
-    unsubscribe();
+    removeListener();
 
-    expect(removeAllListeners).toHaveBeenCalledTimes(1);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('throws clear errors when the updates bridge is missing', async () => {

@@ -7,6 +7,7 @@ import type {
 import type { ElectronApi } from '../../shared/types/electron_api';
 
 type ElectronLifeApi = ElectronApi['life'];
+const noop = (): void => undefined;
 
 const getLifeApi = (): ElectronLifeApi | null => {
   if (typeof window === 'undefined') return null;
@@ -46,10 +47,7 @@ export const lifeService = {
   },
   onPush(callback: (payload: LifePushPayload | unknown) => void): () => void {
     const api = getLifeApi();
-    if (!api?.onPush) return () => undefined;
-    api.onPush(callback);
-    return () => {
-      api.removeAllListeners?.();
-    };
+    if (!api?.onPush) return noop;
+    return api.onPush(callback);
   },
 };

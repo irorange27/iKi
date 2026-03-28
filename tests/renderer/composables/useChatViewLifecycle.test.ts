@@ -29,6 +29,8 @@ describe('useChatViewLifecycle', () => {
   it('initializes config once, refreshes chat metadata, and forwards chat/task events', async () => {
     let uiChunkHandler: ((chunk: unknown) => void) | null = null;
     let taskPushHandler: ((payload: unknown) => void) | null = null;
+    const removeChatChunkListener = vi.fn();
+    const removeTaskPushListener = vi.fn();
 
     const deps = {
       configStore: {
@@ -39,15 +41,15 @@ describe('useChatViewLifecycle', () => {
       loadToolSources: vi.fn(async () => undefined),
       electronAPI: {
         chat: {
-          removeAllListeners: vi.fn(),
           onUiChunk: vi.fn((handler: (chunk: unknown) => void) => {
             uiChunkHandler = handler;
+            return removeChatChunkListener;
           }),
         },
         tasks: {
-          removeAllListeners: vi.fn(),
           onPush: vi.fn((handler: (payload: unknown) => void) => {
             taskPushHandler = handler;
+            return removeTaskPushListener;
           }),
         },
       },
@@ -62,9 +64,7 @@ describe('useChatViewLifecycle', () => {
     expect(deps.configStore.initialize).toHaveBeenCalledTimes(1);
     expect(deps.refreshThreads).toHaveBeenCalledTimes(1);
     expect(deps.loadToolSources).toHaveBeenCalledTimes(1);
-    expect(deps.electronAPI.chat.removeAllListeners).toHaveBeenCalledTimes(1);
     expect(deps.electronAPI.chat.onUiChunk).toHaveBeenCalledTimes(1);
-    expect(deps.electronAPI.tasks.removeAllListeners).toHaveBeenCalledTimes(1);
     expect(deps.electronAPI.tasks.onPush).toHaveBeenCalledTimes(1);
 
     uiChunkHandler?.({ type: 'text-delta', delta: 'hello' });
@@ -82,8 +82,8 @@ describe('useChatViewLifecycle', () => {
 
     wrapper.unmount();
 
-    expect(deps.electronAPI.chat.removeAllListeners).toHaveBeenCalledTimes(2);
-    expect(deps.electronAPI.tasks.removeAllListeners).toHaveBeenCalledTimes(2);
+    expect(removeChatChunkListener).toHaveBeenCalledTimes(1);
+    expect(removeTaskPushListener).toHaveBeenCalledTimes(1);
   });
 
   it('skips config initialization when the store is already initialized', async () => {
@@ -96,12 +96,10 @@ describe('useChatViewLifecycle', () => {
       loadToolSources: vi.fn(async () => undefined),
       electronAPI: {
         chat: {
-          removeAllListeners: vi.fn(),
-          onUiChunk: vi.fn(),
+          onUiChunk: vi.fn(() => () => undefined),
         },
         tasks: {
-          removeAllListeners: vi.fn(),
-          onPush: vi.fn(),
+          onPush: vi.fn(() => () => undefined),
         },
       },
       streamController: {
@@ -129,14 +127,12 @@ describe('useChatViewLifecycle', () => {
       loadToolSources: vi.fn(async () => undefined),
       electronAPI: {
         chat: {
-          removeAllListeners: vi.fn(),
-          onUiChunk: vi.fn(),
+          onUiChunk: vi.fn(() => () => undefined),
         },
         tasks: {
-          removeAllListeners: vi.fn(() => {
+          onPush: vi.fn(() => {
             throw new Error('tasks bridge unavailable');
           }),
-          onPush: vi.fn(),
         },
       },
       streamController: {
@@ -150,7 +146,7 @@ describe('useChatViewLifecycle', () => {
     expect(deps.refreshThreads).toHaveBeenCalledTimes(1);
     expect(deps.loadToolSources).toHaveBeenCalledTimes(1);
     expect(deps.electronAPI.chat.onUiChunk).toHaveBeenCalledTimes(1);
-    expect(deps.electronAPI.tasks.onPush).not.toHaveBeenCalled();
+    expect(deps.electronAPI.tasks.onPush).toHaveBeenCalledTimes(1);
 
     expect(() => wrapper.unmount()).not.toThrow();
   });

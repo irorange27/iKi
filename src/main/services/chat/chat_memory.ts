@@ -11,6 +11,7 @@ import {
 import { createLogger } from '../../../core/logger';
 import { generateLongMemorySummary } from '../../../core/memory/auto_summarize';
 import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
+import { parseJsonStringArray } from '../../../shared/utils/json';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage } from './chat_types';
 import { getPromptFromMessage } from './chat_ui';
@@ -45,17 +46,6 @@ const buildMemorySystemMessage = (
   if (!entries.length) return '';
   const lines = entries.map(formatMemoryLine);
   return ['Long-term memory (use only if relevant; ignore if unrelated):', ...lines].join('\n');
-};
-
-const parseJsonStringArray = (value: string | null | undefined): string[] => {
-  if (!value || !value.trim()) return [];
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is string => typeof entry === 'string');
-  } catch {
-    return [];
-  }
 };
 
 const EMOTION_CACHE_TTL_MS = 2 * 60 * 1000;

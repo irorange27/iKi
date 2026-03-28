@@ -39,6 +39,16 @@ import type {
 } from '../shared/types/electron_api';
 import { toIpcSerializable } from '../shared/utils/ipc_serialization';
 
+const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => void) => {
+  const handler = (_event: Electron.IpcRendererEvent, payload: T) => {
+    callback(payload);
+  };
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.removeListener(channel, handler);
+  };
+};
+
 const electronApi: ElectronApi = {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
@@ -50,21 +60,14 @@ const electronApi: ElectronApi = {
     controlDaemon: (action: DaemonControlAction): Promise<DaemonControlResult> =>
       ipcRenderer.invoke('config:control-daemon', action),
     set: (config: AppConfig) => ipcRenderer.invoke('config:set', config),
-    onUpdated: (callback: (config: AppConfig) => void) => {
-      ipcRenderer.on('config:updated', (_event, config) => {
-        callback(config);
-      });
-    },
+    onUpdated: (callback: (config: AppConfig) => void) => subscribe('config:updated', callback),
   },
   updates: {
     getStatus: (): Promise<AppUpdateStatus> => ipcRenderer.invoke('updates:get-status'),
     check: (): Promise<AppUpdateStatus> => ipcRenderer.invoke('updates:check'),
     install: (): Promise<void> => ipcRenderer.invoke('updates:install'),
-    onStatusChanged: (callback: (status: AppUpdateStatus) => void) => {
-      ipcRenderer.on('updates:status-changed', (_event, status) => {
-        callback(status);
-      });
-    },
+    onStatusChanged: (callback: (status: AppUpdateStatus) => void) =>
+      subscribe('updates:status-changed', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('updates:status-changed');
     },
@@ -76,15 +79,8 @@ const electronApi: ElectronApi = {
     update: (id: string, provider: Partial<Provider>) =>
       ipcRenderer.invoke('providers:update', id, provider),
     delete: (id: string) => ipcRenderer.invoke('providers:delete', id),
-    onUpdated: callback => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: ProviderUpdatedEvent) => {
-        callback(payload);
-      };
-      ipcRenderer.on('providers:updated', handler);
-      return () => {
-        ipcRenderer.removeListener('providers:updated', handler);
-      };
-    },
+    onUpdated: (callback: (event: ProviderUpdatedEvent) => void) =>
+      subscribe('providers:updated', callback),
   },
   chat: {
     getModels: (providerType: string) => ipcRenderer.invoke('chat:getModels', providerType),
@@ -93,9 +89,7 @@ const electronApi: ElectronApi = {
     send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),
     stream: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
-    onUiChunk: (callback: (chunk: unknown) => void) => {
-      ipcRenderer.on('chat:ui-chunk', (_event, chunk) => callback(chunk));
-    },
+    onUiChunk: (callback: (chunk: unknown) => void) => subscribe('chat:ui-chunk', callback),
     approveTool: (approvalId: string, approved: boolean) => {
       return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);
     },
@@ -155,9 +149,7 @@ const electronApi: ElectronApi = {
     setOwnerMode: (mode: LifeOwnerMode, note?: string | null): Promise<LifeSnapshot | null> =>
       ipcRenderer.invoke('life:set-owner-mode', mode, note),
     clearOwnerMode: (): Promise<LifeSnapshot | null> => ipcRenderer.invoke('life:clear-owner-mode'),
-    onPush: (callback: (payload: unknown) => void) => {
-      ipcRenderer.on('life:push', (_event, payload) => callback(payload));
-    },
+    onPush: (callback: (payload: unknown) => void) => subscribe('life:push', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('life:push');
     },
@@ -206,9 +198,8 @@ const electronApi: ElectronApi = {
     listModels: (): Promise<WhisperNodeModelInfo[]> => ipcRenderer.invoke('speech:list-models'),
     downloadModel: (modelName: string): Promise<WhisperNodeDownloadResult> =>
       ipcRenderer.invoke('speech:download-model', modelName),
-    onDownloadProgress: (callback: (payload: WhisperNodeDownloadProgress) => void) => {
-      ipcRenderer.on('speech:download-progress', (_event, payload) => callback(payload));
-    },
+    onDownloadProgress: (callback: (payload: WhisperNodeDownloadProgress) => void) =>
+      subscribe('speech:download-progress', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('speech:download-progress');
     },
@@ -233,9 +224,7 @@ const electronApi: ElectronApi = {
       ipcRenderer.invoke('tasks:update', id, toIpcSerializable(updates)),
     delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),
     runNow: (id: string) => ipcRenderer.invoke('tasks:run-now', id),
-    onPush: (callback: (payload: unknown) => void) => {
-      ipcRenderer.on('tasks:push', (_event, payload) => callback(payload));
-    },
+    onPush: (callback: (payload: unknown) => void) => subscribe('tasks:push', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('tasks:push');
     },

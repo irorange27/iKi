@@ -136,13 +136,13 @@ export interface ElectronApi {
     getDaemonLogs: (limit?: number) => Promise<DaemonLogsInfo>;
     controlDaemon: (action: DaemonControlAction) => Promise<DaemonControlResult>;
     set: (config: AppConfig) => Promise<unknown>;
-    onUpdated: (callback: (config: AppConfig) => void) => void;
+    onUpdated: (callback: (config: AppConfig) => void) => () => void;
   };
   updates: {
     getStatus: () => Promise<AppUpdateStatus>;
     check: () => Promise<AppUpdateStatus>;
     install: () => Promise<void>;
-    onStatusChanged: (callback: (status: AppUpdateStatus) => void) => void;
+    onStatusChanged: (callback: (status: AppUpdateStatus) => void) => () => void;
     removeAllListeners: () => void;
   };
   providers: {
@@ -159,7 +159,7 @@ export interface ElectronApi {
     send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stopStream: () => Promise<ChatInvocationResult>;
-    onUiChunk: (callback: (chunk: unknown) => void) => void;
+    onUiChunk: (callback: (chunk: unknown) => void) => () => void;
     approveTool: (approvalId: string, approved: boolean) => Promise<ChatInvocationResult>;
     removeAllListeners: () => void;
     threads: {
@@ -211,7 +211,7 @@ export interface ElectronApi {
     refresh: () => Promise<LifeSnapshot | null>;
     setOwnerMode: (mode: LifeOwnerMode, note?: string | null) => Promise<LifeSnapshot | null>;
     clearOwnerMode: () => Promise<LifeSnapshot | null>;
-    onPush: (callback: (payload: unknown) => void) => void;
+    onPush: (callback: (payload: unknown) => void) => () => void;
     removeAllListeners: () => void;
   };
   relationship: {
@@ -251,7 +251,7 @@ export interface ElectronApi {
     transcribe: (input: SpeechTranscriptionInput) => Promise<SpeechTranscriptionResult>;
     listModels: () => Promise<WhisperNodeModelInfo[]>;
     downloadModel: (modelName: string) => Promise<WhisperNodeDownloadResult>;
-    onDownloadProgress: (callback: (payload: WhisperNodeDownloadProgress) => void) => void;
+    onDownloadProgress: (callback: (payload: WhisperNodeDownloadProgress) => void) => () => void;
     removeAllListeners: () => void;
   };
   skills: {
@@ -276,7 +276,7 @@ export interface ElectronApi {
     ) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
     delete: (id: string) => Promise<WindowActionResult>;
     runNow: (id: string) => Promise<WindowActionResult>;
-    onPush: (callback: (payload: unknown) => void) => void;
+    onPush: (callback: (payload: unknown) => void) => () => void;
     removeAllListeners: () => void;
   };
   mcp: {

@@ -7,6 +7,7 @@ import {
   type ThreadWorkspaceSelection,
 } from '../workspaces/thread_workspace';
 import { getUserDataPath } from '../platform';
+import { isPathWithinRoot } from '../utils/path_boundary';
 import { getToolRuntimeContext } from './runtime_context';
 
 export type WorkspaceRoot = {
@@ -84,11 +85,6 @@ export const resolveWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
   }
 
   return [...deduped.values()];
-};
-
-const isPathWithinRoot = (root: string, candidate: string): boolean => {
-  const relativePath = path.relative(root, candidate);
-  return !(relativePath.startsWith('..') || path.isAbsolute(relativePath));
 };
 
 const formatWorkspaceRoots = (roots: WorkspaceRoot[]): string =>

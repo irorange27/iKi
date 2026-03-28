@@ -12,6 +12,7 @@ import type {
   LifeReflectionRecord,
   LifeSleepWindow,
 } from '../../../shared/types/life';
+import { parseJsonStringArray as parseRawJsonStringArray } from '../../../shared/utils/json';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
 import { DEFAULT_SLEEP_WINDOW, normalizeSleepWindow } from './life_activity_engine';
 
@@ -125,19 +126,10 @@ const sampleHeadTail = <T>(items: T[], maxItems: number): T[] => {
   return [...items.slice(0, headCount), ...items.slice(items.length - tailCount)];
 };
 
-const parseJsonStringArray = (value: string | null | undefined): string[] => {
-  if (!value?.trim()) return [];
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => clipText(entry, MAX_LIST_ITEM_CHARS))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-};
+const parseJsonStringArray = (value: string | null | undefined): string[] =>
+  parseRawJsonStringArray(value)
+    .map(entry => clipText(entry, MAX_LIST_ITEM_CHARS))
+    .filter(Boolean);
 
 const extractJsonObject = (raw: string): string => {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);

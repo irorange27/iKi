@@ -7,33 +7,20 @@ import type {
   RelationshipSourceKind,
   RelationshipStateRecord,
 } from '../../../shared/types/relationship';
-import { isObjectRecord } from '../../../shared/utils/guards';
+import {
+  parseJsonObjectRecord,
+  parseJsonStringArray as parseRawJsonStringArray,
+} from '../../../shared/utils/json';
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
 
-const parseJsonObject = (value: string | null | undefined): Record<string, unknown> => {
-  if (!value?.trim()) return {};
-  try {
-    const parsed = JSON.parse(value);
-    return isObjectRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-};
+const parseJsonObject = (value: string | null | undefined): Record<string, unknown> =>
+  parseJsonObjectRecord(value);
 
-const parseJsonStringArray = (value: string | null | undefined): string[] => {
-  if (!value?.trim()) return [];
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => normalizeWhitespace(entry))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-};
+const parseJsonStringArray = (value: string | null | undefined): string[] =>
+  parseRawJsonStringArray(value)
+    .map(entry => normalizeWhitespace(entry))
+    .filter(Boolean);
 
 const getOwnerBaseline = (): RelationshipOwnerBaseline => {
   const profile = getOrCreateActiveIdentityProfile();

@@ -618,6 +618,7 @@ import { createDefaultAppConfig } from '../../shared/config/defaults';
 import type { AppConfig } from '../../shared/types/config';
 import type { Provider } from '../../shared/types/provider';
 import type { AppUpdateStatus } from '../../shared/types/update';
+import { getErrorMessage } from '../../shared/utils/errors';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
 
@@ -660,9 +661,6 @@ type NetworkUpdatePath =
   | 'proxy.port'
   | 'timeout'
   | 'retryAttempts';
-
-const getErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : 'Unknown error';
 
 const getInputValue = (event: Event): string =>
   (event.target as HTMLInputElement | null)?.value ?? '';

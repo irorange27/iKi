@@ -108,7 +108,7 @@ const mountSettingsTasksSection = async (options?: {
   const create = vi.fn(async () => ({ success: true }));
   const update = vi.fn(async () => ({ success: true }));
   const runNow = vi.fn(async () => ({ success: true }));
-  const removeAllListeners = vi.fn();
+  const removeTaskPushListener = vi.fn();
   const onPush = vi.fn();
 
   setElectronApi({
@@ -118,8 +118,11 @@ const mountSettingsTasksSection = async (options?: {
       update,
       runNow,
       delete: vi.fn(async () => ({ success: true })),
-      removeAllListeners,
-      onPush,
+      removeAllListeners: vi.fn(),
+      onPush: vi.fn((handler: (payload: unknown) => void) => {
+        onPush(handler);
+        return removeTaskPushListener;
+      }),
     },
     chat: {
       threads: {
@@ -140,7 +143,7 @@ const mountSettingsTasksSection = async (options?: {
 
   await flushPromises();
 
-  return { wrapper, list, create, update, runNow, removeAllListeners, onPush };
+  return { wrapper, list, create, update, runNow, removeTaskPushListener, onPush };
 };
 
 describe('SettingsTasksSection', () => {
