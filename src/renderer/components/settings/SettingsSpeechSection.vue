@@ -226,7 +226,7 @@ import { RefreshCw } from 'lucide-vue-next';
 
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
-import { getElectronAPI } from '../../services/electron_api';
+import { getElectronApiSliceMethod } from '../../services/electron_api';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type {
@@ -244,8 +244,11 @@ const emit = defineEmits<{
 const props = defineProps<{
   active: boolean;
 }>();
-const electronAPI = getElectronAPI();
 const { t } = useI18n();
+const getSpeechStatus = getElectronApiSliceMethod('speech', 'getStatus');
+const listSpeechModels = getElectronApiSliceMethod('speech', 'listModels');
+const downloadSpeechModel = getElectronApiSliceMethod('speech', 'downloadModel');
+const subscribeSpeechDownloadProgress = getElectronApiSliceMethod('speech', 'onDownloadProgress');
 
 type WhisperDownloadStage = 'idle' | 'downloading' | 'compiling' | 'done' | 'error';
 type WhisperDownloadProgressState = {
@@ -368,23 +371,23 @@ const updateSpeechLanguageSelection = (value: string) => {
 
 const loadSpeechStatus = async () => {
   speechStatusLoading.value = true;
-  if (!electronAPI?.speech?.getStatus) {
-      speechStatus.value = {
-        available: false,
-        enabled: false,
-        reason: t('settings.speech.error.serviceUnavailable'),
-      };
+  if (!getSpeechStatus) {
+    speechStatus.value = {
+      available: false,
+      enabled: false,
+      reason: t('settings.speech.error.serviceUnavailable'),
+    };
     speechStatusLoading.value = false;
     return;
   }
   try {
-    speechStatus.value = await electronAPI.speech.getStatus();
+    speechStatus.value = await getSpeechStatus();
   } catch (error: unknown) {
-      speechStatus.value = {
-        available: false,
-        enabled: false,
-        reason: getErrorMessage(error) || t('settings.speech.error.serviceUnavailable'),
-      };
+    speechStatus.value = {
+      available: false,
+      enabled: false,
+      reason: getErrorMessage(error) || t('settings.speech.error.serviceUnavailable'),
+    };
   } finally {
     speechStatusLoading.value = false;
   }
@@ -403,13 +406,13 @@ const scheduleSpeechStatusRefresh = () => {
 const loadWhisperModels = async () => {
   whisperModelsLoading.value = true;
   whisperModelsError.value = '';
-  if (!electronAPI?.speech?.listModels) {
+  if (!listSpeechModels) {
     whisperModelsError.value = t('settings.speech.error.modelListUnavailable');
     whisperModelsLoading.value = false;
     return;
   }
   try {
-    const models = await electronAPI.speech.listModels();
+    const models = await listSpeechModels();
     whisperModels.value = Array.isArray(models) ? models : [];
   } catch (error: unknown) {
     whisperModelsError.value = t('settings.speech.error.loadModelsFailed', {
@@ -425,13 +428,13 @@ const downloadWhisperModel = async (modelName: string) => {
   whisperModelStages.value[modelName] = 'downloading';
   whisperModelDownloadErrors.value[modelName] = '';
   whisperModelProgress.value[modelName] = {};
-  if (!electronAPI?.speech?.downloadModel) {
+  if (!downloadSpeechModel) {
     whisperModelDownloadErrors.value[modelName] = t('settings.speech.error.downloadUnavailable');
     whisperModelStages.value[modelName] = 'error';
     return;
   }
   try {
-    const result = await electronAPI.speech.downloadModel(modelName);
+    const result = await downloadSpeechModel(modelName);
     if (!result?.success) {
       whisperModelDownloadErrors.value[modelName] =
         result?.error || t('settings.speech.error.downloadFailed');
@@ -637,7 +640,7 @@ onMounted(() => {
   try {
     removeDownloadProgressListener();
     removeDownloadProgressListener =
-      electronAPI?.speech?.onDownloadProgress?.((payload: WhisperNodeDownloadProgress) => {
+      subscribeSpeechDownloadProgress?.((payload: WhisperNodeDownloadProgress) => {
         handleWhisperDownloadProgress(payload);
       }) ?? (() => undefined);
   } catch {

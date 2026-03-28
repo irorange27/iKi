@@ -2,6 +2,7 @@ import { onMounted, onUnmounted, watch } from 'vue';
 import type { AppConfig } from '../../shared/types/config';
 import { resolveThemeSelection } from '../../shared/theme/registry';
 import { THEME_SLOT_TO_CSS_VARIABLE } from '../../shared/theme/types';
+import { getElectronApiMethod } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
 
 const SYSTEM_THEME_QUERY = '(prefers-color-scheme: dark)';
@@ -19,11 +20,10 @@ const systemPrefersDark = (): boolean => {
 };
 
 const syncNativeWindowShadow = (resolvedTheme: 'light' | 'dark') => {
-  if (typeof window === 'undefined') return;
   const nextShadowState = resolvedTheme === 'light';
   if (lastNativeWindowShadow === nextShadowState) return;
   lastNativeWindowShadow = nextShadowState;
-  window.electronAPI?.setWindowShadow?.(nextShadowState);
+  getElectronApiMethod('setWindowShadow')?.(nextShadowState);
 };
 
 export const applyCssVariables = (config: AppConfig) => {
