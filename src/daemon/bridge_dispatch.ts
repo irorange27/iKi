@@ -1,4 +1,5 @@
 import * as chatThreadDb from '../core/db/chat_thread';
+import { createDaemonLogger } from '../core/daemon_logs';
 import type { ChatThread } from '../shared/types/chat';
 import { isObjectRecord } from '../shared/utils/guards';
 import { getErrorMessage } from '../main/utils/errors';
@@ -16,14 +17,28 @@ export type BridgeThreadDeliveryResult = {
 };
 
 const bridgeThreadSenders = new Map<string, BridgeThreadMessageSender>();
+const bridgeDispatchLogger = createDaemonLogger({
+  module: 'bridge_dispatch',
+  source: 'bridge-dispatch',
+});
 
-const parseThreadMetadata = (thread: Pick<ChatThread, 'metadata'>): Record<string, unknown> => {
+const parseThreadMetadata = (thread: Pick<ChatThread, 'id' | 'metadata'>): Record<string, unknown> => {
   if (typeof thread.metadata !== 'string' || !thread.metadata.trim()) return {};
 
   try {
     const parsed = JSON.parse(thread.metadata);
     return isObjectRecord(parsed) ? parsed : {};
-  } catch {
+  } catch (error) {
+    bridgeDispatchLogger.event({
+      level: 'warn',
+      event: 'bridge.dispatch.metadata',
+      outcome: 'degraded',
+      error,
+      message: 'Failed to parse bridge thread metadata; falling back to thread heuristics.',
+      data: {
+        thread_id: thread.id,
+      },
+    });
     return {};
   }
 };

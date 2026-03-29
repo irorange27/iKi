@@ -112,6 +112,34 @@ const mockHealthOnline = (host = '127.0.0.1', port = 6127) => {
   );
 };
 
+const mockHealthMalformedJson = () => {
+  requestMock.mockImplementation(
+    (_options: unknown, callback: (response: HealthResponseMock) => void) => {
+      const req = {
+        on: vi.fn(() => req),
+        destroy: vi.fn(),
+        end: vi.fn(() => {
+          const response: HealthResponseMock = {
+            statusCode: 200,
+            setEncoding: vi.fn(),
+            on: (event, handler) => {
+              if (event === 'data') {
+                handler('not-json');
+              }
+              if (event === 'end') {
+                handler();
+              }
+              return response;
+            },
+          };
+          callback(response);
+        }),
+      };
+      return req;
+    }
+  );
+};
+
 const setupDaemonServerReturn = () => {
   startDaemonServerMock.mockReturnValue({
     server: {
@@ -201,6 +229,55 @@ describe('daemon lifecycle', () => {
 
     expect(startDaemonServerMock).toHaveBeenCalledTimes(1);
     expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '127.0.0.1', port: 6127 });
+  });
+
+  it('logs config fallback and uses default binding when config lookup fails', async () => {
+    getAppConfigMock.mockImplementationOnce(() => {
+      throw new Error('config unavailable');
+    });
+    mockHealthOffline();
+    const { startDesktopDaemon } = await import(
+      '../../../../src/main/services/daemon/daemon_lifecycle'
+    );
+
+    const started = startDesktopDaemon();
+    await vi.runAllTimersAsync();
+    await started;
+
+    expect(startDaemonServerMock).toHaveBeenCalledTimes(1);
+    expect(startDaemonServerMock).toHaveBeenCalledWith({ host: '127.0.0.1', port: 6127 });
+    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'daemon.lifecycle.config',
+        outcome: 'degraded',
+        message: 'Failed to read daemon binding from config; using defaults.',
+      })
+    );
+  });
+
+  it('logs malformed health payloads before falling back to default binding metadata', async () => {
+    mockHealthMalformedJson();
+    const { startDesktopDaemon } = await import(
+      '../../../../src/main/services/daemon/daemon_lifecycle'
+    );
+
+    await startDesktopDaemon();
+
+    expect(startDaemonServerMock).not.toHaveBeenCalled();
+    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'daemon.lifecycle.healthcheck',
+        outcome: 'degraded',
+        message: 'Daemon health response was not valid JSON; using fallback binding.',
+        data: expect.objectContaining({
+          probe_host: '127.0.0.1',
+          probe_port: 6127,
+          status: 200,
+        }),
+      })
+    );
   });
 
   it('uses the daemon shutdown hook when stopping an embedded daemon', async () => {

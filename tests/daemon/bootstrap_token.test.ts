@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   generateBootstrapToken,
@@ -47,5 +47,19 @@ describe('daemon bootstrap tokens', () => {
 
     expect(rotated).not.toBe(first);
     expect(fs.readFileSync(path.join(userDataPath, 'daemon.token'), 'utf8')).toBe(rotated);
+  });
+
+  it('rethrows unexpected filesystem errors instead of silently rotating a new token', () => {
+    const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'iki-daemon-token-'));
+    tempDirs.push(userDataPath);
+    const readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
+      const error = new Error('permission denied') as NodeJS.ErrnoException;
+      error.code = 'EACCES';
+      throw error;
+    });
+
+    expect(() => readOrCreateBootstrapToken(userDataPath)).toThrow('permission denied');
+
+    readFileSyncSpy.mockRestore();
   });
 });

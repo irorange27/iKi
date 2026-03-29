@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { daemonLoggerEventMock } = vi.hoisted(() => ({
+  daemonLoggerEventMock: vi.fn(),
+}));
+
 vi.mock('../../src/core/db/chat_thread', () => ({
   getChatThread: vi.fn(),
+}));
+
+vi.mock('../../src/core/daemon_logs', () => ({
+  createDaemonLogger: vi.fn(() => ({
+    event: daemonLoggerEventMock,
+  })),
 }));
 
 import * as chatThreadDb from '../../src/core/db/chat_thread';
@@ -70,6 +80,28 @@ describe('bridge thread dispatch', () => {
         metadata: '{}',
       }))
     ).toBeNull();
+  });
+
+  it('logs malformed metadata and falls back to client heuristics', () => {
+    expect(
+      getBridgeThreadSource(createThread({
+        id: 'napcat_10001_private_20002',
+        client_id: 'client_napcat',
+        metadata: '{broken',
+      }))
+    ).toBe('napcat');
+
+    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'bridge.dispatch.metadata',
+        outcome: 'degraded',
+        message: 'Failed to parse bridge thread metadata; falling back to thread heuristics.',
+        data: {
+          thread_id: 'napcat_10001_private_20002',
+        },
+      })
+    );
   });
 
   it('returns a bridge-specific error when no sender is registered', async () => {

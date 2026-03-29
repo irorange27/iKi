@@ -53,7 +53,18 @@ const readConfigDaemonBinding = (): { host: string; port: number } => {
         : DEFAULT_DAEMON_HOST;
     const port = normalizePort(config.daemon?.port, DEFAULT_DAEMON_PORT);
     return { host, port };
-  } catch {
+  } catch (error) {
+    getDaemonLifecycleLogger().event({
+      level: 'warn',
+      event: 'daemon.lifecycle.config',
+      outcome: 'degraded',
+      error,
+      message: 'Failed to read daemon binding from config; using defaults.',
+      data: {
+        host: DEFAULT_DAEMON_HOST,
+        port: DEFAULT_DAEMON_PORT,
+      },
+    });
     return { host: DEFAULT_DAEMON_HOST, port: DEFAULT_DAEMON_PORT };
   }
 };
@@ -107,7 +118,19 @@ const readDaemonHealth = async (
                 : DEFAULT_DAEMON_HOST;
             const reportedPort = normalizePort(parsed.port, port);
             resolve({ ok: true, host, port: reportedPort });
-          } catch {
+          } catch (error) {
+            getDaemonLifecycleLogger().event({
+              level: 'warn',
+              event: 'daemon.lifecycle.healthcheck',
+              outcome: 'degraded',
+              error,
+              message: 'Daemon health response was not valid JSON; using fallback binding.',
+              data: {
+                probe_host: probeHost,
+                probe_port: port,
+                status,
+              },
+            });
             resolve({ ok: true, host: DEFAULT_DAEMON_HOST, port });
           }
         });

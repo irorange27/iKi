@@ -24,8 +24,10 @@ export const readOrCreateBootstrapToken = (userDataPath: string): string => {
   try {
     const existing = fs.readFileSync(tokenPath, 'utf8').trim();
     if (existing) return existing;
-  } catch {
-    // fall through to generate
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      throw error;
+    }
   }
 
   return rotateBootstrapToken(userDataPath);
