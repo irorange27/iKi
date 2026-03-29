@@ -8,12 +8,22 @@ import type { ChatTransportMessage } from '../main/services/chat/chat_types';
 import type { ChatService } from '../main/services/chat/chat_service';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {
+  logDaemonHandlerFailure,
+  type DaemonServerLogger,
+  writeClientPayloadFailure,
+} from './server_logging';
+import {
   readRequestedMcpServerIds,
   resolveMcpServerIdsForClient,
   resolveToolsForClient,
 } from './tool_access';
 import {
   getSchemaErrorMessage,
+  type ApproveToolPayload,
+  type ChatSendPayload,
+  type ChatThreadCreatePayload,
+  type ClientRegistrationPayload,
+  type MemorySearchPayload,
   parseApproveToolPayload,
   parseChatSendPayload,
   parseChatThreadCreatePayload,
@@ -26,11 +36,11 @@ import {
   authenticateRequest,
   getThreadOrError,
   hasScope,
+  isFirstUserClientRegistration,
   parseJsonBody,
   type WsSession,
   withCors,
   writeJson,
-  isFirstUserClientRegistration,
 } from './server_shared';
 
 type CreateDaemonRequestHandlerDeps = {
@@ -42,6 +52,21 @@ type CreateDaemonRequestHandlerDeps = {
   chatService: ChatService;
   mcpManager: McpManager;
   sessions: Map<number, WsSession>;
+  logger: DaemonServerLogger;
+};
+
+const readParsedBody = async <T>(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  parser: (value: unknown) => T,
+  invalidMessage: string
+): Promise<T | null> => {
+  try {
+    return parser(await parseJsonBody(req));
+  } catch (error) {
+    writeClientPayloadFailure(res, error, invalidMessage);
+    return null;
+  }
 };
 
 export const createDaemonRequestHandler =
@@ -56,30 +81,39 @@ export const createDaemonRequestHandler =
 
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     const pathName = url.pathname;
+    let clientId: string | undefined;
 
-    if (req.method === 'GET' && pathName === '/v1/health') {
-      writeJson(res, 200, {
-        success: true,
-        status: 'ok',
-        uptime: process.uptime(),
-        host: deps.host,
-        port: deps.port,
-      });
-      return;
-    }
-
-    if (req.method === 'POST' && pathName === '/v1/clients/register') {
-      const setupToken =
-        typeof req.headers['x-iki-setup-token'] === 'string' ? req.headers['x-iki-setup-token'] : '';
-      if (deps.bootstrapTokenRef.current && setupToken !== deps.bootstrapTokenRef.current) {
-        writeJson(res, 401, { success: false, error: 'Invalid setup token' });
+    try {
+      if (req.method === 'GET' && pathName === '/v1/health') {
+        writeJson(res, 200, {
+          success: true,
+          status: 'ok',
+          uptime: process.uptime(),
+          host: deps.host,
+          port: deps.port,
+        });
         return;
       }
 
-      try {
-        const isFirstClient = isFirstUserClientRegistration(deps.napcatClientId);
-        const body = parseClientRegistrationPayload(await parseJsonBody(req));
+      if (req.method === 'POST' && pathName === '/v1/clients/register') {
+        const setupToken =
+          typeof req.headers['x-iki-setup-token'] === 'string'
+            ? req.headers['x-iki-setup-token']
+            : '';
+        if (deps.bootstrapTokenRef.current && setupToken !== deps.bootstrapTokenRef.current) {
+          writeJson(res, 401, { success: false, error: 'Invalid setup token' });
+          return;
+        }
 
+        const body = await readParsedBody<ClientRegistrationPayload>(
+          req,
+          res,
+          parseClientRegistrationPayload,
+          'Invalid registration payload'
+        );
+        if (!body) return;
+
+        const isFirstClient = isFirstUserClientRegistration(deps.napcatClientId);
         const created = createAppClient(body);
         if (isFirstClient) {
           chatThreadDb.assignClientToLegacyThreads(created.client.id);
@@ -93,95 +127,102 @@ export const createDaemonRequestHandler =
           allowed_tools: created.client.allowedTools,
         });
         return;
-      } catch {
-        writeJson(res, 400, { success: false, error: 'Invalid registration payload' });
-        return;
       }
-    }
 
-    const auth = authenticateRequest(req);
-    if (!auth.client) {
-      writeJson(res, 401, { success: false, error: auth.error || 'Unauthorized' });
-      return;
-    }
+      const auth = authenticateRequest(req);
+      if (!auth.client) {
+        writeJson(res, 401, { success: false, error: auth.error || 'Unauthorized' });
+        return;
+      }
 
-    const client = auth.client;
+      const client = auth.client;
+      clientId = client.id;
 
-    if (req.method === 'GET' && pathName === '/v1/chat/threads') {
-      if (!hasScope(client, 'chat:read')) {
-        writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+      if (req.method === 'GET' && pathName === '/v1/chat/threads') {
+        if (!hasScope(client, 'chat:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+          return;
+        }
+        const threads = deps.chatService
+          .listThreads()
+          .filter(thread => thread.client_id === client.id);
+        writeJson(res, 200, { success: true, threads });
         return;
       }
-      const threads = deps.chatService.listThreads().filter(thread => thread.client_id === client.id);
-      writeJson(res, 200, { success: true, threads });
-      return;
-    }
 
-    if (req.method === 'GET' && pathName.startsWith('/v1/chat/threads/')) {
-      if (!hasScope(client, 'chat:read')) {
-        writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+      if (req.method === 'GET' && pathName.startsWith('/v1/chat/threads/')) {
+        if (!hasScope(client, 'chat:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+          return;
+        }
+        const threadId = pathName.split('/').pop() || '';
+        if (!threadId) {
+          writeJson(res, 400, { success: false, error: 'Missing thread id' });
+          return;
+        }
+        const result = getThreadOrError(threadId, client.id);
+        if (!result.thread) {
+          writeJson(res, result.status || 404, { success: false, error: result.error });
+          return;
+        }
+        writeJson(res, 200, { success: true, thread: result.thread });
         return;
       }
-      const threadId = pathName.split('/').pop() || '';
-      if (!threadId) {
-        writeJson(res, 400, { success: false, error: 'Missing thread id' });
-        return;
-      }
-      const result = getThreadOrError(threadId, client.id);
-      if (!result.thread) {
-        writeJson(res, result.status || 404, { success: false, error: result.error });
-        return;
-      }
-      writeJson(res, 200, { success: true, thread: result.thread });
-      return;
-    }
 
-    if (req.method === 'POST' && pathName === '/v1/chat/threads') {
-      if (!hasScope(client, 'chat:write')) {
-        writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
-        return;
-      }
-      try {
-        const body = parseChatThreadCreatePayload(await parseJsonBody(req));
+      if (req.method === 'POST' && pathName === '/v1/chat/threads') {
+        if (!hasScope(client, 'chat:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+          return;
+        }
+        const body = await readParsedBody<ChatThreadCreatePayload>(
+          req,
+          res,
+          parseChatThreadCreatePayload,
+          'Invalid thread payload'
+        );
+        if (!body) return;
+
         const thread = deps.chatService.createThread({
-          ...(body || {}),
+          ...body,
           client_id: client.id,
         });
         writeJson(res, 200, { success: true, thread });
         return;
-      } catch {
-        writeJson(res, 400, { success: false, error: 'Invalid thread payload' });
-        return;
       }
-    }
 
-    if (req.method === 'GET' && pathName === '/v1/chat/messages') {
-      if (!hasScope(client, 'chat:read')) {
-        writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+      if (req.method === 'GET' && pathName === '/v1/chat/messages') {
+        if (!hasScope(client, 'chat:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+          return;
+        }
+        const threadId = url.searchParams.get('thread_id') || '';
+        if (!threadId) {
+          writeJson(res, 400, { success: false, error: 'Missing thread_id' });
+          return;
+        }
+        const access = getThreadOrError(threadId, client.id);
+        if (!access.thread) {
+          writeJson(res, access.status || 404, { success: false, error: access.error });
+          return;
+        }
+        const messages = deps.chatService.listMessages(threadId);
+        writeJson(res, 200, { success: true, messages });
         return;
       }
-      const threadId = url.searchParams.get('thread_id') || '';
-      if (!threadId) {
-        writeJson(res, 400, { success: false, error: 'Missing thread_id' });
-        return;
-      }
-      const access = getThreadOrError(threadId, client.id);
-      if (!access.thread) {
-        writeJson(res, access.status || 404, { success: false, error: access.error });
-        return;
-      }
-      const messages = deps.chatService.listMessages(threadId);
-      writeJson(res, 200, { success: true, messages });
-      return;
-    }
 
-    if (req.method === 'POST' && pathName === '/v1/chat/send') {
-      if (!hasScope(client, 'chat:write')) {
-        writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
-        return;
-      }
-      try {
-        const body = parseChatSendPayload(await parseJsonBody(req));
+      if (req.method === 'POST' && pathName === '/v1/chat/send') {
+        if (!hasScope(client, 'chat:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+          return;
+        }
+        const body = await readParsedBody<ChatSendPayload>(
+          req,
+          res,
+          parseChatSendPayload,
+          'Invalid chat payload'
+        );
+        if (!body) return;
+
         const threadId = body.threadId;
         if (threadId) {
           const access = getThreadOrError(threadId, client.id);
@@ -216,19 +257,21 @@ export const createDaemonRequestHandler =
 
         writeJson(res, 200, result);
         return;
-      } catch {
-        writeJson(res, 400, { success: false, error: 'Invalid chat payload' });
-        return;
       }
-    }
 
-    if (req.method === 'POST' && pathName === '/v1/chat/approve-tool') {
-      if (!hasScope(client, 'tools:approve')) {
-        writeJson(res, 403, { success: false, error: 'Missing tools:approve scope' });
-        return;
-      }
-      try {
-        const body = parseApproveToolPayload(await parseJsonBody(req));
+      if (req.method === 'POST' && pathName === '/v1/chat/approve-tool') {
+        if (!hasScope(client, 'tools:approve')) {
+          writeJson(res, 403, { success: false, error: 'Missing tools:approve scope' });
+          return;
+        }
+        const body = await readParsedBody<ApproveToolPayload>(
+          req,
+          res,
+          parseApproveToolPayload,
+          'Invalid approval payload'
+        );
+        if (!body) return;
+
         const connectionId =
           typeof body.connectionId === 'number'
             ? body.connectionId
@@ -249,84 +292,86 @@ export const createDaemonRequestHandler =
         );
         writeJson(res, 200, result);
         return;
-      } catch {
-        writeJson(res, 400, { success: false, error: 'Invalid approval payload' });
-        return;
       }
-    }
 
-    if (req.method === 'POST' && pathName === '/v1/chat/stop-stream') {
-      if (!hasScope(client, 'chat:write')) {
-        writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+      if (req.method === 'POST' && pathName === '/v1/chat/stop-stream') {
+        if (!hasScope(client, 'chat:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+          return;
+        }
+        const connectionId =
+          typeof req.headers['x-iki-connection'] === 'string'
+            ? Number(req.headers['x-iki-connection'])
+            : null;
+        if (!connectionId || Number.isNaN(connectionId)) {
+          writeJson(res, 400, { success: false, error: 'Missing X-Iki-Connection header' });
+          return;
+        }
+        const session = deps.sessions.get(connectionId);
+        if (!session || session.client.id !== client.id) {
+          writeJson(res, 400, { success: false, error: 'Invalid connection_id' });
+          return;
+        }
+        const result = deps.chatService.stopStream(connectionId);
+        writeJson(res, 200, result);
         return;
       }
-      const connectionId =
-        typeof req.headers['x-iki-connection'] === 'string'
-          ? Number(req.headers['x-iki-connection'])
-          : null;
-      if (!connectionId || Number.isNaN(connectionId)) {
-        writeJson(res, 400, { success: false, error: 'Missing X-Iki-Connection header' });
-        return;
-      }
-      const session = deps.sessions.get(connectionId);
-      if (!session || session.client.id !== client.id) {
-        writeJson(res, 400, { success: false, error: 'Invalid connection_id' });
-        return;
-      }
-      const result = deps.chatService.stopStream(connectionId);
-      writeJson(res, 200, result);
-      return;
-    }
 
-    if (req.method === 'GET' && pathName === '/v1/memory/short') {
-      if (!hasScope(client, 'memory:read')) {
-        writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
+      if (req.method === 'GET' && pathName === '/v1/memory/short') {
+        if (!hasScope(client, 'memory:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
+          return;
+        }
+        const threadId = url.searchParams.get('thread_id') || '';
+        if (!threadId) {
+          writeJson(res, 400, { success: false, error: 'Missing thread_id' });
+          return;
+        }
+        const access = getThreadOrError(threadId, client.id);
+        if (!access.thread) {
+          writeJson(res, access.status || 404, { success: false, error: access.error });
+          return;
+        }
+        const limit = Number(url.searchParams.get('limit') || '');
+        const rows = memoryDb.listShortMemory(threadId, Number.isFinite(limit) ? limit : undefined);
+        writeJson(res, 200, { success: true, entries: rows });
         return;
       }
-      const threadId = url.searchParams.get('thread_id') || '';
-      if (!threadId) {
-        writeJson(res, 400, { success: false, error: 'Missing thread_id' });
-        return;
-      }
-      const access = getThreadOrError(threadId, client.id);
-      if (!access.thread) {
-        writeJson(res, access.status || 404, { success: false, error: access.error });
-        return;
-      }
-      const limit = Number(url.searchParams.get('limit') || '');
-      const rows = memoryDb.listShortMemory(threadId, Number.isFinite(limit) ? limit : undefined);
-      writeJson(res, 200, { success: true, entries: rows });
-      return;
-    }
 
-    if (req.method === 'GET' && pathName === '/v1/memory/long') {
-      if (!hasScope(client, 'memory:read')) {
-        writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
+      if (req.method === 'GET' && pathName === '/v1/memory/long') {
+        if (!hasScope(client, 'memory:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
+          return;
+        }
+        const threadId = url.searchParams.get('thread_id') || '';
+        if (!threadId) {
+          writeJson(res, 400, { success: false, error: 'Missing thread_id' });
+          return;
+        }
+        const access = getThreadOrError(threadId, client.id);
+        if (!access.thread) {
+          writeJson(res, access.status || 404, { success: false, error: access.error });
+          return;
+        }
+        const limit = Number(url.searchParams.get('limit') || '');
+        const rows = memoryDb.listLongMemory(threadId, Number.isFinite(limit) ? limit : undefined);
+        writeJson(res, 200, { success: true, entries: rows });
         return;
       }
-      const threadId = url.searchParams.get('thread_id') || '';
-      if (!threadId) {
-        writeJson(res, 400, { success: false, error: 'Missing thread_id' });
-        return;
-      }
-      const access = getThreadOrError(threadId, client.id);
-      if (!access.thread) {
-        writeJson(res, access.status || 404, { success: false, error: access.error });
-        return;
-      }
-      const limit = Number(url.searchParams.get('limit') || '');
-      const rows = memoryDb.listLongMemory(threadId, Number.isFinite(limit) ? limit : undefined);
-      writeJson(res, 200, { success: true, entries: rows });
-      return;
-    }
 
-    if (req.method === 'POST' && pathName === '/v1/memory/search') {
-      if (!hasScope(client, 'memory:read')) {
-        writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
-        return;
-      }
-      try {
-        const body = parseMemorySearchPayload(await parseJsonBody(req));
+      if (req.method === 'POST' && pathName === '/v1/memory/search') {
+        if (!hasScope(client, 'memory:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
+          return;
+        }
+        const body = await readParsedBody<MemorySearchPayload>(
+          req,
+          res,
+          parseMemorySearchPayload,
+          'Invalid search payload'
+        );
+        if (!body) return;
+
         const results = memoryDb.searchLongMemoryAcrossThreads(body.query, {
           limit: body.limit,
           threshold: body.threshold,
@@ -335,122 +380,146 @@ export const createDaemonRequestHandler =
         });
         writeJson(res, 200, { success: true, results });
         return;
-      } catch {
-        writeJson(res, 400, { success: false, error: 'Invalid search payload' });
-        return;
-      }
-    }
-
-    if (req.method === 'GET' && pathName === '/v1/mcp/servers') {
-      if (!hasScope(client, 'mcp:read')) {
-        writeJson(res, 403, { success: false, error: 'Missing mcp:read scope' });
-        return;
-      }
-      const servers = deps.mcpManager.listServers();
-      writeJson(res, 200, { success: true, servers });
-      return;
-    }
-
-    if (req.method === 'POST' && pathName === '/v1/mcp/servers') {
-      if (!hasScope(client, 'mcp:write')) {
-        writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
-        return;
-      }
-      try {
-        const body = parseMcpServerCreatePayload(await parseJsonBody(req));
-        const created = await deps.mcpManager.addServer(body);
-        writeJson(res, 200, { success: true, server: created });
-        return;
-      } catch (error) {
-        writeJson(res, 400, {
-          success: false,
-          error: getSchemaErrorMessage(error, 'Invalid MCP server payload'),
-        });
-        return;
-      }
-    }
-
-    const mcpMatch = pathName.match(/^\/v1\/mcp\/servers\/([^/]+)(?:\/([^/]+))?$/);
-    if (req.method === 'POST' && mcpMatch) {
-      const serverId = mcpMatch[1];
-      const action = mcpMatch[2];
-      if (!serverId) {
-        writeJson(res, 400, { success: false, error: 'Missing MCP server id' });
-        return;
       }
 
-      if (action === 'connect') {
-        if (!hasScope(client, 'mcp:write')) {
-          writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
-          return;
-        }
-        try {
-          const status = await deps.mcpManager.connectServer(serverId);
-          writeJson(res, 200, { success: true, status });
-        } catch (error) {
-          writeJson(res, 400, {
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to connect MCP server',
-          });
-        }
-        return;
-      }
-
-      if (action === 'disconnect') {
-        if (!hasScope(client, 'mcp:write')) {
-          writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
-          return;
-        }
-        await deps.mcpManager.disconnectServer(serverId);
-        writeJson(res, 200, { success: true });
-        return;
-      }
-
-      if (action === 'refresh-tools') {
+      if (req.method === 'GET' && pathName === '/v1/mcp/servers') {
         if (!hasScope(client, 'mcp:read')) {
           writeJson(res, 403, { success: false, error: 'Missing mcp:read scope' });
           return;
         }
-        try {
-          const tools = await deps.mcpManager.refreshTools(serverId);
-          writeJson(res, 200, { success: true, tools });
-        } catch (error) {
-          writeJson(res, 400, {
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to refresh tools',
-          });
-        }
+        const servers = deps.mcpManager.listServers();
+        writeJson(res, 200, { success: true, servers });
         return;
       }
 
-      if (action === 'delete') {
+      if (req.method === 'POST' && pathName === '/v1/mcp/servers') {
         if (!hasScope(client, 'mcp:write')) {
           writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
           return;
         }
-        await deps.mcpManager.deleteServer(serverId);
-        writeJson(res, 200, { success: true });
-        return;
-      }
+        const body = await readParsedBody(
+          req,
+          res,
+          parseMcpServerCreatePayload,
+          'Invalid MCP server payload'
+        );
+        if (!body) return;
 
-      if (!action) {
-        if (!hasScope(client, 'mcp:write')) {
-          writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
-          return;
-        }
         try {
-          const body = parseMcpServerUpdatePayload(await parseJsonBody(req));
-          const updated = await deps.mcpManager.updateServer(serverId, body);
-          writeJson(res, 200, { success: true, server: updated });
+          const created = await deps.mcpManager.addServer(body);
+          writeJson(res, 200, { success: true, server: created });
+          return;
         } catch (error) {
           writeJson(res, 400, {
             success: false,
-            error: getSchemaErrorMessage(error, 'Invalid MCP server update'),
+            error: getSchemaErrorMessage(error, 'Failed to create MCP server'),
           });
+          return;
         }
-        return;
       }
+
+      const mcpMatch = pathName.match(/^\/v1\/mcp\/servers\/([^/]+)(?:\/([^/]+))?$/);
+      if (req.method === 'POST' && mcpMatch) {
+        const serverId = mcpMatch[1];
+        const action = mcpMatch[2];
+        if (!serverId) {
+          writeJson(res, 400, { success: false, error: 'Missing MCP server id' });
+          return;
+        }
+
+        if (action === 'connect') {
+          if (!hasScope(client, 'mcp:write')) {
+            writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+            return;
+          }
+          try {
+            const status = await deps.mcpManager.connectServer(serverId);
+            writeJson(res, 200, { success: true, status });
+          } catch (error) {
+            writeJson(res, 400, {
+              success: false,
+              error: error instanceof Error ? error.message : 'Failed to connect MCP server',
+            });
+          }
+          return;
+        }
+
+        if (action === 'disconnect') {
+          if (!hasScope(client, 'mcp:write')) {
+            writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+            return;
+          }
+          await deps.mcpManager.disconnectServer(serverId);
+          writeJson(res, 200, { success: true });
+          return;
+        }
+
+        if (action === 'refresh-tools') {
+          if (!hasScope(client, 'mcp:read')) {
+            writeJson(res, 403, { success: false, error: 'Missing mcp:read scope' });
+            return;
+          }
+          try {
+            const tools = await deps.mcpManager.refreshTools(serverId);
+            writeJson(res, 200, { success: true, tools });
+          } catch (error) {
+            writeJson(res, 400, {
+              success: false,
+              error: error instanceof Error ? error.message : 'Failed to refresh tools',
+            });
+          }
+          return;
+        }
+
+        if (action === 'delete') {
+          if (!hasScope(client, 'mcp:write')) {
+            writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+            return;
+          }
+          await deps.mcpManager.deleteServer(serverId);
+          writeJson(res, 200, { success: true });
+          return;
+        }
+
+        if (!action) {
+          if (!hasScope(client, 'mcp:write')) {
+            writeJson(res, 403, { success: false, error: 'Missing mcp:write scope' });
+            return;
+          }
+          const body = await readParsedBody(
+            req,
+            res,
+            parseMcpServerUpdatePayload,
+            'Invalid MCP server update'
+          );
+          if (!body) return;
+
+          try {
+            const updated = await deps.mcpManager.updateServer(serverId, body);
+            writeJson(res, 200, { success: true, server: updated });
+          } catch (error) {
+            writeJson(res, 400, {
+              success: false,
+              error: getSchemaErrorMessage(error, 'Failed to update MCP server'),
+            });
+          }
+          return;
+        }
+      }
+
+      writeJson(res, 404, { success: false, error: 'Not found' });
+    } catch (error) {
+      logDaemonHandlerFailure({
+        logger: deps.logger,
+        event: 'daemon.server.http.request',
+        message: 'Daemon HTTP request failed unexpectedly.',
+        error,
+        data: {
+          method: req.method || 'GET',
+          path: pathName,
+          ...(clientId ? { client_id: clientId } : {}),
+        },
+      });
+      writeJson(res, 500, { success: false, error: 'Internal server error' });
     }
-
-    writeJson(res, 404, { success: false, error: 'Not found' });
   };

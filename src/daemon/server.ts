@@ -97,6 +97,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         chatService,
         mcpManager,
         sessions,
+        logger: serverLogger,
       })
     );
 
@@ -190,6 +191,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       sessions,
       wsSessions,
       nextSessionIdRef,
+      logger: serverLogger,
     });
 
     server.listen(port, host, () => {

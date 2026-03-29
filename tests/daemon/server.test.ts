@@ -476,6 +476,43 @@ const requestJson = async (
   };
 };
 
+const requestText = async (
+  _started: StartedDaemon,
+  pathname: string,
+  options: {
+    method?: string;
+    headers?: Record<string, string>;
+    bodyText: string;
+  }
+) => {
+  const handler = getRequestHandler();
+  if (!handler) {
+    throw new Error('Expected daemon request handler to be registered');
+  }
+
+  const req = createRequest({
+    method: options.method ?? 'POST',
+    url: pathname,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers ?? {}),
+    },
+  });
+  const responseState = createResponse();
+  const pending = Promise.resolve(handler(req, responseState.res));
+
+  req.emit('data', Buffer.from(options.bodyText, 'utf8'));
+  req.emit('end');
+
+  await pending;
+  const text = responseState.getBody();
+  return {
+    status: responseState.res.statusCode,
+    headers: responseState.getHeaders(),
+    json: text ? (JSON.parse(text) as Record<string, unknown>) : {},
+  };
+};
+
 const issueClient = (params: { scopes?: string[]; allowedTools?: string[]; name?: string } = {}) =>
   createAppClientMock({
     name: params.name ?? 'Desktop Client',
@@ -616,7 +653,10 @@ describe('daemon server', () => {
     });
 
     expect(result.status).toBe(400);
-    expect(result.json).toEqual({ success: false, error: 'Invalid registration payload' });
+    expect(result.json).toEqual({
+      success: false,
+      error: 'Invalid input: expected object, received array',
+    });
     expect(createAppClientMock).toHaveBeenCalledTimes(1);
   });
 
@@ -732,7 +772,30 @@ describe('daemon server', () => {
     });
 
     expect(result.status).toBe(400);
-    expect(result.json).toEqual({ success: false, error: 'Invalid thread payload' });
+    expect(result.json).toEqual({
+      success: false,
+      error: 'Invalid input: expected object, received array',
+    });
+    expect(chatServiceMock.createThread).not.toHaveBeenCalled();
+  });
+
+  it('returns a clear client error for malformed JSON bodies', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:write'] });
+
+    const result = await requestText(started, '/v1/chat/threads', {
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      bodyText: '{"title":',
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.json).toEqual({
+      success: false,
+      error: 'Malformed JSON body',
+    });
     expect(chatServiceMock.createThread).not.toHaveBeenCalled();
   });
 
@@ -867,7 +930,10 @@ describe('daemon server', () => {
     });
 
     expect(result.status).toBe(400);
-    expect(result.json).toEqual({ success: false, error: 'Invalid search payload' });
+    expect(result.json).toEqual({
+      success: false,
+      error: 'include_incognito: Invalid input: expected boolean, received string',
+    });
     expect(searchLongMemoryAcrossThreadsMock).not.toHaveBeenCalled();
   });
 
@@ -893,6 +959,134 @@ describe('daemon server', () => {
       error: 'base_url: base_url is required for remote servers',
     });
     expect(mcpManagerMock.addServer).not.toHaveBeenCalled();
+  });
+
+  it('logs and returns 500 when chat send fails after payload validation', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({
+      scopes: ['chat:write'],
+      allowedTools: [],
+    });
+    chatServiceMock.send.mockRejectedValueOnce(new Error('provider offline'));
+
+    const result = await requestJson(started, '/v1/chat/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: {
+        providerType: 'openai',
+        model: 'gpt-4.1',
+        messages: [],
+      },
+    });
+
+    expect(result.status).toBe(500);
+    expect(result.json).toEqual({
+      success: false,
+      error: 'Internal server error',
+    });
+    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'daemon.server.http.request',
+        outcome: 'failed',
+        message: 'Daemon HTTP request failed unexpectedly.',
+        data: {
+          method: 'POST',
+          path: '/v1/chat/send',
+          client_id: issued.client.id,
+        },
+      })
+    );
+  });
+
+  it('surfaces MCP connect action failures from the manager', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['mcp:write'] });
+    mcpManagerMock.connectServer.mockRejectedValueOnce(new Error('connect failed'));
+
+    const result = await requestJson(started, '/v1/mcp/servers/docs/connect', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.json).toEqual({
+      success: false,
+      error: 'connect failed',
+    });
+    expect(mcpManagerMock.connectServer).toHaveBeenCalledWith('docs');
+  });
+
+  it('requires mcp:read for refresh-tools and surfaces refresh failures', async () => {
+    const started = await startTestDaemon();
+    const missingScopeClient = issueClient({ scopes: [] });
+
+    const denied = await requestJson(started, '/v1/mcp/servers/docs/refresh-tools', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${missingScopeClient.token}`,
+        'X-Iki-Client': missingScopeClient.client.id,
+      },
+    });
+
+    expect(denied.status).toBe(403);
+    expect(denied.json).toEqual({
+      success: false,
+      error: 'Missing mcp:read scope',
+    });
+
+    const issued = issueClient({ scopes: ['mcp:read'] });
+    mcpManagerMock.refreshTools.mockRejectedValueOnce(new Error('refresh failed'));
+
+    const failed = await requestJson(started, '/v1/mcp/servers/docs/refresh-tools', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(failed.status).toBe(400);
+    expect(failed.json).toEqual({
+      success: false,
+      error: 'refresh failed',
+    });
+    expect(mcpManagerMock.refreshTools).toHaveBeenCalledWith('docs');
+  });
+
+  it('routes MCP disconnect and delete actions to the manager for authorized clients', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['mcp:write'] });
+
+    const disconnected = await requestJson(started, '/v1/mcp/servers/docs/disconnect', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(disconnected.status).toBe(200);
+    expect(disconnected.json).toEqual({ success: true });
+    expect(mcpManagerMock.disconnectServer).toHaveBeenCalledWith('docs');
+
+    const deleted = await requestJson(started, '/v1/mcp/servers/docs/delete', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(deleted.status).toBe(200);
+    expect(deleted.json).toEqual({ success: true });
+    expect(mcpManagerMock.deleteServer).toHaveBeenCalledWith('docs');
   });
 
   it('exposes idempotent shutdown that disposes the bridge and unregisters signal handlers', async () => {

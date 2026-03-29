@@ -2,6 +2,7 @@ import http from 'node:http';
 
 import type { ChatService } from '../main/services/chat/chat_service';
 import type { ChatTransportMessage } from '../main/services/chat/chat_types';
+import { logDaemonHandlerFailure, type DaemonServerLogger } from './server_logging';
 import {
   readRequestedMcpServerIds,
   resolveMcpServerIdsForClient,
@@ -29,6 +30,7 @@ type ConfigureDaemonWebSocketsDeps = {
   sessions: Map<number, WsSession>;
   wsSessions: Map<DaemonSocket, WsSession>;
   nextSessionIdRef: { current: number };
+  logger: DaemonServerLogger;
 };
 
 const sendDaemonPayload = (ws: DaemonSocket, payload: Record<string, unknown>) => {
@@ -38,6 +40,30 @@ const sendDaemonPayload = (ws: DaemonSocket, payload: Record<string, unknown>) =
       payload,
     })
   );
+};
+
+const sendDaemonError = (ws: DaemonSocket, error: string) => {
+  sendDaemonPayload(ws, { type: 'error', error });
+};
+
+const logWsFailure = (deps: ConfigureDaemonWebSocketsDeps, session: WsSession, input: {
+  error: unknown;
+  message: string;
+  messageType: 'start' | 'approve-tool' | 'stop';
+  requestId?: unknown;
+}) => {
+  logDaemonHandlerFailure({
+    logger: deps.logger,
+    event: 'daemon.server.ws.message',
+    message: input.message,
+    error: input.error,
+    data: {
+      connection_id: session.id,
+      client_id: session.client.id,
+      message_type: input.messageType,
+      ...(input.requestId !== undefined ? { request_id: String(input.requestId) } : {}),
+    },
+  });
 };
 
 export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) => {
@@ -98,40 +124,43 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
     if (!session) return;
 
     ws.on('message', async (data: unknown) => {
+      let parsed: ReturnType<typeof parseDaemonWebSocketMessage>;
       try {
-        const parsed = parseDaemonWebSocketMessage(JSON.parse(String(data)));
+        parsed = parseDaemonWebSocketMessage(JSON.parse(String(data)));
+      } catch {
+        sendDaemonError(ws, 'Invalid message payload');
+        return;
+      }
 
-        if (parsed.type === 'start') {
-          if (!hasScope(session.client, 'chat:write')) {
-            sendDaemonPayload(ws, { type: 'error', error: 'Missing chat:write scope' });
+      if (parsed.type === 'start') {
+        if (!hasScope(session.client, 'chat:write')) {
+          sendDaemonError(ws, 'Missing chat:write scope');
+          return;
+        }
+
+        const payload = parsed.payload;
+        const threadId = payload.threadId;
+        if (threadId) {
+          const access = getThreadOrError(threadId, session.client.id);
+          if (!access.thread) {
+            sendDaemonError(ws, access.error || 'Thread not found');
             return;
           }
+        }
 
-          const payload = parsed.payload;
-          const threadId = payload.threadId;
-          if (threadId) {
-            const access = getThreadOrError(threadId, session.client.id);
-            if (!access.thread) {
-              sendDaemonPayload(ws, {
-                type: 'error',
-                error: access.error || 'Thread not found',
-              });
-              return;
-            }
-          }
+        const messages = payload.messages as ChatTransportMessage[];
+        const tools = resolveToolsForClient(payload.tools, session.client.allowedTools);
+        const requestedMcpServerIds = readRequestedMcpServerIds(payload);
+        const mcpServerIds = resolveMcpServerIdsForClient(
+          requestedMcpServerIds,
+          session.client.allowedTools
+        );
+        if ((tools.length > 0 || mcpServerIds.length > 0) && !hasScope(session.client, 'tools:run')) {
+          sendDaemonError(ws, 'Missing tools:run scope');
+          return;
+        }
 
-          const messages = payload.messages as ChatTransportMessage[];
-          const tools = resolveToolsForClient(payload.tools, session.client.allowedTools);
-          const requestedMcpServerIds = readRequestedMcpServerIds(payload);
-          const mcpServerIds = resolveMcpServerIdsForClient(
-            requestedMcpServerIds,
-            session.client.allowedTools
-          );
-          if ((tools.length > 0 || mcpServerIds.length > 0) && !hasScope(session.client, 'tools:run')) {
-            sendDaemonPayload(ws, { type: 'error', error: 'Missing tools:run scope' });
-            return;
-          }
-
+        try {
           const result = await deps.chatService.stream(session.webContents, {
             providerType: payload.providerType,
             model: payload.model,
@@ -148,14 +177,25 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             request_id: parsed.request_id || null,
             ...result,
           });
+        } catch (error) {
+          logWsFailure(deps, session, {
+            error,
+            message: 'Daemon WebSocket start request failed unexpectedly.',
+            messageType: 'start',
+            requestId: parsed.request_id,
+          });
+          sendDaemonError(ws, 'Failed to start stream');
+        }
+        return;
+      }
+
+      if (parsed.type === 'approve-tool') {
+        if (!hasScope(session.client, 'tools:approve')) {
+          sendDaemonError(ws, 'Missing tools:approve scope');
           return;
         }
 
-        if (parsed.type === 'approve-tool') {
-          if (!hasScope(session.client, 'tools:approve')) {
-            sendDaemonPayload(ws, { type: 'error', error: 'Missing tools:approve scope' });
-            return;
-          }
+        try {
           const result = await deps.chatService.approveTool(
             session.webContents,
             parsed.approval_id,
@@ -166,15 +206,27 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             approval_id: parsed.approval_id,
             ...result,
           });
-          return;
+        } catch (error) {
+          logWsFailure(deps, session, {
+            error,
+            message: 'Daemon WebSocket tool approval failed unexpectedly.',
+            messageType: 'approve-tool',
+          });
+          sendDaemonError(ws, 'Failed to approve tool request');
         }
+        return;
+      }
 
-        if (parsed.type === 'stop') {
-          const result = deps.chatService.stopStream(session.webContents.id);
-          sendDaemonPayload(ws, { type: 'stop-result', ...result });
-        }
-      } catch {
-        sendDaemonPayload(ws, { type: 'error', error: 'Invalid message payload' });
+      try {
+        const result = deps.chatService.stopStream(session.webContents.id);
+        sendDaemonPayload(ws, { type: 'stop-result', ...result });
+      } catch (error) {
+        logWsFailure(deps, session, {
+          error,
+          message: 'Daemon WebSocket stop request failed unexpectedly.',
+          messageType: 'stop',
+        });
+        sendDaemonError(ws, 'Failed to stop stream');
       }
     });
   });
