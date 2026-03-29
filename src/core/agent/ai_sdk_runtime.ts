@@ -11,7 +11,10 @@ import {
 import { getAppConfig } from '../config';
 import { createLogger } from '../logger';
 import { getFullSystemPrompt } from '../provider/llm/factory';
-import { extractTextFromModelMessageContent } from './model_messages';
+import {
+  extractTextFromModelMessageContent,
+  sanitizeModelConversationMessages,
+} from './model_messages';
 import {
   AgentConfigSchema,
   type AgentConfig,
@@ -214,6 +217,8 @@ export const buildPromptContext = (
   config: Pick<AgentConfig, 'providerType' | 'providerId' | 'systemPrompt'>,
   history: ModelMessage[]
 ): { systemPrompt: string; messages: ModelMessage[] } => {
+  const conversationMessages = history.filter(message => message.role !== 'system');
+  const sanitizedConversation = sanitizeModelConversationMessages(conversationMessages);
   const systemParts: string[] = [getFullSystemPrompt(config.providerType, config.providerId)];
 
   if (config.systemPrompt.trim()) {
@@ -228,9 +233,22 @@ export const buildPromptContext = (
     }
   }
 
+  if (sanitizedConversation.droppedMessages > 0) {
+    agentRuntimeLogger.event({
+      level: 'warn',
+      event: 'agent.history.tool_messages_sanitized',
+      outcome: 'degraded',
+      data: {
+        dropped_message_count: sanitizedConversation.droppedMessages,
+        message_count_before: conversationMessages.length,
+        message_count_after: sanitizedConversation.messages.length,
+      },
+    });
+  }
+
   return {
     systemPrompt: systemParts.join('\n\n'),
-    messages: history.filter(message => message.role !== 'system'),
+    messages: sanitizedConversation.messages,
   };
 };
 

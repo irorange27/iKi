@@ -65,6 +65,89 @@ describe('ai_sdk_runtime', () => {
     });
   });
 
+  it('drops orphaned tool messages before sending prompt context to the provider', () => {
+    const history = [
+      { role: 'system' as const, content: 'thread system' },
+      { role: 'user' as const, content: 'hello' },
+      {
+        role: 'tool' as const,
+        content: [{ type: 'tool-result', toolCallId: 'orphan_1', output: { ok: true } }],
+      },
+      { role: 'user' as const, content: 'follow up' },
+    ];
+
+    expect(
+      buildPromptContext(
+        {
+          providerType: 'openai',
+          providerId: '',
+          systemPrompt: 'runtime system',
+        },
+        history
+      )
+    ).toEqual({
+      systemPrompt: 'persona prompt\n\nruntime system\n\nthread system',
+      messages: [
+        { role: 'user', content: 'hello' },
+        { role: 'user', content: 'follow up' },
+      ],
+    });
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'agent.history.tool_messages_sanitized',
+        outcome: 'degraded',
+        data: expect.objectContaining({
+          dropped_message_count: 1,
+          message_count_before: 3,
+          message_count_after: 2,
+        }),
+      })
+    );
+  });
+
+  it('preserves approval-response tool messages when the preceding assistant message anchors them', () => {
+    const history = [
+      {
+        role: 'assistant' as const,
+        content: [
+          {
+            type: 'tool-approval-request',
+            approvalId: 'approval_1',
+            toolCall: {
+              toolCallId: 'call_1',
+              toolName: 'web',
+              input: { q: 'hello' },
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool' as const,
+        content: [
+          {
+            type: 'tool-approval-response',
+            approvalId: 'approval_1',
+            approved: true,
+            reason: 'approved',
+          },
+        ],
+      },
+    ];
+
+    expect(
+      buildPromptContext(
+        {
+          providerType: 'openai',
+          providerId: '',
+          systemPrompt: '',
+        },
+        history
+      ).messages
+    ).toEqual(history);
+    expect(loggerEventMock).not.toHaveBeenCalled();
+  });
+
   it('clones and appends prompt/approval/response messages without mutating the original history', () => {
     const originalHistory = [{ role: 'user' as const, content: 'hello' }];
     const clonedHistory = cloneModelMessages(originalHistory);

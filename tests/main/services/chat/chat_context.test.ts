@@ -535,23 +535,74 @@ describe('chat_context assembler', () => {
     );
   });
 
-  it('preserves tool messages without clipping them through the recent-history window', async () => {
+  it('preserves anchored tool messages without clipping them through the recent-history window', async () => {
     const { assembler } = createAssembler();
+    const assistantToolCallMessage = {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolCallId: 'call_1', toolName: 'web', input: {} }],
+    } as never;
     const toolMessage = {
       role: 'tool',
-      content: { ok: true, output: 'Important tool result' },
+      content: [{ type: 'tool-result', toolCallId: 'call_1', output: 'Important tool result' }],
     } as never;
 
     const result = await assembler.assemble({
-      messages: [toolMessage, { role: 'user', content: 'Use the tool output.' }],
+      messages: [
+        assistantToolCallMessage,
+        toolMessage,
+        { role: 'user', content: 'Use the tool output.' },
+      ],
     });
 
     expect(result.messages).toContainEqual(toolMessage);
+    expect(result.messages).toContainEqual(assistantToolCallMessage);
     expect(findBlock(result, 'recent-history')).toEqual(
       expect.objectContaining({
         kind: 'recent-history',
         status: 'included',
-        sourceCount: 2,
+        sourceCount: 3,
+      })
+    );
+  });
+
+  it('keeps the assistant tool call with its tool result when the recent-history window lands on that boundary', async () => {
+    getAppConfigMock.mockReturnValue({
+      memory: {
+        context: {
+          ...baseConfig.memory.context,
+          recentMessageCount: 2,
+        },
+      },
+    });
+
+    const { assembler } = createAssembler();
+    const assistantToolCallMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'Let me check.' },
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'web', input: { q: 'hello' } },
+      ],
+    } as never;
+    const toolResultMessage = {
+      role: 'tool',
+      content: [{ type: 'tool-result', toolCallId: 'call_1', output: { ok: true } }],
+    } as never;
+    const latestUserMessage = { role: 'user', content: 'Use that result.' };
+
+    const result = await assembler.assemble({
+      messages: [assistantToolCallMessage, toolResultMessage, latestUserMessage],
+    });
+
+    expect(result.messages).toEqual([
+      assistantToolCallMessage,
+      toolResultMessage,
+      latestUserMessage,
+    ]);
+    expect(findBlock(result, 'recent-history')).toEqual(
+      expect.objectContaining({
+        kind: 'recent-history',
+        status: 'included',
+        sourceCount: 3,
       })
     );
   });

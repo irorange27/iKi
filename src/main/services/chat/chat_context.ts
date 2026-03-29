@@ -4,7 +4,11 @@ import { getAppConfig } from '../../../core/config';
 import * as chatMessageDb from '../../../core/db/chat_message';
 import * as threadContextDb from '../../../core/db/thread_context';
 import * as memoryDb from '../../../core/db/memory';
-import { extractTextFromModelMessageContent } from '../../../core/agent/model_messages';
+import {
+  extractTextFromModelMessageContent,
+  hasToolPartInModelMessageContent,
+  sanitizeModelConversationMessages,
+} from '../../../core/agent/model_messages';
 import {
   clipTextToTokenBudget,
   estimateMessageTokens,
@@ -94,6 +98,11 @@ type RecentHistoryContext = {
   recentMessages: ChatInputMessage[];
   compactedMessages: number;
   block: ContextReportBlock;
+};
+
+type ConversationChunk = {
+  messages: ChatInputMessage[];
+  preserveAtomically: boolean;
 };
 
 type SummaryContext = {
@@ -313,6 +322,78 @@ const buildMemorySystemMessage = (
   return ['Long-term memory (use only if relevant; ignore if unrelated):', ...lines].join('\n');
 };
 
+const buildConversationChunks = (messages: ChatInputMessage[]): ConversationChunk[] => {
+  const chunks: ConversationChunk[] = [];
+
+  for (let index = 0; index < messages.length; ) {
+    const currentMessage = messages[index];
+    const assistantAnchorsToolExchange =
+      currentMessage.role === 'assistant' && hasToolPartInModelMessageContent(currentMessage.content);
+
+    if (assistantAnchorsToolExchange) {
+      let nextIndex = index + 1;
+      while (nextIndex < messages.length && messages[nextIndex]?.role === 'tool') {
+        nextIndex += 1;
+      }
+
+      if (nextIndex > index + 1) {
+        chunks.push({
+          messages: messages.slice(index, nextIndex),
+          preserveAtomically: true,
+        });
+        index = nextIndex;
+        continue;
+      }
+    }
+
+    chunks.push({
+      messages: [currentMessage],
+      preserveAtomically: false,
+    });
+    index += 1;
+  }
+
+  return chunks;
+};
+
+const buildRecentHistoryReason = (params: {
+  compactedMessages: number;
+  truncatedRecentMessages: number;
+  droppedToolMessages: number;
+}): string | undefined => {
+  const reasons: string[] = [];
+
+  if (params.compactedMessages > 0) {
+    reasons.push('compacted older turns');
+  }
+
+  if (params.truncatedRecentMessages > 0) {
+    reasons.push('clipped oversized recent text');
+  }
+
+  if (params.droppedToolMessages > 0) {
+    reasons.push('removed orphaned tool messages');
+  }
+
+  if (reasons.length === 0) return undefined;
+  if (reasons.length === 1) {
+    return reasons[0] === 'compacted older turns'
+      ? 'compacted older turns into summary/recent window'
+      : reasons[0];
+  }
+  if (reasons.length === 2) {
+    if (
+      reasons[0] === 'compacted older turns' &&
+      reasons[1] === 'clipped oversized recent text'
+    ) {
+      return 'compacted older turns and clipped oversized recent text';
+    }
+    return `${reasons[0]} and ${reasons[1]}`;
+  }
+
+  return `${reasons[0]}, ${reasons[1]}, and ${reasons[2]}`;
+};
+
 const selectRecentHistory = (
   messages: ChatInputMessage[],
   contextConfig: ContextConfig,
@@ -320,61 +401,83 @@ const selectRecentHistory = (
 ): RecentHistoryContext => {
   const conversationMessages = messages.filter(message => message.role !== 'system');
   const systemMessages = messages.filter(message => message.role === 'system');
+  const conversationChunks = buildConversationChunks(conversationMessages);
   const recentMessages: ChatInputMessage[] = [];
   let recentTokens = 0;
   let truncatedRecentMessages = 0;
 
-  for (let index = conversationMessages.length - 1; index >= 0; index -= 1) {
-    const isLatestMessage = index === conversationMessages.length - 1;
-    const clippedMessage = isLatestMessage
-      ? { message: conversationMessages[index], truncated: false }
-      : clipMessageToBudget(
-          conversationMessages[index],
-          contextConfig.maxMessageTokens,
-          modelCapability
-        );
-    const message = clippedMessage.message;
-    const messageTokens = countMessageTokens(message, modelCapability);
+  for (let chunkIndex = conversationChunks.length - 1; chunkIndex >= 0; chunkIndex -= 1) {
+    const chunk = conversationChunks[chunkIndex];
+    const isLatestChunk = chunkIndex === conversationChunks.length - 1;
+    const clippedChunkMessages = chunk.messages.map((message, messageIndex) => {
+      const isLatestMessageInConversation =
+        isLatestChunk && messageIndex === chunk.messages.length - 1;
+      return isLatestMessageInConversation
+        ? { message, truncated: false }
+        : clipMessageToBudget(message, contextConfig.maxMessageTokens, modelCapability);
+    });
+    const nextMessages = clippedChunkMessages.map(entry => entry.message);
+    const nextTokens = nextMessages.reduce(
+      (sum, message) => sum + countMessageTokens(message, modelCapability),
+      0
+    );
+    const nextTruncatedCount = clippedChunkMessages.filter(entry => entry.truncated).length;
     const exceedsBudget =
-      recentMessages.length > 0 && recentTokens + messageTokens > contextConfig.maxRecentTokens;
-    const exceedsCount = recentMessages.length >= Math.max(1, contextConfig.recentMessageCount);
+      recentMessages.length > 0 && recentTokens + nextTokens > contextConfig.maxRecentTokens;
+    const exceedsCount =
+      recentMessages.length > 0 &&
+      recentMessages.length + nextMessages.length > Math.max(1, contextConfig.recentMessageCount);
 
     if (exceedsBudget || exceedsCount) {
+      if (!chunk.preserveAtomically) {
+        break;
+      }
+
+      recentMessages.unshift(...nextMessages);
+      recentTokens += nextTokens;
+      truncatedRecentMessages += nextTruncatedCount;
       break;
     }
 
-    recentMessages.unshift(message);
-    recentTokens += messageTokens;
-    if (clippedMessage.truncated) {
-      truncatedRecentMessages += 1;
-    }
+    recentMessages.unshift(...nextMessages);
+    recentTokens += nextTokens;
+    truncatedRecentMessages += nextTruncatedCount;
   }
 
-  const compactedMessages = Math.max(0, conversationMessages.length - recentMessages.length);
+  const sanitizedRecentHistory = sanitizeModelConversationMessages(recentMessages);
+  const compactedMessages = Math.max(
+    0,
+    conversationMessages.length - sanitizedRecentHistory.messages.length
+  );
+  const reason = buildRecentHistoryReason({
+    compactedMessages,
+    truncatedRecentMessages,
+    droppedToolMessages: sanitizedRecentHistory.droppedMessages,
+  });
+  const sanitizedRecentTokens = sanitizedRecentHistory.messages.reduce(
+    (sum, message) => sum + countMessageTokens(message, modelCapability),
+    0
+  );
 
   return {
     systemMessages,
-    recentMessages,
+    recentMessages: sanitizedRecentHistory.messages,
     compactedMessages,
     block: {
       kind: 'recent-history',
-      status: compactedMessages > 0 || truncatedRecentMessages > 0 ? 'truncated' : 'included',
-      estimatedTokens: recentTokens,
-      charCount: recentMessages.reduce(
+      status:
+        compactedMessages > 0 ||
+        truncatedRecentMessages > 0 ||
+        sanitizedRecentHistory.droppedMessages > 0
+          ? 'truncated'
+          : 'included',
+      estimatedTokens: sanitizedRecentTokens,
+      charCount: sanitizedRecentHistory.messages.reduce(
         (sum, message) => sum + buildMessagePreview(message).length,
         0
       ),
-      ...(compactedMessages > 0 || truncatedRecentMessages > 0
-        ? {
-            reason:
-              compactedMessages > 0 && truncatedRecentMessages > 0
-                ? 'compacted older turns and clipped oversized recent text'
-                : compactedMessages > 0
-                  ? 'compacted older turns into summary/recent window'
-                  : 'clipped oversized recent text',
-          }
-        : {}),
-      sourceCount: recentMessages.length,
+      ...(reason ? { reason } : {}),
+      sourceCount: sanitizedRecentHistory.messages.length,
     },
   };
 };
