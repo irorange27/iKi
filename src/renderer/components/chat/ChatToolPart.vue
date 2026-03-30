@@ -120,7 +120,8 @@
           </li>
         </ol>
       </div>
-      <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+      <ChatTodoPlan v-if="todoPlanOutput" :output="todoPlanOutput" />
+      <div v-else-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
         <div class="tool-card-section-title">
           {{ getToolInputDisplayTitle(part) }}
         </div>
@@ -129,7 +130,7 @@
           {{ getToolInputDisplayMetaText(part) }}
         </div>
       </div>
-      <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
+      <div v-if="!todoPlanOutput && hasDisplayValue(getToolOutput(part))" class="tool-card-section">
         <div class="tool-card-section-title">{{ t('chat.tool.output') }}</div>
         <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
       </div>
@@ -231,6 +232,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   CheckCircle,
   ChevronDown,
@@ -254,6 +256,7 @@ import {
   getToolInputDisplayValue,
   getToolName,
   getToolOutput,
+  getParsedToolOutput,
   getToolStateKind,
   getToolStateLabel,
   getToolStatePillClass,
@@ -268,6 +271,7 @@ import {
   toggleToolCollapse,
 } from '../../modules/chat/ui_message_tool_parts';
 import { useI18n } from '../../i18n';
+import ChatTodoPlan from './ChatTodoPlan.vue';
 
 const props = defineProps<{
   approvalProcessing: boolean;
@@ -284,6 +288,12 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+const todoPlanOutput = computed(() => {
+  if (!isToolResultPart(props.part)) return null;
+  const parsedOutput = getParsedToolOutput(props.part);
+  return parsedOutput.kind === 'todo' ? parsedOutput.output : null;
+});
 
 const emitApproval = (approved: boolean) => {
   emit('approve-tool', {

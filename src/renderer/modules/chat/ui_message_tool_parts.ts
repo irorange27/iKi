@@ -314,6 +314,10 @@ export const getToolTitle = (part: unknown): string => {
       }
       return 'Todo lists';
     }
+
+    if (toolKey === 'todo') {
+      return translate('chat.tool.executionPlan');
+    }
   }
 
   if (typeof rawName === 'string' && rawName.trim()) {
@@ -464,6 +468,14 @@ export const isToolCollapsed = (part: unknown): boolean => {
   const uiState = toolCallId ? getToolUiState(toolCallId) : undefined;
   if (uiState && typeof uiState.collapsed === 'boolean') {
     return uiState.collapsed;
+  }
+
+  if (
+    isToolResultPart(part) &&
+    normalizeToolNameKey(getToolName(part)) === 'todo' &&
+    getToolStateKind(part) === 'success'
+  ) {
+    return false;
   }
 
   return getToolStateKind(part) === 'success';
