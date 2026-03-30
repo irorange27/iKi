@@ -1,6 +1,11 @@
 <template>
   <div class="message-wrapper" :class="message.role">
-    <div class="message-shell">
+    <div
+      class="message-shell"
+      @mouseenter="showActions"
+      @mouseleave="scheduleHideActions"
+      @focusin="showActions"
+    >
       <ChatMessageReferences v-if="message.role === 'assistant'" :message="message" />
 
       <div class="message-content">
@@ -18,7 +23,10 @@
       <div
         v-if="message.role === 'user'"
         class="message-actions"
+        :class="{ 'actions-visible': areActionsVisible }"
         :data-menu-open="isMoreMenuOpen ? 'true' : undefined"
+        @mouseenter="showActions"
+        @mouseleave="scheduleHideActions"
         @focusout="handleActionsFocusOut"
         @keydown.escape.stop.prevent="closeMoreMenu"
       >
@@ -130,7 +138,9 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const ACTIONS_HIDE_DELAY_MS = 160;
 const isMoreMenuOpen = ref(false);
+const areActionsVisible = ref(false);
 const copyFeedbackVisible = ref(false);
 const messageText = computed(() => extractTextFromMessage(props.message));
 const copyTooltip = computed(() =>
@@ -138,6 +148,7 @@ const copyTooltip = computed(() =>
 );
 
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+let hideActionsTimer: ReturnType<typeof setTimeout> | null = null;
 
 const clearCopyFeedbackTimer = () => {
   if (!copyFeedbackTimer) return;
@@ -145,11 +156,34 @@ const clearCopyFeedbackTimer = () => {
   copyFeedbackTimer = null;
 };
 
+const clearHideActionsTimer = () => {
+  if (!hideActionsTimer) return;
+  clearTimeout(hideActionsTimer);
+  hideActionsTimer = null;
+};
+
+const showActions = () => {
+  clearHideActionsTimer();
+  areActionsVisible.value = true;
+};
+
+const scheduleHideActions = () => {
+  clearHideActionsTimer();
+  if (isMoreMenuOpen.value) return;
+  hideActionsTimer = setTimeout(() => {
+    if (!isMoreMenuOpen.value) {
+      areActionsVisible.value = false;
+    }
+    hideActionsTimer = null;
+  }, ACTIONS_HIDE_DELAY_MS);
+};
+
 const closeMoreMenu = () => {
   isMoreMenuOpen.value = false;
 };
 
 const toggleMoreMenu = () => {
+  showActions();
   isMoreMenuOpen.value = !isMoreMenuOpen.value;
 };
 
@@ -187,10 +221,14 @@ const handleActionsFocusOut = (event: FocusEvent) => {
     return;
   }
   closeMoreMenu();
+  if (!currentTarget.matches(':hover')) {
+    scheduleHideActions();
+  }
 };
 
 onBeforeUnmount(() => {
   clearCopyFeedbackTimer();
+  clearHideActionsTimer();
 });
 </script>
 
@@ -236,9 +274,7 @@ onBeforeUnmount(() => {
   z-index: 10;
 }
 
-.message-wrapper.user .message-shell:hover .message-actions,
-.message-wrapper.user .message-shell:focus-within .message-actions,
-.message-wrapper.user .message-actions:hover,
+.message-wrapper.user .message-actions.actions-visible,
 .message-wrapper.user .message-actions[data-menu-open='true'] {
   opacity: 1;
   pointer-events: auto;
@@ -308,10 +344,19 @@ onBeforeUnmount(() => {
   display: flex;
 }
 
+.message-actions::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 12px;
+}
+
 .message-more-menu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 10px);
+  top: calc(100% + 10px);
   min-width: 156px;
   padding: 6px;
   border-radius: 14px;

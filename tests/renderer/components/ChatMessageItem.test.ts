@@ -72,6 +72,27 @@ describe('ChatMessageItem', () => {
     expect(copyButton.attributes('data-copied')).toBeUndefined();
   });
 
+  it('keeps the action bar visible while the pointer moves from the bubble to the action bar', async () => {
+    const wrapper = mountChatMessageItem();
+    const shell = wrapper.find('.message-shell');
+    const actions = wrapper.find('.message-actions');
+
+    await shell.trigger('mouseenter');
+    expect(actions.classes()).toContain('actions-visible');
+
+    await shell.trigger('mouseleave');
+    await vi.advanceTimersByTimeAsync(80);
+    expect(actions.classes()).toContain('actions-visible');
+
+    await actions.trigger('mouseenter');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(actions.classes()).toContain('actions-visible');
+
+    await actions.trigger('mouseleave');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(actions.classes()).not.toContain('actions-visible');
+  });
+
   it('emits regenerate/edit actions and opens the overflow menu', async () => {
     const message = createUserMessage();
     const wrapper = mountChatMessageItem(message);
