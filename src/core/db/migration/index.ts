@@ -25,6 +25,7 @@ import { migration as migration023CanonicalizeChatUiMessages } from './023_canon
 import { migration as migration024AddProviderModelOptions } from './024_add_provider_model_options';
 import { migration as migration025AddChatThreadTodos } from './025_add_chat_thread_todos_table';
 import { migration as migration026AddChatToolApprovalMaxIterations } from './026_add_chat_tool_approval_max_iterations';
+import { migration as migration027RestoreLegacyDesktopThreadOwnership } from './027_restore_legacy_desktop_thread_ownership';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -54,6 +55,7 @@ export const registeredMigrations = [
   migration024AddProviderModelOptions,
   migration025AddChatThreadTodos,
   migration026AddChatToolApprovalMaxIterations,
+  migration027RestoreLegacyDesktopThreadOwnership,
   // Add more migrations here as needed
 ];
 

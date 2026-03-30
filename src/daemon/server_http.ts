@@ -1,7 +1,6 @@
 import http from 'node:http';
 
 import * as memoryDb from '../core/db/memory';
-import * as chatThreadDb from '../core/db/chat_thread';
 import { createAppClient } from '../core/db/app_clients';
 import type { McpManager } from '../core/mcp';
 import type { ChatTransportMessage } from '../main/services/chat/chat_types';
@@ -115,9 +114,6 @@ export const createDaemonRequestHandler =
 
         const isFirstClient = isFirstUserClientRegistration(deps.napcatClientId);
         const created = createAppClient(body);
-        if (isFirstClient) {
-          chatThreadDb.assignClientToLegacyThreads(created.client.id);
-        }
         deps.bootstrapTokenRef.current = rotateBootstrapToken(deps.userDataPath);
         writeJson(res, 200, {
           success: true,

@@ -29,11 +29,12 @@ import {
 } from './ui_message_tool_parts';
 
 export type ToolReferenceSummary = {
-  count: number;
+  callCount: number;
+  kindCount: number;
   names: string[];
   items: Array<{
     name: string;
-    count: number;
+    callCount: number;
   }>;
 };
 
@@ -232,11 +233,11 @@ export const getToolReferenceSummary = (
   message: ChatUiMessage | unknown
 ): ToolReferenceSummary => {
   const parts = getMessageParts(message);
-  const toolCallIds = new Set<string>();
-  const toolNames: string[] = [];
+  const orderedToolNameKeys: string[] = [];
   const toolNamesSeen = new Set<string>();
-  const toolNameCounts = new Map<string, number>();
-  const countedCallIds = new Set<string>();
+  const toolDisplayNames = new Map<string, string>();
+  const toolNameCallCounts = new Map<string, number>();
+  const countedCalls = new Map<string, string | null>();
 
   for (const part of parts) {
     if (!isToolPart(part)) continue;
@@ -248,33 +249,41 @@ export const getToolReferenceSummary = (
       continue;
     }
 
-    if (toolCallId && countedCallIds.has(toolCallId)) {
-      if (toolName && !toolNamesSeen.has(toolName)) {
-        toolNamesSeen.add(toolName);
-        toolNames.push(toolName);
+    const toolNameKey = toolName ? normalizeToolNameKey(toolName) || toolName : '';
+    if (toolName && toolNameKey && !toolNamesSeen.has(toolNameKey)) {
+      toolNamesSeen.add(toolNameKey);
+      orderedToolNameKeys.push(toolNameKey);
+      toolDisplayNames.set(toolNameKey, toolName);
+    }
+
+    const callKey = toolCallId ? `id:${toolCallId}` : toolNameKey ? `name:${toolNameKey}` : '';
+    if (!callKey) continue;
+
+    const countedToolNameKey = countedCalls.get(callKey);
+    if (countedToolNameKey !== undefined) {
+      if (!countedToolNameKey && toolNameKey) {
+        countedCalls.set(callKey, toolNameKey);
+        toolNameCallCounts.set(toolNameKey, (toolNameCallCounts.get(toolNameKey) || 0) + 1);
       }
       continue;
     }
 
-    if (toolCallId) {
-      toolCallIds.add(toolCallId);
-      countedCallIds.add(toolCallId);
-    }
-
-    if (toolName && !toolNamesSeen.has(toolName)) {
-      toolNamesSeen.add(toolName);
-      toolNames.push(toolName);
-    }
-
-    if (toolName) {
-      toolNameCounts.set(toolName, (toolNameCounts.get(toolName) || 0) + 1);
+    countedCalls.set(callKey, toolNameKey || null);
+    if (toolNameKey) {
+      toolNameCallCounts.set(toolNameKey, (toolNameCallCounts.get(toolNameKey) || 0) + 1);
     }
   }
 
   return {
-    count: toolCallIds.size > 0 ? toolCallIds.size : toolNames.length,
-    names: toolNames,
-    items: Array.from(toolNameCounts.entries()).map(([name, count]) => ({ name, count })),
+    callCount: countedCalls.size,
+    kindCount: orderedToolNameKeys.length,
+    names: orderedToolNameKeys.map(nameKey => toolDisplayNames.get(nameKey) || nameKey),
+    items: orderedToolNameKeys
+      .map(nameKey => ({
+        name: toolDisplayNames.get(nameKey) || nameKey,
+        callCount: toolNameCallCounts.get(nameKey) || 0,
+      }))
+      .filter(item => item.callCount > 0),
   };
 };
 
@@ -552,7 +561,7 @@ export const buildContextUsageIndicator = (
 
 export const hasReferenceSummary = (message: ChatUiMessage | unknown): boolean => {
   const toolSummary = getToolReferenceSummary(message);
-  if (toolSummary.count > 0) return true;
+  if (toolSummary.callCount > 0) return true;
   if (getSkillReferenceSummary(message).items.length > 0) return true;
   if (getMemoryReferenceSummary(message).items.length > 0) return true;
   if (getAffectReferenceSummary(message).label) return true;

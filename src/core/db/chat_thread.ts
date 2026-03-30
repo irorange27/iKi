@@ -145,10 +145,3 @@ export const toggleFavoriteChatThread = (id: string) => {
   if (!thread) return null;
   return updateChatThread(id, { is_favorited: thread.is_favorited === 1 ? 0 : 1 });
 };
-
-export const assignClientToLegacyThreads = (clientId: string) => {
-  if (!clientId) return null;
-  return getDb()
-    .prepare('UPDATE chat_threads SET client_id = ? WHERE client_id IS NULL')
-    .run(clientId);
-};

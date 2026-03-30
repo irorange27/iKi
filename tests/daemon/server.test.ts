@@ -28,7 +28,6 @@ const {
   createChatServiceMock,
   chatServiceMock,
   getChatThreadMock,
-  assignClientToLegacyThreadsMock,
   getDefaultAllowedToolsMock,
   readOrCreateBootstrapTokenMock,
   rotateBootstrapTokenMock,
@@ -180,8 +179,6 @@ const {
   const createChatServiceMock = vi.fn(() => chatServiceMock);
 
   const getChatThreadMock = vi.fn();
-  const assignClientToLegacyThreadsMock = vi.fn();
-
   const readOrCreateBootstrapTokenMock = vi.fn(() => currentBootstrapToken());
   const rotateBootstrapTokenMock = vi.fn(() => {
     bootstrapRotation += 1;
@@ -277,7 +274,6 @@ const {
     createChatServiceMock,
     chatServiceMock,
     getChatThreadMock,
-    assignClientToLegacyThreadsMock,
     getDefaultAllowedToolsMock,
     readOrCreateBootstrapTokenMock,
     rotateBootstrapTokenMock,
@@ -354,7 +350,6 @@ vi.mock('../../src/main/services/chat/chat_service', () => ({
 
 vi.mock('../../src/core/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
-  assignClientToLegacyThreads: assignClientToLegacyThreadsMock,
 }));
 
 vi.mock('../../src/core/db/memory', () => ({
@@ -568,7 +563,7 @@ describe('daemon server', () => {
     });
   });
 
-  it('treats the first non-NapCat registration as the legacy-owner client and rotates setup tokens', async () => {
+  it('rotates setup tokens on first non-NapCat registration without reassigning legacy desktop threads', async () => {
     const started = await startTestDaemon();
 
     const first = await requestJson(started, '/v1/clients/register', {
@@ -589,8 +584,6 @@ describe('daemon server', () => {
       scopes: ['chat:read', 'chat:write'],
       allowed_tools: ['web', 'mcp:server:docs'],
     });
-    expect(assignClientToLegacyThreadsMock).toHaveBeenCalledTimes(1);
-    expect(assignClientToLegacyThreadsMock).toHaveBeenCalledWith('client_1');
     expect(rotateBootstrapTokenMock).toHaveBeenCalledWith('/tmp/iki-daemon-tests');
 
     const staleToken = await requestJson(started, '/v1/clients/register', {
@@ -644,7 +637,6 @@ describe('daemon server', () => {
         'mcp:*',
       ],
     });
-    expect(assignClientToLegacyThreadsMock).toHaveBeenCalledTimes(1);
   });
 
   it('rejects non-object registration payloads instead of silently creating a client', async () => {

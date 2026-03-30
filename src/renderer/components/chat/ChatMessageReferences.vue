@@ -13,9 +13,13 @@
         <Brain :size="14" class="reference-summary-icon" />
         {{ t('chat.references.memories', { count: memorySummary.items.length }) }}
       </span>
-      <span v-if="toolSummary.count > 0" class="reference-summary-item" :data-tooltip="toolTooltip">
+      <span
+        v-if="toolSummary.callCount > 0"
+        class="reference-summary-item"
+        :data-tooltip="toolTooltip"
+      >
         <Wrench :size="14" class="reference-summary-icon" />
-        {{ t('chat.references.tools', { count: toolSummary.count }) }}
+        {{ t('chat.references.tools', { count: toolSummary.callCount }) }}
       </span>
       <span
         v-if="skillSummary.items.length > 0"
@@ -57,9 +61,27 @@ const skillSummary = computed(() => getSkillReferenceSummary(props.message));
 const memorySummary = computed(() => getMemoryReferenceSummary(props.message));
 const affectSummary = computed(() => getAffectReferenceSummary(props.message));
 
-const toolTooltip = computed(() =>
-  t('chat.references.toolTooltip', { names: toolSummary.value.names.join(', ') })
-);
+const toolTooltip = computed(() => {
+  const lines = [
+    t('chat.references.toolTooltip', {
+      callCount: toolSummary.value.callCount,
+      kindCount: toolSummary.value.kindCount,
+    }),
+  ];
+
+  if (toolSummary.value.items.length > 0) {
+    lines.push(
+      ...toolSummary.value.items.map(item =>
+        t('chat.references.toolTooltipItem', {
+          name: item.name,
+          count: item.callCount,
+        })
+      )
+    );
+  }
+
+  return lines.join('\n');
+});
 
 const skillTooltip = computed(() => {
   if (skillSummary.value.items.length === 0) return t('chat.references.noSkillsLoaded');

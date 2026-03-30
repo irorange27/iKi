@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NO_TOOLS_SYSTEM_PROMPT } from '../../../../src/main/services/chat/chat_constants';
+import {
+  DEFAULT_CHAT_TOOL_MAX_ITERATIONS,
+  NO_TOOLS_SYSTEM_PROMPT,
+} from '../../../../src/main/services/chat/chat_constants';
 
 const {
   dbPrepareMock,
@@ -810,7 +813,7 @@ describe('createChatStreaming', () => {
         recoveryContext: expect.objectContaining({
           threadId: 'thread_3',
           maxOutputTokens: 512,
-          maxIterations: 10,
+          maxIterations: DEFAULT_CHAT_TOOL_MAX_ITERATIONS,
           enabledTools: ['web'],
           availableSkillIds: [],
         }),
@@ -821,7 +824,7 @@ describe('createChatStreaming', () => {
         providerType: 'openai',
         model: 'gpt-4o-mini',
         enableTools: true,
-        maxIterations: 10,
+        maxIterations: DEFAULT_CHAT_TOOL_MAX_ITERATIONS,
         maxTokens: 512,
       })
     );

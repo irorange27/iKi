@@ -11,6 +11,7 @@ import {
 import { createLogger } from '../../../core/logger';
 import { generateLongMemorySummary } from '../../../core/memory/auto_summarize';
 import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
+import { planMemoryRetrieval } from '../../../core/provider/memory_retrieval';
 import { parseJsonStringArray } from '../../../shared/utils/json';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage } from './chat_types';
@@ -317,6 +318,55 @@ export const createChatMemory = () => {
     sourceMessageCount: parseJsonStringArray(entry.source_message_ids).length || undefined,
   });
 
+  const resolveMemorySearchQuery = async (
+    query: string
+  ): Promise<{ shouldSearch: boolean; query: string }> => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return {
+        shouldSearch: false,
+        query: '',
+      };
+    }
+
+    try {
+      const plan = await planMemoryRetrieval(trimmed);
+      if (!plan) {
+        return {
+          shouldSearch: true,
+          query: trimmed,
+        };
+      }
+
+      if (!plan.shouldSearch) {
+        return {
+          shouldSearch: false,
+          query: '',
+        };
+      }
+
+      const plannedQuery = plan.query.trim();
+      return {
+        shouldSearch: true,
+        query: plannedQuery || trimmed,
+      };
+    } catch (error) {
+      chatMemoryLogger.event({
+        level: 'warn',
+        event: 'chat.memory.retrieval_plan',
+        outcome: 'failed',
+        error,
+        data: {
+          error_message: getErrorMessage(error),
+        },
+      });
+      return {
+        shouldSearch: true,
+        query: trimmed,
+      };
+    }
+  };
+
   const retrieveRelevantMemory = async (
     threadId: string,
     query: string
@@ -328,14 +378,17 @@ export const createChatMemory = () => {
     const thread = chatThreadDb.getChatThread(threadId);
     if (thread?.is_incognito) return null;
 
+    const searchPlan = await resolveMemorySearchQuery(query);
+    if (!searchPlan.shouldSearch || !searchPlan.query) return null;
+
     const limit = Math.max(1, Math.trunc(memoryConfig.maxRetrievalCount || 0));
     const threshold = memoryConfig.similarThreshold;
-    const threadResults = await memoryDb.searchLongMemory(threadId, query, {
+    const threadResults = await memoryDb.searchLongMemory(threadId, searchPlan.query, {
       limit,
       threshold,
     });
     const clientResults = thread?.client_id
-      ? await memoryDb.searchLongMemoryAcrossThreads(query, {
+      ? await memoryDb.searchLongMemoryAcrossThreads(searchPlan.query, {
           limit: Math.max(limit * 2, limit),
           threshold,
           clientId: thread.client_id,
@@ -354,7 +407,7 @@ export const createChatMemory = () => {
     }
 
     return {
-      query,
+      query: searchPlan.query,
       results: deduped.map(buildMemoryPreview),
       systemMessage: deduped.length > 0 ? buildMemorySystemMessage(deduped) : '',
     };

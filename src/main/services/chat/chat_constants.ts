@@ -1,4 +1,4 @@
-export const DEFAULT_CHAT_TOOL_MAX_ITERATIONS = 10;
+export const DEFAULT_CHAT_TOOL_MAX_ITERATIONS = 50;
 
 export const resolveChatToolMaxIterations = (value?: number): number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0

@@ -155,10 +155,12 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.skills.noSkills': '没有找到技能。',
   'chat.references.affect': '情绪',
   'chat.references.memories': ({ count }) => `${asCount(count)} 条记忆`,
-  'chat.references.tools': ({ count }) => `${asCount(count)} 个工具`,
+  'chat.references.tools': ({ count }) => `${asCount(count)} 次工具调用`,
   'chat.references.skills': ({ count }) => `${asCount(count)} 个技能`,
-  'chat.references.toolTooltip': ({ names }) =>
-    asText(names) ? `使用的工具：${asText(names)}` : '本次回复使用了工具',
+  'chat.references.toolTooltip': ({ callCount, kindCount }) =>
+    `工具调用：${asCount(callCount)} 次\n工具种类：${asCount(kindCount)} 种`,
+  'chat.references.toolTooltipItem': ({ name, count }) =>
+    `${asText(name)}：${asCount(count)} 次`,
   'chat.references.noSkillsLoaded': '没有已加载技能',
   'chat.references.loadedSkills': ({ names }) => `已加载技能：${asText(names)}`,
   'chat.references.selectedNotLoaded': ({ names }) => `已选择但未加载：${asText(names)}`,

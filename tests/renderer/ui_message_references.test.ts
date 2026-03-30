@@ -13,7 +13,7 @@ import {
 } from '../../src/renderer/modules/chat/ui_message_references';
 
 describe('ui_message_references', () => {
-  it('counts unique tool calls while preserving readable tool names', () => {
+  it('reports tool call counts separately from tool types', () => {
     const summary = getToolReferenceSummary({
       id: 'assistant_1',
       role: 'assistant',
@@ -53,11 +53,12 @@ describe('ui_message_references', () => {
     } as never);
 
     expect(summary).toEqual({
-      count: 2,
+      callCount: 2,
+      kindCount: 2,
       names: ['web', 'fetch'],
       items: [
-        { name: 'web', count: 1 },
-        { name: 'fetch', count: 1 },
+        { name: 'web', callCount: 1 },
+        { name: 'fetch', callCount: 1 },
       ],
     });
   });
@@ -92,9 +93,38 @@ describe('ui_message_references', () => {
     } as never);
 
     expect(summary).toEqual({
-      count: 1,
+      callCount: 1,
+      kindCount: 1,
       names: ['fetch'],
-      items: [{ name: 'fetch', count: 1 }],
+      items: [{ name: 'fetch', callCount: 1 }],
+    });
+  });
+
+  it('keeps repeated calls of the same tool distinct from the tool kind count', () => {
+    const summary = getToolReferenceSummary({
+      id: 'assistant_2',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call_web_1',
+          toolName: 'web',
+          state: 'output-available',
+        },
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'call_web_2',
+          toolName: 'web',
+          state: 'output-available',
+        },
+      ],
+    } as never);
+
+    expect(summary).toEqual({
+      callCount: 2,
+      kindCount: 1,
+      names: ['web'],
+      items: [{ name: 'web', callCount: 2 }],
     });
   });
 
