@@ -1,5 +1,9 @@
 <template>
-  <section class="todo-plan" :aria-label="t('chat.tool.executionPlan')">
+  <section
+    class="todo-plan"
+    :class="{ 'is-collapsed': isCollapsed }"
+    :aria-label="t('chat.tool.executionPlan')"
+  >
     <div class="todo-plan-summary">
       <div class="todo-plan-summary-main">
         <ListTodo :size="14" class="todo-plan-summary-icon" />
@@ -7,11 +11,20 @@
           {{ t('chat.todoPlan.progress', { completed: completedCount, total: totalCount }) }}
         </div>
       </div>
+      <button
+        type="button"
+        class="todo-plan-toggle"
+        :aria-expanded="isCollapsed ? 'false' : 'true'"
+        :aria-label="isCollapsed ? t('chat.tool.expandDetails') : t('chat.tool.collapseDetails')"
+        @click="isCollapsed = !isCollapsed"
+      >
+        <ChevronDown :size="14" class="todo-plan-toggle-icon" :class="{ 'is-collapsed': isCollapsed }" />
+      </button>
     </div>
 
-    <ol v-if="items.length > 0" class="todo-plan-list">
+    <ol v-if="!isCollapsed && visibleItems.length > 0" class="todo-plan-list">
       <li
-        v-for="(item, index) in items"
+        v-for="(item, index) in visibleItems"
         :key="item.id"
         class="todo-plan-item"
         :class="[`status-${item.status}`]"
@@ -27,15 +40,19 @@
       </li>
     </ol>
 
-    <div v-else class="todo-plan-empty">{{ t('chat.todoPlan.empty') }}</div>
+    <div v-else-if="!isCollapsed" class="todo-plan-empty">{{ t('chat.todoPlan.empty') }}</div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { ListTodo } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
+import { ChevronDown, ListTodo } from 'lucide-vue-next';
 
-import type { TaskPlan, TaskPlanItemStatus } from '../../../shared/types/task_plan';
+import {
+  MAX_EXECUTION_TASK_PLAN_ITEMS,
+  type TaskPlan,
+  type TaskPlanItemStatus,
+} from '../../../shared/types/task_plan';
 import { useI18n } from '../../i18n';
 
 defineOptions({
@@ -43,14 +60,16 @@ defineOptions({
 });
 
 const props = defineProps<{
-  plan: Pick<TaskPlan, 'items'>;
+  plan: Pick<TaskPlan, 'thread_id' | 'items'>;
 }>();
 
 const { t } = useI18n();
+const isCollapsed = ref(false);
 
 const items = computed(() =>
   Array.isArray(props.plan.items) ? props.plan.items : []
 );
+const visibleItems = computed(() => items.value.slice(0, MAX_EXECUTION_TASK_PLAN_ITEMS));
 
 const deriveCount = (status?: TaskPlanItemStatus) => {
   if (!status) return items.value.length;
@@ -59,6 +78,13 @@ const deriveCount = (status?: TaskPlanItemStatus) => {
 
 const totalCount = computed(() => deriveCount());
 const completedCount = computed(() => deriveCount('completed'));
+
+watch(
+  () => props.plan.thread_id,
+  () => {
+    isCollapsed.value = false;
+  }
+);
 </script>
 
 <style scoped>
@@ -69,6 +95,10 @@ const completedCount = computed(() => deriveCount('completed'));
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
   border-radius: 14px;
   background: color-mix(in srgb, var(--bg-primary) 94%, var(--bg-secondary));
+}
+
+.todo-plan.is-collapsed {
+  gap: 0;
 }
 
 .todo-plan-summary {
@@ -96,6 +126,37 @@ const completedCount = computed(() => deriveCount('completed'));
   line-height: 1.4;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.todo-plan-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.todo-plan-toggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.todo-plan-toggle-icon {
+  transition: transform 0.18s ease;
+}
+
+.todo-plan-toggle-icon.is-collapsed {
+  transform: rotate(-90deg);
 }
 
 .todo-plan-list {

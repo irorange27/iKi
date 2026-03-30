@@ -238,6 +238,10 @@ describe('ChatInput', () => {
       items: [
         { id: '1', text: 'Inspect state', status: 'completed' },
         { id: '2', text: 'Ship composer card', status: 'in_progress' },
+        { id: '3', text: 'Task three', status: 'pending' },
+        { id: '4', text: 'Task four', status: 'pending' },
+        { id: '5', text: 'Task five', status: 'pending' },
+        { id: '6', text: 'Task six', status: 'pending' },
       ],
       created_at: '2026-03-30T00:00:00.000Z',
       updated_at: '2026-03-30T00:01:00.000Z',
@@ -253,8 +257,10 @@ describe('ChatInput', () => {
     const composer = wrapper.find('.chat-input-container');
 
     expect(plan.exists()).toBe(true);
-    expect(plan.text()).toContain('1 out of 2 tasks completed');
+    expect(plan.text()).toContain('1 out of 6 tasks completed');
     expect(plan.text()).toContain('Ship composer card');
+    expect(plan.text()).toContain('Task five');
+    expect(plan.text()).not.toContain('Task six');
     expect(plan.element.compareDocumentPosition(composer.element) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
 

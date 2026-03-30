@@ -136,4 +136,16 @@ describe('tool input schemas', () => {
       }).description
     ).toBe('Remove a stale checklist the user no longer wants.');
   });
+
+  it('caps execution todo plans at five broad steps', () => {
+    expect(() =>
+      TodoToolInputSchema.parse({
+        items: Array.from({ length: 6 }, (_value, index) => ({
+          id: String(index + 1),
+          text: `Task ${index + 1}`,
+        })),
+        description: 'Track an overlong execution plan.',
+      })
+    ).toThrow(/<=5 items/i);
+  });
 });

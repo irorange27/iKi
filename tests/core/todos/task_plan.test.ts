@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  MAX_EXECUTION_TASK_PLAN_ITEMS,
   MAX_TASK_PLAN_ITEMS,
   normalizeTaskPlanItems,
   renderTaskPlan,
@@ -57,5 +58,16 @@ describe('task_plan helpers', () => {
         }))
       )
     ).toThrow(/max 20 todos allowed/i);
+  });
+
+  it('can enforce a tighter execution-plan cap for the chat todo tool', () => {
+    expect(() =>
+      normalizeTaskPlanItems(
+        Array.from({ length: MAX_EXECUTION_TASK_PLAN_ITEMS + 1 }, (_value, index) => ({
+          text: `Task ${index + 1}`,
+        })),
+        { maxItems: MAX_EXECUTION_TASK_PLAN_ITEMS }
+      )
+    ).toThrow(/max 5 todos allowed/i);
   });
 });

@@ -1,5 +1,9 @@
 import { getDb } from './database';
-import type { TaskPlan, TaskPlanItemDraft } from '../../shared/types/task_plan';
+import {
+  MAX_EXECUTION_TASK_PLAN_ITEMS,
+  type TaskPlan,
+  type TaskPlanItemDraft,
+} from '../../shared/types/task_plan';
 import { normalizeTaskPlanItems } from '../todos/task_plan';
 import { normalizeWhitespace, toIsoNow } from '../../shared/utils/text';
 
@@ -50,7 +54,9 @@ export const writeThreadTodoPlan = (params: {
     throw new Error('Todo tool requires an active chat thread');
   }
 
-  const items = normalizeTaskPlanItems(Array.isArray(params.items) ? params.items : []);
+  const items = normalizeTaskPlanItems(Array.isArray(params.items) ? params.items : [], {
+    maxItems: MAX_EXECUTION_TASK_PLAN_ITEMS,
+  });
   const now = toIsoNow();
   const existing = getThreadTodoPlan(normalizedThreadId);
 

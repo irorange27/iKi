@@ -1,3 +1,6 @@
+export const MAX_EXECUTION_TASK_PLAN_ITEMS = 5;
+export const MAX_STORED_TASK_PLAN_ITEMS = 20;
+
 export type TaskPlanItemStatus = 'pending' | 'in_progress' | 'completed';
 
 export interface TaskPlanItemDraft {

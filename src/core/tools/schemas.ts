@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_EXECUTION_TASK_PLAN_ITEMS } from '../../shared/types/task_plan';
 
 export const DEFAULT_SEARCH_RESULT_LIMIT = 5;
 export const MAX_SEARCH_RESULT_LIMIT = 10;
@@ -391,8 +392,10 @@ export const DeletePersonalSkillInputSchemaUi = z
 export const TodoToolInputSchema = z.object({
   items: z
     .array(todoPlanItemInputSchema)
-    .max(20)
-    .describe('Current task-plan items in execution order')
+    .max(MAX_EXECUTION_TASK_PLAN_ITEMS)
+    .describe(
+      `Current task-plan items in execution order. Keep the execution plan to ${MAX_EXECUTION_TASK_PLAN_ITEMS} broad steps or fewer by grouping related work.`
+    )
     .optional()
     .default([]),
   description: toolCallDescriptionField,

@@ -1,7 +1,14 @@
-import type { TaskPlanItem, TaskPlanItemDraft, TaskPlanItemStatus } from '../../shared/types/task_plan';
+import {
+  MAX_EXECUTION_TASK_PLAN_ITEMS,
+  MAX_STORED_TASK_PLAN_ITEMS,
+  type TaskPlanItem,
+  type TaskPlanItemDraft,
+  type TaskPlanItemStatus,
+} from '../../shared/types/task_plan';
 import { normalizeWhitespace } from '../../shared/utils/text';
 
-export const MAX_TASK_PLAN_ITEMS = 20;
+export const MAX_TASK_PLAN_ITEMS = MAX_STORED_TASK_PLAN_ITEMS;
+export { MAX_EXECUTION_TASK_PLAN_ITEMS };
 
 const VALID_TASK_PLAN_STATUSES = new Set<TaskPlanItemStatus>([
   'pending',
@@ -16,9 +23,17 @@ const normalizeTaskPlanStatus = (value: unknown): TaskPlanItemStatus => {
     : 'pending';
 };
 
-export const normalizeTaskPlanItems = (items: TaskPlanItemDraft[]): TaskPlanItem[] => {
-  if (items.length > MAX_TASK_PLAN_ITEMS) {
-    throw new Error(`Max ${MAX_TASK_PLAN_ITEMS} todos allowed`);
+export const normalizeTaskPlanItems = (
+  items: TaskPlanItemDraft[],
+  options?: { maxItems?: number }
+): TaskPlanItem[] => {
+  const maxItems =
+    typeof options?.maxItems === 'number' && Number.isFinite(options.maxItems)
+      ? Math.max(0, Math.trunc(options.maxItems))
+      : MAX_TASK_PLAN_ITEMS;
+
+  if (items.length > maxItems) {
+    throw new Error(`Max ${maxItems} todos allowed`);
   }
 
   const normalizedItems = items.map((item, index) => {
