@@ -264,6 +264,76 @@ describe('ProvidersSettings', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
+  it('surfaces MiniMax as a built-in provider with the official default base URL', async () => {
+    const list = vi.fn(async () => []);
+    const add = vi.fn(async () => ({ id: 'minimax_176' }));
+
+    setElectronApi({
+      providers: {
+        list,
+        add,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const minimaxRow = wrapper
+      .findAll('.provider-list-item')
+      .find(item => item.text().includes('MiniMax'));
+
+    if (!minimaxRow) {
+      throw new Error('MiniMax provider row not found');
+    }
+
+    await minimaxRow.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Inactive');
+    expect(wrapper.find('input[type="password"]').exists()).toBe(true);
+    expect(
+      wrapper.find('input[placeholder="https://api.minimax.io/anthropic/v1"]').exists()
+    ).toBe(true);
+
+    const apiKeyInput = wrapper.find('input[type="password"]');
+    await apiKeyInput.setValue('minimax-key');
+    await wrapper.find('.provider-switch input').setValue(true);
+    await findButtonByText(wrapper, 'Save').trigger('click');
+    await flushPromises();
+
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^minimax_\d+$/),
+        name: 'MiniMax',
+        type: 'minimax',
+        api_key: 'minimax-key',
+        base_url: 'https://api.minimax.io/anthropic/v1',
+        models: '[]',
+        available_models: '[]',
+        enabled: true,
+      })
+    );
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
   it('creates a custom provider with the selected shared dropdown type', async () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'custom_176' }));

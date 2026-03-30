@@ -23,6 +23,7 @@ describe('provider_models helpers', () => {
   it('maps provider aliases to models.dev provider keys', () => {
     expect(getModelsDevProviderKey('kimi')).toBe('moonshotai');
     expect(getModelsDevProviderKey('moonshot')).toBe('moonshotai');
+    expect(getModelsDevProviderKey('minimax')).toBe('minimax-cn');
     expect(getModelsDevProviderKey('openai')).toBe('openai');
   });
 
@@ -55,10 +56,24 @@ describe('provider_models helpers', () => {
           },
         },
       },
+      'minimax-cn': {
+        models: {
+          'MiniMax-M2': {
+            name: 'MiniMax M2',
+            limits: {
+              context: '1000000',
+              output: '80000',
+            },
+            supports_tools: true,
+            supports_reasoning: true,
+          },
+        },
+      },
     };
 
     expect(listModelsDevProviderModels(catalog, 'openai')).toEqual(['gpt-4o-mini']);
     expect(listModelsDevProviderModels(catalog, 'kimi')).toEqual(['kimi-k2']);
+    expect(listModelsDevProviderModels(catalog, 'minimax')).toEqual(['MiniMax-M2']);
 
     expect(lookupModelsDevModelCapability(catalog, 'openai', 'gpt-4o-mini')).toEqual({
       providerType: 'openai',
@@ -81,6 +96,19 @@ describe('provider_models helpers', () => {
       contextWindow: 64000,
       maxInputTokens: 64000,
       maxOutputTokens: 8000,
+      supportsToolCalls: true,
+      supportsReasoning: true,
+      source: 'models.dev',
+    });
+
+    expect(lookupModelsDevModelCapability(catalog, 'minimax', 'MiniMax-M2')).toEqual({
+      providerType: 'minimax',
+      providerKey: 'minimax-cn',
+      modelId: 'MiniMax-M2',
+      displayName: 'MiniMax M2',
+      contextWindow: 1000000,
+      maxInputTokens: 1000000,
+      maxOutputTokens: 80000,
       supportsToolCalls: true,
       supportsReasoning: true,
       source: 'models.dev',

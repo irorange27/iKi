@@ -1025,6 +1025,8 @@ export const en = defineCatalog({
   'settings.providers.description.deepseek':
     'DeepSeek AI models with advanced reasoning capabilities',
   'settings.providers.description.kimi': 'Moonshot AI models like Kimi with long context support',
+  'settings.providers.description.minimax':
+    'Official MiniMax models via the AI SDK MiniMax provider',
   'settings.providers.description.ollama': 'Run open-source LLMs locally with Ollama',
   'settings.mcp.title': 'MCP (Model Context Protocol)',
   'settings.mcp.description':

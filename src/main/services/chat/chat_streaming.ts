@@ -17,6 +17,7 @@ import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import * as llmFactory from '../../../core/provider/llm/factory';
 import * as deepseekProvider from '../../../core/provider/llm/deepseek';
 import * as kimiProvider from '../../../core/provider/llm/kimi';
+import * as minimaxProvider from '../../../core/provider/llm/minimax';
 import * as openaiProvider from '../../../core/provider/llm/openai';
 import { defaultToolRegistry } from '../../../core/tools';
 import { LoadSkillTool } from '../../../core/tools/skill_tools';
@@ -338,6 +339,7 @@ export const createChatStreaming = (deps: {
       if (providerType === 'deepseek') return await deepseekProvider.getDeepSeekModels();
       if (providerType === 'openai') return await openaiProvider.getOpenAIModels();
       if (providerType === 'kimi') return await kimiProvider.getKimiModels();
+      if (providerType === 'minimax') return await minimaxProvider.getMinimaxModels();
 
       // 2. Fallback to general factory fetch
       return await llmFactory.fetchModelsFromDev(providerType);

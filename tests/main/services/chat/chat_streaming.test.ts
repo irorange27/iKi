@@ -25,6 +25,7 @@ const {
   toolLoopStreamMock,
   defaultToolRegistryGetMock,
   getErrorMessageMock,
+  getMinimaxModelsMock,
 } = vi.hoisted(() => ({
   dbPrepareMock: vi.fn(),
   dbGetMock: vi.fn(),
@@ -64,6 +65,7 @@ const {
   getErrorMessageMock: vi.fn((error: unknown) =>
     error instanceof Error ? error.message : String(error)
   ),
+  getMinimaxModelsMock: vi.fn(async () => []),
 }));
 
 vi.mock('../../../../src/core/config', () => ({
@@ -125,6 +127,10 @@ vi.mock('../../../../src/core/provider/llm/openai', () => ({
 
 vi.mock('../../../../src/core/provider/llm/kimi', () => ({
   getKimiModels: vi.fn(async () => []),
+}));
+
+vi.mock('../../../../src/core/provider/llm/minimax', () => ({
+  getMinimaxModels: getMinimaxModelsMock,
 }));
 
 vi.mock('../../../../src/core/tools', () => ({
@@ -276,6 +282,15 @@ beforeEach(() => {
 });
 
 describe('createChatStreaming', () => {
+  it('getModels() routes MiniMax through the provider-specific cache path', async () => {
+    getMinimaxModelsMock.mockResolvedValueOnce(['MiniMax-M2']);
+
+    const { streaming } = createDeps();
+
+    await expect(streaming.getModels('minimax')).resolves.toEqual(['MiniMax-M2']);
+    expect(getMinimaxModelsMock).toHaveBeenCalledTimes(1);
+  });
+
   it('stream() emits skill usage citations before rendering the response', async () => {
     assembleContextMock.mockResolvedValue({
       messages: [{ role: 'user', content: 'hello' }],

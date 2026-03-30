@@ -4,6 +4,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createMinimax } from 'vercel-minimax-ai-provider';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '../../logger';
 import { getPersonaPrompt } from '../../persona';
@@ -290,6 +291,17 @@ export const createModel = (
     });
     return client(modelId);
   }
+  if (providerType === 'minimax') {
+    const client = createMinimax({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.minimax.io/anthropic/v1',
+    });
+    const model = client(modelId);
+    if (!isLanguageModelInstance(model)) {
+      throw new Error(`MiniMax provider returned an invalid language model for "${modelId}".`);
+    }
+    return model;
+  }
 
   if (config.isResponseApi) {
     const client = createOpenAI({
@@ -444,8 +456,8 @@ export const fetchModelsFromDev = async (providerType: string) => {
     const data = await fetchModelsDevCatalog();
     return listModelsDevProviderModels(data, providerType);
   } catch {
+    return [];
   }
-  return [];
 };
 
 const fetchModelsDevCatalog = async (): Promise<ModelsDevCatalog> => {

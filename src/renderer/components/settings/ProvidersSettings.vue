@@ -647,6 +647,7 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
       anthropic: t('settings.providers.description.anthropic'),
       deepseek: t('settings.providers.description.deepseek'),
       kimi: t('settings.providers.description.kimi'),
+      minimax: t('settings.providers.description.minimax'),
       ollama: t('settings.providers.description.ollama'),
     };
     return {

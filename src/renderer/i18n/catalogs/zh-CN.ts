@@ -986,6 +986,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     '通过 AI SDK 的 Anthropic Provider 使用官方 Claude 模型',
   'settings.providers.description.deepseek': 'DeepSeek AI 模型，具备更强的推理能力',
   'settings.providers.description.kimi': 'Moonshot AI 模型，例如支持超长上下文的 Kimi',
+  'settings.providers.description.minimax':
+    '通过 AI SDK 的 MiniMax Provider 使用官方 MiniMax 模型',
   'settings.providers.description.ollama': '通过 Ollama 在本地运行开源大模型',
   'settings.mcp.title': 'MCP（Model Context Protocol）',
   'settings.mcp.description':

@@ -4,6 +4,7 @@ const {
   createAnthropicMock,
   createDeepSeekMock,
   createLoggerMock,
+  createMinimaxMock,
   createOpenAICompatibleMock,
   createOpenAIMock,
   fetchWithTimeoutMock,
@@ -21,6 +22,7 @@ const {
     debug: vi.fn(),
     event: vi.fn(),
   })),
+  createMinimaxMock: vi.fn(),
   createOpenAICompatibleMock: vi.fn(),
   createOpenAIMock: vi.fn(),
   fetchWithTimeoutMock: vi.fn(),
@@ -49,6 +51,10 @@ vi.mock('@ai-sdk/deepseek', () => ({
 
 vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: createOpenAICompatibleMock,
+}));
+
+vi.mock('vercel-minimax-ai-provider', () => ({
+  createMinimax: createMinimaxMock,
 }));
 
 vi.mock('../../../../src/core/db/providers', () => ({
@@ -86,9 +92,9 @@ const createAsyncIterable = <T>(values: T[]) =>
     }
   })();
 
-const createMockLanguageModel = () => ({
+const createMockLanguageModel = (provider = 'anthropic') => ({
   specificationVersion: 'v3' as const,
-  provider: 'anthropic',
+  provider,
   modelId: 'claude-sonnet-4-5',
   supportedUrls: {},
   doGenerate: vi.fn(),
@@ -157,6 +163,30 @@ describe('llm factory', () => {
       baseURL: 'https://api.anthropic.com/v1',
     });
     expect(modelFactory).toHaveBeenCalledWith('claude-sonnet-4-5');
+    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
+  });
+
+  it('instantiates MiniMax models through the MiniMax provider adapter', () => {
+    const minimaxModel = createMockLanguageModel('minimax.messages');
+    const modelFactory = vi.fn(() => minimaxModel);
+    createMinimaxMock.mockReturnValue(modelFactory);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_minimax',
+        type: 'minimax',
+        enabled: true,
+        api_key: 'sk-mini',
+        base_url: '',
+        models: JSON.stringify(['MiniMax-M2']),
+      },
+    ]);
+
+    expect(createModel('minimax', 'MiniMax-M2')).toBe(minimaxModel);
+    expect(createMinimaxMock).toHaveBeenCalledWith({
+      apiKey: 'sk-mini',
+      baseURL: 'https://api.minimax.io/anthropic/v1',
+    });
+    expect(modelFactory).toHaveBeenCalledWith('MiniMax-M2');
     expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
   });
 

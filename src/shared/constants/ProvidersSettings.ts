@@ -34,6 +34,16 @@ export const BUILTIN_PROVIDERS: BuiltInProvider[] = [
     docsUrl: 'https://platform.moonshot.cn/docs',
   },
   {
+    id: 'minimax',
+    name: 'MiniMax',
+    description: 'Official MiniMax models via the AI SDK MiniMax provider',
+    defaultBaseUrl: 'https://api.minimax.io/anthropic/v1',
+    models: ['MiniMax-M2', 'MiniMax-M2-Stable'],
+    docsUrl: 'https://platform.minimax.io',
+    credentialsUrl: 'https://platform.minimax.io',
+    credentialsLabel: 'MiniMax Platform',
+  },
+  {
     id: 'ollama',
     name: 'Ollama',
     description: 'Run open-source LLMs locally with Ollama',
