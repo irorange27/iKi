@@ -126,4 +126,44 @@ describe('WebSearchTool', () => {
       { title: 'News & Two', url: 'https://news.example.com/2' },
     ]);
   });
+
+  it('uses English locale parameters for Latin-script web queries', async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response('<html><body></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const tool = new WebSearchTool();
+    await tool.execute({ query: 'BBC African author road accident died', limit: 5 });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('duckduckgo.com');
+    expect(url).toContain('kl=us-en');
+    expect(init.headers).toMatchObject({
+      'accept-language': 'en-US,en;q=0.9',
+    });
+  });
+
+  it('uses Chinese locale parameters for CJK web queries', async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response('<html><body></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const tool = new WebSearchTool();
+    await tool.execute({ query: '今天 新闻', limit: 5 });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('duckduckgo.com');
+    expect(url).toContain('kl=cn-zh');
+    expect(init.headers).toMatchObject({
+      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
+    });
+  });
 });

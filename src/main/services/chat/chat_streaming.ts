@@ -25,7 +25,11 @@ import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thre
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import { getErrorMessage } from '../../utils/errors';
-import { NO_TOOLS_SYSTEM_PROMPT, TOOL_AGENT_SYSTEM_PROMPT } from './chat_constants';
+import {
+  NO_TOOLS_SYSTEM_PROMPT,
+  TOOL_AGENT_SYSTEM_PROMPT,
+  resolveChatToolMaxIterations,
+} from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import { createChatContextAssembler } from './chat_context';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
@@ -301,6 +305,7 @@ export const createChatStreaming = (deps: {
     model: string;
     systemPrompt: string;
     maxOutputTokens?: number;
+    maxIterations: number;
     enabledTools: string[];
     availableSkillIds: string[];
   }): ApprovalRecoveryContext | undefined => {
@@ -321,6 +326,7 @@ export const createChatStreaming = (deps: {
       ...(typeof params.maxOutputTokens === 'number'
         ? { maxOutputTokens: params.maxOutputTokens }
         : {}),
+      maxIterations: params.maxIterations,
       enabledTools: [...params.enabledTools],
       availableSkillIds: [...params.availableSkillIds],
     };
@@ -372,6 +378,7 @@ export const createChatStreaming = (deps: {
     skillIds?: string[];
     skillMode?: 'manual' | 'auto';
     threadId?: string;
+    maxIterations?: number;
   };
 
   type PreparedChatTurn = {
@@ -483,6 +490,7 @@ export const createChatStreaming = (deps: {
   const send = async (options: ChatTurnOptions) => {
     try {
       const preparedTurn = await prepareChatTurn(options);
+      const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
 
       if (preparedTurn.enableTools) {
         const runner = createChatConversationRunner({
@@ -492,7 +500,7 @@ export const createChatStreaming = (deps: {
           systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
           enableTools: true,
           enabledTools: preparedTurn.guardedTools,
-          maxIterations: 5,
+          maxIterations,
           ...(typeof preparedTurn.maxOutputTokens === 'number'
             ? { maxTokens: preparedTurn.maxOutputTokens }
             : {}),
@@ -605,6 +613,7 @@ export const createChatStreaming = (deps: {
           });
         },
       });
+      const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
 
       if (preparedTurn.usedSkills.length > 0) {
         uiChunkEmitter.emitSkillUsage({
@@ -636,6 +645,7 @@ export const createChatStreaming = (deps: {
             model: options.model,
             systemPrompt,
             maxOutputTokens: preparedTurn.maxOutputTokens,
+            maxIterations,
             enabledTools: preparedTurn.guardedTools,
             availableSkillIds: preparedTurn.selectedSkillIds,
           })
@@ -648,7 +658,7 @@ export const createChatStreaming = (deps: {
         systemPrompt,
         enableTools: preparedTurn.enableTools,
         enabledTools: preparedTurn.guardedTools,
-        maxIterations: 5,
+        maxIterations,
         ...(typeof preparedTurn.maxOutputTokens === 'number'
           ? { maxTokens: preparedTurn.maxOutputTokens }
           : {}),

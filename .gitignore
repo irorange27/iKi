@@ -3,6 +3,8 @@ dist/
 docs/
 dataset/
 
+benchmark-runs/
+
 .vscode/
 .VSCodeCounter/
 

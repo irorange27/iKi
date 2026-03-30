@@ -26,6 +26,33 @@ const entityMap: Record<string, string> = {
   nbsp: ' ',
 };
 
+type SearchLocale = {
+  duckDuckGoRegion: string;
+  bingMarket: string;
+  bingCountry: string;
+  acceptLanguage: string;
+};
+
+const CJK_QUERY_PATTERN = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
+
+const inferSearchLocale = (query: string): SearchLocale => {
+  if (CJK_QUERY_PATTERN.test(query)) {
+    return {
+      duckDuckGoRegion: 'cn-zh',
+      bingMarket: 'zh-CN',
+      bingCountry: 'CN',
+      acceptLanguage: 'zh-CN,zh;q=0.9,en;q=0.6',
+    };
+  }
+
+  return {
+    duckDuckGoRegion: 'us-en',
+    bingMarket: 'en-US',
+    bingCountry: 'US',
+    acceptLanguage: 'en-US,en;q=0.9',
+  };
+};
+
 const decodeHtmlEntities = (value: string): string =>
   value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, rawEntity: string) => {
     const entity = rawEntity.toLowerCase();
@@ -258,10 +285,11 @@ export class WebSearchTool extends BaseTool {
     const retries = Math.min(getNetworkRetryAttempts(), 1);
     const warnings: string[] = [];
     const sourcesTried: string[] = [];
+    const locale = inferSearchLocale(query);
 
     const tryDuckDuckGo = async (): Promise<Array<{ title: string; url: string }> | null> => {
       sourcesTried.push('duckduckgo');
-      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=${encodeURIComponent(locale.duckDuckGoRegion)}`;
       const response = await fetchWithTimeout(
         searchUrl,
         {
@@ -270,6 +298,7 @@ export class WebSearchTool extends BaseTool {
             'user-agent':
               'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
             accept: 'text/html,application/xhtml+xml',
+            'accept-language': locale.acceptLanguage,
           },
         },
         { timeoutMs, retries }
@@ -286,7 +315,11 @@ export class WebSearchTool extends BaseTool {
 
     const tryBingRss = async (): Promise<Array<{ title: string; url: string }> > => {
       sourcesTried.push('bing');
-      const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&format=rss`;
+      const searchUrl =
+        `https://www.bing.com/search?q=${encodeURIComponent(query)}` +
+        `&format=rss&mkt=${encodeURIComponent(locale.bingMarket)}` +
+        `&setlang=${encodeURIComponent(locale.bingMarket)}` +
+        `&cc=${encodeURIComponent(locale.bingCountry)}`;
       const response = await fetchWithTimeout(
         searchUrl,
         {
@@ -295,6 +328,7 @@ export class WebSearchTool extends BaseTool {
             'user-agent':
               'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
             accept: 'application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
+            'accept-language': locale.acceptLanguage,
           },
         },
         { timeoutMs, retries }

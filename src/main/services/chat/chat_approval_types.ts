@@ -7,6 +7,7 @@ export type ApprovalRecoveryContext = {
   model: string;
   systemPrompt: string;
   maxOutputTokens?: number;
+  maxIterations?: number;
   enabledTools: string[];
   availableSkillIds?: string[];
 };

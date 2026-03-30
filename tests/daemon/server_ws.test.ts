@@ -374,6 +374,7 @@ describe('configureDaemonWebSockets', () => {
           model: 'gpt-4.1',
           messages: [{ role: 'user', content: 'hello' }],
           thread_id: 'thread_owned',
+          maxIterations: 12,
           tools: ['web', 'shell'],
           mcpServerIds: ['docs', 'other'],
           skillIds: ['skill_1'],
@@ -401,6 +402,7 @@ describe('configureDaemonWebSockets', () => {
         skillIds: ['skill_1'],
         skillMode: 'manual',
         threadId: 'thread_owned',
+        maxIterations: 12,
       }
     );
     expect(parseDaemonPayload(harness.ws.sent.at(-1) || '')).toEqual({

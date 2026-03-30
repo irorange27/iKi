@@ -29,6 +29,7 @@ npm run benchmark:daemon -- \
   --provider openai \
   --model gpt-4.1-mini \
   --parallel 4 \
+  --max-iterations 12 \
   --spawn-daemon \
   --user-data-path /path/to/preconfigured/iki-benchmark-profile
 ```
@@ -46,6 +47,7 @@ npm run benchmark:daemon -- \
   --judge-provider openai \
   --judge-model gpt-4.1 \
   --parallel 4 \
+  --max-iterations 12 \
   --spawn-daemon \
   --user-data-path /path/to/preconfigured/iki-benchmark-profile
 ```
@@ -74,6 +76,9 @@ Important:
 - `--spawn-daemon` now requires `--user-data-path`
 - `--parallel` defaults to `1`; increase it gradually (`2`, `4`, then `8`) based on provider rate
   limits and daemon stability
+- `--max-iterations` lets daemon benchmark runs raise the tool-loop ceiling without changing normal
+  desktop chat defaults; BrowseComp-style browse-heavy tasks often need more than the product
+  default of `5`, so start with `12`
 - that profile must already contain an enabled provider configuration; the harness does not create
   provider records automatically
 

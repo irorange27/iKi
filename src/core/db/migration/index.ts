@@ -24,6 +24,7 @@ import { migration as migration022ChatToolApprovalMaxOutputTokens } from './022_
 import { migration as migration023CanonicalizeChatUiMessages } from './023_canonicalize_chat_ui_messages';
 import { migration as migration024AddProviderModelOptions } from './024_add_provider_model_options';
 import { migration as migration025AddChatThreadTodos } from './025_add_chat_thread_todos_table';
+import { migration as migration026AddChatToolApprovalMaxIterations } from './026_add_chat_tool_approval_max_iterations';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -52,6 +53,7 @@ export const registeredMigrations = [
   migration023CanonicalizeChatUiMessages,
   migration024AddProviderModelOptions,
   migration025AddChatThreadTodos,
+  migration026AddChatToolApprovalMaxIterations,
   // Add more migrations here as needed
 ];
 

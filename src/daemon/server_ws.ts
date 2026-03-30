@@ -170,6 +170,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             skillIds: payload.skillIds,
             skillMode: payload.skillMode,
             threadId,
+            maxIterations: payload.maxIterations,
           });
 
           sendDaemonPayload(ws, {

@@ -1,4 +1,5 @@
 import { createSimpleConversationRunner, type ConversationRunner } from '../../../core/agent';
+import { resolveChatToolMaxIterations } from './chat_constants';
 import { createTodoPrepareStep } from './chat_todo_planning';
 
 type CreateChatConversationRunnerParams = {
@@ -30,5 +31,5 @@ export const createChatConversationRunner = (
         }
       : {}),
     ...(typeof params.maxTokens === 'number' ? { maxTokens: params.maxTokens } : {}),
-    maxIterations: params.maxIterations ?? 5,
+    maxIterations: resolveChatToolMaxIterations(params.maxIterations),
   });

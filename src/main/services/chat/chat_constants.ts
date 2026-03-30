@@ -1,3 +1,10 @@
+export const DEFAULT_CHAT_TOOL_MAX_ITERATIONS = 10;
+
+export const resolveChatToolMaxIterations = (value?: number): number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.trunc(value)
+    : DEFAULT_CHAT_TOOL_MAX_ITERATIONS;
+
 export const TOOL_AGENT_SYSTEM_PROMPT =
   'You can use tools (filesystem, shell, web, MCP) when they are necessary to solve the task.\n' +
   'Rules:\n' +

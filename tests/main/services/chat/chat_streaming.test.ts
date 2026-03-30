@@ -810,6 +810,7 @@ describe('createChatStreaming', () => {
         recoveryContext: expect.objectContaining({
           threadId: 'thread_3',
           maxOutputTokens: 512,
+          maxIterations: 10,
           enabledTools: ['web'],
           availableSkillIds: [],
         }),
@@ -820,7 +821,7 @@ describe('createChatStreaming', () => {
         providerType: 'openai',
         model: 'gpt-4o-mini',
         enableTools: true,
-        maxIterations: 5,
+        maxIterations: 10,
         maxTokens: 512,
       })
     );
@@ -883,6 +884,56 @@ describe('createChatStreaming', () => {
       text: 'Explanation: done\nExact Answer: 42\nConfidence: 90%',
       stopped: false,
     });
+  });
+
+  it('stream() forwards an explicit tool-iteration cap for daemon-style callers', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [
+        { role: 'system', content: 'history' },
+        { role: 'user', content: 'stream tool' },
+      ],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 24,
+        retainedRecentMessages: 2,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 512,
+      },
+    });
+    resolveToolNamesMock.mockResolvedValue({
+      mode: 'manual',
+      explicitTools: ['web'],
+      resolvedTools: ['web'],
+    });
+    toModelInputMessagesMock.mockResolvedValue([
+      { role: 'system', content: 'history' },
+      { role: 'user', content: 'stream tool' },
+    ]);
+
+    const { streaming } = createDeps();
+    const webContents = { id: 14, send: vi.fn() };
+    await streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'stream tool' }],
+      tools: ['web'],
+      threadId: 'thread_tool_iterations',
+      maxIterations: 12,
+    });
+
+    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        enableTools: true,
+        maxIterations: 12,
+        maxTokens: 512,
+      })
+    );
   });
 
   it('treats affect as a first-class turn signal for routing and ui emission', async () => {

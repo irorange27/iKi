@@ -11,6 +11,7 @@
     "app:dev": "npm run -s start",
     "app:build": "npm run -s make",
     "app:preview": "node scripts/run-packaged-preview.cjs",
+    "benchmark:daemon": "node scripts/benchmarks/run-daemon-benchmark.cjs",
     "daemon:start": "tsc && node scripts/start-daemon.cjs",
     "ts": "tsc",
     "watch": "tsc -w",

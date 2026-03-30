@@ -97,6 +97,7 @@ const ChatSendPayloadSchema = z
     mcpServerIds: z.unknown().optional(),
     skillIds: StringArraySchema.optional(),
     skillMode: z.enum(['manual', 'auto']).optional(),
+    maxIterations: z.number().int().positive().max(100).optional(),
   })
   .passthrough()
   .transform(value => ({
@@ -108,6 +109,7 @@ const ChatSendPayloadSchema = z
     mcpServerIds: value.mcpServerIds,
     skillIds: value.skillIds,
     skillMode: value.skillMode as ChatInvocationOptions['skillMode'],
+    maxIterations: value.maxIterations,
   }));
 
 const ApproveToolPayloadSchema = z

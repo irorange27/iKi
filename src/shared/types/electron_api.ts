@@ -72,6 +72,7 @@ export type ChatInvocationOptions = {
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
   threadId?: string;
+  maxIterations?: number;
 };
 
 export type ChatInvocationResult = {

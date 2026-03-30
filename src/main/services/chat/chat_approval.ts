@@ -12,6 +12,7 @@ import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_a
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatMemory } from './chat_memory';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
+import { resolveChatToolMaxIterations } from './chat_constants';
 import type { ActiveStreamState, ChatWebContents } from './chat_types';
 import { createUiChunkEmitter, parseStoredUiMessageRow, toModelInputMessages } from './chat_ui';
 import { createChatConversationRunner } from './chat_conversation_runner';
@@ -118,6 +119,7 @@ export const createChatApproval = (deps: {
         model: recoveryContext.model,
         system_prompt: recoveryContext.systemPrompt,
         max_output_tokens: recoveryContext.maxOutputTokens ?? null,
+        max_iterations: recoveryContext.maxIterations ?? null,
         enabled_tools: JSON.stringify(recoveryContext.enabledTools),
         available_skill_ids: JSON.stringify(recoveryContext.availableSkillIds),
       });
@@ -226,13 +228,14 @@ export const createChatApproval = (deps: {
         )
       );
     }
+    const maxIterations = resolveChatToolMaxIterations(approvalSession.max_iterations ?? undefined);
 
     const runner = createChatConversationRunner({
       providerType: approvalSession.provider_type,
       model: approvalSession.model,
       systemPrompt: approvalSession.system_prompt,
       enableTools: true,
-      maxIterations: 5,
+      maxIterations,
       ...(typeof approvalSession.max_output_tokens === 'number'
         ? { maxTokens: approvalSession.max_output_tokens }
         : {}),
@@ -285,6 +288,7 @@ export const createChatApproval = (deps: {
         ...(typeof approvalSession.max_output_tokens === 'number'
           ? { maxOutputTokens: approvalSession.max_output_tokens }
           : {}),
+        maxIterations,
         enabledTools: toolNames,
         availableSkillIds,
       },
