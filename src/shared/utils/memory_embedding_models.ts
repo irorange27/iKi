@@ -1,5 +1,4 @@
-import type { Provider } from '../types/provider';
-import type { ProviderModelOptions } from '../types/provider';
+import type { Provider, ProviderModelOptions } from '../types/provider';
 import { parseModelList, parseProviderModelOptionsMap } from './provider_models';
 
 export const DEFAULT_MEMORY_EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -29,7 +28,9 @@ export const isLikelyEmbeddingModel = (
   return EMBEDDING_MODEL_PATTERN.test(modelId);
 };
 
-export const listProviderEmbeddingModels = (provider: Pick<Provider, 'type' | 'models' | 'model_options'>): string[] => {
+export const listProviderEmbeddingModels = (
+  provider: Pick<Provider, 'type' | 'models' | 'model_options'>
+): string[] => {
   const models = parseModelList(provider.models);
   const modelOptionsMap = parseProviderModelOptionsMap(provider.model_options);
   const embeddingModels = models.filter(model => isLikelyEmbeddingModel(model, modelOptionsMap[model]));

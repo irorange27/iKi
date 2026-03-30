@@ -35,7 +35,6 @@ import {
   authenticateRequest,
   getThreadOrError,
   hasScope,
-  isFirstUserClientRegistration,
   parseJsonBody,
   type WsSession,
   withCors,
@@ -112,7 +111,6 @@ export const createDaemonRequestHandler =
         );
         if (!body) return;
 
-        const isFirstClient = isFirstUserClientRegistration(deps.napcatClientId);
         const created = createAppClient(body);
         deps.bootstrapTokenRef.current = rotateBootstrapToken(deps.userDataPath);
         writeJson(res, 200, {

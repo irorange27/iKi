@@ -26,7 +26,7 @@ const mountHarness = async (options?: {
   const state = {
     activeTodoPlan: ref<unknown>(null),
     todoPlan: ref<unknown>(null),
-    handleChatChunk: (_chunk: unknown) => undefined,
+    handleChatChunk: () => undefined,
   };
 
   const Harness = defineComponent({
