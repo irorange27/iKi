@@ -1,52 +1,27 @@
 <template>
-  <section class="todo-plan">
+  <section class="todo-plan" :aria-label="t('chat.tool.executionPlan')">
     <div class="todo-plan-summary">
-      <div class="todo-plan-summary-copy">
-        <div class="todo-plan-eyebrow">{{ t('chat.tool.executionPlan') }}</div>
+      <div class="todo-plan-summary-main">
+        <ListTodo :size="14" class="todo-plan-summary-icon" />
         <div class="todo-plan-progress">
-          {{ t('chat.todoPlan.progress', { completed: completedCount, total: totalCount, percent }) }}
+          {{ t('chat.todoPlan.progress', { completed: completedCount, total: totalCount }) }}
         </div>
       </div>
-      <div class="todo-plan-badges">
-        <span class="todo-plan-badge badge-progress">
-          {{ t('chat.todoPlan.inProgressCount', { count: inProgressCount }) }}
-        </span>
-        <span class="todo-plan-badge badge-pending">
-          {{ t('chat.todoPlan.pendingCount', { count: pendingCount }) }}
-        </span>
-        <span class="todo-plan-badge badge-completed">
-          {{ t('chat.todoPlan.completedCount', { count: completedCount }) }}
-        </span>
-      </div>
-    </div>
-
-    <div class="todo-plan-rail" aria-hidden="true">
-      <div class="todo-plan-rail-fill" :style="{ width: `${progressPercent}%` }"></div>
-    </div>
-
-    <div v-if="currentItem" class="todo-plan-focus">
-      <div class="todo-plan-focus-label">{{ t('chat.todoPlan.current') }}</div>
-      <div class="todo-plan-focus-text">{{ currentItem.text }}</div>
-    </div>
-
-    <div v-else class="todo-plan-focus is-idle">
-      <div class="todo-plan-focus-label">{{ t('chat.todoPlan.current') }}</div>
-      <div class="todo-plan-focus-text">{{ t('chat.todoPlan.noCurrentTask') }}</div>
     </div>
 
     <ol v-if="items.length > 0" class="todo-plan-list">
       <li
-        v-for="item in items"
+        v-for="(item, index) in items"
         :key="item.id"
         class="todo-plan-item"
         :class="[`status-${item.status}`]"
       >
-        <span class="todo-plan-item-marker">{{ getMarker(item.status) }}</span>
+        <span class="todo-plan-item-marker" aria-hidden="true"></span>
+        <span class="todo-plan-item-index">{{ index + 1 }}.</span>
         <div class="todo-plan-item-body">
           <div class="todo-plan-item-text">{{ item.text }}</div>
-          <div class="todo-plan-item-meta">
-            <span class="todo-plan-item-id">#{{ item.id }}</span>
-            <span class="todo-plan-item-status">{{ getStatusLabel(item.status) }}</span>
+          <div v-if="item.status === 'in_progress'" class="todo-plan-item-hint">
+            {{ t('chat.todoPlan.inProgress') }}
           </div>
         </div>
       </li>
@@ -58,204 +33,68 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { ListTodo } from 'lucide-vue-next';
 
-import type { TodoToolOutput } from '../../../shared/chat/tool_payloads';
+import type { TaskPlan, TaskPlanItemStatus } from '../../../shared/types/task_plan';
 import { useI18n } from '../../i18n';
 
 defineOptions({
   name: 'ChatTodoPlan',
 });
 
-type TodoStatus = 'pending' | 'in_progress' | 'completed';
-type TodoItem = {
-  id: string;
-  text: string;
-  status: TodoStatus;
-};
-
 const props = defineProps<{
-  output: TodoToolOutput;
+  plan: Pick<TaskPlan, 'items'>;
 }>();
 
 const { t } = useI18n();
 
-const isTodoStatus = (value: unknown): value is TodoStatus =>
-  value === 'pending' || value === 'in_progress' || value === 'completed';
-
-const items = computed<TodoItem[]>(() =>
-  Array.isArray(props.output.items)
-    ? props.output.items
-        .filter(
-          (item): item is { id: string; text: string; status: TodoStatus } =>
-            typeof item?.id === 'string' &&
-            typeof item?.text === 'string' &&
-            isTodoStatus(item?.status)
-        )
-        .map(item => ({
-          id: item.id,
-          text: item.text,
-          status: item.status,
-        }))
-    : []
+const items = computed(() =>
+  Array.isArray(props.plan.items) ? props.plan.items : []
 );
 
-const deriveCount = (explicit: number | undefined, status?: TodoStatus) => {
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
-    return Math.max(0, Math.trunc(explicit));
-  }
-  if (!status) {
-    return items.value.length;
-  }
+const deriveCount = (status?: TaskPlanItemStatus) => {
+  if (!status) return items.value.length;
   return items.value.filter(item => item.status === status).length;
 };
 
-const totalCount = computed(() => deriveCount(props.output.totalCount));
-const completedCount = computed(() => deriveCount(props.output.completedCount, 'completed'));
-const inProgressCount = computed(() => deriveCount(props.output.inProgressCount, 'in_progress'));
-const pendingCount = computed(() => deriveCount(props.output.pendingCount, 'pending'));
-
-const progressPercent = computed(() => {
-  if (totalCount.value <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((completedCount.value / totalCount.value) * 100)));
-});
-
-const percent = computed(() => `${progressPercent.value}%`);
-const currentItem = computed(() => items.value.find(item => item.status === 'in_progress') ?? null);
-
-const getStatusLabel = (status: TodoStatus) => {
-  if (status === 'completed') return t('chat.todoPlan.completed');
-  if (status === 'in_progress') return t('chat.todoPlan.inProgress');
-  return t('chat.todoPlan.pending');
-};
-
-const getMarker = (status: TodoStatus) => {
-  if (status === 'completed') return '[x]';
-  if (status === 'in_progress') return '[>]';
-  return '[ ]';
-};
+const totalCount = computed(() => deriveCount());
+const completedCount = computed(() => deriveCount('completed'));
 </script>
 
 <style scoped>
 .todo-plan {
   display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--accent-color) 14%, var(--border-color));
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
   border-radius: 14px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-color) 5%, var(--bg-tertiary)) 0%,
-      var(--bg-tertiary) 100%
-    );
-  box-shadow: var(--surface-shadow-sm);
+  background: color-mix(in srgb, var(--bg-primary) 94%, var(--bg-secondary));
 }
 
 .todo-plan-summary {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.todo-plan-summary-copy {
+.todo-plan-summary-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.todo-plan-eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.todo-plan-summary-icon {
+  flex: 0 0 auto;
   color: var(--text-muted);
+  opacity: 0.9;
 }
 
 .todo-plan-progress {
-  margin-top: 4px;
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--text-primary);
-}
-
-.todo-plan-badges {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.todo-plan-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 1.4;
   font-weight: 600;
-  border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
-  color: var(--text-secondary);
-}
-
-.todo-plan-badge.badge-progress {
-  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
-  color: var(--accent-color);
-}
-
-.todo-plan-badge.badge-pending {
-  border-color: color-mix(in srgb, var(--warning-color) 35%, var(--border-color));
-  color: color-mix(in srgb, var(--warning-color) 72%, var(--text-primary));
-}
-
-.todo-plan-badge.badge-completed {
-  border-color: color-mix(in srgb, var(--success-color) 38%, var(--border-color));
-  color: var(--success-color);
-}
-
-.todo-plan-rail {
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--accent-color) 12%, var(--border-color));
-}
-
-.todo-plan-rail-fill {
-  height: 100%;
-  border-radius: inherit;
-  background:
-    linear-gradient(
-      90deg,
-      var(--accent-color) 0%,
-      color-mix(in srgb, var(--success-color) 60%, var(--accent-color)) 100%
-    );
-  transition: width 0.2s ease;
-}
-
-.todo-plan-focus {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent-color) 22%, var(--border-color));
-  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-secondary));
-}
-
-.todo-plan-focus.is-idle {
-  border-color: var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
-}
-
-.todo-plan-focus-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.todo-plan-focus-text {
-  font-size: 14px;
-  line-height: 1.5;
   color: var(--text-primary);
 }
 
@@ -264,90 +103,97 @@ const getMarker = (status: TodoStatus) => {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .todo-plan-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 14px auto minmax(0, 1fr);
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
-}
-
-.todo-plan-item.status-in_progress {
-  border-color: color-mix(in srgb, var(--accent-color) 34%, var(--border-color));
-  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-secondary));
-}
-
-.todo-plan-item.status-completed {
-  border-color: color-mix(in srgb, var(--success-color) 28%, var(--border-color));
+  column-gap: 8px;
+  padding: 0;
 }
 
 .todo-plan-item-marker {
-  flex: 0 0 auto;
-  min-width: 28px;
-  padding-top: 1px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  position: relative;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 70%, var(--border-color));
+  box-sizing: border-box;
 }
 
 .todo-plan-item.status-in_progress .todo-plan-item-marker {
-  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 70%, var(--border-color));
+}
+
+.todo-plan-item.status-in_progress .todo-plan-item-marker::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  background: var(--accent-color);
 }
 
 .todo-plan-item.status-completed .todo-plan-item-marker {
-  color: var(--success-color);
+  border-color: color-mix(in srgb, var(--success-color) 80%, var(--border-color));
+  background: color-mix(in srgb, var(--success-color) 88%, transparent);
+}
+
+.todo-plan-item.status-completed .todo-plan-item-marker::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 3px;
+  height: 6px;
+  border-right: 1.5px solid var(--bg-primary);
+  border-bottom: 1.5px solid var(--bg-primary);
+  transform: rotate(40deg);
+}
+
+.todo-plan-item-index {
+  min-width: 1.6em;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .todo-plan-item-body {
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .todo-plan-item-text {
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--text-primary);
   overflow-wrap: anywhere;
 }
 
+.todo-plan-item.status-in_progress .todo-plan-item-text {
+  font-weight: 600;
+}
+
 .todo-plan-item.status-completed .todo-plan-item-text {
   color: var(--text-secondary);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 55%, transparent);
 }
 
-.todo-plan-item-meta {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.todo-plan-item-hint {
+  margin-top: 2px;
   font-size: 11px;
-  color: var(--text-muted);
-}
-
-.todo-plan-item-id,
-.todo-plan-item-status {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 2px 8px;
-  border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--accent-color);
 }
 
 .todo-plan-empty {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px dashed var(--border-color);
-  color: var(--text-secondary);
-  font-size: 13px;
-  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  padding-left: 22px;
 }
 </style>

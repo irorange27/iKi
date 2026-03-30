@@ -1,6 +1,7 @@
 <template>
   <div class="chat-input-outer">
     <div class="mx-auto max-w-4xl">
+      <ChatTodoPlan v-if="props.todoPlan" class="chat-input-plan" :plan="props.todoPlan" />
       <ChatComposerShell
         :set-input-ref="setInputRef"
         v-model="message"
@@ -55,11 +56,13 @@
 <script setup lang="ts">
 import { computed, ref, toRef, watchEffect } from 'vue';
 import type { Provider } from '../../shared/types/provider';
+import type { TaskPlan } from '../../shared/types/task_plan';
 import type { ContextUsageIndicator } from '../modules/chat/ui_message_references';
 import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
+import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatComposerSelectors from './ChatComposerSelectors.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
@@ -89,6 +92,7 @@ const props = defineProps<{
   workspaceLocked?: boolean;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
   contextUsage?: ContextUsageIndicator | null;
+  todoPlan?: TaskPlan | null;
 }>();
 
 const inputRef = ref<HTMLInputElement | null>(null);
@@ -213,5 +217,9 @@ defineExpose({
 <style scoped>
 .chat-input-outer {
   padding: var(--chat-composer-padding, 10px);
+}
+
+.chat-input-plan {
+  margin-bottom: 10px;
 }
 </style>

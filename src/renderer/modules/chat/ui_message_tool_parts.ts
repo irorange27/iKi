@@ -463,19 +463,14 @@ export const getToolInputDisplayValue = (part: unknown): unknown => getToolInput
 export const getToolInputDisplayMetaText = (part: unknown): string =>
   getToolInputDisplay(part).metaText ?? '';
 
+export const isTranscriptHiddenToolPart = (part: unknown): boolean =>
+  normalizeToolNameKey(getToolName(part)) === 'todo';
+
 export const isToolCollapsed = (part: unknown): boolean => {
   const toolCallId = getToolCallIdFromPart(part);
   const uiState = toolCallId ? getToolUiState(toolCallId) : undefined;
   if (uiState && typeof uiState.collapsed === 'boolean') {
     return uiState.collapsed;
-  }
-
-  if (
-    isToolResultPart(part) &&
-    normalizeToolNameKey(getToolName(part)) === 'todo' &&
-    getToolStateKind(part) === 'success'
-  ) {
-    return false;
   }
 
   return getToolStateKind(part) === 'success';
@@ -498,6 +493,7 @@ export const getUsedToolNames = (message: unknown): string[] => {
 
   for (const part of parts) {
     if (!isToolPart(part)) continue;
+    if (isTranscriptHiddenToolPart(part)) continue;
     const rawName = getToolName(part);
     const name = typeof rawName === 'string' ? rawName.trim() : '';
     if (!name || name === 'tool') continue;

@@ -62,6 +62,42 @@ describe('ui_message_references', () => {
     });
   });
 
+  it('does not count transcript-hidden todo planner calls as visible tool references', () => {
+    const summary = getToolReferenceSummary({
+      id: 'assistant_1',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-result',
+          toolCallId: 'call_todo_1',
+          toolName: 'todo',
+          state: 'output-available',
+          output: { items: [{ id: '1', text: 'Inspect current code', status: 'completed' }] },
+        },
+        {
+          type: 'tool-result',
+          toolCallId: 'call_todo_2',
+          toolName: 'todo',
+          state: 'output-available',
+          output: { items: [{ id: '2', text: 'Implement fix', status: 'in_progress' }] },
+        },
+        {
+          type: 'tool-result',
+          toolCallId: 'call_fetch_1',
+          toolName: 'fetch',
+          state: 'output-available',
+          output: { content: 'ok' },
+        },
+      ],
+    } as never);
+
+    expect(summary).toEqual({
+      count: 1,
+      names: ['fetch'],
+      items: [{ name: 'fetch', count: 1 }],
+    });
+  });
+
   it('reports loaded skills separately from selected-only skills', () => {
     const summary = getSkillReferenceSummary({
       id: 'assistant_1',

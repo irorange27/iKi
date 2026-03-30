@@ -1,5 +1,7 @@
 <template>
-  <div v-if="isApprovalRequestedPart(part)" class="tool-approval-content">
+  <template v-if="isHiddenTodoTool"></template>
+
+  <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
     <div class="tool-approval-header">
       <svg class="tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -120,8 +122,7 @@
           </li>
         </ol>
       </div>
-      <ChatTodoPlan v-if="todoPlanOutput" :output="todoPlanOutput" />
-      <div v-else-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+      <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
         <div class="tool-card-section-title">
           {{ getToolInputDisplayTitle(part) }}
         </div>
@@ -130,7 +131,7 @@
           {{ getToolInputDisplayMetaText(part) }}
         </div>
       </div>
-      <div v-if="!todoPlanOutput && hasDisplayValue(getToolOutput(part))" class="tool-card-section">
+      <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
         <div class="tool-card-section-title">{{ t('chat.tool.output') }}</div>
         <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
       </div>
@@ -256,7 +257,6 @@ import {
   getToolInputDisplayValue,
   getToolName,
   getToolOutput,
-  getParsedToolOutput,
   getToolStateKind,
   getToolStateLabel,
   getToolStatePillClass,
@@ -265,13 +265,13 @@ import {
   hasDisplayValue,
   hasWebSearchCitations,
   isApprovalRequestedPart,
+  isTranscriptHiddenToolPart,
   isToolCallPart,
   isToolCollapsed,
   isToolResultPart,
   toggleToolCollapse,
 } from '../../modules/chat/ui_message_tool_parts';
 import { useI18n } from '../../i18n';
-import ChatTodoPlan from './ChatTodoPlan.vue';
 
 const props = defineProps<{
   approvalProcessing: boolean;
@@ -289,11 +289,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const todoPlanOutput = computed(() => {
-  if (!isToolResultPart(props.part)) return null;
-  const parsedOutput = getParsedToolOutput(props.part);
-  return parsedOutput.kind === 'todo' ? parsedOutput.output : null;
-});
+const isHiddenTodoTool = computed(() => isTranscriptHiddenToolPart(props.part));
 
 const emitApproval = (approved: boolean) => {
   emit('approve-tool', {

@@ -13,6 +13,7 @@ export const registerChatIpc = (): void => {
   // Chat Thread Management
   ipcMain.handle('chat:threads:list', () => chatService.listThreads());
   ipcMain.handle('chat:threads:get', (_, id) => chatService.getThread(id));
+  ipcMain.handle('chat:threads:todo:get', (_, threadId) => chatService.getThreadTodoPlan(threadId));
   ipcMain.handle('chat:threads:create', (_, thread) => chatService.createThread(thread));
   ipcMain.handle('chat:threads:update', (_, id, thread) => chatService.updateThread(id, thread));
   ipcMain.handle('chat:threads:delete', (_, id) => chatService.deleteThread(id));

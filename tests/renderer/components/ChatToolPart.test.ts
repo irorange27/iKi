@@ -134,7 +134,7 @@ describe('ChatToolPart', () => {
     expect(wrapper.text()).toContain('MCP Server: Docs Server');
   });
 
-  it('renders todo results as a dedicated execution-plan UI and keeps them expanded by default', () => {
+  it('hides thread-scoped todo tool parts from the transcript', () => {
     const wrapper = mount(ChatToolPart, {
       props: {
         approvalProcessing: false,
@@ -158,21 +158,12 @@ describe('ChatToolPart', () => {
               { id: '2', text: 'Implement fix', status: 'in_progress' },
               { id: '3', text: 'Run tests', status: 'pending' },
             ],
-            totalCount: 3,
-            completedCount: 1,
-            inProgressCount: 1,
-            pendingCount: 1,
           },
         },
       },
     });
 
-    expect(wrapper.find('.tool-result-content').classes()).not.toContain('tool-card-collapsed');
-    expect(wrapper.find('.todo-plan').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Execution Plan');
-    expect(wrapper.text()).toContain('1 / 3 completed');
-    expect(wrapper.text()).toContain('Implement fix');
-    expect(wrapper.text()).toContain('#2');
-    expect(wrapper.find('.tool-json-output').exists()).toBe(false);
+    expect(wrapper.find('.tool-result-content').exists()).toBe(false);
+    expect(wrapper.text()).toBe('');
   });
 });

@@ -56,6 +56,7 @@ describe('useChatViewLifecycle', () => {
       streamController: {
         handleUiChunk: vi.fn(async () => undefined),
       },
+      handleChatChunk: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
     };
 
@@ -72,6 +73,10 @@ describe('useChatViewLifecycle', () => {
     await flushPromises();
 
     expect(deps.streamController.handleUiChunk).toHaveBeenCalledWith({
+      type: 'text-delta',
+      delta: 'hello',
+    });
+    expect(deps.handleChatChunk).toHaveBeenCalledWith({
       type: 'text-delta',
       delta: 'hello',
     });
@@ -105,6 +110,7 @@ describe('useChatViewLifecycle', () => {
       streamController: {
         handleUiChunk: vi.fn(async () => undefined),
       },
+      handleChatChunk: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
     };
 
@@ -138,6 +144,7 @@ describe('useChatViewLifecycle', () => {
       streamController: {
         handleUiChunk: vi.fn(async () => undefined),
       },
+      handleChatChunk: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
     };
 

@@ -14,6 +14,7 @@ export const useChatViewLifecycle = (deps: {
   loadToolSources: () => Promise<void>;
   electronAPI: Pick<ElectronApi, 'chat' | 'tasks'>;
   streamController: Pick<ChatUiStreamController, 'handleUiChunk'>;
+  handleChatChunk?: (chunk: unknown) => Promise<void> | void;
   handleTaskPush: (payload: unknown) => Promise<void> | void;
 }) => {
   let removeChatChunkListener: () => void = () => undefined;
@@ -30,6 +31,7 @@ export const useChatViewLifecycle = (deps: {
     removeChatChunkListener();
     removeChatChunkListener = deps.electronAPI.chat.onUiChunk((chunk: unknown) => {
       void deps.streamController.handleUiChunk(chunk);
+      void deps.handleChatChunk?.(chunk);
     });
 
     try {

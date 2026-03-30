@@ -232,6 +232,38 @@ describe('ChatInput', () => {
     vi.restoreAllMocks();
   });
 
+  it('renders the thread todo plan above the composer shell and hides it when absent', async () => {
+    const activePlan = {
+      thread_id: 'thread_1',
+      items: [
+        { id: '1', text: 'Inspect state', status: 'completed' },
+        { id: '2', text: 'Ship composer card', status: 'in_progress' },
+      ],
+      created_at: '2026-03-30T00:00:00.000Z',
+      updated_at: '2026-03-30T00:01:00.000Z',
+    };
+
+    const { wrapper } = await mountChatInput({
+      props: {
+        todoPlan: activePlan,
+      },
+    });
+
+    const plan = wrapper.find('.chat-input-plan');
+    const composer = wrapper.find('.chat-input-container');
+
+    expect(plan.exists()).toBe(true);
+    expect(plan.text()).toContain('1 out of 2 tasks completed');
+    expect(plan.text()).toContain('Ship composer card');
+    expect(plan.element.compareDocumentPosition(composer.element) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+
+    await wrapper.setProps({ todoPlan: null });
+    await flushPromises();
+
+    expect(wrapper.find('.chat-input-plan').exists()).toBe(false);
+  });
+
   it('filters provider models and emits the selected provider/model pair', async () => {
     const deepseek = buildProvider({
       id: 'deepseek',

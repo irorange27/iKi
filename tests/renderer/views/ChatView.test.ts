@@ -33,6 +33,7 @@ const {
   configStoreState,
   useChatThreadsMock,
   useChatStreamingMock,
+  useChatThreadTodoPlanMock,
   useToolMetadataMock,
   useChatViewLifecycleMock,
   useConfigStoreMock,
@@ -99,6 +100,7 @@ const {
 
   const useChatThreadsMock = vi.fn();
   const useChatStreamingMock = vi.fn();
+  const useChatThreadTodoPlanMock = vi.fn();
   const useToolMetadataMock = vi.fn();
   const useChatViewLifecycleMock = vi.fn();
   const useConfigStoreMock = vi.fn(() => configStoreState);
@@ -137,6 +139,7 @@ const {
     configStoreState,
     useChatThreadsMock,
     useChatStreamingMock,
+    useChatThreadTodoPlanMock,
     useToolMetadataMock,
     useChatViewLifecycleMock,
     useConfigStoreMock,
@@ -162,6 +165,10 @@ vi.mock('../../../src/renderer/composables/useChatThreads', () => ({
 
 vi.mock('../../../src/renderer/composables/useChatStreaming', () => ({
   useChatStreaming: useChatStreamingMock,
+}));
+
+vi.mock('../../../src/renderer/composables/useChatThreadTodoPlan', () => ({
+  useChatThreadTodoPlan: useChatThreadTodoPlanMock,
 }));
 
 vi.mock('../../../src/renderer/composables/useToolMetadata', () => ({
@@ -227,6 +234,7 @@ const ChatInputStub = defineComponent({
     selectedWorkspaceId: { type: String, default: null },
     workspaceLocked: { type: Boolean, default: false },
     contextUsage: { type: Object, default: null },
+    todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
   },
   emits: ['incognito-changed', 'model-selected', 'workspace-changed'],
@@ -308,6 +316,7 @@ describe('ChatView', () => {
     getMcpServerLabelMock.mockReset();
     useChatThreadsMock.mockReset();
     useChatStreamingMock.mockReset();
+    useChatThreadTodoPlanMock.mockReset();
     useToolMetadataMock.mockReset();
     useChatViewLifecycleMock.mockReset();
     getContextReferenceSummaryMock.mockReset();
@@ -354,6 +363,13 @@ describe('ChatView', () => {
       loadToolSources: loadToolSourcesMock,
       getMcpServerLabel: getMcpServerLabelMock,
       openSkillReference: openSkillReferenceMock,
+    }));
+
+    useChatThreadTodoPlanMock.mockImplementation(() => ({
+      activeTodoPlan: { value: null, __v_isRef: true as const },
+      handleChatChunk: vi.fn(),
+      refreshTodoPlan: vi.fn(async () => undefined),
+      todoPlan: { value: null, __v_isRef: true as const },
     }));
 
     getContextReferenceSummaryMock.mockImplementation(() => null);
@@ -461,6 +477,30 @@ describe('ChatView', () => {
       label: '3 kept',
       tone: 'neutral',
     });
+  });
+
+  it('passes the active thread todo plan down to the composer region', async () => {
+    const activePlan = {
+      thread_id: 'thread_1',
+      items: [
+        { id: '1', text: 'Inspect state', status: 'completed' as const },
+        { id: '2', text: 'Implement UI card', status: 'in_progress' as const },
+      ],
+      created_at: '2026-03-30T00:00:00.000Z',
+      updated_at: '2026-03-30T00:01:00.000Z',
+    };
+
+    useChatThreadTodoPlanMock.mockImplementation(() => ({
+      activeTodoPlan: { value: activePlan, __v_isRef: true as const },
+      handleChatChunk: vi.fn(),
+      refreshTodoPlan: vi.fn(async () => undefined),
+      todoPlan: { value: activePlan, __v_isRef: true as const },
+    }));
+
+    const wrapper = await mountChatView();
+    const chatInput = wrapper.findComponent(ChatInputStub);
+
+    expect(chatInput.props('todoPlan')).toEqual(activePlan);
   });
 
   it('locks workspace switching once the selected thread already has messages', async () => {

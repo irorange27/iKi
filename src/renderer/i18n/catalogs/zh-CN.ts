@@ -197,8 +197,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.tool.todoLists': '待办列表',
   'chat.tool.input': '输入',
   'chat.tool.allTodoLists': '全部待办列表',
-  'chat.todoPlan.progress': ({ completed, total, percent }) =>
-    `已完成 ${asText(completed)} / ${asText(total)}${asText(percent) ? ` · ${asText(percent)}` : ''}`,
+  'chat.todoPlan.progress': ({ completed, total }) =>
+    `已完成 ${asText(completed)} / ${asText(total)} 项任务`,
   'chat.todoPlan.current': '当前进行中',
   'chat.todoPlan.noCurrentTask': '当前没有进行中的任务。',
   'chat.todoPlan.empty': '当前还没有计划项。',

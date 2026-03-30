@@ -71,6 +71,7 @@
           :selected-workspace-id="selectedWorkspaceId"
           :workspace-locked="isWorkspaceLocked"
           :context-usage="composerContextUsage"
+          :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
           @incognito-changed="handleIncognitoChanged"
           @model-selected="handleModelSelected"
@@ -102,6 +103,7 @@ import { useConfigStore } from '../store/config';
 import { useMarkdownCopy } from '../composables/useMarkdownCopy';
 import { useChatThreads } from '../composables/useChatThreads';
 import { useChatStreaming } from '../composables/useChatStreaming';
+import { useChatThreadTodoPlan } from '../composables/useChatThreadTodoPlan';
 import { useToolMetadata } from '../composables/useToolMetadata';
 import { getThreadOriginInfo } from '../modules/chat/thread_origin';
 import { getElectronAPI } from '../services/electron_api';
@@ -250,6 +252,11 @@ const handleWorkspaceChanged = async (nextValue: string | null) => {
   await setWorkspace(nextValue);
 };
 
+const { activeTodoPlan, handleChatChunk } = useChatThreadTodoPlan({
+  electronAPI,
+  threadId: computed(() => currentThread.value?.id || null),
+});
+
 const streaming = useChatStreaming({
   electronAPI,
   messageStore,
@@ -298,6 +305,7 @@ useChatViewLifecycle({
   loadToolSources,
   electronAPI,
   streamController,
+  handleChatChunk,
   handleTaskPush,
 });
 </script>

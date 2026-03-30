@@ -1,5 +1,6 @@
 import * as chatMessageDb from '../../../core/db/chat_message';
 import * as chatThreadDb from '../../../core/db/chat_thread';
+import * as threadTodoDb from '../../../core/db/thread_todos';
 import { createLogger } from '../../../core/logger';
 import type { ChatMessage, ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/utils/guards';
@@ -24,6 +25,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     ensureThreadWorkspaceSelection(id);
     return chatThreadDb.getChatThread(id);
   };
+  const getThreadTodoPlan = (threadId: string) => threadTodoDb.getThreadTodoPlan(threadId);
   const createThread = (input: unknown) => {
     const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
     const threadId =
@@ -240,6 +242,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     // Threads
     listThreads,
     getThread,
+    getThreadTodoPlan,
     createThread,
     updateThread,
     deleteThread,

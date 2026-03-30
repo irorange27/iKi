@@ -200,8 +200,8 @@ export const en = defineCatalog({
   'chat.tool.todoLists': 'Todo lists',
   'chat.tool.input': 'Input',
   'chat.tool.allTodoLists': 'All todo lists',
-  'chat.todoPlan.progress': ({ completed, total, percent }) =>
-    `${asText(completed)} / ${asText(total)} completed${asText(percent) ? ` · ${asText(percent)}` : ''}`,
+  'chat.todoPlan.progress': ({ completed, total }) =>
+    `${asText(completed)} out of ${asText(total)} tasks completed`,
   'chat.todoPlan.current': 'Current',
   'chat.todoPlan.noCurrentTask': 'No task is currently in progress.',
   'chat.todoPlan.empty': 'No plan items yet.',

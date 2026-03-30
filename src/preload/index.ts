@@ -99,6 +99,7 @@ const electronApi: ElectronApi = {
     threads: {
       list: () => ipcRenderer.invoke('chat:threads:list'),
       get: (id: string) => ipcRenderer.invoke('chat:threads:get', id),
+      getTodoPlan: (threadId: string) => ipcRenderer.invoke('chat:threads:todo:get', threadId),
       create: (thread: ChatThreadInput) => ipcRenderer.invoke('chat:threads:create', thread),
       update: (id: string, thread: ChatThreadInput) =>
         ipcRenderer.invoke('chat:threads:update', id, thread),

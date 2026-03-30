@@ -39,20 +39,17 @@ describe('ui_message_tool_parts', () => {
     expect(title).toBe('Execution Plan');
   });
 
-  it('keeps successful todo results expanded by default', () => {
+  it('collapses successful tool results by default when no UI override exists', () => {
     expect(
       isToolCollapsed({
         type: 'tool-result',
-        toolCallId: 'call_todo',
-        toolName: 'todo',
+        toolCallId: 'call_shell',
+        toolName: 'shell',
         state: 'output-available',
         input: {
-          items: [{ id: '1', text: 'Inspect current code', status: 'in_progress' }],
-        },
-        output: {
-          items: [{ id: '1', text: 'Inspect current code', status: 'in_progress' }],
+          command: 'pwd',
         },
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });

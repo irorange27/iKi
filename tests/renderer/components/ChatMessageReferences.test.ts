@@ -100,4 +100,34 @@ describe('ChatMessageReferences', () => {
     expect(wrapper.find('.reference-panel').exists()).toBe(false);
     expect(wrapper.emitted('open-skill')).toBeUndefined();
   });
+
+  it('hides the tool summary when only transcript-hidden todo planner calls exist', () => {
+    const wrapper = mount(ChatMessageReferences, {
+      props: {
+        message: {
+          id: 'assistant_2',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call_todo_1',
+              toolName: 'todo',
+              state: 'output-available',
+              output: { items: [{ id: '1', text: 'Inspect current code', status: 'completed' }] },
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call_todo_2',
+              toolName: 'todo',
+              state: 'output-available',
+              output: { items: [{ id: '2', text: 'Implement fix', status: 'in_progress' }] },
+            },
+          ],
+        } as unknown as UIMessage,
+      },
+    });
+
+    expect(wrapper.text()).not.toContain('tools');
+    expect(wrapper.findAll('.reference-summary-item')).toHaveLength(0);
+  });
 });

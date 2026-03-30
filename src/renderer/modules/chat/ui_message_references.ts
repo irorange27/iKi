@@ -23,6 +23,7 @@ import {
   getParsedToolOutput,
   getToolCallIdFromPart,
   getToolName,
+  isTranscriptHiddenToolPart,
   isToolPart,
   normalizeToolNameKey,
 } from './ui_message_tool_parts';
@@ -239,6 +240,7 @@ export const getToolReferenceSummary = (
 
   for (const part of parts) {
     if (!isToolPart(part)) continue;
+    if (isTranscriptHiddenToolPart(part)) continue;
 
     const toolCallId = getToolCallIdFromPart(part);
     const toolName = normalizeWhitespace(getToolName(part));
