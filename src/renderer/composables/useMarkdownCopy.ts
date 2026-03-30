@@ -1,4 +1,4 @@
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
+export const copyTextToClipboard = async (text: string): Promise<boolean> => {
   if (!text) return false;
 
   try {

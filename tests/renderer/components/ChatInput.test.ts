@@ -456,6 +456,39 @@ describe('ChatInput', () => {
     expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
   });
 
+  it('exposes a programmatic replace-draft-and-send helper for history actions', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
+      providers: [provider],
+    });
+
+    const exposed = wrapper.vm as unknown as {
+      replaceDraftMessageAndSend: (
+        text: string,
+        options?: { focus?: boolean; select?: boolean }
+      ) => Promise<void>;
+    };
+
+    await exposed.replaceDraftMessageAndSend('Replay this prompt', { focus: true });
+    await flushPromises();
+
+    expect(prepareMessageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'Replay this prompt',
+        model: 'gpt-4.1',
+        providerId: 'openai',
+      })
+    );
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
+  });
+
   it('restores persisted manual tool selection from the thread and forwards it on send', async () => {
     const provider = buildProvider({
       id: 'openai',

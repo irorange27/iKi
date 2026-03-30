@@ -45,6 +45,7 @@
               :approval-processing="isApprovalProcessing"
               :get-mcp-server-label="getMcpServerLabel"
               @approve-tool="handleToolApprovalEvent"
+              @regenerate-user-message="regenerateMessage"
               @edit-user-message="beginEditMessage"
             />
           </div>
@@ -111,6 +112,10 @@ import type { ChatUiMessage } from '../../shared/chat/message_parts';
 
 type ChatInputExpose = {
   setDraftMessage: (
+    text: string,
+    options?: { focus?: boolean; select?: boolean }
+  ) => Promise<void> | void;
+  replaceDraftMessageAndSend: (
     text: string,
     options?: { focus?: boolean; select?: boolean }
   ) => Promise<void> | void;
@@ -290,6 +295,13 @@ const beginEditMessage = async (message: ChatUiMessage) => {
     await chatInputRef.value?.setDraftMessage(text, { focus: true, select: true });
   };
   await streaming.beginEditMessage(message, setDraft);
+};
+
+const regenerateMessage = async (message: ChatUiMessage) => {
+  const setDraftAndSend = async (text: string) => {
+    await chatInputRef.value?.replaceDraftMessageAndSend(text, { focus: true });
+  };
+  await streaming.beginEditMessage(message, setDraftAndSend);
 };
 
 const cancelEditing = async () => {

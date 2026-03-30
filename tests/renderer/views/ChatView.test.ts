@@ -16,6 +16,7 @@ const {
   editingUserMessageIdRef,
   streamController,
   setDraftMessageMock,
+  replaceDraftMessageAndSendMock,
   handleToolApprovalMock,
   prepareMessageSendMock,
   selectThreadMock,
@@ -71,6 +72,7 @@ const {
   };
 
   const setDraftMessageMock = vi.fn(async () => undefined);
+  const replaceDraftMessageAndSendMock = vi.fn(async () => undefined);
   const handleToolApprovalMock = vi.fn(async () => undefined);
   const prepareMessageSendMock = vi.fn(async () => null);
   const selectThreadMock = vi.fn(async () => undefined);
@@ -122,6 +124,7 @@ const {
     editingUserMessageIdRef,
     streamController,
     setDraftMessageMock,
+    replaceDraftMessageAndSendMock,
     handleToolApprovalMock,
     prepareMessageSendMock,
     selectThreadMock,
@@ -241,6 +244,7 @@ const ChatInputStub = defineComponent({
   setup(_, { expose }) {
     expose({
       setDraftMessage: setDraftMessageMock,
+      replaceDraftMessageAndSend: replaceDraftMessageAndSendMock,
     });
     return () => h('div', { class: 'chat-input-stub' });
   },
@@ -252,7 +256,7 @@ const ChatMessageItemStub = defineComponent({
     message: { type: Object, required: true },
     messageIndex: { type: Number, required: true },
   },
-  emits: ['approve-tool', 'edit-user-message', 'open-skill'],
+  emits: ['approve-tool', 'regenerate-user-message', 'edit-user-message', 'open-skill'],
   setup() {
     return () => h('div', { class: 'chat-message-item-stub' });
   },
@@ -299,6 +303,7 @@ describe('ChatView', () => {
     streamController.activeStreamThreadId.value = null;
 
     setDraftMessageMock.mockReset();
+    replaceDraftMessageAndSendMock.mockReset();
     handleToolApprovalMock.mockReset();
     prepareMessageSendMock.mockReset();
     selectThreadMock.mockReset();
@@ -429,6 +434,31 @@ describe('ChatView', () => {
     expect(setDraftMessageMock).toHaveBeenCalledWith('Edited from history', {
       focus: true,
       select: true,
+    });
+  });
+
+  it('routes regenerate requests into the programmatic draft-and-send path', async () => {
+    const userMessage: UIMessage = {
+      id: 'user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Regenerate me' }],
+    };
+    chatState.messages = [userMessage];
+    beginEditMessageMock.mockImplementation(
+      async (_message: UIMessage, setDraftAndSend: (text: string) => Promise<void>) => {
+        await setDraftAndSend('Regenerate me');
+      }
+    );
+
+    const wrapper = await mountChatView();
+    const messageItem = wrapper.findComponent(ChatMessageItemStub);
+
+    await messageItem.vm.$emit('regenerate-user-message', userMessage);
+    await flushPromises();
+
+    expect(beginEditMessageMock).toHaveBeenCalledWith(userMessage, expect.any(Function));
+    expect(replaceDraftMessageAndSendMock).toHaveBeenCalledWith('Regenerate me', {
+      focus: true,
     });
   });
 

@@ -212,6 +212,13 @@ const toggleIncognitoMode = () => {
 
 defineExpose({
   setDraftMessage,
+  replaceDraftMessageAndSend: async (
+    nextValue: string,
+    options?: { focus?: boolean; select?: boolean }
+  ) => {
+    await setDraftMessage(nextValue, options);
+    await sendMessage();
+  },
 });
 </script>
 <style scoped>
