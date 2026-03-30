@@ -410,6 +410,14 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.memory.summarizationTitle': '记忆总结',
   'settings.memory.autoSummarize': '自动总结对话',
   'settings.memory.summarizationDescription': '自动从对话中提取并保存重要信息，生成新的记忆。',
+  'settings.memory.embeddingModelTitle': '嵌入模型',
+  'settings.memory.embeddingModelDescription':
+    '选择长期记忆语义检索使用的嵌入模型。自动检测会优先使用已配置的 embedding provider；如果没有可用 provider，则退回本地 hash 检索。',
+  'settings.memory.embeddingModelSelect': '嵌入模型',
+  'settings.memory.embeddingModelAria': '记忆嵌入模型',
+  'settings.memory.embeddingModelAutoDetect': '自动检测（推荐）',
+  'settings.memory.embeddingModelHint':
+    '切换该设置不会立刻重写所有记忆向量。已有记忆会在后续检索中按需懒刷新。',
   'settings.memory.contextTitle': '上下文组装',
   'settings.memory.contextEnable': '启用上下文预算',
   'settings.memory.contextDescription':

@@ -430,6 +430,14 @@ export const en = defineCatalog({
   'settings.memory.autoSummarize': 'Auto Summarize Conversations',
   'settings.memory.summarizationDescription':
     'Automatically extract and store important information from conversations as new memories.',
+  'settings.memory.embeddingModelTitle': 'Embedding Model',
+  'settings.memory.embeddingModelDescription':
+    'Choose the model used for long-memory semantic retrieval. Auto-detect prefers a configured embedding-capable provider and falls back to local hash search when none is available.',
+  'settings.memory.embeddingModelSelect': 'Embedding Model',
+  'settings.memory.embeddingModelAria': 'Memory embedding model',
+  'settings.memory.embeddingModelAutoDetect': 'Auto-detect (recommended)',
+  'settings.memory.embeddingModelHint':
+    'Changing this setting does not rewrite all memory rows immediately. Existing memories are refreshed lazily during later searches.',
   'settings.memory.contextTitle': 'Context Assembly',
   'settings.memory.contextEnable': 'Enable Context Budgeting',
   'settings.memory.contextDescription':

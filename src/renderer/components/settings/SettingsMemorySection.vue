@@ -67,6 +67,23 @@
     </div>
 
     <div class="settings-card">
+      <div class="card-title">{{ t('settings.memory.embeddingModelTitle') }}</div>
+      <p class="card-help">{{ t('settings.memory.embeddingModelDescription') }}</p>
+
+      <label class="input-label">
+        <span>{{ t('settings.memory.embeddingModelSelect') }}</span>
+        <SettingsSelect
+          :model-value="selectedEmbeddingModelOptionValue"
+          :options="embeddingModelSelectOptions"
+          :aria-label="t('settings.memory.embeddingModelAria')"
+          @update:model-value="updateEmbeddingModelSelection"
+        />
+      </label>
+
+      <p class="slider-hint">{{ t('settings.memory.embeddingModelHint') }}</p>
+    </div>
+
+    <div class="settings-card">
       <div class="card-title">{{ t('settings.memory.contextTitle') }}</div>
       <label class="checkbox-label">
         <input
@@ -715,6 +732,7 @@ import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '../../../shared/types/config';
 import type { ChatThread } from '../../../shared/types/chat';
+import type { Provider } from '../../../shared/types/provider';
 import type {
   AffectStateEntry,
   LongMemoryEntry,
@@ -722,6 +740,7 @@ import type {
   ShortMemoryEntry,
 } from '../../../shared/types/memory';
 import { getErrorMessage } from '../../../shared/utils/errors';
+import { listProviderEmbeddingModels } from '../../../shared/utils/memory_embedding_models';
 import {
   formatJson,
   formatJsonList,
@@ -735,13 +754,20 @@ const emit = defineEmits<{
   (event: 'reset'): void;
 }>();
 
-const props = defineProps<{
-  active: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    active: boolean;
+    providers?: Provider[];
+  }>(),
+  {
+    providers: () => [],
+  }
+);
 const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const ALL_THREADS = '__all__';
+const AUTO_DETECT_EMBEDDING_MODEL_VALUE = '';
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -767,6 +793,42 @@ const memoryMutationError = ref('');
 const editingLongMemoryId = ref('');
 const editingLongMemorySummary = ref('');
 const editingLongMemoryOriginal = ref('');
+
+const serializeEmbeddingModelSelection = (selection: AppConfig['memory']['embeddingModel']): string =>
+  JSON.stringify([selection.providerId, selection.providerType, selection.model]);
+
+const parseEmbeddingModelSelection = (value: string): AppConfig['memory']['embeddingModel'] | null => {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed) || parsed.length !== 3) return null;
+
+    const [providerId, providerType, model] = parsed;
+    if (
+      typeof providerId !== 'string' ||
+      typeof providerType !== 'string' ||
+      typeof model !== 'string'
+    ) {
+      return null;
+    }
+
+    const trimmedProviderId = providerId.trim();
+    const trimmedProviderType = providerType.trim();
+    const trimmedModel = model.trim();
+    if (!trimmedModel || (!trimmedProviderId && !trimmedProviderType)) {
+      return null;
+    }
+
+    return {
+      providerId: trimmedProviderId,
+      providerType: trimmedProviderType,
+      model: trimmedModel,
+    };
+  } catch {
+    return null;
+  }
+};
 
 const updateMemory = <K extends keyof AppConfig['memory']>(
   key: K,
@@ -800,6 +862,18 @@ const updateEmotionGuard = <K extends keyof AppConfig['memory']['emotion']['tool
   emit('config-change');
 };
 
+const updateEmbeddingModelSelection = (value: string) => {
+  config.value.memory.embeddingModel =
+    value === AUTO_DETECT_EMBEDDING_MODEL_VALUE
+      ? {
+          providerId: '',
+          providerType: '',
+          model: '',
+        }
+      : parseEmbeddingModelSelection(value) || config.value.memory.embeddingModel;
+  emit('config-change');
+};
+
 const hasMemoryQuery = computed(() => memorySearchQuery.value.trim().length > 0);
 const isAllThreadsSelected = computed(() => selectedMemoryThreadId.value === ALL_THREADS);
 const parsedAffectState = computed(() => parseAffectStateSnapshot(affectStateEntry.value?.state));
@@ -815,6 +889,41 @@ const canSaveLongMemoryEdit = computed(() => {
   const summary = editingLongMemorySummary.value.trim();
   return summary.length > 0 && summary !== editingLongMemoryOriginal.value.trim();
 });
+const selectedEmbeddingModelOptionValue = computed(() => {
+  const selection = config.value.memory.embeddingModel;
+  if (!selection.model.trim()) {
+    return AUTO_DETECT_EMBEDDING_MODEL_VALUE;
+  }
+
+  return serializeEmbeddingModelSelection(selection);
+});
+const embeddingModelSelectOptions = computed(() => [
+  {
+    value: AUTO_DETECT_EMBEDDING_MODEL_VALUE,
+    label: t('settings.memory.embeddingModelAutoDetect'),
+  },
+  ...props.providers
+    .filter(provider => provider.enabled)
+    .map(provider => {
+      const embeddingModels = listProviderEmbeddingModels(provider);
+      if (embeddingModels.length === 0) return null;
+
+      return {
+        label: provider.name || provider.id,
+        options: embeddingModels.map(model => ({
+          value: serializeEmbeddingModelSelection({
+            providerId: provider.id,
+            providerType: provider.type,
+            model,
+          }),
+          label: model,
+        })),
+      };
+    })
+    .filter((entry): entry is { label: string; options: Array<{ value: string; label: string }> } =>
+      Boolean(entry)
+    ),
+]);
 
 const threadLabelMap = computed(() => {
   const map = new Map<string, string>();

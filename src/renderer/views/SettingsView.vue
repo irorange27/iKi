@@ -545,6 +545,7 @@
       <SettingsMemorySection
         v-show="activeSection === 'memory'"
         :active="activeSection === 'memory'"
+        :providers="providers"
         @config-change="autoSave"
         @reset="resetSection('memory')"
       />

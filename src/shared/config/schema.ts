@@ -127,6 +127,13 @@ const MemorySchema = z
     autoSummarize: booleanField(DEFAULT_APP_CONFIG.memory.autoSummarize),
     maxRetrievalCount: numberField(DEFAULT_APP_CONFIG.memory.maxRetrievalCount),
     similarThreshold: numberField(DEFAULT_APP_CONFIG.memory.similarThreshold),
+    embeddingModel: z
+      .object({
+        providerId: stringField(DEFAULT_APP_CONFIG.memory.embeddingModel.providerId),
+        providerType: stringField(DEFAULT_APP_CONFIG.memory.embeddingModel.providerType),
+        model: stringField(DEFAULT_APP_CONFIG.memory.embeddingModel.model),
+      })
+      .catch(DEFAULT_APP_CONFIG.memory.embeddingModel),
     context: z
       .object({
         enabled: booleanField(DEFAULT_APP_CONFIG.memory.context.enabled),

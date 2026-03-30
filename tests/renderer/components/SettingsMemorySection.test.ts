@@ -8,6 +8,7 @@ import SettingsMemorySection from '../../../src/renderer/components/settings/Set
 import { useConfigStore } from '../../../src/renderer/store/config';
 import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
 import type { ChatThread } from '../../../src/shared/types/chat';
+import type { Provider } from '../../../src/shared/types/provider';
 import type {
   AffectStateEntry,
   LongMemoryEntry,
@@ -108,6 +109,30 @@ const buildThread = (overrides: Partial<ChatThread> & Pick<ChatThread, 'id' | 't
   skill_ids: overrides.skill_ids,
 });
 
+const buildProvider = (
+  overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type'>
+): Provider => ({
+  id: overrides.id,
+  name: overrides.name,
+  type: overrides.type,
+  api_key: overrides.api_key ?? 'test-key',
+  models: overrides.models ?? '[]',
+  model_options: overrides.model_options ?? '{}',
+  base_url: overrides.base_url ?? '',
+  enabled: overrides.enabled ?? true,
+  created_at: overrides.created_at ?? '2026-03-21T00:00:00.000Z',
+  updated_at: overrides.updated_at ?? '2026-03-21T00:00:00.000Z',
+  available_models: overrides.available_models ?? '[]',
+  api_version: overrides.api_version,
+  is_response_api: overrides.is_response_api ?? false,
+  acp_command: overrides.acp_command,
+  acp_args: overrides.acp_args,
+  acp_mcp_server_ids: overrides.acp_mcp_server_ids,
+  acp_auth_method_id: overrides.acp_auth_method_id,
+  acp_api_provider_id: overrides.acp_api_provider_id,
+  acp_model_mapping: overrides.acp_model_mapping,
+});
+
 const buildShortMemoryEntry = (
   overrides: Partial<ShortMemoryEntry> & Pick<ShortMemoryEntry, 'id' | 'thread_id' | 'content'>
 ): ShortMemoryEntry => ({
@@ -167,6 +192,7 @@ const buildAffectStateEntry = (
 
 const mountSettingsMemorySection = async (options?: {
   active?: boolean;
+  providers?: Provider[];
   threads?: ChatThread[];
   shortEntries?: ShortMemoryEntry[];
   allShortEntries?: ShortMemoryEntry[];
@@ -226,6 +252,7 @@ const mountSettingsMemorySection = async (options?: {
   const wrapper = mount(SettingsMemorySection, {
     props: {
       active: options?.active ?? true,
+      providers: options?.providers ?? [],
     },
     global: {
       plugins: [pinia],
@@ -293,6 +320,35 @@ describe('SettingsMemorySection', () => {
     expect(store.config.memory.emotion.minConfidence).toBe(0.65);
     expect(store.config.memory.emotion.toolGuard.maxValence).toBe(-0.35);
     expect(wrapper.emitted('config-change')).toHaveLength(5);
+  });
+
+  it('stores an explicit embedding model selection in memory settings', async () => {
+    const { wrapper, store } = await mountSettingsMemorySection({
+      providers: [
+        buildProvider({
+          id: 'provider_openai',
+          name: 'OpenAI Primary',
+          type: 'openai',
+          models: '["gpt-4.1"]',
+        }),
+        buildProvider({
+          id: 'provider_gateway',
+          name: 'Gateway',
+          type: 'openai-compatible',
+          models: '["custom-embed-large","custom-chat"]',
+        }),
+      ],
+    });
+
+    const embeddingCard = findCardByTitle(wrapper, 'Embedding Model');
+    await selectSettingsOption(embeddingCard, 'custom-embed-large');
+
+    expect(store.config.memory.embeddingModel).toEqual({
+      providerId: 'provider_gateway',
+      providerType: 'openai-compatible',
+      model: 'custom-embed-large',
+    });
+    expect(wrapper.emitted('config-change')).toHaveLength(1);
   });
 
   it('loads the first thread on activation and hydrates memory plus affect-state panels', async () => {

@@ -196,6 +196,11 @@ const normalizeProviderModelOptions = (value: unknown): ProviderModelOptions | n
     normalizeOptionalBoolean(record.supportsVision) ??
     normalizeOptionalBoolean(record.supports_vision) ??
     normalizeOptionalBoolean(record.vision);
+  const supportsEmbeddings =
+    normalizeOptionalBoolean(record.supportsEmbeddings) ??
+    normalizeOptionalBoolean(record.supports_embeddings) ??
+    normalizeOptionalBoolean(record.embedding) ??
+    normalizeOptionalBoolean(record.embeddings);
   const supportsStructuredOutputs =
     normalizeOptionalBoolean(record.supportsStructuredOutputs) ??
     normalizeOptionalBoolean(record.supports_structured_outputs) ??
@@ -209,6 +214,7 @@ const normalizeProviderModelOptions = (value: unknown): ProviderModelOptions | n
   if (supportsToolCalls !== null) normalized.supportsToolCalls = supportsToolCalls;
   if (supportsReasoning !== null) normalized.supportsReasoning = supportsReasoning;
   if (supportsVision !== null) normalized.supportsVision = supportsVision;
+  if (supportsEmbeddings !== null) normalized.supportsEmbeddings = supportsEmbeddings;
   if (supportsStructuredOutputs !== null) {
     normalized.supportsStructuredOutputs = supportsStructuredOutputs;
   }

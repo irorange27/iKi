@@ -1,8 +1,12 @@
 import { createLogger } from '../logger';
+import { getAppConfig } from '../config';
 import { getProviders } from '../db/providers';
 import { getProviderConfig } from '../provider/llm/factory';
 import { fetchWithTimeout } from '../network/http';
-import { parseModelList } from '../../shared/utils/provider_models';
+import {
+  DEFAULT_MEMORY_EMBEDDING_MODEL,
+  listProviderEmbeddingModels,
+} from '../../shared/utils/memory_embedding_models';
 
 const memoryEmbeddingLogger = createLogger({ module: 'memory_embedding' });
 
@@ -10,8 +14,6 @@ export const HASH_EMBEDDING_DIM = 128;
 export const HASH_EMBEDDING_VERSION = 1;
 export const PROVIDER_EMBEDDING_VERSION = 1;
 
-const OPENAI_DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_MODEL_PATTERN = /(?:^|[-_./])(embed|embedding)(?:[-_./]|$)/i;
 const EMBEDDING_PROVIDER_PRIORITY = [
   'openai',
   'openai-compatible',
@@ -108,12 +110,29 @@ const resolveProviderPriority = (providerType: string): number => {
   return index >= 0 ? index : EMBEDDING_PROVIDER_PRIORITY.length + 1;
 };
 
-const pickEmbeddingModel = (models: string[]): string | null => {
-  const exactPreferred = models.find(model => model.trim() === OPENAI_DEFAULT_EMBEDDING_MODEL);
-  if (exactPreferred) return exactPreferred.trim();
+const getConfiguredEmbeddingSelection = (): {
+  providerId: string;
+  providerType: string;
+  model: string;
+} | null => {
+  const selection = getAppConfig()?.memory?.embeddingModel;
+  if (!selection || typeof selection !== 'object') return null;
 
-  const preferred = models.find(model => EMBEDDING_MODEL_PATTERN.test(model));
-  return preferred ? preferred.trim() : null;
+  const providerId =
+    typeof selection.providerId === 'string' ? selection.providerId.trim() : '';
+  const providerType =
+    typeof selection.providerType === 'string' ? selection.providerType.trim() : '';
+  const model = typeof selection.model === 'string' ? selection.model.trim() : '';
+
+  if (!model || (!providerId && !providerType)) {
+    return null;
+  }
+
+  return {
+    providerId,
+    providerType,
+    model,
+  };
 };
 
 const resolveConfiguredProvider = (
@@ -143,6 +162,23 @@ const resolveConfiguredProvider = (
   }
 };
 
+const resolveSelectedEmbeddingProvider = (): ResolvedEmbeddingProvider | null => {
+  const selection = getConfiguredEmbeddingSelection();
+  if (!selection) return null;
+
+  const providers = getProviders().filter(provider => provider.enabled);
+  const matchedProvider = selection.providerId
+    ? providers.find(provider => provider.id === selection.providerId)
+    : providers.find(provider => provider.type === selection.providerType);
+  if (!matchedProvider) return null;
+
+  return resolveConfiguredProvider(
+    selection.providerType || matchedProvider.type,
+    matchedProvider.id,
+    selection.model
+  );
+};
+
 const resolveOpenAiEmbeddingProvider = (): ResolvedEmbeddingProvider | null => {
   const providers = getProviders()
     .filter(provider => provider.enabled && provider.type === 'openai')
@@ -152,7 +188,7 @@ const resolveOpenAiEmbeddingProvider = (): ResolvedEmbeddingProvider | null => {
     const resolved = resolveConfiguredProvider(
       provider.type,
       provider.id,
-      OPENAI_DEFAULT_EMBEDDING_MODEL
+      DEFAULT_MEMORY_EMBEDDING_MODEL
     );
     if (resolved) return resolved;
   }
@@ -170,7 +206,7 @@ const resolveAdvertisedEmbeddingProvider = (): ResolvedEmbeddingProvider | null 
     });
 
   for (const provider of providers) {
-    const model = pickEmbeddingModel(parseModelList(provider.models));
+    const model = listProviderEmbeddingModels(provider)[0] || null;
     if (!model) continue;
     const resolved = resolveConfiguredProvider(provider.type, provider.id, model);
     if (resolved) return resolved;
@@ -180,7 +216,11 @@ const resolveAdvertisedEmbeddingProvider = (): ResolvedEmbeddingProvider | null 
 };
 
 const resolveEmbeddingProvider = (): ResolvedEmbeddingProvider | null => {
-  return resolveOpenAiEmbeddingProvider() || resolveAdvertisedEmbeddingProvider();
+  return (
+    resolveSelectedEmbeddingProvider() ||
+    resolveOpenAiEmbeddingProvider() ||
+    resolveAdvertisedEmbeddingProvider()
+  );
 };
 
 const toProviderFingerprint = (

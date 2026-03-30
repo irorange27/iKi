@@ -129,6 +129,11 @@ export interface AppConfig {
     autoSummarize: boolean;
     maxRetrievalCount: number;
     similarThreshold: number;
+    embeddingModel: {
+      providerId: string;
+      providerType: string;
+      model: string;
+    };
     context: {
       enabled: boolean;
       recentMessageCount: number;

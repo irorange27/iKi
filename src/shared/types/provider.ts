@@ -8,6 +8,7 @@ export interface ProviderModelOptions {
   supportsToolCalls?: boolean | null;
   supportsReasoning?: boolean | null;
   supportsVision?: boolean | null;
+  supportsEmbeddings?: boolean | null;
   supportsStructuredOutputs?: boolean | null;
   providerOptions?: Record<string, JSONValue> | null;
 }

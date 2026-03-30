@@ -62,6 +62,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     autoSummarize: false,
     maxRetrievalCount: 5,
     similarThreshold: 0.1,
+    embeddingModel: {
+      providerId: '',
+      providerType: '',
+      model: '',
+    },
     context: {
       enabled: true,
       recentMessageCount: 10,
@@ -217,6 +222,10 @@ export const mergeAppConfigWithBase = (
     memory: {
       ...base.memory,
       ...(rawConfig.memory ?? {}),
+      embeddingModel: {
+        ...base.memory.embeddingModel,
+        ...((rawConfig.memory ?? {}).embeddingModel ?? {}),
+      },
       context: {
         ...base.memory.context,
         ...((rawConfig.memory ?? {}).context ?? {}),
