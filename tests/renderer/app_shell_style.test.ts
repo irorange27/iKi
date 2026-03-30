@@ -58,10 +58,12 @@ describe('renderer app shell styles', () => {
     const toolPartSource = readFileSync(CHAT_TOOL_PART_VUE_PATH, 'utf8');
 
     expect(chatSource).toMatch(
-      /class="chat-main-area flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"/
+      /class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"/
     );
     expect(chatSource).toMatch(/class="messages-area w-full h-full min-w-0"/);
     expect(chatSource).toMatch(/\.messages-area\s*\{[\s\S]*min-width:\s*0;/i);
+    expect(chatSource).toMatch(/\.chat-main-area\s*\{[\s\S]*overscroll-behavior:\s*contain;/i);
+    expect(chatSource).toMatch(/\.chat-main-area\s*\{[\s\S]*scrollbar-gutter:\s*stable both-edges;/i);
     expect(chatSource).toMatch(/\.messages-container\s*\{[\s\S]*min-width:\s*0;/i);
     expect(chatMessagePartsSource).toMatch(
       /<ChatToolPart[\s\S]*:mcp-server-label="getMcpServerLabel\(part\)"/

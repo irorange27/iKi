@@ -256,6 +256,8 @@ describe('renderer style system foundation', () => {
     expect(globalsSource).toMatch(/\.ui-text-muted\s*\{/);
     expect(globalsSource).toMatch(/\.ui-text-accent\s*\{/);
     expect(globalsSource).toMatch(/\.ui-text-danger\s*\{/);
+    expect(globalsSource).toMatch(/\.ui-scrollbar\s*\{/);
+    expect(globalsSource).toMatch(/\.ui-scrollbar::-webkit-scrollbar-thumb:hover\s*\{/);
     expect(globalsSource).not.toMatch(/\.text-primary\s*\{/);
     expect(globalsSource).not.toMatch(/\.text-secondary\s*\{/);
     expect(globalsSource).not.toMatch(/\.text-muted\s*\{/);

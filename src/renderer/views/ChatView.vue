@@ -24,7 +24,7 @@
 
       <!-- Main Area -->
       <div
-        class="chat-main-area flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"
+        class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"
         ref="messagesContainer"
       >
         <WelcomeScreen v-if="showWelcome && chatMessages.length === 0" @new-chat="handleNewChat" />
@@ -334,6 +334,8 @@ useChatViewLifecycle({
 .chat-main-area {
   padding: var(--chat-content-padding, 24px);
   min-width: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
 
 .messages-container {
