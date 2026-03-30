@@ -372,7 +372,7 @@ export const createDaemonRequestHandler =
         );
         if (!body) return;
 
-        const results = memoryDb.searchLongMemoryAcrossThreads(body.query, {
+        const results = await memoryDb.searchLongMemoryAcrossThreads(body.query, {
           limit: body.limit,
           threshold: body.threshold,
           includeIncognito: body.includeIncognito,

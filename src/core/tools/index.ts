@@ -4,6 +4,7 @@ export * from './shell_tools';
 export * from './skill_tools';
 export * from './web_tools';
 export * from './schemas';
+export * from './task_plan_tools';
 export * from './todo_tools';
 
 import { defaultToolRegistry } from './base';
@@ -21,6 +22,7 @@ import {
   ReadTodoListTool,
   WriteTodoListTool,
 } from './todo_tools';
+import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
 
 /**
@@ -38,6 +40,7 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new ReadPersonalSkillTool());
   defaultToolRegistry.register(new WritePersonalSkillTool());
   defaultToolRegistry.register(new DeletePersonalSkillTool());
+  defaultToolRegistry.register(new TodoTool());
   defaultToolRegistry.register(new ListTodoListsTool());
   defaultToolRegistry.register(new ReadTodoListTool());
   defaultToolRegistry.register(new WriteTodoListTool());

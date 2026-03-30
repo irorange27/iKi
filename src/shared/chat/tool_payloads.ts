@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   DeletePersonalSkillInputSchemaUi,
   DeletePersonalSkillOutputSchema,
+  TodoToolInputSchemaUi,
+  TodoToolOutputSchema,
   DeleteTodoListInputSchemaUi,
   DeleteTodoListOutputSchema,
   DeleteFileInputSchemaUi,
@@ -49,6 +51,7 @@ export type ListPersonalSkillsToolInput = z.infer<typeof ListPersonalSkillsInput
 export type ReadPersonalSkillToolInput = z.infer<typeof ReadPersonalSkillInputSchemaUi>;
 export type WritePersonalSkillToolInput = z.infer<typeof WritePersonalSkillInputSchemaUi>;
 export type DeletePersonalSkillToolInput = z.infer<typeof DeletePersonalSkillInputSchemaUi>;
+export type TodoToolInput = z.infer<typeof TodoToolInputSchemaUi>;
 export type ListTodoListsToolInput = z.infer<typeof ListTodoListsInputSchemaUi>;
 export type ReadTodoListToolInput = z.infer<typeof ReadTodoListInputSchemaUi>;
 export type WriteTodoListToolInput = z.infer<typeof WriteTodoListInputSchemaUi>;
@@ -66,6 +69,7 @@ export type ListPersonalSkillsToolOutput = z.infer<typeof ListPersonalSkillsOutp
 export type ReadPersonalSkillToolOutput = z.infer<typeof ReadPersonalSkillOutputSchema>;
 export type WritePersonalSkillToolOutput = z.infer<typeof WritePersonalSkillOutputSchema>;
 export type DeletePersonalSkillToolOutput = z.infer<typeof DeletePersonalSkillOutputSchema>;
+export type TodoToolOutput = z.infer<typeof TodoToolOutputSchema>;
 export type ListTodoListsToolOutput = z.infer<typeof ListTodoListsOutputSchema>;
 export type ReadTodoListToolOutput = z.infer<typeof ReadTodoListOutputSchema>;
 export type WriteTodoListToolOutput = z.infer<typeof WriteTodoListOutputSchema>;
@@ -84,6 +88,7 @@ type ToolKind =
   | 'read_personal_skill'
   | 'write_personal_skill'
   | 'delete_personal_skill'
+  | 'todo'
   | 'list_todo_lists'
   | 'read_todo_list'
   | 'write_todo_list'
@@ -102,6 +107,7 @@ export type ParsedToolInput =
   | { kind: 'read_personal_skill'; input: ReadPersonalSkillToolInput }
   | { kind: 'write_personal_skill'; input: WritePersonalSkillToolInput }
   | { kind: 'delete_personal_skill'; input: DeletePersonalSkillToolInput }
+  | { kind: 'todo'; input: TodoToolInput }
   | { kind: 'list_todo_lists'; input: ListTodoListsToolInput }
   | { kind: 'read_todo_list'; input: ReadTodoListToolInput }
   | { kind: 'write_todo_list'; input: WriteTodoListToolInput }
@@ -121,6 +127,7 @@ export type ParsedToolOutput =
   | { kind: 'read_personal_skill'; output: ReadPersonalSkillToolOutput }
   | { kind: 'write_personal_skill'; output: WritePersonalSkillToolOutput }
   | { kind: 'delete_personal_skill'; output: DeletePersonalSkillToolOutput }
+  | { kind: 'todo'; output: TodoToolOutput }
   | { kind: 'list_todo_lists'; output: ListTodoListsToolOutput }
   | { kind: 'read_todo_list'; output: ReadTodoListToolOutput }
   | { kind: 'write_todo_list'; output: WriteTodoListToolOutput }
@@ -152,6 +159,7 @@ const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny
     input: DeletePersonalSkillInputSchemaUi,
     output: DeletePersonalSkillOutputSchema,
   },
+  todo: { input: TodoToolInputSchemaUi, output: TodoToolOutputSchema },
   list_todo_lists: { input: ListTodoListsInputSchemaUi, output: ListTodoListsOutputSchema },
   read_todo_list: { input: ReadTodoListInputSchemaUi, output: ReadTodoListOutputSchema },
   write_todo_list: { input: WriteTodoListInputSchemaUi, output: WriteTodoListOutputSchema },

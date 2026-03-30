@@ -449,8 +449,8 @@ onUnmounted(() => {
 }
 
 .workspace-selector-badge {
-  left: -5px;
-  right: auto;
+  right: -5px;
+  left: auto;
 }
 
 .workspace-selector-refresh {

@@ -220,6 +220,7 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   write_file: FilePenLine,
   list_dir: Folder,
   delete_file: Trash2,
+  todo: ListTodo,
   list_todo_lists: ListTodo,
   read_todo_list: ListTodo,
   write_todo_list: ListTodo,

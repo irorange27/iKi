@@ -1,4 +1,5 @@
 import { createSimpleConversationRunner, type ConversationRunner } from '../../../core/agent';
+import { createTodoPrepareStep } from './chat_todo_planning';
 
 type CreateChatConversationRunnerParams = {
   providerType: string;
@@ -6,6 +7,7 @@ type CreateChatConversationRunnerParams = {
   model: string;
   systemPrompt: string;
   enableTools: boolean;
+  enabledTools?: string[];
   maxIterations?: number;
   maxTokens?: number;
 };
@@ -22,6 +24,11 @@ export const createChatConversationRunner = (
     model: params.model,
     systemPrompt: params.systemPrompt,
     enableTools: params.enableTools,
+    ...(params.enableTools
+      ? {
+          prepareStep: createTodoPrepareStep(params.enabledTools ?? []),
+        }
+      : {}),
     ...(typeof params.maxTokens === 'number' ? { maxTokens: params.maxTokens } : {}),
     maxIterations: params.maxIterations ?? 5,
   });

@@ -23,6 +23,7 @@ import { migration as migration021ChatToolApprovalSkillIds } from './021_add_cha
 import { migration as migration022ChatToolApprovalMaxOutputTokens } from './022_add_chat_tool_approval_max_output_tokens';
 import { migration as migration023CanonicalizeChatUiMessages } from './023_canonicalize_chat_ui_messages';
 import { migration as migration024AddProviderModelOptions } from './024_add_provider_model_options';
+import { migration as migration025AddChatThreadTodos } from './025_add_chat_thread_todos_table';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -50,6 +51,7 @@ export const registeredMigrations = [
   migration022ChatToolApprovalMaxOutputTokens,
   migration023CanonicalizeChatUiMessages,
   migration024AddProviderModelOptions,
+  migration025AddChatThreadTodos,
   // Add more migrations here as needed
 ];
 

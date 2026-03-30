@@ -29,6 +29,18 @@ describe('parseToolInput', () => {
     expect(parsed.input.items?.[0]?.content).toBe('Ship feature');
   });
 
+  it('parses execution todo inputs from JSON', () => {
+    const parsed = parseToolInput(
+      'todo',
+      '{"items":[{"id":"1","text":"Inspect current code","status":"in_progress"}]}'
+    );
+
+    expect(parsed.kind).toBe('todo');
+    if (parsed.kind !== 'todo') throw new Error('Expected todo payload');
+    expect(parsed.input.items?.[0]?.text).toBe('Inspect current code');
+    expect(parsed.input.items?.[0]?.status).toBe('in_progress');
+  });
+
   it('parses load_skill inputs from JSON', () => {
     const parsed = parseToolInput('load_skill', '{"id":"user:planner"}');
 
@@ -76,6 +88,18 @@ describe('parseToolOutput', () => {
     if (parsed.kind !== 'read_todo_list') throw new Error('Expected read_todo_list payload');
     expect(parsed.output.list?.title).toBe('Today');
     expect(parsed.output.list?.items?.[0]?.status).toBe('pending');
+  });
+
+  it('parses execution todo outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'todo',
+      '{"items":[{"id":"1","text":"Inspect current code","status":"completed"}],"rendered":"[x] #1: Inspect current code\\n\\n(1/1 completed)","totalCount":1,"completedCount":1}'
+    );
+
+    expect(parsed.kind).toBe('todo');
+    if (parsed.kind !== 'todo') throw new Error('Expected todo output payload');
+    expect(parsed.output.items?.[0]?.status).toBe('completed');
+    expect(parsed.output.completedCount).toBe(1);
   });
 
   it('parses load_skill outputs from JSON', () => {

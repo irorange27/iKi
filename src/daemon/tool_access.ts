@@ -14,6 +14,7 @@ const FALLBACK_DEFAULT_BUILTIN_TOOL_NAMES = [
   'read_personal_skill',
   'write_personal_skill',
   'delete_personal_skill',
+  'todo',
   'list_todo_lists',
   'read_todo_list',
   'write_todo_list',
@@ -53,13 +54,14 @@ const getBuiltinToolOrder = (toolName: string): number => {
   if (toolName.startsWith('write_personal_skill') || toolName.startsWith('delete_personal_skill')) {
     return 4;
   }
+  if (toolName === 'todo') return 5;
   if (toolName.startsWith('list_todo_list') || toolName.startsWith('read_todo_list')) {
-    return 5;
-  }
-  if (toolName.startsWith('write_todo_list') || toolName.startsWith('delete_todo_list')) {
     return 6;
   }
-  return 7;
+  if (toolName.startsWith('write_todo_list') || toolName.startsWith('delete_todo_list')) {
+    return 7;
+  }
+  return 8;
 };
 
 const getDefaultBuiltinToolNames = (): string[] => {

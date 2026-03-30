@@ -25,12 +25,20 @@ import type {
 
 const simpleConversationLogger = createLogger({ module: 'simple_conversation_runner' });
 
+type RunnerPrepareStep = Parameters<typeof generateText>[0]['prepareStep'];
+
 export class SimpleConversationRunner implements ConversationRunner {
   private readonly config: AgentConfig;
   private readonly toolRegistry = new ToolRegistry();
+  private readonly prepareStep: RunnerPrepareStep;
   private history: ModelMessage[] = [];
 
-  constructor(config?: PartialAgentConfig) {
+  constructor(
+    config?: PartialAgentConfig & {
+      prepareStep?: RunnerPrepareStep;
+    }
+  ) {
+    this.prepareStep = config?.prepareStep;
     this.config = loadAgentConfig(config);
   }
 
@@ -93,6 +101,7 @@ export class SimpleConversationRunner implements ConversationRunner {
         system: systemPrompt,
         messages,
         tools,
+        ...(this.prepareStep ? { prepareStep: this.prepareStep } : {}),
         ...getModelGenerationSettings({
           providerType: this.config.providerType,
           modelId: this.config.model,
@@ -170,6 +179,7 @@ export class SimpleConversationRunner implements ConversationRunner {
       system: systemPrompt,
       messages,
       tools,
+      ...(this.prepareStep ? { prepareStep: this.prepareStep } : {}),
       ...getModelGenerationSettings({
         providerType: this.config.providerType,
         modelId: this.config.model,
@@ -240,5 +250,8 @@ export class SimpleConversationRunner implements ConversationRunner {
   }
 }
 
-export const createSimpleConversationRunner = (config?: PartialAgentConfig): ConversationRunner =>
-  new SimpleConversationRunner(config);
+export const createSimpleConversationRunner = (
+  config?: PartialAgentConfig & {
+    prepareStep?: RunnerPrepareStep;
+  }
+): ConversationRunner => new SimpleConversationRunner(config);

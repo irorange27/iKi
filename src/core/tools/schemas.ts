@@ -82,6 +82,15 @@ const todoListItemInputSchema = z.object({
   completed: z.boolean().describe('Whether the item is already completed').optional(),
 });
 
+const todoPlanItemInputSchema = z.object({
+  id: z.string().describe('Stable todo item id').optional(),
+  text: z.string().min(1).describe('Todo item text'),
+  status: z
+    .enum(['pending', 'in_progress', 'completed'])
+    .describe('Todo item status')
+    .optional(),
+});
+
 export const WebToolInputSchema = z.object({
   query: webInputFields.query,
   limit: webInputFields.limit.optional().default(DEFAULT_SEARCH_RESULT_LIMIT),
@@ -379,6 +388,31 @@ export const DeletePersonalSkillInputSchemaUi = z
   })
   .passthrough();
 
+export const TodoToolInputSchema = z.object({
+  items: z
+    .array(todoPlanItemInputSchema)
+    .max(20)
+    .describe('Current task-plan items in execution order')
+    .optional()
+    .default([]),
+  description: toolCallDescriptionField,
+});
+
+export const TodoToolInputSchemaUi = z
+  .object({
+    items: z.array(todoPlanItemInputSchema).optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+const TodoPlanItemOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    text: z.string().optional(),
+    status: z.enum(['pending', 'in_progress', 'completed']).optional(),
+  })
+  .passthrough();
+
 const TodoItemOutputSchema = z
   .object({
     id: z.string().optional(),
@@ -543,6 +577,17 @@ export const DeletePersonalSkillOutputSchema = z
     deleted: z.boolean().optional(),
     id: z.string().optional(),
     filePath: z.string().optional(),
+  })
+  .passthrough();
+
+export const TodoToolOutputSchema = z
+  .object({
+    items: z.array(TodoPlanItemOutputSchema).optional(),
+    rendered: z.string().optional(),
+    totalCount: z.number().optional(),
+    completedCount: z.number().optional(),
+    inProgressCount: z.number().optional(),
+    pendingCount: z.number().optional(),
   })
   .passthrough();
 

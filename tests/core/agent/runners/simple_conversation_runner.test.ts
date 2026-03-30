@@ -272,6 +272,40 @@ describe('SimpleConversationRunner', () => {
     );
   });
 
+  it('passes prepareStep through to AI SDK generation when configured', async () => {
+    generateTextMock.mockResolvedValue({
+      text: 'done',
+      content: [],
+      steps: [],
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+      },
+      response: {
+        messages: [],
+      },
+    });
+    const prepareStep = vi.fn();
+
+    const runner = createSimpleConversationRunner({
+      enabled: true,
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      systemPrompt: 'system prompt',
+      enableTools: true,
+      prepareStep,
+    });
+
+    await runner.generate({ prompt: 'hello' });
+
+    expect(generateTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prepareStep,
+      })
+    );
+  });
+
   it('reuses persisted history for approval continuation without requiring explicit history', async () => {
     streamTextMock
       .mockReturnValueOnce({

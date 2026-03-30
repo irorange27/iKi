@@ -68,7 +68,7 @@ beforeEach(() => {
 });
 
 describe('chat_memory retrieval scope', () => {
-  it('prefers thread-local results before same-client cross-thread results and deduplicates ids', () => {
+  it('prefers thread-local results before same-client cross-thread results and deduplicates ids', async () => {
     vi.mocked(memoryDb.searchLongMemory).mockReturnValue([
       {
         id: 'mem_thread',
@@ -114,7 +114,7 @@ describe('chat_memory retrieval scope', () => {
     ]);
 
     const memory = createChatMemory();
-    const payload = memory.retrieveRelevantMemory('thread_1', 'constraints');
+    const payload = await memory.retrieveRelevantMemory('thread_1', 'constraints');
 
     expect(vi.mocked(memoryDb.searchLongMemory)).toHaveBeenCalledWith(
       'thread_1',
@@ -128,7 +128,7 @@ describe('chat_memory retrieval scope', () => {
     expect(payload?.results.map(entry => entry.id)).toEqual(['mem_thread', 'mem_client']);
   });
 
-  it('does not expand retrieval beyond the active thread when the thread has no client boundary', () => {
+  it('does not expand retrieval beyond the active thread when the thread has no client boundary', async () => {
     getChatThreadMock.mockReturnValue({
       is_incognito: false,
       client_id: '',
@@ -150,7 +150,7 @@ describe('chat_memory retrieval scope', () => {
     ]);
 
     const memory = createChatMemory();
-    const payload = memory.retrieveRelevantMemory('thread_2', 'thread only');
+    const payload = await memory.retrieveRelevantMemory('thread_2', 'thread only');
 
     expect(vi.mocked(memoryDb.searchLongMemoryAcrossThreads)).not.toHaveBeenCalled();
     expect(payload?.results.map(entry => entry.id)).toEqual(['mem_thread_only']);

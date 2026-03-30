@@ -8,6 +8,28 @@ vi.mock('../../../src/core/config', () => ({
   getAppConfig: vi.fn(() => ({ memory: { enabled: true } })),
 }));
 
+vi.mock('../../../src/core/memory/embedding', () => ({
+  embedTextsWithFallback: vi.fn(async (texts: string[]) => ({
+    results: texts.map(() => ({
+      vector: [0.25, 0.75],
+      fingerprint: {
+        strategy: 'provider',
+        version: 1,
+        dimensions: 2,
+        providerType: 'openai',
+        providerId: 'provider_openai',
+        model: 'text-embedding-3-small',
+      },
+    })),
+    degraded: false,
+  })),
+  HASH_EMBEDDING_DIM: 128,
+  HASH_EMBEDDING_VERSION: 1,
+  PROVIDER_EMBEDDING_VERSION: 1,
+  createHashMemoryEmbeddingRuntime: vi.fn(),
+  createPreferredMemoryEmbeddingRuntime: vi.fn(),
+}));
+
 import { getDb } from '../../../src/core/db/database';
 import { deleteLongMemory, updateLongMemory } from '../../../src/core/db/memory';
 import type { LongMemoryEntry } from '../../../src/core/db/memory';
@@ -17,9 +39,10 @@ type LongMemoryUpdate = Partial<LongMemoryEntry>;
 
 const setupDb = () => {
   const runMock = vi.fn((params?: unknown) => params ?? { changes: 1 });
-  const prepareMock = vi.fn(() => ({ run: runMock }));
+  const getMock = vi.fn(() => ({ metadata: '{"source":"manual"}' }));
+  const prepareMock = vi.fn(() => ({ run: runMock, get: getMock }));
   getDbMock.mockReturnValue({ prepare: prepareMock } as unknown as ReturnType<typeof getDb>);
-  return { runMock, prepareMock };
+  return { runMock, prepareMock, getMock };
 };
 
 beforeEach(() => {
@@ -27,30 +50,31 @@ beforeEach(() => {
 });
 
 describe('updateLongMemory', () => {
-  it('returns null when id is missing', () => {
-    const result = updateLongMemory('', { summary: 'User likes tea.' });
+  it('returns null when id is missing', async () => {
+    const result = await updateLongMemory('', { summary: 'User likes tea.' });
 
     expect(result).toBeNull();
     expect(getDbMock).not.toHaveBeenCalled();
   });
 
-  it('returns null when there are no updatable fields', () => {
+  it('returns null when there are no updatable fields', async () => {
     const { prepareMock } = setupDb();
 
-    const result = updateLongMemory('mem_1', { id: 'mem_1' } as LongMemoryUpdate);
+    const result = await updateLongMemory('mem_1', { id: 'mem_1' } as LongMemoryUpdate);
 
     expect(result).toBeNull();
     expect(prepareMock).not.toHaveBeenCalled();
   });
 
-  it('recomputes embedding when summary changes', () => {
+  it('recomputes embedding when summary changes', async () => {
     const { runMock } = setupDb();
 
-    updateLongMemory('mem_2', { summary: 'User prefers green tea.' });
+    await updateLongMemory('mem_2', { summary: 'User prefers green tea.' });
 
     const params = runMock.mock.calls[0][0] as {
       summary: string;
       embedding: string;
+      metadata: string;
       id: string;
       updated_at: string;
     };
@@ -61,14 +85,21 @@ describe('updateLongMemory', () => {
 
     const embedding = JSON.parse(params.embedding);
     expect(Array.isArray(embedding)).toBe(true);
-    expect(embedding).toHaveLength(128);
-    expect(embedding.some((value: number) => value !== 0)).toBe(true);
+    expect(embedding).toEqual([0.25, 0.75]);
+    expect(JSON.parse(params.metadata)).toMatchObject({
+      source: 'manual',
+      embedding: {
+        strategy: 'provider',
+        model: 'text-embedding-3-small',
+        dimensions: 2,
+      },
+    });
   });
 
-  it('does not update embedding when summary is absent', () => {
+  it('does not update embedding when summary is absent', async () => {
     const { runMock } = setupDb();
 
-    updateLongMemory('mem_3', { tags: '["preference"]' } as LongMemoryUpdate);
+    await updateLongMemory('mem_3', { tags: '["preference"]' } as LongMemoryUpdate);
 
     const params = runMock.mock.calls[0][0] as Record<string, unknown>;
     expect(params.tags).toBe('["preference"]');

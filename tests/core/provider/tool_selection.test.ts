@@ -125,4 +125,26 @@ describe('selectToolsWithAgent', () => {
       })
     );
   });
+
+  it('tells the router to include todo for multi-step work', async () => {
+    const generate = vi.fn().mockResolvedValue({ response: '["todo","shell"]' });
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({ generate });
+
+    await selectToolsWithAgent({
+      messages: [{ role: 'user', content: 'Inspect the repo, implement the fix, and run checks.' }],
+      availableTools: [{ name: 'todo' }, { name: 'shell' }],
+    });
+
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('Include `todo` when the task is meaningfully multi-step'),
+      })
+    );
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('include `todo` unless the task is trivial'),
+      })
+    );
+  });
 });

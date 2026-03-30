@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DeletePersonalSkillInputSchema,
+  TodoToolInputSchema,
   DeleteTodoListInputSchema,
   DeleteFileInputSchema,
   FetchToolInputSchema,
@@ -98,6 +99,13 @@ describe('tool input schemas', () => {
         description: 'Remove a stale personal skill the user no longer wants.',
       }).description
     ).toBe('Remove a stale personal skill the user no longer wants.');
+
+    expect(
+      TodoToolInputSchema.parse({
+        items: [{ id: '1', text: 'Inspect current code', status: 'in_progress' }],
+        description: 'Track the multi-step execution plan.',
+      }).description
+    ).toBe('Track the multi-step execution plan.');
 
     expect(
       ListTodoListsInputSchema.parse({

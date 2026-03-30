@@ -215,7 +215,7 @@ export const createChatMemory = () => {
         return;
       }
 
-      memoryDb.addLongMemory(
+      await memoryDb.addLongMemory(
         {
           thread_id: threadId,
           summary: summary.summary,
@@ -317,10 +317,10 @@ export const createChatMemory = () => {
     sourceMessageCount: parseJsonStringArray(entry.source_message_ids).length || undefined,
   });
 
-  const retrieveRelevantMemory = (
+  const retrieveRelevantMemory = async (
     threadId: string,
     query: string
-  ): MemoryRetrievalPayload | null => {
+  ): Promise<MemoryRetrievalPayload | null> => {
     if (!threadId || !query.trim()) return null;
     const memoryConfig = getMemoryConfig();
     if (!memoryConfig?.enabled) return null;
@@ -330,12 +330,12 @@ export const createChatMemory = () => {
 
     const limit = Math.max(1, Math.trunc(memoryConfig.maxRetrievalCount || 0));
     const threshold = memoryConfig.similarThreshold;
-    const threadResults = memoryDb.searchLongMemory(threadId, query, {
+    const threadResults = await memoryDb.searchLongMemory(threadId, query, {
       limit,
       threshold,
     });
     const clientResults = thread?.client_id
-      ? memoryDb.searchLongMemoryAcrossThreads(query, {
+      ? await memoryDb.searchLongMemoryAcrossThreads(query, {
           limit: Math.max(limit * 2, limit),
           threshold,
           clientId: thread.client_id,
@@ -360,14 +360,14 @@ export const createChatMemory = () => {
     };
   };
 
-  const injectMemoryIntoMessages = (
+  const injectMemoryIntoMessages = async (
     messages: ChatInputMessage[],
     threadId?: string,
     options?: {
       onRetrieved?: (payload: MemoryRetrievalPayload) => void;
       skipAffect?: boolean;
     }
-  ): ChatInputMessage[] => {
+  ): Promise<ChatInputMessage[]> => {
     if (!threadId) return messages;
     const thread = chatThreadDb.getChatThread(threadId);
     if (thread?.is_incognito) return messages;
@@ -375,7 +375,7 @@ export const createChatMemory = () => {
     const systemMessages: ChatInputMessage[] = [];
     const lastMessage = messages[messages.length - 1];
     const query = getPromptFromMessage(lastMessage);
-    const memoryPayload = query.trim() ? retrieveRelevantMemory(threadId, query) : null;
+    const memoryPayload = query.trim() ? await retrieveRelevantMemory(threadId, query) : null;
     if (memoryPayload) {
       if (options?.onRetrieved) {
         options.onRetrieved(memoryPayload);

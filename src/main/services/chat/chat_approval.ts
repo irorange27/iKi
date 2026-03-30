@@ -177,7 +177,7 @@ export const createChatApproval = (deps: {
     const uiMessages = rows.map(row =>
       parseStoredUiMessageRow({ id: row.id, message: row.message })
     );
-    const inputMessages = deps.memory.injectMemoryIntoMessages(
+    const inputMessages = await deps.memory.injectMemoryIntoMessages(
       await toModelInputMessages(uiMessages),
       threadId
     );

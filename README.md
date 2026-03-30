@@ -27,6 +27,10 @@ A local agent pet for AI provider orchestration.
 - Persistent ToDoList tools so iKi can create, read, and maintain local structured checklists
   instead of scattering todos across chat text or ad hoc files.
 
+- A thread-scoped `todo` planning tool that keeps multi-step agent work visible with
+  `pending` / `in_progress` / `completed` states and reminder-backed progress updates inside the
+  main chat tool loop.
+
 - First-class personal-skill management tools so iKi can list, inspect, create, update, and
   delete user-managed `SKILL.md` files under the Personal skills root without needing workspace
   hacks; destructive skill changes remain explicitly approval-gated.

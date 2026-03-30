@@ -1,7 +1,20 @@
 import { getDb } from './database';
 import { getAppConfig } from '../config';
+import { createLogger } from '../logger';
+import {
+  createHashMemoryEmbeddingRuntime,
+  createPreferredMemoryEmbeddingRuntime,
+  embedTextsWithFallback,
+  HASH_EMBEDDING_DIM,
+  HASH_EMBEDDING_VERSION,
+  PROVIDER_EMBEDDING_VERSION,
+  type MemoryEmbeddingFingerprint,
+  type MemoryEmbeddingRuntime,
+} from '../memory/embedding';
 import { createPrefixedId } from '../../shared/utils/id';
 import { toIsoNow } from '../../shared/utils/text';
+
+const memoryLogger = createLogger({ module: 'memory_db' });
 
 export type ShortMemoryEntry = {
   id: string;
@@ -30,7 +43,6 @@ export type LongMemoryEntry = {
 
 export type LongMemorySearchResult = LongMemoryEntry & { score: number };
 
-const EMBEDDING_DIM = 128;
 const SHORT_MEMORY_LIMIT = 200;
 
 const isMemoryEnabled = (): boolean => {
@@ -38,47 +50,16 @@ const isMemoryEnabled = (): boolean => {
   return Boolean(appConfig?.memory?.enabled);
 };
 
-const tokenize = (text: string): string[] => {
-  const matches = text.toLowerCase().match(/[a-z0-9]+/g);
-  return matches ? matches : [];
-};
-
-const hashToken = (token: string): number => {
-  let hash = 2166136261;
-  for (let i = 0; i < token.length; i += 1) {
-    hash ^= token.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-};
-
-const normalizeVector = (vector: number[]): number[] => {
-  const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
-  if (!norm) return vector;
-  return vector.map(value => value / norm);
-};
-
-const textToEmbedding = (text: string): number[] => {
-  const vector = new Array(EMBEDDING_DIM).fill(0);
-  for (const token of tokenize(text)) {
-    const hash = hashToken(token);
-    const index = hash % EMBEDDING_DIM;
-    const sign = hash & 1 ? 1 : -1;
-    vector[index] += sign;
-  }
-  return normalizeVector(vector);
-};
-
 const parseEmbedding = (raw: string): number[] => {
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.map(value => (typeof value === 'number' ? value : 0));
+      return parsed.map(value => (typeof value === 'number' && Number.isFinite(value) ? value : 0));
     }
   } catch {
     // Ignore parse failures.
   }
-  return new Array(EMBEDDING_DIM).fill(0);
+  return [];
 };
 
 const cosineSimilarity = (a: number[], b: number[]): number => {
@@ -88,6 +69,250 @@ const cosineSimilarity = (a: number[], b: number[]): number => {
     dot += (a[i] || 0) * (b[i] || 0);
   }
   return dot;
+};
+
+const parseMetadataRecord = (raw: unknown): Record<string, unknown> => {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? ({ ...(raw as Record<string, unknown>) } as Record<string, unknown>)
+    : {};
+};
+
+const toStoredMetadata = (metadata: Record<string, unknown>): string | null =>
+  Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null;
+
+const normalizeFingerprint = (
+  value: unknown,
+  fallbackDimensions: number
+): MemoryEmbeddingFingerprint | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const strategy = record.strategy === 'provider' || record.strategy === 'hash' ? record.strategy : null;
+  const version =
+    typeof record.version === 'number' && Number.isFinite(record.version)
+      ? Math.trunc(record.version)
+      : strategy === 'provider'
+        ? PROVIDER_EMBEDDING_VERSION
+        : HASH_EMBEDDING_VERSION;
+  const dimensions =
+    typeof record.dimensions === 'number' && Number.isFinite(record.dimensions)
+      ? Math.trunc(record.dimensions)
+      : fallbackDimensions;
+
+  if (!strategy || dimensions <= 0) return null;
+
+  const providerType = typeof record.providerType === 'string' ? record.providerType.trim() : '';
+  const providerId = typeof record.providerId === 'string' ? record.providerId.trim() : '';
+  const model = typeof record.model === 'string' ? record.model.trim() : '';
+
+  if (strategy === 'provider') {
+    if (!providerType || !model) return null;
+    return {
+      strategy,
+      version,
+      dimensions,
+      providerType,
+      ...(providerId ? { providerId } : {}),
+      model,
+    };
+  }
+
+  return {
+    strategy,
+    version,
+    dimensions,
+  };
+};
+
+const extractStoredFingerprint = (
+  metadataRaw: string | null,
+  embeddingVector: number[]
+): MemoryEmbeddingFingerprint | null => {
+  const metadata = parseMetadataRecord(metadataRaw);
+  const normalized = normalizeFingerprint(metadata.embedding, embeddingVector.length);
+  if (normalized) return normalized;
+
+  if (embeddingVector.length === HASH_EMBEDDING_DIM) {
+    return {
+      strategy: 'hash',
+      version: HASH_EMBEDDING_VERSION,
+      dimensions: HASH_EMBEDDING_DIM,
+    };
+  }
+
+  return null;
+};
+
+const withEmbeddingFingerprint = (
+  metadataRaw: unknown,
+  fingerprint: MemoryEmbeddingFingerprint
+): string | null => {
+  const metadata = parseMetadataRecord(metadataRaw);
+  metadata.embedding = {
+    strategy: fingerprint.strategy,
+    version: fingerprint.version,
+    dimensions: fingerprint.dimensions,
+    ...(fingerprint.providerType ? { providerType: fingerprint.providerType } : {}),
+    ...(fingerprint.providerId ? { providerId: fingerprint.providerId } : {}),
+    ...(fingerprint.model ? { model: fingerprint.model } : {}),
+  };
+  return toStoredMetadata(metadata);
+};
+
+const fingerprintsMatch = (
+  stored: MemoryEmbeddingFingerprint | null,
+  active: MemoryEmbeddingFingerprint
+): boolean => {
+  if (!stored) return false;
+  if (stored.strategy !== active.strategy) return false;
+  if (stored.dimensions !== active.dimensions) return false;
+  if (stored.version !== active.version) return false;
+  if (stored.strategy === 'provider') {
+    return (
+      stored.providerType === active.providerType &&
+      stored.providerId === active.providerId &&
+      stored.model === active.model
+    );
+  }
+  return true;
+};
+
+const persistEmbeddingBackfill = (
+  entries: Array<{ id: string; embedding: string; metadata: string | null }>
+) => {
+  if (entries.length === 0) return;
+  const stmt = getDb().prepare(
+    'UPDATE memory_long SET embedding = @embedding, metadata = @metadata WHERE id = @id'
+  );
+  const transaction = getDb().transaction((rows: Array<{ id: string; embedding: string; metadata: string | null }>) => {
+    for (const row of rows) {
+      stmt.run(row);
+    }
+  });
+  transaction(entries);
+};
+
+const scoreLongMemoryRowsWithRuntime = async (
+  rows: LongMemoryEntry[],
+  query: string,
+  runtime: MemoryEmbeddingRuntime,
+  options?: Pick<LongMemorySearchOptions, 'limit' | 'threshold'> & { persistBackfill?: boolean }
+): Promise<LongMemorySearchResult[]> => {
+  const threshold = options?.threshold ?? 0.1;
+  const limit = options?.limit ?? 5;
+  const persistBackfill = options?.persistBackfill === true;
+
+  const [queryEmbeddingResult] = await runtime.embed([query]);
+  if (!queryEmbeddingResult) return [];
+
+  const activeFingerprint = queryEmbeddingResult.fingerprint;
+  const compatibleRows: LongMemoryEntry[] = [];
+  const rowsNeedingBackfill: LongMemoryEntry[] = [];
+
+  for (const row of rows) {
+    const embedding = parseEmbedding(row.embedding);
+    const fingerprint = extractStoredFingerprint(row.metadata, embedding);
+    if (embedding.length > 0 && fingerprintsMatch(fingerprint, activeFingerprint)) {
+      compatibleRows.push(row);
+      continue;
+    }
+    if (row.summary && row.summary.trim()) {
+      rowsNeedingBackfill.push(row);
+    }
+  }
+
+  if (rowsNeedingBackfill.length > 0) {
+    const backfilled = await runtime.embed(rowsNeedingBackfill.map(row => row.summary));
+    const persistedRows: Array<{ id: string; embedding: string; metadata: string | null }> = [];
+
+    for (let index = 0; index < rowsNeedingBackfill.length; index += 1) {
+      const row = rowsNeedingBackfill[index];
+      const nextEmbedding = backfilled[index];
+      if (!row || !nextEmbedding) continue;
+
+      const rawEmbedding = JSON.stringify(nextEmbedding.vector);
+      const rawMetadata = withEmbeddingFingerprint(row.metadata, nextEmbedding.fingerprint);
+      compatibleRows.push({
+        ...row,
+        embedding: rawEmbedding,
+        metadata: rawMetadata,
+      });
+
+      if (persistBackfill) {
+        persistedRows.push({
+          id: row.id,
+          embedding: rawEmbedding,
+          metadata: rawMetadata,
+        });
+      }
+    }
+
+    if (persistedRows.length > 0) {
+      persistEmbeddingBackfill(persistedRows);
+    }
+  }
+
+  return compatibleRows
+    .map(row => {
+      const embedding = parseEmbedding(row.embedding);
+      if (embedding.length !== queryEmbeddingResult.vector.length) {
+        return { ...row, score: Number.NEGATIVE_INFINITY };
+      }
+      const score = cosineSimilarity(queryEmbeddingResult.vector, embedding);
+      return { ...row, score };
+    })
+    .filter(row => row.score >= threshold)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+};
+
+const searchLongMemoryRows = async (
+  rows: LongMemoryEntry[],
+  query: string,
+  options?: Pick<LongMemorySearchOptions, 'limit' | 'threshold'>
+): Promise<LongMemorySearchResult[]> => {
+  const runtime = createPreferredMemoryEmbeddingRuntime();
+
+  try {
+    return await scoreLongMemoryRowsWithRuntime(rows, query, runtime, {
+      ...options,
+      persistBackfill: runtime.fingerprint.strategy === 'provider',
+    });
+  } catch (error) {
+    if (runtime.fingerprint.strategy !== 'provider') {
+      throw error;
+    }
+
+    memoryLogger.event({
+      level: 'warn',
+      event: 'memory.search.embedding_fallback',
+      outcome: 'degraded',
+      error,
+      fallback_applied: true,
+      data: {
+        provider_type: runtime.fingerprint.providerType || null,
+        provider_id: runtime.fingerprint.providerId || null,
+        model: runtime.fingerprint.model || null,
+        row_count: rows.length,
+      },
+    });
+
+    return await scoreLongMemoryRowsWithRuntime(rows, query, createHashMemoryEmbeddingRuntime(), {
+      ...options,
+      persistBackfill: false,
+    });
+  }
 };
 
 export const extractTextFromMessageJson = (
@@ -194,9 +419,7 @@ export const addShortMemoryFromChatMessage = (
 export const listShortMemory = (threadId: string, limit?: number): ShortMemoryEntry[] => {
   const safeLimit = typeof limit === 'number' ? limit : 50;
   const rows = getDb()
-    .prepare(
-      'SELECT * FROM memory_short WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?'
-    )
+    .prepare('SELECT * FROM memory_short WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?')
     .all(threadId, safeLimit) as ShortMemoryEntry[];
 
   return rows.map(row => ({
@@ -260,7 +483,7 @@ export const pruneShortMemory = (threadId: string, maxCount = SHORT_MEMORY_LIMIT
     .run(threadId, maxCount);
 };
 
-export const addLongMemory = (
+export const addLongMemory = async (
   entry: {
     id?: string;
     thread_id: string;
@@ -276,7 +499,10 @@ export const addLongMemory = (
   if (!isMemoryEnabled() && !options?.force) return null;
 
   const now = toIsoNow();
-  const embedding = JSON.stringify(textToEmbedding(entry.summary));
+  const embeddingResult = await embedTextsWithFallback([entry.summary]);
+  const firstEmbedding = embeddingResult.results[0];
+  if (!firstEmbedding) return null;
+
   const stmt = getDb().prepare(`
     INSERT INTO memory_long (
       id, thread_id, summary, embedding, source_message_ids, emotion, tags, metadata, created_at, updated_at
@@ -289,13 +515,11 @@ export const addLongMemory = (
     id: entry.id || createPrefixedId('meml'),
     thread_id: entry.thread_id,
     summary: entry.summary,
-    embedding,
-    source_message_ids: entry.source_message_ids
-      ? JSON.stringify(entry.source_message_ids)
-      : null,
+    embedding: JSON.stringify(firstEmbedding.vector),
+    source_message_ids: entry.source_message_ids ? JSON.stringify(entry.source_message_ids) : null,
     emotion: entry.emotion ? JSON.stringify(entry.emotion) : null,
     tags: entry.tags ? JSON.stringify(entry.tags) : null,
-    metadata: entry.metadata ? JSON.stringify(entry.metadata) : null,
+    metadata: withEmbeddingFingerprint(entry.metadata, firstEmbedding.fingerprint),
     created_at: now,
     updated_at: now,
   };
@@ -305,12 +529,9 @@ export const addLongMemory = (
 
 export const listLongMemory = (threadId: string, limit?: number): LongMemoryEntry[] => {
   const safeLimit = typeof limit === 'number' ? limit : 50;
-  const rows = getDb()
-    .prepare(
-      'SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?'
-    )
+  return getDb()
+    .prepare('SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC LIMIT ?')
     .all(threadId, safeLimit) as LongMemoryEntry[];
-  return rows;
 };
 
 export const listLongMemoryAcrossThreads = (
@@ -332,7 +553,7 @@ export const listLongMemoryAcrossThreads = (
   }
 
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
-  const rows = getDb()
+  return getDb()
     .prepare(
       `
       SELECT memory_long.*
@@ -344,14 +565,20 @@ export const listLongMemoryAcrossThreads = (
     `
     )
     .all(...params, safeLimit) as LongMemoryEntry[];
-  return rows;
 };
 
-export const updateLongMemory = (id: string, updates: Partial<LongMemoryEntry>) => {
+export const updateLongMemory = async (id: string, updates: Partial<LongMemoryEntry>) => {
   if (!id) return null;
   const now = toIsoNow();
-  const fields = Object.keys(updates)
+  const fieldNames = new Set(
+    Object.keys(updates)
     .filter(key => key !== 'id' && key !== 'created_at')
+  );
+  if (typeof updates.summary === 'string') {
+    fieldNames.add('embedding');
+    fieldNames.add('metadata');
+  }
+  const fields = Array.from(fieldNames)
     .map(key => `${key} = @${key}`)
     .join(', ');
 
@@ -370,7 +597,18 @@ export const updateLongMemory = (id: string, updates: Partial<LongMemoryEntry>) 
   };
 
   if (typeof updates.summary === 'string') {
-    params.embedding = JSON.stringify(textToEmbedding(updates.summary));
+    const existingMetadata =
+      typeof updates.metadata === 'string'
+        ? updates.metadata
+        : ((getDb()
+            .prepare('SELECT metadata FROM memory_long WHERE id = ?')
+            .get(id) as { metadata?: string | null } | undefined)?.metadata ?? null);
+    const embeddingResult = await embedTextsWithFallback([updates.summary]);
+    const firstEmbedding = embeddingResult.results[0];
+    if (firstEmbedding) {
+      params.embedding = JSON.stringify(firstEmbedding.vector);
+      params.metadata = withEmbeddingFingerprint(existingMetadata, firstEmbedding.fingerprint);
+    }
   }
 
   return stmt.run(params);
@@ -389,31 +627,11 @@ type LongMemorySearchOptions = {
   clientId?: string;
 };
 
-const scoreLongMemoryRows = (
-  rows: LongMemoryEntry[],
-  query: string,
-  options?: Pick<LongMemorySearchOptions, 'limit' | 'threshold'>
-): LongMemorySearchResult[] => {
-  const queryEmbedding = textToEmbedding(query);
-  const threshold = options?.threshold ?? 0.1;
-  const limit = options?.limit ?? 5;
-
-  return rows
-    .map(row => {
-      const embedding = parseEmbedding(row.embedding);
-      const score = cosineSimilarity(queryEmbedding, embedding);
-      return { ...row, score };
-    })
-    .filter(row => row.score >= threshold)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-};
-
-export const searchLongMemory = (
+export const searchLongMemory = async (
   threadId: string,
   query: string,
   options?: LongMemorySearchOptions
-): LongMemorySearchResult[] => {
+): Promise<LongMemorySearchResult[]> => {
   if (!threadId || !query.trim()) return [];
   if (!isMemoryEnabled() && !options?.force) return [];
 
@@ -421,13 +639,13 @@ export const searchLongMemory = (
     .prepare('SELECT * FROM memory_long WHERE thread_id = ? ORDER BY updated_at DESC')
     .all(threadId) as LongMemoryEntry[];
 
-  return scoreLongMemoryRows(rows, query, options);
+  return await searchLongMemoryRows(rows, query, options);
 };
 
-export const searchLongMemoryAcrossThreads = (
+export const searchLongMemoryAcrossThreads = async (
   query: string,
   options?: LongMemorySearchOptions
-): LongMemorySearchResult[] => {
+): Promise<LongMemorySearchResult[]> => {
   if (!query.trim()) return [];
   if (!isMemoryEnabled() && !options?.force) return [];
 
@@ -457,5 +675,5 @@ export const searchLongMemoryAcrossThreads = (
     )
     .all(...params) as LongMemoryEntry[];
 
-  return scoreLongMemoryRows(rows, query, options);
+  return await searchLongMemoryRows(rows, query, options);
 };

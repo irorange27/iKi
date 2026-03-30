@@ -33,8 +33,9 @@ const SYSTEM_PROMPT =
   '- Output ONLY valid JSON.\n' +
   '- Prefer using NO tools when possible.\n' +
   '- If the user asks about current local machine state or other live information the model cannot know reliably on its own (for example current time, filesystem contents, git status, installed tools, running processes, or live web data), include the tool needed to verify it instead of guessing.\n' +
+  '- Include `todo` when the task is meaningfully multi-step (for example code changes, debugging, investigation, or any turn likely to need several tool calls or progress tracking).\n' +
   '- Prefer 1-3 tools; only exceed that when a multi-step workflow clearly needs it.\n' +
-  '- If a task likely needs sequential tool use in one turn (for example list -> read -> write), include each needed tool.\n' +
+  '- If a task likely needs sequential tool use in one turn (for example list -> read -> write), include each needed tool and include `todo` unless the task is trivial.\n' +
   '- Prefer tools that do not require approval unless approval-gated tools are clearly necessary.\n' +
   '- Return a JSON array of tool names. Example: ["web","fetch"].\n' +
   '- If no tool is needed, return [].\n' +

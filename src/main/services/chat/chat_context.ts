@@ -646,14 +646,14 @@ const toMemoryDisplayEntry = (result: Record<string, unknown>) => ({
   updated_at: typeof result.updated_at === 'string' ? result.updated_at : undefined,
 });
 
-const buildMemoryContext = (params: {
+const buildMemoryContext = async (params: {
   threadId?: string;
   query: string;
   memory: ChatMemory;
   contextConfig: ContextConfig;
   modelCapability?: ModelCapability | null;
   onMemoryRetrieved?: AssembleChatContextParams['onMemoryRetrieved'];
-}): MemoryContext => {
+}): Promise<MemoryContext> => {
   if (!params.query.trim()) {
     return {
       systemMessage: '',
@@ -680,7 +680,7 @@ const buildMemoryContext = (params: {
     };
   }
 
-  const memoryPayload = params.memory.retrieveRelevantMemory(params.threadId, params.query);
+  const memoryPayload = await params.memory.retrieveRelevantMemory(params.threadId, params.query);
   if (!memoryPayload) {
     return {
       systemMessage: '',
@@ -887,7 +887,7 @@ export const createChatContextAssembler = (deps: {
 
     const lastMessage = params.messages[params.messages.length - 1];
     const query = getPromptFromMessage(lastMessage);
-    const memoryContext = buildMemoryContext({
+    const memoryContext = await buildMemoryContext({
       threadId: params.threadId,
       query,
       memory: deps.memory,

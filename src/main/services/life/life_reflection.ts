@@ -492,20 +492,20 @@ const shouldWriteReflectionMemory = (params: {
   };
 };
 
-const writeReflectionMemory = (params: {
+const writeReflectionMemory = async (params: {
   reflectionRecord: LifeReflectionRecord;
   reflection: ReflectionModelOutput;
   episodes: LifeEpisodeRecord[];
   model: ToolModelConfig;
   memoryTags: string[];
-}): boolean => {
+}): Promise<boolean> => {
   const target = shouldWriteReflectionMemory({
     reflection: params.reflection,
     episodes: params.episodes,
   });
   if (!target) return false;
 
-  const result = memoryDb.addLongMemory({
+  const result = await memoryDb.addLongMemory({
     thread_id: target.threadId,
     summary: target.summary,
     tags: params.memoryTags,
@@ -552,7 +552,7 @@ const generateReflection = async (
       plan_json: JSON.stringify(reflection.next_focus),
     });
 
-    const wroteMemory = writeReflectionMemory({
+    const wroteMemory = await writeReflectionMemory({
       reflectionRecord: record,
       reflection,
       episodes: params.memoryEpisodes,

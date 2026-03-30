@@ -45,6 +45,7 @@ import {
   toModelInputMessages,
 } from './chat_ui';
 import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_loop';
+import { TODO_PLANNING_TOOL_NAME } from './chat_todo_planning';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -398,7 +399,9 @@ export const createChatStreaming = (deps: {
       inputMessages: finalMessages,
       affectState: affectStateForRouting,
     });
-    const guardedTools = applyToolGuard(resolvedTools, mode, guardActive);
+    const guardedTools = applyToolGuard(resolvedTools, mode, guardActive).filter(
+      toolName => Boolean(options.threadId) || toolName !== TODO_PLANNING_TOOL_NAME
+    );
 
     persistThreadRuntimeHints({
       threadId: options.threadId ?? '',
@@ -448,6 +451,7 @@ export const createChatStreaming = (deps: {
           model: options.model,
           systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
           enableTools: true,
+          enabledTools: preparedTurn.guardedTools,
           maxIterations: 5,
           ...(typeof preparedTurn.maxOutputTokens === 'number'
             ? { maxTokens: preparedTurn.maxOutputTokens }
@@ -603,6 +607,7 @@ export const createChatStreaming = (deps: {
         model: options.model,
         systemPrompt,
         enableTools: preparedTurn.enableTools,
+        enabledTools: preparedTurn.guardedTools,
         maxIterations: 5,
         ...(typeof preparedTurn.maxOutputTokens === 'number'
           ? { maxTokens: preparedTurn.maxOutputTokens }

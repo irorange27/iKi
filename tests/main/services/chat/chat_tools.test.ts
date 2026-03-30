@@ -28,6 +28,7 @@ const TEST_TOOL_NAMES = [
   'mcp_alpha_safe',
   'mcp_beta_unsafe',
   'manual_only',
+  'todo',
   'list_todo_lists',
   'read_todo_list',
   'write_todo_list',
@@ -159,7 +160,8 @@ describe('resolveToolNames', () => {
     ]);
   });
 
-  it('includes todo list tools in auto mode for normal chat turns', async () => {
+  it('includes todo planning and todo-list tools in auto mode for normal chat turns', async () => {
+    registerTool({ name: 'todo', source: { kind: 'builtin' } });
     registerTool({ name: 'list_todo_lists', source: { kind: 'builtin' } });
     registerTool({ name: 'read_todo_list', source: { kind: 'builtin' } });
     registerTool({ name: 'write_todo_list', source: { kind: 'builtin' } });
@@ -171,6 +173,7 @@ describe('resolveToolNames', () => {
 
     expect(result.mode).toBe('auto');
     expect(result.resolvedTools).toEqual([
+      'todo',
       'list_todo_lists',
       'read_todo_list',
       'write_todo_list',
