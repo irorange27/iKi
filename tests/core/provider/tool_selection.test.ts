@@ -138,12 +138,16 @@ describe('selectToolsWithAgent', () => {
 
     expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        systemPrompt: expect.stringContaining('Include `todo` when the task is meaningfully multi-step'),
+        systemPrompt: expect.stringContaining(
+          'Include `todo` only when the task is genuinely substantial and multi-step'
+        ),
       })
     );
     expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        systemPrompt: expect.stringContaining('include `todo` unless the task is trivial'),
+        systemPrompt: expect.stringContaining(
+          'Do NOT include `todo` for simple questions, one-shot lookups, single command checks'
+        ),
       })
     );
   });

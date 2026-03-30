@@ -21,6 +21,15 @@ const stepUsedTodo = (step: StepWithToolCalls): boolean =>
       )
     : false;
 
+const getNonTodoToolCalls = (step: StepWithToolCalls): string[] =>
+  Array.isArray(step.toolCalls)
+    ? step.toolCalls
+        .map(toolCall =>
+          typeof toolCall?.toolName === 'string' ? toolCall.toolName.trim().toLowerCase() : ''
+        )
+        .filter(toolName => toolName.length > 0 && toolName !== TODO_TOOL_NAME)
+    : [];
+
 const countRoundsSinceTodo = (steps: ReadonlyArray<StepWithToolCalls>): number => {
   let roundsSinceTodo = 0;
 
@@ -34,6 +43,28 @@ const countRoundsSinceTodo = (steps: ReadonlyArray<StepWithToolCalls>): number =
   return roundsSinceTodo;
 };
 
+const hasMeaningfullyComplexTodoCandidate = (steps: ReadonlyArray<StepWithToolCalls>): boolean => {
+  let nonTodoRounds = 0;
+  let nonTodoToolCallCount = 0;
+  const distinctNonTodoTools = new Set<string>();
+
+  for (const step of steps) {
+    if (stepUsedTodo(step)) continue;
+    const nonTodoTools = getNonTodoToolCalls(step);
+    if (nonTodoTools.length === 0) continue;
+
+    nonTodoRounds += 1;
+    nonTodoToolCallCount += nonTodoTools.length;
+    for (const toolName of nonTodoTools) {
+      distinctNonTodoTools.add(toolName);
+    }
+  }
+
+  if (nonTodoRounds < TODO_REMINDER_AFTER_STEPS) return false;
+  if (distinctNonTodoTools.size >= 2) return true;
+  return nonTodoToolCallCount >= TODO_REMINDER_AFTER_STEPS + 1;
+};
+
 export const createTodoPrepareStep = (
   enabledTools: string[]
 ): TodoPrepareStep | undefined => {
@@ -43,6 +74,9 @@ export const createTodoPrepareStep = (
 
   return ({ steps, messages }: PrepareStepOptions): PrepareStepResult => {
     if (countRoundsSinceTodo(steps) < TODO_REMINDER_AFTER_STEPS) {
+      return undefined;
+    }
+    if (!hasMeaningfullyComplexTodoCandidate(steps)) {
       return undefined;
     }
 

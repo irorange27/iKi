@@ -181,6 +181,37 @@ describe('resolveToolNames', () => {
     ]);
   });
 
+  it('drops todo from overeager auto selections for simple requests', async () => {
+    selectToolsWithAgentMock.mockResolvedValue(['todo', 'shell']);
+    registerTool({ name: 'todo', source: { kind: 'builtin' } });
+    registerTool({ name: 'shell', source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [{ role: 'user', content: 'What time is it right now?' }],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual(['shell']);
+  });
+
+  it('keeps todo for clearly substantial multi-step work even with a small tool set', async () => {
+    selectToolsWithAgentMock.mockResolvedValue(['todo', 'shell']);
+    registerTool({ name: 'todo', source: { kind: 'builtin' } });
+    registerTool({ name: 'shell', source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [
+        {
+          role: 'user',
+          content: 'Inspect the repo, implement the fix, and run checks before you finish.',
+        },
+      ],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual(['todo', 'shell']);
+  });
+
   it('reports approval-gated tools as prompt-free to the auto router when global auto-approve is enabled', async () => {
     getAppConfigMock.mockReturnValue({
       general: {

@@ -54,4 +54,23 @@ describe('chat_todo_planning', () => {
 
     expect(result).toBeUndefined();
   });
+
+  it('does not inject a reminder for repetitive single-tool activity that is not clearly complex', () => {
+    const prepareStep = createTodoPrepareStep([TODO_PLANNING_TOOL_NAME]);
+    if (!prepareStep) throw new Error('Expected todo prepareStep');
+
+    const result = prepareStep({
+      stepNumber: TODO_REMINDER_THRESHOLD_STEPS + 1,
+      steps: [
+        { toolCalls: [{ toolName: 'shell' }] },
+        { toolCalls: [{ toolName: 'shell' }] },
+        { toolCalls: [{ toolName: 'shell' }] },
+      ],
+      model: {} as never,
+      messages: [{ role: 'user', content: 'Check a few shell things.' }],
+      experimental_context: undefined,
+    });
+
+    expect(result).toBeUndefined();
+  });
 });
