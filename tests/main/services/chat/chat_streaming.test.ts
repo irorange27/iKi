@@ -423,6 +423,72 @@ describe('createChatStreaming', () => {
     expect(generateChatWithUsageMock).not.toHaveBeenCalled();
   });
 
+  it('send() merges declarative required built-in tools from selected skills into the same turn', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'check local playback state' }],
+      usedSkills: [
+        {
+          id: 'user:music',
+          name: 'Music',
+          description: 'Playback support',
+          source: 'user',
+          requiredTools: ['shell'],
+        },
+      ],
+      skillMode: 'auto',
+      report: {
+        totalEstimatedTokens: 40,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [{ kind: 'skills', status: 'included', estimatedTokens: 40, charCount: 160 }],
+      },
+    });
+    defaultToolRegistryGetMock.mockImplementation((toolName?: string) =>
+      toolName === 'shell'
+        ? {
+            name: 'shell',
+            description: 'Run shell commands',
+            parameters: {},
+            source: { kind: 'builtin' },
+            handler: vi.fn(async () => ({ ok: true })),
+          }
+        : undefined
+    );
+
+    const runner = {
+      registerTool: vi.fn(),
+      generate: vi.fn().mockResolvedValue({ response: 'shell skill result', iterations: 1 }),
+    };
+    createChatConversationRunnerMock.mockReturnValue(runner);
+
+    const { streaming } = createDeps();
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'check local playback state' }],
+      threadId: 'thread_skill_required_tool',
+      skillMode: 'auto',
+    });
+
+    expect(result).toEqual({ success: true, text: 'shell skill result' });
+    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabledTools: ['shell'],
+      })
+    );
+    expect(runner.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'load_skill',
+      })
+    );
+    expect(runner.registerTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'shell',
+      })
+    );
+    expect(generateChatWithUsageMock).not.toHaveBeenCalled();
+  });
+
   it('send() routes through the tool runner when tools are enabled', async () => {
     resolveToolNamesMock.mockResolvedValue({
       mode: 'manual',

@@ -5,6 +5,7 @@ import {
   TodoToolInputSchema,
   DeleteTodoListInputSchema,
   DeleteFileInputSchema,
+  EditFileInputSchema,
   FetchToolInputSchema,
   ListPersonalSkillsInputSchema,
   ListTodoListsInputSchema,
@@ -56,6 +57,14 @@ describe('tool input schemas', () => {
         description: 'Write generated notes to disk.',
       }).description
     ).toBe('Write generated notes to disk.');
+
+    expect(
+      EditFileInputSchema.parse({
+        path: 'notes.txt',
+        edits: [{ oldText: 'hello', newText: 'hi' }],
+        description: 'Patch the existing file without rewriting everything.',
+      }).description
+    ).toBe('Patch the existing file without rewriting everything.');
 
     expect(
       ListDirInputSchema.parse({

@@ -331,21 +331,18 @@ const normalizeMcpServers = (input: unknown): McpServerSummary[] => {
 };
 
 const getBuiltinToolOrder = (toolName: string): number => {
-  if (toolName === 'web' || toolName === 'fetch') {
-    return 0;
-  }
-  if (
-    toolName === 'read_file' ||
-    toolName === 'write_file' ||
-    toolName === 'list_dir' ||
-    toolName === 'delete_file'
-  ) {
-    return 1;
-  }
-  if (toolName === 'shell') {
-    return 2;
-  }
-  return 3;
+  const explicitOrder: Record<string, number> = {
+    web: 0,
+    fetch: 1,
+    list_dir: 10,
+    read_file: 11,
+    edit: 12,
+    write_file: 13,
+    delete_file: 14,
+    shell: 20,
+  };
+
+  return explicitOrder[toolName] ?? 100;
 };
 
 const builtinTools = computed(() =>

@@ -23,6 +23,7 @@ const TEST_TOOL_NAMES = [
   'shell',
   'list_dir',
   'read_file',
+  'edit',
   'write_file',
   'delete_file',
   'mcp_alpha_safe',
@@ -142,6 +143,7 @@ describe('resolveToolNames', () => {
     registerTool({ name: 'shell', source: { kind: 'builtin' } });
     registerTool({ name: 'list_dir', source: { kind: 'builtin' } });
     registerTool({ name: 'read_file', source: { kind: 'builtin' } });
+    registerTool({ name: 'edit', source: { kind: 'builtin' } });
     registerTool({ name: 'write_file', source: { kind: 'builtin' } });
     registerTool({ name: 'delete_file', source: { kind: 'builtin' } });
     registerTool({ name: 'manual_only', autoAllowed: false, source: { kind: 'builtin' } });
@@ -155,6 +157,7 @@ describe('resolveToolNames', () => {
       'shell',
       'list_dir',
       'read_file',
+      'edit',
       'write_file',
       'delete_file',
     ]);

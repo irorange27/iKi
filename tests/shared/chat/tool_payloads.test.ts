@@ -62,6 +62,20 @@ describe('parseToolInput', () => {
     expect(parsed.input.id).toBe('user:planner');
     expect(parsed.input.skillName).toBe('Planner');
   });
+
+  it('parses edit tool inputs from JSON', () => {
+    const parsed = parseToolInput(
+      'edit',
+      '{"path":"src/app.ts","edits":[{"oldText":"before","newText":"after","replaceAll":false}]}'
+    );
+
+    expect(parsed.kind).toBe('edit');
+    if (parsed.kind !== 'edit') throw new Error('Expected edit payload');
+    expect(parsed.input.path).toBe('src/app.ts');
+    expect(parsed.input.edits?.[0]?.oldText).toBe('before');
+    expect(parsed.input.edits?.[0]?.newText).toBe('after');
+    expect(parsed.input.edits?.[0]?.replaceAll).toBe(false);
+  });
 });
 
 describe('parseToolOutput', () => {
@@ -128,5 +142,18 @@ describe('parseToolOutput', () => {
     expect(parsed.output.id).toBe('user:planner');
     expect(parsed.output.description).toBe('Planning support');
     expect(parsed.output.truncated).toBe(false);
+  });
+
+  it('parses edit tool outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'edit',
+      '{"path":"src/app.ts","success":true,"changed":true,"appliedEditCount":1,"totalReplacements":1}'
+    );
+
+    expect(parsed.kind).toBe('edit');
+    if (parsed.kind !== 'edit') throw new Error('Expected edit output payload');
+    expect(parsed.output.path).toBe('src/app.ts');
+    expect(parsed.output.changed).toBe(true);
+    expect(parsed.output.totalReplacements).toBe(1);
   });
 });

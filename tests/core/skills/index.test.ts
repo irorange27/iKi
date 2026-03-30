@@ -131,6 +131,37 @@ Additional details below.
     );
   });
 
+  it('extracts declarative required built-in tools from skill frontmatter without loading the body', async () => {
+    await writeSkill(
+      userDataPath(),
+      'shell-driven',
+      `---
+name: shell-driven
+description: Uses local shell checks.
+required_tools:
+  - shell
+  - web
+  - shell
+---
+
+# Shell Driven
+
+Run local inspection before answering.
+`
+    );
+
+    const skills = await listSkills({ forceRefresh: true });
+
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        id: 'user:shell-driven',
+        name: 'Shell Driven',
+        description: 'Uses local shell checks.',
+        requiredTools: ['shell', 'web'],
+      })
+    );
+  });
+
   it('reads instruction content without yaml frontmatter for on-demand loading', async () => {
     await writeSkill(
       userDataPath(),

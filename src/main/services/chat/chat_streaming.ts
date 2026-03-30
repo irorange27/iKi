@@ -222,6 +222,42 @@ export const createChatStreaming = (deps: {
     return tools;
   };
 
+  const mergeToolNames = (primary: string[], secondary: string[]): string[] => {
+    const merged: string[] = [];
+    const seen = new Set<string>();
+
+    for (const toolName of [...primary, ...secondary]) {
+      if (typeof toolName !== 'string') continue;
+      const trimmed = toolName.trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      merged.push(trimmed);
+    }
+
+    return merged;
+  };
+
+  const collectRequiredBuiltinSkillTools = (
+    skills: Array<{ requiredTools?: string[] }>
+  ): string[] => {
+    const requiredTools: string[] = [];
+    const seen = new Set<string>();
+
+    for (const skill of skills) {
+      for (const toolName of skill.requiredTools ?? []) {
+        if (typeof toolName !== 'string') continue;
+        const trimmed = toolName.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        const tool = defaultToolRegistry.get(trimmed);
+        if (!tool || tool.source?.kind === 'mcp') continue;
+        seen.add(trimmed);
+        requiredTools.push(trimmed);
+      }
+    }
+
+    return requiredTools;
+  };
+
   const describeApprovalRequiredTools = (
     requests: Array<{ toolCall?: { toolName: string } }>
   ): string => {
@@ -399,7 +435,11 @@ export const createChatStreaming = (deps: {
       inputMessages: finalMessages,
       affectState: affectStateForRouting,
     });
-    const guardedTools = applyToolGuard(resolvedTools, mode, guardActive).filter(
+    const skillRequiredTools = collectRequiredBuiltinSkillTools(
+      Array.isArray(assembledContext.usedSkills) ? assembledContext.usedSkills : []
+    );
+    const mergedResolvedTools = mergeToolNames(resolvedTools, skillRequiredTools);
+    const guardedTools = applyToolGuard(mergedResolvedTools, mode, guardActive).filter(
       toolName => Boolean(options.threadId) || toolName !== TODO_PLANNING_TOOL_NAME
     );
 

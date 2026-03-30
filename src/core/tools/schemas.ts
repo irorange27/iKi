@@ -8,6 +8,7 @@ export const MIN_FETCH_MAX_CHARS = 500;
 export const MAX_FETCH_MAX_CHARS = 80000;
 export const DEFAULT_SHELL_TIMEOUT_MS = 30000;
 export const DEFAULT_FILE_ENCODING = 'utf-8';
+export const MAX_EDIT_FILE_OPERATIONS = 20;
 export const DEFAULT_TODO_LIST_LIMIT = 20;
 export const MAX_TODO_LIST_LIMIT = 100;
 export const DEFAULT_PERSONAL_SKILL_LIST_LIMIT = 20;
@@ -53,6 +54,33 @@ const writeFileInputFields = {
   encoding: z.string().describe('File encoding'),
 };
 
+const editFileOperationInputSchema = z.object({
+  oldText: z
+    .string()
+    .min(1)
+    .describe('Exact existing text to replace. Must match the file content exactly.'),
+  newText: z.string().describe('Replacement text. Use an empty string to delete the matched text.'),
+  replaceAll: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Replace every exact match instead of requiring a single unambiguous match'),
+});
+
+const editFileInputFields = {
+  path: z
+    .string()
+    .describe('Absolute path or workspace-relative path to the existing file to edit'),
+  edits: z
+    .array(editFileOperationInputSchema)
+    .min(1)
+    .max(MAX_EDIT_FILE_OPERATIONS)
+    .describe(
+      `Ordered exact-text replacement operations to apply sequentially. Provide at most ${MAX_EDIT_FILE_OPERATIONS} edits per call.`
+    ),
+  encoding: z.string().describe('File encoding'),
+};
+
 const listDirInputFields = {
   path: z.string().describe('Absolute path or workspace-relative path to the directory to list'),
   recursive: z.boolean().describe('Whether to list subdirectories recursively'),
@@ -86,10 +114,7 @@ const todoListItemInputSchema = z.object({
 const todoPlanItemInputSchema = z.object({
   id: z.string().describe('Stable todo item id').optional(),
   text: z.string().min(1).describe('Todo item text'),
-  status: z
-    .enum(['pending', 'in_progress', 'completed'])
-    .describe('Todo item status')
-    .optional(),
+  status: z.enum(['pending', 'in_progress', 'completed']).describe('Todo item status').optional(),
 });
 
 export const WebToolInputSchema = z.object({
@@ -157,11 +182,27 @@ export const WriteFileInputSchema = z.object({
   description: toolCallDescriptionField,
 });
 
+export const EditFileInputSchema = z.object({
+  path: editFileInputFields.path,
+  edits: editFileInputFields.edits,
+  encoding: editFileInputFields.encoding.optional().default(DEFAULT_FILE_ENCODING),
+  description: toolCallDescriptionField,
+});
+
 export const WriteFileInputSchemaUi = z
   .object({
     path: writeFileInputFields.path.optional(),
     content: writeFileInputFields.content.optional(),
     encoding: writeFileInputFields.encoding.optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const EditFileInputSchemaUi = z
+  .object({
+    path: editFileInputFields.path.optional(),
+    edits: z.array(editFileOperationInputSchema).optional(),
+    encoding: editFileInputFields.encoding.optional(),
     description: toolCallDescriptionField,
   })
   .passthrough();
@@ -502,6 +543,16 @@ export const WriteFileOutputSchema = z
   .object({
     path: z.string().optional(),
     success: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const EditFileOutputSchema = z
+  .object({
+    path: z.string().optional(),
+    success: z.boolean().optional(),
+    changed: z.boolean().optional(),
+    appliedEditCount: z.number().optional(),
+    totalReplacements: z.number().optional(),
   })
   .passthrough();
 

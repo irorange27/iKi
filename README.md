@@ -43,6 +43,9 @@ A local agent pet for AI provider orchestration.
   local file tools have a safe per-thread scratch area by default while still allowing edits under
   the app-managed `brain/` continuity folder.
 
+- A precise built-in `edit` tool can patch existing files through exact-match replacements, which
+  lets iKi update code and docs safely without having to rewrite an entire file for every change.
+
 ## Getting Started
 
 1. Install Node.js 20.x and npm 10.x.

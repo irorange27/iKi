@@ -7,6 +7,7 @@ const FALLBACK_DEFAULT_BUILTIN_TOOL_NAMES = [
   'fetch',
   'list_dir',
   'read_file',
+  'edit',
   'write_file',
   'delete_file',
   'shell',
@@ -38,30 +39,27 @@ const normalizeStringArray = (input: unknown): string[] => {
 };
 
 const getBuiltinToolOrder = (toolName: string): number => {
-  if (toolName === 'web' || toolName === 'fetch') return 0;
-  if (
-    toolName === 'list_dir' ||
-    toolName === 'read_file' ||
-    toolName === 'write_file' ||
-    toolName === 'delete_file'
-  ) {
-    return 1;
-  }
-  if (toolName === 'shell') return 2;
-  if (toolName.startsWith('list_personal_skill') || toolName.startsWith('read_personal_skill')) {
-    return 3;
-  }
-  if (toolName.startsWith('write_personal_skill') || toolName.startsWith('delete_personal_skill')) {
-    return 4;
-  }
-  if (toolName === 'todo') return 5;
-  if (toolName.startsWith('list_todo_list') || toolName.startsWith('read_todo_list')) {
-    return 6;
-  }
-  if (toolName.startsWith('write_todo_list') || toolName.startsWith('delete_todo_list')) {
-    return 7;
-  }
-  return 8;
+  const explicitOrder: Record<string, number> = {
+    web: 0,
+    fetch: 1,
+    list_dir: 10,
+    read_file: 11,
+    edit: 12,
+    write_file: 13,
+    delete_file: 14,
+    shell: 20,
+    list_personal_skills: 30,
+    read_personal_skill: 31,
+    write_personal_skill: 32,
+    delete_personal_skill: 33,
+    todo: 40,
+    list_todo_lists: 50,
+    read_todo_list: 51,
+    write_todo_list: 52,
+    delete_todo_list: 53,
+  };
+
+  return explicitOrder[toolName] ?? 100;
 };
 
 const getDefaultBuiltinToolNames = (): string[] => {

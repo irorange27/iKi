@@ -217,6 +217,7 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   fetch: Download,
   shell: Terminal,
   read_file: FileText,
+  edit: FilePenLine,
   write_file: FilePenLine,
   list_dir: Folder,
   delete_file: Trash2,
@@ -286,6 +287,7 @@ export const getToolTitle = (part: unknown): string => {
 
     if (
       toolKey === 'read_file' ||
+      toolKey === 'edit' ||
       toolKey === 'write_file' ||
       toolKey === 'list_dir' ||
       toolKey === 'delete_file'
@@ -390,6 +392,7 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
 
     if (
       (toolKey === 'read_file' ||
+        toolKey === 'edit' ||
         toolKey === 'write_file' ||
         toolKey === 'list_dir' ||
         toolKey === 'delete_file') &&

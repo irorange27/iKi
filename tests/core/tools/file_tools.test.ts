@@ -36,6 +36,7 @@ vi.mock('../../../src/core/db/chat_thread', () => ({
 
 import {
   DeleteFileTool,
+  EditFileTool,
   ListDirTool,
   ReadFileTool,
   WriteFileTool,
@@ -145,8 +146,96 @@ describe('file tools workspace boundaries', () => {
   it('publishes auto-mode metadata for all file tools by default', () => {
     expect(new ListDirTool().toAgentTool().autoAllowed).toBe(true);
     expect(new ReadFileTool().toAgentTool().autoAllowed).toBe(true);
+    expect(new EditFileTool().toAgentTool().autoAllowed).toBe(true);
     expect(new WriteFileTool().toAgentTool().autoAllowed).toBe(true);
     expect(new DeleteFileTool().toAgentTool().autoAllowed).toBe(true);
+  });
+
+  it('edits an existing file through exact text replacement', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    const filePath = path.join(workspaceRoot, 'docs', 'note.txt');
+    await fs.mkdir(path.join(workspaceRoot, 'docs'), { recursive: true });
+    await fs.writeFile(filePath, 'hello workspace\nsecond line\n', 'utf8');
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const tool = new EditFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      tool.execute({
+        path: 'docs/note.txt',
+        edits: [{ oldText: 'hello workspace', newText: 'hello edited workspace' }],
+      })
+    )) as {
+      path: string;
+      success: boolean;
+      changed: boolean;
+      appliedEditCount: number;
+      totalReplacements: number;
+    };
+
+    expect(result).toEqual({
+      path: filePath,
+      success: true,
+      changed: true,
+      appliedEditCount: 1,
+      totalReplacements: 1,
+    });
+    expect(await fs.readFile(filePath, 'utf8')).toBe('hello edited workspace\nsecond line\n');
+  });
+
+  it('rejects ambiguous edits unless replaceAll is explicit', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, 'repeated.txt'), 'alpha\nbeta\nalpha\n', 'utf8');
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const tool = new EditFileTool();
+
+    await expect(
+      runInWorkspaceContext('thread_1', async () =>
+        tool.execute({
+          path: 'repeated.txt',
+          edits: [{ oldText: 'alpha', newText: 'gamma' }],
+        })
+      )
+    ).rejects.toThrow(/matched 2 locations/i);
+  });
+
+  it('supports replaceAll edits when the caller explicitly requests them', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    const filePath = path.join(workspaceRoot, 'repeated.txt');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    await fs.writeFile(filePath, 'alpha\nbeta\nalpha\n', 'utf8');
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const tool = new EditFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      tool.execute({
+        path: 'repeated.txt',
+        edits: [{ oldText: 'alpha', newText: 'gamma', replaceAll: true }],
+      })
+    )) as {
+      changed: boolean;
+      totalReplacements: number;
+    };
+
+    expect(result.changed).toBe(true);
+    expect(result.totalReplacements).toBe(2);
+    expect(await fs.readFile(filePath, 'utf8')).toBe('gamma\nbeta\ngamma\n');
   });
 
   it('pins relative reads to the active thread workspace when one is selected', async () => {
@@ -181,7 +270,11 @@ describe('file tools workspace boundaries', () => {
   });
 
   it('auto-creates a temporary workspace when the active thread points to a missing workspace record', async () => {
-    const tempWorkspaceRoot = path.join(process.env.IKI_USER_DATA_PATH as string, 'thread-workspaces', 'thread_1');
+    const tempWorkspaceRoot = path.join(
+      process.env.IKI_USER_DATA_PATH as string,
+      'thread-workspaces',
+      'thread_1'
+    );
     const tempWorkspaceId = 'workspace_thread_thread_1';
     getChatThreadMock.mockReturnValue({
       id: 'thread_1',
@@ -223,7 +316,11 @@ describe('file tools workspace boundaries', () => {
   });
 
   it('auto-creates a temporary workspace when no workspace is selected for the active thread', async () => {
-    const tempWorkspaceRoot = path.join(process.env.IKI_USER_DATA_PATH as string, 'thread-workspaces', 'thread_1');
+    const tempWorkspaceRoot = path.join(
+      process.env.IKI_USER_DATA_PATH as string,
+      'thread-workspaces',
+      'thread_1'
+    );
     const tempWorkspaceId = 'workspace_thread_thread_1';
     getChatThreadMock.mockReturnValue({
       id: 'thread_1',
@@ -276,9 +373,14 @@ describe('file tools workspace boundaries', () => {
     )) as { path: string; success: boolean };
 
     expect(result.success).toBe(true);
-    expect(result.path).toBe(path.join(process.env.IKI_USER_DATA_PATH as string, 'brain', 'owner.md'));
+    expect(result.path).toBe(
+      path.join(process.env.IKI_USER_DATA_PATH as string, 'brain', 'owner.md')
+    );
     expect(
-      await fs.readFile(path.join(process.env.IKI_USER_DATA_PATH as string, 'brain', 'owner.md'), 'utf8')
+      await fs.readFile(
+        path.join(process.env.IKI_USER_DATA_PATH as string, 'brain', 'owner.md'),
+        'utf8'
+      )
     ).toContain('Preferred name: Nina');
   });
 });

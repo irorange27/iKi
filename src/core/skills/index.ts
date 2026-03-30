@@ -17,6 +17,7 @@ const PERSONAL_SKILL_ID_PREFIX = 'user:';
 const MAX_PROMPT_SKILL_NAME_CHARS = 160;
 const MAX_PROMPT_SKILL_DESCRIPTION_CHARS = 320;
 const MAX_PROMPT_SKILL_SOURCE_CHARS = 32;
+const MAX_REQUIRED_TOOLS_PER_SKILL = 12;
 
 const MAX_SCAN_DEPTH = 8;
 const SKIP_DIRS = new Set([
@@ -73,6 +74,22 @@ export const getSkillRootPath = (source: SkillSource): string => {
 
 const normalizeSummaryText = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
+const normalizeRequiredToolNames = (values: string[]): string[] => {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+    if (normalized.length >= MAX_REQUIRED_TOOLS_PER_SKILL) break;
+  }
+
+  return normalized;
+};
+
 const extractFrontmatter = (raw: string): { metadata: string; body: string } | null => {
   const normalized = raw.startsWith('\uFEFF') ? raw.slice(1) : raw;
   const match = normalized.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/);
@@ -103,10 +120,66 @@ const parseQuotedFrontmatterValue = (value: string): string => {
   return trimmed;
 };
 
-const parseSkillFrontmatter = (raw: string): { name: string; description: string } => {
+const parseInlineFrontmatterArray = (value: string): string[] => {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return normalizeRequiredToolNames(
+          parsed.filter((entry): entry is string => typeof entry === 'string')
+        );
+      }
+    } catch {
+      const inner = trimmed.slice(1, -1).trim();
+      if (!inner) return [];
+      return normalizeRequiredToolNames(
+        inner.split(',').map(entry => parseQuotedFrontmatterValue(entry))
+      );
+    }
+  }
+
+  return normalizeRequiredToolNames([parseQuotedFrontmatterValue(trimmed)]);
+};
+
+const parseIndentedFrontmatterArray = (
+  lines: string[],
+  startIndex: number
+): { values: string[]; nextIndex: number } => {
+  const values: string[] = [];
+  let nextIndex = startIndex;
+
+  for (; nextIndex < lines.length; nextIndex += 1) {
+    const nextLine = lines[nextIndex] || '';
+    if (!nextLine.trim()) continue;
+
+    const indent = nextLine.match(/^[ \t]*/)?.[0].length ?? 0;
+    if (indent === 0) break;
+
+    const trimmed = nextLine.trim();
+    if (!trimmed.startsWith('-')) break;
+    values.push(parseQuotedFrontmatterValue(trimmed.slice(1).trim()));
+  }
+
+  return {
+    values: normalizeRequiredToolNames(values),
+    nextIndex: nextIndex - 1,
+  };
+};
+
+const parseSkillFrontmatter = (
+  raw: string
+): {
+  name: string;
+  description: string;
+  requiredTools: string[];
+} => {
   const lines = raw.split(/\r?\n/);
   let name = '';
   let description = '';
+  let requiredTools: string[] = [];
 
   const assignField = (key: 'name' | 'description', value: string) => {
     const normalized = normalizeSummaryText(value);
@@ -123,10 +196,31 @@ const parseSkillFrontmatter = (raw: string): { name: string; description: string
     if (!match) continue;
 
     const [, keyRaw, remainderRaw] = match;
-    const key = keyRaw === 'name' || keyRaw === 'description' ? keyRaw : null;
+    const key =
+      keyRaw === 'name' || keyRaw === 'description'
+        ? keyRaw
+        : keyRaw === 'required_tools' || keyRaw === 'requiredTools'
+          ? 'requiredTools'
+          : null;
     if (!key) continue;
 
     const remainder = remainderRaw.trim();
+    if (key === 'requiredTools') {
+      if (!remainder) {
+        const parsed = parseIndentedFrontmatterArray(lines, i + 1);
+        if (parsed.values.length > 0 && requiredTools.length === 0) {
+          requiredTools = parsed.values;
+        }
+        i = parsed.nextIndex;
+        continue;
+      }
+
+      if (requiredTools.length === 0) {
+        requiredTools = parseInlineFrontmatterArray(remainder);
+      }
+      continue;
+    }
+
     if (/^[>|][-+0-9]*$/.test(remainder)) {
       const blockLines: string[] = [];
       let blockIndent: number | null = null;
@@ -153,7 +247,7 @@ const parseSkillFrontmatter = (raw: string): { name: string; description: string
     assignField(key, parseQuotedFrontmatterValue(remainder));
   }
 
-  return { name, description };
+  return { name, description, requiredTools };
 };
 
 const extractMarkdownTitleAndDescription = (
@@ -181,16 +275,19 @@ const extractMarkdownTitleAndDescription = (
   return { title, description };
 };
 
-const extractTitleAndDescription = (raw: string): { title: string; description: string } => {
+const extractSkillMetadata = (
+  raw: string
+): { title: string; description: string; requiredTools: string[] } => {
   const frontmatter = extractFrontmatter(raw);
   const markdown = extractMarkdownTitleAndDescription(frontmatter?.body || raw);
   const metadata = frontmatter
     ? parseSkillFrontmatter(frontmatter.metadata)
-    : { name: '', description: '' };
+    : { name: '', description: '', requiredTools: [] };
 
   return {
     title: markdown.title || metadata.name,
     description: metadata.description || markdown.description,
+    requiredTools: metadata.requiredTools,
   };
 };
 
@@ -290,13 +387,14 @@ const listSkillRecords = async (options?: { forceRefresh?: boolean }): Promise<S
       seenIds.add(id);
 
       const snippet = await safeReadTextFile(filePath);
-      const { title, description } = extractTitleAndDescription(snippet.slice(0, 8000));
+      const { title, description, requiredTools } = extractSkillMetadata(snippet.slice(0, 8000));
       const name = title || filePathToNameFallback(filePath);
 
       records.push({
         id,
         name,
         description: description || '',
+        ...(requiredTools.length > 0 ? { requiredTools } : {}),
         source,
         filePath,
       });
@@ -401,6 +499,7 @@ const quoteFrontmatterValue = (value: string): string => JSON.stringify(value);
 const buildSkillDocument = (params: {
   skillName: string;
   skillDescription?: string;
+  requiredTools?: string[];
   instructions: string;
 }): string => {
   const frontmatterLines = ['---', `name: ${quoteFrontmatterValue(params.skillName)}`];
@@ -408,6 +507,10 @@ const buildSkillDocument = (params: {
     typeof params.skillDescription === 'string' ? params.skillDescription.trim() : '';
   if (description) {
     frontmatterLines.push(`description: ${quoteFrontmatterValue(description)}`);
+  }
+  const requiredTools = normalizeRequiredToolNames(params.requiredTools ?? []);
+  if (requiredTools.length > 0) {
+    frontmatterLines.push(`required_tools: ${JSON.stringify(requiredTools)}`);
   }
   frontmatterLines.push('---', '');
 
@@ -442,6 +545,9 @@ export const listSkills = async (options?: { forceRefresh?: boolean }): Promise<
     name: record.name,
     description: record.description,
     source: record.source,
+    ...(Array.isArray(record.requiredTools) && record.requiredTools.length > 0
+      ? { requiredTools: [...record.requiredTools] }
+      : {}),
     path: path.dirname(record.filePath),
   }));
 };
@@ -530,6 +636,7 @@ export const readPersonalSkill = async (
   id: string;
   name: string;
   description: string;
+  requiredTools?: string[];
   source: 'user';
   filePath: string;
   content: string;
@@ -543,11 +650,12 @@ export const readPersonalSkill = async (
   }
 
   const truncated = await readRawSkillFile(location.filePath, options);
-  const metadata = extractTitleAndDescription(truncated.content);
+  const metadata = extractSkillMetadata(truncated.content);
   return {
     id: location.id,
     name: metadata.title || filePathToNameFallback(location.filePath),
     description: metadata.description || '',
+    ...(metadata.requiredTools.length > 0 ? { requiredTools: metadata.requiredTools } : {}),
     source: 'user',
     filePath: location.filePath,
     content: truncated.content,
@@ -585,6 +693,7 @@ export const writePersonalSkill = async (params: {
   const nextContent = buildSkillDocument({
     skillName: nextName,
     skillDescription: nextDescription,
+    requiredTools: existing?.requiredTools,
     instructions: params.instructions,
   });
 

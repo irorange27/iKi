@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { BaseTool } from './base';
 import {
   DeleteFileInputSchema,
+  EditFileInputSchema,
   ListDirInputSchema,
   ReadFileInputSchema,
   WriteFileInputSchema,
@@ -51,6 +52,27 @@ const listDirEntries = async (
   return results;
 };
 
+const countOccurrences = (content: string, search: string): number => {
+  if (!search) return 0;
+  let count = 0;
+  let startIndex = 0;
+
+  while (startIndex <= content.length) {
+    const matchIndex = content.indexOf(search, startIndex);
+    if (matchIndex === -1) break;
+    count += 1;
+    startIndex = matchIndex + search.length;
+  }
+
+  return count;
+};
+
+const replaceFirstOccurrence = (content: string, search: string, replacement: string): string => {
+  const matchIndex = content.indexOf(search);
+  if (matchIndex === -1) return content;
+  return content.slice(0, matchIndex) + replacement + content.slice(matchIndex + search.length);
+};
+
 export class ReadFileTool extends BaseTool {
   override name = 'read_file';
   override type = 'function';
@@ -87,6 +109,75 @@ export class WriteFileTool extends BaseTool {
 
     await fs.writeFile(absolutePath, args.content, { encoding: args.encoding as BufferEncoding });
     return { path: absolutePath, success: true };
+  }
+}
+
+/**
+ * Tool for applying exact-text edits to an existing file
+ */
+export class EditFileTool extends BaseTool {
+  override name = 'edit';
+  override type = 'function';
+  override autoAllowed = true;
+  override description =
+    'Edit an existing file by applying exact text replacements without rewriting the whole file.';
+  override needsApproval = true;
+  override paramSchema = EditFileInputSchema;
+
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
+    const absolutePath = await resolveWritableWorkspacePath(args.path);
+
+    let originalContent: string;
+    try {
+      originalContent = await fs.readFile(absolutePath, {
+        encoding: args.encoding as BufferEncoding,
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`File "${args.path}" does not exist. Use write_file to create it first.`);
+      }
+      throw error;
+    }
+
+    let updatedContent = originalContent;
+    let totalReplacements = 0;
+
+    for (const [index, edit] of args.edits.entries()) {
+      const occurrences = countOccurrences(updatedContent, edit.oldText);
+
+      if (occurrences === 0) {
+        throw new Error(
+          `Edit ${index + 1} could not find the target text in "${args.path}". Read the file again and retry with an exact match.`
+        );
+      }
+
+      if (!edit.replaceAll && occurrences !== 1) {
+        throw new Error(
+          `Edit ${index + 1} matched ${occurrences} locations in "${args.path}". Provide a more specific oldText or set replaceAll to true.`
+        );
+      }
+
+      updatedContent = edit.replaceAll
+        ? updatedContent.split(edit.oldText).join(edit.newText)
+        : replaceFirstOccurrence(updatedContent, edit.oldText, edit.newText);
+
+      totalReplacements += edit.replaceAll ? occurrences : 1;
+    }
+
+    const changed = updatedContent !== originalContent;
+    if (changed) {
+      await fs.writeFile(absolutePath, updatedContent, {
+        encoding: args.encoding as BufferEncoding,
+      });
+    }
+
+    return {
+      path: absolutePath,
+      success: true,
+      changed,
+      appliedEditCount: args.edits.length,
+      totalReplacements,
+    };
   }
 }
 

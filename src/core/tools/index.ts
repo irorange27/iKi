@@ -8,7 +8,13 @@ export * from './task_plan_tools';
 export * from './todo_tools';
 
 import { defaultToolRegistry } from './base';
-import { ReadFileTool, WriteFileTool, ListDirTool, DeleteFileTool } from './file_tools';
+import {
+  ReadFileTool,
+  WriteFileTool,
+  EditFileTool,
+  ListDirTool,
+  DeleteFileTool,
+} from './file_tools';
 import { ShellExecutionTool } from './shell_tools';
 import {
   DeletePersonalSkillTool,
@@ -29,9 +35,10 @@ import { WebSearchTool, FetchTool } from './web_tools';
  * Register all standard system tools to the default global registry
  */
 export function registerStandardTools() {
-  defaultToolRegistry.register(new ReadFileTool());
-  defaultToolRegistry.register(new WriteFileTool());
   defaultToolRegistry.register(new ListDirTool());
+  defaultToolRegistry.register(new ReadFileTool());
+  defaultToolRegistry.register(new EditFileTool());
+  defaultToolRegistry.register(new WriteFileTool());
   defaultToolRegistry.register(new DeleteFileTool());
   defaultToolRegistry.register(new ShellExecutionTool());
   defaultToolRegistry.register(new WebSearchTool());

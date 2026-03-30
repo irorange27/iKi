@@ -34,6 +34,7 @@ describe('load skill tool', () => {
       `---
 name: planner
 description: Planning support
+required_tools: ["shell"]
 ---
 
 # Planner
@@ -131,7 +132,7 @@ Step 2: Plan.
     const listed = (await listTool.execute({ query: 'planner' })) as {
       rootPath: string;
       resultCount: number;
-      skills: Array<{ id: string; name: string }>;
+      skills: Array<{ id: string; name: string; requiredTools?: string[] }>;
     };
 
     expect(listed.rootPath).toBe(path.join(userDataPath(), 'skills'));
@@ -140,6 +141,7 @@ Step 2: Plan.
       expect.objectContaining({
         id: 'user:planner',
         name: 'Planner',
+        requiredTools: ['shell'],
       })
     );
 
@@ -147,6 +149,7 @@ Step 2: Plan.
       id: string;
       name: string;
       description: string;
+      requiredTools?: string[];
       content: string;
     };
 
@@ -155,6 +158,7 @@ Step 2: Plan.
         id: 'user:planner',
         name: 'Planner',
         description: 'Planning support',
+        requiredTools: ['shell'],
       })
     );
     expect(read.content).toContain('# Planner');
@@ -210,6 +214,7 @@ Step 2: Plan.
     expect(result.name).toBe('Planner');
     expect(result.description).toBe('Planning support');
     expect(result.content).toContain('description: "Planning support"');
+    expect(result.content).toContain('required_tools: ["shell"]');
     expect(result.content).toContain('Step 3: Verify.');
   });
 
