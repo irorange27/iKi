@@ -86,12 +86,10 @@ describe('ChatMessageReferences', () => {
     expect(wrapper.findAll('button.reference-summary-item')).toHaveLength(0);
     expect(wrapper.find('.reference-panel').exists()).toBe(false);
     expect(wrapper.text()).toContain('1 skills');
-    expect(wrapper.text()).toContain('1 tool call');
+    expect(wrapper.text()).toContain('1 tool');
     expect(wrapper.text()).toContain('1 memories');
     expect(wrapper.text()).toContain('affect');
-    expect(summaryItems[2].attributes('data-tooltip')).toContain('Tool calls: 1');
-    expect(summaryItems[2].attributes('data-tooltip')).toContain('Tool types: 1');
-    expect(summaryItems[2].attributes('data-tooltip')).toContain('web: 1 call');
+    expect(summaryItems[2].attributes('data-tooltip')).toContain('Tools: web');
     expect(summaryItems[3].attributes('data-tooltip')).toContain('Loaded skills: Planner');
     expect(summaryItems[3].attributes('data-tooltip')).toContain(
       'Selected not loaded: openai-docs'

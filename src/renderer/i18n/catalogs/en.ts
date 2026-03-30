@@ -160,15 +160,11 @@ export const en = defineCatalog({
   'chat.references.memories': ({ count }) => `${asCount(count)} memories`,
   'chat.references.tools': ({ count }) => {
     const normalized = asCount(count);
-    return `${normalized} tool call${normalized === 1 ? '' : 's'}`;
+    return `${normalized} tool${normalized === 1 ? '' : 's'}`;
   },
   'chat.references.skills': ({ count }) => `${asCount(count)} skills`,
-  'chat.references.toolTooltip': ({ callCount, kindCount }) =>
-    `Tool calls: ${asCount(callCount)}\nTool types: ${asCount(kindCount)}`,
-  'chat.references.toolTooltipItem': ({ name, count }) => {
-    const normalized = asCount(count);
-    return `${asText(name)}: ${normalized} call${normalized === 1 ? '' : 's'}`;
-  },
+  'chat.references.toolTooltip': ({ names }) =>
+    asText(names) ? `Tools: ${asText(names)}` : 'Tools used in this reply',
   'chat.references.noSkillsLoaded': 'No skills loaded',
   'chat.references.loadedSkills': ({ names }) => `Loaded skills: ${asText(names)}`,
   'chat.references.selectedNotLoaded': ({ names }) => `Selected not loaded: ${asText(names)}`,
