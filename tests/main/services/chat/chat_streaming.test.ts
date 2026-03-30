@@ -835,6 +835,56 @@ describe('createChatStreaming', () => {
     expect(activeStreams.size).toBe(0);
   });
 
+  it('stream() returns final tool-loop text even when it arrives only at completion', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [
+        { role: 'system', content: 'history' },
+        { role: 'user', content: 'stream tool' },
+      ],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 24,
+        retainedRecentMessages: 2,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 512,
+      },
+    });
+    resolveToolNamesMock.mockResolvedValue({
+      mode: 'manual',
+      explicitTools: ['web'],
+      resolvedTools: ['web'],
+    });
+    toModelInputMessagesMock.mockResolvedValue([
+      { role: 'system', content: 'history' },
+      { role: 'user', content: 'stream tool' },
+    ]);
+    toolLoopStreamMock.mockResolvedValue({
+      awaitingApproval: false,
+      response: 'Explanation: done\nExact Answer: 42\nConfidence: 90%',
+    });
+
+    const { streaming } = createDeps();
+    const webContents = { id: 13, send: vi.fn() };
+    const result = await streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'stream tool' }],
+      tools: ['web'],
+      threadId: 'thread_tool_text',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      awaitingApproval: false,
+      text: 'Explanation: done\nExact Answer: 42\nConfidence: 90%',
+      stopped: false,
+    });
+  });
+
   it('treats affect as a first-class turn signal for routing and ui emission', async () => {
     getAppConfigMock.mockReturnValue({
       memory: {

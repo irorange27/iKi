@@ -25,9 +25,14 @@ import { normalizeLanguageModelUsage } from './usage';
 const factoryLogger = createLogger({ module: 'llm_factory' });
 const MODELS_DEV_CACHE_TTL_MS = 3600000;
 const MODELS_DEV_TIMEOUT_MS = 1200;
+const MODELS_DEV_FAILURE_COOLDOWN_MS = 300000;
 
 let cachedModelsDevCatalog: ModelsDevCatalog | null = null;
 let cachedModelsDevFetchedAt = 0;
+let cachedModelsDevUnavailableUntil = 0;
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export interface ProviderConfig {
   id: string;
@@ -438,8 +443,7 @@ export const fetchModelsFromDev = async (providerType: string) => {
   try {
     const data = await fetchModelsDevCatalog();
     return listModelsDevProviderModels(data, providerType);
-  } catch (error) {
-    factoryLogger.error(`Failed to fetch models for ${providerType}`, error);
+  } catch {
   }
   return [];
 };
@@ -450,24 +454,44 @@ const fetchModelsDevCatalog = async (): Promise<ModelsDevCatalog> => {
     return cachedModelsDevCatalog;
   }
 
-  const response = await fetchWithTimeout(
-    'https://models.dev/api.json',
-    {
-      method: 'GET',
-      headers: {
-        accept: 'application/json',
-      },
-    },
-    { timeoutMs: MODELS_DEV_TIMEOUT_MS, retries: 0 }
-  );
-  if (!response.ok) {
-    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+  if (cachedModelsDevUnavailableUntil > now) {
+    if (cachedModelsDevCatalog) {
+      return cachedModelsDevCatalog;
+    }
+    throw new Error('models.dev fetch is temporarily disabled after a recent failure');
   }
 
-  const data = (await response.json()) as ModelsDevCatalog;
-  cachedModelsDevCatalog = data;
-  cachedModelsDevFetchedAt = now;
-  return data;
+  try {
+    const response = await fetchWithTimeout(
+      'https://models.dev/api.json',
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+        },
+      },
+      { timeoutMs: MODELS_DEV_TIMEOUT_MS, retries: 0 }
+    );
+    if (!response.ok) {
+      throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as ModelsDevCatalog;
+    cachedModelsDevCatalog = data;
+    cachedModelsDevFetchedAt = now;
+    cachedModelsDevUnavailableUntil = 0;
+    return data;
+  } catch (error) {
+    cachedModelsDevUnavailableUntil = now + MODELS_DEV_FAILURE_COOLDOWN_MS;
+    factoryLogger.warn(
+      `Failed to fetch models.dev catalog; disabling remote capability lookups for ${Math.trunc(MODELS_DEV_FAILURE_COOLDOWN_MS / 1000)}s`,
+      error
+    );
+    if (cachedModelsDevCatalog) {
+      return cachedModelsDevCatalog;
+    }
+    throw new Error(getErrorMessage(error));
+  }
 };
 
 export const fetchModelCapabilityFromDev = async (
@@ -480,11 +504,7 @@ export const fetchModelCapabilityFromDev = async (
   try {
     const catalog = await fetchModelsDevCatalog();
     return lookupModelsDevModelCapability(catalog, providerType, trimmedModelId);
-  } catch (error) {
-    factoryLogger.error(
-      `Failed to fetch model capability for ${providerType}/${trimmedModelId}`,
-      error
-    );
+  } catch {
     return null;
   }
 };
@@ -501,4 +521,10 @@ export const resolveModelCapability = async (
   const baseCapability = await fetchModelCapabilityFromDev(providerType, trimmedModelId);
 
   return mergeModelCapability(baseCapability, providerType, trimmedModelId, modelOptions);
+};
+
+export const resetModelsDevCatalogCacheForTests = () => {
+  cachedModelsDevCatalog = null;
+  cachedModelsDevFetchedAt = 0;
+  cachedModelsDevUnavailableUntil = 0;
 };

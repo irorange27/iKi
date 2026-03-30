@@ -73,6 +73,7 @@ import {
   getModelCallSettings,
   getModelGenerationSettings,
   generateChatWithUsage,
+  resetModelsDevCatalogCacheForTests,
   resolveModelCapability,
   streamChat,
   streamChatWithUsage,
@@ -96,6 +97,7 @@ const createMockLanguageModel = () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetModelsDevCatalogCacheForTests();
   getProvidersMock.mockReturnValue([
     {
       id: 'provider_openai',
@@ -275,6 +277,15 @@ describe('llm factory', () => {
       supportsReasoning: false,
       source: 'models.dev',
     });
+  });
+
+  it('backs off repeated models.dev capability fetches after a timeout', async () => {
+    fetchWithTimeoutMock.mockRejectedValue(new Error('Network request timed out after 1200 ms'));
+
+    await expect(fetchModelCapabilityFromDev('deepseek', 'deepseek-reasoner')).resolves.toBeNull();
+    await expect(fetchModelCapabilityFromDev('deepseek', 'deepseek-reasoner')).resolves.toBeNull();
+
+    expect(fetchWithTimeoutMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns streamed text together with normalized usage', async () => {
@@ -515,6 +526,29 @@ describe('llm factory', () => {
   });
 
   it('merges stored provider model options over models.dev capability metadata', async () => {
+    fetchWithTimeoutMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          openai: {
+            models: {
+              'gpt-4o-mini': {
+                name: 'GPT-4o mini',
+                limit: {
+                  context: 128000,
+                  output: 16384,
+                },
+                tool_call: true,
+                reasoning: false,
+              },
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        }
+      )
+    );
     getProvidersMock.mockReturnValue([
       {
         id: 'provider_openai',

@@ -33,6 +33,7 @@ export type ToolLoopStreamParams = {
 export type ToolLoopStreamResult = {
   awaitingApproval: boolean;
   cancelled?: boolean;
+  response?: string;
   usage?: AgentResult['usage'];
 };
 
@@ -134,6 +135,24 @@ const streamToolLoop = async (
     finalText = fullResponse;
   }
 
+  if (finalText.trim()) {
+    let missingText = '';
+    if (!fullResponse) {
+      missingText = finalText;
+    } else if (finalText.startsWith(fullResponse)) {
+      missingText = finalText.slice(fullResponse.length);
+    }
+
+    if (missingText) {
+      fullResponse += missingText;
+      params.uiChunkEmitter?.emitTextDelta(missingText);
+    }
+  }
+
   params.uiChunkEmitter?.finish();
-  return { awaitingApproval: false, usage: agentResult?.usage };
+  return {
+    awaitingApproval: false,
+    ...(finalText.trim() ? { response: finalText } : {}),
+    usage: agentResult?.usage,
+  };
 };

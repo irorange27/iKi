@@ -717,6 +717,7 @@ export const createChatStreaming = (deps: {
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
+        ...(streamResult.response ? { text: streamResult.response } : {}),
         stopped: streamState.stoppedByUser,
       };
     } catch (error: unknown) {

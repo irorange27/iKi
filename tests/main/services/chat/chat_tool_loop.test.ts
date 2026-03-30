@@ -113,6 +113,45 @@ describe('tool loop runner', () => {
     expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
   });
 
+  it('emits the final assistant response when the provider only returns text at completion', async () => {
+    const registerApprovalBatch = vi.fn();
+    const runner = createToolLoopRunner({ registerApprovalBatch });
+    const agentResult: AgentResult = {
+      response: 'Exact Answer: 42',
+      iterations: 1,
+      usage: {
+        inputTokens: 4,
+        outputTokens: 2,
+        totalTokens: 6,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        estimatedCostUsd: 0,
+      },
+    };
+    const conversationRunner = createConversationRunner(createAsyncGenerator([], agentResult));
+    const uiChunkEmitter = createUiChunkEmitter();
+    const webContents = { id: 4, send: vi.fn() };
+
+    const result = await runner.stream({
+      runner: conversationRunner,
+      webContents,
+      history: [{ role: 'system', content: 'history' }],
+      prompt: 'hi',
+      uiChunkEmitter,
+    });
+
+    expect(result).toEqual({
+      awaitingApproval: false,
+      response: 'Exact Answer: 42',
+      usage: agentResult.usage,
+    });
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenCalledTimes(1);
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenCalledWith('Exact Answer: 42');
+    expect(uiChunkEmitter.finish).toHaveBeenCalledTimes(1);
+    expect(registerApprovalBatch).not.toHaveBeenCalled();
+  });
+
   it('aborts when cancelled during streaming', async () => {
     const registerApprovalBatch = vi.fn();
     const runner = createToolLoopRunner({ registerApprovalBatch });
