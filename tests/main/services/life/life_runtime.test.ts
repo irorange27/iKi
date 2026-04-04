@@ -151,6 +151,31 @@ describe('life_runtime', () => {
     expect(getLifeContextMessage()).toContain('Current life state for iKi:');
   });
 
+  it('stays daemon-safe when BrowserWindow.getAllWindows is unavailable', async () => {
+    const electronModule = await import('electron');
+    const originalGetAllWindows = electronModule.BrowserWindow.getAllWindows;
+    (electronModule.BrowserWindow as { getAllWindows?: unknown }).getAllWindows = undefined;
+
+    try {
+      const startedAt = localDate(14, 0);
+      vi.setSystemTime(startedAt);
+      const { recordLifeRuntimeEvent } = await import(
+        '../../../../src/main/services/life/life_runtime'
+      );
+
+      const snapshot = recordLifeRuntimeEvent({
+        type: 'runtime-start',
+        at: toLocalTimestamp(startedAt),
+      });
+
+      expect(snapshot?.state.current_activity).toBe('companion_idle');
+      expect(snapshot?.state.presence).toBe('available');
+    } finally {
+      (electronModule.BrowserWindow as { getAllWindows?: unknown }).getAllWindows =
+        originalGetAllWindows;
+    }
+  });
+
   it('opens a focused episode during task execution and exits it after completion', async () => {
     const { recordLifeRuntimeEvent, getLifeOverview } = await import(
       '../../../../src/main/services/life/life_runtime'

@@ -112,4 +112,38 @@ describe('chat_memory realtime emotion cache', () => {
       })
     );
   });
+
+  it('shares a preloaded realtime emotion analysis with persistence', async () => {
+    const memory = createChatMemory();
+    const resolvedEmotion = { label: 'sadness', confidence: 0.84 };
+    let resolveAnalysis: ((value: typeof resolvedEmotion) => void) | null = null;
+
+    analyzeEmotionMock.mockReturnValue(
+      new Promise(resolve => {
+        resolveAnalysis = resolve;
+      })
+    );
+
+    memory.preloadRealtimeEmotion('thread_1', 'Hello there');
+    memory.onMessagePersisted({
+      threadId: 'thread_1',
+      messageId: 'msg_2',
+      messageJson: JSON.stringify({ role: 'user', content: 'Hello there' }),
+    });
+
+    expect(analyzeEmotionMock).toHaveBeenCalledTimes(1);
+
+    resolveAnalysis?.(resolvedEmotion);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(analyzeEmotionMock).toHaveBeenCalledTimes(1);
+    expect(emotionDb.addEmotionEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thread_id: 'thread_1',
+        message_id: 'msg_2',
+        emotion: resolvedEmotion,
+      })
+    );
+  });
 });

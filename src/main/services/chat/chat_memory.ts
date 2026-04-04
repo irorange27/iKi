@@ -65,6 +65,7 @@ export const createChatMemory = () => {
   const memorySummarizeInFlight = new Set<string>();
   const emotionInFlight = new Set<string>();
   const realtimeEmotionCache = new Map<string, { emotion: unknown; createdAt: number }>();
+  const realtimeEmotionAnalysisInFlight = new Map<string, Promise<unknown | null>>();
 
   const getMemoryConfig = () => {
     const appConfig = getAppConfig();
@@ -146,6 +147,82 @@ export const createChatMemory = () => {
     }
     realtimeEmotionCache.delete(key);
     return entry.emotion;
+  };
+
+  const peekRealtimeEmotion = (threadId: string, content: string): unknown | null => {
+    if (!threadId) return null;
+    const trimmed = content.trim();
+    if (!trimmed) return null;
+    pruneRealtimeEmotionCache();
+    const key = buildEmotionCacheKey(threadId, trimmed);
+    const entry = realtimeEmotionCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.createdAt > EMOTION_CACHE_TTL_MS) {
+      realtimeEmotionCache.delete(key);
+      return null;
+    }
+    return entry.emotion;
+  };
+
+  const analyzeRealtimeEmotion = (threadId: string, content: string): Promise<unknown | null> => {
+    const trimmed = content.trim();
+    if (!threadId || !trimmed) {
+      return Promise.resolve(null);
+    }
+
+    const cachedEmotion = peekRealtimeEmotion(threadId, trimmed);
+    if (cachedEmotion) {
+      return Promise.resolve(cachedEmotion);
+    }
+
+    const cacheKey = buildEmotionCacheKey(threadId, trimmed);
+    const inFlight = realtimeEmotionAnalysisInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const promise = analyzeEmotionWithAgent(trimmed)
+      .then(emotion => {
+        if (emotion) {
+          recordRealtimeEmotion(threadId, trimmed, emotion);
+        }
+        return emotion;
+      })
+      .finally(() => {
+        realtimeEmotionAnalysisInFlight.delete(cacheKey);
+      });
+
+    realtimeEmotionAnalysisInFlight.set(cacheKey, promise);
+    return promise;
+  };
+
+  const preloadRealtimeEmotion = (threadId: string | undefined, content: string) => {
+    const emotionConfig = getEmotionConfig();
+    if (!emotionConfig?.enabled || !emotionConfig.injectToSystemPrompt || !emotionConfig.realtimeAnalysis) {
+      return;
+    }
+
+    const normalizedThreadId = typeof threadId === 'string' ? threadId.trim() : '';
+    const trimmed = content.trim();
+    if (!normalizedThreadId || !trimmed) return;
+
+    const thread = chatThreadDb.getChatThread(normalizedThreadId);
+    if (thread?.is_incognito) return;
+
+    void analyzeRealtimeEmotion(normalizedThreadId, trimmed).catch(error => {
+      chatMemoryLogger.event({
+        level: 'warn',
+        event: 'chat.memory.realtime_emotion_preload',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: normalizedThreadId,
+        },
+        data: {
+          error_message: getErrorMessage(error),
+        },
+      });
+    });
   };
 
   const getAffectContextMessage = (threadId: string): string => {
@@ -255,7 +332,7 @@ export const createChatMemory = () => {
     void (async () => {
       try {
         const cachedEmotion = consumeRealtimeEmotion(params.threadId, content);
-        const emotion = cachedEmotion ?? (await analyzeEmotionWithAgent(content));
+        const emotion = cachedEmotion ?? (await analyzeRealtimeEmotion(params.threadId, content));
         if (!emotion) return;
 
         emotionDb.addEmotionEvent({
@@ -418,6 +495,7 @@ export const createChatMemory = () => {
     threadId?: string,
     options?: {
       onRetrieved?: (payload: MemoryRetrievalPayload) => void;
+      skipRetrieval?: boolean;
       skipAffect?: boolean;
     }
   ): Promise<ChatInputMessage[]> => {
@@ -428,7 +506,8 @@ export const createChatMemory = () => {
     const systemMessages: ChatInputMessage[] = [];
     const lastMessage = messages[messages.length - 1];
     const query = getPromptFromMessage(lastMessage);
-    const memoryPayload = query.trim() ? await retrieveRelevantMemory(threadId, query) : null;
+    const memoryPayload =
+      options?.skipRetrieval || !query.trim() ? null : await retrieveRelevantMemory(threadId, query);
     if (memoryPayload) {
       if (options?.onRetrieved) {
         options.onRetrieved(memoryPayload);
@@ -502,6 +581,7 @@ export const createChatMemory = () => {
   return {
     injectMemoryIntoMessages,
     onMessagePersisted,
+    preloadRealtimeEmotion,
     recordRealtimeEmotion,
     getAffectState,
     getAffectContextMessage,

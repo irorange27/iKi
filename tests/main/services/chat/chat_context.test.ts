@@ -399,6 +399,72 @@ describe('chat_context assembler', () => {
     );
   });
 
+  it('skips hot-path memory retrieval while preserving affect and skills assembly', async () => {
+    const onMemoryRetrieved = vi.fn();
+    resolveSkillsSystemPromptMock.mockResolvedValue({
+      skillsSystemPrompt: 'Selected skills:\n- Planner',
+      usedSkills: [{ id: 'user:planner', name: 'Planner' }],
+      skillMode: 'auto',
+    });
+
+    const retrieveRelevantMemory = vi.fn(() => ({
+      query: 'durable project context',
+      results: [{ id: 'mem_1', summary: 'Remember the launch constraint.', score: 0.9 }],
+      systemMessage:
+        'Long-term memory (use only if relevant; ignore if unrelated):\n- (0.900) Remember the launch constraint.',
+    }));
+    const getAffectContextMessage = vi.fn(
+      () => 'Affect state:\n- User seems focused, keep execution crisp.'
+    );
+    const { assembler } = createAssembler({
+      retrieveRelevantMemory,
+      getAffectContextMessage,
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_hot_path',
+      messages: [{ role: 'user', content: 'What should we do next?' }],
+      includeMemory: false,
+      skillMode: 'auto',
+      onMemoryRetrieved,
+    });
+
+    expect(retrieveRelevantMemory).not.toHaveBeenCalled();
+    expect(onMemoryRetrieved).not.toHaveBeenCalled();
+    expect(findBlock(result, 'memory')).toEqual(
+      expect.objectContaining({
+        kind: 'memory',
+        status: 'dropped',
+        reason: 'disabled for chat response path',
+      })
+    );
+    expect(findBlock(result, 'affect')).toEqual(
+      expect.objectContaining({
+        kind: 'affect',
+        status: 'included',
+      })
+    );
+    expect(findBlock(result, 'skills')).toEqual(
+      expect.objectContaining({
+        kind: 'skills',
+        status: 'included',
+        sourceCount: 1,
+      })
+    );
+    expect(result.messages).toContainEqual({
+      role: 'system',
+      content: 'Affect state:\n- User seems focused, keep execution crisp.',
+    });
+    expect(
+      result.messages.some(
+        message =>
+          message.role === 'system' &&
+          typeof message.content === 'string' &&
+          message.content.includes('Long-term memory')
+      )
+    ).toBe(false);
+  });
+
   it('clips a single oversized memory block to the configured budget', async () => {
     getAppConfigMock.mockReturnValue({
       memory: {

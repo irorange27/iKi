@@ -14,6 +14,7 @@ import { createPrefixedId } from '../../../shared/utils/id';
 import { toIsoNow } from '../../../shared/utils/text';
 import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
+import { getAllBrowserWindows } from '../../utils/browser_windows';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
 import { recordLifeRuntimeEvent } from '../life/life_runtime';
 
@@ -95,7 +96,7 @@ const buildProactiveTaskPrompt = (
 };
 
 const sendPushEventToRenderers = (payload: unknown) => {
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of getAllBrowserWindows()) {
     try {
       win.webContents.send('tasks:push', payload);
     } catch (error) {

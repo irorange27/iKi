@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -31,6 +31,7 @@ import {
   DEFAULT_DAEMON_PORT,
   NAPCAT_REVERSE_WS_PATH,
 } from '../../shared/constants/daemon';
+import { getAllBrowserWindows } from '../utils/browser_windows';
 
 let configIpcRegistered = false;
 let configMigrationRun = false;
@@ -341,7 +342,7 @@ export const registerConfigIpc = (): void => {
     const normalized = saveConfig(config);
     applyAppUpdateConfig(normalized);
 
-    for (const win of BrowserWindow.getAllWindows()) {
+    for (const win of getAllBrowserWindows()) {
       win.webContents.send('config:updated', normalized);
     }
 

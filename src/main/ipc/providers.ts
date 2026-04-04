@@ -1,15 +1,16 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 
 import * as providerDb from '../../core/db/providers';
 import { createLogger } from '../../core/logger';
 import type { ProviderUpdatedEvent } from '../../shared/types/provider';
+import { getAllBrowserWindows } from '../utils/browser_windows';
 
 let providersIpcRegistered = false;
 const providersIpcLogger = createLogger({ module: 'providers_ipc' });
 const PROVIDERS_UPDATED_CHANNEL = 'providers:updated';
 
 const broadcastProviderUpdate = (payload: ProviderUpdatedEvent): void => {
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of getAllBrowserWindows()) {
     win.webContents.send(PROVIDERS_UPDATED_CHANNEL, payload);
   }
 };

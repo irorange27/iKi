@@ -87,6 +87,23 @@ describe('run-daemon-benchmark', () => {
     expect(parsed.maxIterations).toBe(12);
   });
 
+  it('accepts latency profiling from the CLI', async () => {
+    const script = await import('../../scripts/benchmarks/run-daemon-benchmark.cjs');
+    const parsed = script.parseArgs([
+      '--benchmark',
+      'generic',
+      '--tasks',
+      'tasks.json',
+      '--provider',
+      'openai',
+      '--model',
+      'gpt-4.1-mini',
+      '--profile-latency',
+    ]);
+
+    expect(parsed.profileLatency).toBe(true);
+  });
+
   it('decrypts BrowseComp ciphertext with the derived key', async () => {
     const script = await import('../../scripts/benchmarks/run-daemon-benchmark.cjs');
     const password = 'canary-seed';
@@ -224,5 +241,66 @@ describe('run-daemon-benchmark', () => {
       { id: 'task_2', index: 1 },
       { id: 'task_3', index: 2 },
     ]);
+  });
+
+  it('builds a latency profile that attributes tool and model time separately', async () => {
+    const script = await import('../../scripts/benchmarks/run-daemon-benchmark.cjs');
+
+    const profile = script.buildStreamLatencyProfile({
+      wsOpenedAtMs: 2,
+      readyAtMs: 4,
+      startSentAtMs: 5,
+      completedAtMs: 300,
+      outcome: 'completed',
+      daemonEvents: [
+        { type: 'ready', receivedAtMs: 4 },
+        { type: 'stream-result', receivedAtMs: 300 },
+      ],
+      chunks: [
+        { type: 'start', receivedAtMs: 50 },
+        { type: 'tool-input-start', toolCallId: 'call_1', toolName: 'web', receivedAtMs: 50 },
+        {
+          type: 'tool-input-available',
+          toolCallId: 'call_1',
+          toolName: 'web',
+          input: { query: 'who wrote hamlet' },
+          receivedAtMs: 60,
+        },
+        {
+          type: 'tool-output-available',
+          toolCallId: 'call_1',
+          output: { results: [] },
+          receivedAtMs: 140,
+        },
+        { type: 'text-start', receivedAtMs: 180 },
+        { type: 'text-delta', delta: 'William Shakespeare', receivedAtMs: 190 },
+        { type: 'finish', receivedAtMs: 300 },
+      ],
+    });
+
+    expect(profile.durationMs).toBe(300);
+    expect(profile.milestones.firstToolCallAtMs).toBe(50);
+    expect(profile.milestones.firstTextDeltaAtMs).toBe(190);
+    expect(profile.buckets).toEqual(
+      expect.objectContaining({
+        handshakeMs: 5,
+        toolExecutionMs: 90,
+        modelBeforeFirstToolMs: 45,
+        modelAfterLastToolMs: 160,
+      })
+    );
+    expect(profile.toolSummary).toEqual(
+      expect.objectContaining({
+        totalCalls: 1,
+        totalWallTimeMs: 90,
+        byTool: [
+          expect.objectContaining({
+            toolName: 'web',
+            count: 1,
+            totalDurationMs: 90,
+          }),
+        ],
+      })
+    );
   });
 });

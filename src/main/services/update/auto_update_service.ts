@@ -5,6 +5,7 @@ import { app, autoUpdater, BrowserWindow, dialog } from 'electron';
 import type { AppConfig } from '../../../shared/types/config';
 import type { AppUpdateStatus, AppUpdateUnsupportedReason } from '../../../shared/types/update';
 import { createLogger } from '../../../core/logger';
+import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 const UPDATE_SERVER_BASE_URL = 'https://update.electronjs.org';
 const DEFAULT_GITHUB_REPOSITORY = 'irorange27/iKi';
@@ -442,7 +443,7 @@ const service = createAppUpdateService({
   app,
   autoUpdater,
   dialog,
-  getAllWindows: () => BrowserWindow.getAllWindows(),
+  getAllWindows: () => getAllBrowserWindows(),
   logger: createLogger({ module: 'app_update_service' }),
   platform: process.platform,
   arch: process.arch,

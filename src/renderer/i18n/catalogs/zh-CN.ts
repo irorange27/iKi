@@ -438,8 +438,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.memory.emotionDescription':
     '从最近的用户消息推断情感信号，用于引导语气和节奏。情绪事件不会存储消息正文。',
   'settings.memory.injectEmotionToAgent': '将情绪上下文注入到 Agent',
-  'settings.memory.realtimeAnalysis': '回复前分析当前消息（会增加延迟）',
-  'settings.memory.realtimeDescription': '会额外发起一次模型调用，把用户当前情绪纳入本次回复。',
+  'settings.memory.realtimeAnalysis': '后台分析当前消息',
+  'settings.memory.realtimeDescription':
+    '会在后台预热当前消息的情绪分析，不阻塞本次回复，供后续持久化和后续轮次复用。',
   'settings.memory.minimumConfidence': '最低置信度',
   'settings.memory.higherValuesConservative': '值越高，情绪上下文会越保守。',
   'settings.memory.minimumSamples': '最少样本数',

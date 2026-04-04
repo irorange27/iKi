@@ -221,11 +221,12 @@ describe('createChatApproval', () => {
         updated_at: '2026-03-19T00:00:00.000Z',
       },
     ]);
+    const injectMemoryIntoMessagesMock = vi.fn(messages => messages);
 
     const approvals = createChatApproval({
       activeStreams: new Map(),
       memory: {
-        injectMemoryIntoMessages: vi.fn(messages => messages),
+        injectMemoryIntoMessages: injectMemoryIntoMessagesMock,
       } as never,
       usage: {
         recordUsageEvent: vi.fn(),
@@ -247,6 +248,16 @@ describe('createChatApproval', () => {
       'approval_1',
       'approved',
       'User approved tool execution.'
+    );
+    expect(injectMemoryIntoMessagesMock).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          role: 'user',
+          parts: [{ type: 'text', text: 'hello' }],
+        }),
+      ],
+      'thread_1',
+      { skipRetrieval: true }
     );
     expect(consumeChatToolApprovalSessionMock).toHaveBeenCalledWith('assistant_1');
     expect(resumedStream).toHaveBeenCalledWith(

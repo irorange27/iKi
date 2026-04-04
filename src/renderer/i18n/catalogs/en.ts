@@ -461,9 +461,9 @@ export const en = defineCatalog({
   'settings.memory.emotionDescription':
     'Infer affect signals from recent user messages to guide tone and pacing. Emotion events are stored without message content.',
   'settings.memory.injectEmotionToAgent': 'Inject Emotion Context into Agent',
-  'settings.memory.realtimeAnalysis': 'Analyze Current Message Before Reply (adds latency)',
+  'settings.memory.realtimeAnalysis': 'Analyze Current Message In Background',
   'settings.memory.realtimeDescription':
-    "Runs one extra model call to include the user's current affect in this response.",
+    "Preloads the current message's affect without blocking this reply, so later persistence and future turns can reuse it.",
   'settings.memory.minimumConfidence': 'Minimum Confidence',
   'settings.memory.higherValuesConservative':
     'Higher values make emotion context more conservative.',

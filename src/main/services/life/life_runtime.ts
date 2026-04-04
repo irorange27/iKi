@@ -1,5 +1,3 @@
-import { BrowserWindow } from 'electron';
-
 import * as tasksDb from '../../../core/db/tasks';
 import * as lifeDb from '../../../core/db/life';
 import * as lifeReflectionDb from '../../../core/db/life_reflection';
@@ -27,6 +25,7 @@ import {
 } from './life_activity_engine';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
 import { runDueDailyLifeReflections, runDueHourlyLifeReflections } from './life_reflection';
+import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 const LIFE_TICK_MS = 60_000;
 const DEFAULT_BUDGETS = {
@@ -58,7 +57,7 @@ const normalizeEventTimestamp = (value?: string): string => {
 };
 
 const pushLifeEventToRenderers = (payload: LifePushPayload) => {
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of getAllBrowserWindows()) {
     try {
       win.webContents.send('life:push', payload);
     } catch (error) {

@@ -83,6 +83,7 @@ type AssembleChatContextParams = {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
+  includeMemory?: boolean;
   modelCapability?: ModelCapability | null;
   affectState?: AffectState | null;
   realtimeAffectMessage?: string;
@@ -646,6 +647,17 @@ const toMemoryDisplayEntry = (result: Record<string, unknown>) => ({
   updated_at: typeof result.updated_at === 'string' ? result.updated_at : undefined,
 });
 
+const buildDroppedMemoryContext = (reason: string): MemoryContext => ({
+  systemMessage: '',
+  block: {
+    kind: 'memory',
+    status: 'dropped',
+    estimatedTokens: 0,
+    charCount: 0,
+    reason,
+  },
+});
+
 const buildMemoryContext = async (params: {
   threadId?: string;
   query: string;
@@ -655,43 +667,16 @@ const buildMemoryContext = async (params: {
   onMemoryRetrieved?: AssembleChatContextParams['onMemoryRetrieved'];
 }): Promise<MemoryContext> => {
   if (!params.query.trim()) {
-    return {
-      systemMessage: '',
-      block: {
-        kind: 'memory',
-        status: 'dropped',
-        estimatedTokens: 0,
-        charCount: 0,
-        reason: 'no user query available',
-      },
-    };
+    return buildDroppedMemoryContext('no user query available');
   }
 
   if (!params.threadId) {
-    return {
-      systemMessage: '',
-      block: {
-        kind: 'memory',
-        status: 'dropped',
-        estimatedTokens: 0,
-        charCount: 0,
-        reason: 'no relevant memory retrieved',
-      },
-    };
+    return buildDroppedMemoryContext('no relevant memory retrieved');
   }
 
   const memoryPayload = await params.memory.retrieveRelevantMemory(params.threadId, params.query);
   if (!memoryPayload) {
-    return {
-      systemMessage: '',
-      block: {
-        kind: 'memory',
-        status: 'dropped',
-        estimatedTokens: 0,
-        charCount: 0,
-        reason: 'no relevant memory retrieved',
-      },
-    };
+    return buildDroppedMemoryContext('no relevant memory retrieved');
   }
 
   let memoryResults = [...memoryPayload.results];
@@ -887,14 +872,17 @@ export const createChatContextAssembler = (deps: {
 
     const lastMessage = params.messages[params.messages.length - 1];
     const query = getPromptFromMessage(lastMessage);
-    const memoryContext = await buildMemoryContext({
-      threadId: params.threadId,
-      query,
-      memory: deps.memory,
-      contextConfig,
-      modelCapability: params.modelCapability,
-      onMemoryRetrieved: params.onMemoryRetrieved,
-    });
+    const memoryContext =
+      params.includeMemory === false
+        ? buildDroppedMemoryContext('disabled for chat response path')
+        : await buildMemoryContext({
+            threadId: params.threadId,
+            query,
+            memory: deps.memory,
+            contextConfig,
+            modelCapability: params.modelCapability,
+            onMemoryRetrieved: params.onMemoryRetrieved,
+          });
     blocks.push(memoryContext.block);
 
     const baseMessages = insertSystemMessages(

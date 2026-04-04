@@ -183,6 +183,7 @@ const createDeps = () => {
     injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
     getAffectState: vi.fn(() => null),
     getAffectContextMessage: vi.fn(() => ''),
+    preloadRealtimeEmotion: vi.fn(),
     recordRealtimeEmotion: vi.fn(),
     retrieveRelevantMemory: vi.fn(() => null),
   };
@@ -388,6 +389,13 @@ describe('createChatStreaming', () => {
     });
     expect(createChatConversationRunnerMock).not.toHaveBeenCalled();
     expect(assembleContextMock).toHaveBeenCalledTimes(1);
+    expect(assembleContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [{ role: 'user', content: 'hello' }],
+        threadId: 'thread_1',
+        includeMemory: false,
+      })
+    );
     expect(persistThreadRuntimeHintsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         threadId: 'thread_1',
@@ -1036,5 +1044,46 @@ describe('createChatStreaming', () => {
       guardActive: false,
       state: affectState,
     });
+  });
+
+  it('preloads realtime affect asynchronously instead of blocking the current turn', async () => {
+    getAppConfigMock.mockReturnValue({
+      memory: {
+        enabled: false,
+        autoSummarize: false,
+        context: {
+          enabled: true,
+        },
+        emotion: {
+          enabled: true,
+          injectToSystemPrompt: true,
+          realtimeAnalysis: true,
+        },
+      },
+      mcp: {
+        defaultApprovalMode: 'safe-only',
+      },
+    });
+
+    const { streaming, memory } = createDeps();
+
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'read this carefully' }],
+      threadId: 'thread_realtime_affect',
+    });
+
+    expect(result).toEqual({ success: true, text: 'assistant result' });
+    expect(memory.preloadRealtimeEmotion).toHaveBeenCalledWith(
+      'thread_realtime_affect',
+      'read this carefully'
+    );
+    expect(resolveToolNamesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectState: null,
+      })
+    );
+    expect(memory.recordRealtimeEmotion).not.toHaveBeenCalled();
   });
 });

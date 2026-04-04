@@ -181,7 +181,8 @@ export const createChatApproval = (deps: {
     );
     const inputMessages = await deps.memory.injectMemoryIntoMessages(
       await toModelInputMessages(uiMessages),
-      threadId
+      threadId,
+      { skipRetrieval: true }
     );
 
     let toolNames: string[] = [];

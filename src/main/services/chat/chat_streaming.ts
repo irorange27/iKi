@@ -2,18 +2,12 @@ import { type ConversationRunner } from '../../../core/agent';
 import { getAppConfig } from '../../../core/config';
 import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
-import * as emotionDb from '../../../core/db/emotion';
-import * as memoryDb from '../../../core/db/memory';
 import { createLogger } from '../../../core/logger';
 import {
   type AffectState,
-  buildAffectSystemMessage,
-  collectEmotionSamples,
-  computeAffectState,
   rehydrateAffectState,
 } from '../../../core/emotion/affect_state';
 import { shouldGuardTools } from '../../../core/emotion/affect_policy';
-import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
 import * as llmFactory from '../../../core/provider/llm/factory';
 import * as deepseekProvider from '../../../core/provider/llm/deepseek';
 import * as kimiProvider from '../../../core/provider/llm/kimi';
@@ -96,84 +90,9 @@ export const createChatStreaming = (deps: {
     workspaceSystemMessage: buildThreadWorkspaceSystemMessage,
   });
 
-  const getMemoryConfig = () => getAppConfig()?.memory || null;
   const getEmotionConfig = () => getAppConfig()?.memory?.emotion || null;
   const shouldAutoApproveToolRequests = () =>
     getAppConfig()?.general?.autoApproveToolRequests === true;
-
-  const canStoreShortMemory = () => {
-    const memoryConfig = getMemoryConfig();
-    return Boolean(memoryConfig?.enabled || memoryConfig?.autoSummarize);
-  };
-
-  const buildRealtimeAffectContext = async (
-    threadId: string | undefined,
-    prompt: string
-  ): Promise<{ message: string; state: AffectState | null }> => {
-    const emotionConfig = getEmotionConfig();
-    if (
-      !emotionConfig?.enabled ||
-      !emotionConfig.injectToSystemPrompt ||
-      !emotionConfig.realtimeAnalysis
-    ) {
-      return { message: '', state: null };
-    }
-
-    const content = prompt.trim();
-    if (!content) return { message: '', state: null };
-
-    const minSampleCount = Math.max(1, Math.floor(emotionConfig.minSampleCount || 1));
-    if (!threadId && minSampleCount > 1) return { message: '', state: null };
-
-    if (threadId) {
-      const thread = chatThreadDb.getChatThread(threadId);
-      if (thread?.is_incognito) return { message: '', state: null };
-    }
-
-    let emotion;
-    try {
-      emotion = await analyzeEmotionWithAgent(content);
-    } catch (error) {
-      chatStreamingLogger.warn('Realtime emotion analysis failed', error);
-      return { message: '', state: null };
-    }
-    if (!emotion) return { message: '', state: null };
-
-    if (threadId) {
-      deps.memory.recordRealtimeEmotion?.(threadId, content, emotion);
-    }
-
-    const realtimeSample = {
-      emotion: {
-        label: emotion.label,
-        confidence: emotion.confidence,
-        ...(typeof emotion.valence === 'number' ? { valence: emotion.valence } : {}),
-        ...(typeof emotion.arousal === 'number' ? { arousal: emotion.arousal } : {}),
-        ...(emotion.emotions ? { emotions: emotion.emotions } : {}),
-      },
-      timestamp: new Date(),
-    };
-
-    const fetchLimit = Math.max(10, Math.floor(emotionConfig.windowSize || 0) * 3, minSampleCount);
-
-    const samples = [realtimeSample];
-    if (threadId) {
-      const events = emotionDb.listEmotionEvents(threadId, fetchLimit);
-      samples.push(...collectEmotionSamples(events));
-    }
-
-    let affectState = computeAffectState(samples, emotionConfig);
-    if (!affectState && threadId && canStoreShortMemory()) {
-      const shortEntries = memoryDb.listShortMemory(threadId, fetchLimit);
-      affectState = computeAffectState(
-        [realtimeSample, ...collectEmotionSamples(shortEntries)],
-        emotionConfig
-      );
-    }
-
-    if (!affectState) return { message: '', state: null };
-    return { message: buildAffectSystemMessage(affectState), state: affectState };
-  };
 
   const getStoredAffectState = (threadId?: string): AffectState | null => {
     if (!threadId) return null;
@@ -411,14 +330,15 @@ export const createChatStreaming = (deps: {
     );
     const lastModelMessage = modelMessages[modelMessages.length - 1];
     const emotionConfig = getEmotionConfig();
-    const realtimeContext = lastModelMessage
-      ? await buildRealtimeAffectContext(options.threadId, getPromptFromMessage(lastModelMessage))
-      : { message: '', state: null };
-    const affectStateForPolicy = realtimeContext.state ?? getAffectStateForPolicy(options.threadId);
+    if (lastModelMessage) {
+      deps.memory.preloadRealtimeEmotion?.(
+        options.threadId,
+        getPromptFromMessage(lastModelMessage)
+      );
+    }
+    const affectStateForPolicy = getAffectStateForPolicy(options.threadId);
     const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
-    const affectSignal = realtimeContext.state
-      ? toAffectSignal(realtimeContext.state, 'realtime', guardActive)
-      : toAffectSignal(affectStateForPolicy, 'history', guardActive);
+    const affectSignal = toAffectSignal(affectStateForPolicy, 'history', guardActive);
     const affectStateForRouting = emotionConfig?.injectToSystemPrompt
       ? (affectSignal?.state ?? null)
       : null;
@@ -428,9 +348,9 @@ export const createChatStreaming = (deps: {
       threadId: options.threadId,
       skillIds: options.skillIds,
       skillMode: options.skillMode,
+      includeMemory: false,
       modelCapability,
       affectState: affectStateForRouting,
-      realtimeAffectMessage: realtimeContext.message,
       onMemoryRetrieved: options.onMemoryRetrieved,
     });
     const finalMessages = assembledContext.messages;

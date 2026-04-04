@@ -79,6 +79,7 @@ import {
   getModelCallSettings,
   getModelGenerationSettings,
   generateChatWithUsage,
+  refreshModelsDevCatalog,
   resetModelsDevCatalogCacheForTests,
   resolveModelCapability,
   streamChat,
@@ -270,7 +271,7 @@ describe('llm factory', () => {
     );
   });
 
-  it('resolves model capabilities from models.dev metadata', async () => {
+  it('resolves model capabilities from a refreshed models.dev cache', async () => {
     fetchWithTimeoutMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -295,6 +296,11 @@ describe('llm factory', () => {
       )
     );
 
+    await expect(refreshModelsDevCatalog()).resolves.toEqual(
+      expect.objectContaining({
+        openai: expect.any(Object),
+      })
+    );
     await expect(fetchModelCapabilityFromDev('openai', 'gpt-4o-mini')).resolves.toEqual({
       providerType: 'openai',
       providerKey: 'openai',
@@ -309,11 +315,70 @@ describe('llm factory', () => {
     });
   });
 
-  it('backs off repeated models.dev capability fetches after a timeout', async () => {
+  it('returns immediately from capability lookup and refreshes models.dev in background', async () => {
+    let resolveFetch: ((response: Response) => void) | null = null;
+    fetchWithTimeoutMock.mockReturnValue(
+      new Promise<Response>(resolve => {
+        resolveFetch = resolve;
+      })
+    );
+
+    const settled = vi.fn();
+    fetchModelCapabilityFromDev('openai', 'gpt-4o-mini').then(settled);
+
+    await Promise.resolve();
+
+    expect(settled).toHaveBeenCalledWith(null);
+    expect(fetchWithTimeoutMock).toHaveBeenCalledTimes(1);
+
+    resolveFetch?.(
+      new Response(
+        JSON.stringify({
+          openai: {
+            models: {
+              'gpt-4o-mini': {
+                name: 'GPT-4o mini',
+                limit: {
+                  context: 128000,
+                  output: 16384,
+                },
+                tool_call: true,
+                reasoning: false,
+              },
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        }
+      )
+    );
+
+    await expect(refreshModelsDevCatalog()).resolves.toEqual(
+      expect.objectContaining({
+        openai: expect.any(Object),
+      })
+    );
+    await expect(fetchModelCapabilityFromDev('openai', 'gpt-4o-mini')).resolves.toEqual({
+      providerType: 'openai',
+      providerKey: 'openai',
+      modelId: 'gpt-4o-mini',
+      displayName: 'GPT-4o mini',
+      contextWindow: 128000,
+      maxInputTokens: 128000,
+      maxOutputTokens: 16384,
+      supportsToolCalls: true,
+      supportsReasoning: false,
+      source: 'models.dev',
+    });
+  });
+
+  it('backs off repeated models.dev refreshes after a timeout', async () => {
     fetchWithTimeoutMock.mockRejectedValue(new Error('Network request timed out after 1200 ms'));
 
-    await expect(fetchModelCapabilityFromDev('deepseek', 'deepseek-reasoner')).resolves.toBeNull();
-    await expect(fetchModelCapabilityFromDev('deepseek', 'deepseek-reasoner')).resolves.toBeNull();
+    await expect(refreshModelsDevCatalog()).resolves.toBeNull();
+    await expect(refreshModelsDevCatalog()).resolves.toBeNull();
 
     expect(fetchWithTimeoutMock).toHaveBeenCalledTimes(1);
   });
@@ -597,6 +662,11 @@ describe('llm factory', () => {
       },
     ]);
 
+    await expect(refreshModelsDevCatalog()).resolves.toEqual(
+      expect.objectContaining({
+        openai: expect.any(Object),
+      })
+    );
     await expect(resolveModelCapability('openai', 'gpt-4o-mini')).resolves.toEqual({
       providerType: 'openai',
       providerKey: 'openai',

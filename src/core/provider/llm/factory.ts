@@ -31,9 +31,7 @@ const MODELS_DEV_FAILURE_COOLDOWN_MS = 300000;
 let cachedModelsDevCatalog: ModelsDevCatalog | null = null;
 let cachedModelsDevFetchedAt = 0;
 let cachedModelsDevUnavailableUntil = 0;
-
-const getErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
+let modelsDevRefreshInFlight: Promise<ModelsDevCatalog | null> | null = null;
 
 export interface ProviderConfig {
   id: string;
@@ -453,57 +451,87 @@ export const generateChatWithUsage = async (options: {
 
 export const fetchModelsFromDev = async (providerType: string) => {
   try {
-    const data = await fetchModelsDevCatalog();
-    return listModelsDevProviderModels(data, providerType);
+    const data = await refreshModelsDevCatalog();
+    return data ? listModelsDevProviderModels(data, providerType) : [];
   } catch {
     return [];
   }
 };
 
-const fetchModelsDevCatalog = async (): Promise<ModelsDevCatalog> => {
+const hasFreshModelsDevCatalog = (now = Date.now()) =>
+  Boolean(cachedModelsDevCatalog && now - cachedModelsDevFetchedAt < MODELS_DEV_CACHE_TTL_MS);
+
+const startModelsDevCatalogRefresh = (): Promise<ModelsDevCatalog | null> => {
   const now = Date.now();
-  if (cachedModelsDevCatalog && now - cachedModelsDevFetchedAt < MODELS_DEV_CACHE_TTL_MS) {
-    return cachedModelsDevCatalog;
+  if (hasFreshModelsDevCatalog(now)) {
+    return Promise.resolve(cachedModelsDevCatalog);
+  }
+
+  if (modelsDevRefreshInFlight) {
+    return modelsDevRefreshInFlight;
   }
 
   if (cachedModelsDevUnavailableUntil > now) {
-    if (cachedModelsDevCatalog) {
-      return cachedModelsDevCatalog;
-    }
-    throw new Error('models.dev fetch is temporarily disabled after a recent failure');
+    return Promise.resolve(cachedModelsDevCatalog);
   }
 
-  try {
-    const response = await fetchWithTimeout(
-      'https://models.dev/api.json',
-      {
-        method: 'GET',
-        headers: {
-          accept: 'application/json',
+  let refreshPromise: Promise<ModelsDevCatalog | null>;
+  refreshPromise = (async () => {
+    try {
+      const response = await fetchWithTimeout(
+        'https://models.dev/api.json',
+        {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+          },
         },
-      },
-      { timeoutMs: MODELS_DEV_TIMEOUT_MS, retries: 0 }
-    );
-    if (!response.ok) {
-      throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
-    }
+        { timeoutMs: MODELS_DEV_TIMEOUT_MS, retries: 0 }
+      );
+      if (!response.ok) {
+        throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+      }
 
-    const data = (await response.json()) as ModelsDevCatalog;
-    cachedModelsDevCatalog = data;
-    cachedModelsDevFetchedAt = now;
-    cachedModelsDevUnavailableUntil = 0;
-    return data;
-  } catch (error) {
-    cachedModelsDevUnavailableUntil = now + MODELS_DEV_FAILURE_COOLDOWN_MS;
-    factoryLogger.warn(
-      `Failed to fetch models.dev catalog; disabling remote capability lookups for ${Math.trunc(MODELS_DEV_FAILURE_COOLDOWN_MS / 1000)}s`,
-      error
-    );
-    if (cachedModelsDevCatalog) {
-      return cachedModelsDevCatalog;
+      const data = (await response.json()) as ModelsDevCatalog;
+      cachedModelsDevCatalog = data;
+      cachedModelsDevFetchedAt = Date.now();
+      cachedModelsDevUnavailableUntil = 0;
+      return data;
+    } catch (error) {
+      cachedModelsDevUnavailableUntil = Date.now() + MODELS_DEV_FAILURE_COOLDOWN_MS;
+      factoryLogger.warn(
+        `Failed to fetch models.dev catalog; disabling remote capability lookups for ${Math.trunc(MODELS_DEV_FAILURE_COOLDOWN_MS / 1000)}s`,
+        error
+      );
+      if (cachedModelsDevCatalog) {
+        return cachedModelsDevCatalog;
+      }
+      return null;
+    } finally {
+      if (modelsDevRefreshInFlight === refreshPromise) {
+        modelsDevRefreshInFlight = null;
+      }
     }
-    throw new Error(getErrorMessage(error));
+  })();
+
+  modelsDevRefreshInFlight = refreshPromise;
+  return refreshPromise;
+};
+
+export const refreshModelsDevCatalog = async (): Promise<ModelsDevCatalog | null> =>
+  startModelsDevCatalogRefresh();
+
+const scheduleModelsDevCatalogRefresh = () => {
+  void startModelsDevCatalogRefresh();
+};
+
+const getModelsDevCatalogSnapshot = (): ModelsDevCatalog | null => {
+  if (hasFreshModelsDevCatalog()) {
+    return cachedModelsDevCatalog;
   }
+
+  scheduleModelsDevCatalogRefresh();
+  return cachedModelsDevCatalog;
 };
 
 export const fetchModelCapabilityFromDev = async (
@@ -513,12 +541,8 @@ export const fetchModelCapabilityFromDev = async (
   const trimmedModelId = modelId.trim();
   if (!trimmedModelId) return null;
 
-  try {
-    const catalog = await fetchModelsDevCatalog();
-    return lookupModelsDevModelCapability(catalog, providerType, trimmedModelId);
-  } catch {
-    return null;
-  }
+  const catalog = getModelsDevCatalogSnapshot();
+  return catalog ? lookupModelsDevModelCapability(catalog, providerType, trimmedModelId) : null;
 };
 
 export const resolveModelCapability = async (
@@ -539,4 +563,5 @@ export const resetModelsDevCatalogCacheForTests = () => {
   cachedModelsDevCatalog = null;
   cachedModelsDevFetchedAt = 0;
   cachedModelsDevUnavailableUntil = 0;
+  modelsDevRefreshInFlight = null;
 };
