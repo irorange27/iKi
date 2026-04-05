@@ -2,6 +2,7 @@ import * as chatThreadDb from '../../../core/db/chat_thread';
 import { createLogger } from '../../../core/logger';
 import type { ChatThread } from '../../../shared/types/chat';
 import type { AffectSignal } from '../../../shared/emotion/affect';
+import type { InterventionPolicySignal } from '../../../shared/chat/intervention_policy';
 import {
   buildThreadRuntimeMetadata,
   normalizeStringArray,
@@ -18,6 +19,7 @@ export const persistThreadRuntimeHints = (params: {
   toolMode: 'manual' | 'auto';
   mcpServerIds?: string[];
   affectSignal?: AffectSignal | null;
+  interventionPolicy?: InterventionPolicySignal | null;
 }): void => {
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
   if (!normalizedThreadId) return;
@@ -38,6 +40,7 @@ export const persistThreadRuntimeHints = (params: {
           toolMode: params.toolMode,
           mcpServerIds: params.mcpServerIds,
           affectSignal: params.affectSignal,
+          interventionPolicy: params.interventionPolicy,
         })
       ),
     };

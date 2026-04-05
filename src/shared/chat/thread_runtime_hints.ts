@@ -5,6 +5,10 @@ import {
   type AffectSignal,
   type AffectSignalSource,
 } from '../emotion/affect';
+import {
+  isInterventionState,
+  type InterventionPolicySignal,
+} from './intervention_policy';
 
 export type ThreadToolSelectionMode = 'manual' | 'auto';
 
@@ -20,6 +24,10 @@ export type ThreadToolSelectionState = {
 };
 
 export type ThreadAffectState = AffectSignal & {
+  updatedAt?: string;
+};
+
+export type ThreadInterventionPolicyState = InterventionPolicySignal & {
   updatedAt?: string;
 };
 
@@ -165,6 +173,53 @@ export const parseThreadAffectState = (metadataRaw: unknown): ThreadAffectState 
   };
 };
 
+const normalizeReasonCodes = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  const reasonCodes: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    reasonCodes.push(trimmed);
+  }
+  return reasonCodes;
+};
+
+export const parseThreadInterventionPolicyState = (
+  metadataRaw: unknown
+): ThreadInterventionPolicyState | null => {
+  const metadata = parseJsonRecord(metadataRaw);
+  const policy = isObjectRecord(metadata.interventionPolicy) ? metadata.interventionPolicy : null;
+  if (!policy || !isInterventionState(policy.interventionState)) return null;
+
+  const escalateRaw = toFiniteNumber(policy.escalate);
+  const confidence = toFiniteNumber(policy.confidence);
+  const rationale =
+    typeof policy.rationale === 'string' && policy.rationale.trim()
+      ? policy.rationale.trim()
+      : '';
+
+  if (escalateRaw === undefined || confidence === undefined || !rationale) {
+    return null;
+  }
+
+  return {
+    interventionState: policy.interventionState,
+    escalate: escalateRaw >= 1 ? 1 : 0,
+    confidence: Math.min(1, Math.max(0, confidence)),
+    rationale,
+    reasonCodes: normalizeReasonCodes(policy.reasonCodes),
+    affectUsed: policy.affectUsed === true,
+    ...(policy.applied === true || policy.applied === false ? { applied: policy.applied === true } : {}),
+    ...(typeof policy.updatedAt === 'string' && policy.updatedAt.trim()
+      ? { updatedAt: policy.updatedAt }
+      : {}),
+  };
+};
+
 export const buildThreadRuntimeMetadata = (params: {
   existingMetadata: unknown;
   providerType: string;
@@ -173,6 +228,7 @@ export const buildThreadRuntimeMetadata = (params: {
   toolMode: ThreadToolSelectionMode;
   mcpServerIds?: string[];
   affectSignal?: AffectSignal | null;
+  interventionPolicy?: InterventionPolicySignal | null;
   updatedAt?: string;
 }): ObjectRecord => {
   const metadataRecord = parseJsonRecord(params.existingMetadata);
@@ -229,6 +285,25 @@ export const buildThreadRuntimeMetadata = (params: {
       };
     } else {
       delete nextMetadata.affect;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(params, 'interventionPolicy')) {
+    if (params.interventionPolicy) {
+      nextMetadata.interventionPolicy = {
+        interventionState: params.interventionPolicy.interventionState,
+        escalate: params.interventionPolicy.escalate,
+        confidence: params.interventionPolicy.confidence,
+        rationale: params.interventionPolicy.rationale,
+        reasonCodes: [...params.interventionPolicy.reasonCodes],
+        affectUsed: params.interventionPolicy.affectUsed,
+        ...(params.interventionPolicy.applied === true || params.interventionPolicy.applied === false
+          ? { applied: params.interventionPolicy.applied === true }
+          : {}),
+        updatedAt,
+      };
+    } else {
+      delete nextMetadata.interventionPolicy;
     }
   }
 

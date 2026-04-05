@@ -5,6 +5,10 @@ dataset/
 
 benchmark-runs/
 
+scripts/
+research/
+
+
 .vscode/
 .VSCodeCounter/
 

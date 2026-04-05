@@ -19,11 +19,13 @@ import {
 import {
   getSchemaErrorMessage,
   type ApproveToolPayload,
+  type ChatMessageCreatePayload,
   type ChatSendPayload,
   type ChatThreadCreatePayload,
   type ClientRegistrationPayload,
   type MemorySearchPayload,
   parseApproveToolPayload,
+  parseChatMessageCreatePayload,
   parseChatSendPayload,
   parseChatThreadCreatePayload,
   parseClientRegistrationPayload,
@@ -204,6 +206,51 @@ export const createDaemonRequestHandler =
         return;
       }
 
+      if (req.method === 'POST' && pathName === '/v1/chat/messages') {
+        if (!hasScope(client, 'chat:write')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+          return;
+        }
+        const body = await readParsedBody<ChatMessageCreatePayload>(
+          req,
+          res,
+          parseChatMessageCreatePayload,
+          'Invalid chat message payload'
+        );
+        if (!body) return;
+
+        const access = getThreadOrError(body.threadId, client.id);
+        if (!access.thread) {
+          writeJson(res, access.status || 404, { success: false, error: access.error });
+          return;
+        }
+
+        const message = await deps.chatService.createMessageWithProcessing?.(
+          {
+            thread_id: body.threadId,
+            message: {
+              role: body.role,
+              content: body.content,
+            },
+            ...(typeof body.timestamp === 'string' && body.timestamp.trim()
+              ? { timestamp: body.timestamp.trim() }
+              : {}),
+            ...(body.metadata !== undefined
+              ? {
+                  metadata:
+                    typeof body.metadata === 'string'
+                      ? body.metadata
+                      : JSON.stringify(body.metadata),
+                }
+              : {}),
+          },
+          { waitForEmotionAnalysis: body.awaitEmotionAnalysis }
+        );
+
+        writeJson(res, 200, { success: true, message });
+        return;
+      }
+
       if (req.method === 'POST' && pathName === '/v1/chat/send') {
         if (!hasScope(client, 'chat:write')) {
           writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
@@ -247,6 +294,7 @@ export const createDaemonRequestHandler =
           skillIds: body.skillIds,
           skillMode: body.skillMode,
           threadId,
+          experimentalContext: body.experimentalContext,
         });
 
         writeJson(res, 200, result);

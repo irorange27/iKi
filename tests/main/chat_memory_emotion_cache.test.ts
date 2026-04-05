@@ -146,4 +146,72 @@ describe('chat_memory realtime emotion cache', () => {
       })
     );
   });
+
+  it('builds same-turn affect context from realtime analysis when requested', async () => {
+    const memory = createChatMemory();
+    analyzeEmotionMock.mockResolvedValue({
+      label: 'anger',
+      confidence: 0.86,
+      valence: -0.62,
+      arousal: 0.79,
+      emotions: [{ label: 'anger', score: 0.86 }],
+    } as never);
+
+    const affectContext = await memory.buildRealtimeAffectContext('thread_1', 'Hello there');
+
+    expect(analyzeEmotionMock).toHaveBeenCalledWith('Hello there');
+    expect(affectContext.message).not.toBe('');
+    expect(affectContext.state).toEqual(
+      expect.objectContaining({
+        label: 'anger',
+        confidence: expect.any(Number),
+        valence: expect.any(Number),
+        arousal: expect.any(Number),
+      })
+    );
+  });
+
+  it('can force same-turn affect analysis for experiments even when realtime analysis is disabled in config', async () => {
+    const config = createDefaultAppConfig();
+    config.memory = {
+      ...config.memory,
+      enabled: false,
+      autoSummarize: false,
+      maxRetrievalCount: 5,
+      similarThreshold: 0.1,
+      emotion: {
+        ...config.memory.emotion,
+        enabled: true,
+        injectToSystemPrompt: false,
+        realtimeAnalysis: false,
+        minConfidence: 0,
+        minSampleCount: 1,
+        windowSize: 3,
+        halfLifeMinutes: 60,
+        maxAgeMinutes: 180,
+        includeNeutral: false,
+      },
+    };
+    getAppConfigMock.mockReturnValue(config);
+
+    const memory = createChatMemory();
+    analyzeEmotionMock.mockResolvedValue({
+      label: 'sadness',
+      confidence: 0.8,
+      valence: -0.63,
+      arousal: 0.61,
+      emotions: [{ label: 'sadness', score: 0.8 }],
+    } as never);
+
+    const affectContext = await memory.buildRealtimeAffectContext('thread_1', 'Hello there', {
+      force: true,
+    });
+
+    expect(analyzeEmotionMock).toHaveBeenCalledWith('Hello there');
+    expect(affectContext.state).toEqual(
+      expect.objectContaining({
+        label: 'sadness',
+      })
+    );
+  });
 });

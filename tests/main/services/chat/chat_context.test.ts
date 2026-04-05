@@ -784,6 +784,76 @@ describe('chat_context assembler', () => {
     );
   });
 
+  it('fully disables affect injection when the experiment requests no_affect', async () => {
+    const getAffectContextMessage = vi.fn(() => 'Stored affect.');
+    const { assembler } = createAssembler({ getAffectContextMessage });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_no_affect',
+      affectContextMode: 'disabled',
+      messages: [{ role: 'user', content: 'Respond.' }],
+    });
+
+    expect(getAffectContextMessage).not.toHaveBeenCalled();
+    expect(
+      result.messages.some(
+        message => message.role === 'system' && String(message.content).includes('Stored affect.')
+      )
+    ).toBe(false);
+    expect(findBlock(result, 'affect')).toEqual(
+      expect.objectContaining({
+        kind: 'affect',
+        status: 'dropped',
+        reason: 'disabled for experiment no_affect mode',
+      })
+    );
+  });
+
+  it('drops confounding context blocks in benchmark clean mode', async () => {
+    getIdentityContextMessageMock.mockReturnValue('Identity.');
+    getRelationshipContextMessageMock.mockReturnValue('Relationship.');
+    getLifeContextMessageMock.mockReturnValue('Life state.');
+    getRecentLifeReflectionContextMessageMock.mockReturnValue('Reflection.');
+
+    const { assembler } = createAssembler({
+      getAffectContextMessage: vi.fn(() => 'Stored affect.'),
+    });
+
+    const result = await assembler.assemble({
+      threadId: 'thread_clean',
+      contextMode: 'benchmark_clean',
+      messages: [{ role: 'user', content: 'Respond.' }],
+      skillMode: 'auto',
+    });
+
+    expect(findBlock(result, 'identity')).toEqual(
+      expect.objectContaining({
+        kind: 'identity',
+        status: 'dropped',
+        reason: 'disabled for benchmark clean mode',
+      })
+    );
+    expect(findBlock(result, 'relationship')).toEqual(
+      expect.objectContaining({
+        kind: 'relationship',
+        status: 'dropped',
+      })
+    );
+    expect(findBlock(result, 'thread-summary')).toEqual(
+      expect.objectContaining({
+        kind: 'thread-summary',
+        status: 'dropped',
+      })
+    );
+    expect(findBlock(result, 'skills')).toEqual(
+      expect.objectContaining({
+        kind: 'skills',
+        status: 'dropped',
+        reason: 'disabled for benchmark clean mode',
+      })
+    );
+  });
+
   it('reports when no skills are selected for the current turn', async () => {
     const { assembler } = createAssembler();
 

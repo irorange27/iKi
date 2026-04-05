@@ -186,6 +186,27 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     return created;
   };
 
+  const createMessageWithProcessing = async (
+    input: unknown,
+    options?: { waitForEmotionAnalysis?: boolean }
+  ) => {
+    const created = createMessage(input);
+    if (
+      options?.waitForEmotionAnalysis &&
+      created &&
+      typeof created.thread_id === 'string' &&
+      typeof created.id === 'string' &&
+      typeof created.message === 'string'
+    ) {
+      await deps.memory.waitForEmotionAnalysis?.({
+        threadId: created.thread_id,
+        messageId: created.id,
+        messageJson: created.message,
+      });
+    }
+    return created;
+  };
+
   const updateMessage = (id: string, input: unknown) => {
     const sanitizedUpdate: Partial<ChatMessage> = isObjectRecord(input)
       ? {
@@ -250,6 +271,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     listMessages,
     getMessage,
     createMessage,
+    createMessageWithProcessing,
     updateMessage,
     deleteMessage,
   };

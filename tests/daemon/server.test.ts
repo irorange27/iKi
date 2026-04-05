@@ -171,6 +171,10 @@ const {
     listThreads: vi.fn(() => []),
     createThread: vi.fn((thread: Record<string, unknown>) => ({ id: 'thread_new', ...thread })),
     listMessages: vi.fn(() => []),
+    createMessageWithProcessing: vi.fn(async (message: Record<string, unknown>) => ({
+      id: 'msg_new',
+      ...message,
+    })),
     send: vi.fn(async (options: Record<string, unknown>) => ({ success: true, echoed: options })),
     stream: vi.fn(async () => ({ success: true })),
     approveTool: vi.fn(async () => ({ success: true })),
@@ -795,6 +799,49 @@ describe('daemon server', () => {
     expect(chatServiceMock.createThread).not.toHaveBeenCalled();
   });
 
+  it('replays benchmark messages through the daemon message-create endpoint', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:write'] });
+    getChatThreadMock.mockReturnValueOnce({
+      id: 'thread_owned',
+      client_id: issued.client.id,
+      title: 'Owned',
+    });
+
+    const result = await requestJson(started, '/v1/chat/messages', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: {
+        thread_id: 'thread_owned',
+        role: 'user',
+        content: 'hello',
+        await_emotion_analysis: true,
+      },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.json).toEqual({
+      success: true,
+      message: expect.objectContaining({
+        id: 'msg_new',
+        thread_id: 'thread_owned',
+      }),
+    });
+    expect(chatServiceMock.createMessageWithProcessing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thread_id: 'thread_owned',
+        message: {
+          role: 'user',
+          content: 'hello',
+        },
+      }),
+      { waitForEmotionAnalysis: true }
+    );
+  });
+
   it('rejects chat send when tools are requested without tools:run scope', async () => {
     const started = await startTestDaemon();
     const issued = issueClient({
@@ -879,6 +926,10 @@ describe('daemon server', () => {
         mcpServerIds: ['docs', 'other'],
         skillIds: ['skill_1'],
         skillMode: 'manual',
+        experimental_context: {
+          affect_mode: 'explicit_policy',
+          context_mode: 'benchmark_clean',
+        },
       },
     });
 
@@ -906,6 +957,10 @@ describe('daemon server', () => {
       skillIds: ['skill_1'],
       skillMode: 'manual',
       threadId: 'thread_owned',
+      experimentalContext: {
+        affectMode: 'explicit_policy',
+        contextMode: 'benchmark_clean',
+      },
     });
   });
 

@@ -183,9 +183,11 @@ const createDeps = () => {
     injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
     getAffectState: vi.fn(() => null),
     getAffectContextMessage: vi.fn(() => ''),
+    buildRealtimeAffectContext: vi.fn(async () => ({ message: '', state: null })),
     preloadRealtimeEmotion: vi.fn(),
     recordRealtimeEmotion: vi.fn(),
     retrieveRelevantMemory: vi.fn(() => null),
+    waitForEmotionAnalysis: vi.fn(async () => undefined),
   };
 
   return {
@@ -1085,5 +1087,220 @@ describe('createChatStreaming', () => {
       })
     );
     expect(memory.recordRealtimeEmotion).not.toHaveBeenCalled();
+  });
+
+  it('injects an explicit intervention policy for experiment runs and persists the signal', async () => {
+    const affectState = {
+      label: 'sadness',
+      confidence: 0.88,
+      valence: -0.72,
+      arousal: 0.74,
+      emotions: [{ label: 'sadness', score: 0.88 }],
+      sampleCount: 3,
+      windowSize: 6,
+      startAt: '2026-04-01T00:00:00.000Z',
+      endAt: '2026-04-01T00:03:00.000Z',
+      ageMinutes: 1,
+      windowMinutes: 3,
+    };
+    toLlmChatMessagesMock.mockImplementation(messages => messages as never);
+
+    const { streaming, memory } = createDeps();
+    memory.getAffectState.mockReturnValue(affectState);
+
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: '直接帮我写回复吧，但我现在整个人都很焦虑，也很怕把事情弄得更糟。',
+        },
+      ],
+      threadId: 'thread_policy',
+      experimentalContext: {
+        affectMode: 'explicit_policy',
+        contextMode: 'benchmark_clean',
+      },
+    });
+
+    expect(result).toEqual({ success: true, text: 'assistant result' });
+    expect(resolveToolNamesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectState: null,
+      })
+    );
+    expect(persistThreadRuntimeHintsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectSignal: expect.objectContaining({
+          source: 'history',
+          state: affectState,
+        }),
+        interventionPolicy: expect.objectContaining({
+          interventionState: 'co_plan',
+          affectUsed: true,
+          applied: true,
+        }),
+      })
+    );
+    expect(toLlmChatMessagesMock).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('Turn intervention policy:'),
+        }),
+      ])
+    );
+  });
+
+  it('records but does not apply an explicit policy during tone_only runs', async () => {
+    toLlmChatMessagesMock.mockImplementation(messages => messages as never);
+
+    const { streaming, memory } = createDeps();
+    memory.getAffectState.mockReturnValue({
+      label: 'sadness',
+      confidence: 0.77,
+      valence: -0.61,
+      arousal: 0.68,
+      emotions: [{ label: 'sadness', score: 0.77 }],
+      sampleCount: 2,
+      windowSize: 4,
+      startAt: '2026-04-01T00:00:00.000Z',
+      endAt: '2026-04-01T00:02:00.000Z',
+      ageMinutes: 1,
+      windowMinutes: 2,
+    });
+
+    await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: '我有点卡住了，但还是想继续推进。' }],
+      threadId: 'thread_tone_only',
+      experimentalContext: {
+        affectMode: 'tone_only',
+        contextMode: 'benchmark_clean',
+      },
+    });
+
+    expect(assembleContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectContextMode: 'default',
+      })
+    );
+    expect(persistThreadRuntimeHintsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectSignal: expect.anything(),
+        interventionPolicy: expect.objectContaining({
+          applied: false,
+          affectUsed: false,
+        }),
+      })
+    );
+    expect(toLlmChatMessagesMock).not.toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('Turn intervention policy:'),
+        }),
+      ])
+    );
+  });
+
+  it('fully disables affect context and keeps policy audit-only during no_affect runs', async () => {
+    toLlmChatMessagesMock.mockImplementation(messages => messages as never);
+
+    const { streaming, memory } = createDeps();
+    memory.getAffectState.mockReturnValue({
+      label: 'anger',
+      confidence: 0.8,
+      valence: -0.58,
+      arousal: 0.71,
+      emotions: [{ label: 'anger', score: 0.8 }],
+      sampleCount: 2,
+      windowSize: 4,
+      startAt: '2026-04-01T00:00:00.000Z',
+      endAt: '2026-04-01T00:01:00.000Z',
+      ageMinutes: 1,
+      windowMinutes: 1,
+    });
+
+    await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: '先别替我写，我要自己想一想。' }],
+      threadId: 'thread_no_affect',
+      experimentalContext: {
+        affectMode: 'no_affect',
+        contextMode: 'benchmark_clean',
+      },
+    });
+
+    expect(assembleContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectContextMode: 'disabled',
+        realtimeAffectMessage: '',
+      })
+    );
+    expect(persistThreadRuntimeHintsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        affectSignal: null,
+        interventionPolicy: expect.objectContaining({
+          applied: false,
+          affectUsed: false,
+        }),
+      })
+    );
+    expect(toLlmChatMessagesMock).not.toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('Turn intervention policy:'),
+        }),
+      ])
+    );
+  });
+
+  it('awaits realtime affect context when the experiment requests same-turn affect injection', async () => {
+    const affectState = {
+      label: 'anger',
+      confidence: 0.74,
+      valence: -0.55,
+      arousal: 0.81,
+      emotions: [{ label: 'anger', score: 0.74 }],
+      sampleCount: 1,
+      windowSize: 1,
+      startAt: '2026-04-01T00:00:00.000Z',
+      endAt: '2026-04-01T00:00:00.000Z',
+      ageMinutes: 0,
+      windowMinutes: 0,
+    };
+    const { streaming, memory } = createDeps();
+    memory.buildRealtimeAffectContext.mockResolvedValue({
+      message: 'Realtime affect context.',
+      state: affectState,
+    });
+
+    await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'read this carefully' }],
+      threadId: 'thread_realtime_injected',
+      experimentalContext: {
+        affectMode: 'tone_only',
+        awaitRealtimeAffect: true,
+      },
+    });
+
+    expect(memory.buildRealtimeAffectContext).toHaveBeenCalledWith(
+      'thread_realtime_injected',
+      'read this carefully',
+      { force: true }
+    );
+    expect(memory.preloadRealtimeEmotion).not.toHaveBeenCalled();
+    expect(assembleContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        realtimeAffectMessage: 'Realtime affect context.',
+      })
+    );
   });
 });

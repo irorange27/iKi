@@ -5,6 +5,7 @@ import {
   normalizeStringArray,
   parseJsonRecord,
   parseThreadAffectState,
+  parseThreadInterventionPolicyState,
   parseThreadToolNames,
   parseThreadToolSelectionState,
 } from '../../../src/shared/chat/thread_runtime_hints';
@@ -119,6 +120,36 @@ describe('thread_runtime_hints', () => {
         ageMinutes: 1,
         windowMinutes: 5,
       },
+    });
+  });
+
+  it('stores whether an intervention policy was applied or recorded only for audit', () => {
+    const metadata = buildThreadRuntimeMetadata({
+      existingMetadata: '{}',
+      providerType: 'openai',
+      model: 'gpt-4.1',
+      toolMode: 'manual',
+      interventionPolicy: {
+        interventionState: 'co_plan',
+        escalate: 0,
+        confidence: 0.84,
+        rationale: 'Lower pressure next step is safer.',
+        reasonCodes: ['affect_blocked'],
+        affectUsed: true,
+        applied: false,
+      },
+      updatedAt: '2026-03-22T00:06:00.000Z',
+    });
+
+    expect(parseThreadInterventionPolicyState(metadata)).toEqual({
+      interventionState: 'co_plan',
+      escalate: 0,
+      confidence: 0.84,
+      rationale: 'Lower pressure next step is safer.',
+      reasonCodes: ['affect_blocked'],
+      affectUsed: true,
+      applied: false,
+      updatedAt: '2026-03-22T00:06:00.000Z',
     });
   });
 });

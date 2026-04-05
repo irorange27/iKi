@@ -20,6 +20,7 @@ import {
 } from '../../../core/context/thread_summary';
 import type { AffectState } from '../../../core/emotion/affect_state';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
+import type { ChatContextMode } from '../../../shared/chat/intervention_policy';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import type { ChatInputMessage } from './chat_types';
@@ -83,9 +84,11 @@ type AssembleChatContextParams = {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
+  contextMode?: ChatContextMode;
   includeMemory?: boolean;
   modelCapability?: ModelCapability | null;
   affectState?: AffectState | null;
+  affectContextMode?: 'default' | 'disabled';
   realtimeAffectMessage?: string;
   onMemoryRetrieved?: (payload: {
     query: string;
@@ -658,6 +661,14 @@ const buildDroppedMemoryContext = (reason: string): MemoryContext => ({
   },
 });
 
+const buildDroppedBlock = (kind: ContextBlockKind, reason: string): ContextReportBlock => ({
+  kind,
+  status: 'dropped',
+  estimatedTokens: 0,
+  charCount: 0,
+  reason,
+});
+
 const buildMemoryContext = async (params: {
   threadId?: string;
   query: string;
@@ -726,25 +737,35 @@ const buildMemoryContext = async (params: {
 };
 
 const resolveAffectMessage = (
-  params: Pick<AssembleChatContextParams, 'realtimeAffectMessage' | 'threadId'>,
+  params: Pick<AssembleChatContextParams, 'affectContextMode' | 'realtimeAffectMessage' | 'threadId'>,
   memory: ChatMemory
-): string => {
-  if (params.realtimeAffectMessage?.trim()) {
-    return params.realtimeAffectMessage.trim();
+): { message: string; droppedReason?: string } => {
+  if (params.affectContextMode === 'disabled') {
+    return {
+      message: '',
+      droppedReason: 'disabled for experiment no_affect mode',
+    };
   }
 
-  return params.threadId ? memory.getAffectContextMessage(params.threadId) : '';
+  if (params.realtimeAffectMessage?.trim()) {
+    return { message: params.realtimeAffectMessage.trim() };
+  }
+
+  return {
+    message: params.threadId ? memory.getAffectContextMessage(params.threadId) : '',
+  };
 };
 
 const buildAffectBlock = (
   affectMessage: string,
-  modelCapability?: ModelCapability | null
+  modelCapability?: ModelCapability | null,
+  droppedReason?: string
 ): ContextReportBlock => ({
   kind: 'affect',
   status: affectMessage ? 'included' : 'dropped',
   estimatedTokens: estimateTextTokens(affectMessage, modelCapability),
   charCount: affectMessage.length,
-  ...(affectMessage ? {} : { reason: 'no affect context available' }),
+  ...(affectMessage ? {} : { reason: droppedReason || 'no affect context available' }),
 });
 
 const buildSkillContext = async (params: {
@@ -818,6 +839,7 @@ export const createChatContextAssembler = (deps: {
   ): Promise<AssembleChatContextResult> => {
     const contextConfig = deriveModelAwareContextConfig(getContextConfig(), params.modelCapability);
     const blocks: ContextReportBlock[] = [];
+    const benchmarkCleanContext = params.contextMode === 'benchmark_clean';
 
     if (!contextConfig.enabled) {
       return buildAssembleResult({
@@ -838,42 +860,66 @@ export const createChatContextAssembler = (deps: {
     );
     blocks.push(recentHistory.block);
 
-    const identityContext = buildIdentityContext(
-      getIdentityContextMessage(),
-      deps.workspaceSystemMessage?.(params.threadId),
-      contextConfig,
-      params.modelCapability
-    );
+    const identityContext = benchmarkCleanContext
+      ? {
+          systemMessage: '',
+          block: buildDroppedBlock('identity', 'disabled for benchmark clean mode'),
+        }
+      : buildIdentityContext(
+          getIdentityContextMessage(),
+          deps.workspaceSystemMessage?.(params.threadId),
+          contextConfig,
+          params.modelCapability
+        );
     blocks.push(identityContext.block);
 
-    const relationshipContext = buildRelationshipContext(
-      params.threadId,
-      contextConfig,
-      params.modelCapability
-    );
+    const relationshipContext = benchmarkCleanContext
+      ? {
+          systemMessage: '',
+          block: buildDroppedBlock('relationship', 'disabled for benchmark clean mode'),
+        }
+      : buildRelationshipContext(params.threadId, contextConfig, params.modelCapability);
     blocks.push(relationshipContext.block);
 
-    const lifeStateContext = buildLifeStateContext(contextConfig, params.modelCapability);
+    const lifeStateContext = benchmarkCleanContext
+      ? {
+          systemMessage: '',
+          block: buildDroppedBlock('life-state', 'disabled for benchmark clean mode'),
+        }
+      : buildLifeStateContext(contextConfig, params.modelCapability);
     blocks.push(lifeStateContext.block);
 
-    const reflectionContext = buildRecentReflectionContext(contextConfig, params.modelCapability);
+    const reflectionContext = benchmarkCleanContext
+      ? {
+          systemMessage: '',
+          block: buildDroppedBlock('recent-reflection', 'disabled for benchmark clean mode'),
+        }
+      : buildRecentReflectionContext(contextConfig, params.modelCapability);
     blocks.push(reflectionContext.block);
 
-    const threadSummary = params.threadId
-      ? await ensureThreadSummary(params.threadId, contextConfig)
-      : null;
-    const summaryContext = buildThreadSummaryContext(
-      threadSummary,
-      recentHistory.compactedMessages,
-      contextConfig,
-      params.modelCapability
-    );
+    const threadSummary =
+      benchmarkCleanContext || !params.threadId
+        ? null
+        : await ensureThreadSummary(params.threadId, contextConfig);
+    const summaryContext = benchmarkCleanContext
+      ? {
+          systemMessage: '',
+          block: buildDroppedBlock('thread-summary', 'disabled for benchmark clean mode'),
+        }
+      : buildThreadSummaryContext(
+          threadSummary,
+          recentHistory.compactedMessages,
+          contextConfig,
+          params.modelCapability
+        );
     blocks.push(summaryContext.block);
 
     const lastMessage = params.messages[params.messages.length - 1];
     const query = getPromptFromMessage(lastMessage);
     const memoryContext =
-      params.includeMemory === false
+      benchmarkCleanContext
+        ? buildDroppedMemoryContext('disabled for benchmark clean mode')
+        : params.includeMemory === false
         ? buildDroppedMemoryContext('disabled for chat response path')
         : await buildMemoryContext({
             threadId: params.threadId,
@@ -897,19 +943,32 @@ export const createChatContextAssembler = (deps: {
       ]
     );
 
-    const affectMessage = resolveAffectMessage(params, deps.memory);
-    blocks.push(buildAffectBlock(affectMessage, params.modelCapability));
+    const affectContext = resolveAffectMessage(params, deps.memory);
+    blocks.push(
+      buildAffectBlock(
+        affectContext.message,
+        params.modelCapability,
+        affectContext.droppedReason
+      )
+    );
 
-    const baseWithAffect = insertSystemMessages(baseMessages, [affectMessage]);
-    const skillContext = await buildSkillContext({
-      inputMessages: baseWithAffect,
-      threadId: params.threadId,
-      skillIds: params.skillIds,
-      skillMode: params.skillMode,
-      affectState: params.affectState,
-      contextConfig,
-      modelCapability: params.modelCapability,
-    });
+    const baseWithAffect = insertSystemMessages(baseMessages, [affectContext.message]);
+    const skillContext: SkillContext = benchmarkCleanContext
+      ? {
+          systemMessage: '',
+          usedSkills: [] as SkillContext['usedSkills'],
+          skillMode: params.skillMode === 'auto' ? 'auto' : 'manual',
+          block: buildDroppedBlock('skills', 'disabled for benchmark clean mode'),
+        }
+      : await buildSkillContext({
+          inputMessages: baseWithAffect,
+          threadId: params.threadId,
+          skillIds: params.skillIds,
+          skillMode: params.skillMode,
+          affectState: params.affectState,
+          contextConfig,
+          modelCapability: params.modelCapability,
+        });
     blocks.push(skillContext.block);
 
     return buildAssembleResult({

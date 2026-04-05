@@ -7,6 +7,10 @@ import {
   type AffectState,
   rehydrateAffectState,
 } from '../../../core/emotion/affect_state';
+import {
+  buildInterventionPolicySystemMessage,
+  deriveInterventionPolicy,
+} from '../../../core/emotion/intervention_policy';
 import { shouldGuardTools } from '../../../core/emotion/affect_policy';
 import * as llmFactory from '../../../core/provider/llm/factory';
 import * as deepseekProvider from '../../../core/provider/llm/deepseek';
@@ -18,6 +22,11 @@ import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
 import type { AffectSignal } from '../../../shared/emotion/affect';
+import type {
+  ChatAffectExperimentMode,
+  ChatExperimentalContext,
+  InterventionPolicySignal,
+} from '../../../shared/chat/intervention_policy';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import { getErrorMessage } from '../../utils/errors';
 import {
@@ -161,6 +170,33 @@ export const createChatStreaming = (deps: {
     return merged;
   };
 
+  const insertSystemMessages = (
+    messages: ChatInputMessage[],
+    additions: string[]
+  ): ChatInputMessage[] => {
+    const nextSystemMessages = additions
+      .map(content => content.trim())
+      .filter(Boolean)
+      .map(content => ({ role: 'system', content }) as ChatInputMessage);
+
+    if (nextSystemMessages.length === 0) return messages;
+
+    const insertIndex = messages.findIndex(message => message.role !== 'system');
+    const headIndex = insertIndex === -1 ? messages.length : insertIndex;
+    return [...messages.slice(0, headIndex), ...nextSystemMessages, ...messages.slice(headIndex)];
+  };
+
+  const getExperimentalAffectMode = (
+    experimentalContext?: ChatExperimentalContext
+  ): ChatAffectExperimentMode | null => {
+    const affectMode = experimentalContext?.affectMode;
+    return affectMode === 'no_affect' ||
+      affectMode === 'tone_only' ||
+      affectMode === 'explicit_policy'
+      ? affectMode
+      : null;
+  };
+
   const collectRequiredBuiltinSkillTools = (
     skills: Array<{ requiredTools?: string[] }>
   ): string[] => {
@@ -300,6 +336,7 @@ export const createChatStreaming = (deps: {
     skillMode?: 'manual' | 'auto';
     threadId?: string;
     maxIterations?: number;
+    experimentalContext?: ChatExperimentalContext;
   };
 
   type PreparedChatTurn = {
@@ -313,6 +350,7 @@ export const createChatStreaming = (deps: {
     prompt: string;
     guardActive: boolean;
     affectSignal: AffectSignal | null;
+    interventionPolicy: InterventionPolicySignal | null;
     guardedTools: string[];
     enableTools: boolean;
   };
@@ -330,30 +368,69 @@ export const createChatStreaming = (deps: {
     );
     const lastModelMessage = modelMessages[modelMessages.length - 1];
     const emotionConfig = getEmotionConfig();
-    if (lastModelMessage) {
-      deps.memory.preloadRealtimeEmotion?.(
-        options.threadId,
-        getPromptFromMessage(lastModelMessage)
-      );
+    const experimentalAffectMode = getExperimentalAffectMode(options.experimentalContext);
+    const shouldAwaitRealtimeAffect = options.experimentalContext?.awaitRealtimeAffect === true;
+    const lastPrompt = lastModelMessage ? getPromptFromMessage(lastModelMessage) : '';
+    const realtimeAffectContext =
+      lastPrompt && shouldAwaitRealtimeAffect && deps.memory.buildRealtimeAffectContext
+        ? await deps.memory.buildRealtimeAffectContext(options.threadId, lastPrompt, {
+            force: true,
+          })
+        : { message: '', state: null };
+
+    if (lastPrompt && !shouldAwaitRealtimeAffect) {
+      deps.memory.preloadRealtimeEmotion?.(options.threadId, lastPrompt);
     }
-    const affectStateForPolicy = getAffectStateForPolicy(options.threadId);
-    const guardActive = shouldRequireGuardedTools(affectStateForPolicy);
-    const affectSignal = toAffectSignal(affectStateForPolicy, 'history', guardActive);
-    const affectStateForRouting = emotionConfig?.injectToSystemPrompt
-      ? (affectSignal?.state ?? null)
-      : null;
+    const storedAffectState = getAffectStateForPolicy(options.threadId);
+    const effectiveAffectState = realtimeAffectContext.state ?? storedAffectState;
+    const affectSource = realtimeAffectContext.state ? 'realtime' : 'history';
+    const experimentalModeActive = experimentalAffectMode !== null;
+    const rawAffectEnabled =
+      experimentalAffectMode === 'tone_only' || experimentalAffectMode === 'explicit_policy';
+    const affectContextMode = experimentalAffectMode === 'no_affect' ? 'disabled' : 'default';
+    const guardState = experimentalModeActive ? null : storedAffectState;
+    const guardActive = shouldRequireGuardedTools(guardState);
+    const affectSignal = experimentalModeActive
+      ? rawAffectEnabled
+        ? toAffectSignal(effectiveAffectState, affectSource, false)
+        : null
+      : toAffectSignal(guardState, 'history', guardActive);
+    const affectStateForRouting =
+      experimentalModeActive || !emotionConfig?.injectToSystemPrompt
+        ? null
+        : affectSignal?.state ?? null;
+    const realtimeAffectMessage =
+      rawAffectEnabled || shouldAwaitRealtimeAffect ? realtimeAffectContext.message : '';
 
     const assembledContext = await contextAssembler.assemble({
       messages: modelMessages,
       threadId: options.threadId,
       skillIds: options.skillIds,
       skillMode: options.skillMode,
+      contextMode: options.experimentalContext?.contextMode,
       includeMemory: false,
       modelCapability,
       affectState: affectStateForRouting,
+      affectContextMode,
+      realtimeAffectMessage,
       onMemoryRetrieved: options.onMemoryRetrieved,
     });
-    const finalMessages = assembledContext.messages;
+    const interventionPolicy =
+      experimentalAffectMode !== null
+        ? {
+            ...deriveInterventionPolicy({
+              messages: modelMessages,
+              affectState:
+                experimentalAffectMode === 'explicit_policy' ? effectiveAffectState : null,
+            }),
+            applied: experimentalAffectMode === 'explicit_policy',
+          }
+        : null;
+    const finalMessages = interventionPolicy?.applied
+      ? insertSystemMessages(assembledContext.messages, [
+          buildInterventionPolicySystemMessage(interventionPolicy),
+        ])
+      : assembledContext.messages;
     const selectedSkillIds = assembledContext.usedSkills
       .map(skill => skill.id)
       .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
@@ -381,6 +458,7 @@ export const createChatStreaming = (deps: {
       toolMode: mode,
       mcpServerIds: options.mcpServerIds,
       affectSignal,
+      interventionPolicy,
     });
 
     if (!finalMessages || finalMessages.length === 0) {
@@ -404,6 +482,7 @@ export const createChatStreaming = (deps: {
       prompt,
       guardActive,
       affectSignal,
+      interventionPolicy,
       guardedTools,
       enableTools: guardedTools.length > 0 || selectedSkillIds.length > 0,
     };

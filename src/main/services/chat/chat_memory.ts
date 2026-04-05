@@ -4,13 +4,17 @@ import * as chatThreadDb from '../../../core/db/chat_thread';
 import * as emotionDb from '../../../core/db/emotion';
 import * as memoryDb from '../../../core/db/memory';
 import {
+  type AffectState,
   buildAffectSystemMessage,
   collectEmotionSamples,
   computeAffectState,
 } from '../../../core/emotion/affect_state';
 import { createLogger } from '../../../core/logger';
 import { generateLongMemorySummary } from '../../../core/memory/auto_summarize';
-import { analyzeEmotionWithAgent } from '../../../core/provider/emotion_model';
+import {
+  analyzeEmotionWithAgent,
+  type EmotionResult,
+} from '../../../core/provider/emotion_model';
 import { planMemoryRetrieval } from '../../../core/provider/memory_retrieval';
 import { parseJsonStringArray } from '../../../shared/utils/json';
 import { getErrorMessage } from '../../utils/errors';
@@ -63,9 +67,9 @@ const hashText = (text: string): string => {
 
 export const createChatMemory = () => {
   const memorySummarizeInFlight = new Set<string>();
-  const emotionInFlight = new Set<string>();
-  const realtimeEmotionCache = new Map<string, { emotion: unknown; createdAt: number }>();
-  const realtimeEmotionAnalysisInFlight = new Map<string, Promise<unknown | null>>();
+  const emotionAnalysisInFlight = new Map<string, Promise<void>>();
+  const realtimeEmotionCache = new Map<string, { emotion: EmotionResult; createdAt: number }>();
+  const realtimeEmotionAnalysisInFlight = new Map<string, Promise<EmotionResult | null>>();
 
   const getMemoryConfig = () => {
     const appConfig = getAppConfig();
@@ -124,7 +128,7 @@ export const createChatMemory = () => {
     }
   };
 
-  const recordRealtimeEmotion = (threadId: string, content: string, emotion: unknown) => {
+  const recordRealtimeEmotion = (threadId: string, content: string, emotion: EmotionResult) => {
     if (!threadId) return;
     const trimmed = content.trim();
     if (!trimmed) return;
@@ -133,7 +137,7 @@ export const createChatMemory = () => {
     realtimeEmotionCache.set(key, { emotion, createdAt: Date.now() });
   };
 
-  const consumeRealtimeEmotion = (threadId: string, content: string): unknown | null => {
+  const consumeRealtimeEmotion = (threadId: string, content: string): EmotionResult | null => {
     if (!threadId) return null;
     const trimmed = content.trim();
     if (!trimmed) return null;
@@ -149,7 +153,7 @@ export const createChatMemory = () => {
     return entry.emotion;
   };
 
-  const peekRealtimeEmotion = (threadId: string, content: string): unknown | null => {
+  const peekRealtimeEmotion = (threadId: string, content: string): EmotionResult | null => {
     if (!threadId) return null;
     const trimmed = content.trim();
     if (!trimmed) return null;
@@ -164,7 +168,10 @@ export const createChatMemory = () => {
     return entry.emotion;
   };
 
-  const analyzeRealtimeEmotion = (threadId: string, content: string): Promise<unknown | null> => {
+  const analyzeRealtimeEmotion = (
+    threadId: string,
+    content: string
+  ): Promise<EmotionResult | null> => {
     const trimmed = content.trim();
     if (!threadId || !trimmed) {
       return Promise.resolve(null);
@@ -231,6 +238,94 @@ export const createChatMemory = () => {
     const affectState = computeAffectStateForThread(threadId);
     if (!affectState) return '';
     return buildAffectSystemMessage(affectState);
+  };
+
+  const buildRealtimeAffectContext = async (
+    threadId: string | undefined,
+    content: string,
+    options?: { force?: boolean }
+  ): Promise<{ message: string; state: AffectState | null }> => {
+    try {
+      const emotionConfig = getEmotionConfig();
+      const force = options?.force === true;
+      if (!emotionConfig?.enabled) {
+        return { message: '', state: null };
+      }
+      if (!force && (!emotionConfig.injectToSystemPrompt || !emotionConfig.realtimeAnalysis)) {
+        return { message: '', state: null };
+      }
+
+      const normalizedThreadId = typeof threadId === 'string' ? threadId.trim() : '';
+      const trimmed = content.trim();
+      if (!trimmed) return { message: '', state: null };
+
+      const minSampleCount = Math.max(1, Math.floor(emotionConfig.minSampleCount || 1));
+      if (!normalizedThreadId && minSampleCount > 1) {
+        return { message: '', state: null };
+      }
+
+      if (normalizedThreadId) {
+        const thread = chatThreadDb.getChatThread(normalizedThreadId);
+        if (thread?.is_incognito) return { message: '', state: null };
+      }
+
+      const emotion = normalizedThreadId
+        ? await analyzeRealtimeEmotion(normalizedThreadId, trimmed)
+        : await analyzeEmotionWithAgent(trimmed);
+      if (!emotion) return { message: '', state: null };
+
+      const realtimeSample = {
+        emotion: {
+          label: emotion.label,
+          confidence: emotion.confidence,
+          ...(typeof emotion.valence === 'number' ? { valence: emotion.valence } : {}),
+          ...(typeof emotion.arousal === 'number' ? { arousal: emotion.arousal } : {}),
+          ...(emotion.emotions ? { emotions: emotion.emotions } : {}),
+        },
+        timestamp: new Date(),
+      };
+
+      const fetchLimit = Math.max(
+        10,
+        Math.floor(emotionConfig.windowSize || 0) * 3,
+        minSampleCount
+      );
+      const samples = [realtimeSample];
+
+      if (normalizedThreadId) {
+        const events = emotionDb.listEmotionEvents(normalizedThreadId, fetchLimit);
+        samples.push(...collectEmotionSamples(events));
+      }
+
+      let affectState = computeAffectState(samples, emotionConfig);
+      if (!affectState && normalizedThreadId && canStoreShortMemory()) {
+        const shortEntries = memoryDb.listShortMemory(normalizedThreadId, fetchLimit);
+        affectState = computeAffectState(
+          [realtimeSample, ...collectEmotionSamples(shortEntries)],
+          emotionConfig
+        );
+      }
+
+      if (!affectState) return { message: '', state: null };
+      return {
+        message: buildAffectSystemMessage(affectState),
+        state: affectState,
+      };
+    } catch (error) {
+      chatMemoryLogger.event({
+        level: 'warn',
+        event: 'chat.memory.realtime_affect_context',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: typeof threadId === 'string' ? threadId : null,
+        },
+        data: {
+          error_message: getErrorMessage(error),
+        },
+      });
+      return { message: '', state: null };
+    }
   };
 
   const computeAffectStateForThread = (threadId: string) => {
@@ -315,21 +410,21 @@ export const createChatMemory = () => {
     threadId: string;
     messageId: string;
     messageJson: string;
-  }) => {
+  }): Promise<void> => {
     const emotionConfig = getEmotionConfig();
-    if (!emotionConfig?.enabled) return;
+    if (!emotionConfig?.enabled) return Promise.resolve();
     const thread = chatThreadDb.getChatThread(params.threadId);
-    if (thread?.is_incognito) return;
-    if (emotionInFlight.has(params.messageId)) return;
+    if (thread?.is_incognito) return Promise.resolve();
+    const inFlight = emotionAnalysisInFlight.get(params.messageId);
+    if (inFlight) return inFlight;
 
     const extracted = memoryDb.extractTextFromMessageJson(params.messageJson);
-    if (!extracted || extracted.role !== 'user') return;
+    if (!extracted || extracted.role !== 'user') return Promise.resolve();
 
     const content = extracted.content.trim();
-    if (!content) return;
+    if (!content) return Promise.resolve();
 
-    emotionInFlight.add(params.messageId);
-    void (async () => {
+    const promise = (async () => {
       try {
         const cachedEmotion = consumeRealtimeEmotion(params.threadId, content);
         const emotion = cachedEmotion ?? (await analyzeRealtimeEmotion(params.threadId, content));
@@ -374,9 +469,12 @@ export const createChatMemory = () => {
           },
         });
       } finally {
-        emotionInFlight.delete(params.messageId);
+        emotionAnalysisInFlight.delete(params.messageId);
       }
     })();
+
+    emotionAnalysisInFlight.set(params.messageId, promise);
+    return promise;
   };
 
   const buildMemoryPreview = (entry: {
@@ -552,7 +650,7 @@ export const createChatMemory = () => {
       );
       memoryDb.pruneShortMemory(params.threadId);
 
-      queueEmotionAnalysis({
+      void queueEmotionAnalysis({
         threadId: params.threadId,
         messageId: params.messageId,
         messageJson: params.messageJson,
@@ -578,11 +676,21 @@ export const createChatMemory = () => {
 
   const getAffectState = (threadId: string) => computeAffectStateForThread(threadId);
 
+  const waitForEmotionAnalysis = async (params: {
+    threadId: string;
+    messageId: string;
+    messageJson: string;
+  }) => {
+    await queueEmotionAnalysis(params);
+  };
+
   return {
     injectMemoryIntoMessages,
     onMessagePersisted,
     preloadRealtimeEmotion,
+    buildRealtimeAffectContext,
     recordRealtimeEmotion,
+    waitForEmotionAnalysis,
     getAffectState,
     getAffectContextMessage,
     retrieveRelevantMemory,

@@ -30,6 +30,7 @@ import type {
 import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
+import type { ChatExperimentalContext } from '../chat/intervention_policy';
 
 export type ProviderInput = Partial<Provider> &
   Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
@@ -73,6 +74,7 @@ export type ChatInvocationOptions = {
   skillMode?: 'manual' | 'auto';
   threadId?: string;
   maxIterations?: number;
+  experimentalContext?: ChatExperimentalContext;
 };
 
 export type ChatInvocationResult = {

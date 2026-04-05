@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  parseChatMessageCreatePayload,
   parseChatSendPayload,
   parseClientRegistrationPayload,
   parseDaemonWebSocketMessage,
@@ -48,6 +49,11 @@ describe('daemon server schemas', () => {
         thread_id: 'thread_1',
         skillIds: ['skill_1'],
         skillMode: 'manual',
+        experimental_context: {
+          affect_mode: 'explicit_policy',
+          context_mode: 'benchmark_clean',
+          await_realtime_affect: true,
+        },
       })
     ).toEqual({
       providerType: 'openai',
@@ -58,6 +64,11 @@ describe('daemon server schemas', () => {
       mcpServerIds: undefined,
       skillIds: ['skill_1'],
       skillMode: 'manual',
+      experimentalContext: {
+        affectMode: 'explicit_policy',
+        contextMode: 'benchmark_clean',
+        awaitRealtimeAffect: true,
+      },
     });
 
     expect(() =>
@@ -66,6 +77,24 @@ describe('daemon server schemas', () => {
         model: '',
       })
     ).toThrow();
+  });
+
+  it('parses benchmark message replay payloads', () => {
+    expect(
+      parseChatMessageCreatePayload({
+        thread_id: 'thread_1',
+        role: 'user',
+        content: 'hello',
+        await_emotion_analysis: true,
+      })
+    ).toEqual({
+      threadId: 'thread_1',
+      role: 'user',
+      content: 'hello',
+      timestamp: undefined,
+      metadata: undefined,
+      awaitEmotionAnalysis: true,
+    });
   });
 
   it('validates MCP create and update payload shapes', () => {
@@ -119,6 +148,7 @@ describe('daemon server schemas', () => {
         mcpServerIds: undefined,
         skillIds: undefined,
         skillMode: undefined,
+        experimentalContext: undefined,
       },
     });
 

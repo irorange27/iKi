@@ -188,6 +188,35 @@ describe('run-daemon-benchmark', () => {
     ]);
   });
 
+  it('normalizes setup-message replay and experimental context on generic tasks', async () => {
+    const script = await import('../../scripts/benchmarks/run-daemon-benchmark.cjs');
+
+    const task = script.normalizeTask(
+      {
+        id: 'affect_1',
+        messages: [{ role: 'user', content: 'hello' }],
+        setup_messages: [
+          { role: 'assistant', content: 'prior turn' },
+          { role: 'user', content: 'blocked', await_emotion_analysis: true },
+        ],
+        experimental_context: {
+          affect_mode: 'explicit_policy',
+          context_mode: 'benchmark_clean',
+        },
+      },
+      0
+    );
+
+    expect(task.setupMessages).toEqual([
+      { role: 'assistant', content: 'prior turn' },
+      { role: 'user', content: 'blocked', awaitEmotionAnalysis: true },
+    ]);
+    expect(task.experimentalContext).toEqual({
+      affectMode: 'explicit_policy',
+      contextMode: 'benchmark_clean',
+    });
+  });
+
   it('scores BrowseComp predictions in preview mode from extracted exact answers', async () => {
     const script = await import('../../scripts/benchmarks/run-daemon-benchmark.cjs');
     const score = await script.scorePrediction({

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getDefaultAllowedTools } from './tool_access';
 import type { ChatInvocationOptions } from '../shared/types/electron_api';
 import type { McpServerInput } from '../shared/types/mcp';
+import type { ChatExperimentalContext } from '../shared/chat/intervention_policy';
 
 const DEFAULT_SCOPES = [
   'chat:read',
@@ -26,6 +27,31 @@ const NullableStringRecordSchema = z
   .union([z.record(NonEmptyTrimmedStringSchema, z.string()), z.null()])
   .optional();
 const LooseObjectSchema = z.object({}).passthrough();
+const ExperimentalContextSchema = z
+  .object({
+    affect_mode: z.enum(['no_affect', 'tone_only', 'explicit_policy']).optional(),
+    affectMode: z.enum(['no_affect', 'tone_only', 'explicit_policy']).optional(),
+    context_mode: z.enum(['default', 'benchmark_clean']).optional(),
+    contextMode: z.enum(['default', 'benchmark_clean']).optional(),
+    await_realtime_affect: z.boolean().optional(),
+    awaitRealtimeAffect: z.boolean().optional(),
+  })
+  .passthrough()
+  .transform(
+    value =>
+      ({
+        ...(value.affect_mode || value.affectMode
+          ? { affectMode: value.affect_mode ?? value.affectMode }
+          : {}),
+        ...(value.context_mode || value.contextMode
+          ? { contextMode: value.context_mode ?? value.contextMode }
+          : {}),
+        ...(typeof value.await_realtime_affect === 'boolean' ||
+        typeof value.awaitRealtimeAffect === 'boolean'
+          ? { awaitRealtimeAffect: value.await_realtime_affect ?? value.awaitRealtimeAffect }
+          : {}),
+      }) satisfies ChatExperimentalContext
+  );
 
 const McpServerBaseSchema = z.object({
   name: NonEmptyTrimmedStringSchema,
@@ -98,6 +124,7 @@ const ChatSendPayloadSchema = z
     skillIds: StringArraySchema.optional(),
     skillMode: z.enum(['manual', 'auto']).optional(),
     maxIterations: z.number().int().positive().max(100).optional(),
+    experimental_context: ExperimentalContextSchema.optional(),
   })
   .passthrough()
   .transform(value => ({
@@ -110,6 +137,26 @@ const ChatSendPayloadSchema = z
     skillIds: value.skillIds,
     skillMode: value.skillMode as ChatInvocationOptions['skillMode'],
     maxIterations: value.maxIterations,
+    experimentalContext: value.experimental_context,
+  }));
+
+const ChatMessageCreatePayloadSchema = z
+  .object({
+    thread_id: NonEmptyTrimmedStringSchema,
+    role: NonEmptyTrimmedStringSchema,
+    content: z.string(),
+    timestamp: OptionalNullableTrimmedStringSchema,
+    metadata: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+    await_emotion_analysis: z.boolean().optional(),
+  })
+  .passthrough()
+  .transform(value => ({
+    threadId: value.thread_id,
+    role: value.role,
+    content: value.content,
+    timestamp: value.timestamp,
+    metadata: value.metadata,
+    awaitEmotionAnalysis: value.await_emotion_analysis === true,
   }));
 
 const ApproveToolPayloadSchema = z
@@ -171,6 +218,7 @@ const DaemonWebSocketMessageSchema = z.discriminatedUnion('type', [
 export type ClientRegistrationPayload = z.infer<typeof ClientRegistrationPayloadSchema>;
 export type ChatThreadCreatePayload = z.infer<typeof ChatThreadCreatePayloadSchema>;
 export type ChatSendPayload = z.infer<typeof ChatSendPayloadSchema>;
+export type ChatMessageCreatePayload = z.infer<typeof ChatMessageCreatePayloadSchema>;
 export type ApproveToolPayload = z.infer<typeof ApproveToolPayloadSchema>;
 export type MemorySearchPayload = z.infer<typeof MemorySearchPayloadSchema>;
 export type DaemonWebSocketMessage = z.infer<typeof DaemonWebSocketMessageSchema>;
@@ -201,6 +249,9 @@ export const parseChatThreadCreatePayload = (value: unknown): ChatThreadCreatePa
 
 export const parseChatSendPayload = (value: unknown): ChatSendPayload =>
   ChatSendPayloadSchema.parse(value);
+
+export const parseChatMessageCreatePayload = (value: unknown): ChatMessageCreatePayload =>
+  ChatMessageCreatePayloadSchema.parse(value);
 
 export const parseApproveToolPayload = (value: unknown): ApproveToolPayload =>
   ApproveToolPayloadSchema.parse(value);
