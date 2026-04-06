@@ -18,6 +18,10 @@ A local agent pet for AI provider orchestration.
 - Structured context assembly with rolling thread summaries, bounded memory / skill context, and
   visible context reports per assistant turn.
 
+- A typed continuity layer for confirmed owner facts, preferences, boundaries, workflow rules, and
+  reference notes, with explicit-message capture and evidence tracking instead of relying only on
+  freeform archive memory or speculative future abstractions.
+
 - Model-aware context budgeting that can use `models.dev` metadata (model list + context window)
   to avoid overstuffing smaller models while keeping larger-model defaults stable.
 
@@ -36,8 +40,8 @@ A local agent pet for AI provider orchestration.
   hacks; destructive skill changes remain explicitly approval-gated.
 
 - A user-editable local `brain/` markdown folder under the app user-data directory
-  (`iki.md`, `owner.md`, `relationship.md`) so iKi continuity and owner identity can start from
-  simple files instead of requiring a heavier memory schema first.
+  (`iki.md`, `owner.md`) so assistant baseline notes stay local and
+  inspectable; those files complement, but do not replace, the typed continuity model.
 
 - Threads now auto-provision a hidden temporary workspace under the app user-data directory, so
   local file tools have a safe per-thread scratch area by default while still allowing edits under

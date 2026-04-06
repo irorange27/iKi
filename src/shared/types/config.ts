@@ -140,7 +140,6 @@ export interface AppConfig {
       maxRecentTokens: number;
       maxMessageTokens: number;
       maxIdentityTokens: number;
-      maxRelationshipTokens: number;
       maxLifeStateTokens: number;
       maxReflectionTokens: number;
       summaryTriggerMessages: number;
@@ -168,6 +167,13 @@ export interface AppConfig {
         disableAutoTools: boolean;
       };
     };
+  };
+  continuity: {
+    enabled: boolean;
+    autoCaptureExplicitFacts: boolean;
+    injectToSystemPrompt: boolean;
+    useLegacyContextBlocks: boolean;
+    maxRetrievedItems: number;
   };
   speech: {
     enabled: boolean;

@@ -137,86 +137,6 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">{{ t('settings.life.relationshipTitle') }}</div>
-      <p class="card-help">{{ t('settings.life.relationshipDescription') }}</p>
-
-      <p v-if="relationshipErrorText" class="tasks-error">{{ relationshipErrorText }}</p>
-      <template v-else-if="relationshipOverview">
-        <div class="life-summary-block">
-          <div class="life-summary-label">{{ t('settings.life.ownerBaseline') }}</div>
-          <div class="life-summary-text">
-            {{ relationshipOverview.owner.owner_label }}: {{
-              relationshipOverview.owner.relationship_to_owner
-            }}
-          </div>
-        </div>
-
-        <div v-if="recentRelationshipStates.length === 0" class="tasks-empty">
-          {{ t('settings.life.noRelationshipStates') }}
-        </div>
-        <div v-else class="life-episode-list">
-          <div
-            v-for="state in recentRelationshipStates"
-            :key="state.id"
-            class="life-episode-item"
-          >
-            <div class="life-episode-head">
-              <div class="task-item-title relationship-title">
-                <span class="task-name">{{ state.subject_label || state.scope_id }}</span>
-                <span class="life-chip">{{ formatRelationshipSource(state.source_kind) }}</span>
-              </div>
-              <div class="life-episode-time">
-                {{
-                  state.last_interaction_at
-                    ? formatTimestamp(state.last_interaction_at)
-                    : t('settings.life.noInteractionYet')
-                }}
-              </div>
-            </div>
-
-            <div class="life-episode-body">
-              <div>{{ state.relationship_summary }}</div>
-            </div>
-
-            <div v-if="state.preferred_address" class="life-meta-lines">
-              <div>
-                <span class="task-meta-label">{{ t('settings.life.preferredAddress') }}:</span>
-                {{ state.preferred_address }}
-              </div>
-            </div>
-
-            <div v-if="parseList(state.boundaries_json).length > 0" class="life-summary-block mini-block">
-              <div class="life-summary-label">{{ t('settings.life.boundaries') }}</div>
-              <div class="life-list">
-                <div v-for="item in parseList(state.boundaries_json)" :key="item">{{ item }}</div>
-              </div>
-            </div>
-
-            <div v-if="parseList(state.notes_json).length > 0" class="life-summary-block mini-block">
-              <div class="life-summary-label">{{ t('settings.life.notes') }}</div>
-              <div class="life-list">
-                <div v-for="item in parseList(state.notes_json)" :key="item">{{ item }}</div>
-              </div>
-            </div>
-
-            <div class="life-meta-lines">
-              <div>
-                <span class="task-meta-label">{{ t('common.thread') }}:</span>
-                {{ state.scope_id }}
-              </div>
-              <div>
-                <span class="task-meta-label">{{ t('settings.life.updated') }}:</span>
-                {{ formatTimestamp(state.updated_at) }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
-      <div v-else-if="loading" class="tasks-empty">{{ t('settings.life.relationshipLoading') }}</div>
-      <div v-else class="tasks-empty">{{ t('settings.life.relationshipEmpty') }}</div>
-    </div>
-
-    <div class="settings-card">
       <div class="card-title">{{ t('settings.life.episodesTitle') }}</div>
       <p class="card-help">{{ t('settings.life.episodesDescription') }}</p>
 
@@ -311,10 +231,8 @@ import type {
   LifePushPayload,
   LifeSnapshot,
 } from '../../../shared/types/life';
-import type { RelationshipOverview, RelationshipSourceKind } from '../../../shared/types/relationship';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { lifeService } from '../../services/life_service';
-import { relationshipService } from '../../services/relationship_service';
 import { formatTimestamp } from './settings_formatters';
 
 const props = defineProps<{
@@ -326,9 +244,7 @@ const loading = ref(false);
 const controlLoading = ref(false);
 const errorText = ref('');
 const controlErrorText = ref('');
-const relationshipErrorText = ref('');
 const lifeOverview = ref<LifeOverview | null>(null);
-const relationshipOverview = ref<RelationshipOverview | null>(null);
 const pendingMode = ref<LifeOwnerMode | null | undefined>(undefined);
 const overviewLimit = 8;
 
@@ -338,7 +254,6 @@ let removePushListener: (() => void) | null = null;
 const snapshot = computed<LifeSnapshot | null>(() => lifeOverview.value?.snapshot ?? null);
 const recentEpisodes = computed(() => lifeOverview.value?.recentEpisodes ?? []);
 const recentReflections = computed(() => lifeOverview.value?.recentReflections ?? []);
-const recentRelationshipStates = computed(() => relationshipOverview.value?.recentStates ?? []);
 const formatOwnerMode = (mode: LifeOwnerMode | null | undefined): string => {
   if (!mode) return t('settings.life.mode.auto');
   if (mode === 'sleep') return t('settings.life.mode.sleep');
@@ -385,25 +300,6 @@ const ownerModeLabel = computed(() => {
 });
 
 const formatPercent = (value: number): string => `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
-const parseList = (raw: string | null | undefined): string[] => {
-  if (!raw?.trim()) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-      : [];
-  } catch {
-    return [];
-  }
-};
-
-const formatRelationshipSource = (sourceKind: RelationshipSourceKind): string => {
-  if (sourceKind === 'desktop-owner-thread') return t('settings.life.source.desktopOwner');
-  if (sourceKind === 'napcat-private') return t('settings.life.source.napcatPrivate');
-  if (sourceKind === 'napcat-group') return t('settings.life.source.napcatGroup');
-  if (sourceKind === 'external-client-thread') return t('settings.life.source.externalClient');
-  return t('settings.life.source.unknown');
-};
 
 const loadState = async (limit = overviewLimit, options?: { showLoading?: boolean }) => {
   const showLoading = options?.showLoading ?? true;
@@ -411,25 +307,16 @@ const loadState = async (limit = overviewLimit, options?: { showLoading?: boolea
     loading.value = true;
   }
   errorText.value = '';
-  relationshipErrorText.value = '';
-
-  const [lifeResult, relationshipResult] = await Promise.allSettled([
-    lifeService.getOverview(limit),
-    relationshipService.getOverview(limit),
-  ]);
+  const lifeResult = await lifeService.getOverview(limit).then(
+    value => ({ status: 'fulfilled', value } as const),
+    reason => ({ status: 'rejected', reason } as const)
+  );
 
   if (lifeResult.status === 'fulfilled') {
     lifeOverview.value = lifeResult.value;
   } else {
     errorText.value = getErrorMessage(lifeResult.reason);
     lifeOverview.value = null;
-  }
-
-  if (relationshipResult.status === 'fulfilled') {
-    relationshipOverview.value = relationshipResult.value;
-  } else {
-    relationshipErrorText.value = getErrorMessage(relationshipResult.reason);
-    relationshipOverview.value = null;
   }
 
   loading.value = false;
@@ -442,7 +329,6 @@ const refreshOverview = async () => {
 const forceRefresh = async () => {
   loading.value = true;
   errorText.value = '';
-  relationshipErrorText.value = '';
   try {
     await lifeService.refresh();
   } catch (error: unknown) {
@@ -642,12 +528,6 @@ onUnmounted(() => {
 .secondary-btn-active {
   border-color: color-mix(in srgb, var(--accent-color) 34%, var(--border-color));
   background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
-}
-
-.relationship-title {
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 @media (max-width: 720px) {

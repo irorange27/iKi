@@ -73,7 +73,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       maxRecentTokens: 2400,
       maxMessageTokens: 420,
       maxIdentityTokens: 320,
-      maxRelationshipTokens: 220,
       maxLifeStateTokens: 220,
       maxReflectionTokens: 240,
       summaryTriggerMessages: 14,
@@ -101,6 +100,13 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
         disableAutoTools: false,
       },
     },
+  },
+  continuity: {
+    enabled: true,
+    autoCaptureExplicitFacts: true,
+    injectToSystemPrompt: true,
+    useLegacyContextBlocks: false,
+    maxRetrievedItems: 6,
   },
   speech: {
     enabled: false,
@@ -238,6 +244,10 @@ export const mergeAppConfigWithBase = (
           ...(((rawConfig.memory ?? {}).emotion ?? {}).toolGuard ?? {}),
         },
       },
+    },
+    continuity: {
+      ...base.continuity,
+      ...(rawConfig.continuity ?? {}),
     },
     speech: {
       ...base.speech,

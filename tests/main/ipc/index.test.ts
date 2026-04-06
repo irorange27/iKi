@@ -13,7 +13,6 @@ const { registerMocks, callOrder } = vi.hoisted(() => {
       registerWindowIpc: namedRegister('window'),
       registerConfigIpc: namedRegister('config'),
       registerLifeIpc: namedRegister('life'),
-      registerRelationshipIpc: namedRegister('relationship'),
       registerProvidersIpc: namedRegister('providers'),
       registerMcpIpc: namedRegister('mcp'),
       registerMemoryIpc: namedRegister('memory'),
@@ -39,9 +38,6 @@ vi.mock('../../../src/main/ipc/config', () => ({
 }));
 vi.mock('../../../src/main/ipc/life', () => ({
   registerLifeIpc: registerMocks.registerLifeIpc,
-}));
-vi.mock('../../../src/main/ipc/relationship', () => ({
-  registerRelationshipIpc: registerMocks.registerRelationshipIpc,
 }));
 vi.mock('../../../src/main/ipc/providers', () => ({
   registerProvidersIpc: registerMocks.registerProvidersIpc,
@@ -100,7 +96,6 @@ describe('main IPC registration', () => {
       'config',
       'updater',
       'life',
-      'relationship',
       'providers',
       'mcp',
       'memory',

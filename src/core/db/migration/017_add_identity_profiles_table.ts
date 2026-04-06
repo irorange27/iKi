@@ -11,7 +11,7 @@ export const migration: Migration = {
         name TEXT NOT NULL,
         self_description TEXT NOT NULL DEFAULT '',
         owner_name TEXT NOT NULL DEFAULT '',
-        relationship_to_owner TEXT NOT NULL DEFAULT '',
+        owner_role_description TEXT NOT NULL DEFAULT '',
         core_values TEXT,
         boundaries TEXT,
         tone_guidance TEXT NOT NULL DEFAULT '',

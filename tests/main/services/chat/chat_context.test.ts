@@ -9,8 +9,9 @@ const {
   extractTextFromMessageJsonMock,
   generateThreadSummaryMock,
   resolveSkillsSystemPromptMock,
-  getIdentityContextMessageMock,
-  getRelationshipContextMessageMock,
+  getAssistantProfileContextMessageMock,
+  retrieveRelevantContinuityMock,
+  shouldUseLegacyContinuityContextBlocksMock,
   getLifeContextMessageMock,
   getRecentLifeReflectionContextMessageMock,
 } = vi.hoisted(() => ({
@@ -22,8 +23,9 @@ const {
   extractTextFromMessageJsonMock: vi.fn(),
   generateThreadSummaryMock: vi.fn(),
   resolveSkillsSystemPromptMock: vi.fn(),
-  getIdentityContextMessageMock: vi.fn(),
-  getRelationshipContextMessageMock: vi.fn(),
+  getAssistantProfileContextMessageMock: vi.fn(),
+  retrieveRelevantContinuityMock: vi.fn(),
+  shouldUseLegacyContinuityContextBlocksMock: vi.fn(),
   getLifeContextMessageMock: vi.fn(),
   getRecentLifeReflectionContextMessageMock: vi.fn(),
 }));
@@ -54,12 +56,10 @@ vi.mock('../../../../src/main/services/chat/chat_skills', () => ({
   resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
 }));
 
-vi.mock('../../../../src/main/services/identity/identity_service', () => ({
-  getIdentityContextMessage: getIdentityContextMessageMock,
-}));
-
-vi.mock('../../../../src/main/services/relationship/relationship_service', () => ({
-  getRelationshipContextMessage: getRelationshipContextMessageMock,
+vi.mock('../../../../src/main/services/continuity/continuity_service', () => ({
+  getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,
+  retrieveRelevantContinuity: retrieveRelevantContinuityMock,
+  shouldUseLegacyContinuityContextBlocks: shouldUseLegacyContinuityContextBlocksMock,
 }));
 
 vi.mock('../../../../src/main/services/life/life_runtime', () => ({
@@ -80,7 +80,6 @@ const baseConfig = {
       maxRecentTokens: 4000,
       maxMessageTokens: 200,
       maxIdentityTokens: 120,
-      maxRelationshipTokens: 120,
       maxLifeStateTokens: 120,
       maxReflectionTokens: 120,
       summaryTriggerMessages: 5,
@@ -132,8 +131,9 @@ beforeEach(() => {
     usedSkills: [],
     skillMode: 'manual',
   });
-  getIdentityContextMessageMock.mockReturnValue('');
-  getRelationshipContextMessageMock.mockReturnValue('');
+  getAssistantProfileContextMessageMock.mockReturnValue('');
+  retrieveRelevantContinuityMock.mockReturnValue(null);
+  shouldUseLegacyContinuityContextBlocksMock.mockReturnValue(false);
   getLifeContextMessageMock.mockReturnValue('');
   getRecentLifeReflectionContextMessageMock.mockReturnValue('');
 });
@@ -272,7 +272,7 @@ describe('chat_context assembler', () => {
         kind: 'memory',
         status: 'truncated',
         sourceCount: retrievedIds.length,
-        reason: 'memory items reduced to fit context budget',
+        reason: 'continuity or archive memory items reduced to fit context budget',
       })
     );
     expect(retrievedIds.length).toBeGreaterThan(0);
@@ -295,8 +295,52 @@ describe('chat_context assembler', () => {
     expect(String(result.messages[0].content)).toContain('Long-term memory');
   });
 
+  it('injects durable continuity through the memory block even when archive memory is unavailable', async () => {
+    const onMemoryRetrieved = vi.fn();
+    retrieveRelevantContinuityMock.mockReturnValue({
+      query: 'owner preferences',
+      results: [
+        {
+          id: 'continuity_1',
+          summary: 'preference: Call the owner Nina.',
+          score: 0.95,
+          updated_at: '2026-04-06T02:00:00.000Z',
+        },
+      ],
+      systemMessage: '',
+    });
+
+    const { assembler } = createAssembler();
+    const result = await assembler.assemble({
+      messages: [{ role: 'user', content: 'owner preferences' }],
+      onMemoryRetrieved,
+    });
+
+    expect(result.messages[0]).toEqual({
+      role: 'system',
+      content: expect.stringContaining('Durable continuity context (use only if relevant):'),
+    });
+    expect(result.messages[0]).toEqual({
+      role: 'system',
+      content: expect.stringContaining('preference: Call the owner Nina.'),
+    });
+    expect(findBlock(result, 'memory')).toEqual(
+      expect.objectContaining({
+        kind: 'memory',
+        status: 'included',
+        sourceCount: 1,
+      })
+    );
+    expect(onMemoryRetrieved).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: 'owner preferences',
+        results: [expect.objectContaining({ id: 'continuity_1' })],
+      })
+    );
+  });
+
   it('inserts assembled system blocks after preserved system prompts and before conversation turns', async () => {
-    getIdentityContextMessageMock.mockReturnValue('Identity block.');
+    getAssistantProfileContextMessageMock.mockReturnValue('Identity block.');
     resolveSkillsSystemPromptMock.mockResolvedValue({
       skillsSystemPrompt: 'Use the planning skill.',
       usedSkills: [
@@ -387,7 +431,7 @@ describe('chat_context assembler', () => {
       expect.objectContaining({
         kind: 'memory',
         status: 'dropped',
-        reason: 'no relevant memory retrieved',
+        reason: 'no relevant continuity or archive memory retrieved',
       })
     );
     expect(findBlock(result, 'affect')).toEqual(
@@ -746,7 +790,7 @@ describe('chat_context assembler', () => {
         expect.objectContaining({
           kind: 'memory',
           status: 'dropped',
-          reason: 'no relevant memory retrieved',
+          reason: 'no relevant continuity or archive memory retrieved',
         }),
         expect.objectContaining({
           kind: 'affect',
@@ -810,8 +854,7 @@ describe('chat_context assembler', () => {
   });
 
   it('drops confounding context blocks in benchmark clean mode', async () => {
-    getIdentityContextMessageMock.mockReturnValue('Identity.');
-    getRelationshipContextMessageMock.mockReturnValue('Relationship.');
+    getAssistantProfileContextMessageMock.mockReturnValue('Identity.');
     getLifeContextMessageMock.mockReturnValue('Life state.');
     getRecentLifeReflectionContextMessageMock.mockReturnValue('Reflection.');
 
@@ -833,12 +876,6 @@ describe('chat_context assembler', () => {
         reason: 'disabled for benchmark clean mode',
       })
     );
-    expect(findBlock(result, 'relationship')).toEqual(
-      expect.objectContaining({
-        kind: 'relationship',
-        status: 'dropped',
-      })
-    );
     expect(findBlock(result, 'thread-summary')).toEqual(
       expect.objectContaining({
         kind: 'thread-summary',
@@ -850,6 +887,44 @@ describe('chat_context assembler', () => {
         kind: 'skills',
         status: 'dropped',
         reason: 'disabled for benchmark clean mode',
+      })
+    );
+  });
+
+  it('drops legacy life blocks by default when continuity owns durable context', async () => {
+    getLifeContextMessageMock.mockReturnValue('Life state.');
+    getRecentLifeReflectionContextMessageMock.mockReturnValue('Reflection.');
+
+    const { assembler } = createAssembler();
+    const result = await assembler.assemble({
+      threadId: 'thread_default_continuity',
+      messages: [{ role: 'user', content: 'Respond.' }],
+    });
+
+    expect(
+      result.messages.some(
+        message => message.role === 'system' && String(message.content).includes('Life state.')
+      )
+    ).toBe(false);
+    expect(
+      result.messages.some(
+        message => message.role === 'system' && String(message.content).includes('Reflection.')
+      )
+    ).toBe(false);
+    expect(findBlock(result, 'life-state')).toEqual(
+      expect.objectContaining({
+        kind: 'life-state',
+        status: 'dropped',
+        reason:
+          'disabled by continuity config: runtime presence is no longer part of default prompt context',
+      })
+    );
+    expect(findBlock(result, 'recent-reflection')).toEqual(
+      expect.objectContaining({
+        kind: 'recent-reflection',
+        status: 'dropped',
+        reason:
+          'disabled by continuity config: life reflections are no longer part of default prompt context',
       })
     );
   });
@@ -1169,7 +1244,7 @@ describe('chat_context assembler', () => {
   });
 
   it('injects the active identity block through the shared context pipeline', async () => {
-    getIdentityContextMessageMock.mockReturnValue(
+    getAssistantProfileContextMessageMock.mockReturnValue(
       'Identity profile for iKi:\n- Core role: grounded personal AI companion.'
     );
 
@@ -1230,39 +1305,8 @@ describe('chat_context assembler', () => {
     );
   });
 
-  it('injects thread relationship context as a dedicated bounded block', async () => {
-    getRelationshipContextMessageMock.mockReturnValue(
-      'Relationship context for iKi:\n- Current thread: QQ Group 30003\n- Thread relationship: shared group context.'
-    );
-
-    const assembler = createChatContextAssembler({
-      memory: {
-        retrieveRelevantMemory: vi.fn(() => null),
-        getAffectContextMessage: vi.fn(() => ''),
-      } as never,
-    });
-
-    const result = await assembler.assemble({
-      threadId: 'thread_group',
-      messages: [{ role: 'user', content: 'summarize the discussion' }],
-    });
-
-    expect(result.messages).toContainEqual({
-      role: 'system',
-      content:
-        'Relationship context for iKi:\n- Current thread: QQ Group 30003\n- Thread relationship: shared group context.',
-    });
-    expect(result.report.blocks).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'relationship',
-          status: 'included',
-        }),
-      ])
-    );
-  });
-
   it('injects the current life-state block through the shared context pipeline', async () => {
+    shouldUseLegacyContinuityContextBlocksMock.mockReturnValue(true);
     getLifeContextMessageMock.mockReturnValue(
       'Current life state for iKi:\n- Presence: focused\n- Activity: focused_work'
     );
@@ -1294,6 +1338,7 @@ describe('chat_context assembler', () => {
   });
 
   it('injects the recent reflection block through the shared context pipeline', async () => {
+    shouldUseLegacyContinuityContextBlocksMock.mockReturnValue(true);
     getRecentLifeReflectionContextMessageMock.mockReturnValue(
       'Recent life reflection for iKi:\n- Hourly recap: task arc stayed coherent.'
     );

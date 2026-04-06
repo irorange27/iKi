@@ -8,7 +8,7 @@ const {
   getChatThreadMock,
   updateChatThreadMock,
   touchChatThreadMock,
-  touchThreadRelationshipStateMock,
+  onContinuityMessagePersistedMock,
   ensureThreadWorkspaceSelectionMock,
 } = vi.hoisted(() => ({
   addChatThreadMock: vi.fn(),
@@ -18,7 +18,7 @@ const {
   getChatThreadMock: vi.fn(),
   updateChatThreadMock: vi.fn(),
   touchChatThreadMock: vi.fn(),
-  touchThreadRelationshipStateMock: vi.fn(),
+  onContinuityMessagePersistedMock: vi.fn(),
   ensureThreadWorkspaceSelectionMock: vi.fn(),
 }));
 
@@ -35,8 +35,8 @@ vi.mock('../../../../src/core/db/chat_thread', () => ({
   touchChatThread: touchChatThreadMock,
 }));
 
-vi.mock('../../../../src/main/services/relationship/relationship_service', () => ({
-  touchThreadRelationshipState: touchThreadRelationshipStateMock,
+vi.mock('../../../../src/main/services/continuity/continuity_service', () => ({
+  onMessagePersisted: onContinuityMessagePersistedMock,
 }));
 
 vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
@@ -114,7 +114,7 @@ describe('chat_persistence', () => {
     );
   });
 
-  it('touches thread relationship state when persisting a chat message', async () => {
+  it('touches thread ordering and persists continuity when saving a chat message', async () => {
     const onMessagePersisted = vi.fn();
     const { createChatPersistence } = await import(
       '../../../../src/main/services/chat/chat_persistence'
@@ -134,11 +134,12 @@ describe('chat_persistence', () => {
     });
 
     expect(touchChatThreadMock).toHaveBeenCalledWith('thread_1');
-    expect(touchThreadRelationshipStateMock).toHaveBeenCalledWith(
-      'thread_1',
-      expect.any(String)
-    );
     expect(onMessagePersisted).toHaveBeenCalled();
+    expect(onContinuityMessagePersistedMock).toHaveBeenCalledWith({
+      threadId: 'thread_1',
+      messageId: 'msg_1',
+      messageJson: JSON.stringify({ role: 'user', content: 'hello' }),
+    });
   });
 
   it('rejects workspace rebinding once a thread already has persisted messages', async () => {

@@ -141,7 +141,6 @@ const MemorySchema = z
         maxRecentTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxRecentTokens),
         maxMessageTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxMessageTokens),
         maxIdentityTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxIdentityTokens),
-        maxRelationshipTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxRelationshipTokens),
         maxLifeStateTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxLifeStateTokens),
         maxReflectionTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxReflectionTokens),
         summaryTriggerMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryTriggerMessages),
@@ -180,6 +179,18 @@ const MemorySchema = z
       .catch(DEFAULT_APP_CONFIG.memory.emotion),
   })
   .catch(DEFAULT_APP_CONFIG.memory);
+
+const ContinuitySchema = z
+  .object({
+    enabled: booleanField(DEFAULT_APP_CONFIG.continuity.enabled),
+    autoCaptureExplicitFacts: booleanField(
+      DEFAULT_APP_CONFIG.continuity.autoCaptureExplicitFacts
+    ),
+    injectToSystemPrompt: booleanField(DEFAULT_APP_CONFIG.continuity.injectToSystemPrompt),
+    useLegacyContextBlocks: booleanField(DEFAULT_APP_CONFIG.continuity.useLegacyContextBlocks),
+    maxRetrievedItems: intField(DEFAULT_APP_CONFIG.continuity.maxRetrievedItems),
+  })
+  .catch(DEFAULT_APP_CONFIG.continuity);
 
 const SpeechSchema = z
   .object({
@@ -284,6 +295,7 @@ export const AppConfigSchema = z
     keybindings: KeybindingsSchema,
     chat: ChatSchema,
     memory: MemorySchema,
+    continuity: ContinuitySchema,
     speech: SpeechSchema,
     toolModel: ToolModelSchema,
     toolExecution: ToolExecutionSchema,

@@ -146,6 +146,6 @@ export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): str
   return (
     `Current workspace: ${workspaceLabel} (${workspacePath}). ` +
     'Prefer relative paths from this root, default shell work to this directory, and do not operate outside it unless the user explicitly changes workspace. ' +
-    `Additional writable app data root: ${brainPath}. Use it for continuity files such as owner.md, relationship.md, and memory_inbox/.`
+    `Additional writable app data root: ${brainPath}. Use it for continuity files such as owner.md and memory_inbox/.`
   );
 };

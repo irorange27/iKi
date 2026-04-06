@@ -147,14 +147,6 @@ describe('preload task IPC payload serialization', () => {
     expect(sendMock).toHaveBeenCalledWith('window:set-shadow', true);
   });
 
-  it('forwards relationship overview reads over IPC', async () => {
-    invokeMock.mockResolvedValue({ owner: { owner_label: 'Nina', relationship_to_owner: 'owner' } });
-
-    await exposedApi.relationship.getOverview(5);
-
-    expect(invokeMock).toHaveBeenCalledWith('relationship:get-overview', 5);
-  });
-
   it('exposes the shared Electron API contract across renderer namespaces', async () => {
     invokeMock.mockResolvedValue({});
 

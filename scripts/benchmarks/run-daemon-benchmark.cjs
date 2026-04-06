@@ -6,8 +6,10 @@ const path = require('node:path');
 const net = require('node:net');
 const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
+const { performance } = require('node:perf_hooks');
 
 const WebSocket = require('ws');
+const { writeTraceArtifacts } = require('./trace_flamegraph.cjs');
 
 const DEFAULT_HEALTH_TIMEOUT_MS = 30_000;
 const DEFAULT_STREAM_TIMEOUT_MS = 5 * 60 * 1000;
@@ -15,6 +17,7 @@ const DEFAULT_LIMIT = Number.POSITIVE_INFINITY;
 const DEFAULT_PARALLEL = 1;
 const DEFAULT_BENCHMARK = 'generic';
 const DEFAULT_DAEMON_URL = 'http://127.0.0.1:6127';
+const LATENCY_PROFILE_VERSION = 1;
 const BROWSECOMP_OFFICIAL_DATASET_URL =
   'https://openaipublic.blob.core.windows.net/simple-evals/browse_comp_test_set.csv';
 const BROWSECOMP_QUERY_TEMPLATE = `
@@ -40,6 +43,804 @@ confidence: The extracted confidence score between 0|%| and 100|%| from [respons
 `.trim();
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const isObjectRecord = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const roundDurationMs = value =>
+  Number.isFinite(value) ? Math.round(value * 1000) / 1000 : null;
+
+const durationBetween = (startMs, endMs) => {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+    return null;
+  }
+  return roundDurationMs(endMs - startMs);
+};
+
+const shiftAtMs = (value, offsetMs) => {
+  if (!Number.isFinite(value) || !Number.isFinite(offsetMs)) return null;
+  return roundDurationMs(offsetMs + value);
+};
+
+const summarizeToolInput = value => {
+  if (!isObjectRecord(value)) return null;
+
+  const summary = {};
+  const copyIfPresent = key => {
+    if (typeof value[key] === 'string' && value[key].trim()) {
+      summary[key] = value[key].trim();
+    }
+  };
+
+  copyIfPresent('query');
+  copyIfPresent('q');
+  copyIfPresent('url');
+  copyIfPresent('path');
+  copyIfPresent('command');
+  copyIfPresent('cmd');
+  copyIfPresent('ticker');
+  copyIfPresent('location');
+  copyIfPresent('description');
+
+  return Object.keys(summary).length > 0 ? summary : null;
+};
+
+const mergeTimeWindows = windows => {
+  const normalized = windows
+    .filter(
+      window =>
+        window &&
+        Number.isFinite(window.startAtMs) &&
+        Number.isFinite(window.endAtMs) &&
+        window.endAtMs >= window.startAtMs
+    )
+    .sort((left, right) => left.startAtMs - right.startAtMs);
+
+  if (normalized.length === 0) return [];
+
+  const merged = [normalized[0]];
+  for (let index = 1; index < normalized.length; index += 1) {
+    const current = normalized[index];
+    const last = merged[merged.length - 1];
+    if (current.startAtMs <= last.endAtMs) {
+      last.endAtMs = Math.max(last.endAtMs, current.endAtMs);
+      continue;
+    }
+    merged.push({ ...current });
+  }
+
+  return merged;
+};
+
+const sumDurations = durations =>
+  roundDurationMs(
+    durations.reduce(
+      (total, value) => total + (Number.isFinite(value) ? value : 0),
+      0
+    )
+  ) ?? 0;
+
+const sortObjectEntriesDescending = input =>
+  Object.fromEntries(
+    Object.entries(input).sort((left, right) => {
+      const leftValue = Number.isFinite(left[1]) ? left[1] : Number.NEGATIVE_INFINITY;
+      const rightValue = Number.isFinite(right[1]) ? right[1] : Number.NEGATIVE_INFINITY;
+      return rightValue - leftValue;
+    })
+  );
+
+const createLatencyRecorder = () => {
+  const baseMs = performance.now();
+  const phases = {};
+  const marks = [];
+
+  const now = () => roundDurationMs(performance.now() - baseMs) ?? 0;
+
+  return {
+    now,
+    mark: (name, detail = {}) => {
+      marks.push({
+        name,
+        atMs: now(),
+        ...detail,
+      });
+    },
+    startPhase: (name, detail = {}) => {
+      phases[name] = {
+        startedAtMs: now(),
+        ...detail,
+      };
+      return phases[name];
+    },
+    endPhase: (name, detail = {}) => {
+      const existing = phases[name] || {};
+      const endedAtMs = now();
+      phases[name] = {
+        ...existing,
+        ...detail,
+        endedAtMs,
+        durationMs: durationBetween(existing.startedAtMs, endedAtMs),
+      };
+      return phases[name];
+    },
+    snapshot: () => ({
+      phases: JSON.parse(JSON.stringify(phases)),
+      marks: JSON.parse(JSON.stringify(marks)),
+    }),
+  };
+};
+
+const buildStreamLatencyProfile = ({
+  chunks,
+  daemonEvents,
+  wsOpenedAtMs = null,
+  readyAtMs = null,
+  startSentAtMs = null,
+  completedAtMs = null,
+  outcome = 'completed',
+  error = null,
+}) => {
+  const toolCalls = [];
+  const openToolCalls = new Map();
+  const chunkTypeCounts = {};
+  let firstChunkAtMs = null;
+  let firstMeaningfulChunkAtMs = null;
+  let firstTextDeltaAtMs = null;
+  let firstToolCallAtMs = null;
+  let firstToolResultAtMs = null;
+  let firstContextReportAtMs = null;
+  let firstMemoryRetrievalAtMs = null;
+  let firstAffectSignalAtMs = null;
+  let firstSkillUsageAtMs = null;
+  let lastChunkAtMs = null;
+
+  const getChunkAtMs = chunk =>
+    isObjectRecord(chunk) && Number.isFinite(chunk.receivedAtMs) ? chunk.receivedAtMs : null;
+
+  const ensureOpenToolCall = (chunk, atMs) => {
+    const toolCallId =
+      typeof chunk.toolCallId === 'string' && chunk.toolCallId.length > 0
+        ? chunk.toolCallId
+        : `unknown_${toolCalls.length + openToolCalls.size + 1}`;
+    const existing = openToolCalls.get(toolCallId);
+    if (existing) return existing;
+
+    const created = {
+      toolCallId,
+      toolName:
+        typeof chunk.toolName === 'string' && chunk.toolName.trim() ? chunk.toolName.trim() : 'tool',
+      ordinal: toolCalls.length + openToolCalls.size + 1,
+      startAtMs: atMs,
+      inputReadyAtMs: null,
+      firstPreliminaryOutputAtMs: null,
+      endAtMs: null,
+      durationMs: null,
+      outcome: 'running',
+      inputSummary: null,
+    };
+    openToolCalls.set(toolCallId, created);
+    return created;
+  };
+
+  const finalizeToolCall = (toolCall, atMs, outcomeLabel) => {
+    const endAtMs = Number.isFinite(atMs)
+      ? atMs
+      : Number.isFinite(toolCall.inputReadyAtMs)
+        ? toolCall.inputReadyAtMs
+        : toolCall.startAtMs;
+    const finalized = {
+      ...toolCall,
+      endAtMs,
+      durationMs: durationBetween(toolCall.startAtMs, endAtMs),
+      outcome: outcomeLabel,
+    };
+    toolCalls.push(finalized);
+    openToolCalls.delete(toolCall.toolCallId);
+  };
+
+  for (const chunk of chunks) {
+    if (!isObjectRecord(chunk)) continue;
+    const atMs = getChunkAtMs(chunk);
+    if (Number.isFinite(atMs)) {
+      if (firstChunkAtMs === null) firstChunkAtMs = atMs;
+      lastChunkAtMs = atMs;
+    }
+
+    const type = typeof chunk.type === 'string' ? chunk.type : 'unknown';
+    chunkTypeCounts[type] = (chunkTypeCounts[type] || 0) + 1;
+
+    if (
+      firstMeaningfulChunkAtMs === null &&
+      Number.isFinite(atMs) &&
+      type !== 'start' &&
+      type !== 'text-start'
+    ) {
+      firstMeaningfulChunkAtMs = atMs;
+    }
+
+    if (type === 'text-delta' && firstTextDeltaAtMs === null && Number.isFinite(atMs)) {
+      firstTextDeltaAtMs = atMs;
+    }
+    if (type === 'data-context-report' && firstContextReportAtMs === null && Number.isFinite(atMs)) {
+      firstContextReportAtMs = atMs;
+    }
+    if (
+      type === 'data-memory-retrieval' &&
+      firstMemoryRetrievalAtMs === null &&
+      Number.isFinite(atMs)
+    ) {
+      firstMemoryRetrievalAtMs = atMs;
+    }
+    if (type === 'data-affect-signal' && firstAffectSignalAtMs === null && Number.isFinite(atMs)) {
+      firstAffectSignalAtMs = atMs;
+    }
+    if (type === 'data-skill-usage' && firstSkillUsageAtMs === null && Number.isFinite(atMs)) {
+      firstSkillUsageAtMs = atMs;
+    }
+
+    if (type === 'tool-input-start') {
+      const toolCall = ensureOpenToolCall(chunk, atMs);
+      if (firstToolCallAtMs === null && Number.isFinite(atMs)) {
+        firstToolCallAtMs = atMs;
+      }
+      if (!Number.isFinite(toolCall.startAtMs)) {
+        toolCall.startAtMs = atMs;
+      }
+      if (!toolCall.toolName && typeof chunk.toolName === 'string') {
+        toolCall.toolName = chunk.toolName;
+      }
+      continue;
+    }
+
+    if (type === 'tool-input-available' || type === 'tool-input-error') {
+      const toolCall = ensureOpenToolCall(chunk, atMs);
+      if (!Number.isFinite(toolCall.startAtMs)) {
+        toolCall.startAtMs = atMs;
+      }
+      toolCall.inputReadyAtMs = Number.isFinite(atMs) ? atMs : toolCall.inputReadyAtMs;
+      toolCall.inputSummary = summarizeToolInput(chunk.input) || toolCall.inputSummary;
+      if (type === 'tool-input-error') {
+        finalizeToolCall(toolCall, atMs, 'input_error');
+      }
+      continue;
+    }
+
+    if (type === 'tool-output-available') {
+      const toolCall = ensureOpenToolCall(chunk, atMs);
+      if (firstToolResultAtMs === null && Number.isFinite(atMs)) {
+        firstToolResultAtMs = atMs;
+      }
+      if (chunk.preliminary === true) {
+        if (toolCall.firstPreliminaryOutputAtMs === null && Number.isFinite(atMs)) {
+          toolCall.firstPreliminaryOutputAtMs = atMs;
+        }
+        continue;
+      }
+      finalizeToolCall(toolCall, atMs, 'output_available');
+      continue;
+    }
+
+    if (type === 'tool-output-error' || type === 'tool-output-denied') {
+      const toolCall = ensureOpenToolCall(chunk, atMs);
+      const outcomeLabel = type === 'tool-output-error' ? 'output_error' : 'output_denied';
+      finalizeToolCall(toolCall, atMs, outcomeLabel);
+    }
+  }
+
+  for (const toolCall of openToolCalls.values()) {
+    finalizeToolCall(toolCall, toolCall.inputReadyAtMs ?? toolCall.startAtMs, 'incomplete');
+  }
+
+  const normalizedCompletedAtMs =
+    completedAtMs ??
+    lastChunkAtMs ??
+    firstChunkAtMs ??
+    startSentAtMs ??
+    readyAtMs ??
+    wsOpenedAtMs ??
+    0;
+
+  const mergedToolWindows = mergeTimeWindows(
+    toolCalls.map(toolCall => ({
+      startAtMs:
+        toolCall.startAtMs ??
+        toolCall.inputReadyAtMs ??
+        toolCall.firstPreliminaryOutputAtMs ??
+        toolCall.endAtMs,
+      endAtMs:
+        toolCall.endAtMs ??
+        toolCall.firstPreliminaryOutputAtMs ??
+        toolCall.inputReadyAtMs ??
+        toolCall.startAtMs,
+    }))
+  );
+  const toolExecutionMs = sumDurations(
+    mergedToolWindows.map(window => durationBetween(window.startAtMs, window.endAtMs))
+  );
+
+  const modelBeforeFirstToolMs =
+    mergedToolWindows.length > 0 ? durationBetween(startSentAtMs, mergedToolWindows[0].startAtMs) : null;
+  const betweenToolsModelMs =
+    mergedToolWindows.length > 1
+      ? sumDurations(
+          mergedToolWindows
+            .slice(1)
+            .map((window, index) =>
+              durationBetween(mergedToolWindows[index].endAtMs, window.startAtMs)
+            )
+        )
+      : 0;
+  const modelAfterLastToolMs =
+    mergedToolWindows.length > 0
+      ? durationBetween(mergedToolWindows[mergedToolWindows.length - 1].endAtMs, normalizedCompletedAtMs)
+      : null;
+  const modelResponseMs =
+    mergedToolWindows.length === 0 ? durationBetween(startSentAtMs, normalizedCompletedAtMs) : null;
+  const handshakeMs = durationBetween(0, startSentAtMs);
+
+  const perTool = {};
+  for (const toolCall of toolCalls) {
+    const key = toolCall.toolName || 'tool';
+    if (!perTool[key]) {
+      perTool[key] = {
+        toolName: key,
+        count: 0,
+        totalDurationMs: 0,
+        maxDurationMs: 0,
+      };
+    }
+    perTool[key].count += 1;
+    perTool[key].totalDurationMs += Number.isFinite(toolCall.durationMs) ? toolCall.durationMs : 0;
+    perTool[key].maxDurationMs = Math.max(
+      perTool[key].maxDurationMs,
+      Number.isFinite(toolCall.durationMs) ? toolCall.durationMs : 0
+    );
+  }
+
+  const perToolSummary = Object.values(perTool)
+    .map(entry => ({
+      toolName: entry.toolName,
+      count: entry.count,
+      totalDurationMs: roundDurationMs(entry.totalDurationMs) ?? 0,
+      avgDurationMs: roundDurationMs(entry.totalDurationMs / entry.count) ?? 0,
+      maxDurationMs: roundDurationMs(entry.maxDurationMs) ?? 0,
+    }))
+    .sort((left, right) => right.totalDurationMs - left.totalDurationMs);
+
+  return {
+    version: LATENCY_PROFILE_VERSION,
+    outcome,
+    ...(error ? { error } : {}),
+    durationMs: roundDurationMs(normalizedCompletedAtMs) ?? 0,
+    milestones: {
+      wsOpenedAtMs: roundDurationMs(wsOpenedAtMs),
+      readyAtMs: roundDurationMs(readyAtMs),
+      startSentAtMs: roundDurationMs(startSentAtMs),
+      firstChunkAtMs: roundDurationMs(firstChunkAtMs),
+      firstMeaningfulChunkAtMs: roundDurationMs(firstMeaningfulChunkAtMs),
+      firstTextDeltaAtMs: roundDurationMs(firstTextDeltaAtMs),
+      firstToolCallAtMs: roundDurationMs(firstToolCallAtMs),
+      firstToolResultAtMs: roundDurationMs(firstToolResultAtMs),
+      firstContextReportAtMs: roundDurationMs(firstContextReportAtMs),
+      firstMemoryRetrievalAtMs: roundDurationMs(firstMemoryRetrievalAtMs),
+      firstAffectSignalAtMs: roundDurationMs(firstAffectSignalAtMs),
+      firstSkillUsageAtMs: roundDurationMs(firstSkillUsageAtMs),
+      completedAtMs: roundDurationMs(normalizedCompletedAtMs),
+    },
+    buckets: sortObjectEntriesDescending({
+      handshakeMs,
+      preFirstMeaningfulChunkMs: durationBetween(startSentAtMs, firstMeaningfulChunkAtMs),
+      modelBeforeFirstToolMs,
+      toolExecutionMs,
+      betweenToolsModelMs,
+      modelAfterLastToolMs,
+      modelResponseMs,
+    }),
+    chunkTypeCounts: sortObjectEntriesDescending(chunkTypeCounts),
+    toolCalls: toolCalls.map(toolCall => ({
+      ...toolCall,
+      startAtMs: roundDurationMs(toolCall.startAtMs),
+      inputReadyAtMs: roundDurationMs(toolCall.inputReadyAtMs),
+      firstPreliminaryOutputAtMs: roundDurationMs(toolCall.firstPreliminaryOutputAtMs),
+      endAtMs: roundDurationMs(toolCall.endAtMs),
+      durationMs: roundDurationMs(toolCall.durationMs),
+    })),
+    toolSummary: {
+      totalCalls: toolCalls.length,
+      totalWallTimeMs: toolExecutionMs,
+      byTool: perToolSummary,
+    },
+    daemonEventCount: Array.isArray(daemonEvents) ? daemonEvents.length : 0,
+  };
+};
+
+const buildTaskLatencyProfile = ({
+  taskId,
+  recorder,
+  streamLatencyProfile = null,
+  error = null,
+  taskStartedAtRunMs = null,
+  taskCompletedAtRunMs = null,
+}) => {
+  const snapshot = recorder.snapshot();
+  const phases = snapshot.phases;
+  const taskDurationMs = roundDurationMs(recorder.now()) ?? 0;
+  const streamPhase = phases.stream || null;
+  const scorePhase = phases.score || null;
+  const threadCreatePhase = phases.threadCreate || null;
+  const streamOffsetMs =
+    streamPhase && Number.isFinite(streamPhase.startedAtMs) ? streamPhase.startedAtMs : null;
+
+  const shiftedToolCalls =
+    streamLatencyProfile && Number.isFinite(streamOffsetMs)
+      ? streamLatencyProfile.toolCalls.map(toolCall => ({
+          ...toolCall,
+          startAtTaskMs: shiftAtMs(toolCall.startAtMs, streamOffsetMs),
+          inputReadyAtTaskMs: shiftAtMs(toolCall.inputReadyAtMs, streamOffsetMs),
+          firstPreliminaryOutputAtTaskMs: shiftAtMs(
+            toolCall.firstPreliminaryOutputAtMs,
+            streamOffsetMs
+          ),
+          endAtTaskMs: shiftAtMs(toolCall.endAtMs, streamOffsetMs),
+        }))
+      : [];
+
+  const attribution = {
+    threadCreateMs: threadCreatePhase?.durationMs ?? null,
+    streamHandshakeMs: streamLatencyProfile?.buckets?.handshakeMs ?? null,
+    modelBeforeFirstToolMs:
+      streamLatencyProfile?.buckets?.modelBeforeFirstToolMs ??
+      streamLatencyProfile?.buckets?.modelResponseMs ??
+      null,
+    toolExecutionMs: streamLatencyProfile?.buckets?.toolExecutionMs ?? null,
+    betweenToolsModelMs: streamLatencyProfile?.buckets?.betweenToolsModelMs ?? null,
+    modelAfterLastToolMs: streamLatencyProfile?.buckets?.modelAfterLastToolMs ?? null,
+    scoreMs: scorePhase?.durationMs ?? null,
+  };
+
+  const topSources = Object.entries(attribution)
+    .filter(([, value]) => Number.isFinite(value) && value > 0)
+    .sort((left, right) => right[1] - left[1])
+    .map(([name, value]) => ({
+      name,
+      durationMs: roundDurationMs(value),
+      shareOfTask: taskDurationMs > 0 ? roundDurationMs(value / taskDurationMs) : null,
+    }));
+
+  return {
+    version: LATENCY_PROFILE_VERSION,
+    taskId,
+    taskDurationMs,
+    ...(error ? { error } : {}),
+    ...(Number.isFinite(taskStartedAtRunMs) || Number.isFinite(taskCompletedAtRunMs)
+      ? {
+          runOffsets: {
+            taskStartedAtRunMs: roundDurationMs(taskStartedAtRunMs),
+            taskCompletedAtRunMs: roundDurationMs(taskCompletedAtRunMs),
+          },
+        }
+      : {}),
+    phases,
+    marks: snapshot.marks,
+    attribution,
+    topSources,
+    stream:
+      streamLatencyProfile && Number.isFinite(streamOffsetMs)
+        ? {
+            ...streamLatencyProfile,
+            startedAtTaskMs: roundDurationMs(streamOffsetMs),
+            completedAtTaskMs: shiftAtMs(streamLatencyProfile.milestones.completedAtMs, streamOffsetMs),
+            milestonesTaskMs: Object.fromEntries(
+              Object.entries(streamLatencyProfile.milestones).map(([name, value]) => [
+                name,
+                shiftAtMs(value, streamOffsetMs),
+              ])
+            ),
+            toolCalls: shiftedToolCalls,
+          }
+        : streamLatencyProfile,
+  };
+};
+
+const buildLatencyRunSummary = taskResults => {
+  const profiles = taskResults
+    .map(task => task?.latencyProfile)
+    .filter(profile => isObjectRecord(profile));
+
+  const totalTaskDurationMs = sumDurations(
+    profiles.map(profile => (Number.isFinite(profile.taskDurationMs) ? profile.taskDurationMs : 0))
+  );
+  const aggregateAttribution = {};
+  const aggregateToolSummary = {};
+  const milestoneSeries = {
+    firstTextDeltaAtMs: [],
+    firstToolCallAtMs: [],
+    toolExecutionMs: [],
+    threadCreateMs: [],
+    streamHandshakeMs: [],
+  };
+
+  for (const profile of profiles) {
+    for (const [key, value] of Object.entries(profile.attribution || {})) {
+      if (!Number.isFinite(value)) continue;
+      aggregateAttribution[key] = (aggregateAttribution[key] || 0) + value;
+    }
+
+    const firstTextDeltaAtMs = profile.stream?.milestones?.firstTextDeltaAtMs;
+    if (Number.isFinite(firstTextDeltaAtMs)) {
+      milestoneSeries.firstTextDeltaAtMs.push(firstTextDeltaAtMs);
+    }
+    const firstToolCallAtMs = profile.stream?.milestones?.firstToolCallAtMs;
+    if (Number.isFinite(firstToolCallAtMs)) {
+      milestoneSeries.firstToolCallAtMs.push(firstToolCallAtMs);
+    }
+    if (Number.isFinite(profile.stream?.toolSummary?.totalWallTimeMs)) {
+      milestoneSeries.toolExecutionMs.push(profile.stream.toolSummary.totalWallTimeMs);
+    }
+    if (Number.isFinite(profile.attribution?.threadCreateMs)) {
+      milestoneSeries.threadCreateMs.push(profile.attribution.threadCreateMs);
+    }
+    if (Number.isFinite(profile.attribution?.streamHandshakeMs)) {
+      milestoneSeries.streamHandshakeMs.push(profile.attribution.streamHandshakeMs);
+    }
+
+    for (const toolCall of profile.stream?.toolCalls || []) {
+      const toolName = toolCall.toolName || 'tool';
+      if (!aggregateToolSummary[toolName]) {
+        aggregateToolSummary[toolName] = {
+          toolName,
+          count: 0,
+          totalDurationMs: 0,
+          maxDurationMs: 0,
+        };
+      }
+      aggregateToolSummary[toolName].count += 1;
+      aggregateToolSummary[toolName].totalDurationMs +=
+        Number.isFinite(toolCall.durationMs) ? toolCall.durationMs : 0;
+      aggregateToolSummary[toolName].maxDurationMs = Math.max(
+        aggregateToolSummary[toolName].maxDurationMs,
+        Number.isFinite(toolCall.durationMs) ? toolCall.durationMs : 0
+      );
+    }
+  }
+
+  const averageOf = values =>
+    values.length > 0 ? roundDurationMs(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+
+  return {
+    version: LATENCY_PROFILE_VERSION,
+    profiledTasks: profiles.length,
+    totalTaskDurationMs,
+    averageTaskDurationMs:
+      profiles.length > 0 ? roundDurationMs(totalTaskDurationMs / profiles.length) : null,
+    topSources: Object.entries(aggregateAttribution)
+      .filter(([, value]) => Number.isFinite(value) && value > 0)
+      .sort((left, right) => right[1] - left[1])
+      .map(([name, value]) => ({
+        name,
+        totalDurationMs: roundDurationMs(value),
+        avgDurationMs: profiles.length > 0 ? roundDurationMs(value / profiles.length) : null,
+        shareOfProfiledTaskTime:
+          totalTaskDurationMs > 0 ? roundDurationMs(value / totalTaskDurationMs) : null,
+      })),
+    perTool: Object.values(aggregateToolSummary)
+      .map(entry => ({
+        toolName: entry.toolName,
+        count: entry.count,
+        totalDurationMs: roundDurationMs(entry.totalDurationMs) ?? 0,
+        avgDurationMs: roundDurationMs(entry.totalDurationMs / entry.count) ?? 0,
+        maxDurationMs: roundDurationMs(entry.maxDurationMs) ?? 0,
+      }))
+      .sort((left, right) => right.totalDurationMs - left.totalDurationMs),
+    averages: {
+      firstTextDeltaAtMs: averageOf(milestoneSeries.firstTextDeltaAtMs),
+      firstToolCallAtMs: averageOf(milestoneSeries.firstToolCallAtMs),
+      toolExecutionMs: averageOf(milestoneSeries.toolExecutionMs),
+      threadCreateMs: averageOf(milestoneSeries.threadCreateMs),
+      streamHandshakeMs: averageOf(milestoneSeries.streamHandshakeMs),
+    },
+    slowestTasks: profiles
+      .map(profile => ({
+        taskId: profile.taskId,
+        taskDurationMs: roundDurationMs(profile.taskDurationMs) ?? 0,
+        topSource: profile.topSources?.[0] || null,
+      }))
+      .sort((left, right) => right.taskDurationMs - left.taskDurationMs)
+      .slice(0, 10),
+  };
+};
+
+const buildDaemonBenchmarkVisualization = ({
+  benchmark,
+  options,
+  runProfile,
+  taskResults,
+}) => {
+  const spans = [];
+  const markers = [];
+  const tracks = ['Benchmark Run', 'Run Phases'];
+  const runTotalDurationMs =
+    runProfile?.phases?.benchmark?.durationMs ??
+    sumDurations(taskResults.map(task => task?.latencyProfile?.taskDurationMs || 0));
+
+  spans.push({
+    track: 'Benchmark Run',
+    label: `${benchmark} benchmark`,
+    startMs: 0,
+    durationMs: runTotalDurationMs,
+    category: 'run',
+    detail: {
+      benchmark,
+      providerType: options.providerType,
+      model: options.model,
+      parallel: options.parallel,
+    },
+  });
+
+  for (const [phaseName, phase] of Object.entries(runProfile?.phases || {})) {
+    if (phaseName === 'benchmark') continue;
+    if (!Number.isFinite(phase?.startedAtMs) || !Number.isFinite(phase?.durationMs)) continue;
+    spans.push({
+      track: 'Run Phases',
+      label: phaseName,
+      startMs: phase.startedAtMs,
+      durationMs: phase.durationMs,
+      category:
+        phaseName === 'executeTasks'
+          ? 'daemon'
+          : phaseName === 'writeOutputs'
+            ? 'io'
+            : 'phase',
+      detail: phase,
+    });
+  }
+
+  for (const task of taskResults) {
+    const profile = task?.latencyProfile;
+    const taskStartedAtRunMs = profile?.runOffsets?.taskStartedAtRunMs;
+    if (!profile || !Number.isFinite(taskStartedAtRunMs)) continue;
+
+    const taskTrack = `Task ${task.id}`;
+    const streamTrack = `Task ${task.id} / Stream`;
+    const eventTrack = `Task ${task.id} / Events`;
+    tracks.push(taskTrack, streamTrack, eventTrack);
+
+    spans.push({
+      track: taskTrack,
+      label: task.id,
+      startMs: taskStartedAtRunMs,
+      durationMs: profile.taskDurationMs,
+      category: 'task',
+      detail: {
+        success: task.success,
+        chunkCount: task.chunkCount,
+      },
+    });
+
+    for (const [phaseName, phase] of Object.entries(profile.phases || {})) {
+      if (!Number.isFinite(phase?.startedAtMs) || !Number.isFinite(phase?.durationMs)) continue;
+      spans.push({
+        track: taskTrack,
+        label: phaseName,
+        startMs: taskStartedAtRunMs + phase.startedAtMs,
+        durationMs: phase.durationMs,
+        category:
+          phaseName === 'threadCreate'
+            ? 'phase'
+            : phaseName === 'stream'
+              ? 'stream'
+              : phaseName === 'score'
+                ? 'scoring'
+                : 'phase',
+        detail: phase,
+      });
+    }
+
+    const stream = profile.stream;
+    if (stream && Number.isFinite(stream.startedAtTaskMs)) {
+      const streamBaseAtRunMs = taskStartedAtRunMs + stream.startedAtTaskMs;
+      spans.push({
+        track: streamTrack,
+        label: 'stream',
+        startMs: streamBaseAtRunMs,
+        durationMs: stream.durationMs,
+        category: 'stream',
+        detail: {
+          outcome: stream.outcome,
+          daemonEventCount: stream.daemonEventCount,
+        },
+      });
+
+      const bucketEntries = [];
+      const milestone = stream.milestones || {};
+      if (Number.isFinite(milestone.startSentAtMs) && Number.isFinite(milestone.firstMeaningfulChunkAtMs)) {
+        bucketEntries.push({
+          label: 'wait_first_meaningful_chunk',
+          startMs: milestone.startSentAtMs,
+          durationMs: milestone.firstMeaningfulChunkAtMs - milestone.startSentAtMs,
+          category: 'model',
+        });
+      }
+      if (stream.toolCalls?.length > 0) {
+        const calls = stream.toolCalls.filter(toolCall => Number.isFinite(toolCall.startAtMs));
+        if (calls.length > 0) {
+          const firstTool = calls[0];
+          if (Number.isFinite(milestone.startSentAtMs) && firstTool.startAtMs > milestone.startSentAtMs) {
+            bucketEntries.push({
+              label: 'model_before_first_tool',
+              startMs: milestone.startSentAtMs,
+              durationMs: firstTool.startAtMs - milestone.startSentAtMs,
+              category: 'model',
+            });
+          }
+          for (const toolCall of calls) {
+            spans.push({
+              track: streamTrack,
+              label: `${toolCall.toolName}#${toolCall.ordinal}`,
+              startMs: streamBaseAtRunMs + toolCall.startAtMs,
+              durationMs: toolCall.durationMs,
+              category: 'tool',
+              detail: {
+                outcome: toolCall.outcome,
+                inputSummary: toolCall.inputSummary,
+              },
+            });
+          }
+        }
+      } else if (Number.isFinite(stream.buckets?.modelResponseMs) && Number.isFinite(milestone.startSentAtMs)) {
+        bucketEntries.push({
+          label: 'model_response',
+          startMs: milestone.startSentAtMs,
+          durationMs: stream.buckets.modelResponseMs,
+          category: 'model',
+        });
+      }
+
+      for (const bucket of bucketEntries) {
+        if (!Number.isFinite(bucket.durationMs) || bucket.durationMs <= 0) continue;
+        spans.push({
+          track: streamTrack,
+          label: bucket.label,
+          startMs: streamBaseAtRunMs + bucket.startMs,
+          durationMs: bucket.durationMs,
+          category: bucket.category,
+        });
+      }
+
+      const markerEntries = [
+        ['ready', milestone.readyAtMs],
+        ['start_sent', milestone.startSentAtMs],
+        ['first_context_report', milestone.firstContextReportAtMs],
+        ['first_memory_retrieval', milestone.firstMemoryRetrievalAtMs],
+        ['first_tool_call', milestone.firstToolCallAtMs],
+        ['first_text_delta', milestone.firstTextDeltaAtMs],
+        ['completed', milestone.completedAtMs],
+      ];
+      for (const [label, value] of markerEntries) {
+        if (!Number.isFinite(value)) continue;
+        markers.push({
+          track: eventTrack,
+          label,
+          atMs: streamBaseAtRunMs + value,
+          category: 'event',
+        });
+      }
+    }
+  }
+
+  return {
+    title: `Daemon benchmark flamegraph (${benchmark})`,
+    totalDurationMs: runTotalDurationMs,
+    spans,
+    markers,
+    tracks,
+    metadata: {
+      benchmark,
+      providerType: options.providerType,
+      model: options.model,
+      parallel: options.parallel,
+    },
+  };
+};
 
 const normalizeProviderType = value => {
   if (typeof value !== 'string') return '';
@@ -158,6 +959,9 @@ const parseArgs = argv => {
         break;
       case 'browsecomp-url':
         parsed.browsecompUrl = consumeValue();
+        break;
+      case 'profile-latency':
+        parsed.profileLatency = true;
         break;
       default:
         throw new Error(`Unknown option: --${key}`);
@@ -397,6 +1201,61 @@ const compareBrowseCompAnswersPreview = (expected, actual) => {
   return false;
 };
 
+const normalizeSetupMessages = rawValue => {
+  if (!Array.isArray(rawValue)) return [];
+
+  return rawValue
+    .map(entry => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+      const role = typeof entry.role === 'string' ? entry.role.trim() : '';
+      const content = typeof entry.content === 'string' ? entry.content : '';
+      if (!role || !content.trim()) return null;
+      return {
+        role,
+        content,
+        ...(entry.awaitEmotionAnalysis === true || entry.await_emotion_analysis === true
+          ? { awaitEmotionAnalysis: true }
+          : {}),
+      };
+    })
+    .filter(Boolean);
+};
+
+const normalizeExperimentalContext = rawValue => {
+  if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+    return null;
+  }
+
+  const affectMode =
+    rawValue.affectMode === 'no_affect' ||
+    rawValue.affectMode === 'tone_only' ||
+    rawValue.affectMode === 'explicit_policy'
+      ? rawValue.affectMode
+      : rawValue.affect_mode === 'no_affect' ||
+          rawValue.affect_mode === 'tone_only' ||
+          rawValue.affect_mode === 'explicit_policy'
+        ? rawValue.affect_mode
+        : null;
+  const contextMode =
+    rawValue.contextMode === 'default' || rawValue.contextMode === 'benchmark_clean'
+      ? rawValue.contextMode
+      : rawValue.context_mode === 'default' || rawValue.context_mode === 'benchmark_clean'
+        ? rawValue.context_mode
+        : null;
+  const awaitRealtimeAffect =
+    rawValue.awaitRealtimeAffect === true || rawValue.await_realtime_affect === true;
+
+  if (!affectMode && !contextMode && !awaitRealtimeAffect) {
+    return null;
+  }
+
+  return {
+    ...(affectMode ? { affectMode } : {}),
+    ...(contextMode ? { contextMode } : {}),
+    ...(awaitRealtimeAffect ? { awaitRealtimeAffect } : {}),
+  };
+};
+
 const normalizeTask = (task, index) => {
   if (!task || typeof task !== 'object' || Array.isArray(task)) {
     throw new Error(`Task ${index + 1} is not a valid object`);
@@ -438,6 +1297,10 @@ const normalizeTask = (task, index) => {
         ? task.scoring
         : null,
     tools: Array.isArray(task.tools) ? task.tools.filter(value => typeof value === 'string') : null,
+    setupMessages: normalizeSetupMessages(task.setupMessages ?? task.setup_messages),
+    experimentalContext: normalizeExperimentalContext(
+      task.experimentalContext ?? task.experimental_context
+    ),
     metadata:
       task.metadata && typeof task.metadata === 'object' && !Array.isArray(task.metadata)
         ? task.metadata
@@ -602,6 +1465,55 @@ const createThread = async ({ daemonUrl, clientId, clientToken, title, model }) 
   return payload.thread;
 };
 
+const getThread = async ({ daemonUrl, clientId, clientToken, threadId }) => {
+  const { response, payload } = await requestJson(
+    `${daemonUrl}/v1/chat/threads/${encodeURIComponent(threadId)}`,
+    {
+      headers: buildHeaders({ clientId, clientToken }),
+    }
+  );
+
+  if (!response.ok || !payload?.success || !payload.thread?.id) {
+    throw new Error(`Failed to load thread (${response.status}): ${JSON.stringify(payload)}`);
+  }
+
+  return payload.thread;
+};
+
+const createMessage = async ({
+  daemonUrl,
+  clientId,
+  clientToken,
+  threadId,
+  role,
+  content,
+  timestamp,
+  metadata,
+  awaitEmotionAnalysis = false,
+}) => {
+  const { response, payload } = await requestJson(`${daemonUrl}/v1/chat/messages`, {
+    method: 'POST',
+    headers: {
+      ...buildHeaders({ clientId, clientToken }),
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      thread_id: threadId,
+      role,
+      content,
+      ...(typeof timestamp === 'string' && timestamp.trim() ? { timestamp } : {}),
+      ...(metadata && typeof metadata === 'object' ? { metadata } : {}),
+      ...(awaitEmotionAnalysis ? { await_emotion_analysis: true } : {}),
+    }),
+  });
+
+  if (!response.ok || !payload?.success || !payload.message?.id) {
+    throw new Error(`Chat message create failed (${response.status}): ${JSON.stringify(payload)}`);
+  }
+
+  return payload.message;
+};
+
 const sendChat = async ({
   daemonUrl,
   clientId,
@@ -762,8 +1674,17 @@ const scorePrediction = async ({
   };
 };
 
-const streamTask = async ({ daemonUrl, clientId, clientToken, requestId, payload, timeoutMs }) =>
+const streamTask = async ({
+  daemonUrl,
+  clientId,
+  clientToken,
+  requestId,
+  payload,
+  timeoutMs,
+  profileLatency = false,
+}) =>
   await new Promise((resolve, reject) => {
+    const streamStartedAtMs = performance.now();
     const ws = new WebSocket(toWsUrl(daemonUrl), {
       headers: buildHeaders({ clientId, clientToken }),
     });
@@ -772,6 +1693,26 @@ const streamTask = async ({ daemonUrl, clientId, clientToken, requestId, payload
     const daemonEvents = [];
     let settled = false;
     let ready = false;
+    let wsOpenedAtMs = null;
+    let readyAtMs = null;
+    let startSentAtMs = null;
+    let completedAtMs = null;
+
+    const elapsedSinceStreamStart = () => roundDurationMs(performance.now() - streamStartedAtMs) ?? 0;
+
+    const buildProfile = ({ outcome, error = null }) =>
+      profileLatency
+        ? buildStreamLatencyProfile({
+            chunks,
+            daemonEvents,
+            wsOpenedAtMs,
+            readyAtMs,
+            startSentAtMs,
+            completedAtMs: completedAtMs ?? elapsedSinceStreamStart(),
+            outcome,
+            error,
+          })
+        : null;
 
     const timeout = setTimeout(() => {
       if (settled) return;
@@ -779,30 +1720,59 @@ const streamTask = async ({ daemonUrl, clientId, clientToken, requestId, payload
       try {
         ws.close();
       } catch {}
-      reject(new Error(`Stream timed out after ${timeoutMs}ms`));
+      const error = new Error(`Stream timed out after ${timeoutMs}ms`);
+      if (profileLatency) {
+        error.streamLatencyProfile = buildProfile({
+          outcome: 'timeout',
+          error: error.message,
+        });
+      }
+      reject(error);
     }, timeoutMs);
 
     const finish = result => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      completedAtMs = completedAtMs ?? elapsedSinceStreamStart();
       try {
         ws.close();
       } catch {}
-      resolve(result);
+      resolve({
+        ...result,
+        ...(profileLatency
+          ? {
+              latencyProfile: buildProfile({
+                outcome: 'completed',
+              }),
+            }
+          : {}),
+      });
     };
 
     const fail = error => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      completedAtMs = completedAtMs ?? elapsedSinceStreamStart();
       try {
         ws.close();
       } catch {}
+      if (profileLatency) {
+        error.streamLatencyProfile = buildProfile({
+          outcome: 'error',
+          error: String(error && error.message ? error.message : error),
+        });
+      }
       reject(error);
     };
 
+    ws.on('open', () => {
+      wsOpenedAtMs = elapsedSinceStreamStart();
+    });
+
     ws.on('message', rawData => {
+      const receivedAtMs = elapsedSinceStreamStart();
       let parsed;
       try {
         parsed = JSON.parse(String(rawData));
@@ -812,9 +1782,18 @@ const streamTask = async ({ daemonUrl, clientId, clientToken, requestId, payload
       }
 
       if (parsed && typeof parsed === 'object' && parsed.channel === 'daemon' && parsed.payload) {
-        daemonEvents.push(parsed.payload);
+        const daemonPayload =
+          profileLatency && isObjectRecord(parsed.payload)
+            ? {
+                ...parsed.payload,
+                receivedAtMs,
+              }
+            : parsed.payload;
+        daemonEvents.push(daemonPayload);
         if (parsed.payload.type === 'ready') {
           ready = true;
+          readyAtMs = receivedAtMs;
+          startSentAtMs = receivedAtMs;
           ws.send(
             JSON.stringify({
               type: 'start',
@@ -831,14 +1810,29 @@ const streamTask = async ({ daemonUrl, clientId, clientToken, requestId, payload
         }
 
         if (parsed.payload.type === 'stream-result') {
+          completedAtMs = receivedAtMs;
           finish({
-            daemonResult: parsed.payload,
+            daemonResult:
+              profileLatency && isObjectRecord(parsed.payload)
+                ? {
+                    ...parsed.payload,
+                    receivedAtMs,
+                  }
+                : parsed.payload,
             daemonEvents,
             chunks,
           });
           return;
         }
 
+        return;
+      }
+
+      if (profileLatency && isObjectRecord(parsed)) {
+        chunks.push({
+          ...parsed,
+          receivedAtMs,
+        });
         return;
       }
 
@@ -915,7 +1909,14 @@ const spawnDaemonProcess = async ({ host, port, userDataPath }) => {
   return child;
 };
 
-const writeBenchmarkOutputs = async ({ outputDir, summary, taskResults, predictions, benchmark }) => {
+const writeBenchmarkOutputs = async ({
+  outputDir,
+  summary,
+  taskResults,
+  predictions,
+  benchmark,
+  latencySummary = null,
+}) => {
   await fsp.writeFile(
     path.join(outputDir, 'summary.json'),
     `${JSON.stringify(summary, null, 2)}\n`,
@@ -949,6 +1950,14 @@ const writeBenchmarkOutputs = async ({ outputDir, summary, taskResults, predicti
       'utf8'
     );
   }
+
+  if (latencySummary) {
+    await fsp.writeFile(
+      path.join(outputDir, 'latency-summary.json'),
+      `${JSON.stringify(latencySummary, null, 2)}\n`,
+      'utf8'
+    );
+  }
 };
 
 const runBenchmarkTask = async ({
@@ -960,12 +1969,16 @@ const runBenchmarkTask = async ({
   daemonContext,
   resolvedTools,
   taskOutputDir,
+  taskStartedAtRunMs = null,
+  getRunNow = null,
 }) => {
   const taskStarted = Date.now();
+  const latencyRecorder = options.profileLatency ? createLatencyRecorder() : null;
   const requestId = `${sanitizeFileName(task.id)}_${Date.now()}`;
   let threadId = null;
 
   try {
+    latencyRecorder?.startPhase('threadCreate');
     const thread = await createThread({
       daemonUrl: daemonContext.daemonUrl,
       clientId: daemonContext.clientId,
@@ -973,21 +1986,40 @@ const runBenchmarkTask = async ({
       title: `[${benchmark}] ${task.id}`,
       model: options.model,
     });
+    latencyRecorder?.endPhase('threadCreate');
     threadId = thread.id;
 
-      const streamPayload = {
-        providerType: options.providerType,
-        model: options.model,
-        thread_id: thread.id,
-        messages: task.messages,
-        ...(typeof options.maxIterations === 'number'
-          ? { maxIterations: options.maxIterations }
-          : {}),
-        ...(resolvedTools.length > 0 ? { tools: resolvedTools } : {}),
-        ...(task.tools && task.tools.length > 0 ? { tools: task.tools } : {}),
-        ...(options.skillMode ? { skillMode: options.skillMode } : {}),
+    if (Array.isArray(task.setupMessages) && task.setupMessages.length > 0) {
+      latencyRecorder?.startPhase('setupMessages');
+      for (const message of task.setupMessages) {
+        await createMessage({
+          daemonUrl: daemonContext.daemonUrl,
+          clientId: daemonContext.clientId,
+          clientToken: daemonContext.clientToken,
+          threadId: thread.id,
+          role: message.role,
+          content: message.content,
+          awaitEmotionAnalysis: message.awaitEmotionAnalysis === true && message.role === 'user',
+        });
+      }
+      latencyRecorder?.endPhase('setupMessages');
+    }
+
+    const streamPayload = {
+      providerType: options.providerType,
+      model: options.model,
+      thread_id: thread.id,
+      messages: task.messages,
+      ...(typeof options.maxIterations === 'number'
+        ? { maxIterations: options.maxIterations }
+        : {}),
+      ...(resolvedTools.length > 0 ? { tools: resolvedTools } : {}),
+      ...(task.tools && task.tools.length > 0 ? { tools: task.tools } : {}),
+      ...(options.skillMode ? { skillMode: options.skillMode } : {}),
+      ...(task.experimentalContext ? { experimental_context: task.experimentalContext } : {}),
     };
 
+    latencyRecorder?.startPhase('stream');
     const streamResult = await streamTask({
       daemonUrl: daemonContext.daemonUrl,
       clientId: daemonContext.clientId,
@@ -995,12 +2027,21 @@ const runBenchmarkTask = async ({
       requestId,
       payload: streamPayload,
       timeoutMs: options.streamTimeoutMs,
+      profileLatency: options.profileLatency,
     });
+    latencyRecorder?.endPhase('stream');
 
     const prediction = resolvePredictionText({
       chunks: streamResult.chunks,
       daemonResult: streamResult.daemonResult,
     });
+    const refreshedThread = await getThread({
+      daemonUrl: daemonContext.daemonUrl,
+      clientId: daemonContext.clientId,
+      clientToken: daemonContext.clientToken,
+      threadId: thread.id,
+    });
+    latencyRecorder?.startPhase('score');
     const score = await scorePrediction({
       task,
       prediction,
@@ -1009,11 +2050,21 @@ const runBenchmarkTask = async ({
       judgeModel: options.judgeModel,
       daemonContext,
     });
+    latencyRecorder?.endPhase('score');
     const durationMs = Date.now() - taskStarted;
     const extractedExactAnswer =
       benchmark === 'browsecomp' ? extractBrowseCompExactAnswer(prediction) : '';
     const extractedConfidence =
       benchmark === 'browsecomp' ? extractBrowseCompConfidence(prediction) : '';
+    const latencyProfile = latencyRecorder
+      ? buildTaskLatencyProfile({
+          taskId: task.id,
+          recorder: latencyRecorder,
+          streamLatencyProfile: streamResult.latencyProfile || null,
+          taskStartedAtRunMs,
+          taskCompletedAtRunMs: typeof getRunNow === 'function' ? getRunNow() : null,
+        })
+      : null;
 
     const taskRecord = {
       id: task.id,
@@ -1030,7 +2081,9 @@ const runBenchmarkTask = async ({
       daemonResult: streamResult.daemonResult,
       daemonEvents: streamResult.daemonEvents,
       chunks: streamResult.chunks,
+      thread: refreshedThread,
       metadata: task.metadata,
+      ...(latencyProfile ? { latencyProfile } : {}),
     };
 
     await fsp.writeFile(
@@ -1052,7 +2105,38 @@ const runBenchmarkTask = async ({
       ok: true,
     };
   } catch (error) {
+    if (latencyRecorder) {
+      const phases = latencyRecorder.snapshot().phases;
+      if (phases.score?.startedAtMs !== undefined && phases.score?.endedAtMs === undefined) {
+        latencyRecorder.endPhase('score');
+      }
+      if (phases.stream?.startedAtMs !== undefined && phases.stream?.endedAtMs === undefined) {
+        latencyRecorder.endPhase('stream');
+      }
+      if (
+        phases.threadCreate?.startedAtMs !== undefined &&
+        phases.threadCreate?.endedAtMs === undefined
+      ) {
+        latencyRecorder.endPhase('threadCreate');
+      }
+      if (
+        phases.setupMessages?.startedAtMs !== undefined &&
+        phases.setupMessages?.endedAtMs === undefined
+      ) {
+        latencyRecorder.endPhase('setupMessages');
+      }
+    }
     const durationMs = Date.now() - taskStarted;
+    const latencyProfile = latencyRecorder
+      ? buildTaskLatencyProfile({
+          taskId: task.id,
+          recorder: latencyRecorder,
+          streamLatencyProfile: error?.streamLatencyProfile || null,
+          error: String(error && error.message ? error.message : error),
+          taskStartedAtRunMs,
+          taskCompletedAtRunMs: typeof getRunNow === 'function' ? getRunNow() : null,
+        })
+      : null;
     const taskRecord = {
       id: task.id,
       success: false,
@@ -1064,6 +2148,7 @@ const runBenchmarkTask = async ({
       score: null,
       error: String(error && error.message ? error.message : error),
       metadata: task.metadata,
+      ...(latencyProfile ? { latencyProfile } : {}),
     };
 
     await fsp.writeFile(
@@ -1088,6 +2173,8 @@ const runBenchmarkTask = async ({
 
 const main = async () => {
   const options = parseArgs(process.argv.slice(2));
+  const runRecorder = options.profileLatency ? createLatencyRecorder() : null;
+  runRecorder?.startPhase('benchmark');
   const benchmark = options.benchmark.trim().toLowerCase() || DEFAULT_BENCHMARK;
   const defaultTools = getDefaultToolsForBenchmark(benchmark);
   const explicitTools = parseList(options.tools);
@@ -1107,7 +2194,9 @@ const main = async () => {
   const taskOutputDir = path.join(outputDir, 'tasks');
   await ensureDir(taskOutputDir);
 
+  runRecorder?.startPhase('loadTasks');
   const allTasks = await loadTasks(options);
+  runRecorder?.endPhase('loadTasks');
   const tasks = allTasks.slice(0, Math.min(allTasks.length, options.limit));
   if (tasks.length === 0) {
     throw new Error('No tasks to run after applying --limit');
@@ -1120,6 +2209,7 @@ const main = async () => {
   let daemonUrl = options.daemonUrl || '';
 
   if (options.spawnDaemon) {
+    runRecorder?.startPhase('daemonStartup');
     if (userDataPath) {
       await ensureDir(userDataPath);
     }
@@ -1139,6 +2229,7 @@ const main = async () => {
       port: daemonPort,
       userDataPath,
     });
+    runRecorder?.endPhase('daemonStartup');
   } else {
     daemonUrl = deriveDaemonUrl({
       daemonUrl: options.daemonUrl,
@@ -1161,11 +2252,14 @@ const main = async () => {
   });
 
   try {
+    runRecorder?.startPhase('healthCheck');
     const health = await waitForDaemonHealth({
       daemonUrl,
       timeoutMs: options.healthTimeoutMs,
     });
+    runRecorder?.endPhase('healthCheck');
 
+    runRecorder?.startPhase('resolveClient');
     let clientId = options.clientId || '';
     let clientToken = options.clientToken || '';
     if (!clientId || !clientToken) {
@@ -1186,6 +2280,7 @@ const main = async () => {
       clientId = registered.clientId;
       clientToken = registered.clientToken;
     }
+    runRecorder?.endPhase('resolveClient');
 
     const daemonContext = {
       daemonUrl,
@@ -1198,10 +2293,12 @@ const main = async () => {
     const startedAt = new Date().toISOString();
     let completedTasks = 0;
 
+    runRecorder?.startPhase('executeTasks');
     await mapWithConcurrency({
       items: tasks,
       parallel: options.parallel,
       worker: async (task, index) => {
+        const taskStartedAtRunMs = runRecorder ? runRecorder.now() : null;
         const taskOutcome = await runBenchmarkTask({
           task,
           taskIndex: index,
@@ -1211,6 +2308,8 @@ const main = async () => {
           daemonContext,
           resolvedTools,
           taskOutputDir,
+          taskStartedAtRunMs,
+          getRunNow: runRecorder ? runRecorder.now : null,
         });
 
         taskResults[index] = taskOutcome.taskRecord;
@@ -1224,9 +2323,13 @@ const main = async () => {
         return taskOutcome;
       },
     });
+    runRecorder?.endPhase('executeTasks');
 
     const finalizedTaskResults = taskResults.filter(Boolean);
     const finalizedPredictions = predictionRecords.filter(Boolean);
+    const latencySummary = options.profileLatency
+      ? buildLatencyRunSummary(finalizedTaskResults)
+      : null;
 
     const scoredTasks = finalizedTaskResults.filter(
       task => task.score && typeof task.score.passed === 'boolean'
@@ -1249,6 +2352,7 @@ const main = async () => {
       tools: resolvedTools,
       ...(typeof options.maxIterations === 'number' ? { maxIterations: options.maxIterations } : {}),
       parallel: options.parallel,
+      profileLatency: Boolean(options.profileLatency),
       startedAt,
       finishedAt: new Date().toISOString(),
       totalTasks: finalizedTaskResults.length,
@@ -1257,15 +2361,42 @@ const main = async () => {
       scoredTasks: scoredTasks.length,
       passedTasks: passedTasks.length,
       passRate: scoredTasks.length > 0 ? passedTasks.length / scoredTasks.length : null,
+      ...(latencySummary
+        ? {
+            latencySummaryPath: path.join(outputDir, 'latency-summary.json'),
+            flamegraphHtmlPath: path.join(outputDir, 'benchmark-flamegraph.flamegraph.html'),
+            traceJsonPath: path.join(outputDir, 'benchmark-flamegraph.trace.json'),
+            latencyTopSources: latencySummary.topSources.slice(0, 5),
+          }
+        : {}),
     };
 
+    runRecorder?.startPhase('writeOutputs');
     await writeBenchmarkOutputs({
       outputDir,
       summary,
       taskResults: finalizedTaskResults,
       predictions: finalizedPredictions,
       benchmark,
+      latencySummary,
     });
+    if (options.profileLatency) {
+      runRecorder.endPhase('writeOutputs');
+      runRecorder.endPhase('benchmark');
+      await writeTraceArtifacts({
+        outputDir,
+        basename: 'benchmark-flamegraph',
+        ...buildDaemonBenchmarkVisualization({
+          benchmark,
+          options,
+          runProfile: runRecorder.snapshot(),
+          taskResults: finalizedTaskResults,
+        }),
+      });
+    } else {
+      runRecorder?.endPhase('writeOutputs');
+      runRecorder?.endPhase('benchmark');
+    }
 
     process.stdout.write(`Wrote benchmark artifacts to ${outputDir}\n`);
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
@@ -1293,6 +2424,10 @@ module.exports = {
   scorePrediction,
   mapWithConcurrency,
   resolvePredictionText,
+  buildStreamLatencyProfile,
+  buildTaskLatencyProfile,
+  buildLatencyRunSummary,
+  buildDaemonBenchmarkVisualization,
 };
 
 if (require.main === module) {

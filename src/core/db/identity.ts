@@ -63,7 +63,7 @@ export const addIdentityProfile = (entry: {
   name: string;
   self_description?: string;
   owner_name?: string;
-  relationship_to_owner?: string;
+  owner_role_description?: string;
   core_values?: readonly string[] | string | null;
   boundaries?: readonly string[] | string | null;
   tone_guidance?: string;
@@ -86,10 +86,10 @@ export const addIdentityProfile = (entry: {
       .prepare(
         `
         INSERT INTO identity_profiles (
-          id, name, self_description, owner_name, relationship_to_owner,
+          id, name, self_description, owner_name, owner_role_description,
           core_values, boundaries, tone_guidance, active, metadata, created_at, updated_at
         ) VALUES (
-          @id, @name, @self_description, @owner_name, @relationship_to_owner,
+          @id, @name, @self_description, @owner_name, @owner_role_description,
           @core_values, @boundaries, @tone_guidance, @active, @metadata, @created_at, @updated_at
         )
       `
@@ -100,9 +100,9 @@ export const addIdentityProfile = (entry: {
         self_description:
           typeof entry.self_description === 'string' ? entry.self_description.trim() : '',
         owner_name: typeof entry.owner_name === 'string' ? entry.owner_name.trim() : '',
-        relationship_to_owner:
-          typeof entry.relationship_to_owner === 'string'
-            ? entry.relationship_to_owner.trim()
+        owner_role_description:
+          typeof entry.owner_role_description === 'string'
+            ? entry.owner_role_description.trim()
             : '',
         core_values: toJsonString(entry.core_values),
         boundaries: toJsonString(entry.boundaries),

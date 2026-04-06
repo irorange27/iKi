@@ -5,7 +5,6 @@ import { registerMemoryIpc } from './memory';
 import { registerMcpIpc } from './mcp';
 import { registerPromptAppsIpc } from './prompt_apps';
 import { registerProvidersIpc } from './providers';
-import { registerRelationshipIpc } from './relationship';
 import { registerSpeechIpc } from './speech';
 import { registerSkillsIpc } from './skills';
 import { registerTasksIpc } from './tasks';
@@ -26,7 +25,6 @@ export const registerMainIpc = (): void => {
   registerConfigIpc();
   registerUpdaterIpc();
   registerLifeIpc();
-  registerRelationshipIpc();
   registerProvidersIpc();
   registerMcpIpc();
   registerMemoryIpc();

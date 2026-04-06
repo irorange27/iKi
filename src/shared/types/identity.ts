@@ -3,7 +3,7 @@ export interface IdentityProfile {
   name: string;
   self_description: string;
   owner_name: string;
-  relationship_to_owner: string;
+  owner_role_description: string;
   core_values: string | null;
   boundaries: string | null;
   tone_guidance: string;
@@ -12,4 +12,3 @@ export interface IdentityProfile {
   created_at: string;
   updated_at: string;
 }
-

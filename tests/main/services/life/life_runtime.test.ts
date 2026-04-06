@@ -112,7 +112,7 @@ describe('life_runtime', () => {
       name: 'iKi Core',
       self_description: '',
       owner_name: 'the user',
-      relationship_to_owner: '',
+      owner_role_description: '',
       core_values: '[]',
       boundaries: '[]',
       tone_guidance: '',

@@ -99,7 +99,7 @@ describe('life_reflection', () => {
       name: 'iKi Core',
       self_description: '',
       owner_name: 'Nina',
-      relationship_to_owner: 'trusted companion',
+      owner_role_description: 'trusted companion',
       core_values: '[]',
       boundaries: '[]',
       tone_guidance: '',

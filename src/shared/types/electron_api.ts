@@ -16,7 +16,6 @@ import type {
   ShortMemoryEntry,
 } from './memory';
 import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from './life';
-import type { RelationshipOverview } from './relationship';
 import type { ProactiveTask } from './tasks';
 import type { McpServerInput, McpServerSummary } from './mcp';
 import type {
@@ -218,9 +217,6 @@ export interface ElectronApi {
     clearOwnerMode: () => Promise<LifeSnapshot | null>;
     onPush: (callback: (payload: unknown) => void) => () => void;
     removeAllListeners: () => void;
-  };
-  relationship: {
-    getOverview: (limit?: number) => Promise<RelationshipOverview>;
   };
   workspaces: {
     list: () => Promise<Workspace[]>;

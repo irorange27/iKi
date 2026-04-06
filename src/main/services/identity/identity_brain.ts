@@ -7,7 +7,9 @@ import { getUserDataPath } from '../../../core/platform';
 const identityBrainLogger = createLogger({ module: 'identity_brain' });
 
 type BrainDocument = {
+  key: string;
   fileName: string;
+  legacyFileNames?: string[];
   title: string;
   template: string;
 };
@@ -16,6 +18,7 @@ const BRAIN_ROOT_DIR = 'brain';
 const BRAIN_SUBDIRECTORIES = ['memory_inbox', 'reflections'] as const;
 const BRAIN_DOCUMENTS: BrainDocument[] = [
   {
+    key: 'iki',
     fileName: 'iki.md',
     title: 'iKi',
     template: [
@@ -26,22 +29,13 @@ const BRAIN_DOCUMENTS: BrainDocument[] = [
     ].join('\n'),
   },
   {
+    key: 'owner',
     fileName: 'owner.md',
     title: 'Owner',
     template: [
       '# Owner',
       '',
       '<!-- Store only confirmed, durable facts about the owner here. -->',
-      '',
-    ].join('\n'),
-  },
-  {
-    fileName: 'relationship.md',
-    title: 'Relationship',
-    template: [
-      '# Relationship',
-      '',
-      '<!-- Describe stable relationship guidance, preferred address, and clear boundaries. -->',
       '',
     ].join('\n'),
   },
@@ -77,6 +71,11 @@ const ensureDocument = (rootPath: string, document: BrainDocument) => {
   fs.writeFileSync(filePath, document.template, 'utf8');
 };
 
+const getDocumentCandidatePaths = (rootPath: string, document: BrainDocument): string[] => [
+  path.join(rootPath, document.fileName),
+  ...(document.legacyFileNames ?? []).map(fileName => path.join(rootPath, fileName)),
+];
+
 export const getIdentityBrainDirectoryPath = (): string => getBrainRootPath();
 
 export const ensureIdentityBrainLayout = (): string => {
@@ -107,39 +106,34 @@ export const ensureIdentityBrainLayout = (): string => {
 };
 
 const readBrainDocument = (rootPath: string, document: BrainDocument): string => {
-  const filePath = path.join(rootPath, document.fileName);
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const normalized = normalizeMarkdown(stripHtmlComments(raw));
-    if (!hasMeaningfulMarkdown(normalized)) return '';
-    return normalized;
-  } catch (error) {
-    identityBrainLogger.event({
-      level: 'warn',
-      event: 'identity.brain.read_document',
-      outcome: 'degraded',
-      error,
-      data: {
-        file_path: filePath,
-      },
-    });
-    return '';
+  for (const filePath of getDocumentCandidatePaths(rootPath, document)) {
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const normalized = normalizeMarkdown(stripHtmlComments(raw));
+      if (!hasMeaningfulMarkdown(normalized)) continue;
+      return normalized;
+    } catch (error) {
+      if (!fs.existsSync(filePath)) continue;
+      identityBrainLogger.event({
+        level: 'warn',
+        event: 'identity.brain.read_document',
+        outcome: 'degraded',
+        error,
+        data: {
+          file_path: filePath,
+        },
+      });
+      return '';
+    }
   }
+
+  return '';
 };
 
-export const getIdentityBrainContextMessage = (): string => {
+export const getIdentityBrainDocuments = (): Record<string, string> => {
   const rootPath = ensureIdentityBrainLayout();
-  const sections = BRAIN_DOCUMENTS.map(document => {
-    const content = readBrainDocument(rootPath, document);
-    if (!content) return '';
-    return `## ${document.title}\n${content}`;
-  }).filter(Boolean);
-
-  if (!sections.length) return '';
-
-  return [
-    'User-editable continuity notes from the local brain folder.',
-    'Use them as durable background context when relevant. Do not infer beyond what they actually say.',
-    ...sections,
-  ].join('\n\n');
+  return BRAIN_DOCUMENTS.reduce<Record<string, string>>((record, document) => {
+    record[document.key] = readBrainDocument(rootPath, document);
+    return record;
+  }, {});
 };

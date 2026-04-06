@@ -28,15 +28,17 @@ import type { ChatMemory } from './chat_memory';
 import { deriveModelAwareContextConfig, type EffectiveContextConfig } from './chat_context_budget';
 import { resolveSkillsSystemPrompt } from './chat_skills';
 import { getPromptFromMessage } from './chat_ui';
-import { getIdentityContextMessage } from '../identity/identity_service';
+import {
+  getAssistantProfileContextMessage,
+  retrieveRelevantContinuity,
+  shouldUseLegacyContinuityContextBlocks,
+} from '../continuity/continuity_service';
 import { getLifeContextMessage } from '../life/life_runtime';
 import { getRecentLifeReflectionContextMessage } from '../life/life_reflection';
-import { getRelationshipContextMessage } from '../relationship/relationship_service';
 
 export type ContextBlockKind =
   | 'recent-history'
   | 'identity'
-  | 'relationship'
   | 'life-state'
   | 'recent-reflection'
   | 'thread-summary'
@@ -120,11 +122,6 @@ type IdentityContext = {
 };
 
 type LifeStateContext = {
-  systemMessage: string;
-  block: ContextReportBlock;
-};
-
-type RelationshipContext = {
   systemMessage: string;
   block: ContextReportBlock;
 };
@@ -553,41 +550,6 @@ const buildIdentityContext = (
   };
 };
 
-const buildRelationshipContext = (
-  threadId: string | undefined,
-  contextConfig: ContextConfig,
-  modelCapability?: ModelCapability | null
-): RelationshipContext => {
-  const relationshipClip = clipTextToTokenBudget(
-    getRelationshipContextMessage(threadId),
-    contextConfig.maxRelationshipTokens,
-    modelCapability
-  );
-
-  return {
-    systemMessage: relationshipClip.text,
-    block: {
-      kind: 'relationship',
-      status: relationshipClip.text
-        ? relationshipClip.truncated
-          ? 'truncated'
-          : 'included'
-        : 'dropped',
-      estimatedTokens: estimateTextTokens(relationshipClip.text, modelCapability),
-      charCount: relationshipClip.text.length,
-      ...(relationshipClip.text
-        ? relationshipClip.truncated
-          ? { reason: 'relationship block clipped to context budget' }
-          : {}
-        : {
-            reason: threadId
-              ? 'no relationship state available'
-              : 'no active thread scope available',
-          }),
-    },
-  };
-};
-
 const buildLifeStateContext = (
   contextConfig: ContextConfig,
   modelCapability?: ModelCapability | null
@@ -607,9 +569,9 @@ const buildLifeStateContext = (
       charCount: lifeClip.text.length,
       ...(lifeClip.text
         ? lifeClip.truncated
-          ? { reason: 'life-state block clipped to context budget' }
+          ? { reason: 'presence-state block clipped to context budget' }
           : {}
-        : { reason: 'no life state available' }),
+        : { reason: 'no presence state available' }),
     },
   };
 };
@@ -639,7 +601,7 @@ const buildRecentReflectionContext = (
         ? reflectionClip.truncated
           ? { reason: 'reflection block clipped to context budget' }
           : {}
-        : { reason: 'no recent life reflection available' }),
+        : { reason: 'no recent runtime reflection available' }),
     },
   };
 };
@@ -669,6 +631,25 @@ const buildDroppedBlock = (kind: ContextBlockKind, reason: string): ContextRepor
   reason,
 });
 
+const buildCombinedMemorySystemMessage = (sections: string[]): string =>
+  sections
+    .map(section => section.trim())
+    .filter(Boolean)
+    .join('\n\n');
+
+const buildContinuityMemorySystemMessage = (
+  entries: Array<{ summary: string; score: number; updated_at?: string }>
+): string => {
+  if (!entries.length) return '';
+  const lines = entries.map(entry => {
+    const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
+    const dateText = entry.updated_at ? new Date(entry.updated_at).toLocaleDateString() : '';
+    const summary = normalizeWhitespace(entry.summary);
+    return dateText ? `- (${score}, ${dateText}) ${summary}` : `- (${score}) ${summary}`;
+  });
+  return ['Durable continuity context (use only if relevant):', ...lines].join('\n');
+};
+
 const buildMemoryContext = async (params: {
   threadId?: string;
   query: string;
@@ -681,25 +662,48 @@ const buildMemoryContext = async (params: {
     return buildDroppedMemoryContext('no user query available');
   }
 
-  if (!params.threadId) {
-    return buildDroppedMemoryContext('no relevant memory retrieved');
+  const continuityPayload = retrieveRelevantContinuity(params.query);
+  const archiveMemoryPayload =
+    params.threadId && params.query.trim()
+      ? await params.memory.retrieveRelevantMemory(params.threadId, params.query)
+      : null;
+
+  if (!continuityPayload && !archiveMemoryPayload) {
+    return buildDroppedMemoryContext('no relevant continuity or archive memory retrieved');
   }
 
-  const memoryPayload = await params.memory.retrieveRelevantMemory(params.threadId, params.query);
-  if (!memoryPayload) {
-    return buildDroppedMemoryContext('no relevant memory retrieved');
-  }
-
-  let memoryResults = [...memoryPayload.results];
-  let memorySystemMessage = buildMemorySystemMessage(memoryResults.map(toMemoryDisplayEntry));
+  let continuityResults = [...(continuityPayload?.results ?? [])];
+  let archiveMemoryResults = [...(archiveMemoryPayload?.results ?? [])];
+  const originalResultCount = continuityResults.length + archiveMemoryResults.length;
+  let memoryResults = [...continuityResults, ...archiveMemoryResults];
+  let memorySystemMessage = buildCombinedMemorySystemMessage([
+    continuityResults.length > 0
+      ? buildContinuityMemorySystemMessage(continuityResults.map(toMemoryDisplayEntry))
+      : '',
+    archiveMemoryResults.length > 0
+      ? buildMemorySystemMessage(archiveMemoryResults.map(toMemoryDisplayEntry))
+      : '',
+  ]);
 
   while (
     memoryResults.length > 1 &&
     estimateTextTokens(memorySystemMessage, params.modelCapability) >
       params.contextConfig.maxMemoryTokens
   ) {
-    memoryResults = memoryResults.slice(0, -1);
-    memorySystemMessage = buildMemorySystemMessage(memoryResults.map(toMemoryDisplayEntry));
+    if (archiveMemoryResults.length > 0) {
+      archiveMemoryResults = archiveMemoryResults.slice(0, -1);
+    } else {
+      continuityResults = continuityResults.slice(0, -1);
+    }
+    memoryResults = [...continuityResults, ...archiveMemoryResults];
+    memorySystemMessage = buildCombinedMemorySystemMessage([
+      continuityResults.length > 0
+        ? buildContinuityMemorySystemMessage(continuityResults.map(toMemoryDisplayEntry))
+        : '',
+      archiveMemoryResults.length > 0
+        ? buildMemorySystemMessage(archiveMemoryResults.map(toMemoryDisplayEntry))
+        : '',
+    ]);
   }
 
   const memoryClip = clipTextToTokenBudget(
@@ -708,7 +712,7 @@ const buildMemoryContext = async (params: {
     params.modelCapability
   );
   params.onMemoryRetrieved?.({
-    query: memoryPayload.query,
+    query: continuityPayload?.query || archiveMemoryPayload?.query || params.query,
     results: memoryResults,
     systemMessage: memoryClip.text,
   });
@@ -718,7 +722,7 @@ const buildMemoryContext = async (params: {
     block: {
       kind: 'memory',
       status: memoryClip.text
-        ? memoryClip.truncated || memoryResults.length < memoryPayload.results.length
+        ? memoryClip.truncated || memoryResults.length < originalResultCount
           ? 'truncated'
           : 'included'
         : 'dropped',
@@ -727,10 +731,10 @@ const buildMemoryContext = async (params: {
       ...(memoryClip.text
         ? memoryClip.truncated
           ? { reason: 'memory block clipped to context budget' }
-          : memoryResults.length < memoryPayload.results.length
-            ? { reason: 'memory items reduced to fit context budget' }
+          : memoryResults.length < originalResultCount
+            ? { reason: 'continuity or archive memory items reduced to fit context budget' }
             : {}
-        : { reason: 'no relevant memory retrieved' }),
+        : { reason: 'no relevant continuity or archive memory retrieved' }),
       sourceCount: memoryResults.length,
     },
   };
@@ -866,27 +870,29 @@ export const createChatContextAssembler = (deps: {
           block: buildDroppedBlock('identity', 'disabled for benchmark clean mode'),
         }
       : buildIdentityContext(
-          getIdentityContextMessage(),
+          getAssistantProfileContextMessage(),
           deps.workspaceSystemMessage?.(params.threadId),
           contextConfig,
           params.modelCapability
         );
     blocks.push(identityContext.block);
 
-    const relationshipContext = benchmarkCleanContext
-      ? {
-          systemMessage: '',
-          block: buildDroppedBlock('relationship', 'disabled for benchmark clean mode'),
-        }
-      : buildRelationshipContext(params.threadId, contextConfig, params.modelCapability);
-    blocks.push(relationshipContext.block);
+    const useLegacyContinuityContextBlocks = shouldUseLegacyContinuityContextBlocks();
 
     const lifeStateContext = benchmarkCleanContext
       ? {
           systemMessage: '',
           block: buildDroppedBlock('life-state', 'disabled for benchmark clean mode'),
         }
-      : buildLifeStateContext(contextConfig, params.modelCapability);
+      : !useLegacyContinuityContextBlocks
+        ? {
+            systemMessage: '',
+            block: buildDroppedBlock(
+              'life-state',
+              'disabled by continuity config: runtime presence is no longer part of default prompt context'
+            ),
+          }
+        : buildLifeStateContext(contextConfig, params.modelCapability);
     blocks.push(lifeStateContext.block);
 
     const reflectionContext = benchmarkCleanContext
@@ -894,7 +900,15 @@ export const createChatContextAssembler = (deps: {
           systemMessage: '',
           block: buildDroppedBlock('recent-reflection', 'disabled for benchmark clean mode'),
         }
-      : buildRecentReflectionContext(contextConfig, params.modelCapability);
+      : !useLegacyContinuityContextBlocks
+        ? {
+            systemMessage: '',
+            block: buildDroppedBlock(
+              'recent-reflection',
+              'disabled by continuity config: life reflections are no longer part of default prompt context'
+            ),
+          }
+        : buildRecentReflectionContext(contextConfig, params.modelCapability);
     blocks.push(reflectionContext.block);
 
     const threadSummary =
@@ -935,7 +949,6 @@ export const createChatContextAssembler = (deps: {
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
       [
         identityContext.systemMessage,
-        relationshipContext.systemMessage,
         lifeStateContext.systemMessage,
         reflectionContext.systemMessage,
         summaryContext.systemMessage,

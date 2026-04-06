@@ -7,7 +7,7 @@ import { isObjectRecord } from '../../../shared/utils/guards';
 import { createPrefixedId } from '../../../shared/utils/id';
 import { ensureThreadWorkspaceSelection } from '../../../core/workspaces/thread_workspace';
 import { getErrorMessage } from '../../utils/errors';
-import { touchThreadRelationshipState } from '../relationship/relationship_service';
+import { onMessagePersisted as onContinuityMessagePersisted } from '../continuity/continuity_service';
 import type { ChatMemory } from './chat_memory';
 import { sanitizeUiMessageJsonForStorage } from './chat_ui';
 
@@ -131,7 +131,6 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
       // Keep thread ordering consistent with recent activity.
       if (message.thread_id) {
         chatThreadDb.touchChatThread(message.thread_id);
-        touchThreadRelationshipState(message.thread_id, timestamp);
       }
     } catch (error: unknown) {
       const errorCode =
@@ -177,6 +176,11 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     }
 
     deps.memory.onMessagePersisted({
+      threadId: message.thread_id,
+      messageId,
+      messageJson: sanitizedMessageJson,
+    });
+    void onContinuityMessagePersisted({
       threadId: message.thread_id,
       messageId,
       messageJson: sanitizedMessageJson,
@@ -237,7 +241,6 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
 
       if (threadId) {
         chatThreadDb.touchChatThread(threadId);
-        touchThreadRelationshipState(threadId);
       }
     } catch (error) {
       chatPersistenceLogger.event({

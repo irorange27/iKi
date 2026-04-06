@@ -419,7 +419,6 @@ describe('ui_message_references', () => {
       },
       {
         maxRecentTokens: 2400,
-        maxRelationshipTokens: 220,
         maxSummaryTokens: 500,
         maxMemoryTokens: 500,
         maxSkillTokens: 1200,
@@ -429,13 +428,13 @@ describe('ui_message_references', () => {
     expect(indicator).toEqual(
       expect.objectContaining({
         usedTokens: 640,
-        budgetTokens: 4820,
-        percent: 13,
-        percentLabel: '13%',
+        budgetTokens: 4600,
+        percent: 14,
+        percentLabel: '14%',
         tokenLabel: '640 tok',
       })
     );
-    expect(indicator?.tooltip).toContain('Context usage: 640 tok / 4,820 tok (13%)');
+    expect(indicator?.tooltip).toContain('Context usage: 640 tok / 4,600 tok (14%)');
     expect(indicator?.tooltip).toContain(
       'recent-history: truncated · 220 tok · compacted older turns'
     );
@@ -463,11 +462,10 @@ describe('ui_message_references', () => {
     expect(
       getContextBudgetTokens({
         maxRecentTokens: 2400,
-        maxRelationshipTokens: 220,
         maxSummaryTokens: 500,
         maxMemoryTokens: 500,
         maxSkillTokens: 1200,
       })
-    ).toBe(4820);
+    ).toBe(4600);
   });
 });

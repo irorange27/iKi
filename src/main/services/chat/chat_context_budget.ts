@@ -7,7 +7,6 @@ type ScaledBudgetItem = {
   key:
     | 'maxRecentTokens'
     | 'maxIdentityTokens'
-    | 'maxRelationshipTokens'
     | 'maxLifeStateTokens'
     | 'maxReflectionTokens'
     | 'maxSummaryTokens'
@@ -29,7 +28,6 @@ export type EffectiveContextConfig = ContextConfig & {
 const CONTEXT_BUDGET_FLOORS: Record<ScaledBudgetItem['key'], number> = {
   maxRecentTokens: 256,
   maxIdentityTokens: 48,
-  maxRelationshipTokens: 48,
   maxLifeStateTokens: 48,
   maxReflectionTokens: 48,
   maxSummaryTokens: 96,
@@ -50,11 +48,6 @@ const toScaledBudgetItems = (config: ContextConfig): ScaledBudgetItem[] => [
     key: 'maxIdentityTokens',
     value: config.maxIdentityTokens,
     minValue: CONTEXT_BUDGET_FLOORS.maxIdentityTokens,
-  },
-  {
-    key: 'maxRelationshipTokens',
-    value: config.maxRelationshipTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxRelationshipTokens,
   },
   {
     key: 'maxLifeStateTokens',
@@ -130,7 +123,6 @@ const shrinkBudgetToFit = (
 const buildRequestedContextTokens = (config: ContextConfig): number =>
   config.maxRecentTokens +
   config.maxIdentityTokens +
-  config.maxRelationshipTokens +
   config.maxLifeStateTokens +
   config.maxReflectionTokens +
   config.maxSummaryTokens +
@@ -227,7 +219,6 @@ export const deriveModelAwareContextConfig = (
     maxRecentTokens: itemMap.maxRecentTokens,
     maxMessageTokens: scaleMessageClipBudget(config, scale, itemMap.maxRecentTokens),
     maxIdentityTokens: itemMap.maxIdentityTokens,
-    maxRelationshipTokens: itemMap.maxRelationshipTokens,
     maxLifeStateTokens: itemMap.maxLifeStateTokens,
     maxReflectionTokens: itemMap.maxReflectionTokens,
     maxSummaryTokens: itemMap.maxSummaryTokens,

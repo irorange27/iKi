@@ -18,7 +18,7 @@ import { migration as migration016TodoLists } from './016_add_todo_lists_table';
 import { migration as migration017IdentityProfiles } from './017_add_identity_profiles_table';
 import { migration as migration018LifeRuntime } from './018_add_life_runtime_tables';
 import { migration as migration019LifeReflections } from './019_add_life_reflections_table';
-import { migration as migration020RelationshipStates } from './020_add_relationship_states_table';
+import { migration as migration020LegacyThreadContextSchema } from './020_legacy_thread_context_schema';
 import { migration as migration021ChatToolApprovalSkillIds } from './021_add_chat_tool_approval_skill_ids';
 import { migration as migration022ChatToolApprovalMaxOutputTokens } from './022_add_chat_tool_approval_max_output_tokens';
 import { migration as migration023CanonicalizeChatUiMessages } from './023_canonicalize_chat_ui_messages';
@@ -26,6 +26,9 @@ import { migration as migration024AddProviderModelOptions } from './024_add_prov
 import { migration as migration025AddChatThreadTodos } from './025_add_chat_thread_todos_table';
 import { migration as migration026AddChatToolApprovalMaxIterations } from './026_add_chat_tool_approval_max_iterations';
 import { migration as migration027RestoreLegacyDesktopThreadOwnership } from './027_restore_legacy_desktop_thread_ownership';
+import { migration as migration028AddContinuityTables } from './028_add_continuity_tables';
+import { migration as migration029DropLegacyThreadContextTable } from './029_drop_legacy_thread_context_table';
+import { migration as migration030RenameIdentityOwnerRoleField } from './030_rename_identity_owner_role_field';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -48,7 +51,7 @@ export const registeredMigrations = [
   migration017IdentityProfiles,
   migration018LifeRuntime,
   migration019LifeReflections,
-  migration020RelationshipStates,
+  migration020LegacyThreadContextSchema,
   migration021ChatToolApprovalSkillIds,
   migration022ChatToolApprovalMaxOutputTokens,
   migration023CanonicalizeChatUiMessages,
@@ -56,6 +59,9 @@ export const registeredMigrations = [
   migration025AddChatThreadTodos,
   migration026AddChatToolApprovalMaxIterations,
   migration027RestoreLegacyDesktopThreadOwnership,
+  migration028AddContinuityTables,
+  migration029DropLegacyThreadContextTable,
+  migration030RenameIdentityOwnerRoleField,
   // Add more migrations here as needed
 ];
 
