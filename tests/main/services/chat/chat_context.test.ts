@@ -11,9 +11,6 @@ const {
   resolveSkillsSystemPromptMock,
   getAssistantProfileContextMessageMock,
   retrieveRelevantContinuityMock,
-  shouldUseLegacyContinuityContextBlocksMock,
-  getPresenceContextMessageMock,
-  getRecentRuntimeReflectionContextMessageMock,
 } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
   getChatMessagesMock: vi.fn(),
@@ -25,9 +22,6 @@ const {
   resolveSkillsSystemPromptMock: vi.fn(),
   getAssistantProfileContextMessageMock: vi.fn(),
   retrieveRelevantContinuityMock: vi.fn(),
-  shouldUseLegacyContinuityContextBlocksMock: vi.fn(),
-  getPresenceContextMessageMock: vi.fn(),
-  getRecentRuntimeReflectionContextMessageMock: vi.fn(),
 }));
 
 vi.mock('../../../../src/core/config', () => ({
@@ -59,15 +53,6 @@ vi.mock('../../../../src/main/services/chat/chat_skills', () => ({
 vi.mock('../../../../src/main/services/continuity/continuity_service', () => ({
   getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,
   retrieveRelevantContinuity: retrieveRelevantContinuityMock,
-  shouldUseLegacyContinuityContextBlocks: shouldUseLegacyContinuityContextBlocksMock,
-}));
-
-vi.mock('../../../../src/main/services/presence/presence_runtime', () => ({
-  getPresenceContextMessage: getPresenceContextMessageMock,
-}));
-
-vi.mock('../../../../src/main/services/presence/presence_reflection', () => ({
-  getRecentRuntimeReflectionContextMessage: getRecentRuntimeReflectionContextMessageMock,
 }));
 
 import { createChatContextAssembler } from '../../../../src/main/services/chat/chat_context';
@@ -80,8 +65,6 @@ const baseConfig = {
       maxRecentTokens: 4000,
       maxMessageTokens: 200,
       maxIdentityTokens: 120,
-      maxPresenceStateTokens: 120,
-      maxRuntimeReflectionTokens: 120,
       summaryTriggerMessages: 5,
       summaryRecentMessages: 2,
       maxSummaryTokens: 300,
@@ -133,9 +116,6 @@ beforeEach(() => {
   });
   getAssistantProfileContextMessageMock.mockReturnValue('');
   retrieveRelevantContinuityMock.mockReturnValue(null);
-  shouldUseLegacyContinuityContextBlocksMock.mockReturnValue(false);
-  getPresenceContextMessageMock.mockReturnValue('');
-  getRecentRuntimeReflectionContextMessageMock.mockReturnValue('');
 });
 
 describe('chat_context assembler', () => {
@@ -855,8 +835,6 @@ describe('chat_context assembler', () => {
 
   it('drops confounding context blocks in benchmark clean mode', async () => {
     getAssistantProfileContextMessageMock.mockReturnValue('Identity.');
-    getPresenceContextMessageMock.mockReturnValue('Presence state.');
-    getRecentRuntimeReflectionContextMessageMock.mockReturnValue('Reflection.');
 
     const { assembler } = createAssembler({
       getAffectContextMessage: vi.fn(() => 'Stored affect.'),
@@ -887,44 +865,6 @@ describe('chat_context assembler', () => {
         kind: 'skills',
         status: 'dropped',
         reason: 'disabled for benchmark clean mode',
-      })
-    );
-  });
-
-  it('drops legacy life blocks by default when continuity owns durable context', async () => {
-    getPresenceContextMessageMock.mockReturnValue('Presence state.');
-    getRecentRuntimeReflectionContextMessageMock.mockReturnValue('Reflection.');
-
-    const { assembler } = createAssembler();
-    const result = await assembler.assemble({
-      threadId: 'thread_default_continuity',
-      messages: [{ role: 'user', content: 'Respond.' }],
-    });
-
-    expect(
-      result.messages.some(
-        message => message.role === 'system' && String(message.content).includes('Presence state.')
-      )
-    ).toBe(false);
-    expect(
-      result.messages.some(
-        message => message.role === 'system' && String(message.content).includes('Reflection.')
-      )
-    ).toBe(false);
-    expect(findBlock(result, 'presence-state')).toEqual(
-      expect.objectContaining({
-        kind: 'presence-state',
-        status: 'dropped',
-        reason:
-          'disabled by continuity config: runtime presence is no longer part of default prompt context',
-      })
-    );
-    expect(findBlock(result, 'runtime-reflection')).toEqual(
-      expect.objectContaining({
-        kind: 'runtime-reflection',
-        status: 'dropped',
-        reason:
-          'disabled by continuity config: runtime reflections are no longer part of default prompt context',
       })
     );
   });
@@ -1305,67 +1245,4 @@ describe('chat_context assembler', () => {
     );
   });
 
-  it('injects the current presence-state block through the shared context pipeline', async () => {
-    shouldUseLegacyContinuityContextBlocksMock.mockReturnValue(true);
-    getPresenceContextMessageMock.mockReturnValue(
-      'Current presence state for iKi:\n- Presence: focused\n- Activity: focused_work'
-    );
-
-    const assembler = createChatContextAssembler({
-      memory: {
-        retrieveRelevantMemory: vi.fn(() => null),
-        getAffectContextMessage: vi.fn(() => ''),
-      } as never,
-    });
-
-    const result = await assembler.assemble({
-      threadId: 'thread_life',
-      messages: [{ role: 'user', content: 'What are you occupied with?' }],
-    });
-
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: 'Current presence state for iKi:\n- Presence: focused\n- Activity: focused_work',
-    });
-    expect(result.report.blocks).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'presence-state',
-          status: 'included',
-        }),
-      ])
-    );
-  });
-
-  it('injects the runtime reflection block through the shared context pipeline', async () => {
-    shouldUseLegacyContinuityContextBlocksMock.mockReturnValue(true);
-    getRecentRuntimeReflectionContextMessageMock.mockReturnValue(
-      'Recent runtime reflection for iKi:\n- Hourly recap: task arc stayed coherent.'
-    );
-
-    const assembler = createChatContextAssembler({
-      memory: {
-        retrieveRelevantMemory: vi.fn(() => null),
-        getAffectContextMessage: vi.fn(() => ''),
-      } as never,
-    });
-
-    const result = await assembler.assemble({
-      threadId: 'thread_reflection',
-      messages: [{ role: 'user', content: 'Where are we in the day?' }],
-    });
-
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: 'Recent runtime reflection for iKi:\n- Hourly recap: task arc stayed coherent.',
-    });
-    expect(result.report.blocks).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'runtime-reflection',
-          status: 'included',
-        }),
-      ])
-    );
-  });
 });

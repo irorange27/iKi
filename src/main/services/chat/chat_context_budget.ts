@@ -7,8 +7,6 @@ type ScaledBudgetItem = {
   key:
     | 'maxRecentTokens'
     | 'maxIdentityTokens'
-    | 'maxPresenceStateTokens'
-    | 'maxRuntimeReflectionTokens'
     | 'maxSummaryTokens'
     | 'maxMemoryTokens'
     | 'maxSkillTokens';
@@ -28,8 +26,6 @@ export type EffectiveContextConfig = ContextConfig & {
 const CONTEXT_BUDGET_FLOORS: Record<ScaledBudgetItem['key'], number> = {
   maxRecentTokens: 256,
   maxIdentityTokens: 48,
-  maxPresenceStateTokens: 48,
-  maxRuntimeReflectionTokens: 48,
   maxSummaryTokens: 96,
   maxMemoryTokens: 96,
   maxSkillTokens: 160,
@@ -48,16 +44,6 @@ const toScaledBudgetItems = (config: ContextConfig): ScaledBudgetItem[] => [
     key: 'maxIdentityTokens',
     value: config.maxIdentityTokens,
     minValue: CONTEXT_BUDGET_FLOORS.maxIdentityTokens,
-  },
-  {
-    key: 'maxPresenceStateTokens',
-    value: config.maxPresenceStateTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxPresenceStateTokens,
-  },
-  {
-    key: 'maxRuntimeReflectionTokens',
-    value: config.maxRuntimeReflectionTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxRuntimeReflectionTokens,
   },
   {
     key: 'maxSummaryTokens',
@@ -123,8 +109,6 @@ const shrinkBudgetToFit = (
 const buildRequestedContextTokens = (config: ContextConfig): number =>
   config.maxRecentTokens +
   config.maxIdentityTokens +
-  config.maxPresenceStateTokens +
-  config.maxRuntimeReflectionTokens +
   config.maxSummaryTokens +
   config.maxMemoryTokens +
   config.maxSkillTokens;
@@ -219,8 +203,6 @@ export const deriveModelAwareContextConfig = (
     maxRecentTokens: itemMap.maxRecentTokens,
     maxMessageTokens: scaleMessageClipBudget(config, scale, itemMap.maxRecentTokens),
     maxIdentityTokens: itemMap.maxIdentityTokens,
-    maxPresenceStateTokens: itemMap.maxPresenceStateTokens,
-    maxRuntimeReflectionTokens: itemMap.maxRuntimeReflectionTokens,
     maxSummaryTokens: itemMap.maxSummaryTokens,
     maxMemoryTokens: itemMap.maxMemoryTokens,
     maxSkillTokens: itemMap.maxSkillTokens,

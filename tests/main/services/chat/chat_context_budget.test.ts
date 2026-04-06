@@ -8,8 +8,6 @@ const baseConfig = {
   maxRecentTokens: 2400,
   maxMessageTokens: 420,
   maxIdentityTokens: 320,
-  maxPresenceStateTokens: 220,
-  maxRuntimeReflectionTokens: 240,
   summaryTriggerMessages: 14,
   summaryRecentMessages: 6,
   maxSummaryTokens: 500,
@@ -52,8 +50,6 @@ describe('chat_context_budget', () => {
     const totalBudget =
       result.maxRecentTokens +
       result.maxIdentityTokens +
-      result.maxPresenceStateTokens +
-      result.maxRuntimeReflectionTokens +
       result.maxSummaryTokens +
       result.maxMemoryTokens +
       result.maxSkillTokens;

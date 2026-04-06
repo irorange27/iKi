@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getRendererProdHtmlPath, loadRendererEntry } from '../../../src/main/windows/renderer';
+import {
+  getRendererDevServerUrl,
+  getRendererProdHtmlPath,
+  loadRendererEntry,
+} from '../../../src/main/windows/renderer';
 
 describe('loadRendererEntry', () => {
   const loadURL = vi.fn((url: string) => Promise.resolve(void url));
@@ -15,6 +19,10 @@ describe('loadRendererEntry', () => {
     process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL = 'http://localhost:5173';
   });
 
+  it('normalizes loopback renderer URLs to IPv4', () => {
+    expect(getRendererDevServerUrl()).toBe('http://127.0.0.1:5173/');
+  });
+
   it('loads the dev server URL when the renderer becomes reachable', async () => {
     await loadRendererEntry(
       { loadURL, loadFile },
@@ -25,7 +33,7 @@ describe('loadRendererEntry', () => {
       }
     );
 
-    expect(loadURL).toHaveBeenCalledWith('http://localhost:5173/#settings');
+    expect(loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173/#settings');
     expect(loadFile).not.toHaveBeenCalled();
   });
 

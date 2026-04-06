@@ -67,7 +67,6 @@ import {
   getAssistantProfileContextMessage,
   onMessagePersisted,
   retrieveRelevantContinuity,
-  shouldUseLegacyContinuityContextBlocks,
 } from '../../../../src/main/services/continuity/continuity_service';
 
 const baseConfig = {
@@ -75,7 +74,6 @@ const baseConfig = {
     enabled: true,
     autoCaptureExplicitFacts: true,
     injectToSystemPrompt: true,
-    useLegacyContextBlocks: false,
     maxRetrievedItems: 2,
   },
 };
@@ -279,18 +277,5 @@ describe('continuity_service', () => {
 
     expect(upsertContinuityItemMock).not.toHaveBeenCalled();
     expect(addContinuityEvidenceMock).not.toHaveBeenCalled();
-  });
-
-  it('reads whether legacy runtime blocks remain enabled from config', () => {
-    expect(shouldUseLegacyContinuityContextBlocks()).toBe(false);
-
-    getAppConfigMock.mockReturnValue({
-      continuity: {
-        ...baseConfig.continuity,
-        useLegacyContextBlocks: true,
-      },
-    });
-
-    expect(shouldUseLegacyContinuityContextBlocks()).toBe(true);
   });
 });

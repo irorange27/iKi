@@ -140,8 +140,6 @@ export interface AppConfig {
       maxRecentTokens: number;
       maxMessageTokens: number;
       maxIdentityTokens: number;
-      maxPresenceStateTokens: number;
-      maxRuntimeReflectionTokens: number;
       summaryTriggerMessages: number;
       summaryRecentMessages: number;
       maxSummaryTokens: number;
@@ -172,7 +170,6 @@ export interface AppConfig {
     enabled: boolean;
     autoCaptureExplicitFacts: boolean;
     injectToSystemPrompt: boolean;
-    useLegacyContextBlocks: boolean;
     maxRetrievedItems: number;
   };
   speech: {

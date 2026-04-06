@@ -15,7 +15,6 @@ import type {
   LongMemorySearchResult,
   ShortMemoryEntry,
 } from './memory';
-import type { PresenceOverview, PresenceOwnerMode, PresenceSnapshot } from './presence';
 import type { ProactiveTask } from './tasks';
 import type { McpServerInput, McpServerSummary } from './mcp';
 import type {
@@ -209,14 +208,6 @@ export interface ElectronApi {
     affect: {
       get: (threadId: string) => Promise<AffectStateEntry | null>;
     };
-  };
-  presence: {
-    getOverview: (limit?: number) => Promise<PresenceOverview>;
-    refresh: () => Promise<PresenceSnapshot | null>;
-    setOwnerMode: (mode: PresenceOwnerMode, note?: string | null) => Promise<PresenceSnapshot | null>;
-    clearOwnerMode: () => Promise<PresenceSnapshot | null>;
-    onPush: (callback: (payload: unknown) => void) => () => void;
-    removeAllListeners: () => void;
   };
   workspaces: {
     list: () => Promise<Workspace[]>;

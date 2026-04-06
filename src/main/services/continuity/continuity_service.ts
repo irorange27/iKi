@@ -50,7 +50,6 @@ const getContinuityConfig = () => {
     enabled: config?.enabled !== false,
     autoCaptureExplicitFacts: config?.autoCaptureExplicitFacts !== false,
     injectToSystemPrompt: config?.injectToSystemPrompt !== false,
-    useLegacyContextBlocks: config?.useLegacyContextBlocks === true,
     maxRetrievedItems: Math.max(1, Math.trunc(config?.maxRetrievedItems || 6)),
   };
 };
@@ -292,8 +291,6 @@ export const retrieveRelevantContinuity = (query: string): ContinuityRetrievalPa
   };
 };
 
-export const shouldUseLegacyContinuityContextBlocks = (): boolean =>
-  getContinuityConfig().useLegacyContextBlocks;
 
 export const onMessagePersisted = async (params: {
   threadId: string;

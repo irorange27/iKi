@@ -13,7 +13,6 @@ import type { AppUpdateStatus } from '../shared/types/update';
 import type { Provider, ProviderUpdatedEvent } from '../shared/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
-import type { PresenceOverview, PresenceOwnerMode, PresenceSnapshot } from '../shared/types/presence';
 import type { ProactiveTask } from '../shared/types/tasks';
 import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
 import type {
@@ -140,18 +139,6 @@ const electronApi: ElectronApi = {
     affect: {
       get: (threadId: string): Promise<AffectStateEntry | null> =>
         ipcRenderer.invoke('memory:affect:get', threadId),
-    },
-  },
-  presence: {
-    getOverview: (limit?: number): Promise<PresenceOverview> =>
-      ipcRenderer.invoke('presence:get-overview', limit),
-    refresh: (): Promise<PresenceSnapshot | null> => ipcRenderer.invoke('presence:refresh'),
-    setOwnerMode: (mode: PresenceOwnerMode, note?: string | null): Promise<PresenceSnapshot | null> =>
-      ipcRenderer.invoke('presence:set-owner-mode', mode, note),
-    clearOwnerMode: (): Promise<PresenceSnapshot | null> => ipcRenderer.invoke('presence:clear-owner-mode'),
-    onPush: (callback: (payload: unknown) => void) => subscribe('presence:push', callback),
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('presence:push');
     },
   },
   workspaces: {

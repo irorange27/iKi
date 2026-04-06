@@ -16,7 +16,6 @@ import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
-import { recordPresenceRuntimeEvent } from '../presence/presence_runtime';
 
 const SCHEDULER_TICK_MS = 30_000;
 const proactiveTaskLogger = createLogger({ module: 'proactive_tasks' });
@@ -236,14 +235,6 @@ export const runProactiveTask = async (
       tools: task.tools ?? null,
     });
 
-    recordPresenceRuntimeEvent({
-      type: 'task-started',
-      at: startedAt,
-      taskId: task.id,
-      threadId,
-      triggerRef: options?.reason || 'schedule',
-    });
-
     const toolMode = inferProactiveTaskToolMode(task);
     const selectedTools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
 
@@ -329,14 +320,6 @@ export const runProactiveTask = async (
         message: uiMessage,
       });
 
-      recordPresenceRuntimeEvent({
-        type: 'task-failed',
-        at: toIsoNow(),
-        taskId: task.id,
-        threadId,
-        triggerRef: options?.reason || 'schedule',
-      });
-
       return { success: false, error: errorText };
     }
 
@@ -420,14 +403,6 @@ export const runProactiveTask = async (
         message: failedDeliveryMessage,
       });
 
-      recordPresenceRuntimeEvent({
-        type: 'task-failed',
-        at: toIsoNow(),
-        taskId: task.id,
-        threadId,
-        triggerRef: 'bridge-delivery',
-      });
-
       return { success: false, error: deliveryError };
     }
 
@@ -479,14 +454,6 @@ export const runProactiveTask = async (
       message: uiMessage,
     });
 
-    recordPresenceRuntimeEvent({
-      type: 'task-finished',
-      at: toIsoNow(),
-      taskId: task.id,
-      threadId,
-      triggerRef: options?.reason || 'schedule',
-    });
-
     return { success: true };
   } catch (error) {
     const errorText = getErrorMessage(error);
@@ -496,13 +463,6 @@ export const runProactiveTask = async (
       next_run_at: nextRunAt,
       last_status: 'error',
       last_error: errorText,
-    });
-    recordPresenceRuntimeEvent({
-      type: 'task-failed',
-      at: toIsoNow(),
-      taskId: task.id,
-      threadId,
-      triggerRef: options?.reason || 'schedule',
     });
     return { success: false, error: errorText };
   } finally {

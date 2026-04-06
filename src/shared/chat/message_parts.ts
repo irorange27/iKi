@@ -34,8 +34,6 @@ export type ContextReportItem = {
   kind?:
     | 'recent-history'
     | 'identity'
-    | 'presence-state'
-    | 'runtime-reflection'
     | 'thread-summary'
     | 'memory'
     | 'affect'

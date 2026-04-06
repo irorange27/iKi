@@ -4,4 +4,10 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
+  server: {
+    host: '127.0.0.1',
+  },
+  preview: {
+    host: '127.0.0.1',
+  },
 });

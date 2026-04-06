@@ -1,6 +1,5 @@
 import { registerChatIpc } from './chat';
 import { registerConfigIpc } from './config';
-import { registerPresenceIpc } from './presence';
 import { registerMemoryIpc } from './memory';
 import { registerMcpIpc } from './mcp';
 import { registerPromptAppsIpc } from './prompt_apps';
@@ -24,7 +23,6 @@ export const registerMainIpc = (): void => {
   registerWindowIpc();
   registerConfigIpc();
   registerUpdaterIpc();
-  registerPresenceIpc();
   registerProvidersIpc();
   registerMcpIpc();
   registerMemoryIpc();

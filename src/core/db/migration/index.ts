@@ -29,6 +29,7 @@ import { migration as migration027RestoreLegacyDesktopThreadOwnership } from './
 import { migration as migration028AddContinuityTables } from './028_add_continuity_tables';
 import { migration as migration029DropLegacyThreadContextTable } from './029_drop_legacy_thread_context_table';
 import { migration as migration030RenameIdentityOwnerRoleField } from './030_rename_identity_owner_role_field';
+import { migration as migration031DropPresenceTables } from './031_drop_presence_tables';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -62,6 +63,7 @@ export const registeredMigrations = [
   migration028AddContinuityTables,
   migration029DropLegacyThreadContextTable,
   migration030RenameIdentityOwnerRoleField,
+  migration031DropPresenceTables,
   // Add more migrations here as needed
 ];
 

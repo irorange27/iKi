@@ -153,7 +153,6 @@ describe('preload task IPC payload serialization', () => {
     const configUpdated = vi.fn();
     const updateStatusChanged = vi.fn();
     const chatChunk = vi.fn();
-    const presencePush = vi.fn();
     const taskPush = vi.fn();
     const speechProgress = vi.fn();
 
@@ -233,13 +232,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.memory.long.search('thread_1', 'query', { limit: 3 });
     await exposedApi.memory.long.searchAll('query', { limit: 3 });
     await exposedApi.memory.affect.get('thread_1');
-
-    await exposedApi.presence.getOverview(5);
-    await exposedApi.presence.refresh();
-    await exposedApi.presence.setOwnerMode('focus', 'Deep work');
-    await exposedApi.presence.clearOwnerMode();
-    exposedApi.presence.onPush(presencePush);
-    exposedApi.presence.removeAllListeners();
 
     await exposedApi.workspaces.list();
     await exposedApi.workspaces.get('workspace_1');
@@ -342,10 +334,6 @@ describe('preload task IPC payload serialization', () => {
         'memory:long:search',
         'memory:long:searchAll',
         'memory:affect:get',
-        'presence:get-overview',
-        'presence:refresh',
-        'presence:set-owner-mode',
-        'presence:clear-owner-mode',
         'workspaces:list',
         'workspaces:get',
         'workspaces:getByPath',
@@ -395,7 +383,6 @@ describe('preload task IPC payload serialization', () => {
         'updates:status-changed',
         'providers:updated',
         'chat:ui-chunk',
-        'presence:push',
         'speech:download-progress',
         'tasks:push',
       ])
@@ -404,7 +391,6 @@ describe('preload task IPC payload serialization', () => {
       expect.arrayContaining([
         'chat:ui-chunk',
         'updates:status-changed',
-        'presence:push',
         'speech:download-progress',
         'tasks:push',
       ])

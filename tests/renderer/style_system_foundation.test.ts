@@ -21,10 +21,6 @@ const PROVIDERS_SETTINGS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/ProvidersSettings.vue'
 );
-const SETTINGS_LIFE_VUE_PATH = resolve(
-  process.cwd(),
-  'src/renderer/components/settings/SettingsPresenceSection.vue'
-);
 const SETTINGS_SELECT_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsSelect.vue'
@@ -169,11 +165,10 @@ describe('renderer style system foundation', () => {
     expect(settingsViewSource).not.toMatch(/<select/);
   });
 
-  it('migrates MCP, NapCat, Providers, and Life settings onto shared primitives and canonical tokens', () => {
+  it('migrates MCP, NapCat, and Providers settings onto shared primitives and canonical tokens', () => {
     const mcpSource = readFileSync(MCP_SETTINGS_VUE_PATH, 'utf8');
     const napcatSource = readFileSync(NAPCAT_SETTINGS_VUE_PATH, 'utf8');
     const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
-    const lifeSource = readFileSync(SETTINGS_LIFE_VUE_PATH, 'utf8');
     const colorSchemeSource = readFileSync(SETTINGS_COLOR_SCHEME_VUE_PATH, 'utf8');
     const themeEditorModalSource = readFileSync(THEME_EDITOR_MODAL_VUE_PATH, 'utf8');
     const themePreviewSource = readFileSync(THEME_PREVIEW_VUE_PATH, 'utf8');
@@ -186,7 +181,6 @@ describe('renderer style system foundation', () => {
     expect(mcpSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
     expect(napcatSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
     expect(providersSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
-    expect(lifeSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
 
     expect(mcpSource).not.toMatch(/\.secondary-btn\s*\{/);
     expect(mcpSource).not.toMatch(/var\(--warning-color,\s*#/);
@@ -207,10 +201,6 @@ describe('renderer style system foundation', () => {
     expect(providersSource).toMatch(/surface-inset-highlight/);
     expect(providersSource).toMatch(/surface-shadow-lg/);
     expect(providersSource).not.toMatch(/var\(--accent-rgb,\s*0,\s*0,\s*0\)/);
-
-    expect(lifeSource).not.toMatch(/--color-surface-elevated/);
-    expect(lifeSource).not.toMatch(/--color-accent-primary/);
-    expect(lifeSource).not.toMatch(/--color-text-secondary/);
 
     expect(combinedColorSchemeSource).toMatch(/surface-shadow-md/);
     expect(combinedColorSchemeSource).toMatch(/surface-shadow-lg/);

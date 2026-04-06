@@ -141,12 +141,6 @@ const MemorySchema = z
         maxRecentTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxRecentTokens),
         maxMessageTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxMessageTokens),
         maxIdentityTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxIdentityTokens),
-        maxPresenceStateTokens: intField(
-          DEFAULT_APP_CONFIG.memory.context.maxPresenceStateTokens
-        ),
-        maxRuntimeReflectionTokens: intField(
-          DEFAULT_APP_CONFIG.memory.context.maxRuntimeReflectionTokens
-        ),
         summaryTriggerMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryTriggerMessages),
         summaryRecentMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryRecentMessages),
         maxSummaryTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxSummaryTokens),
@@ -191,7 +185,6 @@ const ContinuitySchema = z
       DEFAULT_APP_CONFIG.continuity.autoCaptureExplicitFacts
     ),
     injectToSystemPrompt: booleanField(DEFAULT_APP_CONFIG.continuity.injectToSystemPrompt),
-    useLegacyContextBlocks: booleanField(DEFAULT_APP_CONFIG.continuity.useLegacyContextBlocks),
     maxRetrievedItems: intField(DEFAULT_APP_CONFIG.continuity.maxRetrievedItems),
   })
   .catch(DEFAULT_APP_CONFIG.continuity);

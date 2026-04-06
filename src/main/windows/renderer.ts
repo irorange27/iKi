@@ -1,8 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+const DEFAULT_RENDERER_DEV_SERVER_URL = 'http://127.0.0.1:5173';
+
+const normalizeLoopbackRendererUrl = (value: string): string => {
+  try {
+    const url = new URL(value);
+    if (url.hostname === 'localhost' || url.hostname === '::1' || url.hostname === '[::1]') {
+      url.hostname = '127.0.0.1';
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+};
+
 export const getRendererDevServerUrl = (): string =>
-  process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL || 'http://localhost:5173';
+  normalizeLoopbackRendererUrl(
+    process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL || DEFAULT_RENDERER_DEV_SERVER_URL
+  );
 
 export const getRendererProdHtmlPath = (): string =>
   // When bundled by electron-forge/plugin-vite, the main process runs from `.vite/build`.
