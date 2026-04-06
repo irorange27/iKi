@@ -1,6 +1,6 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
-import type { AgentResult, AgentTool, ConversationRunner, ToolApprovalRequest } from '../../../core/agent';
+import type { AgentResult, ConversationHarness, ToolApprovalRequest } from '../../../core/agent';
 import { createLogger } from '../../../core/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
@@ -11,15 +11,14 @@ const chatToolLoopLogger = createLogger({ module: 'chat_tool_loop' });
 export type RegisterApprovalBatch = (
   approvalRequests: ToolApprovalRequest[],
   session: {
-    runner: ConversationRunner;
+    harness: ConversationHarness;
     webContents: ChatWebContents;
     recoveryContext?: ApprovalRecoveryContext;
-    availableTools?: AgentTool[];
   }
 ) => void;
 
 export type ToolLoopStreamParams = {
-  runner: ConversationRunner;
+  harness: ConversationHarness;
   webContents: ChatWebContents;
   history?: ModelMessage[];
   prompt: string;
@@ -29,7 +28,6 @@ export type ToolLoopStreamParams = {
   abortSignal?: AbortSignal;
   uiChunkEmitter?: UiChunkEmitter;
   approvalContext?: ApprovalRecoveryContext;
-  availableTools?: AgentTool[];
 };
 
 export type ToolLoopStreamResult = {
@@ -56,7 +54,7 @@ export const createToolLoopRunner = (deps: {
 const streamToolLoop = async (
   params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch }
 ) => {
-  const generator = params.runner.stream({
+  const generator = params.harness.stream({
     history: params.history,
     prompt: params.prompt,
     approvalResponses: params.approvalResponses,
@@ -126,10 +124,9 @@ const streamToolLoop = async (
 
   if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
     params.registerApprovalBatch(agentResult.toolApprovalRequests, {
-      runner: params.runner,
+      harness: params.harness,
       webContents: params.webContents,
       ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
-      ...(params.availableTools ? { availableTools: params.availableTools } : {}),
     });
     return { awaitingApproval: true, usage: agentResult.usage };
   }

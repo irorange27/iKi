@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AgentResult, ConversationRunner } from '../../../../src/core/agent';
+import type { AgentResult, ConversationHarness } from '../../../../src/core/agent';
 import { createToolLoopRunner } from '../../../../src/main/services/chat/chat_tool_loop';
 
 const createAsyncGenerator = (chunks: string[], result: AgentResult) =>
@@ -11,12 +11,13 @@ const createAsyncGenerator = (chunks: string[], result: AgentResult) =>
     return result;
   })();
 
-const createConversationRunner = (stream: AsyncGenerator<string, AgentResult, unknown>) =>
+const createConversationHarness = (stream: AsyncGenerator<string, AgentResult, unknown>) =>
   ({
     generate: vi.fn(),
+    getRegisteredTools: vi.fn(() => []),
     registerTool: vi.fn(),
     stream: vi.fn().mockReturnValue(stream),
-  }) as unknown as ConversationRunner;
+  }) as unknown as ConversationHarness;
 
 const createUiChunkEmitter = () => ({
   messageId: 'msg_1',
@@ -47,14 +48,14 @@ describe('tool loop runner', () => {
         estimatedCostUsd: 0,
       },
     };
-    const conversationRunner = createConversationRunner(
+    const conversationHarness = createConversationHarness(
       createAsyncGenerator(['Hello ', 'world'], agentResult)
     );
     const uiChunkEmitter = createUiChunkEmitter();
     const webContents = { id: 1, send: vi.fn() };
 
     const result = await runner.stream({
-      runner: conversationRunner,
+      harness: conversationHarness,
       webContents,
       history: [{ role: 'system', content: 'history' }],
       prompt: 'hi',
@@ -92,12 +93,12 @@ describe('tool loop runner', () => {
         },
       ],
     };
-    const conversationRunner = createConversationRunner(createAsyncGenerator([], agentResult));
+    const conversationHarness = createConversationHarness(createAsyncGenerator([], agentResult));
     const uiChunkEmitter = createUiChunkEmitter();
     const webContents = { id: 2, send: vi.fn() };
 
     const result = await runner.stream({
-      runner: conversationRunner,
+      harness: conversationHarness,
       webContents,
       history: [{ role: 'system', content: 'history' }],
       prompt: 'go',
@@ -107,7 +108,7 @@ describe('tool loop runner', () => {
     expect(result.awaitingApproval).toBe(true);
     expect(result.usage?.totalTokens).toBe(3);
     expect(registerApprovalBatch).toHaveBeenCalledWith(agentResult.toolApprovalRequests, {
-      runner: conversationRunner,
+      harness: conversationHarness,
       webContents,
     });
     expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
@@ -129,12 +130,12 @@ describe('tool loop runner', () => {
         estimatedCostUsd: 0,
       },
     };
-    const conversationRunner = createConversationRunner(createAsyncGenerator([], agentResult));
+    const conversationHarness = createConversationHarness(createAsyncGenerator([], agentResult));
     const uiChunkEmitter = createUiChunkEmitter();
     const webContents = { id: 4, send: vi.fn() };
 
     const result = await runner.stream({
-      runner: conversationRunner,
+      harness: conversationHarness,
       webContents,
       history: [{ role: 'system', content: 'history' }],
       prompt: 'hi',
@@ -156,7 +157,7 @@ describe('tool loop runner', () => {
     const registerApprovalBatch = vi.fn();
     const runner = createToolLoopRunner({ registerApprovalBatch });
     const agentResult: AgentResult = { response: 'Final text', iterations: 1 };
-    const conversationRunner = createConversationRunner(
+    const conversationHarness = createConversationHarness(
       createAsyncGenerator(['Hello ', 'world'], agentResult)
     );
     const uiChunkEmitter = createUiChunkEmitter();
@@ -164,7 +165,7 @@ describe('tool loop runner', () => {
     let cancelChecks = 0;
 
     const result = await runner.stream({
-      runner: conversationRunner,
+      harness: conversationHarness,
       webContents,
       history: [{ role: 'system', content: 'history' }],
       prompt: 'hi',
@@ -182,7 +183,7 @@ describe('tool loop runner', () => {
     expect(uiChunkEmitter.abort).toHaveBeenCalledTimes(1);
     expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
     expect(registerApprovalBatch).not.toHaveBeenCalled();
-    expect(conversationRunner.stream).toHaveBeenCalledWith({
+    expect(conversationHarness.stream).toHaveBeenCalledWith({
       history: [{ role: 'system', content: 'history' }],
       prompt: 'hi',
       approvalResponses: undefined,

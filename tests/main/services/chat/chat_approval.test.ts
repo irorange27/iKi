@@ -88,7 +88,7 @@ describe('createChatApproval', () => {
       },
     });
 
-    const runner = {} as never;
+    const harness = {} as never;
     const webContents = { id: 1, send: vi.fn() };
 
     approvals.registerApprovalBatch(
@@ -103,13 +103,14 @@ describe('createChatApproval', () => {
         },
       ],
       {
-        runner,
+        harness,
         webContents,
         recoveryContext: {
           sessionId: 'assistant_1',
           threadId: 'thread_1',
           assistantMessageId: 'assistant_1',
           providerType: 'openai',
+          providerId: 'primary-openai',
           model: 'gpt-4o-mini',
           systemPrompt: 'system prompt',
           maxOutputTokens: 640,
@@ -125,6 +126,7 @@ describe('createChatApproval', () => {
       thread_id: 'thread_1',
       assistant_message_id: 'assistant_1',
       provider_type: 'openai',
+      provider_id: 'primary-openai',
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
       max_output_tokens: 640,
@@ -179,6 +181,7 @@ describe('createChatApproval', () => {
       thread_id: 'thread_1',
       assistant_message_id: 'assistant_1',
       provider_type: 'openai',
+      provider_id: 'primary-openai',
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
       max_output_tokens: 640,
@@ -237,6 +240,7 @@ describe('createChatApproval', () => {
 
     expect(createChatConversationRunnerMock).toHaveBeenCalledWith({
       providerType: 'openai',
+      providerId: 'primary-openai',
       model: 'gpt-4o-mini',
       systemPrompt: 'system prompt',
       enableTools: true,
@@ -262,7 +266,10 @@ describe('createChatApproval', () => {
     expect(consumeChatToolApprovalSessionMock).toHaveBeenCalledWith('assistant_1');
     expect(resumedStream).toHaveBeenCalledWith(
       expect.objectContaining({
-        runner,
+        harness: expect.objectContaining({
+          getRegisteredTools: expect.any(Function),
+          stream: expect.any(Function),
+        }),
         prompt: '',
         history: [
           expect.objectContaining({
@@ -281,6 +288,7 @@ describe('createChatApproval', () => {
           assistantMessageId: 'assistant_resume',
           threadId: 'thread_1',
           providerType: 'openai',
+          providerId: 'primary-openai',
           model: 'gpt-4o-mini',
           maxOutputTokens: 640,
           maxIterations: 12,

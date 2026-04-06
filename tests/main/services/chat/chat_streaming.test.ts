@@ -833,7 +833,10 @@ describe('createChatStreaming', () => {
     expect(ensurePendingApprovalSession).toHaveBeenCalledWith(
       'approval_1',
       expect.objectContaining({
-        runner,
+        harness: expect.objectContaining({
+          getRegisteredTools: expect.any(Function),
+          stream: expect.any(Function),
+        }),
         webContents,
         recoveryContext: expect.objectContaining({
           threadId: 'thread_3',
@@ -855,7 +858,10 @@ describe('createChatStreaming', () => {
     );
     expect(toolLoopStreamMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        runner,
+        harness: expect.objectContaining({
+          getRegisteredTools: expect.any(Function),
+          stream: expect.any(Function),
+        }),
         history: [{ role: 'system', content: 'history' }],
         prompt: 'stream tool',
       })

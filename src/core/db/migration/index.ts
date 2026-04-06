@@ -30,6 +30,8 @@ import { migration as migration028AddContinuityTables } from './028_add_continui
 import { migration as migration029DropLegacyThreadContextTable } from './029_drop_legacy_thread_context_table';
 import { migration as migration030RenameIdentityOwnerRoleField } from './030_rename_identity_owner_role_field';
 import { migration as migration031DropPresenceTables } from './031_drop_presence_tables';
+import { migration as migration032RepairIdentityProfileForeignKeys } from './032_repair_identity_profile_foreign_keys';
+import { migration as migration033AddChatToolApprovalProviderId } from './033_add_chat_tool_approval_provider_id';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -64,6 +66,8 @@ export const registeredMigrations = [
   migration029DropLegacyThreadContextTable,
   migration030RenameIdentityOwnerRoleField,
   migration031DropPresenceTables,
+  migration032RepairIdentityProfileForeignKeys,
+  migration033AddChatToolApprovalProviderId,
   // Add more migrations here as needed
 ];
 

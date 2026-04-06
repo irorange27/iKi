@@ -22,6 +22,8 @@ export type {
   ConversationRunnerStreamOptions,
 } from './runners/conversation_runner';
 
+export type { ConversationHarness } from './harnesses/conversation_harness';
+
 // Export current public schemas
 export {
   AgentConfigSchema,
@@ -35,6 +37,8 @@ export {
   SimpleConversationRunner,
   createSimpleConversationRunner,
 } from './runners/simple_conversation_runner';
+
+export { createConversationHarness } from './harnesses/conversation_harness';
 
 export { getConversationRunnerConfig } from './config';
 

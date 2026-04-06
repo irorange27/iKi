@@ -7,6 +7,7 @@ export interface ChatToolApprovalSession {
   thread_id: string;
   assistant_message_id: string;
   provider_type: string;
+  provider_id?: string | null;
   model: string;
   system_prompt: string;
   max_output_tokens?: number | null;

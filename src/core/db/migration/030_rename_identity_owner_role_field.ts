@@ -1,14 +1,28 @@
 import type { Migration } from './runner';
 import { getDb } from '../database';
+import { repairIdentityProfileForeignKeys } from './identity_profile_foreign_key_repair';
 
-const getColumnNames = (tableName: string): string[] =>
-  (
+const CURRENT_TABLE = 'identity_profiles';
+const LEGACY_TABLE = 'identity_profiles_legacy_030';
+
+const tableExists = (tableName: string): boolean =>
+  Boolean(
+    getDb()
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(tableName)
+  );
+
+const getColumnNames = (tableName: string): string[] => {
+  if (!tableExists(tableName)) return [];
+
+  return (
     getDb().prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
       name?: string;
     }>
   )
     .map(row => (typeof row.name === 'string' ? row.name : ''))
     .filter(Boolean);
+};
 
 const buildOwnerRoleSourceExpression = (columns: string[]): string | null => {
   const hasNewColumn = columns.includes('owner_role_description');
@@ -28,16 +42,25 @@ const buildOwnerRoleSourceExpression = (columns: string[]): string | null => {
   return null;
 };
 
-const rebuildIdentityProfilesTable = (ownerRoleSourceExpression: string) => {
+const rebuildIdentityProfilesTable = (
+  sourceTableName: typeof CURRENT_TABLE | typeof LEGACY_TABLE,
+  ownerRoleSourceExpression: string
+) => {
   getDb().exec('PRAGMA foreign_keys = OFF;');
 
   try {
+    getDb().exec('BEGIN;');
+
+    if (sourceTableName === CURRENT_TABLE && !tableExists(LEGACY_TABLE)) {
+      getDb().exec(`ALTER TABLE ${CURRENT_TABLE} RENAME TO ${LEGACY_TABLE};`);
+    }
+
     getDb().exec(`
-      BEGIN;
+      DROP INDEX IF EXISTS idx_identity_profiles_single_active;
+      DROP INDEX IF EXISTS idx_identity_profiles_updated_at;
+      DROP TABLE IF EXISTS ${CURRENT_TABLE};
 
-      ALTER TABLE identity_profiles RENAME TO identity_profiles_legacy_030;
-
-      CREATE TABLE identity_profiles (
+      CREATE TABLE ${CURRENT_TABLE} (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         self_description TEXT NOT NULL DEFAULT '',
@@ -52,7 +75,7 @@ const rebuildIdentityProfilesTable = (ownerRoleSourceExpression: string) => {
         updated_at TEXT NOT NULL
       );
 
-      INSERT INTO identity_profiles (
+      INSERT INTO ${CURRENT_TABLE} (
         id,
         name,
         self_description,
@@ -79,19 +102,19 @@ const rebuildIdentityProfilesTable = (ownerRoleSourceExpression: string) => {
         metadata,
         created_at,
         updated_at
-      FROM identity_profiles_legacy_030;
+      FROM ${LEGACY_TABLE};
 
-      DROP TABLE identity_profiles_legacy_030;
+      DROP TABLE ${LEGACY_TABLE};
 
       CREATE INDEX IF NOT EXISTS idx_identity_profiles_updated_at
-        ON identity_profiles(updated_at DESC);
+        ON ${CURRENT_TABLE}(updated_at DESC);
 
       CREATE UNIQUE INDEX IF NOT EXISTS idx_identity_profiles_single_active
-        ON identity_profiles(active)
+        ON ${CURRENT_TABLE}(active)
         WHERE active = 1;
-
-      COMMIT;
     `);
+
+    getDb().exec('COMMIT;');
   } catch (error) {
     try {
       getDb().exec('ROLLBACK;');
@@ -107,17 +130,24 @@ const rebuildIdentityProfilesTable = (ownerRoleSourceExpression: string) => {
 export const migration: Migration = {
   name: '030_rename_identity_owner_role_field',
   up: () => {
-    const columns = getColumnNames('identity_profiles');
+    const sourceTableName = tableExists(LEGACY_TABLE) ? LEGACY_TABLE : CURRENT_TABLE;
+    const columns = getColumnNames(sourceTableName);
     if (columns.length === 0) return;
 
     const ownerRoleSourceExpression = buildOwnerRoleSourceExpression(columns);
     if (!ownerRoleSourceExpression) return;
 
-    if (columns.includes('owner_role_description') && !columns.includes('relationship_to_owner')) {
+    const currentColumns = getColumnNames(CURRENT_TABLE);
+    if (
+      sourceTableName === CURRENT_TABLE &&
+      currentColumns.includes('owner_role_description') &&
+      !currentColumns.includes('relationship_to_owner')
+    ) {
       return;
     }
 
-    rebuildIdentityProfilesTable(ownerRoleSourceExpression);
+    rebuildIdentityProfilesTable(sourceTableName, ownerRoleSourceExpression);
+    repairIdentityProfileForeignKeys();
   },
   down: () => {
     // Intentionally no-op. The older column name should not be reintroduced automatically.

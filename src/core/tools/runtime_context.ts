@@ -27,3 +27,44 @@ export const runWithToolRuntimeContext = async <T>(
 ): Promise<T> => {
   return await storage.run(context, fn);
 };
+
+export const bindToolRuntimeContextToGenerator = <T, TReturn = unknown, TNext = unknown>(
+  context: ToolRuntimeContext,
+  generator: AsyncGenerator<T, TReturn, TNext>
+): AsyncGenerator<T, TReturn, TNext> => {
+  const invoke = <K extends 'next' | 'return' | 'throw'>(
+    method: K,
+    value?: unknown
+  ): Promise<IteratorResult<T, TReturn>> => {
+    const target = generator[method] as
+      | ((arg?: unknown) => Promise<IteratorResult<T, TReturn>>)
+      | undefined;
+
+    if (!target) {
+      if (method === 'throw') {
+        return Promise.reject(value);
+      }
+      return Promise.resolve({
+        done: true,
+        value: value as TReturn,
+      });
+    }
+
+    return storage.run(context, () => target.call(generator, value));
+  };
+
+  return {
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+    next(value?: TNext) {
+      return invoke('next', value);
+    },
+    return(value?: TReturn) {
+      return invoke('return', value);
+    },
+    throw(error?: unknown) {
+      return invoke('throw', error);
+    },
+  } as AsyncGenerator<T, TReturn, TNext>;
+};

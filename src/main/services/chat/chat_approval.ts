@@ -1,12 +1,15 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
-import type { AgentTool, ConversationRunner } from '../../../core/agent';
+import {
+  createConversationHarness,
+  type AgentTool,
+  type ConversationHarness,
+} from '../../../core/agent';
 import { getAppConfig } from '../../../core/config';
 import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
 import { defaultToolRegistry } from '../../../core/tools';
 import { LoadSkillTool } from '../../../core/tools/skill_tools';
-import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_approval';
 import { getErrorMessage } from '../../utils/errors';
@@ -20,11 +23,10 @@ import { createToolLoopRunner } from './chat_tool_loop';
 
 type PendingApprovalSession = {
   sessionId?: string;
-  runner: ConversationRunner;
+  harness: ConversationHarness;
   webContents: ChatWebContents;
   recoveryContext?: ApprovalRecoveryContext;
   history?: ModelMessage[];
-  availableTools?: AgentTool[];
   pendingApprovalIds: Set<string>;
   collectedApprovalResponses: Map<string, ToolApprovalResponse>;
 };
@@ -64,17 +66,15 @@ export const createChatApproval = (deps: {
   const ensurePendingApprovalSession = (
     approvalId: string,
     session: {
-      runner: ConversationRunner;
+      harness: ConversationHarness;
       webContents: ChatWebContents;
       recoveryContext?: ApprovalRecoveryContext;
-      availableTools?: AgentTool[];
     }
   ) => {
     const existing = pendingApprovalSessions.get(approvalId);
     if (existing) {
       existing.webContents = session.webContents;
       existing.recoveryContext = session.recoveryContext ?? existing.recoveryContext;
-      existing.availableTools = session.availableTools ?? existing.availableTools;
       if (session.recoveryContext?.sessionId) {
         existing.sessionId = session.recoveryContext.sessionId;
       }
@@ -84,10 +84,9 @@ export const createChatApproval = (deps: {
 
     const created: PendingApprovalSession = {
       sessionId: session.recoveryContext?.sessionId,
-      runner: session.runner,
+      harness: session.harness,
       webContents: session.webContents,
       recoveryContext: session.recoveryContext,
-      availableTools: session.availableTools,
       pendingApprovalIds: new Set([approvalId]),
       collectedApprovalResponses: new Map(),
     };
@@ -102,10 +101,9 @@ export const createChatApproval = (deps: {
       toolCall?: { toolName: string; args: Record<string, unknown> };
     }>,
     session: {
-      runner: ConversationRunner;
+      harness: ConversationHarness;
       webContents: ChatWebContents;
       recoveryContext?: ApprovalRecoveryContext;
-      availableTools?: AgentTool[];
     }
   ) => {
     const approvalIds = approvalRequests
@@ -121,6 +119,7 @@ export const createChatApproval = (deps: {
         thread_id: recoveryContext.threadId,
         assistant_message_id: recoveryContext.assistantMessageId,
         provider_type: recoveryContext.providerType,
+        provider_id: recoveryContext.providerId ?? null,
         model: recoveryContext.model,
         system_prompt: recoveryContext.systemPrompt,
         max_output_tokens: recoveryContext.maxOutputTokens ?? null,
@@ -143,10 +142,9 @@ export const createChatApproval = (deps: {
 
     const pendingSession: PendingApprovalSession = {
       sessionId: session.recoveryContext?.sessionId,
-      runner: session.runner,
+      harness: session.harness,
       webContents: session.webContents,
       recoveryContext: session.recoveryContext,
-      availableTools: session.availableTools,
       pendingApprovalIds: new Set(approvalIds),
       collectedApprovalResponses: new Map(),
     };
@@ -179,6 +177,57 @@ export const createChatApproval = (deps: {
     }
 
     return registeredTools;
+  };
+
+  const createApprovalHarness = (params: {
+    threadId: string;
+    providerType: string;
+    providerId?: string;
+    model: string;
+    systemPrompt: string;
+    toolNames: string[];
+    availableSkillIds: string[];
+    maxIterations: number;
+    maxOutputTokens?: number;
+  }): ConversationHarness => {
+    const runner = createChatConversationRunner({
+      providerType: params.providerType,
+      ...(typeof params.providerId === 'string' && params.providerId.trim()
+        ? { providerId: params.providerId.trim() }
+        : {}),
+      model: params.model,
+      systemPrompt: params.systemPrompt,
+      enableTools: true,
+      maxIterations: params.maxIterations,
+      ...(typeof params.maxOutputTokens === 'number'
+        ? { maxTokens: params.maxOutputTokens }
+        : {}),
+    });
+
+    const harness = createConversationHarness({
+      runner,
+      toolRuntimeContext: {
+        threadId: params.threadId,
+        availableSkillIds: params.availableSkillIds,
+        conversationModel: {
+          providerType: params.providerType,
+          ...(typeof params.providerId === 'string' && params.providerId.trim()
+            ? { providerId: params.providerId.trim() }
+            : {}),
+          model: params.model,
+          ...(typeof params.maxOutputTokens === 'number'
+            ? { maxTokens: params.maxOutputTokens }
+            : {}),
+        },
+        delegationDepth: 0,
+      },
+    });
+
+    for (const tool of buildRuntimeTools(params)) {
+      harness.registerTool(tool);
+    }
+
+    return harness;
   };
 
   const tryRecoverApprovalSession = async (
@@ -260,25 +309,21 @@ export const createChatApproval = (deps: {
     }
     const maxIterations = resolveChatToolMaxIterations(approvalSession.max_iterations ?? undefined);
 
-    const runner = createChatConversationRunner({
+    const harness = createApprovalHarness({
+      threadId: approvalSession.thread_id,
       providerType: approvalSession.provider_type,
+      ...(typeof approvalSession.provider_id === 'string' && approvalSession.provider_id.trim()
+        ? { providerId: approvalSession.provider_id.trim() }
+        : {}),
       model: approvalSession.model,
       systemPrompt: approvalSession.system_prompt,
-      enableTools: true,
-      maxIterations,
-      ...(typeof approvalSession.max_output_tokens === 'number'
-        ? { maxTokens: approvalSession.max_output_tokens }
-        : {}),
-    });
-
-    const availableTools = buildRuntimeTools({
       toolNames,
       availableSkillIds,
+      maxIterations,
+      ...(typeof approvalSession.max_output_tokens === 'number'
+        ? { maxOutputTokens: approvalSession.max_output_tokens }
+        : {}),
     });
-
-    for (const tool of availableTools) {
-      runner.registerTool(tool);
-    }
 
     const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
     const collectedApprovalResponses = new Map<string, ToolApprovalResponse>();
@@ -299,7 +344,7 @@ export const createChatApproval = (deps: {
 
     const session: PendingApprovalSession = {
       sessionId: approvalSession.session_id,
-      runner,
+      harness,
       webContents,
       history: inputMessages,
       recoveryContext: {
@@ -307,6 +352,9 @@ export const createChatApproval = (deps: {
         threadId: approvalSession.thread_id,
         assistantMessageId: approvalSession.assistant_message_id,
         providerType: approvalSession.provider_type,
+        ...(typeof approvalSession.provider_id === 'string' && approvalSession.provider_id.trim()
+          ? { providerId: approvalSession.provider_id.trim() }
+          : {}),
         model: approvalSession.model,
         systemPrompt: approvalSession.system_prompt,
         ...(typeof approvalSession.max_output_tokens === 'number'
@@ -316,7 +364,6 @@ export const createChatApproval = (deps: {
         enabledTools: toolNames,
         availableSkillIds,
       },
-      availableTools,
       pendingApprovalIds,
       collectedApprovalResponses,
     };
@@ -414,68 +461,31 @@ export const createChatApproval = (deps: {
     deps.activeStreams.set(resumedSenderId, streamState);
 
     try {
-      const streamResult = await runWithToolRuntimeContext(
-        {
-          threadId: nextApprovalContext?.threadId || session.recoveryContext?.threadId,
-          availableSkillIds:
-            nextApprovalContext?.availableSkillIds || session.recoveryContext?.availableSkillIds,
-          availableTools: session.availableTools,
-          conversationModel: nextApprovalContext
-            ? {
-                providerType: nextApprovalContext.providerType,
-                ...(typeof nextApprovalContext.providerId === 'string' &&
-                nextApprovalContext.providerId.trim()
-                  ? { providerId: nextApprovalContext.providerId.trim() }
-                  : {}),
-                model: nextApprovalContext.model,
-                ...(typeof nextApprovalContext.maxOutputTokens === 'number'
-                  ? { maxTokens: nextApprovalContext.maxOutputTokens }
-                  : {}),
-              }
-            : session.recoveryContext
-              ? {
-                  providerType: session.recoveryContext.providerType,
-                  ...(typeof session.recoveryContext.providerId === 'string' &&
-                  session.recoveryContext.providerId.trim()
-                    ? { providerId: session.recoveryContext.providerId.trim() }
-                    : {}),
-                  model: session.recoveryContext.model,
-                  ...(typeof session.recoveryContext.maxOutputTokens === 'number'
-                    ? { maxTokens: session.recoveryContext.maxOutputTokens }
-                    : {}),
-                }
-              : undefined,
-          delegationDepth: 0,
+      const streamResult = await toolLoopRunner.stream({
+        harness: session.harness,
+        webContents: session.webContents,
+        history: session.history,
+        prompt: '',
+        approvalResponses: Array.from(session.collectedApprovalResponses.values()),
+        approvalContext: nextApprovalContext,
+        shouldCancel: () => streamState.cancelled,
+        onToolEvent: eventPart => {
+          if (
+            eventPart.type === 'tool-approval-request' &&
+            typeof eventPart.approvalId === 'string' &&
+            eventPart.approvalId.length > 0
+          ) {
+            ensurePendingApprovalSession(eventPart.approvalId, {
+              harness: session.harness,
+              webContents: session.webContents,
+              recoveryContext: nextApprovalContext,
+            });
+          }
+          uiChunkEmitter.emitToolEvent(eventPart);
         },
-        async () =>
-          await toolLoopRunner.stream({
-            runner: session.runner,
-            webContents: session.webContents,
-            history: session.history,
-            prompt: '',
-            approvalResponses: Array.from(session.collectedApprovalResponses.values()),
-            approvalContext: nextApprovalContext,
-            availableTools: session.availableTools,
-            shouldCancel: () => streamState.cancelled,
-            onToolEvent: eventPart => {
-              if (
-                eventPart.type === 'tool-approval-request' &&
-                typeof eventPart.approvalId === 'string' &&
-                eventPart.approvalId.length > 0
-              ) {
-                ensurePendingApprovalSession(eventPart.approvalId, {
-                  runner: session.runner,
-                  webContents: session.webContents,
-                  recoveryContext: nextApprovalContext,
-                  availableTools: session.availableTools,
-                });
-              }
-              uiChunkEmitter.emitToolEvent(eventPart);
-            },
-            abortSignal: streamState.abortController.signal,
-            uiChunkEmitter,
-          })
-      );
+        abortSignal: streamState.abortController.signal,
+        uiChunkEmitter,
+      });
       if (!streamResult.cancelled && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.threadId,

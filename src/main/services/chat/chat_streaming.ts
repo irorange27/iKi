@@ -1,4 +1,8 @@
-import { type AgentTool, type ConversationRunner } from '../../../core/agent';
+import {
+  createConversationHarness,
+  type AgentTool,
+  type ConversationHarness,
+} from '../../../core/agent';
 import { getAppConfig } from '../../../core/config';
 import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
@@ -19,7 +23,6 @@ import * as minimaxProvider from '../../../core/provider/llm/minimax';
 import * as openaiProvider from '../../../core/provider/llm/openai';
 import { defaultToolRegistry } from '../../../core/tools';
 import { LoadSkillTool } from '../../../core/tools/skill_tools';
-import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import type {
@@ -83,10 +86,9 @@ export const createChatStreaming = (deps: {
     ensurePendingApprovalSession: (
       approvalId: string,
       session: {
-        runner: ConversationRunner;
+        harness: ConversationHarness;
         webContents: ChatWebContents;
         recoveryContext?: ApprovalRecoveryContext;
-        availableTools?: AgentTool[];
       }
     ) => unknown;
     registerApprovalBatch: RegisterApprovalBatch;
@@ -237,7 +239,7 @@ export const createChatStreaming = (deps: {
   };
 
   const registerToolWithGuard = (
-    runner: ConversationRunner,
+    harness: ConversationHarness,
     toolName: string,
     guardActive: boolean
   ): AgentTool | null => {
@@ -251,8 +253,72 @@ export const createChatStreaming = (deps: {
         autoApproveToolRequests: shouldAutoApproveToolRequests(),
       }
     );
-    runner.registerTool(registered);
+    harness.registerTool(registered);
     return registered;
+  };
+
+  const createChatHarness = (params: {
+    threadId?: string;
+    providerType: string;
+    providerId?: string;
+    model: string;
+    systemPrompt: string;
+    enableTools: boolean;
+    enabledTools: string[];
+    availableSkillIds: string[];
+    guardActive: boolean;
+    maxIterations: number;
+    maxOutputTokens?: number;
+  }): ConversationHarness => {
+    const runner = createChatConversationRunner({
+      providerType: params.providerType,
+      providerId: params.providerId,
+      model: params.model,
+      systemPrompt: params.systemPrompt,
+      enableTools: params.enableTools,
+      enabledTools: params.enabledTools,
+      maxIterations: params.maxIterations,
+      ...(typeof params.maxOutputTokens === 'number'
+        ? { maxTokens: params.maxOutputTokens }
+        : {}),
+    });
+
+    const harness = createConversationHarness({
+      runner,
+      toolRuntimeContext: {
+        threadId: params.threadId,
+        availableSkillIds: params.availableSkillIds,
+        conversationModel: {
+          providerType: params.providerType,
+          ...(typeof params.providerId === 'string' && params.providerId.trim()
+            ? { providerId: params.providerId.trim() }
+            : {}),
+          model: params.model,
+          ...(typeof params.maxOutputTokens === 'number'
+            ? { maxTokens: params.maxOutputTokens }
+            : {}),
+        },
+        delegationDepth: 0,
+      },
+    });
+
+    if (!params.enableTools) {
+      return harness;
+    }
+
+    if (params.availableSkillIds.length > 0) {
+      harness.registerTool(new LoadSkillTool().toAgentTool());
+    }
+
+    for (const toolName of params.enabledTools) {
+      if (!defaultToolRegistry.get(toolName)) {
+        chatStreamingLogger.warn(`Tool ${toolName} not found in registry`);
+        continue;
+      }
+      registerToolWithGuard(harness, toolName, params.guardActive);
+    }
+
+    return harness;
   };
 
   const createApprovalRecoveryContext = (params: {
@@ -496,61 +562,30 @@ export const createChatStreaming = (deps: {
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
 
       if (preparedTurn.enableTools) {
-        const registeredTools: AgentTool[] = [];
-        const runner = createChatConversationRunner({
+        const harness = createChatHarness({
+          threadId: options.threadId,
           providerType: options.providerType,
           providerId: options.providerId,
           model: options.model,
           systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
           enableTools: true,
           enabledTools: preparedTurn.guardedTools,
+          availableSkillIds: preparedTurn.selectedSkillIds,
+          guardActive: preparedTurn.guardActive,
           maxIterations,
           ...(typeof preparedTurn.maxOutputTokens === 'number'
-            ? { maxTokens: preparedTurn.maxOutputTokens }
+            ? { maxOutputTokens: preparedTurn.maxOutputTokens }
             : {}),
         });
-
-        if (preparedTurn.selectedSkillIds.length > 0) {
-          const loadSkillTool = new LoadSkillTool().toAgentTool();
-          runner.registerTool(loadSkillTool);
-          registeredTools.push(loadSkillTool);
-        }
-
-        // Register selected tools
-        for (const toolName of preparedTurn.guardedTools) {
-          const registeredTool = registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
-          if (registeredTool) {
-            registeredTools.push(registeredTool);
-          }
-        }
 
         if (!preparedTurn.prompt.trim()) {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        const result = await runWithToolRuntimeContext(
-          {
-            threadId: options.threadId,
-            availableSkillIds: preparedTurn.selectedSkillIds,
-            availableTools: registeredTools,
-            conversationModel: {
-              providerType: options.providerType,
-              ...(typeof options.providerId === 'string' && options.providerId.trim()
-                ? { providerId: options.providerId.trim() }
-                : {}),
-              model: options.model,
-              ...(typeof preparedTurn.maxOutputTokens === 'number'
-                ? { maxTokens: preparedTurn.maxOutputTokens }
-                : {}),
-            },
-            delegationDepth: 0,
-          },
-          async () =>
-            await runner.generate({
-              history: preparedTurn.history,
-              prompt: preparedTurn.prompt,
-            })
-        );
+        const result = await harness.generate({
+          history: preparedTurn.history,
+          prompt: preparedTurn.prompt,
+        });
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -675,88 +710,50 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      const runner = createChatConversationRunner({
+      const harness = createChatHarness({
+        threadId: options.threadId,
         providerType: options.providerType,
         providerId: options.providerId,
         model: options.model,
         systemPrompt,
         enableTools: preparedTurn.enableTools,
         enabledTools: preparedTurn.guardedTools,
+        availableSkillIds: preparedTurn.selectedSkillIds,
+        guardActive: preparedTurn.guardActive,
         maxIterations,
         ...(typeof preparedTurn.maxOutputTokens === 'number'
-          ? { maxTokens: preparedTurn.maxOutputTokens }
+          ? { maxOutputTokens: preparedTurn.maxOutputTokens }
           : {}),
       });
-
-      const registeredTools: AgentTool[] = [];
-      if (preparedTurn.enableTools) {
-        if (preparedTurn.selectedSkillIds.length > 0) {
-          const loadSkillTool = new LoadSkillTool().toAgentTool();
-          runner.registerTool(loadSkillTool);
-          registeredTools.push(loadSkillTool);
-        }
-
-        for (const toolName of preparedTurn.guardedTools) {
-          if (!defaultToolRegistry.get(toolName)) {
-            chatStreamingLogger.warn(`Tool ${toolName} not found in registry`);
-            continue;
-          }
-          const registeredTool = registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
-          if (registeredTool) {
-            registeredTools.push(registeredTool);
-          }
-        }
-      }
 
       if (!preparedTurn.prompt.trim()) {
         throw new Error('No user prompt provided for streaming');
       }
 
-      const streamResult = await runWithToolRuntimeContext(
-        {
-          threadId: options.threadId,
-          availableSkillIds: preparedTurn.selectedSkillIds,
-          availableTools: registeredTools,
-          conversationModel: {
-            providerType: options.providerType,
-            ...(typeof options.providerId === 'string' && options.providerId.trim()
-              ? { providerId: options.providerId.trim() }
-              : {}),
-            model: options.model,
-            ...(typeof preparedTurn.maxOutputTokens === 'number'
-              ? { maxTokens: preparedTurn.maxOutputTokens }
-              : {}),
-          },
-          delegationDepth: 0,
+      const streamResult = await toolLoopRunner.stream({
+        harness,
+        webContents,
+        history: preparedTurn.history,
+        prompt: preparedTurn.prompt,
+        approvalContext,
+        shouldCancel: () => streamState.cancelled,
+        onToolEvent: eventPart => {
+          if (
+            eventPart.type === 'tool-approval-request' &&
+            typeof eventPart.approvalId === 'string' &&
+            eventPart.approvalId.length > 0
+          ) {
+            deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
+              harness,
+              webContents,
+              recoveryContext: approvalContext,
+            });
+          }
+          uiChunkEmitter.emitToolEvent(eventPart);
         },
-        async () =>
-          await toolLoopRunner.stream({
-            runner,
-            webContents,
-            history: preparedTurn.history,
-            prompt: preparedTurn.prompt,
-            approvalContext,
-            availableTools: registeredTools,
-            shouldCancel: () => streamState.cancelled,
-            onToolEvent: eventPart => {
-              if (
-                eventPart.type === 'tool-approval-request' &&
-                typeof eventPart.approvalId === 'string' &&
-                eventPart.approvalId.length > 0
-              ) {
-                deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
-                  runner,
-                  webContents,
-                  recoveryContext: approvalContext,
-                  availableTools: registeredTools,
-                });
-              }
-              uiChunkEmitter.emitToolEvent(eventPart);
-            },
-            abortSignal: streamState.abortController.signal,
-            uiChunkEmitter,
-          })
-      );
+        abortSignal: streamState.abortController.signal,
+        uiChunkEmitter,
+      });
       if (!streamResult.cancelled) {
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
