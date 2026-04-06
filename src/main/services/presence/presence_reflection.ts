@@ -1,5 +1,5 @@
-import * as lifeDb from '../../../core/db/life';
-import * as lifeReflectionDb from '../../../core/db/life_reflection';
+import * as presenceDb from '../../../core/db/presence';
+import * as presenceReflectionDb from '../../../core/db/presence_reflection';
 import * as memoryDb from '../../../core/db/memory';
 import * as tasksDb from '../../../core/db/tasks';
 import * as todosDb from '../../../core/db/todos';
@@ -7,14 +7,14 @@ import { createLogger } from '../../../core/logger';
 import { getToolModel, type ToolModelConfig } from '../../../core/provider/tool_model';
 import { createSimplePromptTextGenerator } from '../../../core/runtimes/prompt_text_generator';
 import type {
-  LifeEpisodeRecord,
-  LifeReflectionPeriodType,
-  LifeReflectionRecord,
-  LifeSleepWindow,
-} from '../../../shared/types/life';
+  PresenceEpisodeRecord,
+  PresenceReflectionPeriodType,
+  PresenceReflectionRecord,
+  PresenceSleepWindow,
+} from '../../../shared/types/presence';
 import { parseJsonStringArray as parseRawJsonStringArray } from '../../../shared/utils/json';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
-import { DEFAULT_SLEEP_WINDOW, normalizeSleepWindow } from './life_activity_engine';
+import { DEFAULT_SLEEP_WINDOW, normalizeSleepWindow } from './presence_activity_engine';
 
 const MAX_HOURLY_BACKLOG_WINDOWS = 3;
 const MAX_DAILY_BACKLOG_WINDOWS = 2;
@@ -25,11 +25,11 @@ const MAX_TASK_LINES = 5;
 const MAX_PROMPT_CHARS = 7000;
 const MAX_SUMMARY_CHARS = 320;
 const MAX_LIST_ITEM_CHARS = 180;
-const HOURLY_PERIOD_TYPE: LifeReflectionPeriodType = 'hour';
-const DAILY_PERIOD_TYPE: LifeReflectionPeriodType = 'day';
-const HOURLY_MEMORY_TAGS = ['life-reflection', 'hourly-reflection'];
-const DAILY_MEMORY_TAGS = ['life-reflection', 'daily-reflection'];
-const lifeReflectionLogger = createLogger({ module: 'life_reflection' });
+const HOURLY_PERIOD_TYPE: PresenceReflectionPeriodType = 'hour';
+const DAILY_PERIOD_TYPE: PresenceReflectionPeriodType = 'day';
+const HOURLY_MEMORY_TAGS = ['presence-reflection', 'hourly-reflection'];
+const DAILY_MEMORY_TAGS = ['presence-reflection', 'daily-reflection'];
+const presenceReflectionLogger = createLogger({ module: 'presence_reflection' });
 
 type ReflectionModelOutput = {
   summary: string;
@@ -44,20 +44,20 @@ type ReflectionWindow = {
   end: Date;
 };
 
-type GeneratedLifeReflection = {
-  record: LifeReflectionRecord;
+type GeneratedPresenceReflection = {
+  record: PresenceReflectionRecord;
   wroteMemory: boolean;
 };
 
 type ReflectionSourceBundle = {
-  episodes: LifeEpisodeRecord[];
-  hourlyReflections?: LifeReflectionRecord[];
+  episodes: PresenceEpisodeRecord[];
+  hourlyReflections?: PresenceReflectionRecord[];
   todoLines?: string[];
   taskLines?: string[];
 };
 
 type GenerateReflectionParams = {
-  periodType: LifeReflectionPeriodType;
+  periodType: PresenceReflectionPeriodType;
   profileId: string;
   profileName: string;
   ownerName: string;
@@ -68,11 +68,11 @@ type GenerateReflectionParams = {
   systemPrompt: string;
   maxTokens: number;
   memoryTags: string[];
-  memoryEpisodes: LifeEpisodeRecord[];
+  memoryEpisodes: PresenceEpisodeRecord[];
 };
 
 const HOURLY_SYSTEM_PROMPT = [
-  'You write factual hourly reflections for iKi, a local AI companion with a structured life runtime.',
+  'You write factual hourly reflections for iKi, a local AI companion with a structured presence runtime.',
   'Summarize only what the persisted episode trajectory supports.',
   'Focus on semantic activity, commitments, state drift, and what should matter next.',
   'Do not invent embodiment, fake emotions, or physical experiences.',
@@ -82,7 +82,7 @@ const HOURLY_SYSTEM_PROMPT = [
 ].join('\n');
 
 const DAILY_SYSTEM_PROMPT = [
-  'You write factual daily reflections and next-day planning notes for iKi, a local AI companion with a structured life runtime.',
+  'You write factual daily reflections and next-day planning notes for iKi, a local AI companion with a structured presence runtime.',
   'Summarize only what the persisted trajectory, hourly reflections, todo lists, and proactive commitments support.',
   'Focus on the day arc, repeated patterns, unresolved commitments, and the most valuable next-day priorities.',
   'Do not invent embodiment, fake emotions, or theatrical narrative.',
@@ -225,7 +225,7 @@ const getSemanticDayBoundaryAtOrBefore = (date: Date, anchorHour: number): Date 
 
 const buildDailyWindows = (
   now: Date,
-  sleepWindow: LifeSleepWindow,
+  sleepWindow: PresenceSleepWindow,
   limit = MAX_DAILY_BACKLOG_WINDOWS
 ): ReflectionWindow[] => {
   const closedDayEnd = getSemanticDayBoundaryAtOrBefore(now, sleepWindow.startHour);
@@ -252,7 +252,7 @@ const formatDateTime = (value: string | null | undefined): string => {
   return parsed.toISOString().slice(0, 16).replace('T', ' ');
 };
 
-const formatEpisodeLine = (episode: LifeEpisodeRecord): string => {
+const formatEpisodeLine = (episode: PresenceEpisodeRecord): string => {
   const refs = [
     episode.task_id ? `task=${episode.task_id}` : '',
     episode.thread_id ? `thread=${episode.thread_id}` : '',
@@ -272,7 +272,7 @@ const formatEpisodeLine = (episode: LifeEpisodeRecord): string => {
 };
 
 const buildEpisodesTranscript = (
-  episodes: LifeEpisodeRecord[],
+  episodes: PresenceEpisodeRecord[],
   maxLines = MAX_EPISODE_LINES
 ): string => {
   const lines = sampleHeadTail(episodes, maxLines).map(formatEpisodeLine);
@@ -280,7 +280,7 @@ const buildEpisodesTranscript = (
 };
 
 const buildReflectionLines = (
-  reflections: LifeReflectionRecord[],
+  reflections: PresenceReflectionRecord[],
   maxLines = MAX_REFLECTION_LINES
 ): string[] =>
   sampleHeadTail(reflections, maxLines).map(reflection => {
@@ -372,7 +372,7 @@ const buildProactiveTaskLines = (windowEnd: string): string[] =>
       )
     );
 
-const isMeaningfulHourlyWindow = (episodes: LifeEpisodeRecord[]): boolean => {
+const isMeaningfulHourlyWindow = (episodes: PresenceEpisodeRecord[]): boolean => {
   if (episodes.length === 0) return false;
   if (episodes.length > 1) return true;
   return episodes.some(
@@ -391,7 +391,7 @@ const isMeaningfulDailyWindow = (bundle: ReflectionSourceBundle): boolean => {
 const buildSection = (title: string, body: string): string => `${title}:\n${body}`;
 
 const buildHourlyReflectionPrompt = (params: {
-  episodes: LifeEpisodeRecord[];
+  episodes: PresenceEpisodeRecord[];
   periodStart: string;
   periodEnd: string;
   profileName: string;
@@ -457,7 +457,7 @@ const buildDailyReflectionPrompt = (params: {
   return clipText(sections.join('\n\n'), MAX_PROMPT_CHARS);
 };
 
-const resolveSingleThreadForMemoryWriteback = (episodes: LifeEpisodeRecord[]): string | null => {
+const resolveSingleThreadForMemoryWriteback = (episodes: PresenceEpisodeRecord[]): string | null => {
   const unique = Array.from(
     new Set(
       episodes
@@ -472,7 +472,7 @@ const normalizeMemorySummary = (value: string): string => normalizeWhitespace(va
 
 const shouldWriteReflectionMemory = (params: {
   reflection: ReflectionModelOutput;
-  episodes: LifeEpisodeRecord[];
+  episodes: PresenceEpisodeRecord[];
 }): { threadId: string; summary: string } | null => {
   if (!params.reflection.memory_candidate || params.reflection.memory_confidence !== 'high') {
     return null;
@@ -493,9 +493,9 @@ const shouldWriteReflectionMemory = (params: {
 };
 
 const writeReflectionMemory = async (params: {
-  reflectionRecord: LifeReflectionRecord;
+  reflectionRecord: PresenceReflectionRecord;
   reflection: ReflectionModelOutput;
-  episodes: LifeEpisodeRecord[];
+  episodes: PresenceEpisodeRecord[];
   model: ToolModelConfig;
   memoryTags: string[];
 }): Promise<boolean> => {
@@ -510,7 +510,7 @@ const writeReflectionMemory = async (params: {
     summary: target.summary,
     tags: params.memoryTags,
     metadata: {
-      source: 'life-reflection',
+      source: 'presence-reflection',
       reflectionId: params.reflectionRecord.id,
       periodType: params.reflectionRecord.period_type,
       periodStart: params.reflectionRecord.period_start,
@@ -522,7 +522,7 @@ const writeReflectionMemory = async (params: {
 
 const generateReflection = async (
   params: GenerateReflectionParams
-): Promise<GeneratedLifeReflection | null> => {
+): Promise<GeneratedPresenceReflection | null> => {
   if (!params.prompt.trim()) return null;
 
   const generator = createSimplePromptTextGenerator({
@@ -542,7 +542,7 @@ const generateReflection = async (
     const reflection = parseReflectionModelOutput(result.response || '');
     if (!reflection) return null;
 
-    const record = lifeReflectionDb.addLifeReflection({
+    const record = presenceReflectionDb.addPresenceReflection({
       profile_id: params.profileId,
       period_type: params.periodType,
       period_start: params.periodStart,
@@ -565,7 +565,7 @@ const generateReflection = async (
       wroteMemory,
     };
   } catch (error) {
-    lifeReflectionLogger.event({
+    presenceReflectionLogger.event({
       level: 'warn',
       event: 'life.reflection.generate',
       outcome: 'failed',
@@ -583,8 +583,8 @@ const generateReflection = async (
   }
 };
 
-const getProfileSleepWindow = (profileId: string): LifeSleepWindow => {
-  const state = lifeDb.getLifeState(profileId);
+const getProfileSleepWindow = (profileId: string): PresenceSleepWindow => {
+  const state = presenceDb.getPresenceState(profileId);
   if (!state?.sleep_window_json?.trim()) return { ...DEFAULT_SLEEP_WINDOW };
 
   try {
@@ -600,7 +600,7 @@ const runReflectionWindow = async (params: {
   profileId: string;
   profileName: string;
   ownerName: string;
-  periodType: LifeReflectionPeriodType;
+  periodType: PresenceReflectionPeriodType;
   periodStart: string;
   periodEnd: string;
   prompt: string;
@@ -608,11 +608,11 @@ const runReflectionWindow = async (params: {
   systemPrompt: string;
   maxTokens: number;
   memoryTags: string[];
-  memoryEpisodes: LifeEpisodeRecord[];
-}): Promise<GeneratedLifeReflection | null> => {
+  memoryEpisodes: PresenceEpisodeRecord[];
+}): Promise<GeneratedPresenceReflection | null> => {
   const lockKey = `${params.profileId}:${params.periodType}:${params.periodStart}`;
   if (reflectionLocks.has(lockKey)) return null;
-  if (lifeReflectionDb.getLifeReflection(params.profileId, params.periodType, params.periodStart)) {
+  if (presenceReflectionDb.getPresenceReflection(params.profileId, params.periodType, params.periodStart)) {
     return null;
   }
 
@@ -637,10 +637,10 @@ const runReflectionWindow = async (params: {
   }
 };
 
-export const runDueHourlyLifeReflections = async (params?: {
+export const runDueHourlyRuntimeReflections = async (params?: {
   now?: string;
   maxWindows?: number;
-}): Promise<GeneratedLifeReflection[]> => {
+}): Promise<GeneratedPresenceReflection[]> => {
   const profile = getOrCreateActiveIdentityProfile();
   if (!profile) return [];
 
@@ -651,12 +651,12 @@ export const runDueHourlyLifeReflections = async (params?: {
   if (Number.isNaN(now.getTime())) return [];
 
   const windows = buildHourlyWindows(now, params?.maxWindows);
-  const results: GeneratedLifeReflection[] = [];
+  const results: GeneratedPresenceReflection[] = [];
 
   for (const window of windows) {
     const periodStart = window.start.toISOString();
     const periodEnd = window.end.toISOString();
-    const episodes = lifeDb.listLifeEpisodesInWindow(profile.id, periodStart, periodEnd);
+    const episodes = presenceDb.listPresenceEpisodesInWindow(profile.id, periodStart, periodEnd);
     if (!isMeaningfulHourlyWindow(episodes)) continue;
 
     const prompt = buildHourlyReflectionPrompt({
@@ -690,10 +690,10 @@ export const runDueHourlyLifeReflections = async (params?: {
   return results;
 };
 
-export const runDueDailyLifeReflections = async (params?: {
+export const runDueDailyRuntimeReflections = async (params?: {
   now?: string;
   maxWindows?: number;
-}): Promise<GeneratedLifeReflection[]> => {
+}): Promise<GeneratedPresenceReflection[]> => {
   const profile = getOrCreateActiveIdentityProfile();
   if (!profile) return [];
 
@@ -705,13 +705,13 @@ export const runDueDailyLifeReflections = async (params?: {
 
   const sleepWindow = getProfileSleepWindow(profile.id);
   const windows = buildDailyWindows(now, sleepWindow, params?.maxWindows);
-  const results: GeneratedLifeReflection[] = [];
+  const results: GeneratedPresenceReflection[] = [];
 
   for (const window of windows) {
     const periodStart = window.start.toISOString();
     const periodEnd = window.end.toISOString();
-    const episodes = lifeDb.listLifeEpisodesInWindow(profile.id, periodStart, periodEnd);
-    const hourlyReflections = lifeReflectionDb.listLifeReflectionsInWindow({
+    const episodes = presenceDb.listPresenceEpisodesInWindow(profile.id, periodStart, periodEnd);
+    const hourlyReflections = presenceReflectionDb.listPresenceReflectionsInWindow({
       profileId: profile.id,
       periodType: HOURLY_PERIOD_TYPE,
       periodStart,
@@ -760,15 +760,15 @@ export const runDueDailyLifeReflections = async (params?: {
   return results;
 };
 
-export const getRecentLifeReflectionContextMessage = (): string => {
+export const getRecentRuntimeReflectionContextMessage = (): string => {
   const profile = getOrCreateActiveIdentityProfile();
   if (!profile) return '';
 
-  const dailyReflection = lifeReflectionDb.getLatestLifeReflection(profile.id, DAILY_PERIOD_TYPE);
-  const hourlyReflection = lifeReflectionDb.getLatestLifeReflection(profile.id, HOURLY_PERIOD_TYPE);
+  const dailyReflection = presenceReflectionDb.getLatestPresenceReflection(profile.id, DAILY_PERIOD_TYPE);
+  const hourlyReflection = presenceReflectionDb.getLatestPresenceReflection(profile.id, HOURLY_PERIOD_TYPE);
   if (!dailyReflection && !hourlyReflection) return '';
 
-  const lines = ['Recent life reflection for iKi:'];
+  const lines = ['Recent runtime reflection for iKi:'];
 
   if (dailyReflection) {
     const insights = parseJsonStringArray(dailyReflection.insights_json).slice(0, 2);

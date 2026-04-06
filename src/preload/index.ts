@@ -13,7 +13,7 @@ import type { AppUpdateStatus } from '../shared/types/update';
 import type { Provider, ProviderUpdatedEvent } from '../shared/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
-import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from '../shared/types/life';
+import type { PresenceOverview, PresenceOwnerMode, PresenceSnapshot } from '../shared/types/presence';
 import type { ProactiveTask } from '../shared/types/tasks';
 import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
 import type {
@@ -142,16 +142,16 @@ const electronApi: ElectronApi = {
         ipcRenderer.invoke('memory:affect:get', threadId),
     },
   },
-  life: {
-    getOverview: (limit?: number): Promise<LifeOverview> =>
-      ipcRenderer.invoke('life:get-overview', limit),
-    refresh: (): Promise<LifeSnapshot | null> => ipcRenderer.invoke('life:refresh'),
-    setOwnerMode: (mode: LifeOwnerMode, note?: string | null): Promise<LifeSnapshot | null> =>
-      ipcRenderer.invoke('life:set-owner-mode', mode, note),
-    clearOwnerMode: (): Promise<LifeSnapshot | null> => ipcRenderer.invoke('life:clear-owner-mode'),
-    onPush: (callback: (payload: unknown) => void) => subscribe('life:push', callback),
+  presence: {
+    getOverview: (limit?: number): Promise<PresenceOverview> =>
+      ipcRenderer.invoke('presence:get-overview', limit),
+    refresh: (): Promise<PresenceSnapshot | null> => ipcRenderer.invoke('presence:refresh'),
+    setOwnerMode: (mode: PresenceOwnerMode, note?: string | null): Promise<PresenceSnapshot | null> =>
+      ipcRenderer.invoke('presence:set-owner-mode', mode, note),
+    clearOwnerMode: (): Promise<PresenceSnapshot | null> => ipcRenderer.invoke('presence:clear-owner-mode'),
+    onPush: (callback: (payload: unknown) => void) => subscribe('presence:push', callback),
     removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('life:push');
+      ipcRenderer.removeAllListeners('presence:push');
     },
   },
   workspaces: {

@@ -1,16 +1,16 @@
 import { getDb } from './database';
 import type {
-  LifeReflectionPeriodType,
-  LifeReflectionRecord,
-} from '../../shared/types/life';
+  PresenceReflectionPeriodType,
+  PresenceReflectionRecord,
+} from '../../shared/types/presence';
 import { createPrefixedId } from '../../shared/utils/id';
 import { toIsoNow } from '../../shared/utils/text';
 
-export const getLifeReflection = (
+export const getPresenceReflection = (
   profileId: string,
-  periodType: LifeReflectionPeriodType,
+  periodType: PresenceReflectionPeriodType,
   periodStart: string
-): LifeReflectionRecord | null => {
+): PresenceReflectionRecord | null => {
   if (!profileId?.trim() || !periodStart?.trim()) return null;
   const row = getDb()
     .prepare(
@@ -20,14 +20,14 @@ export const getLifeReflection = (
       LIMIT 1
     `
     )
-    .get(profileId, periodType, periodStart) as LifeReflectionRecord | undefined;
+    .get(profileId, periodType, periodStart) as PresenceReflectionRecord | undefined;
   return row || null;
 };
 
-export const getLatestLifeReflection = (
+export const getLatestPresenceReflection = (
   profileId: string,
-  periodType?: LifeReflectionPeriodType
-): LifeReflectionRecord | null => {
+  periodType?: PresenceReflectionPeriodType
+): PresenceReflectionRecord | null => {
   if (!profileId?.trim()) return null;
   const row = periodType
     ? ((getDb()
@@ -39,7 +39,7 @@ export const getLatestLifeReflection = (
           LIMIT 1
         `
         )
-        .get(profileId, periodType) as LifeReflectionRecord | undefined) ?? null)
+        .get(profileId, periodType) as PresenceReflectionRecord | undefined) ?? null)
     : ((getDb()
         .prepare(
           `
@@ -49,15 +49,15 @@ export const getLatestLifeReflection = (
           LIMIT 1
         `
         )
-        .get(profileId) as LifeReflectionRecord | undefined) ?? null);
+        .get(profileId) as PresenceReflectionRecord | undefined) ?? null);
   return row || null;
 };
 
-export const listLifeReflections = (params: {
+export const listPresenceReflections = (params: {
   profileId: string;
-  periodType?: LifeReflectionPeriodType;
+  periodType?: PresenceReflectionPeriodType;
   limit?: number;
-}): LifeReflectionRecord[] => {
+}): PresenceReflectionRecord[] => {
   const profileId = params.profileId?.trim();
   if (!profileId) return [];
 
@@ -72,7 +72,7 @@ export const listLifeReflections = (params: {
           LIMIT ?
         `
         )
-        .all(profileId, params.periodType, limit) as LifeReflectionRecord[]) ?? [])
+        .all(profileId, params.periodType, limit) as PresenceReflectionRecord[]) ?? [])
     : ((getDb()
         .prepare(
           `
@@ -82,17 +82,17 @@ export const listLifeReflections = (params: {
           LIMIT ?
         `
         )
-        .all(profileId, limit) as LifeReflectionRecord[]) ?? []);
+        .all(profileId, limit) as PresenceReflectionRecord[]) ?? []);
 
   return rows;
 };
 
-export const listLifeReflectionsInWindow = (params: {
+export const listPresenceReflectionsInWindow = (params: {
   profileId: string;
-  periodType: LifeReflectionPeriodType;
+  periodType: PresenceReflectionPeriodType;
   periodStart: string;
   periodEnd: string;
-}): LifeReflectionRecord[] => {
+}): PresenceReflectionRecord[] => {
   const profileId = params.profileId?.trim();
   const periodStart = params.periodStart?.trim();
   const periodEnd = params.periodEnd?.trim();
@@ -109,21 +109,21 @@ export const listLifeReflectionsInWindow = (params: {
       ORDER BY period_start ASC, created_at ASC
     `
     )
-    .all(profileId, params.periodType, periodStart, periodEnd) as LifeReflectionRecord[];
+    .all(profileId, params.periodType, periodStart, periodEnd) as PresenceReflectionRecord[];
 
   return rows;
 };
 
-export const addLifeReflection = (entry: {
+export const addPresenceReflection = (entry: {
   id?: string;
   profile_id: string;
-  period_type: LifeReflectionPeriodType;
+  period_type: PresenceReflectionPeriodType;
   period_start: string;
   period_end: string;
   summary: string;
   insights_json?: string | null;
   plan_json?: string | null;
-}): LifeReflectionRecord => {
+}): PresenceReflectionRecord => {
   const id = entry.id?.trim() || createPrefixedId('reflection');
   const createdAt = toIsoNow();
 
@@ -165,9 +165,9 @@ export const addLifeReflection = (entry: {
       created_at: createdAt,
     });
 
-  const reloaded = getLifeReflection(entry.profile_id, entry.period_type, entry.period_start);
+  const reloaded = getPresenceReflection(entry.profile_id, entry.period_type, entry.period_start);
   if (!reloaded) {
-    throw new Error('Failed to reload life reflection after insert');
+    throw new Error('Failed to reload presence reflection after insert');
   }
   return reloaded;
 };

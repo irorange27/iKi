@@ -40,8 +40,8 @@ describe('life reflection db helpers', () => {
       prepare: prepareMock,
     });
 
-    const { addLifeReflection } = await import('../../../src/core/db/life_reflection');
-    const reflection = addLifeReflection({
+    const { addPresenceReflection } = await import('../../../src/core/db/presence_reflection');
+    const reflection = addPresenceReflection({
       profile_id: 'identity_1',
       period_type: 'hour',
       period_start: '2026-03-21T08:00:00.000Z',
@@ -98,8 +98,8 @@ describe('life reflection db helpers', () => {
       prepare: prepareMock,
     });
 
-    const { listLifeReflections } = await import('../../../src/core/db/life_reflection');
-    const list = listLifeReflections({ profileId: 'identity_1', limit: 5 });
+    const { listPresenceReflections } = await import('../../../src/core/db/presence_reflection');
+    const list = listPresenceReflections({ profileId: 'identity_1', limit: 5 });
 
     expect(list.map(entry => entry.id)).toEqual(['reflection_2', 'reflection_1']);
   });

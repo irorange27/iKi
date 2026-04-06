@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LifeEpisodeRecord } from '../../../../src/shared/types/life';
+import type { PresenceEpisodeRecord } from '../../../../src/shared/types/presence';
 
 const {
   getOrCreateActiveIdentityProfileMock,
   getToolModelMock,
   createSimplePromptTextGeneratorMock,
-  getLifeStateMock,
-  listLifeEpisodesInWindowMock,
-  getLifeReflectionMock,
-  addLifeReflectionMock,
-  getLatestLifeReflectionMock,
-  listLifeReflectionsInWindowMock,
+  getPresenceStateMock,
+  listPresenceEpisodesInWindowMock,
+  getPresenceReflectionMock,
+  addPresenceReflectionMock,
+  getLatestPresenceReflectionMock,
+  listPresenceReflectionsInWindowMock,
   listLongMemoryMock,
   addLongMemoryMock,
   getProactiveTasksMock,
@@ -20,12 +20,12 @@ const {
   getOrCreateActiveIdentityProfileMock: vi.fn(),
   getToolModelMock: vi.fn(),
   createSimplePromptTextGeneratorMock: vi.fn(),
-  getLifeStateMock: vi.fn(),
-  listLifeEpisodesInWindowMock: vi.fn(),
-  getLifeReflectionMock: vi.fn(),
-  addLifeReflectionMock: vi.fn(),
-  getLatestLifeReflectionMock: vi.fn(),
-  listLifeReflectionsInWindowMock: vi.fn(),
+  getPresenceStateMock: vi.fn(),
+  listPresenceEpisodesInWindowMock: vi.fn(),
+  getPresenceReflectionMock: vi.fn(),
+  addPresenceReflectionMock: vi.fn(),
+  getLatestPresenceReflectionMock: vi.fn(),
+  listPresenceReflectionsInWindowMock: vi.fn(),
   listLongMemoryMock: vi.fn(),
   addLongMemoryMock: vi.fn(),
   getProactiveTasksMock: vi.fn(),
@@ -45,16 +45,16 @@ vi.mock('../../../../src/core/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: createSimplePromptTextGeneratorMock,
 }));
 
-vi.mock('../../../../src/core/db/life', () => ({
-  getLifeState: getLifeStateMock,
-  listLifeEpisodesInWindow: listLifeEpisodesInWindowMock,
+vi.mock('../../../../src/core/db/presence', () => ({
+  getPresenceState: getPresenceStateMock,
+  listPresenceEpisodesInWindow: listPresenceEpisodesInWindowMock,
 }));
 
-vi.mock('../../../../src/core/db/life_reflection', () => ({
-  getLifeReflection: getLifeReflectionMock,
-  addLifeReflection: addLifeReflectionMock,
-  getLatestLifeReflection: getLatestLifeReflectionMock,
-  listLifeReflectionsInWindow: listLifeReflectionsInWindowMock,
+vi.mock('../../../../src/core/db/presence_reflection', () => ({
+  getPresenceReflection: getPresenceReflectionMock,
+  addPresenceReflection: addPresenceReflectionMock,
+  getLatestPresenceReflection: getLatestPresenceReflectionMock,
+  listPresenceReflectionsInWindow: listPresenceReflectionsInWindowMock,
 }));
 
 vi.mock('../../../../src/core/db/memory', () => ({
@@ -71,7 +71,7 @@ vi.mock('../../../../src/core/db/todos', () => ({
   getTodoListById: getTodoListByIdMock,
 }));
 
-const makeEpisode = (overrides: Partial<LifeEpisodeRecord> = {}): LifeEpisodeRecord => ({
+const makeEpisode = (overrides: Partial<PresenceEpisodeRecord> = {}): PresenceEpisodeRecord => ({
   id: `episode_${Math.random().toString(36).slice(2, 6)}`,
   profile_id: 'identity_1',
   activity_type: 'focused_work',
@@ -91,7 +91,7 @@ const makeEpisode = (overrides: Partial<LifeEpisodeRecord> = {}): LifeEpisodeRec
   ...overrides,
 });
 
-describe('life_reflection', () => {
+describe('presence_reflection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getOrCreateActiveIdentityProfileMock.mockReturnValue({
@@ -112,8 +112,8 @@ describe('life_reflection', () => {
       providerType: 'openai',
       model: 'gpt-4o-mini',
     });
-    getLifeStateMock.mockReturnValue(null);
-    listLifeEpisodesInWindowMock.mockReturnValue([
+    getPresenceStateMock.mockReturnValue(null);
+    listPresenceEpisodesInWindowMock.mockReturnValue([
       makeEpisode(),
       makeEpisode({
         id: 'episode_2',
@@ -125,16 +125,16 @@ describe('life_reflection', () => {
         trigger_type: 'task-finished',
       }),
     ]);
-    getLifeReflectionMock.mockReturnValue(null);
-    addLifeReflectionMock.mockImplementation((entry: Record<string, unknown>) => ({
+    getPresenceReflectionMock.mockReturnValue(null);
+    addPresenceReflectionMock.mockImplementation((entry: Record<string, unknown>) => ({
       id: 'reflection_1',
       created_at: '2026-03-21T09:01:00.000Z',
       ...entry,
     }));
     listLongMemoryMock.mockReturnValue([]);
     addLongMemoryMock.mockReturnValue({ changes: 1 });
-    getLatestLifeReflectionMock.mockReturnValue(null);
-    listLifeReflectionsInWindowMock.mockReturnValue([]);
+    getLatestPresenceReflectionMock.mockReturnValue(null);
+    listPresenceReflectionsInWindowMock.mockReturnValue([]);
     getProactiveTasksMock.mockReturnValue([]);
     listTodoListsMock.mockReturnValue([]);
     getTodoListByIdMock.mockReturnValue(null);
@@ -154,17 +154,17 @@ describe('life_reflection', () => {
       generate: generateMock,
     });
 
-    const { runDueHourlyLifeReflections } = await import(
-      '../../../../src/main/services/life/life_reflection'
+    const { runDueHourlyRuntimeReflections } = await import(
+      '../../../../src/main/services/presence/presence_reflection'
     );
 
-    const result = await runDueHourlyLifeReflections({
+    const result = await runDueHourlyRuntimeReflections({
       now: '2026-03-21T09:05:00.000Z',
       maxWindows: 1,
     });
 
     expect(result).toHaveLength(1);
-    expect(addLifeReflectionMock).toHaveBeenCalledWith(
+    expect(addPresenceReflectionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         profile_id: 'identity_1',
         period_type: 'hour',
@@ -174,9 +174,9 @@ describe('life_reflection', () => {
       expect.objectContaining({
         thread_id: 'thread_1',
         summary: 'Task-driven focus blocks produce the most stable progress for iKi.',
-        tags: expect.arrayContaining(['life-reflection']),
+        tags: expect.arrayContaining(['presence-reflection']),
         metadata: expect.objectContaining({
-          source: 'life-reflection',
+          source: 'presence-reflection',
           reflectionId: 'reflection_1',
         }),
       })
@@ -184,7 +184,7 @@ describe('life_reflection', () => {
   });
 
   it('skips generation when the period already has a stored reflection', async () => {
-    getLifeReflectionMock.mockReturnValue({
+    getPresenceReflectionMock.mockReturnValue({
       id: 'reflection_existing',
       profile_id: 'identity_1',
       period_type: 'hour',
@@ -196,18 +196,18 @@ describe('life_reflection', () => {
       created_at: '2026-03-21T09:01:00.000Z',
     });
 
-    const { runDueHourlyLifeReflections } = await import(
-      '../../../../src/main/services/life/life_reflection'
+    const { runDueHourlyRuntimeReflections } = await import(
+      '../../../../src/main/services/presence/presence_reflection'
     );
 
-    const result = await runDueHourlyLifeReflections({
+    const result = await runDueHourlyRuntimeReflections({
       now: '2026-03-21T09:05:00.000Z',
       maxWindows: 1,
     });
 
     expect(result).toEqual([]);
     expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
-    expect(addLifeReflectionMock).not.toHaveBeenCalled();
+    expect(addPresenceReflectionMock).not.toHaveBeenCalled();
   });
 
   it('generates a daily reflection with hourly recap and commitment inputs', async () => {
@@ -223,7 +223,7 @@ describe('life_reflection', () => {
     createSimplePromptTextGeneratorMock.mockReturnValue({
       generate: generateMock,
     });
-    listLifeReflectionsInWindowMock.mockReturnValue([
+    listPresenceReflectionsInWindowMock.mockReturnValue([
       {
         id: 'reflection_hour_1',
         profile_id: 'identity_1',
@@ -297,17 +297,17 @@ describe('life_reflection', () => {
       },
     ]);
 
-    const { runDueDailyLifeReflections } = await import(
-      '../../../../src/main/services/life/life_reflection'
+    const { runDueDailyRuntimeReflections } = await import(
+      '../../../../src/main/services/presence/presence_reflection'
     );
 
-    const result = await runDueDailyLifeReflections({
+    const result = await runDueDailyRuntimeReflections({
       now: '2026-03-22T02:15:00.000Z',
       maxWindows: 1,
     });
 
     expect(result).toHaveLength(1);
-    expect(addLifeReflectionMock).toHaveBeenCalledWith(
+    expect(addPresenceReflectionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         profile_id: 'identity_1',
         period_type: 'day',
@@ -320,7 +320,7 @@ describe('life_reflection', () => {
   });
 
   it('formats recent daily and hourly reflections into one bounded context message', async () => {
-    getLatestLifeReflectionMock.mockImplementation((_profileId: string, periodType?: string) => {
+    getLatestPresenceReflectionMock.mockImplementation((_profileId: string, periodType?: string) => {
       if (periodType === 'day') {
         return {
           id: 'reflection_day_latest',
@@ -352,13 +352,13 @@ describe('life_reflection', () => {
       return null;
     });
 
-    const { getRecentLifeReflectionContextMessage } = await import(
-      '../../../../src/main/services/life/life_reflection'
+    const { getRecentRuntimeReflectionContextMessage } = await import(
+      '../../../../src/main/services/presence/presence_reflection'
     );
 
-    const message = getRecentLifeReflectionContextMessage();
+    const message = getRecentRuntimeReflectionContextMessage();
 
-    expect(message).toContain('Recent life reflection for iKi:');
+    expect(message).toContain('Recent runtime reflection for iKi:');
     expect(message).toContain('Daily arc: The day stayed strongest when open commitments were surfaced early.');
     expect(message).toContain('Explicit commitment review reduced drift.');
     expect(message).toContain('Finish inbox follow-ups before new proactive work.');

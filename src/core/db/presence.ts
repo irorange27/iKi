@@ -1,10 +1,10 @@
 import { getDb } from './database';
 import type {
-  LifeActivity,
-  LifeEpisodeRecord,
-  LifePresence,
-  LifeStateRecord,
-} from '../../shared/types/life';
+  PresenceActivity,
+  PresenceEpisodeRecord,
+  PresenceState,
+  PresenceStateRecord,
+} from '../../shared/types/presence';
 import { createPrefixedId } from '../../shared/utils/id';
 import { toIsoNow } from '../../shared/utils/text';
 
@@ -14,7 +14,9 @@ const clampUnit = (value: unknown, fallback: number): number => {
   return Math.max(0, Math.min(1, parsed));
 };
 
-const normalizeLifeStateRow = (row: LifeStateRecord | null | undefined): LifeStateRecord | null => {
+const normalizePresenceStateRow = (
+  row: PresenceStateRecord | null | undefined
+): PresenceStateRecord | null => {
   if (!row) return null;
   return {
     ...row,
@@ -24,38 +26,38 @@ const normalizeLifeStateRow = (row: LifeStateRecord | null | undefined): LifeSta
   };
 };
 
-const normalizeLifeEpisodeRow = (
-  row: LifeEpisodeRecord | null | undefined
-): LifeEpisodeRecord | null => {
+const normalizePresenceEpisodeRow = (
+  row: PresenceEpisodeRecord | null | undefined
+): PresenceEpisodeRecord | null => {
   if (!row) return null;
   return { ...row };
 };
 
-export const runLifeTransaction = <T>(fn: () => T): T => getDb().transaction(fn)();
+export const runPresenceTransaction = <T>(fn: () => T): T => getDb().transaction(fn)();
 
-export const getLifeState = (profileId: string): LifeStateRecord | null => {
+export const getPresenceState = (profileId: string): PresenceStateRecord | null => {
   if (!profileId?.trim()) return null;
   const row = getDb().prepare('SELECT * FROM life_state WHERE profile_id = ?').get(profileId) as
-    | LifeStateRecord
+    | PresenceStateRecord
     | undefined;
-  return normalizeLifeStateRow(row);
+  return normalizePresenceStateRow(row);
 };
 
-export const upsertLifeState = (
-  entry: Partial<LifeStateRecord> & {
+export const upsertPresenceState = (
+  entry: Partial<PresenceStateRecord> & {
     profile_id: string;
-    current_activity: LifeActivity;
-    presence: LifePresence;
+    current_activity: PresenceActivity;
+    presence: PresenceState;
     energy: number;
     focus_budget: number;
     social_availability: number;
     policy_version: string;
   }
-): LifeStateRecord => {
+): PresenceStateRecord => {
   const profileId = entry.profile_id.trim();
-  const existing = getLifeState(profileId);
+  const existing = getPresenceState(profileId);
   const timestamp = toIsoNow();
-  const id = existing?.id || entry.id?.trim() || createPrefixedId('life');
+  const id = existing?.id || entry.id?.trim() || createPrefixedId('presence');
   const createdAt = existing?.created_at || entry.created_at || timestamp;
 
   getDb()
@@ -123,22 +125,22 @@ export const upsertLifeState = (
       updated_at: timestamp,
     });
 
-  const reloaded = getLifeState(profileId);
+  const reloaded = getPresenceState(profileId);
   if (!reloaded) {
-    throw new Error('Failed to reload life state after write');
+    throw new Error('Failed to reload presence state after write');
   }
   return reloaded;
 };
 
-export const getLifeEpisode = (id: string): LifeEpisodeRecord | null => {
+export const getPresenceEpisode = (id: string): PresenceEpisodeRecord | null => {
   if (!id?.trim()) return null;
   const row = getDb().prepare('SELECT * FROM life_episodes WHERE id = ?').get(id) as
-    | LifeEpisodeRecord
+    | PresenceEpisodeRecord
     | undefined;
-  return normalizeLifeEpisodeRow(row);
+  return normalizePresenceEpisodeRow(row);
 };
 
-export const listLifeEpisodes = (profileId: string, limit = 20): LifeEpisodeRecord[] => {
+export const listPresenceEpisodes = (profileId: string, limit = 20): PresenceEpisodeRecord[] => {
   if (!profileId?.trim()) return [];
   const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.trunc(limit)) : 20;
   const rows = getDb()
@@ -150,15 +152,15 @@ export const listLifeEpisodes = (profileId: string, limit = 20): LifeEpisodeReco
       LIMIT ?
     `
     )
-    .all(profileId, normalizedLimit) as LifeEpisodeRecord[];
-  return rows.map(row => normalizeLifeEpisodeRow(row)).filter(Boolean) as LifeEpisodeRecord[];
+    .all(profileId, normalizedLimit) as PresenceEpisodeRecord[];
+  return rows.map(row => normalizePresenceEpisodeRow(row)).filter(Boolean) as PresenceEpisodeRecord[];
 };
 
-export const listLifeEpisodesInWindow = (
+export const listPresenceEpisodesInWindow = (
   profileId: string,
   windowStart: string,
   windowEnd: string
-): LifeEpisodeRecord[] => {
+): PresenceEpisodeRecord[] => {
   if (!profileId?.trim() || !windowStart?.trim() || !windowEnd?.trim()) return [];
   const rows = getDb()
     .prepare(
@@ -170,19 +172,19 @@ export const listLifeEpisodesInWindow = (
       ORDER BY started_at ASC, created_at ASC
     `
     )
-    .all(profileId, windowEnd, windowStart) as LifeEpisodeRecord[];
-  return rows.map(row => normalizeLifeEpisodeRow(row)).filter(Boolean) as LifeEpisodeRecord[];
+    .all(profileId, windowEnd, windowStart) as PresenceEpisodeRecord[];
+  return rows.map(row => normalizePresenceEpisodeRow(row)).filter(Boolean) as PresenceEpisodeRecord[];
 };
 
-export const addLifeEpisode = (
-  entry: Partial<LifeEpisodeRecord> & {
+export const addPresenceEpisode = (
+  entry: Partial<PresenceEpisodeRecord> & {
     profile_id: string;
-    activity_type: LifeActivity;
-    presence: LifePresence;
+    activity_type: PresenceActivity;
+    presence: PresenceState;
     started_at?: string;
     transition_reason: string;
   }
-): LifeEpisodeRecord => {
+): PresenceEpisodeRecord => {
   const timestamp = toIsoNow();
   const id = entry.id?.trim() || createPrefixedId('episode');
 
@@ -245,14 +247,14 @@ export const addLifeEpisode = (
       updated_at: timestamp,
     });
 
-  const reloaded = getLifeEpisode(id);
+  const reloaded = getPresenceEpisode(id);
   if (!reloaded) {
-    throw new Error('Failed to reload life episode after insert');
+    throw new Error('Failed to reload presence episode after insert');
   }
   return reloaded;
 };
 
-export const updateLifeEpisode = (id: string, updates: Partial<LifeEpisodeRecord>) => {
+export const updatePresenceEpisode = (id: string, updates: Partial<PresenceEpisodeRecord>) => {
   const fields = Object.keys(updates)
     .filter(key => key !== 'id' && key !== 'profile_id' && key !== 'created_at')
     .map(key => `${key} = @${key}`)

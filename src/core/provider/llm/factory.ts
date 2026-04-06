@@ -475,8 +475,7 @@ const startModelsDevCatalogRefresh = (): Promise<ModelsDevCatalog | null> => {
     return Promise.resolve(cachedModelsDevCatalog);
   }
 
-  let refreshPromise: Promise<ModelsDevCatalog | null>;
-  refreshPromise = (async () => {
+  const refreshPromise: Promise<ModelsDevCatalog | null> = (async () => {
     try {
       const response = await fetchWithTimeout(
         'https://models.dev/api.json',

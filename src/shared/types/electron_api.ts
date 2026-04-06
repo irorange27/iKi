@@ -15,7 +15,7 @@ import type {
   LongMemorySearchResult,
   ShortMemoryEntry,
 } from './memory';
-import type { LifeOverview, LifeOwnerMode, LifeSnapshot } from './life';
+import type { PresenceOverview, PresenceOwnerMode, PresenceSnapshot } from './presence';
 import type { ProactiveTask } from './tasks';
 import type { McpServerInput, McpServerSummary } from './mcp';
 import type {
@@ -210,11 +210,11 @@ export interface ElectronApi {
       get: (threadId: string) => Promise<AffectStateEntry | null>;
     };
   };
-  life: {
-    getOverview: (limit?: number) => Promise<LifeOverview>;
-    refresh: () => Promise<LifeSnapshot | null>;
-    setOwnerMode: (mode: LifeOwnerMode, note?: string | null) => Promise<LifeSnapshot | null>;
-    clearOwnerMode: () => Promise<LifeSnapshot | null>;
+  presence: {
+    getOverview: (limit?: number) => Promise<PresenceOverview>;
+    refresh: () => Promise<PresenceSnapshot | null>;
+    setOwnerMode: (mode: PresenceOwnerMode, note?: string | null) => Promise<PresenceSnapshot | null>;
+    clearOwnerMode: () => Promise<PresenceSnapshot | null>;
     onPush: (callback: (payload: unknown) => void) => () => void;
     removeAllListeners: () => void;
   };

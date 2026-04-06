@@ -1,4 +1,4 @@
-import { startLifeRuntime, stopLifeRuntime } from '../life/life_runtime';
+import { startPresenceRuntime, stopPresenceRuntime } from '../presence/presence_runtime';
 import { startProactiveTaskScheduler, stopProactiveTaskScheduler } from '../tasks/proactive_tasks';
 
 let started = false;
@@ -7,12 +7,12 @@ export const startBackgroundRuntime = () => {
   if (started) return;
   started = true;
   startProactiveTaskScheduler();
-  startLifeRuntime();
+  startPresenceRuntime();
 };
 
 export const stopBackgroundRuntime = () => {
   if (!started) return;
   started = false;
-  stopLifeRuntime();
+  stopPresenceRuntime();
   stopProactiveTaskScheduler();
 };

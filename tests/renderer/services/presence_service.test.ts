@@ -2,9 +2,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { lifeService } from '../../../src/renderer/services/life_service';
+import { presenceService } from '../../../src/renderer/services/presence_service';
 
-describe('lifeService', () => {
+describe('presenceService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -14,7 +14,7 @@ describe('lifeService', () => {
     vi.restoreAllMocks();
   });
 
-  it('delegates life methods when the Electron bridge is available', async () => {
+  it('delegates presence methods when the Electron bridge is available', async () => {
     const overview = { episodes: [], current: null } as const;
     const snapshot = { state: null, currentEpisode: null, recentEpisodes: [] } as const;
     const getOverview = vi.fn(async () => overview);
@@ -27,7 +27,7 @@ describe('lifeService', () => {
     Object.defineProperty(window, 'electronAPI', {
       configurable: true,
       value: {
-        life: {
+        presence: {
           getOverview,
           refresh,
           setOwnerMode,
@@ -37,13 +37,13 @@ describe('lifeService', () => {
       },
     });
 
-    expect(await lifeService.getOverview()).toBe(overview);
-    expect(await lifeService.refresh()).toBe(snapshot);
-    expect(await lifeService.setOwnerMode('focus', 'note')).toBe(snapshot);
-    expect(await lifeService.clearOwnerMode()).toBe(snapshot);
+    expect(await presenceService.getOverview()).toBe(overview);
+    expect(await presenceService.refresh()).toBe(snapshot);
+    expect(await presenceService.setOwnerMode('focus', 'note')).toBe(snapshot);
+    expect(await presenceService.clearOwnerMode()).toBe(snapshot);
 
     const callback = vi.fn();
-    const unsubscribe = lifeService.onPush(callback);
+    const unsubscribe = presenceService.onPush(callback);
 
     expect(getOverview).toHaveBeenCalledWith(10);
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -56,15 +56,15 @@ describe('lifeService', () => {
     expect(removeListener).toHaveBeenCalledTimes(1);
   });
 
-  it('throws clear errors for required life methods when the bridge is missing', async () => {
-    await expect(lifeService.getOverview()).rejects.toThrow('window.electronAPI.life.getOverview is missing');
-    await expect(lifeService.refresh()).rejects.toThrow('window.electronAPI.life.refresh is missing');
-    await expect(lifeService.setOwnerMode('focus')).rejects.toThrow(
-      'window.electronAPI.life.setOwnerMode is missing'
+  it('throws clear errors for required presence methods when the bridge is missing', async () => {
+    await expect(presenceService.getOverview()).rejects.toThrow('window.electronAPI.presence.getOverview is missing');
+    await expect(presenceService.refresh()).rejects.toThrow('window.electronAPI.presence.refresh is missing');
+    await expect(presenceService.setOwnerMode('focus')).rejects.toThrow(
+      'window.electronAPI.presence.setOwnerMode is missing'
     );
-    await expect(lifeService.clearOwnerMode()).rejects.toThrow(
-      'window.electronAPI.life.clearOwnerMode is missing'
+    await expect(presenceService.clearOwnerMode()).rejects.toThrow(
+      'window.electronAPI.presence.clearOwnerMode is missing'
     );
-    expect(() => lifeService.onPush(vi.fn())).not.toThrow();
+    expect(() => presenceService.onPush(vi.fn())).not.toThrow();
   });
 });

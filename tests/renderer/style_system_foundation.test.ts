@@ -23,7 +23,7 @@ const PROVIDERS_SETTINGS_VUE_PATH = resolve(
 );
 const SETTINGS_LIFE_VUE_PATH = resolve(
   process.cwd(),
-  'src/renderer/components/settings/SettingsLifeSection.vue'
+  'src/renderer/components/settings/SettingsPresenceSection.vue'
 );
 const SETTINGS_SELECT_VUE_PATH = resolve(
   process.cwd(),

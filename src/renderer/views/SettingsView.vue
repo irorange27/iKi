@@ -550,7 +550,7 @@
         @reset="resetSection('memory')"
       />
 
-      <SettingsLifeSection v-show="activeSection === 'life'" :active="activeSection === 'life'" />
+      <SettingsPresenceSection v-show="activeSection === 'presence'" :active="activeSection === 'presence'" />
 
       <SettingsTasksSection
         v-show="activeSection === 'tasks'"
@@ -605,7 +605,7 @@ import NapCatSettings from '../components/settings/NapCatSettings.vue';
 import SettingsColorSchemeSection from '../components/settings/SettingsColorSchemeSection.vue';
 import SettingsSpeechSection from '../components/settings/SettingsSpeechSection.vue';
 import SettingsMemorySection from '../components/settings/SettingsMemorySection.vue';
-import SettingsLifeSection from '../components/settings/SettingsLifeSection.vue';
+import SettingsPresenceSection from '../components/settings/SettingsPresenceSection.vue';
 import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
@@ -1149,7 +1149,7 @@ const menuItems = computed(() => [
   { key: 'usage', label: t('settings.menu.usage'), icon: BarChart3 },
   { key: 'skills', label: t('settings.menu.skills'), icon: Wand2 },
   { key: 'memory', label: t('settings.menu.memory'), icon: Brain },
-  { key: 'life', label: t('settings.menu.life'), icon: Activity },
+  { key: 'presence', label: t('settings.menu.presence'), icon: Activity },
   { key: 'ui', label: t('settings.menu.ui'), icon: SlidersHorizontal },
   { key: 'colorScheme', label: t('settings.menu.colorScheme'), icon: Palette },
   { key: 'speech', label: t('settings.menu.speech'), icon: Mic },

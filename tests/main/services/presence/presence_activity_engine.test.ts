@@ -2,30 +2,30 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_SLEEP_WINDOW,
-  advanceLifeBudgets,
-  chooseLifeActivity,
+  advancePresenceBudgets,
+  choosePresenceActivity,
   normalizeSleepWindow,
-  parseLifeStateEnvelope,
-  resolveLifeDayPhase,
-  serializeLifeStateEnvelope,
-} from '../../../../src/main/services/life/life_activity_engine';
+  parsePresenceStateEnvelope,
+  resolvePresenceDayPhase,
+  serializePresenceStateEnvelope,
+} from '../../../../src/main/services/presence/presence_activity_engine';
 
 const localDate = (hour: number, minute = 0) => new Date(2026, 2, 21, hour, minute, 0, 0);
 
-describe('life_activity_engine', () => {
+describe('presence_activity_engine', () => {
   it('normalizes invalid sleep windows back to defaults', () => {
     expect(normalizeSleepWindow({ startHour: -5, endHour: 99 })).toEqual(DEFAULT_SLEEP_WINDOW);
   });
 
   it('resolves sleep and wake phases around the configured sleep window', () => {
-    expect(resolveLifeDayPhase(localDate(2, 30), DEFAULT_SLEEP_WINDOW)).toBe('night');
-    expect(resolveLifeDayPhase(localDate(9, 10), DEFAULT_SLEEP_WINDOW)).toBe('wake');
-    expect(resolveLifeDayPhase(localDate(13, 0), DEFAULT_SLEEP_WINDOW)).toBe('day');
-    expect(resolveLifeDayPhase(localDate(20, 0), DEFAULT_SLEEP_WINDOW)).toBe('evening');
+    expect(resolvePresenceDayPhase(localDate(2, 30), DEFAULT_SLEEP_WINDOW)).toBe('night');
+    expect(resolvePresenceDayPhase(localDate(9, 10), DEFAULT_SLEEP_WINDOW)).toBe('wake');
+    expect(resolvePresenceDayPhase(localDate(13, 0), DEFAULT_SLEEP_WINDOW)).toBe('day');
+    expect(resolvePresenceDayPhase(localDate(20, 0), DEFAULT_SLEEP_WINDOW)).toBe('evening');
   });
 
   it('prefers focused work whenever a task is actively running', () => {
-    const decision = chooseLifeActivity({
+    const decision = choosePresenceActivity({
       now: localDate(14, 0),
       sleepWindow: DEFAULT_SLEEP_WINDOW,
       tasks: {
@@ -45,7 +45,7 @@ describe('life_activity_engine', () => {
   });
 
   it('enters maintenance when commitments are due soon', () => {
-    const decision = chooseLifeActivity({
+    const decision = choosePresenceActivity({
       now: localDate(15, 0),
       sleepWindow: DEFAULT_SLEEP_WINDOW,
       tasks: {
@@ -64,7 +64,7 @@ describe('life_activity_engine', () => {
   });
 
   it('applies explicit owner mode when no task lock is active', () => {
-    const decision = chooseLifeActivity({
+    const decision = choosePresenceActivity({
       now: localDate(2, 0),
       sleepWindow: DEFAULT_SLEEP_WINDOW,
       tasks: {
@@ -85,7 +85,7 @@ describe('life_activity_engine', () => {
   });
 
   it('keeps a running task lock above conflicting owner mode', () => {
-    const decision = chooseLifeActivity({
+    const decision = choosePresenceActivity({
       now: localDate(14, 0),
       sleepWindow: DEFAULT_SLEEP_WINDOW,
       tasks: {
@@ -106,7 +106,7 @@ describe('life_activity_engine', () => {
   });
 
   it('otherwise falls back to honest idle availability', () => {
-    const decision = chooseLifeActivity({
+    const decision = choosePresenceActivity({
       now: localDate(16, 0),
       sleepWindow: DEFAULT_SLEEP_WINDOW,
       tasks: {
@@ -126,7 +126,7 @@ describe('life_activity_engine', () => {
   });
 
   it('applies bounded budget drift per activity', () => {
-    const focused = advanceLifeBudgets(
+    const focused = advancePresenceBudgets(
       'focused_work',
       {
         energy: 0.8,
@@ -139,7 +139,7 @@ describe('life_activity_engine', () => {
     expect(focused.energy).toBeLessThan(0.8);
     expect(focused.focus_budget).toBeLessThan(0.8);
 
-    const recovered = advanceLifeBudgets(
+    const recovered = advancePresenceBudgets(
       'sleep',
       {
         energy: 0.3,
@@ -153,8 +153,8 @@ describe('life_activity_engine', () => {
     expect(recovered.energy).toBeLessThanOrEqual(1);
   });
 
-  it('round-trips the life state envelope JSON shape', () => {
-    const serialized = serializeLifeStateEnvelope({
+  it('round-trips the presence state envelope JSON shape', () => {
+    const serialized = serializePresenceStateEnvelope({
       dayPhase: 'day',
       lastTransitionReason: 'idle-available',
       lastEventType: 'owner-mode-set',
@@ -167,7 +167,7 @@ describe('life_activity_engine', () => {
       ownerModeNote: 'deep work',
     });
 
-    expect(parseLifeStateEnvelope(serialized)).toEqual({
+    expect(parsePresenceStateEnvelope(serialized)).toEqual({
       dayPhase: 'day',
       lastTransitionReason: 'idle-available',
       lastEventType: 'owner-mode-set',

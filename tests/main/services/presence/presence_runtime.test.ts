@@ -1,24 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LifeEpisodeRecord, LifeStateRecord } from '../../../../src/shared/types/life';
+import type { PresenceEpisodeRecord, PresenceStateRecord } from '../../../../src/shared/types/presence';
 
 const {
   getOrCreateActiveIdentityProfileMock,
   listDueProactiveTasksMock,
   getProactiveTasksMock,
-  listLifeReflectionsMock,
-  runDueHourlyLifeReflectionsMock,
-  runDueDailyLifeReflectionsMock,
+  listPresenceReflectionsMock,
+  runDueHourlyRuntimeReflectionsMock,
+  runDueDailyRuntimeReflectionsMock,
 } = vi.hoisted(() => ({
   getOrCreateActiveIdentityProfileMock: vi.fn(),
   listDueProactiveTasksMock: vi.fn(),
   getProactiveTasksMock: vi.fn(),
-  listLifeReflectionsMock: vi.fn(),
-  runDueHourlyLifeReflectionsMock: vi.fn(),
-  runDueDailyLifeReflectionsMock: vi.fn(),
+  listPresenceReflectionsMock: vi.fn(),
+  runDueHourlyRuntimeReflectionsMock: vi.fn(),
+  runDueDailyRuntimeReflectionsMock: vi.fn(),
 }));
 
-let currentState: LifeStateRecord | null = null;
-let episodes: LifeEpisodeRecord[] = [];
+let currentState: PresenceStateRecord | null = null;
+let episodes: PresenceEpisodeRecord[] = [];
 
 const localDate = (hour: number, minute = 0) => new Date(2026, 2, 21, hour, minute, 0, 0);
 const toLocalTimestamp = (date: Date) => {
@@ -43,10 +43,10 @@ vi.mock('../../../../src/core/db/tasks', () => ({
   getProactiveTasks: getProactiveTasksMock,
 }));
 
-vi.mock('../../../../src/core/db/life', () => ({
-  runLifeTransaction: (fn: () => unknown) => fn(),
-  getLifeState: vi.fn(() => currentState),
-  upsertLifeState: vi.fn((params: Partial<LifeStateRecord> & { profile_id: string }) => {
+vi.mock('../../../../src/core/db/presence', () => ({
+  runPresenceTransaction: (fn: () => unknown) => fn(),
+  getPresenceState: vi.fn(() => currentState),
+  upsertPresenceState: vi.fn((params: Partial<PresenceStateRecord> & { profile_id: string }) => {
     currentState = {
       id: currentState?.id || 'life_1',
       created_at: currentState?.created_at || new Date().toISOString(),
@@ -57,11 +57,11 @@ vi.mock('../../../../src/core/db/life', () => ({
       state_json: null,
       ...currentState,
       ...params,
-    } as LifeStateRecord;
+    } as PresenceStateRecord;
     return currentState;
   }),
-  addLifeEpisode: vi.fn((params: Partial<LifeEpisodeRecord> & { profile_id: string }) => {
-    const episode: LifeEpisodeRecord = {
+  addPresenceEpisode: vi.fn((params: Partial<PresenceEpisodeRecord> & { profile_id: string }) => {
+    const episode: PresenceEpisodeRecord = {
       id: params.id || `episode_${episodes.length + 1}`,
       profile_id: params.profile_id,
       activity_type: params.activity_type || 'companion_idle',
@@ -82,26 +82,26 @@ vi.mock('../../../../src/core/db/life', () => ({
     episodes.push(episode);
     return episode;
   }),
-  getLifeEpisode: vi.fn((id: string) => episodes.find(entry => entry.id === id) || null),
-  updateLifeEpisode: vi.fn((id: string, updates: Partial<LifeEpisodeRecord>) => {
+  getPresenceEpisode: vi.fn((id: string) => episodes.find(entry => entry.id === id) || null),
+  updatePresenceEpisode: vi.fn((id: string, updates: Partial<PresenceEpisodeRecord>) => {
     episodes = episodes.map(entry =>
       entry.id === id ? { ...entry, ...updates, updated_at: new Date().toISOString() } : entry
     );
     return { changes: 1 };
   }),
-  listLifeEpisodes: vi.fn((_profileId: string, limit: number) => episodes.slice(-limit).reverse()),
+  listPresenceEpisodes: vi.fn((_profileId: string, limit: number) => episodes.slice(-limit).reverse()),
 }));
 
-vi.mock('../../../../src/core/db/life_reflection', () => ({
-  listLifeReflections: listLifeReflectionsMock,
+vi.mock('../../../../src/core/db/presence_reflection', () => ({
+  listPresenceReflections: listPresenceReflectionsMock,
 }));
 
-vi.mock('../../../../src/main/services/life/life_reflection', () => ({
-  runDueHourlyLifeReflections: runDueHourlyLifeReflectionsMock,
-  runDueDailyLifeReflections: runDueDailyLifeReflectionsMock,
+vi.mock('../../../../src/main/services/presence/presence_reflection', () => ({
+  runDueHourlyRuntimeReflections: runDueHourlyRuntimeReflectionsMock,
+  runDueDailyRuntimeReflections: runDueDailyRuntimeReflectionsMock,
 }));
 
-describe('life_runtime', () => {
+describe('presence_runtime', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -123,9 +123,9 @@ describe('life_runtime', () => {
     });
     listDueProactiveTasksMock.mockReturnValue([]);
     getProactiveTasksMock.mockReturnValue([]);
-    listLifeReflectionsMock.mockReturnValue([]);
-    runDueHourlyLifeReflectionsMock.mockResolvedValue([]);
-    runDueDailyLifeReflectionsMock.mockResolvedValue([]);
+    listPresenceReflectionsMock.mockReturnValue([]);
+    runDueHourlyRuntimeReflectionsMock.mockResolvedValue([]);
+    runDueDailyRuntimeReflectionsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -135,11 +135,11 @@ describe('life_runtime', () => {
   it('creates an initial truthful idle state on startup', async () => {
     const startedAt = localDate(14, 0);
     vi.setSystemTime(startedAt);
-    const { recordLifeRuntimeEvent, getLifeContextMessage } = await import(
-      '../../../../src/main/services/life/life_runtime'
+    const { recordPresenceRuntimeEvent, getPresenceContextMessage } = await import(
+      '../../../../src/main/services/presence/presence_runtime'
     );
 
-    const snapshot = recordLifeRuntimeEvent({
+    const snapshot = recordPresenceRuntimeEvent({
       type: 'runtime-start',
       at: toLocalTimestamp(startedAt),
     });
@@ -148,7 +148,7 @@ describe('life_runtime', () => {
     expect(snapshot?.state.presence).toBe('available');
     expect(snapshot?.derived.dayPhase).toBe('day');
     expect(snapshot?.currentEpisode?.summary).toContain('Available');
-    expect(getLifeContextMessage()).toContain('Current life state for iKi:');
+    expect(getPresenceContextMessage()).toContain('Current presence state for iKi:');
   });
 
   it('stays daemon-safe when BrowserWindow.getAllWindows is unavailable', async () => {
@@ -159,11 +159,11 @@ describe('life_runtime', () => {
     try {
       const startedAt = localDate(14, 0);
       vi.setSystemTime(startedAt);
-      const { recordLifeRuntimeEvent } = await import(
-        '../../../../src/main/services/life/life_runtime'
+      const { recordPresenceRuntimeEvent } = await import(
+        '../../../../src/main/services/presence/presence_runtime'
       );
 
-      const snapshot = recordLifeRuntimeEvent({
+      const snapshot = recordPresenceRuntimeEvent({
         type: 'runtime-start',
         at: toLocalTimestamp(startedAt),
       });
@@ -177,20 +177,20 @@ describe('life_runtime', () => {
   });
 
   it('opens a focused episode during task execution and exits it after completion', async () => {
-    const { recordLifeRuntimeEvent, getLifeOverview } = await import(
-      '../../../../src/main/services/life/life_runtime'
+    const { recordPresenceRuntimeEvent, getPresenceOverview } = await import(
+      '../../../../src/main/services/presence/presence_runtime'
     );
 
     const startedAt = localDate(14, 0);
     vi.setSystemTime(startedAt);
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'runtime-start',
       at: toLocalTimestamp(startedAt),
     });
 
     const focusedAt = localDate(14, 5);
     vi.setSystemTime(focusedAt);
-    const focused = recordLifeRuntimeEvent({
+    const focused = recordPresenceRuntimeEvent({
       type: 'task-started',
       at: toLocalTimestamp(focusedAt),
       taskId: 'task_1',
@@ -204,7 +204,7 @@ describe('life_runtime', () => {
 
     const settledAt = localDate(14, 25);
     vi.setSystemTime(settledAt);
-    const settled = recordLifeRuntimeEvent({
+    const settled = recordPresenceRuntimeEvent({
       type: 'task-finished',
       at: toLocalTimestamp(settledAt),
       taskId: 'task_1',
@@ -214,58 +214,58 @@ describe('life_runtime', () => {
     expect(settled?.state.current_activity).not.toBe('focused_work');
     expect(settled?.derived.runningTaskIds).toEqual([]);
 
-    const overview = getLifeOverview(5);
+    const overview = getPresenceOverview(5);
     expect(overview.recentEpisodes.length).toBeGreaterThanOrEqual(2);
     expect(overview.recentEpisodes[0].activity_type).toBe(settled?.state.current_activity);
   });
 
   it('runs hourly and daily reflection backfill during refresh', async () => {
-    const { recordLifeRuntimeEvent, refreshLifeRuntime } = await import(
-      '../../../../src/main/services/life/life_runtime'
+    const { recordPresenceRuntimeEvent, refreshPresenceRuntime } = await import(
+      '../../../../src/main/services/presence/presence_runtime'
     );
 
     const startedAt = localDate(14, 0);
     vi.setSystemTime(startedAt);
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'runtime-start',
       at: toLocalTimestamp(startedAt),
     });
 
-    await refreshLifeRuntime();
+    await refreshPresenceRuntime();
 
-    expect(runDueHourlyLifeReflectionsMock).toHaveBeenCalled();
-    expect(runDueDailyLifeReflectionsMock).toHaveBeenCalled();
+    expect(runDueHourlyRuntimeReflectionsMock).toHaveBeenCalled();
+    expect(runDueDailyRuntimeReflectionsMock).toHaveBeenCalled();
   });
 
   it('stores owner mode and applies it after a running task lock clears', async () => {
-    const { recordLifeRuntimeEvent, setLifeOwnerMode, getLifeContextMessage } = await import(
-      '../../../../src/main/services/life/life_runtime'
+    const { recordPresenceRuntimeEvent, setPresenceOwnerMode, getPresenceContextMessage } = await import(
+      '../../../../src/main/services/presence/presence_runtime'
     );
 
     const startedAt = localDate(14, 0);
     vi.setSystemTime(startedAt);
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'runtime-start',
       at: toLocalTimestamp(startedAt),
     });
 
     const focusedAt = localDate(14, 5);
     vi.setSystemTime(focusedAt);
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'task-started',
       at: toLocalTimestamp(focusedAt),
       taskId: 'task_1',
       threadId: 'thread_1',
     });
 
-    const deferred = setLifeOwnerMode('sleep');
+    const deferred = setPresenceOwnerMode('sleep');
     expect(deferred?.state.current_activity).toBe('focused_work');
     expect(deferred?.derived.ownerMode).toBe('sleep');
     expect(deferred?.derived.ownerModeStatus).toBe('deferred');
 
     const settledAt = localDate(14, 20);
     vi.setSystemTime(settledAt);
-    const settled = recordLifeRuntimeEvent({
+    const settled = recordPresenceRuntimeEvent({
       type: 'task-finished',
       at: toLocalTimestamp(settledAt),
       taskId: 'task_1',
@@ -276,34 +276,34 @@ describe('life_runtime', () => {
     expect(settled?.state.presence).toBe('sleeping');
     expect(settled?.derived.ownerMode).toBe('sleep');
     expect(settled?.derived.ownerModeStatus).toBe('applied');
-    expect(getLifeContextMessage()).toContain('Owner mode: sleep (applied)');
+    expect(getPresenceContextMessage()).toContain('Owner mode: sleep (applied)');
   });
 
   it('clears owner mode and opens a new semantic episode even when presence stays available', async () => {
-    const { recordLifeRuntimeEvent, setLifeOwnerMode, clearLifeOwnerMode, getLifeOverview } =
-      await import('../../../../src/main/services/life/life_runtime');
+    const { recordPresenceRuntimeEvent, setPresenceOwnerMode, clearPresenceOwnerMode, getPresenceOverview } =
+      await import('../../../../src/main/services/presence/presence_runtime');
 
     const startedAt = localDate(14, 0);
     vi.setSystemTime(startedAt);
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'runtime-start',
       at: toLocalTimestamp(startedAt),
     });
 
     const overrideAt = localDate(14, 3);
     vi.setSystemTime(overrideAt);
-    const overridden = setLifeOwnerMode('available');
+    const overridden = setPresenceOwnerMode('available');
     expect(overridden?.derived.ownerMode).toBe('available');
     expect(overridden?.derived.ownerModeStatus).toBe('applied');
 
     const clearAt = localDate(14, 6);
     vi.setSystemTime(clearAt);
-    const cleared = clearLifeOwnerMode();
+    const cleared = clearPresenceOwnerMode();
 
     expect(cleared?.derived.ownerModeStatus).toBe('none');
     expect(cleared?.currentEpisode?.transition_reason).toBe('idle-available');
 
-    const overview = getLifeOverview(5);
+    const overview = getPresenceOverview(5);
     expect(overview.recentEpisodes.length).toBeGreaterThanOrEqual(3);
     expect(overview.recentEpisodes.some(entry => entry.transition_reason === 'owner-mode-available')).toBe(true);
   });

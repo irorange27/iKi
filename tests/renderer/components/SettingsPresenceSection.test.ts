@@ -3,8 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
-import SettingsLifeSection from '../../../src/renderer/components/settings/SettingsLifeSection.vue';
-import type { LifeOverview, LifePushPayload } from '../../../src/shared/types/life';
+import SettingsPresenceSection from '../../../src/renderer/components/settings/SettingsPresenceSection.vue';
+import type { PresenceOverview, PresencePushPayload } from '../../../src/shared/types/presence';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {
@@ -25,10 +25,10 @@ const findButtonByText = (wrapper: VueWrapper, text: string) => {
   return match;
 };
 
-const buildOverview = (overrides?: Partial<LifeOverview>): LifeOverview => ({
+const buildOverview = (overrides?: Partial<PresenceOverview>): PresenceOverview => ({
   snapshot: {
     state: {
-      id: 'life_1',
+      id: 'presence_1',
       profile_id: 'identity_1',
       current_activity: 'companion_idle',
       presence: 'available',
@@ -77,18 +77,18 @@ const buildOverview = (overrides?: Partial<LifeOverview>): LifeOverview => ({
   ...overrides,
 });
 
-const mountSettingsLifeSection = async (overview: LifeOverview) => {
+const mountSettingsPresenceSection = async (overview: PresenceOverview) => {
   const getOverview = vi.fn(async () => overview);
   const refresh = vi.fn(async () => overview.snapshot);
   const setOwnerMode = vi.fn(async () => overview.snapshot);
   const clearOwnerMode = vi.fn(async () => overview.snapshot);
-  const onPush = vi.fn((callback: (payload: LifePushPayload | unknown) => void) => {
+  const onPush = vi.fn((callback: (payload: PresencePushPayload | unknown) => void) => {
     void callback;
   });
   const removeAllListeners = vi.fn();
 
   setElectronApi({
-    life: {
+    presence: {
       getOverview,
       refresh,
       setOwnerMode,
@@ -98,7 +98,7 @@ const mountSettingsLifeSection = async (overview: LifeOverview) => {
     },
   });
 
-  const wrapper = mount(SettingsLifeSection, {
+  const wrapper = mount(SettingsPresenceSection, {
     props: {
       active: true,
     },
@@ -117,7 +117,7 @@ const mountSettingsLifeSection = async (overview: LifeOverview) => {
   };
 };
 
-describe('SettingsLifeSection', () => {
+describe('SettingsPresenceSection', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-21T14:00:00.000Z'));
@@ -131,7 +131,7 @@ describe('SettingsLifeSection', () => {
   });
 
   it('applies explicit owner mode actions through the life bridge', async () => {
-    const { wrapper, setOwnerMode, clearOwnerMode, getOverview } = await mountSettingsLifeSection(
+    const { wrapper, setOwnerMode, clearOwnerMode, getOverview } = await mountSettingsPresenceSection(
       buildOverview()
     );
 
@@ -152,7 +152,7 @@ describe('SettingsLifeSection', () => {
     if (!baseOverview.snapshot) {
       throw new Error('Expected snapshot in test fixture');
     }
-    const { wrapper } = await mountSettingsLifeSection(
+    const { wrapper } = await mountSettingsPresenceSection(
       buildOverview({
         snapshot: {
           ...baseOverview.snapshot,
@@ -176,5 +176,38 @@ describe('SettingsLifeSection', () => {
     expect(wrapper.text()).toContain('Sleep');
     expect(wrapper.text()).toContain('deferred');
     expect(wrapper.text()).toContain('Waiting for the current task lock to clear');
+  });
+
+  it('renders structured reflection insights and next steps', async () => {
+    const { wrapper } = await mountSettingsPresenceSection(
+      buildOverview({
+        recentReflections: [
+          {
+            id: 'reflection_1',
+            profile_id: 'identity_1',
+            period_type: 'day',
+            period_start: '2026-03-21T00:00:00.000Z',
+            period_end: '2026-03-21T23:59:59.000Z',
+            summary: 'The day stayed coherent when active commitments were reviewed early.',
+            insights_json: JSON.stringify([
+              'Explicit commitment review reduced drift.',
+              'Planning before new work improved follow-through.',
+            ]),
+            plan_json: JSON.stringify([
+              'Finish inbox follow-ups before new proactive work.',
+              'Review deferred tasks after the morning recap.',
+            ]),
+            created_at: '2026-03-21T23:59:59.000Z',
+            updated_at: '2026-03-21T23:59:59.000Z',
+          },
+        ],
+      })
+    );
+
+    expect(wrapper.text()).toContain('Recent Reflections');
+    expect(wrapper.text()).toContain('Insights');
+    expect(wrapper.text()).toContain('Explicit commitment review reduced drift.');
+    expect(wrapper.text()).toContain('Next Day');
+    expect(wrapper.text()).toContain('Finish inbox follow-ups before new proactive work.');
   });
 });

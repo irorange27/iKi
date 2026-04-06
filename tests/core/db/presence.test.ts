@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-type LifeStateRow = Record<string, unknown> | null;
-type LifeEpisodeRow = Record<string, unknown> | null;
+type PresenceStateRow = Record<string, unknown> | null;
+type PresenceEpisodeRow = Record<string, unknown> | null;
 
 const { getDbMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
@@ -11,14 +11,14 @@ vi.mock('../../../src/core/db/database', () => ({
   getDb: getDbMock,
 }));
 
-describe('life db helpers', () => {
+describe('presence db helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
   });
 
-  it('upserts a life state row and reloads it by profile id', async () => {
-    let stateRow: LifeStateRow = null;
+  it('upserts a presence state row and reloads it by profile id', async () => {
+    let stateRow: PresenceStateRow = null;
     const prepareMock = vi.fn((sql: string) => {
       if (sql.includes('SELECT * FROM life_state WHERE profile_id = ?')) {
         return {
@@ -48,8 +48,8 @@ describe('life db helpers', () => {
       transaction: vi.fn((fn: () => unknown) => fn),
     });
 
-    const { upsertLifeState } = await import('../../../src/core/db/life');
-    const state = upsertLifeState({
+    const { upsertPresenceState } = await import('../../../src/core/db/presence');
+    const state = upsertPresenceState({
       profile_id: 'identity_1',
       current_activity: 'companion_idle',
       presence: 'available',
@@ -73,8 +73,8 @@ describe('life db helpers', () => {
     );
   });
 
-  it('adds and lists life episodes in reverse chronological order', async () => {
-    const episodes: LifeEpisodeRow[] = [];
+  it('adds and lists presence episodes in reverse chronological order', async () => {
+    const episodes: PresenceEpisodeRow[] = [];
     const prepareMock = vi.fn((sql: string) => {
       if (sql.includes('SELECT * FROM life_episodes WHERE id = ?')) {
         return {
@@ -108,9 +108,9 @@ describe('life db helpers', () => {
       transaction: vi.fn((fn: () => unknown) => fn),
     });
 
-    const { addLifeEpisode, listLifeEpisodes } = await import('../../../src/core/db/life');
+    const { addPresenceEpisode, listPresenceEpisodes } = await import('../../../src/core/db/presence');
 
-    addLifeEpisode({
+    addPresenceEpisode({
       id: 'episode_old',
       profile_id: 'identity_1',
       activity_type: 'companion_idle',
@@ -118,7 +118,7 @@ describe('life db helpers', () => {
       started_at: '2026-03-21T08:00:00.000Z',
       transition_reason: 'idle-available',
     });
-    addLifeEpisode({
+    addPresenceEpisode({
       id: 'episode_new',
       profile_id: 'identity_1',
       activity_type: 'focused_work',
@@ -127,7 +127,7 @@ describe('life db helpers', () => {
       transition_reason: 'task-running',
     });
 
-    expect(listLifeEpisodes('identity_1', 5).map(entry => entry.id)).toEqual([
+    expect(listPresenceEpisodes('identity_1', 5).map(entry => entry.id)).toEqual([
       'episode_new',
       'episode_old',
     ]);
@@ -168,8 +168,8 @@ describe('life db helpers', () => {
       transaction: vi.fn((fn: () => unknown) => fn),
     });
 
-    const { listLifeEpisodesInWindow } = await import('../../../src/core/db/life');
-    const rows = listLifeEpisodesInWindow(
+    const { listPresenceEpisodesInWindow } = await import('../../../src/core/db/presence');
+    const rows = listPresenceEpisodesInWindow(
       'identity_1',
       '2026-03-21T08:00:00.000Z',
       '2026-03-21T09:00:00.000Z'

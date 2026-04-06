@@ -7,8 +7,8 @@ type ScaledBudgetItem = {
   key:
     | 'maxRecentTokens'
     | 'maxIdentityTokens'
-    | 'maxLifeStateTokens'
-    | 'maxReflectionTokens'
+    | 'maxPresenceStateTokens'
+    | 'maxRuntimeReflectionTokens'
     | 'maxSummaryTokens'
     | 'maxMemoryTokens'
     | 'maxSkillTokens';
@@ -28,8 +28,8 @@ export type EffectiveContextConfig = ContextConfig & {
 const CONTEXT_BUDGET_FLOORS: Record<ScaledBudgetItem['key'], number> = {
   maxRecentTokens: 256,
   maxIdentityTokens: 48,
-  maxLifeStateTokens: 48,
-  maxReflectionTokens: 48,
+  maxPresenceStateTokens: 48,
+  maxRuntimeReflectionTokens: 48,
   maxSummaryTokens: 96,
   maxMemoryTokens: 96,
   maxSkillTokens: 160,
@@ -50,14 +50,14 @@ const toScaledBudgetItems = (config: ContextConfig): ScaledBudgetItem[] => [
     minValue: CONTEXT_BUDGET_FLOORS.maxIdentityTokens,
   },
   {
-    key: 'maxLifeStateTokens',
-    value: config.maxLifeStateTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxLifeStateTokens,
+    key: 'maxPresenceStateTokens',
+    value: config.maxPresenceStateTokens,
+    minValue: CONTEXT_BUDGET_FLOORS.maxPresenceStateTokens,
   },
   {
-    key: 'maxReflectionTokens',
-    value: config.maxReflectionTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxReflectionTokens,
+    key: 'maxRuntimeReflectionTokens',
+    value: config.maxRuntimeReflectionTokens,
+    minValue: CONTEXT_BUDGET_FLOORS.maxRuntimeReflectionTokens,
   },
   {
     key: 'maxSummaryTokens',
@@ -123,8 +123,8 @@ const shrinkBudgetToFit = (
 const buildRequestedContextTokens = (config: ContextConfig): number =>
   config.maxRecentTokens +
   config.maxIdentityTokens +
-  config.maxLifeStateTokens +
-  config.maxReflectionTokens +
+  config.maxPresenceStateTokens +
+  config.maxRuntimeReflectionTokens +
   config.maxSummaryTokens +
   config.maxMemoryTokens +
   config.maxSkillTokens;
@@ -219,8 +219,8 @@ export const deriveModelAwareContextConfig = (
     maxRecentTokens: itemMap.maxRecentTokens,
     maxMessageTokens: scaleMessageClipBudget(config, scale, itemMap.maxRecentTokens),
     maxIdentityTokens: itemMap.maxIdentityTokens,
-    maxLifeStateTokens: itemMap.maxLifeStateTokens,
-    maxReflectionTokens: itemMap.maxReflectionTokens,
+    maxPresenceStateTokens: itemMap.maxPresenceStateTokens,
+    maxRuntimeReflectionTokens: itemMap.maxRuntimeReflectionTokens,
     maxSummaryTokens: itemMap.maxSummaryTokens,
     maxMemoryTokens: itemMap.maxMemoryTokens,
     maxSkillTokens: itemMap.maxSkillTokens,

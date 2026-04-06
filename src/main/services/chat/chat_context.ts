@@ -33,14 +33,14 @@ import {
   retrieveRelevantContinuity,
   shouldUseLegacyContinuityContextBlocks,
 } from '../continuity/continuity_service';
-import { getLifeContextMessage } from '../life/life_runtime';
-import { getRecentLifeReflectionContextMessage } from '../life/life_reflection';
+import { getPresenceContextMessage } from '../presence/presence_runtime';
+import { getRecentRuntimeReflectionContextMessage } from '../presence/presence_reflection';
 
 export type ContextBlockKind =
   | 'recent-history'
   | 'identity'
-  | 'life-state'
-  | 'recent-reflection'
+  | 'presence-state'
+  | 'runtime-reflection'
   | 'thread-summary'
   | 'memory'
   | 'affect'
@@ -121,12 +121,12 @@ type IdentityContext = {
   block: ContextReportBlock;
 };
 
-type LifeStateContext = {
+type PresenceStateContext = {
   systemMessage: string;
   block: ContextReportBlock;
 };
 
-type ReflectionContext = {
+type RuntimeReflectionContext = {
   systemMessage: string;
   block: ContextReportBlock;
 };
@@ -550,20 +550,20 @@ const buildIdentityContext = (
   };
 };
 
-const buildLifeStateContext = (
+const buildPresenceStateContext = (
   contextConfig: ContextConfig,
   modelCapability?: ModelCapability | null
-): LifeStateContext => {
+): PresenceStateContext => {
   const lifeClip = clipTextToTokenBudget(
-    getLifeContextMessage(),
-    contextConfig.maxLifeStateTokens,
+    getPresenceContextMessage(),
+    contextConfig.maxPresenceStateTokens,
     modelCapability
   );
 
   return {
     systemMessage: lifeClip.text,
     block: {
-      kind: 'life-state',
+      kind: 'presence-state',
       status: lifeClip.text ? (lifeClip.truncated ? 'truncated' : 'included') : 'dropped',
       estimatedTokens: estimateTextTokens(lifeClip.text, modelCapability),
       charCount: lifeClip.text.length,
@@ -576,20 +576,20 @@ const buildLifeStateContext = (
   };
 };
 
-const buildRecentReflectionContext = (
+const buildRuntimeReflectionContext = (
   contextConfig: ContextConfig,
   modelCapability?: ModelCapability | null
-): ReflectionContext => {
+): RuntimeReflectionContext => {
   const reflectionClip = clipTextToTokenBudget(
-    getRecentLifeReflectionContextMessage(),
-    contextConfig.maxReflectionTokens,
+    getRecentRuntimeReflectionContextMessage(),
+    contextConfig.maxRuntimeReflectionTokens,
     modelCapability
   );
 
   return {
     systemMessage: reflectionClip.text,
     block: {
-      kind: 'recent-reflection',
+      kind: 'runtime-reflection',
       status: reflectionClip.text
         ? reflectionClip.truncated
           ? 'truncated'
@@ -879,37 +879,37 @@ export const createChatContextAssembler = (deps: {
 
     const useLegacyContinuityContextBlocks = shouldUseLegacyContinuityContextBlocks();
 
-    const lifeStateContext = benchmarkCleanContext
+    const presenceStateContext = benchmarkCleanContext
       ? {
           systemMessage: '',
-          block: buildDroppedBlock('life-state', 'disabled for benchmark clean mode'),
+          block: buildDroppedBlock('presence-state', 'disabled for benchmark clean mode'),
         }
       : !useLegacyContinuityContextBlocks
         ? {
             systemMessage: '',
             block: buildDroppedBlock(
-              'life-state',
+              'presence-state',
               'disabled by continuity config: runtime presence is no longer part of default prompt context'
             ),
           }
-        : buildLifeStateContext(contextConfig, params.modelCapability);
-    blocks.push(lifeStateContext.block);
+        : buildPresenceStateContext(contextConfig, params.modelCapability);
+    blocks.push(presenceStateContext.block);
 
-    const reflectionContext = benchmarkCleanContext
+    const runtimeReflectionContext = benchmarkCleanContext
       ? {
           systemMessage: '',
-          block: buildDroppedBlock('recent-reflection', 'disabled for benchmark clean mode'),
+          block: buildDroppedBlock('runtime-reflection', 'disabled for benchmark clean mode'),
         }
       : !useLegacyContinuityContextBlocks
         ? {
             systemMessage: '',
             block: buildDroppedBlock(
-              'recent-reflection',
-              'disabled by continuity config: life reflections are no longer part of default prompt context'
+              'runtime-reflection',
+              'disabled by continuity config: runtime reflections are no longer part of default prompt context'
             ),
           }
-        : buildRecentReflectionContext(contextConfig, params.modelCapability);
-    blocks.push(reflectionContext.block);
+        : buildRuntimeReflectionContext(contextConfig, params.modelCapability);
+    blocks.push(runtimeReflectionContext.block);
 
     const threadSummary =
       benchmarkCleanContext || !params.threadId
@@ -949,8 +949,8 @@ export const createChatContextAssembler = (deps: {
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
       [
         identityContext.systemMessage,
-        lifeStateContext.systemMessage,
-        reflectionContext.systemMessage,
+        presenceStateContext.systemMessage,
+        runtimeReflectionContext.systemMessage,
         summaryContext.systemMessage,
         memoryContext.systemMessage,
       ]

@@ -1,53 +1,53 @@
 import * as tasksDb from '../../../core/db/tasks';
-import * as lifeDb from '../../../core/db/life';
-import * as lifeReflectionDb from '../../../core/db/life_reflection';
+import * as presenceDb from '../../../core/db/presence';
+import * as presenceReflectionDb from '../../../core/db/presence_reflection';
 import { createLogger } from '../../../core/logger';
 import type {
-  LifeEpisodeRecord,
-  LifeEventType,
-  LifeOwnerMode,
-  LifeOwnerModeStatus,
-  LifeOverview,
-  LifePushPayload,
-  LifeSnapshot,
-  LifeStateEnvelope,
-  LifeStateRecord,
-} from '../../../shared/types/life';
+  PresenceEpisodeRecord,
+  PresenceEventType,
+  PresenceOwnerMode,
+  PresenceOwnerModeStatus,
+  PresenceOverview,
+  PresenceSnapshot,
+  PresenceStateEnvelope,
+  PresenceStateRecord,
+  PresencePushPayload,
+} from '../../../shared/types/presence';
 import {
-  LIFE_POLICY_VERSION,
+  PRESENCE_POLICY_VERSION,
   DEFAULT_SLEEP_WINDOW,
-  advanceLifeBudgets,
-  chooseLifeActivity,
+  advancePresenceBudgets,
+  choosePresenceActivity,
   getReviewTimestamp,
   normalizeSleepWindow,
-  parseLifeStateEnvelope,
-  serializeLifeStateEnvelope,
-} from './life_activity_engine';
+  parsePresenceStateEnvelope,
+  serializePresenceStateEnvelope,
+} from './presence_activity_engine';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
-import { runDueDailyLifeReflections, runDueHourlyLifeReflections } from './life_reflection';
+import { runDueDailyRuntimeReflections, runDueHourlyRuntimeReflections } from './presence_reflection';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 
-const LIFE_TICK_MS = 60_000;
+const PRESENCE_TICK_MS = 60_000;
 const DEFAULT_BUDGETS = {
   energy: 0.74,
   focus_budget: 0.7,
   social_availability: 0.78,
 };
-const lifeRuntimeLogger = createLogger({ module: 'life_runtime' });
+const presenceRuntimeLogger = createLogger({ module: 'presence_runtime' });
 
-type LifeRuntimeEvent = {
-  type: LifeEventType;
+type PresenceRuntimeEvent = {
+  type: PresenceEventType;
   at?: string;
   taskId?: string | null;
   threadId?: string | null;
   clientId?: string | null;
   triggerRef?: string | null;
-  ownerMode?: LifeOwnerMode | null;
+  ownerMode?: PresenceOwnerMode | null;
   ownerModeNote?: string | null;
   persistAsLastEvent?: boolean;
 };
 
-let lifeTimer: NodeJS.Timeout | null = null;
+let presenceTimer: NodeJS.Timeout | null = null;
 let tickInFlight = false;
 
 const normalizeEventTimestamp = (value?: string): string => {
@@ -56,17 +56,17 @@ const normalizeEventTimestamp = (value?: string): string => {
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 };
 
-const pushLifeEventToRenderers = (payload: LifePushPayload) => {
+const pushPresenceEventToRenderers = (payload: PresencePushPayload) => {
   for (const win of getAllBrowserWindows()) {
     try {
-      win.webContents.send('life:push', payload);
+      win.webContents.send('presence:push', payload);
     } catch (error) {
-      lifeRuntimeLogger.event({
+      presenceRuntimeLogger.event({
         level: 'warn',
-        event: 'life.push',
+        event: 'presence.push',
         outcome: 'degraded',
         error,
-        message: 'Failed to push life event to renderer.',
+        message: 'Failed to push presence event to renderer.',
       });
     }
   }
@@ -93,8 +93,8 @@ const uniqueStrings = (values: Array<string | null | undefined>): string[] => {
 };
 
 const getExpectedActivityForOwnerMode = (
-  ownerMode: LifeOwnerMode | null | undefined
-): LifeStateRecord['current_activity'] | null => {
+  ownerMode: PresenceOwnerMode | null | undefined
+): PresenceStateRecord['current_activity'] | null => {
   if (ownerMode === 'sleep') return 'sleep';
   if (ownerMode === 'focus') return 'focused_work';
   if (ownerMode === 'available') return 'companion_idle';
@@ -102,9 +102,9 @@ const getExpectedActivityForOwnerMode = (
 };
 
 const getOwnerModeStatus = (params: {
-  ownerMode: LifeOwnerMode | null | undefined;
-  currentActivity: LifeStateRecord['current_activity'];
-}): LifeOwnerModeStatus => {
+  ownerMode: PresenceOwnerMode | null | undefined;
+  currentActivity: PresenceStateRecord['current_activity'];
+}): PresenceOwnerModeStatus => {
   const expectedActivity = getExpectedActivityForOwnerMode(params.ownerMode);
   if (!expectedActivity) return 'none';
   return params.currentActivity === expectedActivity ? 'applied' : 'deferred';
@@ -126,11 +126,11 @@ const collectTaskSignals = (atIso: string, runningTaskIds: string[]) => {
 };
 
 const applyRuntimeEventToEnvelope = (
-  envelope: LifeStateEnvelope,
-  event: LifeRuntimeEvent,
+  envelope: PresenceStateEnvelope,
+  event: PresenceRuntimeEvent,
   atIso: string
-): LifeStateEnvelope => {
-  const next: LifeStateEnvelope = {
+): PresenceStateEnvelope => {
+  const next: PresenceStateEnvelope = {
     ...envelope,
     runningTaskIds: uniqueStrings(envelope.runningTaskIds || []),
   };
@@ -171,7 +171,7 @@ const getElapsedMinutes = (fromIso: string | null | undefined, toIso: string): n
 };
 
 const buildEpisodeSummary = (params: {
-  decision: ReturnType<typeof chooseLifeActivity>;
+  decision: ReturnType<typeof choosePresenceActivity>;
   taskSignals: ReturnType<typeof collectTaskSignals>;
   taskId?: string | null;
 }): string => {
@@ -210,10 +210,10 @@ const buildEpisodeSummary = (params: {
 };
 
 const buildEpisodeSnapshotJson = (params: {
-  decision: ReturnType<typeof chooseLifeActivity>;
+  decision: ReturnType<typeof choosePresenceActivity>;
   taskSignals: ReturnType<typeof collectTaskSignals>;
-  budgets: Pick<LifeStateRecord, 'energy' | 'focus_budget' | 'social_availability'>;
-  ownerMode?: LifeOwnerMode | null;
+  budgets: Pick<PresenceStateRecord, 'energy' | 'focus_budget' | 'social_availability'>;
+  ownerMode?: PresenceOwnerMode | null;
 }): string =>
   JSON.stringify({
     dayPhase: params.decision.dayPhase,
@@ -230,8 +230,8 @@ const buildEpisodeSnapshotJson = (params: {
     ),
   });
 
-const buildSnapshot = (state: LifeStateRecord, currentEpisode: LifeEpisodeRecord | null): LifeSnapshot => {
-  const envelope = parseLifeStateEnvelope(state.state_json);
+const buildSnapshot = (state: PresenceStateRecord, currentEpisode: PresenceEpisodeRecord | null): PresenceSnapshot => {
+  const envelope = parsePresenceStateEnvelope(state.state_json);
   const ownerModeStatus = getOwnerModeStatus({
     ownerMode: envelope.ownerMode,
     currentActivity: state.current_activity,
@@ -253,9 +253,9 @@ const buildSnapshot = (state: LifeStateRecord, currentEpisode: LifeEpisodeRecord
 };
 
 const shouldStartNewEpisode = (params: {
-  currentEpisode: LifeEpisodeRecord | null;
-  nextActivity: LifeStateRecord['current_activity'];
-  nextPresence: LifeStateRecord['presence'];
+  currentEpisode: PresenceEpisodeRecord | null;
+  nextActivity: PresenceStateRecord['current_activity'];
+  nextPresence: PresenceStateRecord['presence'];
   nextTransitionReason: string;
   taskId?: string | null;
   threadId?: string | null;
@@ -271,7 +271,7 @@ const shouldStartNewEpisode = (params: {
   return false;
 };
 
-const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
+const reconcilePresenceState = (event: PresenceRuntimeEvent): PresenceSnapshot | null => {
   const profile = getOrCreateActiveIdentityProfile();
   if (!profile) return null;
 
@@ -279,28 +279,28 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
   const now = new Date(atIso);
   let semanticChange = false;
 
-  const snapshot = lifeDb.runLifeTransaction(() => {
-    const existingState = lifeDb.getLifeState(profile.id);
+  const snapshot = presenceDb.runPresenceTransaction(() => {
+    const existingState = presenceDb.getPresenceState(profile.id);
     const sleepWindow = normalizeSleepWindow(
       existingState?.sleep_window_json ? JSON.parse(existingState.sleep_window_json) : DEFAULT_SLEEP_WINDOW
     );
-    const previousEnvelope = parseLifeStateEnvelope(existingState?.state_json);
+    const previousEnvelope = parsePresenceStateEnvelope(existingState?.state_json);
     const nextEnvelopeBase = applyRuntimeEventToEnvelope(previousEnvelope, event, atIso);
     const taskSignals = collectTaskSignals(atIso, nextEnvelopeBase.runningTaskIds || []);
-    const decision = chooseLifeActivity({
+    const decision = choosePresenceActivity({
       now,
       sleepWindow,
       tasks: taskSignals,
       ownerMode: nextEnvelopeBase.ownerMode || null,
     });
-    const nextEnvelope: LifeStateEnvelope = {
+    const nextEnvelope: PresenceStateEnvelope = {
       ...nextEnvelopeBase,
       dayPhase: decision.dayPhase,
       lastTransitionReason: decision.transitionReason,
     };
 
     if (!existingState) {
-      const episode = lifeDb.addLifeEpisode({
+      const episode = presenceDb.addPresenceEpisode({
         profile_id: profile.id,
         activity_type: decision.activity,
         presence: decision.presence,
@@ -324,7 +324,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
         }),
       });
 
-      const state = lifeDb.upsertLifeState({
+      const state = presenceDb.upsertPresenceState({
         profile_id: profile.id,
         current_activity: decision.activity,
         presence: decision.presence,
@@ -334,8 +334,8 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
         current_episode_id: episode.id,
         next_review_at: getReviewTimestamp(now, decision.reviewMinutes),
         sleep_window_json: JSON.stringify(sleepWindow),
-        policy_version: LIFE_POLICY_VERSION,
-        state_json: serializeLifeStateEnvelope(nextEnvelope),
+        policy_version: PRESENCE_POLICY_VERSION,
+        state_json: serializePresenceStateEnvelope(nextEnvelope),
       });
 
       semanticChange = true;
@@ -343,7 +343,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
     }
 
     const elapsedMinutes = getElapsedMinutes(existingState.updated_at, atIso);
-    const driftedBudgets = advanceLifeBudgets(
+    const driftedBudgets = advancePresenceBudgets(
       existingState.current_activity,
       {
         energy: existingState.energy,
@@ -354,7 +354,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
     );
 
     const currentEpisode = existingState.current_episode_id
-      ? lifeDb.getLifeEpisode(existingState.current_episode_id)
+      ? presenceDb.getPresenceEpisode(existingState.current_episode_id)
       : null;
 
     let nextEpisode = currentEpisode;
@@ -369,12 +369,12 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
       })
     ) {
       if (currentEpisode && !currentEpisode.ended_at) {
-        lifeDb.updateLifeEpisode(currentEpisode.id, {
+        presenceDb.updatePresenceEpisode(currentEpisode.id, {
           ended_at: atIso,
         });
       }
 
-      nextEpisode = lifeDb.addLifeEpisode({
+      nextEpisode = presenceDb.addPresenceEpisode({
         profile_id: profile.id,
         activity_type: decision.activity,
         presence: decision.presence,
@@ -400,7 +400,7 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
       semanticChange = true;
     }
 
-    const nextState = lifeDb.upsertLifeState({
+    const nextState = presenceDb.upsertPresenceState({
       id: existingState.id,
       profile_id: profile.id,
       current_activity: decision.activity,
@@ -411,8 +411,8 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
       current_episode_id: nextEpisode?.id ?? null,
       next_review_at: getReviewTimestamp(now, decision.reviewMinutes),
       sleep_window_json: JSON.stringify(sleepWindow),
-      policy_version: LIFE_POLICY_VERSION,
-      state_json: serializeLifeStateEnvelope(nextEnvelope),
+      policy_version: PRESENCE_POLICY_VERSION,
+      state_json: serializePresenceStateEnvelope(nextEnvelope),
       created_at: existingState.created_at,
     });
 
@@ -428,8 +428,8 @@ const reconcileLifeState = (event: LifeRuntimeEvent): LifeSnapshot | null => {
   });
 
   if (snapshot && (semanticChange || (event.type !== 'tick' && event.persistAsLastEvent !== false))) {
-    pushLifeEventToRenderers({
-      type: 'life-state',
+    pushPresenceEventToRenderers({
+      type: 'presence-state',
       snapshot,
       sourceEvent: event.type,
     });
@@ -442,15 +442,15 @@ const tick = async () => {
   if (tickInFlight) return;
   tickInFlight = true;
   try {
-    const snapshot = reconcileLifeState({ type: 'tick' });
+    const snapshot = reconcilePresenceState({ type: 'tick' });
     if (snapshot) {
-      await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
-      await runDueDailyLifeReflections({ now: snapshot.state.updated_at });
+      await runDueHourlyRuntimeReflections({ now: snapshot.state.updated_at });
+      await runDueDailyRuntimeReflections({ now: snapshot.state.updated_at });
     }
   } catch (error) {
-    lifeRuntimeLogger.event({
+    presenceRuntimeLogger.event({
       level: 'warn',
-      event: 'life.tick',
+      event: 'presence.tick',
       outcome: 'failed',
       error,
     });
@@ -459,46 +459,46 @@ const tick = async () => {
   }
 };
 
-export const startLifeRuntime = () => {
-  if (lifeTimer) return;
-  lifeTimer = setInterval(() => {
+export const startPresenceRuntime = () => {
+  if (presenceTimer) return;
+  presenceTimer = setInterval(() => {
     void tick();
-  }, LIFE_TICK_MS);
-  const snapshot = reconcileLifeState({ type: 'runtime-start' });
+  }, PRESENCE_TICK_MS);
+  const snapshot = reconcilePresenceState({ type: 'runtime-start' });
   if (snapshot) {
     void (async () => {
-      await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
-      await runDueDailyLifeReflections({ now: snapshot.state.updated_at });
+      await runDueHourlyRuntimeReflections({ now: snapshot.state.updated_at });
+      await runDueDailyRuntimeReflections({ now: snapshot.state.updated_at });
     })();
   }
 };
 
-export const stopLifeRuntime = () => {
-  if (!lifeTimer) return;
-  clearInterval(lifeTimer);
-  lifeTimer = null;
+export const stopPresenceRuntime = () => {
+  if (!presenceTimer) return;
+  clearInterval(presenceTimer);
+  presenceTimer = null;
 };
 
-export const recordLifeRuntimeEvent = (event: LifeRuntimeEvent): LifeSnapshot | null =>
-  reconcileLifeState(event);
+export const recordPresenceRuntimeEvent = (event: PresenceRuntimeEvent): PresenceSnapshot | null =>
+  reconcilePresenceState(event);
 
-export const setLifeOwnerMode = (
-  ownerMode: LifeOwnerMode,
+export const setPresenceOwnerMode = (
+  ownerMode: PresenceOwnerMode,
   ownerModeNote?: string | null
-): LifeSnapshot | null =>
-  reconcileLifeState({
+): PresenceSnapshot | null =>
+  reconcilePresenceState({
     type: 'owner-mode-set',
     ownerMode,
     ownerModeNote: ownerModeNote ?? null,
   });
 
-export const clearLifeOwnerMode = (): LifeSnapshot | null =>
-  reconcileLifeState({
+export const clearPresenceOwnerMode = (): PresenceSnapshot | null =>
+  reconcilePresenceState({
     type: 'owner-mode-cleared',
   });
 
-export const getLifeOverview = (limit = 10): LifeOverview => {
-  const snapshot = reconcileLifeState({
+export const getPresenceOverview = (limit = 10): PresenceOverview => {
+  const snapshot = reconcilePresenceState({
     type: 'manual-refresh',
     persistAsLastEvent: false,
   });
@@ -509,34 +509,34 @@ export const getLifeOverview = (limit = 10): LifeOverview => {
 
   return {
     snapshot,
-    recentEpisodes: lifeDb.listLifeEpisodes(profile.id, limit),
-    recentReflections: lifeReflectionDb.listLifeReflections({
+    recentEpisodes: presenceDb.listPresenceEpisodes(profile.id, limit),
+    recentReflections: presenceReflectionDb.listPresenceReflections({
       profileId: profile.id,
       limit: Math.max(1, Math.min(6, limit)),
     }),
   };
 };
 
-export const refreshLifeRuntime = async (): Promise<LifeSnapshot | null> => {
-  const snapshot = reconcileLifeState({
+export const refreshPresenceRuntime = async (): Promise<PresenceSnapshot | null> => {
+  const snapshot = reconcilePresenceState({
     type: 'manual-refresh',
   });
   if (snapshot) {
-    await runDueHourlyLifeReflections({ now: snapshot.state.updated_at });
-    await runDueDailyLifeReflections({ now: snapshot.state.updated_at });
+    await runDueHourlyRuntimeReflections({ now: snapshot.state.updated_at });
+    await runDueDailyRuntimeReflections({ now: snapshot.state.updated_at });
   }
   return snapshot;
 };
 
 const formatPercent = (value: number): string => `${Math.round(clampUnit(value, 0) * 100)}%`;
 
-export const getLifeContextMessage = (): string => {
-  const overview = getLifeOverview(4);
+export const getPresenceContextMessage = (): string => {
+  const overview = getPresenceOverview(4);
   const snapshot = overview.snapshot;
   if (!snapshot) return '';
 
   const lines = [
-    'Current life state for iKi:',
+    'Current presence state for iKi:',
     `- Presence: ${snapshot.state.presence}`,
     `- Activity: ${snapshot.state.current_activity}`,
     `- Day phase: ${snapshot.derived.dayPhase}`,

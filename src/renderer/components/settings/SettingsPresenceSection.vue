@@ -1,13 +1,13 @@
 <template>
   <section class="config-section">
     <div class="settings-card">
-      <div class="card-title">{{ t('settings.life.controlsTitle') }}</div>
-      <p class="card-help">{{ t('settings.life.controlsDescription') }}</p>
+      <div class="card-title">{{ t('settings.presence.controlsTitle') }}</div>
+      <p class="card-help">{{ t('settings.presence.controlsDescription') }}</p>
 
       <p v-if="controlErrorText" class="tasks-error">{{ controlErrorText }}</p>
 
       <div class="life-summary-block">
-        <div class="life-summary-label">{{ t('settings.life.currentOwnerMode') }}</div>
+        <div class="life-summary-label">{{ t('settings.presence.currentOwnerMode') }}</div>
         <div class="life-summary-text">
           {{ ownerModeLabel }}
           <span v-if="snapshot?.derived.ownerMode" class="task-meta-label">
@@ -16,12 +16,12 @@
         </div>
         <div class="life-meta-lines">
           <div v-if="snapshot?.derived.ownerModeSetAt">
-            <span class="task-meta-label">{{ t('settings.life.setAt') }}:</span>
+            <span class="task-meta-label">{{ t('settings.presence.setAt') }}:</span>
             {{ formatTimestamp(snapshot.derived.ownerModeSetAt) }}
           </div>
           <div v-if="snapshot?.derived.ownerModeStatus === 'deferred'">
-            <span class="task-meta-label">{{ t('settings.life.deferred') }}:</span>
-            {{ t('settings.life.deferredDescription') }}
+            <span class="task-meta-label">{{ t('settings.presence.deferred') }}:</span>
+            {{ t('settings.presence.deferredDescription') }}
           </div>
         </div>
       </div>
@@ -33,7 +33,7 @@
           :disabled="loading || controlLoading"
           @click="clearOwnerMode"
         >
-          {{ controlLoading && pendingMode === null ? t('settings.life.applying') : t('settings.life.mode.auto') }}
+          {{ controlLoading && pendingMode === null ? t('settings.presence.applying') : t('settings.presence.mode.auto') }}
         </button>
         <button
           class="secondary-btn"
@@ -41,7 +41,7 @@
           :disabled="loading || controlLoading"
           @click="setOwnerMode('sleep')"
         >
-          {{ controlLoading && pendingMode === 'sleep' ? t('settings.life.applying') : t('settings.life.mode.sleepNow') }}
+          {{ controlLoading && pendingMode === 'sleep' ? t('settings.presence.applying') : t('settings.presence.mode.sleepNow') }}
         </button>
         <button
           class="secondary-btn"
@@ -49,7 +49,7 @@
           :disabled="loading || controlLoading"
           @click="setOwnerMode('focus')"
         >
-          {{ controlLoading && pendingMode === 'focus' ? t('settings.life.applying') : t('settings.life.mode.focus') }}
+          {{ controlLoading && pendingMode === 'focus' ? t('settings.presence.applying') : t('settings.presence.mode.focus') }}
         </button>
         <button
           class="secondary-btn"
@@ -57,27 +57,27 @@
           :disabled="loading || controlLoading"
           @click="setOwnerMode('available')"
         >
-          {{ controlLoading && pendingMode === 'available' ? t('settings.life.applying') : t('settings.life.mode.available') }}
+          {{ controlLoading && pendingMode === 'available' ? t('settings.presence.applying') : t('settings.presence.mode.available') }}
         </button>
       </div>
     </div>
 
     <div class="settings-card">
-      <div class="card-title">{{ t('settings.life.presenceTitle') }}</div>
-      <p class="card-help">{{ t('settings.life.presenceDescription') }}</p>
+      <div class="card-title">{{ t('settings.presence.presenceTitle') }}</div>
+      <p class="card-help">{{ t('settings.presence.presenceDescription') }}</p>
 
       <div class="task-form-actions">
         <button class="secondary-btn" @click="refreshOverview" :disabled="loading">
-          {{ loading ? t('settings.life.refreshing') : t('common.refresh') }}
+          {{ loading ? t('settings.presence.refreshing') : t('common.refresh') }}
         </button>
         <button class="secondary-btn" @click="forceRefresh" :disabled="loading">
-          {{ t('settings.life.recomputeNow') }}
+          {{ t('settings.presence.recomputeNow') }}
         </button>
       </div>
 
       <p v-if="errorText" class="tasks-error">{{ errorText }}</p>
-      <div v-else-if="loading && !snapshot" class="tasks-empty">{{ t('settings.life.runtimeLoading') }}</div>
-      <div v-else-if="!snapshot" class="tasks-empty">{{ t('settings.life.runtimeEmpty') }}</div>
+      <div v-else-if="loading && !snapshot" class="tasks-empty">{{ t('settings.presence.runtimeLoading') }}</div>
+      <div v-else-if="!snapshot" class="tasks-empty">{{ t('settings.presence.runtimeEmpty') }}</div>
       <template v-else>
         <div class="life-status-row">
           <span class="life-chip life-chip-primary">{{ formatPresence(snapshot.state.presence) }}</span>
@@ -85,7 +85,7 @@
           <span class="life-chip">{{ formatDayPhase(snapshot.derived.dayPhase) }}</span>
           <span v-if="snapshot.derived.ownerMode" class="life-chip">
             {{
-              t('settings.life.ownerChip', {
+              t('settings.presence.ownerChip', {
                 mode: formatOwnerMode(snapshot.derived.ownerMode),
                 status: formatOwnerStatus(snapshot.derived.ownerModeStatus),
               })
@@ -95,19 +95,19 @@
 
         <div class="life-grid">
           <div class="life-stat">
-            <span class="life-stat-label">{{ t('settings.life.energy') }}</span>
+            <span class="life-stat-label">{{ t('settings.presence.energy') }}</span>
             <strong>{{ formatPercent(snapshot.state.energy) }}</strong>
           </div>
           <div class="life-stat">
-            <span class="life-stat-label">{{ t('settings.life.focus') }}</span>
+            <span class="life-stat-label">{{ t('settings.presence.focus') }}</span>
             <strong>{{ formatPercent(snapshot.state.focus_budget) }}</strong>
           </div>
           <div class="life-stat">
-            <span class="life-stat-label">{{ t('settings.life.social') }}</span>
+            <span class="life-stat-label">{{ t('settings.presence.social') }}</span>
             <strong>{{ formatPercent(snapshot.state.social_availability) }}</strong>
           </div>
           <div class="life-stat">
-            <span class="life-stat-label">{{ t('settings.life.nextReview') }}</span>
+            <span class="life-stat-label">{{ t('settings.presence.nextReview') }}</span>
             <strong>{{
               snapshot.state.next_review_at
                 ? formatTimestamp(snapshot.state.next_review_at)
@@ -117,19 +117,19 @@
         </div>
 
         <div class="life-summary-block">
-          <div class="life-summary-label">{{ t('settings.life.currentTrajectory') }}</div>
+          <div class="life-summary-label">{{ t('settings.presence.currentTrajectory') }}</div>
           <div class="life-summary-text">
-            {{ snapshot.currentEpisode?.summary || t('settings.life.noEpisodeSummary') }}
+            {{ snapshot.currentEpisode?.summary || t('settings.presence.noEpisodeSummary') }}
           </div>
         </div>
 
         <div class="life-meta-lines">
           <div v-if="snapshot.derived.lastTransitionReason">
-            <span class="task-meta-label">{{ t('settings.life.transition') }}:</span>
+            <span class="task-meta-label">{{ t('settings.presence.transition') }}:</span>
             {{ snapshot.derived.lastTransitionReason }}
           </div>
           <div v-if="snapshot.derived.runningTaskIds.length > 0">
-            <span class="task-meta-label">{{ t('settings.life.runningTasks') }}:</span>
+            <span class="task-meta-label">{{ t('settings.presence.runningTasks') }}:</span>
             {{ snapshot.derived.runningTaskIds.join(', ') }}
           </div>
         </div>
@@ -137,10 +137,10 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">{{ t('settings.life.episodesTitle') }}</div>
-      <p class="card-help">{{ t('settings.life.episodesDescription') }}</p>
+      <div class="card-title">{{ t('settings.presence.episodesTitle') }}</div>
+      <p class="card-help">{{ t('settings.presence.episodesDescription') }}</p>
 
-      <div v-if="recentEpisodes.length === 0" class="tasks-empty">{{ t('settings.life.noEpisodes') }}</div>
+      <div v-if="recentEpisodes.length === 0" class="tasks-empty">{{ t('settings.presence.noEpisodes') }}</div>
       <div v-else class="life-episode-list">
         <div v-for="episode in recentEpisodes" :key="episode.id" class="life-episode-item">
           <div class="life-episode-head">
@@ -159,11 +159,11 @@
 
           <div class="life-meta-lines">
             <div>
-              <span class="task-meta-label">{{ t('settings.life.reason') }}:</span>
+              <span class="task-meta-label">{{ t('settings.presence.reason') }}:</span>
               {{ episode.transition_reason }}
             </div>
             <div v-if="episode.task_id">
-              <span class="task-meta-label">{{ t('settings.life.task') }}:</span>
+              <span class="task-meta-label">{{ t('settings.presence.task') }}:</span>
               {{ episode.task_id }}
             </div>
             <div v-if="episode.thread_id">
@@ -171,7 +171,7 @@
               {{ episode.thread_id }}
             </div>
             <div v-if="episode.ended_at">
-              <span class="task-meta-label">{{ t('settings.life.ended') }}:</span>
+              <span class="task-meta-label">{{ t('settings.presence.ended') }}:</span>
               {{ formatTimestamp(episode.ended_at) }}
             </div>
           </div>
@@ -180,16 +180,16 @@
     </div>
 
     <div class="settings-card">
-      <div class="card-title">{{ t('settings.life.reflectionsTitle') }}</div>
-      <p class="card-help">{{ t('settings.life.reflectionsDescription') }}</p>
+      <div class="card-title">{{ t('settings.presence.reflectionsTitle') }}</div>
+      <p class="card-help">{{ t('settings.presence.reflectionsDescription') }}</p>
 
-      <div v-if="recentReflections.length === 0" class="tasks-empty">{{ t('settings.life.noReflections') }}</div>
+      <div v-if="recentReflections.length === 0" class="tasks-empty">{{ t('settings.presence.noReflections') }}</div>
       <div v-else class="life-episode-list">
         <div v-for="reflection in recentReflections" :key="reflection.id" class="life-episode-item">
           <div class="life-episode-head">
             <div class="task-item-title">
               <span class="task-name">{{ formatReflectionPeriod(reflection.period_type) }}</span>
-              <span class="task-status status-success">{{ t('settings.life.reflectionLabel') }}</span>
+              <span class="task-status status-success">{{ t('settings.presence.reflectionLabel') }}</span>
             </div>
             <div class="life-episode-time">
               {{ formatTimestamp(reflection.period_start) }} -> {{ formatTimestamp(reflection.period_end) }}
@@ -201,7 +201,7 @@
           </div>
 
           <div v-if="parseList(reflection.insights_json).length > 0" class="life-summary-block mini-block">
-            <div class="life-summary-label">{{ t('settings.life.insights') }}</div>
+            <div class="life-summary-label">{{ t('settings.presence.insights') }}</div>
             <div class="life-list">
               <div v-for="item in parseList(reflection.insights_json)" :key="item">{{ item }}</div>
             </div>
@@ -209,7 +209,7 @@
 
           <div v-if="parseList(reflection.plan_json).length > 0" class="life-summary-block mini-block">
             <div class="life-summary-label">
-              {{ reflection.period_type === 'day' ? t('settings.life.nextDay') : t('settings.life.nextFocus') }}
+              {{ reflection.period_type === 'day' ? t('settings.presence.nextDay') : t('settings.presence.nextFocus') }}
             </div>
             <div class="life-list">
               <div v-for="item in parseList(reflection.plan_json)" :key="item">{{ item }}</div>
@@ -226,13 +226,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { useI18n } from '../../i18n';
 import type {
-  LifeOverview,
-  LifeOwnerMode,
-  LifePushPayload,
-  LifeSnapshot,
-} from '../../../shared/types/life';
+  PresenceOverview,
+  PresenceOwnerMode,
+  PresencePushPayload,
+  PresenceSnapshot,
+} from '../../../shared/types/presence';
 import { getErrorMessage } from '../../../shared/utils/errors';
-import { lifeService } from '../../services/life_service';
+import { parseJsonStringArray } from '../../../shared/utils/json';
+import { presenceService } from '../../services/presence_service';
 import { formatTimestamp } from './settings_formatters';
 
 const props = defineProps<{
@@ -244,57 +245,58 @@ const loading = ref(false);
 const controlLoading = ref(false);
 const errorText = ref('');
 const controlErrorText = ref('');
-const lifeOverview = ref<LifeOverview | null>(null);
-const pendingMode = ref<LifeOwnerMode | null | undefined>(undefined);
+const presenceOverview = ref<PresenceOverview | null>(null);
+const pendingMode = ref<PresenceOwnerMode | null | undefined>(undefined);
 const overviewLimit = 8;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let removePushListener: (() => void) | null = null;
 
-const snapshot = computed<LifeSnapshot | null>(() => lifeOverview.value?.snapshot ?? null);
-const recentEpisodes = computed(() => lifeOverview.value?.recentEpisodes ?? []);
-const recentReflections = computed(() => lifeOverview.value?.recentReflections ?? []);
-const formatOwnerMode = (mode: LifeOwnerMode | null | undefined): string => {
-  if (!mode) return t('settings.life.mode.auto');
-  if (mode === 'sleep') return t('settings.life.mode.sleep');
-  if (mode === 'focus') return t('settings.life.mode.focus');
-  return t('settings.life.mode.available');
+const snapshot = computed<PresenceSnapshot | null>(() => presenceOverview.value?.snapshot ?? null);
+const recentEpisodes = computed(() => presenceOverview.value?.recentEpisodes ?? []);
+const recentReflections = computed(() => presenceOverview.value?.recentReflections ?? []);
+const formatOwnerMode = (mode: PresenceOwnerMode | null | undefined): string => {
+  if (!mode) return t('settings.presence.mode.auto');
+  if (mode === 'sleep') return t('settings.presence.mode.sleep');
+  if (mode === 'focus') return t('settings.presence.mode.focus');
+  return t('settings.presence.mode.available');
 };
 const formatOwnerStatus = (status: string | null | undefined): string => {
-  if (status === 'applied') return t('settings.life.ownerStatus.applied');
-  if (status === 'deferred') return t('settings.life.ownerStatus.deferred');
-  return t('settings.life.ownerStatus.none');
+  if (status === 'applied') return t('settings.presence.ownerStatus.applied');
+  if (status === 'deferred') return t('settings.presence.ownerStatus.deferred');
+  return t('settings.presence.ownerStatus.none');
 };
 const formatPresence = (presence: string | null | undefined): string => {
-  if (presence === 'sleeping') return t('settings.life.presence.sleeping');
-  if (presence === 'waking') return t('settings.life.presence.waking');
-  if (presence === 'available') return t('settings.life.presence.available');
-  if (presence === 'focused') return t('settings.life.presence.focused');
-  if (presence === 'maintaining') return t('settings.life.presence.maintaining');
-  if (presence === 'recovering') return t('settings.life.presence.recovering');
+  if (presence === 'sleeping') return t('settings.presence.presence.sleeping');
+  if (presence === 'waking') return t('settings.presence.presence.waking');
+  if (presence === 'available') return t('settings.presence.presence.available');
+  if (presence === 'focused') return t('settings.presence.presence.focused');
+  if (presence === 'maintaining') return t('settings.presence.presence.maintaining');
+  if (presence === 'recovering') return t('settings.presence.presence.recovering');
   return presence || t('common.unknown');
 };
 const formatActivity = (activity: string | null | undefined): string => {
-  if (activity === 'sleep') return t('settings.life.activity.sleep');
-  if (activity === 'wake_transition') return t('settings.life.activity.wake_transition');
-  if (activity === 'companion_idle') return t('settings.life.activity.companion_idle');
-  if (activity === 'focused_work') return t('settings.life.activity.focused_work');
-  if (activity === 'maintenance') return t('settings.life.activity.maintenance');
-  if (activity === 'recovery') return t('settings.life.activity.recovery');
+  if (activity === 'sleep') return t('settings.presence.activity.sleep');
+  if (activity === 'wake_transition') return t('settings.presence.activity.wake_transition');
+  if (activity === 'companion_idle') return t('settings.presence.activity.companion_idle');
+  if (activity === 'focused_work') return t('settings.presence.activity.focused_work');
+  if (activity === 'maintenance') return t('settings.presence.activity.maintenance');
+  if (activity === 'recovery') return t('settings.presence.activity.recovery');
   return activity || t('common.unknown');
 };
 const formatDayPhase = (phase: string | null | undefined): string => {
-  if (phase === 'night') return t('settings.life.dayPhase.night');
-  if (phase === 'wake') return t('settings.life.dayPhase.wake');
-  if (phase === 'day') return t('settings.life.dayPhase.day');
-  if (phase === 'evening') return t('settings.life.dayPhase.evening');
+  if (phase === 'night') return t('settings.presence.dayPhase.night');
+  if (phase === 'wake') return t('settings.presence.dayPhase.wake');
+  if (phase === 'day') return t('settings.presence.dayPhase.day');
+  if (phase === 'evening') return t('settings.presence.dayPhase.evening');
   return phase || t('common.unknown');
 };
 const formatReflectionPeriod = (period: string | null | undefined): string => {
-  if (period === 'day') return t('settings.life.period.day');
-  if (period === 'hour') return t('settings.life.period.hour');
+  if (period === 'day') return t('settings.presence.period.day');
+  if (period === 'hour') return t('settings.presence.period.hour');
   return period || t('common.unknown');
 };
+const parseList = (value: string | null | undefined): string[] => parseJsonStringArray(value);
 const ownerModeLabel = computed(() => {
   return formatOwnerMode(snapshot.value?.derived.ownerMode);
 });
@@ -307,16 +309,16 @@ const loadState = async (limit = overviewLimit, options?: { showLoading?: boolea
     loading.value = true;
   }
   errorText.value = '';
-  const lifeResult = await lifeService.getOverview(limit).then(
+  const presenceResult = await presenceService.getOverview(limit).then(
     value => ({ status: 'fulfilled', value } as const),
     reason => ({ status: 'rejected', reason } as const)
   );
 
-  if (lifeResult.status === 'fulfilled') {
-    lifeOverview.value = lifeResult.value;
+  if (presenceResult.status === 'fulfilled') {
+    presenceOverview.value = presenceResult.value;
   } else {
-    errorText.value = getErrorMessage(lifeResult.reason);
-    lifeOverview.value = null;
+    errorText.value = getErrorMessage(presenceResult.reason);
+    presenceOverview.value = null;
   }
 
   loading.value = false;
@@ -330,19 +332,19 @@ const forceRefresh = async () => {
   loading.value = true;
   errorText.value = '';
   try {
-    await lifeService.refresh();
+    await presenceService.refresh();
   } catch (error: unknown) {
     errorText.value = getErrorMessage(error);
   }
   await loadState(overviewLimit, { showLoading: false });
 };
 
-const setOwnerMode = async (mode: LifeOwnerMode) => {
+const setOwnerMode = async (mode: PresenceOwnerMode) => {
   controlLoading.value = true;
   controlErrorText.value = '';
   pendingMode.value = mode;
   try {
-    await lifeService.setOwnerMode(mode);
+    await presenceService.setOwnerMode(mode);
     await loadState(overviewLimit, { showLoading: false });
   } catch (error: unknown) {
     controlErrorText.value = getErrorMessage(error);
@@ -357,7 +359,7 @@ const clearOwnerMode = async () => {
   controlErrorText.value = '';
   pendingMode.value = null;
   try {
-    await lifeService.clearOwnerMode();
+    await presenceService.clearOwnerMode();
     await loadState(overviewLimit, { showLoading: false });
   } catch (error: unknown) {
     controlErrorText.value = getErrorMessage(error);
@@ -380,14 +382,14 @@ const restartPolling = () => {
   }, 30_000);
 };
 
-const handleLifePush = (payload: LifePushPayload | unknown) => {
+const handlePresencePush = (payload: PresencePushPayload | unknown) => {
   if (!props.active) return;
   if (!payload || typeof payload !== 'object') {
     void loadState(overviewLimit, { showLoading: false });
     return;
   }
-  const record = payload as Partial<LifePushPayload>;
-  if (record.type === 'life-state') {
+  const record = payload as Partial<PresencePushPayload>;
+  if (record.type === 'presence-state') {
     void loadState(overviewLimit, { showLoading: false });
   }
 };
@@ -404,7 +406,7 @@ watch(
 );
 
 onMounted(() => {
-  removePushListener = lifeService.onPush(handleLifePush);
+  removePushListener = presenceService.onPush(handlePresencePush);
 });
 
 onUnmounted(() => {

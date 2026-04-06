@@ -126,7 +126,7 @@ const mountSettingsView = async (options?: {
         SettingsColorSchemeSection: true,
         SettingsSpeechSection: true,
         SettingsMemorySection: true,
-        SettingsLifeSection: true,
+        SettingsPresenceSection: true,
         SettingsTasksSection: true,
         SettingsUsageSection: true,
         SettingsSkillsSection: true,

@@ -1,15 +1,15 @@
 import type {
-  LifeActivity,
-  LifeActivityDecision,
-  LifeDayPhase,
-  LifeOwnerMode,
-  LifeSignalInput,
-  LifeSleepWindow,
-  LifeStateEnvelope,
-} from '../../../shared/types/life';
+  PresenceActivity,
+  PresenceActivityDecision,
+  PresenceDayPhase,
+  PresenceOwnerMode,
+  PresenceSignalInput,
+  PresenceSleepWindow,
+  PresenceStateEnvelope,
+} from '../../../shared/types/presence';
 
-export const LIFE_POLICY_VERSION = 'life-kernel-v2';
-export const DEFAULT_SLEEP_WINDOW: LifeSleepWindow = {
+export const PRESENCE_POLICY_VERSION = 'life-kernel-v2';
+export const DEFAULT_SLEEP_WINDOW: PresenceSleepWindow = {
   startHour: 1,
   endHour: 9,
 };
@@ -23,25 +23,25 @@ const clampHour = (value: number, fallback: number): number => {
   return normalized;
 };
 
-const normalizeOwnerMode = (value: unknown): LifeOwnerMode | null =>
+const normalizeOwnerMode = (value: unknown): PresenceOwnerMode | null =>
   value === 'sleep' || value === 'focus' || value === 'available' ? value : null;
 
 const minutesBetween = (from: Date, to: Date): number =>
   Math.max(0, Math.floor((to.getTime() - from.getTime()) / 60_000));
 
-export const normalizeSleepWindow = (value: unknown): LifeSleepWindow => {
+export const normalizeSleepWindow = (value: unknown): PresenceSleepWindow => {
   if (!value || typeof value !== 'object') return { ...DEFAULT_SLEEP_WINDOW };
-  const candidate = value as Partial<LifeSleepWindow>;
+  const candidate = value as Partial<PresenceSleepWindow>;
   return {
     startHour: clampHour(Number(candidate.startHour), DEFAULT_SLEEP_WINDOW.startHour),
     endHour: clampHour(Number(candidate.endHour), DEFAULT_SLEEP_WINDOW.endHour),
   };
 };
 
-export const parseLifeStateEnvelope = (raw: string | null | undefined): LifeStateEnvelope => {
+export const parsePresenceStateEnvelope = (raw: string | null | undefined): PresenceStateEnvelope => {
   if (!raw?.trim()) return {};
   try {
-    const parsed = JSON.parse(raw) as Partial<LifeStateEnvelope> | null;
+    const parsed = JSON.parse(raw) as Partial<PresenceStateEnvelope> | null;
     if (!parsed || typeof parsed !== 'object') return {};
     return {
       dayPhase:
@@ -84,7 +84,7 @@ export const parseLifeStateEnvelope = (raw: string | null | undefined): LifeStat
   }
 };
 
-export const serializeLifeStateEnvelope = (value: LifeStateEnvelope): string =>
+export const serializePresenceStateEnvelope = (value: PresenceStateEnvelope): string =>
   JSON.stringify({
     ...(value.dayPhase ? { dayPhase: value.dayPhase } : {}),
     ...(value.lastTransitionReason ? { lastTransitionReason: value.lastTransitionReason } : {}),
@@ -100,7 +100,7 @@ export const serializeLifeStateEnvelope = (value: LifeStateEnvelope): string =>
     ...(value.ownerModeNote ? { ownerModeNote: value.ownerModeNote } : {}),
   });
 
-const isWithinSleepWindow = (date: Date, sleepWindow: LifeSleepWindow): boolean => {
+const isWithinSleepWindow = (date: Date, sleepWindow: PresenceSleepWindow): boolean => {
   const hour = date.getHours();
   if (sleepWindow.startHour === sleepWindow.endHour) return false;
   if (sleepWindow.startHour < sleepWindow.endHour) {
@@ -109,7 +109,7 @@ const isWithinSleepWindow = (date: Date, sleepWindow: LifeSleepWindow): boolean 
   return hour >= sleepWindow.startHour || hour < sleepWindow.endHour;
 };
 
-const getLatestWakeBoundary = (date: Date, sleepWindow: LifeSleepWindow): Date => {
+const getLatestWakeBoundary = (date: Date, sleepWindow: PresenceSleepWindow): Date => {
   const boundary = new Date(date);
   boundary.setMinutes(0, 0, 0);
   boundary.setHours(sleepWindow.endHour, 0, 0, 0);
@@ -119,12 +119,12 @@ const getLatestWakeBoundary = (date: Date, sleepWindow: LifeSleepWindow): Date =
   return boundary;
 };
 
-const getMinutesSinceWake = (date: Date, sleepWindow: LifeSleepWindow): number => {
+const getMinutesSinceWake = (date: Date, sleepWindow: PresenceSleepWindow): number => {
   if (isWithinSleepWindow(date, sleepWindow)) return 0;
   return minutesBetween(getLatestWakeBoundary(date, sleepWindow), date);
 };
 
-export const resolveLifeDayPhase = (date: Date, sleepWindow: LifeSleepWindow): LifeDayPhase => {
+export const resolvePresenceDayPhase = (date: Date, sleepWindow: PresenceSleepWindow): PresenceDayPhase => {
   if (isWithinSleepWindow(date, sleepWindow)) return 'night';
 
   const minutesSinceWake = getMinutesSinceWake(date, sleepWindow);
@@ -135,7 +135,7 @@ export const resolveLifeDayPhase = (date: Date, sleepWindow: LifeSleepWindow): L
   return 'day';
 };
 
-const hasUpcomingTaskPressure = (params: LifeSignalInput): boolean => {
+const hasUpcomingTaskPressure = (params: PresenceSignalInput): boolean => {
   if (params.tasks.dueTaskCount > 0) return true;
   if (!params.tasks.nextDueAt) return false;
   const nextDueAt = new Date(params.tasks.nextDueAt);
@@ -143,8 +143,8 @@ const hasUpcomingTaskPressure = (params: LifeSignalInput): boolean => {
   return minutesBetween(params.now, nextDueAt) <= 20;
 };
 
-export const chooseLifeActivity = (params: LifeSignalInput): LifeActivityDecision => {
-  const dayPhase = resolveLifeDayPhase(params.now, params.sleepWindow);
+export const choosePresenceActivity = (params: PresenceSignalInput): PresenceActivityDecision => {
+  const dayPhase = resolvePresenceDayPhase(params.now, params.sleepWindow);
 
   if (params.tasks.runningTaskIds.length > 0) {
     return {
@@ -227,7 +227,7 @@ export const chooseLifeActivity = (params: LifeSignalInput): LifeActivityDecisio
 };
 
 const applyActivityDrift = (
-  activity: LifeActivity,
+  activity: PresenceActivity,
   budgets: { energy: number; focus_budget: number; social_availability: number },
   elapsedMinutes: number
 ) => {
@@ -277,8 +277,8 @@ const applyActivityDrift = (
   };
 };
 
-export const advanceLifeBudgets = (
-  currentActivity: LifeActivity,
+export const advancePresenceBudgets = (
+  currentActivity: PresenceActivity,
   budgets: { energy: number; focus_budget: number; social_availability: number },
   elapsedMinutes: number
 ) => applyActivityDrift(currentActivity, budgets, elapsedMinutes);

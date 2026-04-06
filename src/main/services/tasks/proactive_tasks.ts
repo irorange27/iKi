@@ -1,4 +1,4 @@
-import { BrowserWindow, Notification, app } from 'electron';
+import { Notification, app } from 'electron';
 
 import * as tasksDb from '../../../core/db/tasks';
 import * as chatThreadDb from '../../../core/db/chat_thread';
@@ -16,7 +16,7 @@ import { chatService } from '../chat/chat_service';
 import { getErrorMessage } from '../../utils/errors';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
-import { recordLifeRuntimeEvent } from '../life/life_runtime';
+import { recordPresenceRuntimeEvent } from '../presence/presence_runtime';
 
 const SCHEDULER_TICK_MS = 30_000;
 const proactiveTaskLogger = createLogger({ module: 'proactive_tasks' });
@@ -236,7 +236,7 @@ export const runProactiveTask = async (
       tools: task.tools ?? null,
     });
 
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'task-started',
       at: startedAt,
       taskId: task.id,
@@ -329,7 +329,7 @@ export const runProactiveTask = async (
         message: uiMessage,
       });
 
-      recordLifeRuntimeEvent({
+      recordPresenceRuntimeEvent({
         type: 'task-failed',
         at: toIsoNow(),
         taskId: task.id,
@@ -420,7 +420,7 @@ export const runProactiveTask = async (
         message: failedDeliveryMessage,
       });
 
-      recordLifeRuntimeEvent({
+      recordPresenceRuntimeEvent({
         type: 'task-failed',
         at: toIsoNow(),
         taskId: task.id,
@@ -479,7 +479,7 @@ export const runProactiveTask = async (
       message: uiMessage,
     });
 
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'task-finished',
       at: toIsoNow(),
       taskId: task.id,
@@ -497,7 +497,7 @@ export const runProactiveTask = async (
       last_status: 'error',
       last_error: errorText,
     });
-    recordLifeRuntimeEvent({
+    recordPresenceRuntimeEvent({
       type: 'task-failed',
       at: toIsoNow(),
       taskId: task.id,

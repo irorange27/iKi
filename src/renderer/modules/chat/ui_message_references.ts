@@ -113,8 +113,8 @@ type ContextBudgetConfig = Pick<
   AppConfig['memory']['context'],
   | 'maxRecentTokens'
   | 'maxIdentityTokens'
-  | 'maxLifeStateTokens'
-  | 'maxReflectionTokens'
+  | 'maxPresenceStateTokens'
+  | 'maxRuntimeReflectionTokens'
   | 'maxSummaryTokens'
   | 'maxMemoryTokens'
   | 'maxSkillTokens'
@@ -480,8 +480,8 @@ export const getContextBudgetTokens = (
   return [
     config.maxRecentTokens,
     config.maxIdentityTokens,
-    config.maxLifeStateTokens,
-    config.maxReflectionTokens,
+    config.maxPresenceStateTokens,
+    config.maxRuntimeReflectionTokens,
     config.maxSummaryTokens,
     config.maxMemoryTokens,
     config.maxSkillTokens,

@@ -1,4 +1,4 @@
-export type LifeActivity =
+export type PresenceActivity =
   | 'sleep'
   | 'wake_transition'
   | 'companion_idle'
@@ -6,7 +6,7 @@ export type LifeActivity =
   | 'maintenance'
   | 'recovery';
 
-export type LifePresence =
+export type PresenceState =
   | 'sleeping'
   | 'waking'
   | 'available'
@@ -14,12 +14,12 @@ export type LifePresence =
   | 'maintaining'
   | 'recovering';
 
-export type LifeDayPhase = 'night' | 'wake' | 'day' | 'evening';
+export type PresenceDayPhase = 'night' | 'wake' | 'day' | 'evening';
 
-export type LifeOwnerMode = 'sleep' | 'focus' | 'available';
-export type LifeOwnerModeStatus = 'none' | 'applied' | 'deferred';
+export type PresenceOwnerMode = 'sleep' | 'focus' | 'available';
+export type PresenceOwnerModeStatus = 'none' | 'applied' | 'deferred';
 
-export type LifeEventType =
+export type PresenceEventType =
   | 'runtime-start'
   | 'tick'
   | 'manual-refresh'
@@ -29,13 +29,13 @@ export type LifeEventType =
   | 'owner-mode-set'
   | 'owner-mode-cleared';
 
-export type LifeReflectionPeriodType = 'hour' | 'day';
+export type PresenceReflectionPeriodType = 'hour' | 'day';
 
-export interface LifeStateRecord {
+export interface PresenceStateRecord {
   id: string;
   profile_id: string;
-  current_activity: LifeActivity;
-  presence: LifePresence;
+  current_activity: PresenceActivity;
+  presence: PresenceState;
   energy: number;
   focus_budget: number;
   social_availability: number;
@@ -48,16 +48,16 @@ export interface LifeStateRecord {
   updated_at: string;
 }
 
-export interface LifeEpisodeRecord {
+export interface PresenceEpisodeRecord {
   id: string;
   profile_id: string;
-  activity_type: LifeActivity;
-  presence: LifePresence;
+  activity_type: PresenceActivity;
+  presence: PresenceState;
   started_at: string;
   ended_at?: string | null;
   transition_reason: string;
   summary?: string | null;
-  trigger_type?: LifeEventType | null;
+  trigger_type?: PresenceEventType | null;
   trigger_ref?: string | null;
   thread_id?: string | null;
   client_id?: string | null;
@@ -67,10 +67,10 @@ export interface LifeEpisodeRecord {
   updated_at: string;
 }
 
-export interface LifeReflectionRecord {
+export interface PresenceReflectionRecord {
   id: string;
   profile_id: string;
-  period_type: LifeReflectionPeriodType;
+  period_type: PresenceReflectionPeriodType;
   period_start: string;
   period_end: string;
   summary: string;
@@ -79,68 +79,68 @@ export interface LifeReflectionRecord {
   created_at: string;
 }
 
-export interface LifeSleepWindow {
+export interface PresenceSleepWindow {
   startHour: number;
   endHour: number;
 }
 
-export interface LifeStateEnvelope {
-  dayPhase?: LifeDayPhase;
+export interface PresenceStateEnvelope {
+  dayPhase?: PresenceDayPhase;
   lastTransitionReason?: string;
-  lastEventType?: LifeEventType;
+  lastEventType?: PresenceEventType;
   runningTaskIds?: string[];
   lastTaskFinishedAt?: string | null;
   lastTaskThreadId?: string | null;
   lastTaskStatus?: 'success' | 'error' | null;
-  ownerMode?: LifeOwnerMode | null;
+  ownerMode?: PresenceOwnerMode | null;
   ownerModeSetAt?: string | null;
   ownerModeNote?: string | null;
 }
 
-export interface LifeTaskSignal {
+export interface PresenceTaskSignal {
   runningTaskIds: string[];
   dueTaskCount: number;
   nextDueAt?: string | null;
 }
 
-export interface LifeSignalInput {
+export interface PresenceSignalInput {
   now: Date;
-  sleepWindow: LifeSleepWindow;
-  tasks: LifeTaskSignal;
-  ownerMode?: LifeOwnerMode | null;
+  sleepWindow: PresenceSleepWindow;
+  tasks: PresenceTaskSignal;
+  ownerMode?: PresenceOwnerMode | null;
 }
 
-export interface LifeActivityDecision {
-  activity: LifeActivity;
-  presence: LifePresence;
-  dayPhase: LifeDayPhase;
+export interface PresenceActivityDecision {
+  activity: PresenceActivity;
+  presence: PresenceState;
+  dayPhase: PresenceDayPhase;
   transitionReason: string;
   reviewMinutes: number;
 }
 
-export interface LifeSnapshot {
-  state: LifeStateRecord;
+export interface PresenceSnapshot {
+  state: PresenceStateRecord;
   derived: {
-    dayPhase: LifeDayPhase;
+    dayPhase: PresenceDayPhase;
     lastTransitionReason?: string;
-    lastEventType?: LifeEventType;
+    lastEventType?: PresenceEventType;
     runningTaskIds: string[];
-    ownerMode?: LifeOwnerMode | null;
+    ownerMode?: PresenceOwnerMode | null;
     ownerModeSetAt?: string | null;
     ownerModeNote?: string | null;
-    ownerModeStatus: LifeOwnerModeStatus;
+    ownerModeStatus: PresenceOwnerModeStatus;
   };
-  currentEpisode: LifeEpisodeRecord | null;
+  currentEpisode: PresenceEpisodeRecord | null;
 }
 
-export interface LifeOverview {
-  snapshot: LifeSnapshot | null;
-  recentEpisodes: LifeEpisodeRecord[];
-  recentReflections: LifeReflectionRecord[];
+export interface PresenceOverview {
+  snapshot: PresenceSnapshot | null;
+  recentEpisodes: PresenceEpisodeRecord[];
+  recentReflections: PresenceReflectionRecord[];
 }
 
-export interface LifePushPayload {
-  type: 'life-state';
-  snapshot: LifeSnapshot;
-  sourceEvent: LifeEventType;
+export interface PresencePushPayload {
+  type: 'presence-state';
+  snapshot: PresenceSnapshot;
+  sourceEvent: PresenceEventType;
 }
