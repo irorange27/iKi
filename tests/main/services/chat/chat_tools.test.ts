@@ -29,6 +29,7 @@ const TEST_TOOL_NAMES = [
   'mcp_alpha_safe',
   'mcp_beta_unsafe',
   'manual_only',
+  'agent',
   'todo',
   'list_todo_lists',
   'read_todo_list',
@@ -182,6 +183,17 @@ describe('resolveToolNames', () => {
       'write_todo_list',
       'delete_todo_list',
     ]);
+  });
+
+  it('includes the delegated agent tool in auto mode when it is registered', async () => {
+    registerTool({ name: 'agent', source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual(['agent']);
   });
 
   it('drops todo from overeager auto selections for simple requests', async () => {

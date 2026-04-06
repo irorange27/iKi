@@ -8,7 +8,7 @@ import type {
   PresenceStateEnvelope,
 } from '../../../shared/types/presence';
 
-export const PRESENCE_POLICY_VERSION = 'life-kernel-v2';
+export const PRESENCE_POLICY_VERSION = 'presence-kernel-v2';
 export const DEFAULT_SLEEP_WINDOW: PresenceSleepWindow = {
   startHour: 1,
   endHour: 9,

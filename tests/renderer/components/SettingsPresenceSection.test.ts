@@ -38,7 +38,7 @@ const buildOverview = (overrides?: Partial<PresenceOverview>): PresenceOverview 
       current_episode_id: 'episode_1',
       next_review_at: '2026-03-21T15:00:00.000Z',
       sleep_window_json: '{"startHour":1,"endHour":9}',
-      policy_version: 'life-kernel-v2',
+      policy_version: 'presence-kernel-v2',
       state_json: '{}',
       created_at: '2026-03-21T14:00:00.000Z',
       updated_at: '2026-03-21T14:00:00.000Z',

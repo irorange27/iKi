@@ -10,22 +10,22 @@ vi.mock('../../../src/core/db/database', () => ({
   getDb: getDbMock,
 }));
 
-describe('life reflection db helpers', () => {
+describe('presence reflection db helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
   });
 
-  it('inserts and reloads a life reflection by period window', async () => {
+  it('inserts and reloads a presence reflection by period window', async () => {
     let reflectionRow: ReflectionRow = null;
     const prepareMock = vi.fn((sql: string) => {
-      if (sql.includes('SELECT * FROM life_reflections') && sql.includes('period_start = ?')) {
+      if (sql.includes('SELECT * FROM presence_reflections') && sql.includes('period_start = ?')) {
         return {
           get: vi.fn(() => reflectionRow),
         };
       }
 
-      if (sql.includes('INSERT INTO life_reflections')) {
+      if (sql.includes('INSERT INTO presence_reflections')) {
         return {
           run: vi.fn((params: Record<string, unknown>) => {
             reflectionRow = params;

@@ -1,6 +1,6 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
-import type { ConversationRunner } from '../../../core/agent';
+import type { AgentTool, ConversationRunner } from '../../../core/agent';
 import { getAppConfig } from '../../../core/config';
 import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
@@ -24,6 +24,7 @@ type PendingApprovalSession = {
   webContents: ChatWebContents;
   recoveryContext?: ApprovalRecoveryContext;
   history?: ModelMessage[];
+  availableTools?: AgentTool[];
   pendingApprovalIds: Set<string>;
   collectedApprovalResponses: Map<string, ToolApprovalResponse>;
 };
@@ -66,12 +67,14 @@ export const createChatApproval = (deps: {
       runner: ConversationRunner;
       webContents: ChatWebContents;
       recoveryContext?: ApprovalRecoveryContext;
+      availableTools?: AgentTool[];
     }
   ) => {
     const existing = pendingApprovalSessions.get(approvalId);
     if (existing) {
       existing.webContents = session.webContents;
       existing.recoveryContext = session.recoveryContext ?? existing.recoveryContext;
+      existing.availableTools = session.availableTools ?? existing.availableTools;
       if (session.recoveryContext?.sessionId) {
         existing.sessionId = session.recoveryContext.sessionId;
       }
@@ -84,6 +87,7 @@ export const createChatApproval = (deps: {
       runner: session.runner,
       webContents: session.webContents,
       recoveryContext: session.recoveryContext,
+      availableTools: session.availableTools,
       pendingApprovalIds: new Set([approvalId]),
       collectedApprovalResponses: new Map(),
     };
@@ -101,6 +105,7 @@ export const createChatApproval = (deps: {
       runner: ConversationRunner;
       webContents: ChatWebContents;
       recoveryContext?: ApprovalRecoveryContext;
+      availableTools?: AgentTool[];
     }
   ) => {
     const approvalIds = approvalRequests
@@ -141,6 +146,7 @@ export const createChatApproval = (deps: {
       runner: session.runner,
       webContents: session.webContents,
       recoveryContext: session.recoveryContext,
+      availableTools: session.availableTools,
       pendingApprovalIds: new Set(approvalIds),
       collectedApprovalResponses: new Map(),
     };
@@ -151,6 +157,29 @@ export const createChatApproval = (deps: {
   };
 
   const toolLoopRunner = createToolLoopRunner({ registerApprovalBatch });
+
+  const buildRuntimeTools = (params: {
+    toolNames: string[];
+    availableSkillIds: string[];
+  }): AgentTool[] => {
+    const registeredTools: AgentTool[] = [];
+
+    if (params.availableSkillIds.length > 0) {
+      registeredTools.push(new LoadSkillTool().toAgentTool());
+    }
+
+    for (const name of params.toolNames) {
+      const tool = defaultToolRegistry.get(name);
+      if (!tool) continue;
+      registeredTools.push(
+        applyToolApprovalPolicy(tool, {
+          autoApproveToolRequests: shouldAutoApproveToolRequests(),
+        })
+      );
+    }
+
+    return registeredTools;
+  };
 
   const tryRecoverApprovalSession = async (
     approvalId: string,
@@ -242,19 +271,13 @@ export const createChatApproval = (deps: {
         : {}),
     });
 
-    if (availableSkillIds.length > 0) {
-      runner.registerTool(new LoadSkillTool().toAgentTool());
-    }
+    const availableTools = buildRuntimeTools({
+      toolNames,
+      availableSkillIds,
+    });
 
-    for (const name of toolNames) {
-      const tool = defaultToolRegistry.get(name);
-      if (tool) {
-        runner.registerTool(
-          applyToolApprovalPolicy(tool, {
-            autoApproveToolRequests: shouldAutoApproveToolRequests(),
-          })
-        );
-      }
+    for (const tool of availableTools) {
+      runner.registerTool(tool);
     }
 
     const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
@@ -293,6 +316,7 @@ export const createChatApproval = (deps: {
         enabledTools: toolNames,
         availableSkillIds,
       },
+      availableTools,
       pendingApprovalIds,
       collectedApprovalResponses,
     };
@@ -395,6 +419,33 @@ export const createChatApproval = (deps: {
           threadId: nextApprovalContext?.threadId || session.recoveryContext?.threadId,
           availableSkillIds:
             nextApprovalContext?.availableSkillIds || session.recoveryContext?.availableSkillIds,
+          availableTools: session.availableTools,
+          conversationModel: nextApprovalContext
+            ? {
+                providerType: nextApprovalContext.providerType,
+                ...(typeof nextApprovalContext.providerId === 'string' &&
+                nextApprovalContext.providerId.trim()
+                  ? { providerId: nextApprovalContext.providerId.trim() }
+                  : {}),
+                model: nextApprovalContext.model,
+                ...(typeof nextApprovalContext.maxOutputTokens === 'number'
+                  ? { maxTokens: nextApprovalContext.maxOutputTokens }
+                  : {}),
+              }
+            : session.recoveryContext
+              ? {
+                  providerType: session.recoveryContext.providerType,
+                  ...(typeof session.recoveryContext.providerId === 'string' &&
+                  session.recoveryContext.providerId.trim()
+                    ? { providerId: session.recoveryContext.providerId.trim() }
+                    : {}),
+                  model: session.recoveryContext.model,
+                  ...(typeof session.recoveryContext.maxOutputTokens === 'number'
+                    ? { maxTokens: session.recoveryContext.maxOutputTokens }
+                    : {}),
+                }
+              : undefined,
+          delegationDepth: 0,
         },
         async () =>
           await toolLoopRunner.stream({
@@ -404,6 +455,7 @@ export const createChatApproval = (deps: {
             prompt: '',
             approvalResponses: Array.from(session.collectedApprovalResponses.values()),
             approvalContext: nextApprovalContext,
+            availableTools: session.availableTools,
             shouldCancel: () => streamState.cancelled,
             onToolEvent: eventPart => {
               if (
@@ -415,6 +467,7 @@ export const createChatApproval = (deps: {
                   runner: session.runner,
                   webContents: session.webContents,
                   recoveryContext: nextApprovalContext,
+                  availableTools: session.availableTools,
                 });
               }
               uiChunkEmitter.emitToolEvent(eventPart);

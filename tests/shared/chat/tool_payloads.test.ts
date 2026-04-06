@@ -41,6 +41,19 @@ describe('parseToolInput', () => {
     expect(parsed.input.items?.[0]?.status).toBe('in_progress');
   });
 
+  it('parses delegated agent inputs from JSON', () => {
+    const parsed = parseToolInput(
+      'agent',
+      '{"task":"Inspect the codebase","tools":["list_dir"],"maxIterations":3}'
+    );
+
+    expect(parsed.kind).toBe('agent');
+    if (parsed.kind !== 'agent') throw new Error('Expected agent payload');
+    expect(parsed.input.task).toBe('Inspect the codebase');
+    expect(parsed.input.tools).toEqual(['list_dir']);
+    expect(parsed.input.maxIterations).toBe(3);
+  });
+
   it('parses load_skill inputs from JSON', () => {
     const parsed = parseToolInput('load_skill', '{"id":"user:planner"}');
 
@@ -114,6 +127,19 @@ describe('parseToolOutput', () => {
     if (parsed.kind !== 'todo') throw new Error('Expected todo output payload');
     expect(parsed.output.items?.[0]?.status).toBe('completed');
     expect(parsed.output.completedCount).toBe(1);
+  });
+
+  it('parses delegated agent outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'agent',
+      '{"response":"Finished analysis","iterations":2,"toolCallCount":1,"usedTools":[{"name":"list_dir","callCount":1}],"model":{"providerType":"openai","model":"gpt-4o-mini"}}'
+    );
+
+    expect(parsed.kind).toBe('agent');
+    if (parsed.kind !== 'agent') throw new Error('Expected agent output payload');
+    expect(parsed.output.response).toBe('Finished analysis');
+    expect(parsed.output.usedTools?.[0]?.name).toBe('list_dir');
+    expect(parsed.output.model?.model).toBe('gpt-4o-mini');
   });
 
   it('parses load_skill outputs from JSON', () => {

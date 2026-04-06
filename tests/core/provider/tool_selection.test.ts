@@ -151,4 +151,31 @@ describe('selectToolsWithAgent', () => {
       })
     );
   });
+
+  it('tells the router to use agent only for bounded delegated subtasks', async () => {
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: '["agent"]' }),
+    });
+
+    await selectToolsWithAgent({
+      messages: [{ role: 'user', content: 'Review the architecture and then decide what to do.' }],
+      availableTools: [{ name: 'agent' }, { name: 'shell' }],
+    });
+
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining(
+          'Include `agent` only when a bounded subtask would benefit from a fresh delegated scratchpad'
+        ),
+      })
+    );
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining(
+          'Do NOT rely on `agent` for approval-gated or destructive actions'
+        ),
+      })
+    );
+  });
 });

@@ -15,7 +15,7 @@ export const getPresenceReflection = (
   const row = getDb()
     .prepare(
       `
-      SELECT * FROM life_reflections
+      SELECT * FROM presence_reflections
       WHERE profile_id = ? AND period_type = ? AND period_start = ?
       LIMIT 1
     `
@@ -33,7 +33,7 @@ export const getLatestPresenceReflection = (
     ? ((getDb()
         .prepare(
           `
-          SELECT * FROM life_reflections
+          SELECT * FROM presence_reflections
           WHERE profile_id = ? AND period_type = ?
           ORDER BY period_end DESC, created_at DESC
           LIMIT 1
@@ -43,7 +43,7 @@ export const getLatestPresenceReflection = (
     : ((getDb()
         .prepare(
           `
-          SELECT * FROM life_reflections
+          SELECT * FROM presence_reflections
           WHERE profile_id = ?
           ORDER BY period_end DESC, created_at DESC
           LIMIT 1
@@ -66,7 +66,7 @@ export const listPresenceReflections = (params: {
     ? ((getDb()
         .prepare(
           `
-          SELECT * FROM life_reflections
+          SELECT * FROM presence_reflections
           WHERE profile_id = ? AND period_type = ?
           ORDER BY period_end DESC, created_at DESC
           LIMIT ?
@@ -76,7 +76,7 @@ export const listPresenceReflections = (params: {
     : ((getDb()
         .prepare(
           `
-          SELECT * FROM life_reflections
+          SELECT * FROM presence_reflections
           WHERE profile_id = ?
           ORDER BY period_end DESC, created_at DESC
           LIMIT ?
@@ -101,7 +101,7 @@ export const listPresenceReflectionsInWindow = (params: {
   const rows = getDb()
     .prepare(
       `
-      SELECT * FROM life_reflections
+      SELECT * FROM presence_reflections
       WHERE profile_id = ?
         AND period_type = ?
         AND period_start >= ?
@@ -130,7 +130,7 @@ export const addPresenceReflection = (entry: {
   getDb()
     .prepare(
       `
-      INSERT INTO life_reflections (
+      INSERT INTO presence_reflections (
         id,
         profile_id,
         period_type,

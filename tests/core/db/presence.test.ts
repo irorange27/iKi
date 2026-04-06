@@ -20,13 +20,13 @@ describe('presence db helpers', () => {
   it('upserts a presence state row and reloads it by profile id', async () => {
     let stateRow: PresenceStateRow = null;
     const prepareMock = vi.fn((sql: string) => {
-      if (sql.includes('SELECT * FROM life_state WHERE profile_id = ?')) {
+      if (sql.includes('SELECT * FROM presence_state WHERE profile_id = ?')) {
         return {
           get: vi.fn(() => stateRow),
         };
       }
 
-      if (sql.includes('INSERT INTO life_state')) {
+      if (sql.includes('INSERT INTO presence_state')) {
         return {
           run: vi.fn((params: Record<string, unknown>) => {
             stateRow = {
@@ -59,7 +59,7 @@ describe('presence db helpers', () => {
       current_episode_id: 'episode_1',
       next_review_at: '2026-03-21T12:15:00.000Z',
       sleep_window_json: '{"startHour":1,"endHour":9}',
-      policy_version: 'life-kernel-v1',
+      policy_version: 'presence-kernel-v1',
       state_json: '{"dayPhase":"day"}',
     });
 
@@ -76,13 +76,13 @@ describe('presence db helpers', () => {
   it('adds and lists presence episodes in reverse chronological order', async () => {
     const episodes: PresenceEpisodeRow[] = [];
     const prepareMock = vi.fn((sql: string) => {
-      if (sql.includes('SELECT * FROM life_episodes WHERE id = ?')) {
+      if (sql.includes('SELECT * FROM presence_episodes WHERE id = ?')) {
         return {
           get: vi.fn((id: string) => episodes.find(entry => entry?.id === id) || null),
         };
       }
 
-      if (sql.includes('SELECT * FROM life_episodes') && sql.includes('LIMIT ?')) {
+      if (sql.includes('SELECT * FROM presence_episodes') && sql.includes('LIMIT ?')) {
         return {
           all: vi.fn(() =>
             [...episodes].sort((left, right) =>
@@ -92,7 +92,7 @@ describe('presence db helpers', () => {
         };
       }
 
-      if (sql.includes('INSERT INTO life_episodes')) {
+      if (sql.includes('INSERT INTO presence_episodes')) {
         return {
           run: vi.fn((params: Record<string, unknown>) => {
             episodes.push(params);
@@ -135,7 +135,10 @@ describe('presence db helpers', () => {
 
   it('queries windowed episodes with open-episode overlap semantics', async () => {
     const prepareMock = vi.fn((sql: string) => {
-      if (sql.includes('SELECT * FROM life_episodes') && sql.includes('ended_at IS NULL OR ended_at >= ?')) {
+      if (
+        sql.includes('SELECT * FROM presence_episodes') &&
+        sql.includes('ended_at IS NULL OR ended_at >= ?')
+      ) {
         return {
           all: vi.fn(() => [
             {

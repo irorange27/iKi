@@ -11,6 +11,7 @@ export const TOOL_AGENT_SYSTEM_PROMPT =
   '- Prefer answering directly when tools are not needed.\n' +
   '- When the user asks about current machine state or other information that must be verified live (for example time, filesystem contents, git status, installed tools, running processes, or live web data), use the relevant tool instead of inferring.\n' +
   '- Use the minimal number of tool calls needed for correctness.\n' +
+  '- Use the dedicated `agent` tool only for bounded subtasks that benefit from a fresh delegated scratchpad. Do not use it for trivial work, and do not use it for approval-gated or destructive actions that you should own directly.\n' +
   '- Use the dedicated `todo` tool only for genuinely substantial multi-step execution plans. Skip it for simple questions, one-shot checks, or straightforward single edits. When you do use it, keep it concise with at most 5 broad steps, mark one item `in_progress` before starting work, then mark it `completed` immediately after finishing.\n' +
   '- MCP tools may invoke external systems; minimize data sharing and avoid sending secrets.\n' +
   '- Prefer built-in tools when they are safer or simpler than MCP tools.\n' +

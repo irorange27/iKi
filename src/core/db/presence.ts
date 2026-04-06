@@ -37,7 +37,7 @@ export const runPresenceTransaction = <T>(fn: () => T): T => getDb().transaction
 
 export const getPresenceState = (profileId: string): PresenceStateRecord | null => {
   if (!profileId?.trim()) return null;
-  const row = getDb().prepare('SELECT * FROM life_state WHERE profile_id = ?').get(profileId) as
+  const row = getDb().prepare('SELECT * FROM presence_state WHERE profile_id = ?').get(profileId) as
     | PresenceStateRecord
     | undefined;
   return normalizePresenceStateRow(row);
@@ -63,7 +63,7 @@ export const upsertPresenceState = (
   getDb()
     .prepare(
       `
-      INSERT INTO life_state (
+      INSERT INTO presence_state (
         id,
         profile_id,
         current_activity,
@@ -134,7 +134,7 @@ export const upsertPresenceState = (
 
 export const getPresenceEpisode = (id: string): PresenceEpisodeRecord | null => {
   if (!id?.trim()) return null;
-  const row = getDb().prepare('SELECT * FROM life_episodes WHERE id = ?').get(id) as
+  const row = getDb().prepare('SELECT * FROM presence_episodes WHERE id = ?').get(id) as
     | PresenceEpisodeRecord
     | undefined;
   return normalizePresenceEpisodeRow(row);
@@ -146,7 +146,7 @@ export const listPresenceEpisodes = (profileId: string, limit = 20): PresenceEpi
   const rows = getDb()
     .prepare(
       `
-      SELECT * FROM life_episodes
+      SELECT * FROM presence_episodes
       WHERE profile_id = ?
       ORDER BY started_at DESC, created_at DESC
       LIMIT ?
@@ -165,7 +165,7 @@ export const listPresenceEpisodesInWindow = (
   const rows = getDb()
     .prepare(
       `
-      SELECT * FROM life_episodes
+      SELECT * FROM presence_episodes
       WHERE profile_id = ?
         AND started_at < ?
         AND (ended_at IS NULL OR ended_at >= ?)
@@ -191,7 +191,7 @@ export const addPresenceEpisode = (
   getDb()
     .prepare(
       `
-      INSERT INTO life_episodes (
+      INSERT INTO presence_episodes (
         id,
         profile_id,
         activity_type,
@@ -265,7 +265,7 @@ export const updatePresenceEpisode = (id: string, updates: Partial<PresenceEpiso
   return getDb()
     .prepare(
       `
-      UPDATE life_episodes
+      UPDATE presence_episodes
       SET ${fields}, updated_at = @updated_at
       WHERE id = @id
     `

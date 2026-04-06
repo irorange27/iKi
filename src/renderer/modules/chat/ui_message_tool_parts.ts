@@ -1,5 +1,6 @@
 import type { Component } from 'vue';
 import {
+  Bot,
   Download,
   FilePenLine,
   FileText,
@@ -221,6 +222,7 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   write_file: FilePenLine,
   list_dir: Folder,
   delete_file: Trash2,
+  agent: Bot,
   todo: ListTodo,
   list_todo_lists: ListTodo,
   read_todo_list: ListTodo,
@@ -276,6 +278,12 @@ export const getToolTitle = (part: unknown): string => {
     if (toolKey === 'fetch') {
       if (typeof input.url === 'string' && input.url.trim()) {
         return normalizeSingleLineText(input.url);
+      }
+    }
+
+    if (toolKey === 'agent') {
+      if (typeof input.task === 'string' && input.task.trim()) {
+        return normalizeSingleLineText(input.task);
       }
     }
 
@@ -385,6 +393,33 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       return {
         title: translate('chat.tool.url'),
         value: input.url.trim(),
+        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
+        isPrimary: true,
+      };
+    }
+
+    if (toolKey === 'agent' && typeof input.task === 'string' && input.task.trim()) {
+      const meta: string[] = [];
+      if (Array.isArray(input.tools) && input.tools.length > 0) {
+        meta.push(
+          translate('chat.tool.meta.tools', {
+            value: input.tools
+              .filter((tool): tool is string => typeof tool === 'string' && tool.trim().length > 0)
+              .join(', '),
+          })
+        );
+      }
+      if (typeof input.maxIterations === 'number' && Number.isFinite(input.maxIterations)) {
+        meta.push(
+          translate('chat.tool.meta.maxIterations', {
+            value: Math.trunc(input.maxIterations),
+          })
+        );
+      }
+
+      return {
+        title: translate('chat.tool.task'),
+        value: input.task.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
       };

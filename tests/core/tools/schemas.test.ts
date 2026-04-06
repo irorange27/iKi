@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AgentToolInputSchema,
   DeletePersonalSkillInputSchema,
   TodoToolInputSchema,
   DeleteTodoListInputSchema,
@@ -115,6 +116,13 @@ describe('tool input schemas', () => {
         description: 'Track the multi-step execution plan.',
       }).description
     ).toBe('Track the multi-step execution plan.');
+
+    expect(
+      AgentToolInputSchema.parse({
+        task: 'Inspect the repo and summarize the module boundaries.',
+        description: 'Delegate focused architecture inspection to a subagent.',
+      }).description
+    ).toBe('Delegate focused architecture inspection to a subagent.');
 
     expect(
       ListTodoListsInputSchema.parse({

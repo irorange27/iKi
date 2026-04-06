@@ -1,4 +1,4 @@
-import { type ConversationRunner } from '../../../core/agent';
+import { type AgentTool, type ConversationRunner } from '../../../core/agent';
 import { getAppConfig } from '../../../core/config';
 import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
@@ -86,6 +86,7 @@ export const createChatStreaming = (deps: {
         runner: ConversationRunner;
         webContents: ChatWebContents;
         recoveryContext?: ApprovalRecoveryContext;
+        availableTools?: AgentTool[];
       }
     ) => unknown;
     registerApprovalBatch: RegisterApprovalBatch;
@@ -239,9 +240,9 @@ export const createChatStreaming = (deps: {
     runner: ConversationRunner,
     toolName: string,
     guardActive: boolean
-  ) => {
+  ): AgentTool | null => {
     const tool = defaultToolRegistry.get(toolName);
-    if (!tool) return;
+    if (!tool) return null;
     const emotionConfig = getEmotionConfig();
     const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
     const registered = applyToolApprovalPolicy(
@@ -251,6 +252,7 @@ export const createChatStreaming = (deps: {
       }
     );
     runner.registerTool(registered);
+    return registered;
   };
 
   const createApprovalRecoveryContext = (params: {
@@ -494,6 +496,7 @@ export const createChatStreaming = (deps: {
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
 
       if (preparedTurn.enableTools) {
+        const registeredTools: AgentTool[] = [];
         const runner = createChatConversationRunner({
           providerType: options.providerType,
           providerId: options.providerId,
@@ -508,12 +511,17 @@ export const createChatStreaming = (deps: {
         });
 
         if (preparedTurn.selectedSkillIds.length > 0) {
-          runner.registerTool(new LoadSkillTool().toAgentTool());
+          const loadSkillTool = new LoadSkillTool().toAgentTool();
+          runner.registerTool(loadSkillTool);
+          registeredTools.push(loadSkillTool);
         }
 
         // Register selected tools
         for (const toolName of preparedTurn.guardedTools) {
-          registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
+          const registeredTool = registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
+          if (registeredTool) {
+            registeredTools.push(registeredTool);
+          }
         }
 
         if (!preparedTurn.prompt.trim()) {
@@ -521,7 +529,22 @@ export const createChatStreaming = (deps: {
         }
 
         const result = await runWithToolRuntimeContext(
-          { threadId: options.threadId, availableSkillIds: preparedTurn.selectedSkillIds },
+          {
+            threadId: options.threadId,
+            availableSkillIds: preparedTurn.selectedSkillIds,
+            availableTools: registeredTools,
+            conversationModel: {
+              providerType: options.providerType,
+              ...(typeof options.providerId === 'string' && options.providerId.trim()
+                ? { providerId: options.providerId.trim() }
+                : {}),
+              model: options.model,
+              ...(typeof preparedTurn.maxOutputTokens === 'number'
+                ? { maxTokens: preparedTurn.maxOutputTokens }
+                : {}),
+            },
+            delegationDepth: 0,
+          },
           async () =>
             await runner.generate({
               history: preparedTurn.history,
@@ -665,9 +688,12 @@ export const createChatStreaming = (deps: {
           : {}),
       });
 
+      const registeredTools: AgentTool[] = [];
       if (preparedTurn.enableTools) {
         if (preparedTurn.selectedSkillIds.length > 0) {
-          runner.registerTool(new LoadSkillTool().toAgentTool());
+          const loadSkillTool = new LoadSkillTool().toAgentTool();
+          runner.registerTool(loadSkillTool);
+          registeredTools.push(loadSkillTool);
         }
 
         for (const toolName of preparedTurn.guardedTools) {
@@ -675,7 +701,10 @@ export const createChatStreaming = (deps: {
             chatStreamingLogger.warn(`Tool ${toolName} not found in registry`);
             continue;
           }
-          registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
+          const registeredTool = registerToolWithGuard(runner, toolName, preparedTurn.guardActive);
+          if (registeredTool) {
+            registeredTools.push(registeredTool);
+          }
         }
       }
 
@@ -684,7 +713,22 @@ export const createChatStreaming = (deps: {
       }
 
       const streamResult = await runWithToolRuntimeContext(
-        { threadId: options.threadId, availableSkillIds: preparedTurn.selectedSkillIds },
+        {
+          threadId: options.threadId,
+          availableSkillIds: preparedTurn.selectedSkillIds,
+          availableTools: registeredTools,
+          conversationModel: {
+            providerType: options.providerType,
+            ...(typeof options.providerId === 'string' && options.providerId.trim()
+              ? { providerId: options.providerId.trim() }
+              : {}),
+            model: options.model,
+            ...(typeof preparedTurn.maxOutputTokens === 'number'
+              ? { maxTokens: preparedTurn.maxOutputTokens }
+              : {}),
+          },
+          delegationDepth: 0,
+        },
         async () =>
           await toolLoopRunner.stream({
             runner,
@@ -692,6 +736,7 @@ export const createChatStreaming = (deps: {
             history: preparedTurn.history,
             prompt: preparedTurn.prompt,
             approvalContext,
+            availableTools: registeredTools,
             shouldCancel: () => streamState.cancelled,
             onToolEvent: eventPart => {
               if (
@@ -703,6 +748,7 @@ export const createChatStreaming = (deps: {
                   runner,
                   webContents,
                   recoveryContext: approvalContext,
+                  availableTools: registeredTools,
                 });
               }
               uiChunkEmitter.emitToolEvent(eventPart);

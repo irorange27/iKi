@@ -30,10 +30,11 @@ afterEach(() => {
 
 describe('tool_access', () => {
   it('uses the broader auto-capable builtin defaults when client omits tool names', () => {
-    expect(resolveToolsForClient(undefined, ['web', 'fetch', 'shell'])).toEqual([
+    expect(resolveToolsForClient(undefined, ['web', 'fetch', 'shell', 'agent'])).toEqual([
       'web',
       'fetch',
       'shell',
+      'agent',
     ]);
   });
 

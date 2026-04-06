@@ -35,6 +35,9 @@ A local agent pet for AI provider orchestration.
   `pending` / `in_progress` / `completed` states and reminder-backed progress updates inside the
   main chat tool loop.
 
+- A first-class delegated `agent` tool so iKi can hand a bounded subtask to a fresh subagent
+  scratchpad without widening beyond the current turn's approval-free tool boundary.
+
 - First-class personal-skill management tools so iKi can list, inspect, create, update, and
   delete user-managed `SKILL.md` files under the Personal skills root without needing workspace
   hacks; destructive skill changes remain explicitly approval-gated.

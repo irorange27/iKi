@@ -2,11 +2,13 @@ import type { Migration } from './runner';
 import { getDb } from '../database';
 
 export const migration: Migration = {
-  name: '018_add_life_runtime_tables',
-  aliases: ['017_add_life_runtime_tables'],
+  name: '018_add_presence_runtime_tables',
   up: () => {
     getDb().exec(`
-      CREATE TABLE IF NOT EXISTS life_episodes (
+      DROP TABLE IF EXISTS life_state;
+      DROP TABLE IF EXISTS life_episodes;
+
+      CREATE TABLE IF NOT EXISTS presence_episodes (
         id TEXT PRIMARY KEY,
         profile_id TEXT NOT NULL,
         activity_type TEXT NOT NULL,
@@ -26,13 +28,13 @@ export const migration: Migration = {
         FOREIGN KEY (profile_id) REFERENCES identity_profiles(id) ON DELETE CASCADE
       );
 
-      CREATE INDEX IF NOT EXISTS idx_life_episodes_profile_started
-        ON life_episodes(profile_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_presence_episodes_profile_started
+        ON presence_episodes(profile_id, started_at DESC);
 
-      CREATE INDEX IF NOT EXISTS idx_life_episodes_task
-        ON life_episodes(task_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_presence_episodes_task
+        ON presence_episodes(task_id, started_at DESC);
 
-      CREATE TABLE IF NOT EXISTS life_state (
+      CREATE TABLE IF NOT EXISTS presence_state (
         id TEXT PRIMARY KEY,
         profile_id TEXT NOT NULL UNIQUE,
         current_activity TEXT NOT NULL,
@@ -48,17 +50,17 @@ export const migration: Migration = {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (profile_id) REFERENCES identity_profiles(id) ON DELETE CASCADE,
-        FOREIGN KEY (current_episode_id) REFERENCES life_episodes(id) ON DELETE SET NULL
+        FOREIGN KEY (current_episode_id) REFERENCES presence_episodes(id) ON DELETE SET NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_life_state_review
-        ON life_state(next_review_at);
+      CREATE INDEX IF NOT EXISTS idx_presence_state_review
+        ON presence_state(next_review_at);
     `);
   },
   down: () => {
     getDb().exec(`
-      DROP TABLE IF EXISTS life_state;
-      DROP TABLE IF EXISTS life_episodes;
+      DROP TABLE IF EXISTS presence_state;
+      DROP TABLE IF EXISTS presence_episodes;
     `);
   },
 };

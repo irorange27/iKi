@@ -1,6 +1,6 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
-import type { ConversationRunner, AgentResult, ToolApprovalRequest } from '../../../core/agent';
+import type { AgentResult, AgentTool, ConversationRunner, ToolApprovalRequest } from '../../../core/agent';
 import { createLogger } from '../../../core/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
@@ -14,6 +14,7 @@ export type RegisterApprovalBatch = (
     runner: ConversationRunner;
     webContents: ChatWebContents;
     recoveryContext?: ApprovalRecoveryContext;
+    availableTools?: AgentTool[];
   }
 ) => void;
 
@@ -28,6 +29,7 @@ export type ToolLoopStreamParams = {
   abortSignal?: AbortSignal;
   uiChunkEmitter?: UiChunkEmitter;
   approvalContext?: ApprovalRecoveryContext;
+  availableTools?: AgentTool[];
 };
 
 export type ToolLoopStreamResult = {
@@ -127,6 +129,7 @@ const streamToolLoop = async (
       runner: params.runner,
       webContents: params.webContents,
       ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
+      ...(params.availableTools ? { availableTools: params.availableTools } : {}),
     });
     return { awaitingApproval: true, usage: agentResult.usage };
   }

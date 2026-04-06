@@ -16,6 +16,9 @@ export const MAX_PERSONAL_SKILL_LIST_LIMIT = 100;
 export const DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS = 20000;
 export const MIN_PERSONAL_SKILL_READ_MAX_CHARS = 500;
 export const MAX_PERSONAL_SKILL_READ_MAX_CHARS = 120000;
+export const DEFAULT_AGENT_MAX_ITERATIONS = 8;
+export const MAX_AGENT_MAX_ITERATIONS = 12;
+export const MAX_AGENT_TOOL_SELECTION = 12;
 
 const toolCallDescriptionField = z
   .string()
@@ -116,6 +119,13 @@ const todoPlanItemInputSchema = z.object({
   text: z.string().min(1).describe('Todo item text'),
   status: z.enum(['pending', 'in_progress', 'completed']).describe('Todo item status').optional(),
 });
+
+const agentUsedToolOutputSchema = z
+  .object({
+    name: z.string().optional(),
+    callCount: z.number().optional(),
+  })
+  .passthrough();
 
 export const WebToolInputSchema = z.object({
   query: webInputFields.query,
@@ -449,6 +459,51 @@ export const TodoToolInputSchemaUi = z
   })
   .passthrough();
 
+export const AgentToolInputSchema = z.object({
+  task: z
+    .string()
+    .trim()
+    .min(1)
+    .describe('Self-contained subtask for the delegated subagent to complete'),
+  context: z
+    .string()
+    .trim()
+    .describe('Optional relevant background, constraints, or facts for the subtask')
+    .optional(),
+  expectedOutput: z
+    .string()
+    .trim()
+    .describe('Optional description of the exact output shape the parent agent wants back')
+    .optional(),
+  tools: z
+    .array(z.string().trim().min(1))
+    .max(MAX_AGENT_TOOL_SELECTION)
+    .describe(
+      `Optional exact subset of currently enabled approval-free tools to expose to the delegated subagent. Provide at most ${MAX_AGENT_TOOL_SELECTION} tool names.`
+    )
+    .optional(),
+  maxIterations: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_AGENT_MAX_ITERATIONS)
+    .describe(`Maximum delegated tool/reasoning steps (1-${MAX_AGENT_MAX_ITERATIONS})`)
+    .optional()
+    .default(DEFAULT_AGENT_MAX_ITERATIONS),
+  description: toolCallDescriptionField,
+});
+
+export const AgentToolInputSchemaUi = z
+  .object({
+    task: z.string().optional(),
+    context: z.string().optional(),
+    expectedOutput: z.string().optional(),
+    tools: z.array(z.string()).optional(),
+    maxIterations: z.number().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
 const TodoPlanItemOutputSchema = z
   .object({
     id: z.string().optional(),
@@ -642,6 +697,23 @@ export const TodoToolOutputSchema = z
     completedCount: z.number().optional(),
     inProgressCount: z.number().optional(),
     pendingCount: z.number().optional(),
+  })
+  .passthrough();
+
+export const AgentToolOutputSchema = z
+  .object({
+    response: z.string().optional(),
+    iterations: z.number().optional(),
+    toolCallCount: z.number().optional(),
+    usedTools: z.array(agentUsedToolOutputSchema).optional(),
+    model: z
+      .object({
+        providerType: z.string().optional(),
+        providerId: z.string().optional(),
+        model: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 

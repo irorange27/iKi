@@ -1,6 +1,7 @@
 export * from './base';
 export * from './file_tools';
 export * from './shell_tools';
+export * from './agent_tools';
 export * from './skill_tools';
 export * from './web_tools';
 export * from './schemas';
@@ -8,6 +9,7 @@ export * from './task_plan_tools';
 export * from './todo_tools';
 
 import { defaultToolRegistry } from './base';
+import { DelegatedAgentTool } from './agent_tools';
 import {
   ReadFileTool,
   WriteFileTool,
@@ -41,6 +43,7 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new WriteFileTool());
   defaultToolRegistry.register(new DeleteFileTool());
   defaultToolRegistry.register(new ShellExecutionTool());
+  defaultToolRegistry.register(new DelegatedAgentTool());
   defaultToolRegistry.register(new WebSearchTool());
   defaultToolRegistry.register(new FetchTool());
   defaultToolRegistry.register(new ListPersonalSkillsTool());

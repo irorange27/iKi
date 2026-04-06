@@ -340,6 +340,7 @@ const getBuiltinToolOrder = (toolName: string): number => {
     write_file: 13,
     delete_file: 14,
     shell: 20,
+    agent: 21,
   };
 
   return explicitOrder[toolName] ?? 100;

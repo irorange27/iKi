@@ -16,8 +16,8 @@ import { migration as migration014ThreadContext } from './014_add_chat_thread_co
 import { migration as migration015ProactiveTaskToolMode } from './015_add_proactive_task_tool_mode';
 import { migration as migration016TodoLists } from './016_add_todo_lists_table';
 import { migration as migration017IdentityProfiles } from './017_add_identity_profiles_table';
-import { migration as migration018LifeRuntime } from './018_add_life_runtime_tables';
-import { migration as migration019LifeReflections } from './019_add_life_reflections_table';
+import { migration as migration018PresenceRuntime } from './018_add_presence_runtime_tables';
+import { migration as migration019PresenceReflections } from './019_add_presence_reflections_table';
 import { migration as migration020LegacyThreadContextSchema } from './020_legacy_thread_context_schema';
 import { migration as migration021ChatToolApprovalSkillIds } from './021_add_chat_tool_approval_skill_ids';
 import { migration as migration022ChatToolApprovalMaxOutputTokens } from './022_add_chat_tool_approval_max_output_tokens';
@@ -49,8 +49,8 @@ export const registeredMigrations = [
   migration015ProactiveTaskToolMode,
   migration016TodoLists,
   migration017IdentityProfiles,
-  migration018LifeRuntime,
-  migration019LifeReflections,
+  migration018PresenceRuntime,
+  migration019PresenceReflections,
   migration020LegacyThreadContextSchema,
   migration021ChatToolApprovalSkillIds,
   migration022ChatToolApprovalMaxOutputTokens,

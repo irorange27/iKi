@@ -39,6 +39,20 @@ describe('ui_message_tool_parts', () => {
     expect(title).toBe('Execution Plan');
   });
 
+  it('uses the delegated task text as the card title for agent tool cards', () => {
+    const title = getToolTitle({
+      type: 'tool-call',
+      toolCallId: 'call_agent',
+      toolName: 'agent',
+      state: 'input-available',
+      input: {
+        task: 'Inspect the core agent runtime boundary.',
+      },
+    });
+
+    expect(title).toBe('Inspect the core agent runtime boundary.');
+  });
+
   it('collapses successful tool results by default when no UI override exists', () => {
     expect(
       isToolCollapsed({
