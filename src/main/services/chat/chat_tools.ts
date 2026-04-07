@@ -8,6 +8,7 @@ import { toLlmChatMessages } from './chat_ui';
 
 type ToolResolveMode = 'manual' | 'auto';
 type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[number];
+const AGENT_TOOL_NAME = 'agent';
 const TODO_TOOL_NAME = 'todo';
 const TODO_EXPLICIT_REQUEST_PATTERN =
   /\b(todo|to-do|checklist|plan|planning|progress|roadmap|milestone|step|steps|track)\b|待办|计划|规划|进度|路线图|里程碑|步骤|拆解/u;
@@ -125,6 +126,23 @@ const filterOvereagerTodoSelection = (
   return selectedTools.filter(toolName => toolName !== TODO_TOOL_NAME);
 };
 
+const filterUnsupportedAgentSelection = (
+  selectedTools: string[],
+  catalog: Array<Pick<ToolMetadata, 'name' | 'needsApproval'>>
+): string[] => {
+  if (!selectedTools.includes(AGENT_TOOL_NAME)) return selectedTools;
+
+  const catalogByName = new Map(catalog.map(tool => [tool.name, tool]));
+  const hasDelegableSiblingTool = selectedTools.some(toolName => {
+    if (toolName === AGENT_TOOL_NAME) return false;
+    const tool = catalogByName.get(toolName);
+    return Boolean(tool) && tool.needsApproval !== true;
+  });
+
+  if (hasDelegableSiblingTool) return selectedTools;
+  return selectedTools.filter(toolName => toolName !== AGENT_TOOL_NAME);
+};
+
 const filterManualToolsByMcpServers = (
   toolNames: string[],
   allowedMcpServerIds: Set<string> | null
@@ -182,5 +200,7 @@ export const resolveToolNames = async (params: {
     resolvedTools
   );
 
-  return { explicitTools, resolvedTools: filteredResolvedTools, mode };
+  const filteredAgentTools = filterUnsupportedAgentSelection(filteredResolvedTools, catalog);
+
+  return { explicitTools, resolvedTools: filteredAgentTools, mode };
 };

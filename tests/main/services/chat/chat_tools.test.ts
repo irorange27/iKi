@@ -193,7 +193,7 @@ describe('resolveToolNames', () => {
     });
 
     expect(result.mode).toBe('auto');
-    expect(result.resolvedTools).toEqual(['agent']);
+    expect(result.resolvedTools).toEqual([]);
   });
 
   it('drops todo from overeager auto selections for simple requests', async () => {
@@ -225,6 +225,66 @@ describe('resolveToolNames', () => {
 
     expect(result.mode).toBe('auto');
     expect(result.resolvedTools).toEqual(['todo', 'shell']);
+  });
+
+  it('keeps agent for delegated source-comparison work when an approval-free sibling tool is selected', async () => {
+    selectToolsWithAgentMock.mockResolvedValue(['agent', 'web', 'fetch']);
+    registerTool({ name: 'agent', source: { kind: 'builtin' } });
+    registerTool({ name: 'web', needsApproval: false, source: { kind: 'builtin' } });
+    registerTool({ name: 'fetch', needsApproval: false, source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [
+        {
+          role: 'user',
+          content: '搜索几篇资料，比较它们对 agent delegation 的实现差异，然后再告诉我关键取舍。',
+        },
+      ],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual(['agent', 'web', 'fetch']);
+  });
+
+  it('drops agent when auto selection leaves it without a usable delegated sibling tool', async () => {
+    selectToolsWithAgentMock.mockResolvedValue(['agent', 'shell']);
+    registerTool({ name: 'agent', source: { kind: 'builtin' } });
+    registerTool({ name: 'shell', needsApproval: true, source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [
+        {
+          role: 'user',
+          content: '先看看 git status，再决定怎么修。',
+        },
+      ],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual(['shell']);
+  });
+
+  it('retains agent when global auto-approve makes the sibling tool usable inside delegation', async () => {
+    getAppConfigMock.mockReturnValue({
+      general: {
+        autoApproveToolRequests: true,
+      },
+    } as never);
+    selectToolsWithAgentMock.mockResolvedValue(['agent', 'shell']);
+    registerTool({ name: 'agent', source: { kind: 'builtin' } });
+    registerTool({ name: 'shell', needsApproval: true, source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [
+        {
+          role: 'user',
+          content: '自己决定要不要分一个子任务去检查本地环境。',
+        },
+      ],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual(['agent', 'shell']);
   });
 
   it('reports approval-gated tools as prompt-free to the auto router when global auto-approve is enabled', async () => {
