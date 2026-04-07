@@ -117,7 +117,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     prompt: '',
   },
   toolModel: {
-    providerType: '',
+    providerId: '',
     model: '',
   },
   toolExecution: {
@@ -254,8 +254,14 @@ export const mergeAppConfigWithBase = (
       ...(rawConfig.speech ?? {}),
     },
     toolModel: {
-      ...base.toolModel,
-      ...(rawConfig.toolModel ?? {}),
+      providerId:
+        typeof rawConfig.toolModel?.providerId === 'string'
+          ? rawConfig.toolModel.providerId
+          : base.toolModel.providerId,
+      model:
+        typeof rawConfig.toolModel?.model === 'string'
+          ? rawConfig.toolModel.model
+          : base.toolModel.model,
     },
     toolExecution: {
       ...base.toolExecution,

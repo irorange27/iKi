@@ -9,13 +9,28 @@ describe('default app config', () => {
     expect(config.memory.emotion.enabled).toBe(true);
     expect(config.memory.emotion.injectToSystemPrompt).toBe(true);
     expect(config.memory.emotion.realtimeAnalysis).toBe(false);
-    expect(config.toolModel.providerType).toBe('');
+    expect(config.toolModel.providerId).toBe('');
     expect(config.general.autoApproveToolRequests).toBe(false);
     expect(config.chat.composer).toEqual({
       preferredProviderId: '',
       preferredModel: '',
     });
     expect(Object.prototype.hasOwnProperty.call(config, 'webSearch')).toBe(false);
+  });
+
+  it('drops legacy tool-model providerType config while preserving the selected model', () => {
+    const config = mergeAppConfig({
+      toolModel: {
+        providerType: 'deepseek',
+        model: 'deepseek-chat',
+      } as never,
+    } as never);
+
+    expect(config.toolModel).toEqual({
+      providerId: '',
+      model: 'deepseek-chat',
+    });
+    expect(Object.prototype.hasOwnProperty.call(config.toolModel, 'providerType')).toBe(false);
   });
 
   it('drops legacy webSearch config during merge', () => {

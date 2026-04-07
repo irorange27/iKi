@@ -11,6 +11,7 @@ import { parseModelList } from '../../shared/utils/provider_models';
 
 export interface ToolModelConfig {
   providerType: string;
+  providerId?: string;
   model: string;
 }
 
@@ -20,49 +21,96 @@ export interface ToolModelLatencyResult extends ToolModelConfig {
 
 const toolModelLogger = createLogger({ module: 'tool_model' });
 
-const findConfiguredToolModel = (
-  providers: ReturnType<typeof getProviders>,
-  config?: Partial<ToolModelConfig> | null
+type ToolModelSelectionInput = {
+  providerId?: string;
+  providerType?: string;
+  model?: string;
+};
+
+type StoredProvider = ReturnType<typeof getProviders>[number];
+
+const resolveProviderModels = (provider: StoredProvider): string[] | null => {
+  try {
+    return parseModelList(provider.models);
+  } catch {
+    return null;
+  }
+};
+
+const resolveExplicitToolModel = (
+  enabledProviders: StoredProvider[],
+  config: ToolModelSelectionInput
 ): ToolModelConfig | null => {
-  const configuredModel = config?.model?.trim() || '';
+  const configuredModel = config.model?.trim() || '';
   if (!configuredModel) return null;
 
-  const enabledProviders = providers.filter(provider => provider.enabled);
-  const configuredProviderType = config?.providerType?.trim() || '';
+  const configuredProviderId = config.providerId?.trim() || '';
+  const configuredProviderType = config.providerType?.trim() || '';
+
+  if (configuredProviderId) {
+    const provider = enabledProviders.find(candidate => candidate.id === configuredProviderId);
+    if (!provider) return null;
+    if (configuredProviderType && provider.type !== configuredProviderType) {
+      return null;
+    }
+
+    const models = resolveProviderModels(provider);
+    if (!models?.includes(configuredModel)) {
+      return null;
+    }
+
+    return {
+      providerId: provider.id,
+      providerType: provider.type,
+      model: configuredModel,
+    };
+  }
 
   if (configuredProviderType) {
-    const provider = enabledProviders.find(candidate => candidate.type === configuredProviderType);
-    if (!provider) return null;
-
-    try {
-      const models = parseModelList(provider.models);
-      if (models.includes(configuredModel)) {
-        return { providerType: configuredProviderType, model: configuredModel };
+    for (const provider of enabledProviders) {
+      if (provider.type !== configuredProviderType) continue;
+      const models = resolveProviderModels(provider);
+      if (!models?.includes(configuredModel)) {
+        continue;
       }
-    } catch {
-      return null;
+
+      return {
+        providerId: provider.id,
+        providerType: provider.type,
+        model: configuredModel,
+      };
     }
 
     return null;
   }
 
   for (const provider of enabledProviders) {
-    try {
-      const models = parseModelList(provider.models);
-      if (models.includes(configuredModel)) {
-        return { providerType: provider.type, model: configuredModel };
-      }
-    } catch {
+    const models = resolveProviderModels(provider);
+    if (!models?.includes(configuredModel)) {
       continue;
     }
+
+    return {
+      providerId: provider.id,
+      providerType: provider.type,
+      model: configuredModel,
+    };
   }
 
   return null;
 };
 
+const findConfiguredToolModel = (
+  providers: ReturnType<typeof getProviders>,
+  config?: ToolModelSelectionInput | null
+): ToolModelConfig | null => {
+  const enabledProviders = providers.filter(provider => provider.enabled);
+  return resolveExplicitToolModel(enabledProviders, config ?? {});
+};
+
 /**
- * Get Tool Model configuration with auto-detection
- * Priority: exact user config → legacy model-only config → auto-detect
+ * Get Tool Model configuration with auto-detection.
+ * Priority: exact provider selection → legacy provider/model config → auto-detect.
  */
 export const getToolModel = (): ToolModelConfig | null => {
   try {
@@ -89,37 +137,45 @@ export const getToolModel = (): ToolModelConfig | null => {
     for (const providerType of priorityOrder) {
       const provider = enabledProviders.find(p => p.type === providerType);
       if (provider) {
-        try {
-          const models = parseModelList(provider.models);
-          const validModels = models.filter((m: string) => {
-            const lower = m.toLowerCase();
-            return !lower.includes('o1') && !lower.includes('o3') && !lower.includes('thinking');
-          });
-
-          for (const recommended of recommendedModels) {
-            if (validModels.includes(recommended)) {
-              return { providerType, model: recommended };
-            }
-          }
-
-          if (validModels.length > 0) {
-            return { providerType, model: validModels[0] };
-          }
-        } catch {
+        const models = resolveProviderModels(provider);
+        if (!models) {
           continue;
+        }
+
+        const validModels = models.filter((model: string) => {
+          const lower = model.toLowerCase();
+          return !lower.includes('o1') && !lower.includes('o3') && !lower.includes('thinking');
+        });
+
+        for (const recommended of recommendedModels) {
+          if (validModels.includes(recommended)) {
+            return {
+              providerId: provider.id,
+              providerType: provider.type,
+              model: recommended,
+            };
+          }
+        }
+
+        if (validModels.length > 0) {
+          return {
+            providerId: provider.id,
+            providerType: provider.type,
+            model: validModels[0],
+          };
         }
       }
     }
 
     if (enabledProviders.length > 0) {
       const provider = enabledProviders[0];
-      try {
-        const models = parseModelList(provider.models);
-        if (models.length > 0) {
-          return { providerType: provider.type, model: models[0] };
-        }
-      } catch {
-        // Ignore
+      const models = resolveProviderModels(provider);
+      if (models && models.length > 0) {
+        return {
+          providerId: provider.id,
+          providerType: provider.type,
+          model: models[0],
+        };
       }
     }
 
@@ -131,9 +187,11 @@ export const getToolModel = (): ToolModelConfig | null => {
 };
 
 export const testToolModelLatency = async (
-  config?: Partial<ToolModelConfig> | null
+  config?: ToolModelSelectionInput | null
 ): Promise<ToolModelLatencyResult> => {
-  const hasExplicitSelection = Boolean(config?.providerType?.trim() || config?.model?.trim());
+  const hasExplicitSelection = Boolean(
+    config?.providerId?.trim() || config?.providerType?.trim() || config?.model?.trim()
+  );
   const resolvedToolModel = hasExplicitSelection
     ? findConfiguredToolModel(getProviders(), config)
     : getToolModel();
@@ -144,17 +202,26 @@ export const testToolModelLatency = async (
     );
   }
 
-  const model = createModel(resolvedToolModel.providerType, resolvedToolModel.model);
+  const model = createModel(
+    resolvedToolModel.providerType,
+    resolvedToolModel.model,
+    resolvedToolModel.providerId
+  );
   const startTime = Date.now();
 
   await generateText({
     model,
     messages: [{ role: 'user', content: 'Reply with OK.' }],
-    ...getModelCallSettings(resolvedToolModel.providerType, resolvedToolModel.model),
+    ...getModelCallSettings(
+      resolvedToolModel.providerType,
+      resolvedToolModel.model,
+      resolvedToolModel.providerId
+    ),
     maxOutputTokens: 8,
   });
 
   return {
+    ...(resolvedToolModel.providerId ? { providerId: resolvedToolModel.providerId } : {}),
     providerType: resolvedToolModel.providerType,
     model: resolvedToolModel.model,
     responseTimeMs: Math.max(Date.now() - startTime, 0),

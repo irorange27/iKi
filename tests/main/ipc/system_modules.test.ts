@@ -396,8 +396,13 @@ describe('system IPC modules', () => {
   });
 
   it('returns tool-model config and title-generation fallbacks when provider selection fails', async () => {
-    getToolModelMock.mockReturnValueOnce({ providerType: 'openai', model: 'gpt-4o-mini' } as never);
+    getToolModelMock.mockReturnValueOnce({
+      providerId: 'provider-openai',
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+    } as never);
     expect(await ipcHandlers.get('toolModel:get')?.(null)).toEqual({
+      providerId: 'provider-openai',
       providerType: 'openai',
       model: 'gpt-4o-mini',
     });
@@ -434,17 +439,19 @@ describe('system IPC modules', () => {
     );
 
     testToolModelLatencyMock.mockResolvedValueOnce({
+      providerId: 'provider-openai',
       providerType: 'openai',
       model: 'gpt-4o-mini',
       responseTimeMs: 1234,
     } as never);
     expect(
       await ipcHandlers.get('toolModel:testLatency')?.(null, {
-        providerType: 'openai',
+        providerId: 'provider-openai',
         model: 'gpt-4o-mini',
       })
     ).toEqual({
       success: true,
+      providerId: 'provider-openai',
       providerType: 'openai',
       model: 'gpt-4o-mini',
       responseTimeMs: 1234,

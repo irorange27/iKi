@@ -84,28 +84,29 @@ beforeEach(() => {
 });
 
 describe('tool model provider', () => {
-  it('prefers the explicitly configured provider when the same model exists on multiple providers', () => {
+  it('prefers the explicitly configured providerId when the same model exists on multiple providers', () => {
     const config = createDefaultAppConfig();
-    config.toolModel.providerType = 'deepseek';
+    config.toolModel.providerId = 'provider-deepseek-secondary';
     config.toolModel.model = 'shared-model';
 
     getAppConfigMock.mockReturnValue(config);
     getProvidersMock.mockReturnValue([
       buildProvider({
-        id: 'provider-openai',
-        name: 'OpenAI',
-        type: 'openai',
+        id: 'provider-deepseek-primary',
+        name: 'DeepSeek Primary',
+        type: 'deepseek',
         models: JSON.stringify(['shared-model']),
       }),
       buildProvider({
-        id: 'provider-deepseek',
-        name: 'DeepSeek',
+        id: 'provider-deepseek-secondary',
+        name: 'DeepSeek Secondary',
         type: 'deepseek',
         models: JSON.stringify(['shared-model']),
       }),
     ]);
 
     expect(getToolModel()).toEqual({
+      providerId: 'provider-deepseek-secondary',
       providerType: 'deepseek',
       model: 'shared-model',
     });
@@ -126,6 +127,7 @@ describe('tool model provider', () => {
     ]);
 
     expect(getToolModel()).toEqual({
+      providerId: 'provider-deepseek',
       providerType: 'deepseek',
       model: 'deepseek-chat',
     });
@@ -143,15 +145,26 @@ describe('tool model provider', () => {
 
     await expect(
       testToolModelLatency({
+        providerId: 'provider-deepseek',
         providerType: 'deepseek',
         model: 'deepseek-chat',
       })
     ).resolves.toMatchObject({
+      providerId: 'provider-deepseek',
       providerType: 'deepseek',
       model: 'deepseek-chat',
     });
 
-    expect(createModelMock).toHaveBeenCalledWith('deepseek', 'deepseek-chat');
+    expect(createModelMock).toHaveBeenCalledWith(
+      'deepseek',
+      'deepseek-chat',
+      'provider-deepseek'
+    );
+    expect(getModelCallSettingsMock).toHaveBeenCalledWith(
+      'deepseek',
+      'deepseek-chat',
+      'provider-deepseek'
+    );
     expect(generateTextMock).toHaveBeenCalledWith({
       model: 'mock-model',
       messages: [{ role: 'user', content: 'Reply with OK.' }],
@@ -159,7 +172,7 @@ describe('tool model provider', () => {
     });
   });
 
-  it('rejects invalid explicit selections instead of silently auto-detecting another provider', async () => {
+  it('rejects invalid explicit providerId selections instead of silently auto-detecting another provider', async () => {
     getProvidersMock.mockReturnValue([
       buildProvider({
         id: 'provider-openai',
@@ -171,7 +184,7 @@ describe('tool model provider', () => {
 
     await expect(
       testToolModelLatency({
-        providerType: 'deepseek',
+        providerId: 'provider-deepseek',
         model: 'deepseek-chat',
       })
     ).rejects.toThrow('Selected tool model is unavailable.');

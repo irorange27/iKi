@@ -87,12 +87,14 @@ export type ChatInvocationResult = {
 };
 
 export type ToolModelConfig = {
-  providerType: string;
+  providerId?: string;
+  providerType?: string;
   model: string;
 };
 
 export type ToolModelLatencyTestResult = {
   success: boolean;
+  providerId?: string;
   providerType?: string;
   model?: string;
   responseTimeMs?: number;
