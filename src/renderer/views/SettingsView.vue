@@ -366,84 +366,12 @@
         <button class="reset-btn" @click="resetSection('ui')">{{ t('settings.ui.reset') }}</button>
       </section>
 
-      <!-- Network -->
-      <section v-show="activeSection === 'network'" class="config-section">
-        <div class="config-group">
-          <h3>{{ t('settings.network.proxy.title') }}</h3>
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              :checked="config.network.proxy.enable"
-              @change="updateNetwork('proxy.enable', ($event.target as HTMLInputElement).checked)"
-            />
-            {{ t('settings.network.proxy.enable') }}
-          </label>
-
-          <template v-if="config.network.proxy.enable">
-            <div class="input-label">
-              <span>{{ t('settings.network.proxy.type') }}</span>
-              <SettingsSelect
-                class="network-proxy-type-select"
-                :model-value="config.network.proxy.type"
-                :options="proxyTypeOptions"
-                :aria-label="t('settings.network.proxy.typeAria')"
-                @update:model-value="updateProxyTypeSelection"
-              />
-            </div>
-
-            <label class="input-label"
-              >{{ t('settings.network.proxy.host') }}
-              <input
-                type="text"
-                :value="config.network.proxy.host"
-                @input="updateNetwork('proxy.host', getInputValue($event))"
-              />
-            </label>
-
-            <label class="input-label"
-              >{{ t('settings.network.proxy.port') }}
-              <input
-                type="number"
-                :value="config.network.proxy.port || ''"
-                @input="updateNetwork('proxy.port', parseOptionalInteger(getInputValue($event)))"
-              />
-            </label>
-          </template>
-        </div>
-
-        <div class="config-group">
-          <h3>{{ t('settings.network.timeoutRetryTitle') }}</h3>
-          <div class="slider-field">
-            <span>{{ t('settings.network.timeoutMs') }}</span>
-            <span class="value-badge">{{ config.network.timeout }}</span>
-          </div>
-          <input
-            type="range"
-            min="1000"
-            max="20000"
-            step="500"
-            :value="config.network.timeout"
-            @input="updateNetwork('timeout', parseRequiredInteger(getInputValue($event)))"
-          />
-          <p class="slider-hint">{{ t('settings.network.timeoutHint') }}</p>
-
-          <div class="slider-field">
-            <span>{{ t('settings.network.retryAttempts') }}</span>
-            <span class="value-badge">{{ config.network.retryAttempts }}</span>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="10"
-            step="1"
-            :value="config.network.retryAttempts"
-            @input="updateNetwork('retryAttempts', parseRequiredInteger(getInputValue($event)))"
-          />
-          <p class="slider-hint">{{ t('settings.network.retryHint') }}</p>
-        </div>
-
-        <button class="reset-btn" @click="resetSection('network')">{{ t('settings.network.reset') }}</button>
-      </section>
+      <SettingsNetworkSection
+        v-show="activeSection === 'network'"
+        :active="activeSection === 'network'"
+        @config-change="autoSave"
+        @reset="resetSection('network')"
+      />
 
       <!-- Security -->
       <section v-show="activeSection === 'security'" class="config-section">
@@ -591,6 +519,7 @@ import {
   BarChart3,
   RefreshCw,
   AlarmClock,
+  Globe,
   Wand2,
   Plug,
   SlidersHorizontal,
@@ -600,6 +529,7 @@ import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
 import NapCatSettings from '../components/settings/NapCatSettings.vue';
 import SettingsColorSchemeSection from '../components/settings/SettingsColorSchemeSection.vue';
+import SettingsNetworkSection from '../components/settings/SettingsNetworkSection.vue';
 import SettingsSpeechSection from '../components/settings/SettingsSpeechSection.vue';
 import SettingsMemorySection from '../components/settings/SettingsMemorySection.vue';
 import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
@@ -651,14 +581,6 @@ type ToolModelSelection = {
   model: string;
 };
 
-type NetworkUpdatePath =
-  | 'proxy.enable'
-  | 'proxy.type'
-  | 'proxy.host'
-  | 'proxy.port'
-  | 'timeout'
-  | 'retryAttempts';
-
 const getInputValue = (event: Event): string =>
   (event.target as HTMLInputElement | null)?.value ?? '';
 
@@ -666,9 +588,6 @@ const getCheckedValue = (event: Event): boolean =>
   (event.target as HTMLInputElement | null)?.checked ?? false;
 
 const parseRequiredInteger = (value: string): number => Number.parseInt(value || '0', 10);
-
-const parseOptionalInteger = (value: string): number | null =>
-  value ? Number.parseInt(value, 10) : null;
 
 const AUTO_DETECT_TOOL_MODEL_VALUE = '';
 
@@ -763,12 +682,6 @@ const shellApprovalModeOptions = computed(() => [
 const languageOptions = computed(() => [
   { value: 'en', label: t('language.english') },
   { value: 'zh-CN', label: t('language.chineseSimplified') },
-]);
-
-const proxyTypeOptions = computed(() => [
-  { value: 'http', label: t('settings.network.proxy.http') },
-  { value: 'https', label: t('settings.network.proxy.https') },
-  { value: 'socks5', label: t('settings.network.proxy.socks5') },
 ]);
 
 const securityLogLevelOptions = computed(() => [
@@ -1145,6 +1058,7 @@ const menuItems = computed(() => [
   { key: 'usage', label: t('settings.menu.usage'), icon: BarChart3 },
   { key: 'skills', label: t('settings.menu.skills'), icon: Wand2 },
   { key: 'memory', label: t('settings.menu.memory'), icon: Brain },
+  { key: 'network', label: t('settings.menu.network'), icon: Globe },
   { key: 'ui', label: t('settings.menu.ui'), icon: SlidersHorizontal },
   { key: 'colorScheme', label: t('settings.menu.colorScheme'), icon: Palette },
   { key: 'speech', label: t('settings.menu.speech'), icon: Mic },
@@ -1261,36 +1175,6 @@ const updateLanguageSelection = (value: string) => {
 
 const toggleAutoApproveToolRequests = () => {
   updateGeneral('autoApproveToolRequests', !config.value.general.autoApproveToolRequests);
-};
-
-const updateNetwork = (path: NetworkUpdatePath, value: boolean | string | number | null) => {
-  switch (path) {
-    case 'proxy.enable':
-      configStore.updateNetworkProxy('enable', value as boolean);
-      break;
-    case 'proxy.type':
-      configStore.updateNetworkProxy('type', value as AppConfig['network']['proxy']['type']);
-      break;
-    case 'proxy.host':
-      configStore.updateNetworkProxy('host', value as string);
-      break;
-    case 'proxy.port':
-      configStore.updateNetworkProxy('port', value as number | null);
-      break;
-    case 'timeout':
-      configStore.updateNetwork('timeout', value as number);
-      break;
-    case 'retryAttempts':
-      configStore.updateNetwork('retryAttempts', value as number);
-      break;
-  }
-  autoSave();
-};
-
-const updateProxyTypeSelection = (value: string) => {
-  if (value === 'http' || value === 'https' || value === 'socks5') {
-    updateNetwork('proxy.type', value);
-  }
 };
 
 const updateSecurity = <K extends keyof AppConfig['security']>(

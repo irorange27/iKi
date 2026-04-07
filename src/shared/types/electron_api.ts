@@ -5,6 +5,7 @@ import type {
   DaemonControlResult,
   DaemonLogsInfo,
   DaemonStatusInfo,
+  NetworkDiagnosticResult,
 } from './config';
 import type {
   ModelCapabilitySnapshot,
@@ -143,6 +144,7 @@ export interface ElectronApi {
     getDaemonStatus: () => Promise<DaemonStatusInfo>;
     getDaemonLogs: (limit?: number) => Promise<DaemonLogsInfo>;
     controlDaemon: (action: DaemonControlAction) => Promise<DaemonControlResult>;
+    testNetwork: (network: AppConfig['network']) => Promise<NetworkDiagnosticResult>;
     set: (config: AppConfig) => Promise<unknown>;
     onUpdated: (callback: (config: AppConfig) => void) => () => void;
   };

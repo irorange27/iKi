@@ -166,14 +166,28 @@ describe('selectToolsWithAgent', () => {
     expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
       expect.objectContaining({
         systemPrompt: expect.stringContaining(
-          'Include `agent` only when a bounded subtask would benefit from a fresh delegated scratchpad'
+          'Include `agent` only when the turn naturally splits into coordinator + worker'
         ),
       })
     );
     expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
       expect.objectContaining({
         systemPrompt: expect.stringContaining(
-          'Do NOT rely on `agent` for approval-gated or destructive actions'
+          'Good `agent` cases: compare several fetched/web sources and report differences'
+        ),
+      })
+    );
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining(
+          'If the likely subtask depends on tools such as `shell`, `read_file`, `write_file`, `edit`, or `delete_file`, do not include `agent` for that step'
+        ),
+      })
+    );
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining(
+          'If the available approval-free tools would not materially help the delegated subtask, omit `agent`'
         ),
       })
     );

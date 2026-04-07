@@ -36,7 +36,8 @@ A local agent pet for AI provider orchestration.
   main chat tool loop.
 
 - A first-class delegated `agent` tool so iKi can hand a bounded subtask to a fresh subagent
-  scratchpad without widening beyond the current turn's approval-free tool boundary.
+  scratchpad without widening beyond the current turn's approval-free tool boundary; intended for
+  focused investigation/review/synthesis side work rather than approval-gated file or shell steps.
 
 - First-class personal-skill management tools so iKi can list, inspect, create, update, and
   delete user-managed `SKILL.md` files under the Personal skills root without needing workspace

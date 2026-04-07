@@ -39,6 +39,7 @@ describe('configService', () => {
     const getDaemonStatus = vi.fn(async () => ({ running: true, managed: true }));
     const getDaemonLogs = vi.fn(async (limit?: number) => ({ lines: [], limit: limit ?? 0 }));
     const controlDaemon = vi.fn(async (action: string) => ({ success: true, action }));
+    const testNetwork = vi.fn(async (network: unknown) => ({ success: true, network }));
     const removeListener = vi.fn();
     const onUpdated = vi.fn(() => removeListener);
 
@@ -52,6 +53,7 @@ describe('configService', () => {
           getDaemonStatus,
           getDaemonLogs,
           controlDaemon,
+          testNetwork,
           onUpdated,
         },
       },
@@ -67,6 +69,30 @@ describe('configService', () => {
       success: true,
       action: 'restart',
     });
+    expect(
+      await configService.testNetwork({
+        proxy: {
+          enable: true,
+          type: 'socks5',
+          host: '127.0.0.1',
+          port: 1080,
+        },
+        timeout: 5000,
+        retryAttempts: 3,
+      })
+    ).toEqual({
+      success: true,
+      network: {
+        proxy: {
+          enable: true,
+          type: 'socks5',
+          host: '127.0.0.1',
+          port: 1080,
+        },
+        timeout: 5000,
+        retryAttempts: 3,
+      },
+    });
 
     const callback = vi.fn();
     const unsubscribe = configService.onUpdated(callback);
@@ -76,6 +102,16 @@ describe('configService', () => {
     expect(getDaemonLogs).toHaveBeenNthCalledWith(1, 120);
     expect(getDaemonLogs).toHaveBeenNthCalledWith(2, 25);
     expect(controlDaemon).toHaveBeenCalledWith('restart');
+    expect(testNetwork).toHaveBeenCalledWith({
+      proxy: {
+        enable: true,
+        type: 'socks5',
+        host: '127.0.0.1',
+        port: 1080,
+      },
+      timeout: 5000,
+      retryAttempts: 3,
+    });
     expect(onUpdated).toHaveBeenCalledWith(callback);
     expect(unsubscribe).toBeTypeOf('function');
     unsubscribe();
@@ -99,6 +135,18 @@ describe('configService', () => {
     await expect(configService.controlDaemon('start')).rejects.toThrow(
       'window.electronAPI.config.controlDaemon is missing'
     );
+    await expect(
+      configService.testNetwork({
+        proxy: {
+          enable: false,
+          type: 'http',
+          host: '',
+          port: null,
+        },
+        timeout: 5000,
+        retryAttempts: 3,
+      })
+    ).rejects.toThrow('window.electronAPI.config.testNetwork is missing');
   });
 
   it('warns and returns a noop unsubscribe when config updates are unavailable', () => {

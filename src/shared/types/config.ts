@@ -68,6 +68,26 @@ export interface DaemonControlResult {
   embeddedRunning: boolean;
 }
 
+export type NetworkDiagnosticTargetKey = 'internet' | 'google';
+
+export interface NetworkDiagnosticProbeResult {
+  key: NetworkDiagnosticTargetKey;
+  url: string;
+  success: boolean;
+  statusCode: number | null;
+  durationMs: number;
+  error: string | null;
+  resolvedProxy: string | null;
+}
+
+export interface NetworkDiagnosticResult {
+  success: boolean;
+  testedAt: string;
+  effectiveProxy: string | null;
+  error: string | null;
+  results: NetworkDiagnosticProbeResult[];
+}
+
 export interface AppConfig {
   general: {
     language: SupportedLocale;

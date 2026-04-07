@@ -124,6 +124,7 @@ const mountSettingsView = async (options?: {
         McpSettings: true,
         NapCatSettings: true,
         SettingsColorSchemeSection: true,
+        SettingsNetworkSection: true,
         SettingsSpeechSection: true,
         SettingsMemorySection: true,
         SettingsTasksSection: true,
@@ -167,6 +168,7 @@ describe('SettingsView general custom selects', () => {
 
     expect(providersList).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain('Prefer a low-latency model.');
+    expect(wrapper.text()).toContain('Network');
     expect(wrapper.text()).not.toContain('Avoid reasoning models');
     expect(wrapper.find('.tool-model-select .settings-select-trigger').text()).toContain(
       'Auto-detect (Recommended)'

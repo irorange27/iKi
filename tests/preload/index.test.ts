@@ -161,6 +161,16 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.config.getDaemonStatus();
     await exposedApi.config.getDaemonLogs(10);
     await exposedApi.config.controlDaemon('restart');
+    await exposedApi.config.testNetwork({
+      proxy: {
+        enable: true,
+        type: 'socks5',
+        host: '127.0.0.1',
+        port: 1080,
+      },
+      timeout: 5000,
+      retryAttempts: 3,
+    });
     await exposedApi.config.set({} as never);
     exposedApi.config.onUpdated(configUpdated);
     await exposedApi.updates.getStatus();
@@ -296,6 +306,7 @@ describe('preload task IPC payload serialization', () => {
         'config:get-daemon-status',
         'config:get-daemon-logs',
         'config:control-daemon',
+        'config:test-network',
         'config:set',
         'updates:get-status',
         'updates:check',

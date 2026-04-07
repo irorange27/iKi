@@ -1,4 +1,5 @@
 import type { AppConfig } from '../../shared/types/config';
+import { buildProxyUrl } from '../../shared/network/proxy';
 import { getAppConfig } from '../config';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
@@ -21,9 +22,7 @@ const getNetworkConfig = (): AppConfig['network'] | null => {
   return getAppConfig()?.network ?? null;
 };
 
-export const getNetworkTimeoutMs = (): number => {
-  const timeout = getNetworkConfig()?.timeout;
-
+export const clampNetworkTimeoutMs = (timeout: unknown): number => {
   if (typeof timeout !== 'number' || !Number.isFinite(timeout)) {
     return DEFAULT_NETWORK_TIMEOUT_MS;
   }
@@ -34,9 +33,11 @@ export const getNetworkTimeoutMs = (): number => {
   );
 };
 
-export const getNetworkRetryAttempts = (): number => {
-  const retries = getNetworkConfig()?.retryAttempts;
+export const getNetworkTimeoutMs = (): number => {
+  return clampNetworkTimeoutMs(getNetworkConfig()?.timeout);
+};
 
+export const clampNetworkRetryAttempts = (retries: unknown): number => {
   if (typeof retries !== 'number' || !Number.isFinite(retries)) {
     return DEFAULT_NETWORK_RETRY_ATTEMPTS;
   }
@@ -47,23 +48,12 @@ export const getNetworkRetryAttempts = (): number => {
   );
 };
 
+export const getNetworkRetryAttempts = (): number => {
+  return clampNetworkRetryAttempts(getNetworkConfig()?.retryAttempts);
+};
+
 export const getConfiguredProxyUrl = (): string | null => {
-  const proxy = getNetworkConfig()?.proxy;
-  if (!proxy?.enable) return null;
-
-  const host = typeof proxy.host === 'string' ? proxy.host.trim() : '';
-  const port = typeof proxy.port === 'number' && Number.isFinite(proxy.port) ? proxy.port : null;
-  if (!host || !port) return null;
-
-  const protocol = proxy.type || 'http';
-  const username = typeof proxy.username === 'string' ? proxy.username : '';
-  const password = typeof proxy.password === 'string' ? proxy.password : '';
-  const auth =
-    username || password
-      ? `${encodeURIComponent(username)}:${encodeURIComponent(password)}@`
-      : '';
-
-  return `${protocol}://${auth}${host}:${port}`;
+  return buildProxyUrl(getNetworkConfig());
 };
 
 const restoreManagedProxyEnv = () => {

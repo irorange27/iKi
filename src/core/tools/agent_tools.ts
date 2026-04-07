@@ -184,7 +184,7 @@ export class DelegatedAgentTool extends BaseTool {
   override autoAllowed = true;
   override needsApproval = false;
   override description =
-    'Delegate a bounded subtask to a fresh subagent scratchpad. The delegated run inherits only the current turn\'s approval-free tools and cannot recursively spawn more agents.';
+    'Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn\'s approval-free tools and cannot recursively spawn more agents.';
   override paramSchema = AgentToolInputSchema;
   override outputSchema = zodSchemaToJsonSchema(AgentToolOutputSchema, {
     title: 'agent_output',

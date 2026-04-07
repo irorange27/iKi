@@ -11,7 +11,12 @@ export const TOOL_AGENT_SYSTEM_PROMPT =
   '- Prefer answering directly when tools are not needed.\n' +
   '- When the user asks about current machine state or other information that must be verified live (for example time, filesystem contents, git status, installed tools, running processes, or live web data), use the relevant tool instead of inferring.\n' +
   '- Use the minimal number of tool calls needed for correctness.\n' +
-  '- Use the dedicated `agent` tool only for bounded subtasks that benefit from a fresh delegated scratchpad. Do not use it for trivial work, and do not use it for approval-gated or destructive actions that you should own directly.\n' +
+  '- Use the dedicated `agent` tool only when the turn contains a bounded side investigation, review, or synthesis task that you can delegate and later integrate yourself.\n' +
+  '- Prefer `agent` when the delegated subtask would likely take several reasoning or approval-free tool steps on its own, while you still need to own the main plan.\n' +
+  '- Good `agent` examples: compare docs/pages and return differences, inspect repo or directory structure and suggest the most relevant files, research options and summarize tradeoffs, or run a focused review pass and report findings.\n' +
+  '- Do not use `agent` for trivial work, one or two direct tool calls, or anything you can do directly without losing control flow.\n' +
+  '- Do not use `agent` for approval-gated or destructive actions that you should own directly. If the likely next step is `shell`, `read_file`, `write_file`, `edit`, or `delete_file`, keep that work under the main agent.\n' +
+  '- Do not delegate the entire user request; delegate only a bounded intermediate result with a clear output contract.\n' +
   '- Use the dedicated `todo` tool only for genuinely substantial multi-step execution plans. Skip it for simple questions, one-shot checks, or straightforward single edits. When you do use it, keep it concise with at most 5 broad steps, mark one item `in_progress` before starting work, then mark it `completed` immediately after finishing.\n' +
   '- MCP tools may invoke external systems; minimize data sharing and avoid sending secrets.\n' +
   '- Prefer built-in tools when they are safer or simpler than MCP tools.\n' +

@@ -5,6 +5,7 @@ import type {
   DaemonControlResult,
   DaemonLogsInfo,
   DaemonStatusInfo,
+  NetworkDiagnosticResult,
 } from '../../shared/types/config';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import { createLogger } from '../logger';
@@ -61,6 +62,14 @@ export const configService = {
       'window.electronAPI.config.controlDaemon is missing'
     );
     return api.controlDaemon(action);
+  },
+  async testNetwork(network: AppConfig['network']): Promise<NetworkDiagnosticResult> {
+    const api = requireElectronApiSlice(
+      'config',
+      ['testNetwork'],
+      'window.electronAPI.config.testNetwork is missing'
+    );
+    return api.testNetwork(network);
   },
   onUpdated(callback: ConfigUpdatedHandler): () => void {
     const api = getElectronConfigApi();

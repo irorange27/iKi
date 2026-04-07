@@ -464,22 +464,28 @@ export const AgentToolInputSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .describe('Self-contained subtask for the delegated subagent to complete'),
+    .describe(
+      'Self-contained delegated subtask with a clear boundary and deliverable. Use for focused research, review, or synthesis work, not for the entire user request.'
+    ),
   context: z
     .string()
     .trim()
-    .describe('Optional relevant background, constraints, or facts for the subtask')
+    .describe(
+      'Optional relevant background, constraints, scope, or already-known facts the subagent must honor.'
+    )
     .optional(),
   expectedOutput: z
     .string()
     .trim()
-    .describe('Optional description of the exact output shape the parent agent wants back')
+    .describe(
+      'Optional exact output contract for the parent agent, for example findings bullets, a shortlist, a comparison summary, or recommended next files.'
+    )
     .optional(),
   tools: z
     .array(z.string().trim().min(1))
     .max(MAX_AGENT_TOOL_SELECTION)
     .describe(
-      `Optional exact subset of currently enabled approval-free tools to expose to the delegated subagent. Provide at most ${MAX_AGENT_TOOL_SELECTION} tool names.`
+      `Optional exact subset of currently enabled approval-free tools to expose to the delegated subagent. Narrow this when the subtask only needs a few safe tools. Provide at most ${MAX_AGENT_TOOL_SELECTION} tool names.`
     )
     .optional(),
   maxIterations: z
@@ -487,7 +493,9 @@ export const AgentToolInputSchema = z.object({
     .int()
     .min(1)
     .max(MAX_AGENT_MAX_ITERATIONS)
-    .describe(`Maximum delegated tool/reasoning steps (1-${MAX_AGENT_MAX_ITERATIONS})`)
+    .describe(
+      `Maximum delegated tool/reasoning steps (1-${MAX_AGENT_MAX_ITERATIONS}). Keep this proportional to the bounded subtask.`
+    )
     .optional()
     .default(DEFAULT_AGENT_MAX_ITERATIONS),
   description: toolCallDescriptionField,

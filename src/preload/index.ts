@@ -8,6 +8,7 @@ import {
   DaemonControlResult,
   DaemonLogsInfo,
   DaemonStatusInfo,
+  NetworkDiagnosticResult,
 } from '../shared/types/config';
 import type { AppUpdateStatus } from '../shared/types/update';
 import type { Provider, ProviderUpdatedEvent } from '../shared/types/provider';
@@ -57,6 +58,8 @@ const electronApi: ElectronApi = {
       ipcRenderer.invoke('config:get-daemon-logs', limit),
     controlDaemon: (action: DaemonControlAction): Promise<DaemonControlResult> =>
       ipcRenderer.invoke('config:control-daemon', action),
+    testNetwork: (network: AppConfig['network']): Promise<NetworkDiagnosticResult> =>
+      ipcRenderer.invoke('config:test-network', network),
     set: (config: AppConfig) => ipcRenderer.invoke('config:set', config),
     onUpdated: (callback: (config: AppConfig) => void) => subscribe('config:updated', callback),
   },

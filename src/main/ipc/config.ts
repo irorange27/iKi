@@ -11,11 +11,12 @@ import { getMcpManager } from '../../core/mcp';
 import { normalizeAppConfig } from '../../shared/config/normalize';
 import type {
   AppConfig,
+  ConfigRuntimeInfo,
   DaemonControlAction,
   DaemonControlResult,
-  ConfigRuntimeInfo,
   DaemonLogsInfo,
   DaemonStatusInfo,
+  NetworkDiagnosticResult,
 } from '../../shared/types/config';
 import {
   applyDesktopDaemonConfigUpdate,
@@ -24,6 +25,7 @@ import {
   startDesktopDaemon,
   stopDesktopDaemon,
 } from '../services/daemon/daemon_lifecycle';
+import { testNetworkConnectivity } from '../services/network/network_diagnostics';
 import { applyAppUpdateConfig } from '../services/update/auto_update_service';
 import {
   buildNapCatWsUrl,
@@ -336,6 +338,13 @@ export const registerConfigIpc = (): void => {
     }
     return controlDesktopDaemon(action);
   });
+
+  ipcMain.handle(
+    'config:test-network',
+    async (_event, candidate: AppConfig['network']): Promise<NetworkDiagnosticResult> => {
+      return testNetworkConnectivity(candidate);
+    }
+  );
 
   ipcMain.handle('config:set', async (_event, config) => {
     const prevConfig = getAppConfig();

@@ -35,8 +35,12 @@ const SYSTEM_PROMPT =
   '- If the user asks about current local machine state or other live information the model cannot know reliably on its own (for example current time, filesystem contents, git status, installed tools, running processes, or live web data), include the tool needed to verify it instead of guessing.\n' +
   '- Include `todo` only when the task is genuinely substantial and multi-step: usually work expected to need at least 3 meaningful actions, several tool rounds, or explicit progress tracking.\n' +
   '- Do NOT include `todo` for simple questions, one-shot lookups, single command checks, single file reads, or straightforward single edits.\n' +
-  '- Include `agent` only when a bounded subtask would benefit from a fresh delegated scratchpad. Do NOT include `agent` for trivial work, or when the main agent can directly use the needed tools itself.\n' +
-  '- Do NOT rely on `agent` for approval-gated or destructive actions; keep those under the main agent.\n' +
+  '- Include `agent` only when the turn naturally splits into coordinator + worker: one bounded investigation, review, or synthesis subtask with a clear intermediate deliverable that the main agent will later integrate.\n' +
+  '- Good `agent` cases: compare several fetched/web sources and report differences; inspect repo or directory structure with approval-free tools and return a shortlist; research options and summarize tradeoffs; do a focused review pass and report findings back.\n' +
+  '- Do NOT include `agent` for trivial work, one or two direct tool calls, or when the main agent can just do the work itself without losing control flow.\n' +
+  '- Do NOT rely on `agent` for approval-gated or destructive actions; keep those under the main agent. If the likely subtask depends on tools such as `shell`, `read_file`, `write_file`, `edit`, or `delete_file`, do not include `agent` for that step.\n' +
+  '- If the available approval-free tools would not materially help the delegated subtask, omit `agent`.\n' +
+  '- Do NOT use `agent` to restate or fully execute the entire user request; use it only for bounded intermediate results.\n' +
   '- Prefer 1-3 tools; only exceed that when a multi-step workflow clearly needs it.\n' +
   '- If a task likely needs a longer sequential workflow in one turn (for example inspect -> edit -> verify), include each needed tool and add `todo` only when the workflow is not trivial.\n' +
   '- Prefer tools that do not require approval unless approval-gated tools are clearly necessary.\n' +
