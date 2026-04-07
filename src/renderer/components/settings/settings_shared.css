@@ -242,6 +242,12 @@ input[type='range'] {
   flex-wrap: wrap;
 }
 
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .group-description {
   font-size: 0.95em;
   margin-bottom: 16px;
@@ -359,6 +365,12 @@ input[type='range'] {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+@media (max-width: 840px) {
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes spin {

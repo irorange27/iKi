@@ -47,7 +47,7 @@ export const getNetworkRetryAttempts = (): number => {
   );
 };
 
-const buildProxyUrl = (): string | null => {
+export const getConfiguredProxyUrl = (): string | null => {
   const proxy = getNetworkConfig()?.proxy;
   if (!proxy?.enable) return null;
 
@@ -88,7 +88,7 @@ const restoreManagedProxyEnv = () => {
 };
 
 const applyProxyEnv = () => {
-  const proxyUrl = buildProxyUrl();
+  const proxyUrl = getConfiguredProxyUrl();
   if (!proxyUrl) {
     restoreManagedProxyEnv();
     return;

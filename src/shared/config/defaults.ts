@@ -174,10 +174,13 @@ export const mergeAppConfigWithBase = (
   rawConfig?: Partial<AppConfig> | null
 ): AppConfig => {
   if (!rawConfig) return base;
+  const { webSearch: _legacyWebSearch, ...restRawConfig } = rawConfig as Partial<AppConfig> & {
+    webSearch?: unknown;
+  };
 
   return {
     ...base,
-    ...rawConfig,
+    ...restRawConfig,
     general: {
       ...base.general,
       ...(rawConfig.general ?? {}),

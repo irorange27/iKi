@@ -250,7 +250,12 @@ const parseBingRssResults = (xml: string, limit: number): Array<{ title: string;
     const title = decodeHtmlEntities(stripCdata(rawTitle)).replace(/\s+/g, ' ').trim();
     const url = decodeHtmlEntities(stripCdata(rawLink)).trim();
 
-    if (title && url && (url.startsWith('http://') || url.startsWith('https://')) && !seen.has(url)) {
+    if (
+      title &&
+      url &&
+      (url.startsWith('http://') || url.startsWith('https://')) &&
+      !seen.has(url)
+    ) {
       seen.add(url);
       results.push({ title, url });
     }
@@ -313,7 +318,7 @@ export class WebSearchTool extends BaseTool {
       return results.length > 0 ? results : null;
     };
 
-    const tryBingRss = async (): Promise<Array<{ title: string; url: string }> > => {
+    const tryBingRss = async (): Promise<Array<{ title: string; url: string }>> => {
       sourcesTried.push('bing');
       const searchUrl =
         `https://www.bing.com/search?q=${encodeURIComponent(query)}` +
