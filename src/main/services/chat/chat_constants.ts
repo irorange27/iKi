@@ -10,6 +10,7 @@ export const TOOL_AGENT_SYSTEM_PROMPT =
   'Rules:\n' +
   '- Prefer answering directly when tools are not needed.\n' +
   '- When the user asks about current machine state or other information that must be verified live (for example time, filesystem contents, git status, installed tools, running processes, or live web data), use the relevant tool instead of inferring.\n' +
+  '- `web` only discovers candidate URLs. If the answer depends on page contents such as prices, dates, quotes, measurements, or specific claims, use `fetch` on one or more candidate pages before concluding.\n' +
   '- Use the minimal number of tool calls needed for correctness.\n' +
   '- Use the dedicated `agent` tool only when the turn contains a bounded side investigation, review, or synthesis task that you can delegate and later integrate yourself.\n' +
   '- Prefer `agent` when the delegated subtask would likely take several reasoning or approval-free tool steps on its own, while you still need to own the main plan.\n' +

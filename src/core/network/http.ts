@@ -1,6 +1,7 @@
 import type { AppConfig } from '../../shared/types/config';
 import { buildProxyUrl } from '../../shared/network/proxy';
 import { getAppConfig } from '../config';
+import { canUseElectronNetworkStack, electronFetchWithTimeout } from './electron_fetch';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
 const MIN_NETWORK_TIMEOUT_MS = 1000;
@@ -123,11 +124,41 @@ export const fetchWithTimeout = async (
     typeof options?.timeoutMs === 'number' ? Math.trunc(options.timeoutMs) : getNetworkTimeoutMs();
   const retries =
     typeof options?.retries === 'number' ? Math.trunc(options.retries) : getNetworkRetryAttempts();
+  const hasElectronNetwork = await canUseElectronNetworkStack();
 
   applyProxyEnv();
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (hasElectronNetwork) {
+      try {
+        const electronResponse = await electronFetchWithTimeout(url, init, timeout);
+        if (!electronResponse) {
+          throw new Error('Electron network stack is unavailable');
+        }
+
+        if (electronResponse.ok) return electronResponse;
+
+        if (attempt >= retries || !isRetryableStatus(electronResponse.status)) {
+          return electronResponse;
+        }
+
+        try {
+          await electronResponse.arrayBuffer();
+        } catch {
+          // ignore
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt >= retries) {
+          throw lastError;
+        }
+      }
+
+      await sleep(Math.min(2000, 250 * Math.pow(2, attempt)));
+      continue;
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
 

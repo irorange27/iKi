@@ -4,9 +4,18 @@ vi.mock('../../../src/core/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
+vi.mock('../../../src/core/network/electron_fetch', () => ({
+  canUseElectronNetworkStack: vi.fn(),
+  electronFetchWithTimeout: vi.fn(),
+}));
+
 import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
 import type { AppConfig } from '../../../src/shared/types/config';
 import { getAppConfig } from '../../../src/core/config';
+import {
+  canUseElectronNetworkStack,
+  electronFetchWithTimeout,
+} from '../../../src/core/network/electron_fetch';
 import {
   fetchWithTimeout,
   getNetworkRetryAttempts,
@@ -14,6 +23,8 @@ import {
 } from '../../../src/core/network/http';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
+const canUseElectronNetworkStackMock = vi.mocked(canUseElectronNetworkStack);
+const electronFetchWithTimeoutMock = vi.mocked(electronFetchWithTimeout);
 const ORIGINAL_ENV = { ...process.env };
 
 const mockConfig = (configure?: (config: AppConfig) => void) => {
@@ -25,6 +36,8 @@ const mockConfig = (configure?: (config: AppConfig) => void) => {
 beforeEach(() => {
   vi.clearAllMocks();
   mockConfig();
+  canUseElectronNetworkStackMock.mockResolvedValue(false);
+  electronFetchWithTimeoutMock.mockReset();
   process.env = { ...ORIGINAL_ENV };
 });
 
@@ -60,6 +73,29 @@ describe('network config helpers', () => {
 });
 
 describe('fetchWithTimeout', () => {
+  it('prefers the Electron network stack when available', async () => {
+    canUseElectronNetworkStackMock.mockResolvedValue(true);
+    electronFetchWithTimeoutMock.mockResolvedValue(new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', vi.fn());
+
+    const response = await fetchWithTimeout('https://example.com', {}, { timeoutMs: 1000, retries: 0 });
+
+    expect(response.status).toBe(200);
+    expect(electronFetchWithTimeoutMock).toHaveBeenCalledWith('https://example.com', {}, 1000);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not silently fall back to global fetch when the Electron network stack fails', async () => {
+    canUseElectronNetworkStackMock.mockResolvedValue(true);
+    electronFetchWithTimeoutMock.mockRejectedValue(new Error('proxy auth failed'));
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(
+      fetchWithTimeout('https://example.com', {}, { timeoutMs: 1000, retries: 0 })
+    ).rejects.toThrow(/proxy auth failed/i);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('retries once on retryable HTTP status and returns the successful response', async () => {
     vi.stubGlobal(
       'fetch',

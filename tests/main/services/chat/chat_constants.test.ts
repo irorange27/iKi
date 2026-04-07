@@ -5,6 +5,9 @@ import { TOOL_AGENT_SYSTEM_PROMPT } from '../../../../src/main/services/chat/cha
 describe('TOOL_AGENT_SYSTEM_PROMPT', () => {
   it('teaches the main agent when delegated agent use is appropriate', () => {
     expect(TOOL_AGENT_SYSTEM_PROMPT).toContain(
+      '`web` only discovers candidate URLs. If the answer depends on page contents such as prices, dates, quotes, measurements, or specific claims, use `fetch`'
+    );
+    expect(TOOL_AGENT_SYSTEM_PROMPT).toContain(
       'Use the dedicated `agent` tool only when the turn contains a bounded side investigation, review, or synthesis task'
     );
     expect(TOOL_AGENT_SYSTEM_PROMPT).toContain(

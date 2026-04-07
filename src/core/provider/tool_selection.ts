@@ -33,6 +33,7 @@ const SYSTEM_PROMPT =
   '- Output ONLY valid JSON.\n' +
   '- Prefer using NO tools when possible.\n' +
   '- If the user asks about current local machine state or other live information the model cannot know reliably on its own (for example current time, filesystem contents, git status, installed tools, running processes, or live web data), include the tool needed to verify it instead of guessing.\n' +
+  '- `web` only discovers candidate pages. If the answer depends on facts inside those pages (for example prices, dates, quotes, measurements, or claims), include `fetch` too instead of relying on search-result snippets alone.\n' +
   '- Include `todo` only when the task is genuinely substantial and multi-step: usually work expected to need at least 3 meaningful actions, several tool rounds, or explicit progress tracking.\n' +
   '- Do NOT include `todo` for simple questions, one-shot lookups, single command checks, single file reads, or straightforward single edits.\n' +
   '- Include `agent` only when the turn naturally splits into coordinator + worker: one bounded investigation, review, or synthesis subtask with a clear intermediate deliverable that the main agent will later integrate.\n' +

@@ -126,6 +126,30 @@ describe('selectToolsWithAgent', () => {
     );
   });
 
+  it('tells the router to pair web search with fetch when page facts are needed', async () => {
+    const generate = vi.fn().mockResolvedValue({ response: '["web","fetch"]' });
+    getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({ generate });
+
+    await selectToolsWithAgent({
+      messages: [{ role: 'user', content: 'What is the latest London spot gold price?' }],
+      availableTools: [{ name: 'web' }, { name: 'fetch' }],
+    });
+
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining(
+          '`web` only discovers candidate pages. If the answer depends on facts inside those pages'
+        ),
+      })
+    );
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('include `fetch` too instead of relying on search-result snippets alone'),
+      })
+    );
+  });
+
   it('tells the router to include todo for multi-step work', async () => {
     const generate = vi.fn().mockResolvedValue({ response: '["todo","shell"]' });
     getToolModelMock.mockReturnValue({ providerType: 'openai', model: 'gpt-4o-mini' });

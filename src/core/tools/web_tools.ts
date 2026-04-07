@@ -13,6 +13,9 @@ import {
 
 // Give search a bit more time than the global default, but keep it interactive.
 const MIN_WEB_SEARCH_TIMEOUT_MS = 12000;
+const DEFAULT_WEB_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36';
+const GOOGLE_HOST_PATTERN = /(^|\.)google\./i;
 
 const getWebSearchTimeoutMs = (): number =>
   Math.max(getNetworkTimeoutMs(), MIN_WEB_SEARCH_TIMEOUT_MS);
@@ -27,17 +30,24 @@ const entityMap: Record<string, string> = {
 };
 
 type SearchLocale = {
+  googleLanguage: string;
+  googleCountry: string;
   duckDuckGoRegion: string;
   bingMarket: string;
   bingCountry: string;
   acceptLanguage: string;
 };
 
+type SearchProviderName = 'google' | 'duckduckgo' | 'bing';
+type SearchResult = { title: string; url: string };
+
 const CJK_QUERY_PATTERN = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
 
 const inferSearchLocale = (query: string): SearchLocale => {
   if (CJK_QUERY_PATTERN.test(query)) {
     return {
+      googleLanguage: 'zh-CN',
+      googleCountry: 'CN',
       duckDuckGoRegion: 'cn-zh',
       bingMarket: 'zh-CN',
       bingCountry: 'CN',
@@ -46,6 +56,8 @@ const inferSearchLocale = (query: string): SearchLocale => {
   }
 
   return {
+    googleLanguage: 'en',
+    googleCountry: 'US',
     duckDuckGoRegion: 'us-en',
     bingMarket: 'en-US',
     bingCountry: 'US',
@@ -71,6 +83,8 @@ const decodeHtmlEntities = (value: string): string =>
     return match;
   });
 
+const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
+
 const htmlToPlainText = (html: string): string => {
   const withoutNoise = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -88,6 +102,15 @@ const htmlToPlainText = (html: string): string => {
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
 };
+
+const extractAttribute = (attrs: string, name: string): string | null => {
+  const regex = new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i');
+  const match = attrs.match(regex);
+  const value = (match?.[1] ?? match?.[2] ?? match?.[3] ?? '').trim();
+  return value ? value : null;
+};
+
+const stripTags = (value: string): string => value.replace(/<[^>]*>/g, ' ');
 
 const truncateText = (content: string, maxChars: number): { text: string; truncated: boolean } => {
   if (content.length <= maxChars) {
@@ -107,10 +130,27 @@ const ensureHttpUrl = (value: string): URL => {
 const extractTitle = (html: string): string => {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   if (!titleMatch || !titleMatch[1]) return '';
-  return decodeHtmlEntities(titleMatch[1]).replace(/\s+/g, ' ').trim();
+  return normalizeWhitespace(decodeHtmlEntities(titleMatch[1]));
 };
 
-const normalizeSearchHref = (href: string): string | null => {
+const normalizeAbsoluteHttpUrl = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const candidate = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
+const normalizeDuckDuckGoSearchHref = (href: string): string | null => {
   const trimmed = href.trim();
   if (!trimmed) return null;
 
@@ -138,19 +178,10 @@ const normalizeSearchHref = (href: string): string | null => {
 
       const uddg = parsed.searchParams.get('uddg');
       if (!uddg) return null;
-      let target = tryDecodeUddg(uddg).trim();
+      const target = tryDecodeUddg(uddg).trim();
       if (!target) return null;
 
-      if (target.startsWith('//')) target = `https:${target}`;
-      if (!target.startsWith('http://') && !target.startsWith('https://')) return null;
-
-      try {
-        const normalized = new URL(target);
-        if (normalized.protocol !== 'http:' && normalized.protocol !== 'https:') return null;
-        return normalized.toString();
-      } catch {
-        return target;
-      }
+      return normalizeAbsoluteHttpUrl(target);
     } catch {
       return null;
     }
@@ -170,25 +201,118 @@ const normalizeSearchHref = (href: string): string | null => {
   return null;
 };
 
-const parseDuckDuckGoResults = (
-  html: string,
-  limit: number
-): Array<{ title: string; url: string }> => {
-  const results: Array<{ title: string; url: string }> = [];
-  const seen = new Set<string>();
+const isGoogleHost = (hostname: string): boolean => GOOGLE_HOST_PATTERN.test(hostname);
 
-  const extractAttribute = (attrs: string, name: string): string | null => {
-    // Support double-quoted, single-quoted, and unquoted attribute values.
-    const regex = new RegExp(
-      `${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
-      'i'
-    );
-    const match = attrs.match(regex);
-    const value = (match?.[1] ?? match?.[2] ?? match?.[3] ?? '').trim();
-    return value ? value : null;
+const normalizeGoogleSearchHref = (href: string): string | null => {
+  const decodedHref = decodeHtmlEntities(href).trim();
+  if (!decodedHref) return null;
+
+  const unwrapGoogleRedirect = (value: string): string | null => {
+    try {
+      const parsed = new URL(value, 'https://www.google.com');
+      if (!isGoogleHost(parsed.hostname)) return null;
+      if (parsed.pathname !== '/url' && parsed.pathname !== '/imgres') return null;
+
+      const target = parsed.searchParams.get('q') ?? parsed.searchParams.get('url');
+      return target ? normalizeAbsoluteHttpUrl(target) : null;
+    } catch {
+      return null;
+    }
   };
 
-  const stripTags = (value: string): string => value.replace(/<[^>]*>/g, ' ');
+  const candidate = decodedHref.startsWith('//') ? `https:${decodedHref}` : decodedHref;
+
+  if (candidate.startsWith('/url?') || candidate.startsWith('/imgres?')) {
+    return unwrapGoogleRedirect(`https://www.google.com${candidate}`);
+  }
+
+  if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+    const unwrapped = unwrapGoogleRedirect(candidate);
+    if (unwrapped) return unwrapped;
+
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      if (isGoogleHost(parsed.hostname)) return null;
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const parseGoogleResults = (html: string, limit: number): SearchResult[] => {
+  const results: SearchResult[] = [];
+  const seen = new Set<string>();
+  const anchorRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+
+  let match: RegExpExecArray | null = anchorRegex.exec(html);
+  while (match && results.length < limit) {
+    const attrs = match[1] || '';
+    const hrefAttr = extractAttribute(attrs, 'href');
+    const normalizedUrl = hrefAttr ? normalizeGoogleSearchHref(hrefAttr) : null;
+    if (!normalizedUrl || seen.has(normalizedUrl)) {
+      match = anchorRegex.exec(html);
+      continue;
+    }
+
+    const rawContent = match[2] || '';
+    const h3Match = rawContent.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/i);
+    const rawTitle = h3Match?.[1] ?? extractAttribute(attrs, 'aria-label') ?? '';
+    const title = normalizeWhitespace(decodeHtmlEntities(stripTags(rawTitle)));
+    if (!title) {
+      match = anchorRegex.exec(html);
+      continue;
+    }
+
+    seen.add(normalizedUrl);
+    results.push({ title, url: normalizedUrl });
+    match = anchorRegex.exec(html);
+  }
+
+  return results;
+};
+
+const getGoogleSearchFailure = (
+  html: string,
+  results: SearchResult[]
+): string | null => {
+  const pageTitle = extractTitle(html);
+  const bodyText = normalizeWhitespace(htmlToPlainText(html));
+  const lowerBodyText = bodyText.toLowerCase();
+  const consentLike =
+    /before you continue to google|在继续之前|继续前往 google|consent/i.test(bodyText) ||
+    /consent\.google\.com|[?&]consent=|\/consent/i.test(html);
+  const captchaLike =
+    /unusual traffic|verify you are human|not a robot|captcha|我们的系统检测到/i.test(bodyText) ||
+    /\/sorry\//i.test(html) ||
+    /captcha-form|g-recaptcha/i.test(html);
+  const hasSearchRoot = /id\s*=\s*["']search["']/i.test(html) || /role\s*=\s*["']main["']/i.test(html);
+
+  if (captchaLike) {
+    return 'Google search requires human verification before results can be accessed';
+  }
+  if (consentLike) {
+    return 'Google search requires a consent page before results can be accessed';
+  }
+  if (!hasSearchRoot && results.length === 0) {
+    return pageTitle
+      ? `Google search page was not parseable (title: ${pageTitle})`
+      : 'Google search page did not expose a stable search result region';
+  }
+  if (results.length === 0) {
+    return lowerBodyText.includes('did not match any documents')
+      ? 'Google search returned no results for this query'
+      : 'Google search returned no parseable organic results';
+  }
+  return null;
+};
+
+const parseDuckDuckGoResults = (html: string, limit: number): SearchResult[] => {
+  const results: SearchResult[] = [];
+  const seen = new Set<string>();
 
   // DuckDuckGo's HTML is not stable about attribute ordering. Parse anchors and
   // extract `class`/`href` explicitly instead of relying on a single regex.
@@ -209,9 +333,9 @@ const parseDuckDuckGoResults = (
     }
 
     const hrefAttr = extractAttribute(attrs, 'href');
-    const normalizedUrl = hrefAttr ? normalizeSearchHref(decodeHtmlEntities(hrefAttr)) : null;
+    const normalizedUrl = hrefAttr ? normalizeDuckDuckGoSearchHref(decodeHtmlEntities(hrefAttr)) : null;
     const rawTitle = match[2] || '';
-    const title = decodeHtmlEntities(stripTags(rawTitle)).replace(/\s+/g, ' ').trim();
+    const title = normalizeWhitespace(decodeHtmlEntities(stripTags(rawTitle)));
 
     if (normalizedUrl && title && !seen.has(normalizedUrl)) {
       seen.add(normalizedUrl);
@@ -236,8 +360,8 @@ const extractXmlTag = (xml: string, tag: string): string => {
   return match && match[1] ? match[1] : '';
 };
 
-const parseBingRssResults = (xml: string, limit: number): Array<{ title: string; url: string }> => {
-  const results: Array<{ title: string; url: string }> = [];
+const parseBingRssResults = (xml: string, limit: number): SearchResult[] => {
+  const results: SearchResult[] = [];
   const seen = new Set<string>();
 
   const itemRegex = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
@@ -247,7 +371,7 @@ const parseBingRssResults = (xml: string, limit: number): Array<{ title: string;
     const rawTitle = extractXmlTag(item, 'title');
     const rawLink = extractXmlTag(item, 'link');
 
-    const title = decodeHtmlEntities(stripCdata(rawTitle)).replace(/\s+/g, ' ').trim();
+    const title = normalizeWhitespace(decodeHtmlEntities(stripCdata(rawTitle)));
     const url = decodeHtmlEntities(stripCdata(rawLink)).trim();
 
     if (
@@ -272,7 +396,7 @@ export class WebSearchTool extends BaseTool {
   override autoAllowed = true;
   override needsApproval = false;
   override description =
-    'Search the web for recent/public information and return a short list of relevant results.';
+    'Search the public web and return candidate result titles/URLs. Use this to discover sources; if the answer depends on page contents, call `fetch` on the selected result before answering.';
 
   override paramSchema = WebToolInputSchema;
 
@@ -289,19 +413,50 @@ export class WebSearchTool extends BaseTool {
     const timeoutMs = getWebSearchTimeoutMs();
     const retries = Math.min(getNetworkRetryAttempts(), 1);
     const warnings: string[] = [];
-    const sourcesTried: string[] = [];
+    const sourcesTried: SearchProviderName[] = [];
     const locale = inferSearchLocale(query);
 
-    const tryDuckDuckGo = async (): Promise<Array<{ title: string; url: string }> | null> => {
-      sourcesTried.push('duckduckgo');
+    const tryGoogle = async (): Promise<SearchResult[]> => {
+      const searchUrl =
+        `https://www.google.com/search?q=${encodeURIComponent(query)}` +
+        `&hl=${encodeURIComponent(locale.googleLanguage)}` +
+        `&gl=${encodeURIComponent(locale.googleCountry)}` +
+        `&num=${Math.max(limit, DEFAULT_SEARCH_RESULT_LIMIT)}`;
+      const response = await fetchWithTimeout(
+        searchUrl,
+        {
+          method: 'GET',
+          headers: {
+            'user-agent': DEFAULT_WEB_USER_AGENT,
+            accept: 'text/html,application/xhtml+xml',
+            'accept-language': locale.acceptLanguage,
+          },
+        },
+        { timeoutMs, retries }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Google search failed with status ${response.status}`);
+      }
+
+      const html = await response.text();
+      const results = parseGoogleResults(html, limit);
+      const failure = getGoogleSearchFailure(html, results);
+      if (failure) {
+        throw new Error(failure);
+      }
+
+      return results;
+    };
+
+    const tryDuckDuckGo = async (): Promise<SearchResult[]> => {
       const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=${encodeURIComponent(locale.duckDuckGoRegion)}`;
       const response = await fetchWithTimeout(
         searchUrl,
         {
           method: 'GET',
           headers: {
-            'user-agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
+            'user-agent': DEFAULT_WEB_USER_AGENT,
             accept: 'text/html,application/xhtml+xml',
             'accept-language': locale.acceptLanguage,
           },
@@ -315,11 +470,14 @@ export class WebSearchTool extends BaseTool {
 
       const html = await response.text();
       const results = parseDuckDuckGoResults(html, limit);
-      return results.length > 0 ? results : null;
+      if (results.length === 0) {
+        throw new Error('DuckDuckGo search returned no parseable results');
+      }
+
+      return results;
     };
 
-    const tryBingRss = async (): Promise<Array<{ title: string; url: string }>> => {
-      sourcesTried.push('bing');
+    const tryBingRss = async (): Promise<SearchResult[]> => {
       const searchUrl =
         `https://www.bing.com/search?q=${encodeURIComponent(query)}` +
         `&format=rss&mkt=${encodeURIComponent(locale.bingMarket)}` +
@@ -330,8 +488,7 @@ export class WebSearchTool extends BaseTool {
         {
           method: 'GET',
           headers: {
-            'user-agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
+            'user-agent': DEFAULT_WEB_USER_AGENT,
             accept: 'application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8',
             'accept-language': locale.acceptLanguage,
           },
@@ -344,37 +501,41 @@ export class WebSearchTool extends BaseTool {
       }
 
       const xml = await response.text();
-      return parseBingRssResults(xml, limit);
+      const results = parseBingRssResults(xml, limit);
+      if (results.length === 0) {
+        throw new Error('Bing RSS search returned no parseable results');
+      }
+      return results;
     };
 
-    let source: 'duckduckgo' | 'bing' = 'duckduckgo';
-    let results: Array<{ title: string; url: string }> = [];
+    const providers: Array<{
+      name: SearchProviderName;
+      execute: () => Promise<SearchResult[]>;
+    }> = [
+      { name: 'google', execute: tryGoogle },
+      { name: 'duckduckgo', execute: tryDuckDuckGo },
+      { name: 'bing', execute: tryBingRss },
+    ];
 
-    try {
-      const duckResults = await tryDuckDuckGo();
-      if (duckResults) {
-        source = 'duckduckgo';
-        results = duckResults;
-      } else {
-        const bingResults = await tryBingRss();
-        source = 'bing';
-        results = bingResults;
-      }
-    } catch (err) {
-      const firstError = err instanceof Error ? err.message : String(err);
-      warnings.push(`duckduckgo: ${firstError}`);
+    let source: SearchProviderName = 'google';
+    let results: SearchResult[] = [];
+
+    for (const provider of providers) {
+      sourcesTried.push(provider.name);
       try {
-        const bingResults = await tryBingRss();
-        source = 'bing';
-        results = bingResults;
-      } catch (bingErr) {
-        const secondError = bingErr instanceof Error ? bingErr.message : String(bingErr);
-        const hint =
-          'Hint: increase Settings > Network > Timeout, or enable Proxy if your network blocks certain sites.';
-        throw new Error(
-          `Web search failed (tried: ${sourcesTried.join(', ')}). duckduckgo: ${firstError}; bing: ${secondError}. ${hint}`
-        );
+        results = await provider.execute();
+        source = provider.name;
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`${provider.name}: ${message}`);
       }
+    }
+
+    if (results.length === 0) {
+      const hint =
+        'Hint: increase Settings > Network > Timeout, or enable Proxy if your network blocks certain sites.';
+      throw new Error(`Web search failed (tried: ${sourcesTried.join(', ')}). ${warnings.join('; ')}. ${hint}`);
     }
 
     return {
@@ -394,7 +555,7 @@ export class FetchTool extends BaseTool {
   override autoAllowed = true;
   override needsApproval = false;
   override description =
-    'Fetch a webpage or text URL and return clean text content (with status and metadata).';
+    'Fetch a specific webpage or text URL and return clean extracted text with status and metadata. Use this after `web` when you need facts from the page itself, not just result titles.';
 
   override paramSchema = FetchToolInputSchema;
 
@@ -409,8 +570,7 @@ export class FetchTool extends BaseTool {
       method: 'GET',
       redirect: 'follow',
       headers: {
-        'user-agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36',
+        'user-agent': DEFAULT_WEB_USER_AGENT,
         accept: 'text/html,application/json,text/plain,application/xml,text/xml;q=0.9,*/*;q=0.8',
       },
     });
