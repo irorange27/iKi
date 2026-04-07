@@ -1,8 +1,8 @@
 import type { ConversationRunnerStreamEvent } from '../../../core/agent';
 import type {
   ChatUiMessage,
-  ContextReportItem,
   SkillUsageEntry,
+  TokenUsagePartData,
 } from '../../../shared/chat/message_parts';
 import type { ModelMessage } from 'ai';
 import type { AffectSignal } from '../../../shared/emotion/affect';
@@ -41,12 +41,7 @@ export type UiChunkEmitter = {
     results: Array<Record<string, unknown>>;
   }) => void;
   emitAffectSignal: (payload: AffectSignal) => void;
-  emitContextReport: (payload: {
-    totalEstimatedTokens: number;
-    retainedRecentMessages: number;
-    compactedMessages: number;
-    blocks: ContextReportItem[];
-  }) => void;
+  emitTokenUsage: (payload: TokenUsagePartData) => void;
   finish: () => void;
   abort: () => void;
   error: (errorText: string) => void;

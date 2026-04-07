@@ -172,14 +172,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.contextUsage.headerWithBudget': ({ used, budget, percent }) =>
     `上下文使用量：${asText(used)} / ${asText(budget)} tok${asText(percent) ? `（${asText(percent)}）` : ''}`,
   'chat.contextUsage.headerWithoutBudget': ({ used }) => `上下文使用量：${asText(used)}`,
-  'chat.contextUsage.recentMessagesKept': ({ count }) => `保留最近消息：${asCount(count)}`,
-  'chat.contextUsage.compactedMessages': ({ count }) => `压缩消息数：${asCount(count)}`,
-  'chat.contextUsage.detailLine': ({ kind, status, tokens, reason }) => {
-    const parts = [`${asText(kind)}：${asText(status)}`];
-    if (asText(tokens)) parts.push(asText(tokens));
-    if (asText(reason)) parts.push(asText(reason));
-    return parts.join(' · ');
-  },
+  'chat.contextUsage.outputTokens': ({ tokens }) => `输出 Token：${asText(tokens)}`,
+  'chat.contextUsage.totalTokens': ({ tokens }) => `总 Token：${asText(tokens)}`,
+  'chat.contextUsage.model': ({ model }) => `模型：${asText(model)}`,
   'chat.tool.approvalRequest': '工具审批请求',
   'chat.tool.approve': '批准',
   'chat.tool.reject': '拒绝',

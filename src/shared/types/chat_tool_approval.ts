@@ -10,6 +10,7 @@ export interface ChatToolApprovalSession {
   provider_id?: string | null;
   model: string;
   system_prompt: string;
+  max_input_tokens?: number | null;
   max_output_tokens?: number | null;
   max_iterations?: number | null;
   enabled_tools: string; // JSON string

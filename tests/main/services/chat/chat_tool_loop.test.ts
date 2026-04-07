@@ -25,7 +25,7 @@ const createUiChunkEmitter = () => ({
   emitToolEvent: vi.fn(),
   emitMemoryRetrieval: vi.fn(),
   emitAffectSignal: vi.fn(),
-  emitContextReport: vi.fn(),
+  emitTokenUsage: vi.fn(),
   finish: vi.fn(),
   abort: vi.fn(),
   error: vi.fn(),
@@ -67,6 +67,15 @@ describe('tool loop runner', () => {
     expect(uiChunkEmitter.emitTextDelta).toHaveBeenCalledTimes(2);
     expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(1, 'Hello ');
     expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(2, 'world');
+    expect(uiChunkEmitter.emitTokenUsage).toHaveBeenCalledWith({
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      estimatedCostUsd: 0,
+    });
     expect(uiChunkEmitter.finish).toHaveBeenCalledTimes(1);
     expect(registerApprovalBatch).not.toHaveBeenCalled();
   });
@@ -110,6 +119,15 @@ describe('tool loop runner', () => {
     expect(registerApprovalBatch).toHaveBeenCalledWith(agentResult.toolApprovalRequests, {
       harness: conversationHarness,
       webContents,
+    });
+    expect(uiChunkEmitter.emitTokenUsage).toHaveBeenCalledWith({
+      inputTokens: 2,
+      outputTokens: 1,
+      totalTokens: 3,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      estimatedCostUsd: 0,
     });
     expect(uiChunkEmitter.finish).not.toHaveBeenCalled();
   });

@@ -1,23 +1,21 @@
 import type {
   ChatUiMessage,
-  ContextReportItem,
   SkillUsageEntry,
 } from '../../../shared/chat/message_parts';
 import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
-import type { AppConfig } from '../../../shared/types/config';
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import { translate } from '../../i18n';
 
 import {
   getAffectSignalPartData,
-  getContextReportPartData,
   getMemoryPartData,
   getSkillUsagePartData,
+  getTokenUsagePartData,
   isAffectSignalPart,
-  isContextReportPart,
   isMemoryPart,
   isObjectRecord,
   isSkillUsagePart,
+  isTokenUsagePart,
 } from '../../../shared/chat/message_parts';
 import {
   getParsedToolOutput,
@@ -84,20 +82,19 @@ export type AffectReferenceSummary = {
   }>;
 };
 
-export type ContextReferenceItem = {
-  kind: string;
-  status: string;
-  estimatedTokens: number | null;
-  charCount: number | null;
-  reason: string;
-  sourceCount: number | null;
-};
-
-export type ContextReferenceSummary = {
-  totalEstimatedTokens: number | null;
-  retainedRecentMessages: number | null;
-  compactedMessages: number | null;
-  items: ContextReferenceItem[];
+export type TokenUsageSummary = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  reasoningTokens: number | null;
+  estimatedCostUsd: number | null;
+  maxInputTokens: number | null;
+  maxOutputTokens: number | null;
+  model: string;
+  providerType: string;
+  providerId: string;
 };
 
 export type ContextUsageIndicator = {
@@ -108,15 +105,6 @@ export type ContextUsageIndicator = {
   tokenLabel: string;
   tooltip: string;
 };
-
-type ContextBudgetConfig = Pick<
-  AppConfig['memory']['context'],
-  | 'maxRecentTokens'
-  | 'maxIdentityTokens'
-  | 'maxSummaryTokens'
-  | 'maxMemoryTokens'
-  | 'maxSkillTokens'
->;
 
 const getMessageParts = (message: unknown): unknown[] =>
   isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
@@ -424,100 +412,77 @@ export const getAffectReferenceSummary = (
   };
 };
 
-export const getContextReferenceSummary = (
+export const getTokenUsageSummary = (
   message: ChatUiMessage | unknown
-): ContextReferenceSummary => {
+): TokenUsageSummary => {
   const parts = getMessageParts(message);
-  const contextPart = parts.find(part => isContextReportPart(part));
+  const usagePart = parts.find(part => isTokenUsagePart(part));
 
-  if (!contextPart) {
+  if (!usagePart) {
     return {
-      totalEstimatedTokens: null,
-      retainedRecentMessages: null,
-      compactedMessages: null,
-      items: [],
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      reasoningTokens: null,
+      estimatedCostUsd: null,
+      maxInputTokens: null,
+      maxOutputTokens: null,
+      model: '',
+      providerType: '',
+      providerId: '',
     };
   }
 
-  const contextData = getContextReportPartData(contextPart);
-  const rawBlocks = Array.isArray(contextData?.blocks) ? contextData.blocks : [];
-  const items = rawBlocks
-    .filter(
-      (entry): entry is ContextReportItem =>
-        isObjectRecord(entry) && typeof entry.kind === 'string' && typeof entry.status === 'string'
-    )
-    .map(entry => ({
-      kind: normalizeWhitespace(entry.kind),
-      status: normalizeWhitespace(entry.status),
-      estimatedTokens: toScore(entry.estimatedTokens),
-      charCount: toScore(entry.charCount),
-      reason: typeof entry.reason === 'string' ? normalizeWhitespace(entry.reason) : '',
-      sourceCount: toScore(entry.sourceCount),
-    }));
+  const usageData = getTokenUsagePartData(usagePart);
 
   return {
-    totalEstimatedTokens: toScore(contextData?.totalEstimatedTokens),
-    retainedRecentMessages: toScore(contextData?.retainedRecentMessages),
-    compactedMessages: toScore(contextData?.compactedMessages),
-    items,
+    inputTokens: toScore(usageData?.inputTokens),
+    outputTokens: toScore(usageData?.outputTokens),
+    totalTokens: toScore(usageData?.totalTokens),
+    cacheReadTokens: toScore(usageData?.cacheReadTokens),
+    cacheWriteTokens: toScore(usageData?.cacheWriteTokens),
+    reasoningTokens: toScore(usageData?.reasoningTokens),
+    estimatedCostUsd: toScore(usageData?.estimatedCostUsd),
+    maxInputTokens: toScore(usageData?.maxInputTokens),
+    maxOutputTokens: toScore(usageData?.maxOutputTokens),
+    model: typeof usageData?.model === 'string' ? normalizeWhitespace(usageData.model) : '',
+    providerType:
+      typeof usageData?.providerType === 'string' ? normalizeWhitespace(usageData.providerType) : '',
+    providerId:
+      typeof usageData?.providerId === 'string' ? normalizeWhitespace(usageData.providerId) : '',
   };
 };
 
-export const formatContextTokenCount = (tokens: number | null): string => {
+export const formatTokenCount = (tokens: number | null): string => {
   if (tokens === null || !Number.isFinite(tokens)) return '';
   return translate('chat.contextUsage.tokenCount', {
     value: Math.max(0, Math.trunc(tokens)).toLocaleString(),
   });
 };
 
-export const getContextBudgetTokens = (
-  config: Partial<ContextBudgetConfig> | null | undefined
-): number => {
-  if (!config) return 0;
-
-  return [
-    config.maxRecentTokens,
-    config.maxIdentityTokens,
-    config.maxSummaryTokens,
-    config.maxMemoryTokens,
-    config.maxSkillTokens,
-  ].reduce((sum, value) => {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-      return sum;
-    }
-    return sum + Math.trunc(value);
-  }, 0);
-};
-
-export const buildContextUsageIndicator = (
-  summary: ContextReferenceSummary,
-  config: Partial<ContextBudgetConfig> | null | undefined
+export const buildTokenUsageIndicator = (
+  summary: TokenUsageSummary
 ): ContextUsageIndicator | null => {
-  if (summary.totalEstimatedTokens === null || !Number.isFinite(summary.totalEstimatedTokens)) {
+  if (summary.inputTokens === null || !Number.isFinite(summary.inputTokens)) {
     return null;
   }
 
-  const usedTokens = Math.max(0, Math.trunc(summary.totalEstimatedTokens));
-  const budgetTokens = getContextBudgetTokens(config);
+  const usedTokens = Math.max(0, Math.trunc(summary.inputTokens));
+  const budgetTokens =
+    summary.maxInputTokens !== null && Number.isFinite(summary.maxInputTokens)
+      ? Math.max(0, Math.trunc(summary.maxInputTokens))
+      : null;
   const percent =
-    budgetTokens > 0
+    budgetTokens !== null && budgetTokens > 0
       ? Math.min(999, Math.max(0, Math.round((usedTokens / budgetTokens) * 100)))
       : null;
   const percentLabel = percent === null ? '' : `${percent}%`;
-  const tokenLabel = formatContextTokenCount(usedTokens);
-
-  const detailLines = summary.items.map(item => {
-    return translate('chat.contextUsage.detailLine', {
-      kind: item.kind,
-      status: item.status,
-      tokens:
-        item.estimatedTokens !== null ? formatContextTokenCount(item.estimatedTokens) : undefined,
-      reason: item.reason,
-    });
-  });
+  const tokenLabel = formatTokenCount(usedTokens);
 
   const tooltipLines = [
-    budgetTokens > 0
+    budgetTokens !== null && budgetTokens > 0
       ? translate('chat.contextUsage.headerWithBudget', {
           used: tokenLabel,
           budget: budgetTokens.toLocaleString(),
@@ -526,21 +491,27 @@ export const buildContextUsageIndicator = (
       : translate('chat.contextUsage.headerWithoutBudget', {
           used: tokenLabel,
         }),
-    ...(summary.retainedRecentMessages !== null
+    ...(summary.outputTokens !== null
       ? [
-          translate('chat.contextUsage.recentMessagesKept', {
-            count: Math.trunc(summary.retainedRecentMessages),
+          translate('chat.contextUsage.outputTokens', {
+            tokens: formatTokenCount(summary.outputTokens),
           }),
         ]
       : []),
-    ...(summary.compactedMessages !== null && summary.compactedMessages > 0
+    ...(summary.totalTokens !== null
       ? [
-          translate('chat.contextUsage.compactedMessages', {
-            count: Math.trunc(summary.compactedMessages),
+          translate('chat.contextUsage.totalTokens', {
+            tokens: formatTokenCount(summary.totalTokens),
           }),
         ]
       : []),
-    ...detailLines,
+    ...(summary.model
+      ? [
+          translate('chat.contextUsage.model', {
+            model: summary.model,
+          }),
+        ]
+      : []),
   ];
 
   return {

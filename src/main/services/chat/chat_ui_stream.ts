@@ -3,6 +3,7 @@ import type {
   AffectSignalPartData,
   ChatUiMessageChunk,
   SkillUsageEntry,
+  TokenUsagePartData,
 } from '../../../shared/chat/message_parts';
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
@@ -243,20 +244,42 @@ export const createUiChunkEmitter = (
         data,
       });
     },
-    emitContextReport: payload => {
+    emitTokenUsage: payload => {
       if (terminated) return;
       ensureStarted();
+      const data: TokenUsagePartData = {
+        ...(typeof payload?.inputTokens === 'number' ? { inputTokens: payload.inputTokens } : {}),
+        ...(typeof payload?.outputTokens === 'number'
+          ? { outputTokens: payload.outputTokens }
+          : {}),
+        ...(typeof payload?.totalTokens === 'number' ? { totalTokens: payload.totalTokens } : {}),
+        ...(typeof payload?.cacheReadTokens === 'number'
+          ? { cacheReadTokens: payload.cacheReadTokens }
+          : {}),
+        ...(typeof payload?.cacheWriteTokens === 'number'
+          ? { cacheWriteTokens: payload.cacheWriteTokens }
+          : {}),
+        ...(typeof payload?.reasoningTokens === 'number'
+          ? { reasoningTokens: payload.reasoningTokens }
+          : {}),
+        ...(typeof payload?.estimatedCostUsd === 'number'
+          ? { estimatedCostUsd: payload.estimatedCostUsd }
+          : {}),
+        ...(typeof payload?.maxInputTokens === 'number'
+          ? { maxInputTokens: payload.maxInputTokens }
+          : {}),
+        ...(typeof payload?.maxOutputTokens === 'number'
+          ? { maxOutputTokens: payload.maxOutputTokens }
+          : {}),
+        ...(typeof payload?.model === 'string' ? { model: payload.model } : {}),
+        ...(typeof payload?.providerType === 'string'
+          ? { providerType: payload.providerType }
+          : {}),
+        ...(typeof payload?.providerId === 'string' ? { providerId: payload.providerId } : {}),
+      };
       emitChunk({
-        type: 'data-context-report',
-        data: {
-          totalEstimatedTokens:
-            typeof payload?.totalEstimatedTokens === 'number' ? payload.totalEstimatedTokens : 0,
-          retainedRecentMessages:
-            typeof payload?.retainedRecentMessages === 'number' ? payload.retainedRecentMessages : 0,
-          compactedMessages:
-            typeof payload?.compactedMessages === 'number' ? payload.compactedMessages : 0,
-          blocks: Array.isArray(payload?.blocks) ? payload.blocks : [],
-        },
+        type: 'data-token-usage',
+        data,
       });
     },
     finish: () => {

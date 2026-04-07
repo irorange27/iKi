@@ -15,6 +15,16 @@ export interface ProviderModelOptions {
 
 export type ProviderModelOptionsMap = Record<string, ProviderModelOptions>;
 
+export interface ProviderModelDescriptor extends ProviderModelOptions {
+  id: string;
+  source?: 'models.dev' | 'provider';
+}
+
+export type ModelCapabilitySnapshot = Pick<
+  ProviderModelOptions,
+  'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
+>;
+
 export interface Provider {
   id: string;
   name: string;

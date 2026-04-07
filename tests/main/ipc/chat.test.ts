@@ -19,7 +19,15 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
     createMessage: vi.fn((message: Record<string, unknown>) => ({ id: 'message_new', ...message })),
     updateMessage: vi.fn((id: string, message: Record<string, unknown>) => ({ id, ...message })),
     deleteMessage: vi.fn((id: string) => ({ success: true, id })),
-    getModels: vi.fn(async (providerType: string) => [`${providerType}-model`]),
+    getModels: vi.fn(async (providerType: string) => [
+      {
+        id: `${providerType}-model`,
+        displayName: `${providerType}-model`,
+        contextWindow: null,
+        maxInputTokens: null,
+        maxOutputTokens: null,
+      },
+    ]),
     isProviderConfigured: vi.fn((providerType: string) => providerType === 'openai'),
     stopStream: vi.fn((senderId: number) => ({ success: true, senderId })),
     send: vi.fn(async (options: Record<string, unknown>) => ({ success: true, options })),
@@ -138,7 +146,15 @@ describe('chat IPC', () => {
       id: 'message_1',
     });
 
-    expect(await ipcHandlers.get('chat:getModels')?.(null, 'openai')).toEqual(['openai-model']);
+    expect(await ipcHandlers.get('chat:getModels')?.(null, 'openai')).toEqual([
+      {
+        id: 'openai-model',
+        displayName: 'openai-model',
+        contextWindow: null,
+        maxInputTokens: null,
+        maxOutputTokens: null,
+      },
+    ]);
     expect(await ipcHandlers.get('chat:isProviderConfigured')?.(null, 'openai')).toBe(true);
     expect(await ipcHandlers.get('chat:stop-stream')?.(event)).toEqual({ success: true, senderId: 77 });
     expect(await ipcHandlers.get('chat:send')?.(null, sendPayload)).toEqual({
@@ -172,7 +188,7 @@ describe('chat IPC', () => {
     expect(chatServiceMock.createMessage).toHaveBeenCalledWith(messagePayload);
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
     expect(chatServiceMock.deleteMessage).toHaveBeenCalledWith('message_1');
-    expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai');
+    expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai', undefined);
     expect(chatServiceMock.isProviderConfigured).toHaveBeenCalledWith('openai', undefined);
     expect(chatServiceMock.stopStream).toHaveBeenCalledWith(77);
     expect(chatServiceMock.send).toHaveBeenCalledWith(sendPayload);

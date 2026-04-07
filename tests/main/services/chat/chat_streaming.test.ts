@@ -277,7 +277,7 @@ beforeEach(() => {
     emitSkillUsage: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
     emitAffectSignal: vi.fn(),
-    emitContextReport: vi.fn(),
+    emitTokenUsage: vi.fn(),
     finish: vi.fn(),
     abort: vi.fn(),
     error: vi.fn(),
@@ -290,11 +290,19 @@ describe('createChatStreaming', () => {
 
     const { streaming } = createDeps();
 
-    await expect(streaming.getModels('minimax')).resolves.toEqual(['MiniMax-M2']);
+    await expect(streaming.getModels('minimax')).resolves.toEqual([
+      {
+        id: 'MiniMax-M2',
+        displayName: 'MiniMax-M2',
+        contextWindow: null,
+        maxInputTokens: null,
+        maxOutputTokens: null,
+      },
+    ]);
     expect(getMinimaxModelsMock).toHaveBeenCalledTimes(1);
   });
 
-  it('stream() emits skill usage citations before rendering the response', async () => {
+  it('stream() emits skill usage citations and reports real token usage before rendering the response', async () => {
     assembleContextMock.mockResolvedValue({
       messages: [{ role: 'user', content: 'hello' }],
       skillMode: 'auto',
@@ -311,6 +319,21 @@ describe('createChatStreaming', () => {
         retainedRecentMessages: 1,
         compactedMessages: 0,
         blocks: [{ kind: 'skills', status: 'included', estimatedTokens: 120, charCount: 480 }],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 700,
+      },
+    });
+    resolveModelCapabilityMock.mockResolvedValueOnce({
+      maxInputTokens: 128000,
+      contextWindow: 128000,
+    });
+    toolLoopStreamMock.mockResolvedValueOnce({
+      awaitingApproval: false,
+      usage: {
+        inputTokens: 912,
+        outputTokens: 48,
+        totalTokens: 960,
       },
     });
 
@@ -341,16 +364,66 @@ describe('createChatStreaming', () => {
         },
       ],
     });
-    expect(createUiChunkEmitterMock.mock.results[0]?.value.emitContextReport).toHaveBeenCalledWith({
-      totalEstimatedTokens: 120,
-      retainedRecentMessages: 1,
-      compactedMessages: 0,
-      blocks: [{ kind: 'skills', status: 'included', estimatedTokens: 120, charCount: 480 }],
-    });
+    expect(toolLoopStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokenUsageContext: {
+          maxInputTokens: 128000,
+          maxOutputTokens: 700,
+          model: 'gpt-4o-mini',
+          providerType: 'openai',
+        },
+      })
+    );
     const runner = createChatConversationRunnerMock.mock.results[0]?.value;
     expect(runner?.registerTool).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'load_skill',
+      })
+    );
+  });
+
+  it('stream() prefers the renderer-provided model capability snapshot for token usage context', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 0,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 700,
+      },
+    });
+    resolveModelCapabilityMock.mockResolvedValueOnce(null);
+
+    const { streaming } = createDeps();
+    const webContents = { id: 11, send: vi.fn() };
+
+    await streaming.stream(webContents, {
+      providerType: 'openai',
+      providerId: 'provider_openai',
+      model: 'gpt-4o-mini',
+      modelCapability: {
+        contextWindow: 200000,
+        maxInputTokens: 200000,
+        maxOutputTokens: 5000,
+      },
+      messages: [{ role: 'user', content: 'hello' }],
+      threadId: 'thread_snapshot',
+    });
+
+    expect(toolLoopStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokenUsageContext: {
+          maxInputTokens: 200000,
+          maxOutputTokens: 5000,
+          model: 'gpt-4o-mini',
+          providerType: 'openai',
+          providerId: 'provider_openai',
+        },
       })
     );
   });
@@ -794,7 +867,7 @@ describe('createChatStreaming', () => {
       emitSkillUsage: vi.fn(),
       emitMemoryRetrieval: vi.fn(),
       emitAffectSignal: vi.fn(),
-      emitContextReport: vi.fn(),
+      emitTokenUsage: vi.fn(),
       finish: vi.fn(),
       abort: vi.fn(),
       error: vi.fn(),

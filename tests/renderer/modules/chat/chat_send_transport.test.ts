@@ -39,6 +39,11 @@ describe('chat_send_transport', () => {
       providerReady: {
         provider,
         model: 'gpt-4.1',
+        modelCapability: {
+          contextWindow: 128000,
+          maxInputTokens: 128000,
+          maxOutputTokens: 16384,
+        },
       },
       preparedMessageSend: {
         threadId: 'thread_1',
@@ -61,6 +66,11 @@ describe('chat_send_transport', () => {
       providerType: 'openai',
       providerId: 'openai',
       model: 'gpt-4.1',
+      modelCapability: {
+        contextWindow: 128000,
+        maxInputTokens: 128000,
+        maxOutputTokens: 16384,
+      },
       messages: [
         {
           id: 'user_1',

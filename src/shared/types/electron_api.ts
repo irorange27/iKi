@@ -6,7 +6,12 @@ import type {
   DaemonLogsInfo,
   DaemonStatusInfo,
 } from './config';
-import type { Provider, ProviderUpdatedEvent } from './provider';
+import type {
+  ModelCapabilitySnapshot,
+  Provider,
+  ProviderModelDescriptor,
+  ProviderUpdatedEvent,
+} from './provider';
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
 import type {
@@ -65,6 +70,7 @@ export type ChatInvocationOptions = {
   providerType: string;
   providerId?: string;
   model: string;
+  modelCapability?: ModelCapabilitySnapshot;
   messages: unknown[];
   tools?: string[];
   mcpServerIds?: string[];
@@ -156,7 +162,7 @@ export interface ElectronApi {
     onUpdated: (callback: (event: ProviderUpdatedEvent) => void) => () => void;
   };
   chat: {
-    getModels: (providerType: string) => Promise<string[]>;
+    getModels: (providerType: string, providerId?: string) => Promise<ProviderModelDescriptor[]>;
     isProviderConfigured: (providerType: string, providerId?: string) => Promise<boolean>;
     send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;

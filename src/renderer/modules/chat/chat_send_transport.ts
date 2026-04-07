@@ -1,12 +1,13 @@
 import type { ChatInvocationOptions } from '../../../shared/types/electron_api';
 import { clonePlainData } from '../../../shared/utils/clone';
-import type { Provider } from '../../../shared/types/provider';
+import type { ModelCapabilitySnapshot, Provider } from '../../../shared/types/provider';
 
 import type { PreparedMessageSend } from './chat_prepare_send';
 
 export type ComposerReadyProvider = {
   provider: Provider;
   model: string;
+  modelCapability?: ModelCapabilitySnapshot | null;
 };
 
 export const createChatComposerStreamPayload = (params: {
@@ -28,6 +29,12 @@ export const createChatComposerStreamPayload = (params: {
     providerType: params.providerReady.provider.type,
     providerId: params.providerReady.provider.id,
     model: params.providerReady.model,
+    ...(params.providerReady.modelCapability &&
+    (typeof params.providerReady.modelCapability.maxInputTokens === 'number' ||
+      typeof params.providerReady.modelCapability.contextWindow === 'number' ||
+      typeof params.providerReady.modelCapability.maxOutputTokens === 'number')
+      ? { modelCapability: clonePlainData(params.providerReady.modelCapability) }
+      : {}),
     messages: transportMessages,
     tools: params.isAutoToolMode
       ? undefined

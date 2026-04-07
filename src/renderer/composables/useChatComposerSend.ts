@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue';
 
 import type { ElectronApi } from '../../shared/types/electron_api';
-import type { Provider } from '../../shared/types/provider';
+import type { ModelCapabilitySnapshot, Provider } from '../../shared/types/provider';
 import { getErrorMessage } from '../../shared/utils/errors';
 import { createLogger } from '../logger';
 import { createChatComposerStreamPayload } from '../modules/chat/chat_send_transport';
@@ -17,6 +17,7 @@ export type ComposerProviderReadyResult =
       ok: true;
       provider: Provider;
       model: string;
+      modelCapability?: ModelCapabilitySnapshot | null;
     }
   | {
       ok: false;
@@ -118,6 +119,7 @@ export const useChatComposerSend = (deps: {
     const readyProvider = {
       provider: providerReady.provider,
       model: providerReady.model,
+      modelCapability: providerReady.modelCapability ?? null,
     };
 
     const userMessage = deps.message.value.trim();

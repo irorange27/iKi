@@ -68,11 +68,27 @@ export type AffectSignalPartData = {
   windowMinutes?: number;
 };
 
+export type TokenUsagePartData = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  reasoningTokens?: number;
+  estimatedCostUsd?: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  model?: string;
+  providerType?: string;
+  providerId?: string;
+};
+
 export type ChatUiDataTypes = {
   'memory-retrieval': MemoryPartData;
   'skill-usage': SkillUsagePartData;
   'context-report': ContextReportPartData;
   'affect-signal': AffectSignalPartData;
+  'token-usage': TokenUsagePartData;
 };
 
 export type ChatUiMessage = UIMessage<unknown, ChatUiDataTypes>;
@@ -83,6 +99,7 @@ export type MemoryPart = Extract<UiMessagePart, { type: 'data-memory-retrieval' 
 export type SkillUsagePart = Extract<UiMessagePart, { type: 'data-skill-usage' }>;
 export type ContextReportPart = Extract<UiMessagePart, { type: 'data-context-report' }>;
 export type AffectSignalPart = Extract<UiMessagePart, { type: 'data-affect-signal' }>;
+export type TokenUsagePart = Extract<UiMessagePart, { type: 'data-token-usage' }>;
 export type DynamicToolPart = Extract<UiMessagePart, { type: 'dynamic-tool' }>;
 
 type LegacyMemoryPart = {
@@ -122,11 +139,28 @@ type LegacyAffectSignalPart = {
   windowMinutes?: number;
 };
 
+type LegacyTokenUsagePart = {
+  type: 'token-usage';
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  reasoningTokens?: number;
+  estimatedCostUsd?: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  model?: string;
+  providerType?: string;
+  providerId?: string;
+};
+
 type LegacyChatUiMetadataPart =
   | LegacyMemoryPart
   | LegacySkillUsagePart
   | LegacyContextReportPart
-  | LegacyAffectSignalPart;
+  | LegacyAffectSignalPart
+  | LegacyTokenUsagePart;
 
 export type ToolApproval = {
   id: string;
@@ -206,7 +240,8 @@ export type ChatUiMetadataPart =
   | MemoryPart
   | SkillUsagePart
   | ContextReportPart
-  | AffectSignalPart;
+  | AffectSignalPart
+  | TokenUsagePart;
 
 type ChatUiMetadataPartType = ChatUiMetadataPart['type'];
 type LegacyChatUiMetadataPartType = LegacyChatUiMetadataPart['type'];
@@ -216,6 +251,7 @@ const CHAT_UI_METADATA_PART_TYPES = new Set<ChatUiMetadataPartType>([
   'data-skill-usage',
   'data-context-report',
   'data-affect-signal',
+  'data-token-usage',
 ]);
 
 const LEGACY_CHAT_UI_METADATA_PART_TYPES = new Set<LegacyChatUiMetadataPartType>([
@@ -223,6 +259,7 @@ const LEGACY_CHAT_UI_METADATA_PART_TYPES = new Set<LegacyChatUiMetadataPartType>
   'skill-usage',
   'context-report',
   'affect-signal',
+  'token-usage',
 ]);
 
 export const createMemoryPart = (data: MemoryPartData): MemoryPart => ({
@@ -245,8 +282,16 @@ export const createAffectSignalPart = (data: AffectSignalPartData): AffectSignal
   data,
 });
 
+export const createTokenUsagePart = (data: TokenUsagePartData): TokenUsagePart => ({
+  type: 'data-token-usage',
+  data,
+});
+
 export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
+
+export const isDataPart = (part: unknown): boolean =>
+  isObjectRecord(part) && typeof part.type === 'string' && part.type.startsWith('data-');
 
 export const isMemoryPart = (part: unknown): part is MemoryPart =>
   isObjectRecord(part) && part.type === 'data-memory-retrieval';
@@ -260,6 +305,9 @@ export const isContextReportPart = (part: unknown): part is ContextReportPart =>
 export const isAffectSignalPart = (part: unknown): part is AffectSignalPart =>
   isObjectRecord(part) && part.type === 'data-affect-signal';
 
+export const isTokenUsagePart = (part: unknown): part is TokenUsagePart =>
+  isObjectRecord(part) && part.type === 'data-token-usage';
+
 export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
   isObjectRecord(part) &&
   part.type === 'dynamic-tool' &&
@@ -272,6 +320,11 @@ export const isChatUiMetadataPart = (
   isObjectRecord(part) &&
   typeof part.type === 'string' &&
   CHAT_UI_METADATA_PART_TYPES.has(part.type as ChatUiMetadataPartType);
+
+export const extractTextFromMessageParts = (parts: unknown): string => {
+  if (!Array.isArray(parts)) return '';
+  return parts.filter(isTextPart).map(part => part.text).join('');
+};
 
 export const getMemoryPartData = (part: unknown): MemoryPartData | null => {
   if (!isMemoryPart(part)) return null;
@@ -293,6 +346,11 @@ export const getAffectSignalPartData = (part: unknown): AffectSignalPartData | n
   return isObjectRecord(part.data) ? (part.data as AffectSignalPartData) : {};
 };
 
+export const getTokenUsagePartData = (part: unknown): TokenUsagePartData | null => {
+  if (!isTokenUsagePart(part)) return null;
+  return isObjectRecord(part.data) ? (part.data as TokenUsagePartData) : {};
+};
+
 export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart | null => {
   if (isMemoryPart(part)) {
     return createMemoryPart(getMemoryPartData(part) ?? {});
@@ -308,6 +366,10 @@ export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart |
 
   if (isAffectSignalPart(part)) {
     return createAffectSignalPart(getAffectSignalPartData(part) ?? {});
+  }
+
+  if (isTokenUsagePart(part)) {
+    return createTokenUsagePart(getTokenUsagePartData(part) ?? {});
   }
 
   if (
@@ -361,6 +423,35 @@ export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart |
         ...(typeof part.endAt === 'string' ? { endAt: part.endAt } : {}),
         ...(typeof part.ageMinutes === 'number' ? { ageMinutes: part.ageMinutes } : {}),
         ...(typeof part.windowMinutes === 'number' ? { windowMinutes: part.windowMinutes } : {}),
+      });
+    }
+
+    if (part.type === 'token-usage') {
+      return createTokenUsagePart({
+        ...(typeof part.inputTokens === 'number' ? { inputTokens: part.inputTokens } : {}),
+        ...(typeof part.outputTokens === 'number' ? { outputTokens: part.outputTokens } : {}),
+        ...(typeof part.totalTokens === 'number' ? { totalTokens: part.totalTokens } : {}),
+        ...(typeof part.cacheReadTokens === 'number'
+          ? { cacheReadTokens: part.cacheReadTokens }
+          : {}),
+        ...(typeof part.cacheWriteTokens === 'number'
+          ? { cacheWriteTokens: part.cacheWriteTokens }
+          : {}),
+        ...(typeof part.reasoningTokens === 'number'
+          ? { reasoningTokens: part.reasoningTokens }
+          : {}),
+        ...(typeof part.estimatedCostUsd === 'number'
+          ? { estimatedCostUsd: part.estimatedCostUsd }
+          : {}),
+        ...(typeof part.maxInputTokens === 'number'
+          ? { maxInputTokens: part.maxInputTokens }
+          : {}),
+        ...(typeof part.maxOutputTokens === 'number'
+          ? { maxOutputTokens: part.maxOutputTokens }
+          : {}),
+        ...(typeof part.model === 'string' ? { model: part.model } : {}),
+        ...(typeof part.providerType === 'string' ? { providerType: part.providerType } : {}),
+        ...(typeof part.providerId === 'string' ? { providerId: part.providerId } : {}),
       });
     }
   }

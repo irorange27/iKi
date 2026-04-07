@@ -1,7 +1,7 @@
 <template>
   <div class="chat-message-parts" :class="message.role">
     <div
-      v-for="(part, partIndex) in message.parts"
+      v-for="(part, partIndex) in getRenderableParts(message.parts)"
       :key="getPartRenderKey(part, partIndex)"
       class="message-part"
     >
@@ -11,11 +11,6 @@
       <div v-else-if="isTextPart(part)" class="message-text markdown-content">
         <VueMarkdown :source="getTextPartContent(part)" :plugins="markdownPlugins" />
       </div>
-      <div
-        v-else-if="shouldHideReferencePart(part)"
-        class="reference-part-hidden"
-        aria-hidden="true"
-      ></div>
       <ChatToolPart
         v-else
         :approval-processing="approvalProcessing(part)"
@@ -33,13 +28,10 @@ import VueMarkdown from 'vue-markdown-render';
 
 import {
   type ChatUiMessage,
-  isAffectSignalPart,
-  isContextReportPart,
-  isMemoryPart,
-  isSkillUsagePart,
+  isDataPart,
+  isTextPart,
 } from '../../../shared/chat/message_parts';
 import { isObjectRecord } from '../../../shared/utils/guards';
-import { isTextPart } from '../../modules/chat/ui_message_text';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
 import ChatToolPart from './ChatToolPart.vue';
 
@@ -65,11 +57,8 @@ const emit = defineEmits<{
   ): void;
 }>();
 
-const shouldHideReferencePart = (part: unknown): boolean =>
-  isSkillUsagePart(part) ||
-  isMemoryPart(part) ||
-  isContextReportPart(part) ||
-  isAffectSignalPart(part);
+const getRenderableParts = (parts: ChatUiMessage['parts']): ChatUiMessage['parts'] =>
+  parts.filter(part => !isDataPart(part));
 
 const getPartType = (part: unknown): string =>
   isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
@@ -99,10 +88,6 @@ const isStreamingTextPart = (part: unknown): boolean => {
 <style scoped>
 .chat-message-parts {
   min-width: 0;
-}
-
-.reference-part-hidden {
-  display: none;
 }
 
 .message-text {

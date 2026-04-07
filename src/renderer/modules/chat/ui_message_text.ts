@@ -1,15 +1,14 @@
-import type { ChatUiMessage, TextPart } from '../../../shared/chat/message_parts';
-import { isObjectRecord } from '../../../shared/chat/tool_parts';
-
-export const isTextPart = (part: unknown): part is TextPart =>
-  isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
+import {
+  extractTextFromMessageParts,
+  isObjectRecord,
+  isTextPart,
+  type ChatUiMessage,
+  type TextPart,
+} from '../../../shared/chat/message_parts';
 
 export const extractTextFromMessage = (message: ChatUiMessage | undefined): string => {
   if (!message || !Array.isArray(message.parts)) return '';
-  return message.parts
-    .filter(isTextPart)
-    .map(part => part.text)
-    .join('');
+  return extractTextFromMessageParts(message.parts);
 };
 
 export const upsertTextIntoMessageParts = (

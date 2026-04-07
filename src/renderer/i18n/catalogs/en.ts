@@ -178,14 +178,9 @@ export const en = defineCatalog({
   'chat.contextUsage.headerWithBudget': ({ used, budget, percent }) =>
     `Context usage: ${asText(used)} / ${asText(budget)} tok${asText(percent) ? ` (${asText(percent)})` : ''}`,
   'chat.contextUsage.headerWithoutBudget': ({ used }) => `Context usage: ${asText(used)}`,
-  'chat.contextUsage.recentMessagesKept': ({ count }) => `Recent messages kept: ${asCount(count)}`,
-  'chat.contextUsage.compactedMessages': ({ count }) => `Compacted messages: ${asCount(count)}`,
-  'chat.contextUsage.detailLine': ({ kind, status, tokens, reason }) => {
-    const parts = [`${asText(kind)}: ${asText(status)}`];
-    if (asText(tokens)) parts.push(asText(tokens));
-    if (asText(reason)) parts.push(asText(reason));
-    return parts.join(' · ');
-  },
+  'chat.contextUsage.outputTokens': ({ tokens }) => `Output tokens: ${asText(tokens)}`,
+  'chat.contextUsage.totalTokens': ({ tokens }) => `Total tokens: ${asText(tokens)}`,
+  'chat.contextUsage.model': ({ model }) => `Model: ${asText(model)}`,
   'chat.tool.approvalRequest': 'Tool Approval Request',
   'chat.tool.approve': 'Approve',
   'chat.tool.reject': 'Reject',

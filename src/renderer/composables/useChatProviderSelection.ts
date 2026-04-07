@@ -1,9 +1,17 @@
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import type { ElectronApi } from '../../shared/types/electron_api';
-import type { Provider } from '../../shared/types/provider';
+import type {
+  ModelCapabilitySnapshot,
+  Provider,
+  ProviderModelDescriptor,
+} from '../../shared/types/provider';
 import { createLogger } from '../logger';
-import { parseModelList } from '../../shared/utils/provider_models';
+import {
+  getProviderModelOptions,
+  parseModelList,
+  parseProviderModelOptionsMap,
+} from '../../shared/utils/provider_models';
 import { translate } from '../i18n';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
 
@@ -80,6 +88,100 @@ export const useChatProviderSelection = (deps: {
   const selectedModel = ref('');
   const availableProviders = ref<Provider[]>([]);
   const preferredProviderId = ref<string | null>(null);
+  const providerModelCatalog = ref<Record<string, ProviderModelDescriptor[]>>({});
+  const providerModelLoads = new Map<string, Promise<void>>();
+
+  const toCapabilitySnapshot = (
+    descriptor: ProviderModelDescriptor | null | undefined
+  ): ModelCapabilitySnapshot | null => {
+    if (!descriptor) return null;
+
+    const contextWindow =
+      typeof descriptor.contextWindow === 'number' ? descriptor.contextWindow : null;
+    const maxInputTokens =
+      typeof descriptor.maxInputTokens === 'number'
+        ? descriptor.maxInputTokens
+        : contextWindow;
+    const maxOutputTokens =
+      typeof descriptor.maxOutputTokens === 'number' ? descriptor.maxOutputTokens : null;
+
+    if (contextWindow === null && maxInputTokens === null && maxOutputTokens === null) {
+      return null;
+    }
+
+    return {
+      ...(contextWindow !== null ? { contextWindow } : {}),
+      ...(maxInputTokens !== null ? { maxInputTokens } : {}),
+      ...(maxOutputTokens !== null ? { maxOutputTokens } : {}),
+    };
+  };
+
+  const getStoredModelDescriptor = (
+    provider: Provider | null,
+    modelId: string
+  ): ProviderModelDescriptor | null => {
+    if (!provider) return null;
+    const trimmedModelId = modelId.trim();
+    if (!trimmedModelId) return null;
+
+    const options = getProviderModelOptions(
+      parseProviderModelOptionsMap(provider.model_options),
+      trimmedModelId
+    );
+    if (!options) return null;
+
+    return {
+      id: trimmedModelId,
+      displayName: options.displayName ?? trimmedModelId,
+      contextWindow: options.contextWindow ?? null,
+      maxInputTokens: options.maxInputTokens ?? options.contextWindow ?? null,
+      maxOutputTokens: options.maxOutputTokens ?? null,
+      ...(options.supportsToolCalls !== undefined
+        ? { supportsToolCalls: options.supportsToolCalls ?? null }
+        : {}),
+      ...(options.supportsReasoning !== undefined
+        ? { supportsReasoning: options.supportsReasoning ?? null }
+        : {}),
+      ...(options.supportsVision !== undefined ? { supportsVision: options.supportsVision ?? null } : {}),
+      source: 'provider',
+    };
+  };
+
+  const loadProviderModels = async (provider: Provider | null) => {
+    if (!provider) return;
+
+    const existingLoad = providerModelLoads.get(provider.id);
+    if (existingLoad) {
+      await existingLoad;
+      return;
+    }
+
+    const loadPromise = (async () => {
+      try {
+        const descriptors = await deps.electronAPI.chat.getModels(provider.type, provider.id);
+        providerModelCatalog.value = {
+          ...providerModelCatalog.value,
+          [provider.id]: Array.isArray(descriptors) ? descriptors : [],
+        };
+      } catch (error) {
+        providerSelectionLogger.event({
+          level: 'warn',
+          event: 'chat.models.load',
+          outcome: 'failed',
+          error,
+          entity: {
+            provider_id: provider.id,
+            provider_type: provider.type,
+          },
+        });
+      } finally {
+        providerModelLoads.delete(provider.id);
+      }
+    })();
+
+    providerModelLoads.set(provider.id, loadPromise);
+    await loadPromise;
+  };
 
   const applyResolvedSelection = (
     preferredModel?: string | null,
@@ -98,6 +200,23 @@ export const useChatProviderSelection = (deps: {
     selectedModel.value = resolved.selectedModel;
   };
 
+  const selectedModelDescriptor = computed<ProviderModelDescriptor | null>(() => {
+    const provider = selectedProvider.value;
+    const modelId = selectedModel.value.trim();
+    if (!provider || !modelId) return null;
+
+    const fetchedModels = providerModelCatalog.value[provider.id];
+    const fetchedModel = Array.isArray(fetchedModels)
+      ? fetchedModels.find(model => model.id === modelId) || null
+      : null;
+
+    return fetchedModel || getStoredModelDescriptor(provider, modelId);
+  });
+
+  const selectedModelCapability = computed<ModelCapabilitySnapshot | null>(() =>
+    toCapabilitySnapshot(selectedModelDescriptor.value)
+  );
+
   const loadAvailableProviders = async (
     preferredModel?: string | null,
     nextPreferredProviderId?: string | null
@@ -111,6 +230,7 @@ export const useChatProviderSelection = (deps: {
         preferredProviderId.value = nextPreferredProviderId;
       }
       applyResolvedSelection(preferredModel, preferredProviderId.value);
+      void loadProviderModels(selectedProvider.value);
     } catch (error) {
       providerSelectionLogger.event({
         level: 'error',
@@ -122,6 +242,7 @@ export const useChatProviderSelection = (deps: {
       selectedProvider.value = null;
       selectedModel.value = '';
       preferredProviderId.value = null;
+      providerModelCatalog.value = {};
     }
   };
 
@@ -140,6 +261,7 @@ export const useChatProviderSelection = (deps: {
     selectedProvider.value = payload.provider;
     selectedModel.value = payload.model;
     preferredProviderId.value = payload.provider.id;
+    void loadProviderModels(payload.provider);
   };
 
   const ensureProviderReady = async (): Promise<
@@ -147,6 +269,7 @@ export const useChatProviderSelection = (deps: {
         ok: true;
         provider: Provider;
         model: string;
+        modelCapability?: ModelCapabilitySnapshot | null;
       }
     | {
         ok: false;
@@ -201,12 +324,14 @@ export const useChatProviderSelection = (deps: {
       ok: true,
       provider: selectedProvider.value,
       model: selectedModel.value,
+      modelCapability: selectedModelCapability.value,
     };
   };
 
   return {
     selectedProvider,
     selectedModel,
+    selectedModelCapability,
     availableProviders,
     loadAvailableProviders,
     selectProviderModel,

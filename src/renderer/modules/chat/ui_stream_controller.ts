@@ -38,10 +38,10 @@ const isAffectSignalChunk = (
 ): chunk is Extract<ChatUiMessageChunk, { type: 'data-affect-signal' }> =>
   chunk.type === 'data-affect-signal' && isObjectRecord(chunk.data);
 
-const isContextReportChunk = (
+const isTokenUsageChunk = (
   chunk: Record<string, unknown>
-): chunk is Extract<ChatUiMessageChunk, { type: 'data-context-report' }> =>
-  chunk.type === 'data-context-report' && isObjectRecord(chunk.data);
+): chunk is Extract<ChatUiMessageChunk, { type: 'data-token-usage' }> =>
+  chunk.type === 'data-token-usage' && isObjectRecord(chunk.data);
 
 const isToolChunk = (
   chunk: Record<string, unknown>
@@ -291,8 +291,8 @@ export const createChatUiStreamController = (deps: {
       return;
     }
 
-    if (isContextReportChunk(chunk)) {
-      await dispatch({ type: 'context_chunk', chunk: chunk.data });
+    if (isTokenUsageChunk(chunk)) {
+      await dispatch({ type: 'usage_chunk', chunk: chunk.data });
       return;
     }
 

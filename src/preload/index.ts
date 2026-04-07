@@ -81,7 +81,8 @@ const electronApi: ElectronApi = {
       subscribe('providers:updated', callback),
   },
   chat: {
-    getModels: (providerType: string) => ipcRenderer.invoke('chat:getModels', providerType),
+    getModels: (providerType: string, providerId?: string) =>
+      ipcRenderer.invoke('chat:getModels', providerType, providerId),
     isProviderConfigured: (providerType: string, providerId?: string) =>
       ipcRenderer.invoke('chat:isProviderConfigured', providerType, providerId),
     send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),

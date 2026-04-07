@@ -11,6 +11,7 @@ import {
   type MemoryEmbeddingFingerprint,
   type MemoryEmbeddingRuntime,
 } from '../memory/embedding';
+import { extractTextFromMessageParts } from '../../shared/chat/message_parts';
 import { createPrefixedId } from '../../shared/utils/id';
 import { toIsoNow } from '../../shared/utils/text';
 
@@ -321,17 +322,14 @@ export const extractTextFromMessageJson = (
   try {
     const parsed = JSON.parse(messageJson) as {
       role?: string;
-      parts?: Array<{ type?: string; text?: string }>;
+      parts?: unknown[];
       content?: string;
     };
 
     if (!parsed || typeof parsed !== 'object' || typeof parsed.role !== 'string') return null;
 
     if (Array.isArray(parsed.parts)) {
-      const content = parsed.parts
-        .filter(part => part && part.type === 'text' && typeof part.text === 'string')
-        .map(part => part.text as string)
-        .join('');
+      const content = extractTextFromMessageParts(parsed.parts);
       return { role: parsed.role, content };
     }
 

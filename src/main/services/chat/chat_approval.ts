@@ -122,6 +122,7 @@ export const createChatApproval = (deps: {
         provider_id: recoveryContext.providerId ?? null,
         model: recoveryContext.model,
         system_prompt: recoveryContext.systemPrompt,
+        max_input_tokens: recoveryContext.maxInputTokens ?? null,
         max_output_tokens: recoveryContext.maxOutputTokens ?? null,
         max_iterations: recoveryContext.maxIterations ?? null,
         enabled_tools: JSON.stringify(recoveryContext.enabledTools),
@@ -357,6 +358,9 @@ export const createChatApproval = (deps: {
           : {}),
         model: approvalSession.model,
         systemPrompt: approvalSession.system_prompt,
+        ...(typeof approvalSession.max_input_tokens === 'number'
+          ? { maxInputTokens: approvalSession.max_input_tokens }
+          : {}),
         ...(typeof approvalSession.max_output_tokens === 'number'
           ? { maxOutputTokens: approvalSession.max_output_tokens }
           : {}),
@@ -485,6 +489,21 @@ export const createChatApproval = (deps: {
         },
         abortSignal: streamState.abortController.signal,
         uiChunkEmitter,
+        tokenUsageContext: {
+          ...(typeof nextApprovalContext?.maxInputTokens === 'number'
+            ? { maxInputTokens: nextApprovalContext.maxInputTokens }
+            : {}),
+          ...(typeof nextApprovalContext?.maxOutputTokens === 'number'
+            ? { maxOutputTokens: nextApprovalContext.maxOutputTokens }
+            : {}),
+          ...(nextApprovalContext?.model ? { model: nextApprovalContext.model } : {}),
+          ...(nextApprovalContext?.providerType
+            ? { providerType: nextApprovalContext.providerType }
+            : {}),
+          ...(nextApprovalContext?.providerId
+            ? { providerId: nextApprovalContext.providerId }
+            : {}),
+        },
       });
       if (!streamResult.cancelled && nextApprovalContext) {
         deps.usage.recordUsageEvent({

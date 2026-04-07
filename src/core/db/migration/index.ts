@@ -32,6 +32,7 @@ import { migration as migration030RenameIdentityOwnerRoleField } from './030_ren
 import { migration as migration031DropPresenceTables } from './031_drop_presence_tables';
 import { migration as migration032RepairIdentityProfileForeignKeys } from './032_repair_identity_profile_foreign_keys';
 import { migration as migration033AddChatToolApprovalProviderId } from './033_add_chat_tool_approval_provider_id';
+import { migration as migration034AddChatToolApprovalMaxInputTokens } from './034_add_chat_tool_approval_max_input_tokens';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -68,6 +69,7 @@ export const registeredMigrations = [
   migration031DropPresenceTables,
   migration032RepairIdentityProfileForeignKeys,
   migration033AddChatToolApprovalProviderId,
+  migration034AddChatToolApprovalMaxInputTokens,
   // Add more migrations here as needed
 ];
 

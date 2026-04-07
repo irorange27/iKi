@@ -528,9 +528,12 @@ const fetchLatestModels = async () => {
   isFetchingModels.value = true;
   try {
     const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
-    const fetched = await electronAPI.chat.getModels(providerLookupKey);
+    const fetched = await electronAPI.chat.getModels(
+      providerLookupKey,
+      selectedProviderConfig.value?.id
+    );
     if (fetched && fetched.length > 0) {
-      setFetchedModels(fetched);
+      setFetchedModels(fetched.map(model => model.id));
     }
   } catch (error) {
     providersSettingsLogger.event({

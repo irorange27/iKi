@@ -30,6 +30,7 @@ import type {
   ChatExperimentalContext,
   InterventionPolicySignal,
 } from '../../../shared/chat/intervention_policy';
+import type { ProviderModelDescriptor } from '../../../shared/types/provider';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import { getErrorMessage } from '../../utils/errors';
 import {
@@ -328,6 +329,7 @@ export const createChatStreaming = (deps: {
     providerId?: string;
     model: string;
     systemPrompt: string;
+    maxInputTokens?: number;
     maxOutputTokens?: number;
     maxIterations: number;
     enabledTools: string[];
@@ -347,6 +349,9 @@ export const createChatStreaming = (deps: {
         : {}),
       model: params.model,
       systemPrompt: params.systemPrompt,
+      ...(typeof params.maxInputTokens === 'number'
+        ? { maxInputTokens: params.maxInputTokens }
+        : {}),
       ...(typeof params.maxOutputTokens === 'number'
         ? { maxOutputTokens: params.maxOutputTokens }
         : {}),
@@ -356,16 +361,66 @@ export const createChatStreaming = (deps: {
     };
   };
 
-  const getModels = async (providerType: string) => {
+  const getModels = async (
+    providerType: string,
+    providerId?: string
+  ): Promise<ProviderModelDescriptor[]> => {
     try {
+      const toDescriptors = async (modelIds: string[]) => {
+        const normalizedIds = modelIds
+          .filter((modelId): modelId is string => typeof modelId === 'string')
+          .map(modelId => modelId.trim())
+          .filter(Boolean)
+          .filter((modelId, index, list) => list.indexOf(modelId) === index);
+
+        return await Promise.all(
+          normalizedIds.map(async modelId => {
+            const capability = await llmFactory.resolveModelCapability(
+              providerType,
+              modelId,
+              providerId
+            );
+
+            return {
+              id: modelId,
+              displayName: capability?.displayName || modelId,
+              contextWindow: capability?.contextWindow ?? null,
+              maxInputTokens: capability?.maxInputTokens ?? capability?.contextWindow ?? null,
+              maxOutputTokens: capability?.maxOutputTokens ?? null,
+              ...(capability?.supportsToolCalls !== null &&
+              capability?.supportsToolCalls !== undefined
+                ? { supportsToolCalls: capability.supportsToolCalls }
+                : {}),
+              ...(capability?.supportsReasoning !== null &&
+              capability?.supportsReasoning !== undefined
+                ? { supportsReasoning: capability.supportsReasoning }
+                : {}),
+              ...(capability?.supportsVision !== null &&
+              capability?.supportsVision !== undefined
+                ? { supportsVision: capability.supportsVision }
+                : {}),
+              ...(capability?.source ? { source: capability.source } : {}),
+            } satisfies ProviderModelDescriptor;
+          })
+        );
+      };
+
       // 1. Try provider-specific cache if it exists (e.g. for DeepSeek special logic)
-      if (providerType === 'deepseek') return await deepseekProvider.getDeepSeekModels();
-      if (providerType === 'openai') return await openaiProvider.getOpenAIModels();
-      if (providerType === 'kimi') return await kimiProvider.getKimiModels();
-      if (providerType === 'minimax') return await minimaxProvider.getMinimaxModels();
+      if (providerType === 'deepseek') {
+        return await toDescriptors(await deepseekProvider.getDeepSeekModels());
+      }
+      if (providerType === 'openai') {
+        return await toDescriptors(await openaiProvider.getOpenAIModels());
+      }
+      if (providerType === 'kimi') {
+        return await toDescriptors(await kimiProvider.getKimiModels());
+      }
+      if (providerType === 'minimax') {
+        return await toDescriptors(await minimaxProvider.getMinimaxModels());
+      }
 
       // 2. Fallback to general factory fetch
-      return await llmFactory.fetchModelsFromDev(providerType);
+      return await toDescriptors(await llmFactory.fetchModelsFromDev(providerType));
     } catch (error: unknown) {
       chatStreamingLogger.error(`Failed to get models for ${providerType}`, error);
       return [];
@@ -397,6 +452,11 @@ export const createChatStreaming = (deps: {
     providerType: string;
     providerId?: string;
     model: string;
+    modelCapability?: {
+      contextWindow?: number | null;
+      maxInputTokens?: number | null;
+      maxOutputTokens?: number | null;
+    };
     messages: ChatTransportMessage[];
     tools?: string[];
     mcpServerIds?: string[];
@@ -412,6 +472,7 @@ export const createChatStreaming = (deps: {
     usedSkills: Awaited<ReturnType<typeof contextAssembler.assemble>>['usedSkills'];
     selectedSkillIds: string[];
     skillMode: Awaited<ReturnType<typeof contextAssembler.assemble>>['skillMode'];
+    maxInputTokens?: number;
     maxOutputTokens?: number;
     finalMessages: ChatInputMessage[];
     history: ChatInputMessage[];
@@ -434,6 +495,13 @@ export const createChatStreaming = (deps: {
       options.model,
       options.providerId
     );
+    const maxInputTokens =
+      options.modelCapability?.maxInputTokens ??
+      options.modelCapability?.contextWindow ??
+      modelCapability?.maxInputTokens ??
+      modelCapability?.contextWindow;
+    const maxOutputTokens =
+      options.modelCapability?.maxOutputTokens ?? modelCapability?.maxOutputTokens;
     const lastModelMessage = modelMessages[modelMessages.length - 1];
     const emotionConfig = getEmotionConfig();
     const experimentalAffectMode = getExperimentalAffectMode(options.experimentalContext);
@@ -542,8 +610,11 @@ export const createChatStreaming = (deps: {
       usedSkills: Array.isArray(assembledContext.usedSkills) ? assembledContext.usedSkills : [],
       selectedSkillIds,
       skillMode: assembledContext.skillMode,
-      ...(typeof assembledContext.effectiveContextConfig?.maxOutputTokens === 'number'
-        ? { maxOutputTokens: assembledContext.effectiveContextConfig.maxOutputTokens }
+      ...(typeof maxInputTokens === 'number' ? { maxInputTokens } : {}),
+      ...(typeof maxOutputTokens === 'number'
+        ? { maxOutputTokens }
+        : typeof assembledContext.effectiveContextConfig?.maxOutputTokens === 'number'
+          ? { maxOutputTokens: assembledContext.effectiveContextConfig.maxOutputTokens }
         : {}),
       finalMessages,
       history,
@@ -690,8 +761,6 @@ export const createChatStreaming = (deps: {
         uiChunkEmitter.emitAffectSignal(preparedTurn.affectSignal);
       }
 
-      uiChunkEmitter.emitContextReport(preparedTurn.report);
-
       const systemPrompt = preparedTurn.enableTools
         ? TOOL_AGENT_SYSTEM_PROMPT
         : NO_TOOLS_SYSTEM_PROMPT;
@@ -703,6 +772,7 @@ export const createChatStreaming = (deps: {
             providerId: options.providerId,
             model: options.model,
             systemPrompt,
+            maxInputTokens: preparedTurn.maxInputTokens,
             maxOutputTokens: preparedTurn.maxOutputTokens,
             maxIterations,
             enabledTools: preparedTurn.guardedTools,
@@ -753,6 +823,19 @@ export const createChatStreaming = (deps: {
         },
         abortSignal: streamState.abortController.signal,
         uiChunkEmitter,
+        tokenUsageContext: {
+          ...(typeof preparedTurn.maxInputTokens === 'number'
+            ? { maxInputTokens: preparedTurn.maxInputTokens }
+            : {}),
+          ...(typeof preparedTurn.maxOutputTokens === 'number'
+            ? { maxOutputTokens: preparedTurn.maxOutputTokens }
+            : {}),
+          model: options.model,
+          providerType: options.providerType,
+          ...(typeof options.providerId === 'string' && options.providerId.trim()
+            ? { providerId: options.providerId.trim() }
+            : {}),
+        },
       });
       if (!streamResult.cancelled) {
         deps.usage.recordUsageEvent({

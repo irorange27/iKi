@@ -38,8 +38,7 @@ const {
   useToolMetadataMock,
   useChatViewLifecycleMock,
   useConfigStoreMock,
-  getContextReferenceSummaryMock,
-  buildContextUsageIndicatorMock,
+  getTokenUsageSummaryMock,
   createUiMessagePersistenceMock,
   createChatMessageStoreMock,
   handleMarkdownClickMock,
@@ -106,8 +105,7 @@ const {
   const useToolMetadataMock = vi.fn();
   const useChatViewLifecycleMock = vi.fn();
   const useConfigStoreMock = vi.fn(() => configStoreState);
-  const getContextReferenceSummaryMock = vi.fn();
-  const buildContextUsageIndicatorMock = vi.fn();
+  const getTokenUsageSummaryMock = vi.fn();
   const createUiMessagePersistenceMock = vi.fn(() => ({ resetPersistedMessageIds: vi.fn() }));
   const createChatMessageStoreMock = vi.fn(() => ({
     messages: chatState.messages,
@@ -146,8 +144,7 @@ const {
     useToolMetadataMock,
     useChatViewLifecycleMock,
     useConfigStoreMock,
-    getContextReferenceSummaryMock,
-    buildContextUsageIndicatorMock,
+    getTokenUsageSummaryMock,
     createUiMessagePersistenceMock,
     createChatMessageStoreMock,
     handleMarkdownClickMock,
@@ -193,8 +190,7 @@ vi.mock('../../../src/renderer/composables/useMarkdownCopy', () => ({
 }));
 
 vi.mock('../../../src/renderer/modules/chat/ui_message_references', () => ({
-  getContextReferenceSummary: getContextReferenceSummaryMock,
-  buildContextUsageIndicator: buildContextUsageIndicatorMock,
+  getTokenUsageSummary: getTokenUsageSummaryMock,
 }));
 
 vi.mock('../../../src/renderer/modules/chat/ui_message_persistence', () => ({
@@ -236,7 +232,7 @@ const ChatInputStub = defineComponent({
     isIncognito: { type: Boolean, default: false },
     selectedWorkspaceId: { type: String, default: null },
     workspaceLocked: { type: Boolean, default: false },
-    contextUsage: { type: Object, default: null },
+    latestTokenUsage: { type: Object, default: null },
     todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
   },
@@ -324,8 +320,7 @@ describe('ChatView', () => {
     useChatThreadTodoPlanMock.mockReset();
     useToolMetadataMock.mockReset();
     useChatViewLifecycleMock.mockReset();
-    getContextReferenceSummaryMock.mockReset();
-    buildContextUsageIndicatorMock.mockReset();
+    getTokenUsageSummaryMock.mockReset();
     createUiMessagePersistenceMock.mockClear();
     createChatMessageStoreMock.mockClear();
     handleMarkdownClickMock.mockReset();
@@ -377,8 +372,7 @@ describe('ChatView', () => {
       todoPlan: { value: null, __v_isRef: true as const },
     }));
 
-    getContextReferenceSummaryMock.mockImplementation(() => null);
-    buildContextUsageIndicatorMock.mockImplementation(() => null);
+    getTokenUsageSummaryMock.mockImplementation(() => null);
   });
 
   afterEach(() => {
@@ -479,7 +473,7 @@ describe('ChatView', () => {
     expect(setDraftMessageMock).toHaveBeenCalledWith('', { focus: true });
   });
 
-  it('passes the latest assistant context usage summary down to the composer', async () => {
+  it('passes the latest assistant token usage summary down to the composer', async () => {
     chatState.messages = [
       {
         id: 'assistant_old',
@@ -493,19 +487,41 @@ describe('ChatView', () => {
       },
     ];
 
-    getContextReferenceSummaryMock.mockImplementation((message: UIMessage) =>
-      message.id === 'assistant_latest' ? { retainedRecentMessages: 3 } : null
-    );
-    buildContextUsageIndicatorMock.mockImplementation(summary =>
-      summary ? { label: '3 kept', tone: 'neutral' } : null
+    getTokenUsageSummaryMock.mockImplementation((message: UIMessage) =>
+      message.id === 'assistant_latest'
+        ? {
+            inputTokens: 300,
+            outputTokens: null,
+            totalTokens: null,
+            cacheReadTokens: null,
+            cacheWriteTokens: null,
+            reasoningTokens: null,
+            estimatedCostUsd: null,
+            maxInputTokens: null,
+            maxOutputTokens: null,
+            model: 'gpt-4.1',
+            providerType: 'openai',
+            providerId: 'openai',
+          }
+        : null
     );
 
     const wrapper = await mountChatView();
     const chatInput = wrapper.findComponent(ChatInputStub);
 
-    expect(chatInput.props('contextUsage')).toEqual({
-      label: '3 kept',
-      tone: 'neutral',
+    expect(chatInput.props('latestTokenUsage')).toEqual({
+      inputTokens: 300,
+      outputTokens: null,
+      totalTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      reasoningTokens: null,
+      estimatedCostUsd: null,
+      maxInputTokens: null,
+      maxOutputTokens: null,
+      model: 'gpt-4.1',
+      providerType: 'openai',
+      providerId: 'openai',
     });
   });
 

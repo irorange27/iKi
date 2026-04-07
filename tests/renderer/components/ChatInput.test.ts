@@ -75,6 +75,16 @@ const buildWorkspace = (
 
 const createElectronApi = (options?: {
   providers?: Provider[];
+  modelCatalogByProviderId?: Record<
+    string,
+    Array<{
+      id: string;
+      displayName?: string;
+      maxInputTokens?: number | null;
+      maxOutputTokens?: number | null;
+      contextWindow?: number | null;
+    }>
+  >;
   workspaces?: Workspace[];
   pickedWorkspace?: Workspace | null;
   configured?: boolean;
@@ -95,6 +105,20 @@ const createElectronApi = (options?: {
   return {
     api: {
       chat: {
+        getModels: vi.fn(async (providerType: string, providerId?: string) => {
+          if (providerId && options?.modelCatalogByProviderId?.[providerId]) {
+            return options.modelCatalogByProviderId[providerId];
+          }
+
+          return (options?.providers ?? [])
+            .filter(provider => provider.type === providerType)
+            .flatMap(provider =>
+              JSON.parse(provider.models || '[]').map((model: string) => ({
+                id: model,
+                displayName: model,
+              }))
+            );
+        }),
         isProviderConfigured: vi.fn(async () => {
           if (options?.configuredError) {
             throw options.configuredError;
@@ -138,6 +162,16 @@ const createElectronApi = (options?: {
 
 const mountChatInput = async (options?: {
   providers?: Provider[];
+  modelCatalogByProviderId?: Record<
+    string,
+    Array<{
+      id: string;
+      displayName?: string;
+      maxInputTokens?: number | null;
+      maxOutputTokens?: number | null;
+      contextWindow?: number | null;
+    }>
+  >;
   configured?: boolean;
   configuredError?: Error;
   thread?: {
@@ -454,6 +488,65 @@ describe('ChatInput', () => {
       parts: [{ type: 'text', text: 'Need help with the repo' }],
     });
     expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
+  });
+
+  it('uses the selected model capability as the context denominator and forwards it with the stream payload', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, stream } = await mountChatInput({
+      providers: [provider],
+      modelCatalogByProviderId: {
+        openai: [
+          {
+            id: 'gpt-4.1',
+            displayName: 'GPT-4.1',
+            maxInputTokens: 128000,
+            maxOutputTokens: 16384,
+            contextWindow: 128000,
+          },
+        ],
+      },
+      props: {
+        latestTokenUsage: {
+          inputTokens: 1200,
+          outputTokens: 90,
+          totalTokens: 1290,
+          cacheReadTokens: null,
+          cacheWriteTokens: null,
+          reasoningTokens: null,
+          estimatedCostUsd: null,
+          maxInputTokens: null,
+          maxOutputTokens: null,
+          model: 'gpt-4.1',
+          providerType: 'openai',
+          providerId: 'openai',
+        },
+      },
+    });
+
+    expect(wrapper.find('.composer-context-value').text()).toBe('1%');
+
+    await wrapper.find('.chat-input-field').setValue('Need help with the repo');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'openai',
+        providerId: 'openai',
+        model: 'gpt-4.1',
+        modelCapability: {
+          contextWindow: 128000,
+          maxInputTokens: 128000,
+          maxOutputTokens: 16384,
+        },
+      })
+    );
   });
 
   it('exposes a programmatic replace-draft-and-send helper for history actions', async () => {

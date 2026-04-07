@@ -71,7 +71,7 @@
           :is-incognito="isIncognito"
           :selected-workspace-id="selectedWorkspaceId"
           :workspace-locked="isWorkspaceLocked"
-          :context-usage="composerContextUsage"
+          :latest-token-usage="latestAssistantTokenUsage"
           :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
           @incognito-changed="handleIncognitoChanged"
@@ -92,10 +92,7 @@ import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import { FolderOpen } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
-import {
-  buildContextUsageIndicator,
-  getContextReferenceSummary,
-} from '../modules/chat/ui_message_references';
+import { getTokenUsageSummary } from '../modules/chat/ui_message_references';
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import { createChatMessageStore } from '../modules/chat/chat_message_store';
 import { createPrefixedId } from '../../shared/utils/id';
@@ -170,16 +167,15 @@ const { loadToolSources, getMcpServerLabel } = useToolMetadata({
   electronAPI,
 });
 
-const composerContextUsage = computed(() => {
+const latestAssistantTokenUsage = computed(() => {
   const messages = Array.isArray(chat.messages) ? [...chat.messages] : [];
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message || message.role !== 'assistant') continue;
 
-    const summary = getContextReferenceSummary(message);
-    const indicator = buildContextUsageIndicator(summary, configStore.config.memory.context);
-    if (indicator) return indicator;
+    const summary = getTokenUsageSummary(message);
+    if (summary && summary.inputTokens !== null) return summary;
   }
 
   return null;

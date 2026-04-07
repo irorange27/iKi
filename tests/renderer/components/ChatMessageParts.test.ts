@@ -12,6 +12,13 @@ const createMessage = (): UIMessage =>
     role: 'assistant',
     parts: [
       {
+        type: 'data-token-usage',
+        data: {
+          inputTokens: 640,
+          maxInputTokens: 128000,
+        },
+      },
+      {
         type: 'data-affect-signal',
         data: {
           source: 'realtime',
@@ -28,7 +35,7 @@ const createMessage = (): UIMessage =>
   }) as unknown as UIMessage;
 
 describe('ChatMessageParts', () => {
-  it('hides affect reference parts from the rendered message body', () => {
+  it('hides data parts from the rendered message body', () => {
     const wrapper = mount(ChatMessageParts, {
       props: {
         message: createMessage(),
@@ -41,6 +48,9 @@ describe('ChatMessageParts', () => {
     });
 
     expect(wrapper.text()).toContain('Reply text should stay visible.');
+    expect(wrapper.findAll('.message-part')).toHaveLength(1);
+    expect(wrapper.text()).not.toContain('640');
+    expect(wrapper.text()).not.toContain('token-usage');
     expect(wrapper.text()).not.toContain('affect-signal');
     expect(wrapper.text()).not.toContain('sadness');
     expect(wrapper.find('.tool-fallback-content').exists()).toBe(false);

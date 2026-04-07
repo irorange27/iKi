@@ -62,6 +62,17 @@ const createMessage = (): UIMessage =>
         },
       },
       {
+        type: 'data-token-usage',
+        data: {
+          inputTokens: 640,
+          outputTokens: 82,
+          totalTokens: 722,
+          maxInputTokens: 4600,
+          model: 'gpt-5-mini',
+          providerType: 'openai',
+        },
+      },
+      {
         type: 'tool-result',
         toolCallId: 'call_1',
         toolName: 'web',
@@ -129,6 +140,30 @@ describe('ChatMessageReferences', () => {
     });
 
     expect(wrapper.text()).not.toContain('tools');
+    expect(wrapper.findAll('.reference-summary-item')).toHaveLength(0);
+  });
+
+  it('does not render a reference summary when token usage is the only assistant metadata', () => {
+    const wrapper = mount(ChatMessageReferences, {
+      props: {
+        message: {
+          id: 'assistant_usage_only',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'data-token-usage',
+              data: {
+                inputTokens: 1200,
+                totalTokens: 1330,
+                maxInputTokens: 128000,
+              },
+            },
+          ],
+        } as unknown as UIMessage,
+      },
+    });
+
+    expect(wrapper.find('.chat-message-references').exists()).toBe(false);
     expect(wrapper.findAll('.reference-summary-item')).toHaveLength(0);
   });
 });

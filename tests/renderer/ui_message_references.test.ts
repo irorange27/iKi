@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getAffectReferenceSummary,
-  buildContextUsageIndicator,
-  formatContextTokenCount,
-  getContextReferenceSummary,
-  getContextBudgetTokens,
+  buildTokenUsageIndicator,
+  formatTokenCount,
   getMemoryReferenceSummary,
   getSkillReferenceSummary,
+  getTokenUsageSummary,
   getToolReferenceSummary,
   hasReferenceSummary,
 } from '../../src/renderer/modules/chat/ui_message_references';
@@ -260,61 +259,42 @@ describe('ui_message_references', () => {
     ).toBe(true);
   });
 
-  it('parses context assembly reports for reference inspection', () => {
-    const summary = getContextReferenceSummary({
+  it('parses token usage reports for composer inspection', () => {
+    const summary = getTokenUsageSummary({
       id: 'assistant_1',
       role: 'assistant',
       parts: [
         {
-          type: 'data-context-report',
+          type: 'data-token-usage',
           data: {
-            totalEstimatedTokens: 640,
-            retainedRecentMessages: 6,
-            compactedMessages: 12,
-            blocks: [
-              {
-                kind: 'recent-history',
-                status: 'truncated',
-                estimatedTokens: 220,
-                charCount: 880,
-                reason: 'compacted older turns into summary/recent window',
-                sourceCount: 6,
-              },
-              {
-                kind: 'thread-summary',
-                status: 'included',
-                estimatedTokens: 180,
-                charCount: 720,
-                sourceCount: 12,
-              },
-            ],
+            inputTokens: 640,
+            outputTokens: 82,
+            totalTokens: 722,
+            cacheReadTokens: 128,
+            reasoningTokens: 44,
+            estimatedCostUsd: 0.0123,
+            maxInputTokens: 128000,
+            model: 'gpt-5-mini',
+            providerType: 'openai',
+            providerId: 'provider_openai',
           },
         },
       ],
     } as never);
 
     expect(summary).toEqual({
-      totalEstimatedTokens: 640,
-      retainedRecentMessages: 6,
-      compactedMessages: 12,
-      items: [
-        {
-          kind: 'recent-history',
-          status: 'truncated',
-          estimatedTokens: 220,
-          charCount: 880,
-          reason: 'compacted older turns into summary/recent window',
-          sourceCount: 6,
-        },
-        {
-          kind: 'thread-summary',
-          status: 'included',
-          estimatedTokens: 180,
-          charCount: 720,
-          reason: '',
-          sourceCount: 12,
-        },
-      ],
+      inputTokens: 640,
+      outputTokens: 82,
+      totalTokens: 722,
+      cacheReadTokens: 128,
+      cacheWriteTokens: null,
+      reasoningTokens: 44,
+      estimatedCostUsd: 0.0123,
+      maxInputTokens: 128000,
+      maxOutputTokens: null,
+      model: 'gpt-5-mini',
+      providerType: 'openai',
+      providerId: 'provider_openai',
     });
   });
 
@@ -394,34 +374,27 @@ describe('ui_message_references', () => {
     ).toBe(false);
   });
 
-  it('formats total context token counts for compact UI labels', () => {
-    expect(formatContextTokenCount(640)).toBe('640 tok');
-    expect(formatContextTokenCount(12345.9)).toBe('12,345 tok');
-    expect(formatContextTokenCount(null)).toBe('');
+  it('formats token counts for compact UI labels', () => {
+    expect(formatTokenCount(640)).toBe('640 tok');
+    expect(formatTokenCount(12345.9)).toBe('12,345 tok');
+    expect(formatTokenCount(null)).toBe('');
   });
 
-  it('builds a compact context-usage indicator with percent and tooltip details', () => {
-    const indicator = buildContextUsageIndicator(
+  it('builds a compact context-usage indicator from actual input token usage', () => {
+    const indicator = buildTokenUsageIndicator(
       {
-        totalEstimatedTokens: 640,
-        retainedRecentMessages: 6,
-        compactedMessages: 12,
-        items: [
-          {
-            kind: 'recent-history',
-            status: 'truncated',
-            estimatedTokens: 220,
-            charCount: 880,
-            reason: 'compacted older turns',
-            sourceCount: 6,
-          },
-        ],
-      },
-      {
-        maxRecentTokens: 2400,
-        maxSummaryTokens: 500,
-        maxMemoryTokens: 500,
-        maxSkillTokens: 1200,
+        inputTokens: 640,
+        outputTokens: 32,
+        totalTokens: 672,
+        cacheReadTokens: null,
+        cacheWriteTokens: null,
+        reasoningTokens: null,
+        estimatedCostUsd: null,
+        maxInputTokens: 4600,
+        maxOutputTokens: null,
+        model: 'gpt-5-mini',
+        providerType: 'openai',
+        providerId: '',
       }
     );
 
@@ -435,9 +408,9 @@ describe('ui_message_references', () => {
       })
     );
     expect(indicator?.tooltip).toContain('Context usage: 640 tok / 4,600 tok (14%)');
-    expect(indicator?.tooltip).toContain(
-      'recent-history: truncated · 220 tok · compacted older turns'
-    );
+    expect(indicator?.tooltip).toContain('Output tokens: 32 tok');
+    expect(indicator?.tooltip).toContain('Total tokens: 672 tok');
+    expect(indicator?.tooltip).toContain('Model: gpt-5-mini');
   });
 
   it('does not treat context-only metadata as an expandable reference summary', () => {
@@ -456,16 +429,40 @@ describe('ui_message_references', () => {
         ],
       } as never)
     ).toBe(false);
+    expect(
+      hasReferenceSummary({
+        id: 'assistant_usage_only',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'data-token-usage',
+            data: {
+              inputTokens: 1200,
+              totalTokens: 1330,
+              maxInputTokens: 128000,
+            },
+          },
+        ],
+      } as never)
+    ).toBe(false);
   });
 
-  it('sums the configured context budget buckets', () => {
+  it('returns null when no token usage metadata is present', () => {
     expect(
-      getContextBudgetTokens({
-        maxRecentTokens: 2400,
-        maxSummaryTokens: 500,
-        maxMemoryTokens: 500,
-        maxSkillTokens: 1200,
+      buildTokenUsageIndicator({
+        inputTokens: null,
+        outputTokens: null,
+        totalTokens: null,
+        cacheReadTokens: null,
+        cacheWriteTokens: null,
+        reasoningTokens: null,
+        estimatedCostUsd: null,
+        maxInputTokens: null,
+        maxOutputTokens: null,
+        model: '',
+        providerType: '',
+        providerId: '',
       })
-    ).toBe(4600);
+    ).toBeNull();
   });
 });

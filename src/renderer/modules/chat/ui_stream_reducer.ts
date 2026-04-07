@@ -10,19 +10,19 @@ import {
   type ChatUiMessage,
   type ChatUiMessageChunk,
   createAffectSignalPart,
-  createContextReportPart,
   createMemoryPart,
   createSkillUsagePart,
-  isContextReportPart,
+  createTokenUsagePart,
   isDynamicToolPart,
   isMemoryPart,
   isObjectRecord,
   isSkillUsagePart,
   isTextPart,
-  type ContextReportItem,
+  isTokenUsagePart,
   type DynamicToolPart,
   type SkillUsageEntry,
   type TextPart,
+  type TokenUsagePartData,
   type UiMessagePart,
 } from '../../../shared/chat/message_parts';
 import { normalizeToolPartForValidation } from '../../../shared/chat/tool_parts';
@@ -108,13 +108,8 @@ export type StreamAction =
       };
     }
   | {
-      type: 'context_chunk';
-      chunk: {
-        totalEstimatedTokens?: unknown;
-        retainedRecentMessages?: unknown;
-        compactedMessages?: unknown;
-        blocks?: unknown;
-      };
+      type: 'usage_chunk';
+      chunk: TokenUsagePartData;
     };
 
 export type ReduceResult = {
@@ -909,57 +904,51 @@ export const reduceStream = (
     };
   }
 
-  if (action.type === 'context_chunk') {
-    const blocks = Array.isArray(action.chunk.blocks)
-      ? action.chunk.blocks
-          .filter(
-            (entry): entry is ContextReportItem =>
-              isObjectRecord(entry) &&
-              typeof entry.kind === 'string' &&
-              typeof entry.status === 'string'
-          )
-          .map(entry => ({
-            kind: entry.kind,
-            status: entry.status,
-            ...(typeof entry.estimatedTokens === 'number' && Number.isFinite(entry.estimatedTokens)
-              ? { estimatedTokens: Math.max(0, Math.trunc(entry.estimatedTokens)) }
-              : {}),
-            ...(typeof entry.charCount === 'number' && Number.isFinite(entry.charCount)
-              ? { charCount: Math.max(0, Math.trunc(entry.charCount)) }
-              : {}),
-            ...(typeof entry.reason === 'string' && entry.reason.trim()
-              ? { reason: entry.reason.trim() }
-              : {}),
-            ...(typeof entry.sourceCount === 'number' && Number.isFinite(entry.sourceCount)
-              ? { sourceCount: Math.max(0, Math.trunc(entry.sourceCount)) }
-              : {}),
-          }))
-      : [];
+  if (action.type === 'usage_chunk') {
+    const toInteger = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(0, Math.trunc(value))
+        : undefined;
+    const toCost = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : undefined;
+    const inputTokens = toInteger(action.chunk.inputTokens);
+    const outputTokens = toInteger(action.chunk.outputTokens);
+    const totalTokens = toInteger(action.chunk.totalTokens);
+    const cacheReadTokens = toInteger(action.chunk.cacheReadTokens);
+    const cacheWriteTokens = toInteger(action.chunk.cacheWriteTokens);
+    const reasoningTokens = toInteger(action.chunk.reasoningTokens);
+    const estimatedCostUsd = toCost(action.chunk.estimatedCostUsd);
+    const maxInputTokens = toInteger(action.chunk.maxInputTokens);
+    const maxOutputTokens = toInteger(action.chunk.maxOutputTokens);
+    const usagePart = createTokenUsagePart({
+      ...(inputTokens !== undefined ? { inputTokens } : {}),
+      ...(outputTokens !== undefined ? { outputTokens } : {}),
+      ...(totalTokens !== undefined ? { totalTokens } : {}),
+      ...(cacheReadTokens !== undefined ? { cacheReadTokens } : {}),
+      ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+      ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+      ...(estimatedCostUsd !== undefined ? { estimatedCostUsd } : {}),
+      ...(maxInputTokens !== undefined ? { maxInputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+      ...(typeof action.chunk.model === 'string' && action.chunk.model.trim()
+        ? { model: action.chunk.model.trim() }
+        : {}),
+      ...(typeof action.chunk.providerType === 'string' && action.chunk.providerType.trim()
+        ? { providerType: action.chunk.providerType.trim() }
+        : {}),
+      ...(typeof action.chunk.providerId === 'string' && action.chunk.providerId.trim()
+        ? { providerId: action.chunk.providerId.trim() }
+        : {}),
+    });
 
     const updateResult = updateAssistantMessage(state, ctx, message => {
       const nextParts = [...message.parts];
-      const existingIndex = nextParts.findIndex(part => isContextReportPart(part));
-
-      const contextPart = createContextReportPart({
-        ...(typeof action.chunk.totalEstimatedTokens === 'number' &&
-        Number.isFinite(action.chunk.totalEstimatedTokens)
-          ? { totalEstimatedTokens: Math.max(0, Math.trunc(action.chunk.totalEstimatedTokens)) }
-          : {}),
-        ...(typeof action.chunk.retainedRecentMessages === 'number' &&
-        Number.isFinite(action.chunk.retainedRecentMessages)
-          ? { retainedRecentMessages: Math.max(0, Math.trunc(action.chunk.retainedRecentMessages)) }
-          : {}),
-        ...(typeof action.chunk.compactedMessages === 'number' &&
-        Number.isFinite(action.chunk.compactedMessages)
-          ? { compactedMessages: Math.max(0, Math.trunc(action.chunk.compactedMessages)) }
-          : {}),
-        blocks,
-      });
+      const existingIndex = nextParts.findIndex(part => isTokenUsagePart(part));
 
       if (existingIndex >= 0) {
-        nextParts[existingIndex] = contextPart;
+        nextParts[existingIndex] = usagePart;
       } else {
-        nextParts.unshift(contextPart);
+        nextParts.unshift(usagePart);
       }
 
       return {

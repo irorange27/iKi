@@ -1,6 +1,7 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import type { AgentResult, ConversationHarness, ToolApprovalRequest } from '../../../core/agent';
+import type { TokenUsagePartData } from '../../../shared/chat/message_parts';
 import { createLogger } from '../../../core/logger';
 import { getErrorMessage } from '../../utils/errors';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
@@ -28,6 +29,10 @@ export type ToolLoopStreamParams = {
   abortSignal?: AbortSignal;
   uiChunkEmitter?: UiChunkEmitter;
   approvalContext?: ApprovalRecoveryContext;
+  tokenUsageContext?: Pick<
+    TokenUsagePartData,
+    'maxInputTokens' | 'maxOutputTokens' | 'model' | 'providerType' | 'providerId'
+  >;
 };
 
 export type ToolLoopStreamResult = {
@@ -117,12 +122,40 @@ const streamToolLoop = async (
   }
 
   const agentResult = (next.value ?? null) as AgentResult | null;
+  const emitTokenUsage = (usage: AgentResult['usage'] | undefined) => {
+    if (!usage) return;
+    params.uiChunkEmitter?.emitTokenUsage({
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      reasoningTokens: usage.reasoningTokens,
+      estimatedCostUsd: usage.estimatedCostUsd,
+      ...(typeof params.tokenUsageContext?.maxInputTokens === 'number'
+        ? { maxInputTokens: params.tokenUsageContext.maxInputTokens }
+        : {}),
+      ...(typeof params.tokenUsageContext?.maxOutputTokens === 'number'
+        ? { maxOutputTokens: params.tokenUsageContext.maxOutputTokens }
+        : {}),
+      ...(typeof params.tokenUsageContext?.model === 'string'
+        ? { model: params.tokenUsageContext.model }
+        : {}),
+      ...(typeof params.tokenUsageContext?.providerType === 'string'
+        ? { providerType: params.tokenUsageContext.providerType }
+        : {}),
+      ...(typeof params.tokenUsageContext?.providerId === 'string'
+        ? { providerId: params.tokenUsageContext.providerId }
+        : {}),
+    });
+  };
   let finalText = fullResponse;
   if (agentResult?.response && agentResult.response.trim()) {
     finalText = agentResult.response;
   }
 
   if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
+    emitTokenUsage(agentResult.usage);
     params.registerApprovalBatch(agentResult.toolApprovalRequests, {
       harness: params.harness,
       webContents: params.webContents,
@@ -149,6 +182,7 @@ const streamToolLoop = async (
     }
   }
 
+  emitTokenUsage(agentResult?.usage);
   params.uiChunkEmitter?.finish();
   return {
     awaitingApproval: false,

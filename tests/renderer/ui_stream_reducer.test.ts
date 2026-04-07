@@ -99,24 +99,18 @@ describe('ui_stream_reducer', () => {
     });
   });
 
-  it('stores context reports as a first-class assistant message part', () => {
+  it('stores token usage as a first-class assistant message part', () => {
     const { messages } = runReducer(createInitialStreamState(), [
       { type: 'begin_turn', threadId: 'thread_1', parentId: 'user_1' },
       {
-        type: 'context_chunk',
+        type: 'usage_chunk',
         chunk: {
-          totalEstimatedTokens: 320,
-          retainedRecentMessages: 5,
-          compactedMessages: 9,
-          blocks: [
-            {
-              kind: 'thread-summary',
-              status: 'included',
-              estimatedTokens: 120,
-              charCount: 480,
-              sourceCount: 9,
-            },
-          ],
+          inputTokens: 320,
+          outputTokens: 45,
+          totalTokens: 365,
+          maxInputTokens: 128000,
+          model: 'gpt-5-mini',
+          providerType: 'openai',
         },
       },
       { type: 'text_delta', delta: 'Response text' },
@@ -126,20 +120,14 @@ describe('ui_stream_reducer', () => {
     expect(messages).toHaveLength(1);
     const [assistant] = messages;
     expect(assistant.parts[0]).toEqual({
-      type: 'data-context-report',
+      type: 'data-token-usage',
       data: {
-        totalEstimatedTokens: 320,
-        retainedRecentMessages: 5,
-        compactedMessages: 9,
-        blocks: [
-          {
-            kind: 'thread-summary',
-            status: 'included',
-            estimatedTokens: 120,
-            charCount: 480,
-            sourceCount: 9,
-          },
-        ],
+        inputTokens: 320,
+        outputTokens: 45,
+        totalTokens: 365,
+        maxInputTokens: 128000,
+        model: 'gpt-5-mini',
+        providerType: 'openai',
       },
     });
   });

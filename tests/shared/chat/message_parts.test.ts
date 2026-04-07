@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  extractTextFromMessageParts,
   isChatUiMetadataPart,
   isSkillUsagePart,
   normalizeChatUiMetadataPart,
@@ -34,6 +35,12 @@ describe('message_parts', () => {
           confidence: 0.4,
         },
         {
+          type: 'token-usage',
+          inputTokens: 320,
+          maxInputTokens: 128000,
+          model: 'gpt-5-mini',
+        },
+        {
           type: 'context-report',
           totalEstimatedTokens: 320,
           blocks: [{ kind: 'memory', status: 'included' }],
@@ -63,6 +70,14 @@ describe('message_parts', () => {
         },
       },
       {
+        type: 'data-token-usage',
+        data: {
+          inputTokens: 320,
+          maxInputTokens: 128000,
+          model: 'gpt-5-mini',
+        },
+      },
+      {
         type: 'data-context-report',
         data: {
           totalEstimatedTokens: 320,
@@ -88,5 +103,23 @@ describe('message_parts', () => {
         results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
       },
     });
+  });
+
+  it('extracts transcript text from text parts only', () => {
+    expect(
+      extractTextFromMessageParts([
+        { type: 'data-token-usage', data: { inputTokens: 320, maxInputTokens: 128000 } },
+        { type: 'text', text: 'Alpha ' },
+        {
+          type: 'tool-result',
+          toolCallId: 'call_1',
+          toolName: 'web',
+          state: 'output-available',
+          output: { results: [] },
+        },
+        { type: 'data-memory-retrieval', data: { results: [{ summary: 'hidden' }] } },
+        { type: 'text', text: 'Beta' },
+      ])
+    ).toBe('Alpha Beta');
   });
 });

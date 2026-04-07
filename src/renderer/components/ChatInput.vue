@@ -30,7 +30,7 @@
 
         <template #toolbar-right>
           <ChatComposerActions
-            :context-usage="props.contextUsage ?? null"
+            :context-usage="composerContextUsage"
             :is-incognito="props.isIncognito ?? false"
             :is-preparing-send="isPreparingSend"
             :is-loading="isLoading"
@@ -57,7 +57,10 @@
 import { computed, ref, toRef, watchEffect } from 'vue';
 import type { Provider } from '../../shared/types/provider';
 import type { TaskPlan } from '../../shared/types/task_plan';
-import type { ContextUsageIndicator } from '../modules/chat/ui_message_references';
+import {
+  buildTokenUsageIndicator,
+  type TokenUsageSummary,
+} from '../modules/chat/ui_message_references';
 import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
@@ -91,7 +94,7 @@ const props = defineProps<{
   selectedWorkspaceId?: string | null;
   workspaceLocked?: boolean;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
-  contextUsage?: ContextUsageIndicator | null;
+  latestTokenUsage?: TokenUsageSummary | null;
   todoPlan?: TaskPlan | null;
 }>();
 
@@ -108,6 +111,7 @@ const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 const {
   selectedProvider,
   selectedModel,
+  selectedModelCapability,
   availableProviders,
   loadAvailableProviders,
   selectProviderModel,
@@ -180,6 +184,30 @@ const {
 sendMessageHandler = sendMessage;
 watchEffect(() => {
   isBusy.value = isPreparingSend.value || isLoading.value;
+});
+
+const composerContextUsage = computed(() => {
+  const latestUsage = props.latestTokenUsage ?? null;
+  const modelCapability = selectedModelCapability.value;
+
+  return buildTokenUsageIndicator({
+    inputTokens: latestUsage?.inputTokens ?? null,
+    outputTokens: latestUsage?.outputTokens ?? null,
+    totalTokens: latestUsage?.totalTokens ?? null,
+    cacheReadTokens: latestUsage?.cacheReadTokens ?? null,
+    cacheWriteTokens: latestUsage?.cacheWriteTokens ?? null,
+    reasoningTokens: latestUsage?.reasoningTokens ?? null,
+    estimatedCostUsd: latestUsage?.estimatedCostUsd ?? null,
+    maxInputTokens:
+      modelCapability?.maxInputTokens ??
+      modelCapability?.contextWindow ??
+      latestUsage?.maxInputTokens ??
+      null,
+    maxOutputTokens: modelCapability?.maxOutputTokens ?? latestUsage?.maxOutputTokens ?? null,
+    model: selectedModel.value || latestUsage?.model || '',
+    providerType: selectedProvider.value?.type || latestUsage?.providerType || '',
+    providerId: selectedProvider.value?.id || latestUsage?.providerId || '',
+  });
 });
 
 useChatComposerLifecycle({

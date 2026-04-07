@@ -20,6 +20,10 @@ vi.mock('../../../../src/core/tools', () => ({
   },
 }));
 
+vi.mock('../../../../src/core/provider/llm/factory', () => ({
+  resolveModelCapability: vi.fn(async () => null),
+}));
+
 vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
   createUiChunkEmitter: vi.fn(() => ({
     messageId: 'assistant_resume',
@@ -27,7 +31,7 @@ vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
     emitToolEvent: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
     emitAffectSignal: vi.fn(),
-    emitContextReport: vi.fn(),
+    emitTokenUsage: vi.fn(),
     finish: vi.fn(),
     abort: vi.fn(),
     error: vi.fn(),
@@ -113,6 +117,7 @@ describe('createChatApproval', () => {
           providerId: 'primary-openai',
           model: 'gpt-4o-mini',
           systemPrompt: 'system prompt',
+          maxInputTokens: 128000,
           maxOutputTokens: 640,
           maxIterations: 12,
           enabledTools: ['web'],
@@ -129,6 +134,7 @@ describe('createChatApproval', () => {
       provider_id: 'primary-openai',
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
+      max_input_tokens: 128000,
       max_output_tokens: 640,
       max_iterations: 12,
       enabled_tools: '["web"]',
@@ -184,6 +190,7 @@ describe('createChatApproval', () => {
       provider_id: 'primary-openai',
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
+      max_input_tokens: 128000,
       max_output_tokens: 640,
       max_iterations: 12,
       enabled_tools: '["web"]',
@@ -290,6 +297,7 @@ describe('createChatApproval', () => {
           providerType: 'openai',
           providerId: 'primary-openai',
           model: 'gpt-4o-mini',
+          maxInputTokens: 128000,
           maxOutputTokens: 640,
           maxIterations: 12,
           enabledTools: ['web'],
