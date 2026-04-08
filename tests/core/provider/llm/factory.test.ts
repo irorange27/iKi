@@ -562,7 +562,7 @@ describe('llm factory', () => {
     });
   });
 
-  it('omits temperature for custom responses-model calls even without explicit reasoning metadata', () => {
+  it('keeps temperature for responses-model calls without explicit reasoning metadata', () => {
     getProvidersMock.mockReturnValue([
       {
         id: 'custom_gateway',
@@ -582,10 +582,12 @@ describe('llm factory', () => {
         modelId: 'gpt-5.4',
         temperature: 0.2,
       })
-    ).toEqual({});
+    ).toEqual({
+      temperature: 0.2,
+    });
   });
 
-  it('keeps temperature when a compatible GPT-5 model explicitly disables reasoning effort', () => {
+  it('keeps temperature when explicit reasoning effort is none', () => {
     getProvidersMock.mockReturnValue([
       {
         id: 'provider_openai',

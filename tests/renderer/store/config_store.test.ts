@@ -65,7 +65,7 @@ describe('config store settings write actions', () => {
     });
   });
 
-  it('replaces the tool model atomically when clearing auto-detect state', () => {
+  it('replaces the tool model atomically when clearing the explicit selection', () => {
     const store = useConfigStore();
     store.config = createDefaultAppConfig();
     store.config.toolModel = {

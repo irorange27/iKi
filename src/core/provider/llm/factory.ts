@@ -148,27 +148,6 @@ const normalizeOptionalLowercaseString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-// Mirror the OpenAI SDK 3.0.2 reasoning-model capability contract so our call assembly stays
-// aligned with the provider's own parameter-compatibility rules for OpenAI-backed runtimes.
-const isOpenAIReasoningModelBySdkContract = (modelId: string): boolean => {
-  const normalizedModelId = modelId.trim().toLowerCase();
-  if (!normalizedModelId) return false;
-
-  return (
-    normalizedModelId.startsWith('o1') ||
-    normalizedModelId.startsWith('o3') ||
-    normalizedModelId.startsWith('o4-mini') ||
-    normalizedModelId.startsWith('codex-mini') ||
-    normalizedModelId.startsWith('computer-use-preview') ||
-    (normalizedModelId.startsWith('gpt-5') && !normalizedModelId.startsWith('gpt-5-chat'))
-  );
-};
-
-const openAIModelSupportsNonReasoningParameters = (modelId: string): boolean => {
-  const normalizedModelId = modelId.trim().toLowerCase();
-  return normalizedModelId.startsWith('gpt-5.1') || normalizedModelId.startsWith('gpt-5.2');
-};
-
 const shouldOmitTemperatureForModelCall = (params: {
   providerType: string;
   modelId: string;
@@ -191,17 +170,14 @@ const shouldOmitTemperatureForModelCall = (params: {
 
   const providerOptions = storedContext?.modelOptions?.providerOptions;
   const reasoningEffort = normalizeOptionalLowercaseString(providerOptions?.reasoningEffort);
-  const isReasoningModel =
-    providerOptions?.forceReasoning === true ||
-    storedContext?.modelOptions?.supportsReasoning === true ||
-    isOpenAIReasoningModelBySdkContract(params.modelId);
-
-  if (!isReasoningModel) {
+  if (reasoningEffort === 'none') {
     return false;
   }
 
-  return !(
-    reasoningEffort === 'none' && openAIModelSupportsNonReasoningParameters(params.modelId)
+  return (
+    providerOptions?.forceReasoning === true ||
+    storedContext?.modelOptions?.supportsReasoning === true ||
+    reasoningEffort !== null
   );
 };
 

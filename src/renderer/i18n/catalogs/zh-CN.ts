@@ -246,13 +246,13 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.footer.save': '保存',
   'settings.general.toolModel.title': '工具模型',
   'settings.general.toolModel.description':
-    '用于与你主聊天模型分离的后台 AI 任务。优先选择低延迟模型。',
+    '用于与你主聊天模型分离的后台 AI 任务。如果你想要更快、更便宜的运行，建议手动选择更快、成本更低的非 reasoning 模型。',
   'settings.general.toolModel.select': '选择工具模型',
   'settings.general.toolModel.test': '测试',
   'settings.general.toolModel.testing': '测试中...',
   'settings.general.toolModel.usedFor':
     '线程标题生成、工具选择、参数提取、记忆操作以及其他后台任务。',
-  'settings.general.toolModel.autoDetectRecommended': '自动检测（推荐）',
+  'settings.general.toolModel.unconfigured': '未配置',
   'settings.general.toolModel.latencyFailed': ({ error }) =>
     `延迟测试失败：${asText(error) || '未知错误'}`,
   'settings.general.toolModel.good': ({ time, model }) =>
