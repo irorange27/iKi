@@ -253,13 +253,13 @@ export const en = defineCatalog({
   'settings.footer.save': 'Save',
   'settings.general.toolModel.title': 'Tool Model',
   'settings.general.toolModel.description':
-    'Used for background AI tasks separate from your main chat model. Prefer a low-latency model.',
+    'Used for background AI tasks separate from your main chat model. If you want faster and cheaper runs, choose a fast, lower-cost non-reasoning model.',
   'settings.general.toolModel.select': 'Select Tool Model',
   'settings.general.toolModel.test': 'Test',
   'settings.general.toolModel.testing': 'Testing...',
   'settings.general.toolModel.usedFor':
     'Thread title generation, tool selection, parameter extraction, memory operations, and other background tasks.',
-  'settings.general.toolModel.autoDetectRecommended': 'Auto-detect (Recommended)',
+  'settings.general.toolModel.unconfigured': 'Not configured',
   'settings.general.toolModel.latencyFailed': ({ error }) =>
     `Latency test failed: ${asText(error) || 'Unknown error'}`,
   'settings.general.toolModel.good': ({ time, model }) =>

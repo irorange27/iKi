@@ -108,75 +108,16 @@ const findConfiguredToolModel = (
   return resolveExplicitToolModel(enabledProviders, config ?? {});
 };
 
-/**
- * Get Tool Model configuration with auto-detection.
- * Priority: exact provider selection → legacy provider/model config → auto-detect.
- */
+// Tool-model selection is explicit. The only fallback retained here is legacy model-only
+// compatibility for previously saved configs that did not persist providerId yet.
 export const getToolModel = (): ToolModelConfig | null => {
   try {
     const config = getAppConfig();
     const providers = getProviders();
-    const enabledProviders = providers.filter(p => p.enabled);
 
     const configuredToolModel = findConfiguredToolModel(providers, config?.toolModel);
     if (configuredToolModel) {
       return configuredToolModel;
-    }
-
-    const priorityOrder = ['openai', 'anthropic', 'google', 'deepseek'];
-    const recommendedModels = [
-      'gpt-4o-mini',
-      'gpt-4o',
-      'claude-3-5-haiku',
-      'claude-3-haiku',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-      'deepseek-chat',
-    ];
-
-    for (const providerType of priorityOrder) {
-      const provider = enabledProviders.find(p => p.type === providerType);
-      if (provider) {
-        const models = resolveProviderModels(provider);
-        if (!models) {
-          continue;
-        }
-
-        const validModels = models.filter((model: string) => {
-          const lower = model.toLowerCase();
-          return !lower.includes('o1') && !lower.includes('o3') && !lower.includes('thinking');
-        });
-
-        for (const recommended of recommendedModels) {
-          if (validModels.includes(recommended)) {
-            return {
-              providerId: provider.id,
-              providerType: provider.type,
-              model: recommended,
-            };
-          }
-        }
-
-        if (validModels.length > 0) {
-          return {
-            providerId: provider.id,
-            providerType: provider.type,
-            model: validModels[0],
-          };
-        }
-      }
-    }
-
-    if (enabledProviders.length > 0) {
-      const provider = enabledProviders[0];
-      const models = resolveProviderModels(provider);
-      if (models && models.length > 0) {
-        return {
-          providerId: provider.id,
-          providerType: provider.type,
-          model: models[0],
-        };
-      }
     }
 
     return null;

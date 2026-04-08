@@ -596,7 +596,10 @@ const getCheckedValue = (event: Event): boolean =>
 
 const parseRequiredInteger = (value: string): number => Number.parseInt(value || '0', 10);
 
-const AUTO_DETECT_TOOL_MODEL_VALUE = '';
+const parseOptionalInteger = (value: string): number | null =>
+  value ? Number.parseInt(value, 10) : null;
+
+const UNCONFIGURED_TOOL_MODEL_VALUE = '';
 
 const serializeToolModelSelection = (selection: { providerId: string; model: string }): string =>
   JSON.stringify([selection.providerId, selection.model]);
@@ -654,15 +657,7 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
         id: provider.id,
         name: provider.name,
         type: provider.type,
-        models: models.filter(model => {
-          // Filter out reasoning models
-          const lowerModel = model.toLowerCase();
-          return (
-            !lowerModel.includes('o1') &&
-            !lowerModel.includes('o3') &&
-            !lowerModel.includes('thinking')
-          );
-        }),
+        models,
       };
     })
     .filter(provider => provider.models.length > 0);
@@ -670,8 +665,8 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
 
 const toolModelSelectOptions = computed(() => [
   {
-    value: AUTO_DETECT_TOOL_MODEL_VALUE,
-    label: t('settings.general.toolModel.autoDetectRecommended'),
+    value: UNCONFIGURED_TOOL_MODEL_VALUE,
+    label: t('settings.general.toolModel.unconfigured'),
   },
   ...availableProvidersWithModels.value.map(provider => ({
     label: provider.name,
@@ -761,7 +756,7 @@ const configuredToolModelTestConfig = computed<ToolModelSelectionInput | null>((
 const selectedToolModelOptionValue = computed(() => {
   const configuredModel = config.value.toolModel.model.trim();
   if (!configuredModel) {
-    return AUTO_DETECT_TOOL_MODEL_VALUE;
+    return UNCONFIGURED_TOOL_MODEL_VALUE;
   }
 
   if (!configuredToolModelSelection.value) {
@@ -774,7 +769,7 @@ const selectedToolModelOptionValue = computed(() => {
   return serializeToolModelSelection(configuredToolModelSelection.value);
 });
 
-const canTestToolModel = computed(() => availableProvidersWithModels.value.length > 0);
+const canTestToolModel = computed(() => configuredToolModelTestConfig.value !== null);
 const shellApprovalDescription = computed(() =>
   config.value.general.autoApproveToolRequests
     ? t('settings.general.shellApproval.bypassed')
@@ -1050,7 +1045,7 @@ const testToolModel = async () => {
 const updateToolModelSelection = (value: string) => {
   toolModelTestResult.value = null;
 
-  if (value === AUTO_DETECT_TOOL_MODEL_VALUE) {
+  if (value === UNCONFIGURED_TOOL_MODEL_VALUE) {
     configStore.setToolModel({
       providerId: '',
       model: '',

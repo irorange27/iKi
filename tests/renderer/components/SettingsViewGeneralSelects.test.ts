@@ -167,12 +167,12 @@ describe('SettingsView general custom selects', () => {
     const setToolModel = vi.spyOn(store, 'setToolModel');
 
     expect(providersList).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain('Prefer a low-latency model.');
+    expect(wrapper.text()).toContain('If you want faster and cheaper runs');
     expect(wrapper.text()).toContain('Network');
-    expect(wrapper.text()).not.toContain('Avoid reasoning models');
     expect(wrapper.find('.tool-model-select .settings-select-trigger').text()).toContain(
-      'Auto-detect (Recommended)'
+      'Not configured'
     );
+    expect(wrapper.find('.tool-model-selector .test-model-btn').exists()).toBe(false);
 
     await wrapper.find('.tool-model-select .settings-select-trigger').trigger('click');
 
@@ -196,10 +196,29 @@ describe('SettingsView general custom selects', () => {
     });
     expect(store.config.toolModel.providerId).toBe('provider-deepseek');
     expect(store.config.toolModel.model).toBe('deepseek-chat');
+    expect(wrapper.find('.tool-model-selector .test-model-btn').exists()).toBe(true);
 
     await vi.advanceTimersByTimeAsync(300);
 
     expect(saveConfig).toHaveBeenCalledTimes(1);
+
+    await wrapper.find('.tool-model-select .settings-select-trigger').trigger('click');
+
+    const unconfiguredOption = wrapper
+      .findAll('.tool-model-select .settings-select-option')
+      .find(candidate => candidate.text().includes('Not configured'));
+
+    if (!unconfiguredOption) {
+      throw new Error('Not configured option not found');
+    }
+
+    await unconfiguredOption.trigger('click');
+
+    expect(store.config.toolModel).toEqual({
+      providerId: '',
+      model: '',
+    });
+    expect(wrapper.find('.tool-model-selector .test-model-btn').exists()).toBe(false);
 
     wrapper.unmount();
   });
