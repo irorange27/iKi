@@ -209,7 +209,7 @@ export interface AppConfig {
     prompt: string;
   };
   toolModel: {
-    providerType: string;
+    providerId: string;
     model: string;
   };
   toolExecution: {

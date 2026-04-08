@@ -576,7 +576,14 @@ type AvailableProvider = {
   models: string[];
 };
 
-type ToolModelSelection = {
+type ToolModelSelectionInput = {
+  providerId?: string;
+  providerType?: string;
+  model: string;
+};
+
+type ResolvedToolModelSelection = {
+  providerId: string;
   providerType: string;
   model: string;
 };
@@ -591,10 +598,10 @@ const parseRequiredInteger = (value: string): number => Number.parseInt(value ||
 
 const AUTO_DETECT_TOOL_MODEL_VALUE = '';
 
-const serializeToolModelSelection = (selection: ToolModelSelection): string =>
-  JSON.stringify([selection.providerType, selection.model]);
+const serializeToolModelSelection = (selection: { providerId: string; model: string }): string =>
+  JSON.stringify([selection.providerId, selection.model]);
 
-const parseToolModelSelection = (value: string): ToolModelSelection | null => {
+const parseToolModelSelection = (value: string): ToolModelSelectionInput | null => {
   if (!value) return null;
 
   try {
@@ -603,19 +610,19 @@ const parseToolModelSelection = (value: string): ToolModelSelection | null => {
       return null;
     }
 
-    const [providerType, model] = parsed;
-    if (typeof providerType !== 'string' || typeof model !== 'string') {
+    const [providerId, model] = parsed;
+    if (typeof providerId !== 'string' || typeof model !== 'string') {
       return null;
     }
 
-    const trimmedProviderType = providerType.trim();
+    const trimmedProviderId = providerId.trim();
     const trimmedModel = model.trim();
-    if (!trimmedProviderType || !trimmedModel) {
+    if (!trimmedProviderId || !trimmedModel) {
       return null;
     }
 
     return {
-      providerType: trimmedProviderType,
+      providerId: trimmedProviderId,
       model: trimmedModel,
     };
   } catch {
@@ -669,7 +676,7 @@ const toolModelSelectOptions = computed(() => [
   ...availableProvidersWithModels.value.map(provider => ({
     label: provider.name,
     options: provider.models.map(model => ({
-      value: serializeToolModelSelection({ providerType: provider.type, model }),
+      value: serializeToolModelSelection({ providerId: provider.id, model }),
       label: model,
     })),
   })),
@@ -691,28 +698,64 @@ const securityLogLevelOptions = computed(() => [
   { value: 'debug', label: t('settings.security.logLevel.debug') },
 ]);
 
-const resolveConfiguredProviderType = (model: string): string | null => {
+const resolveConfiguredProvider = (
+  model: string,
+  providerId?: string
+): AvailableProvider | null => {
+  const normalizedProviderId = providerId?.trim() || '';
+  if (normalizedProviderId) {
+    const provider = availableProvidersWithModels.value.find(
+      candidate => candidate.id === normalizedProviderId
+    );
+    if (!provider || !provider.models.includes(model)) {
+      return null;
+    }
+    return provider;
+  }
+
   for (const provider of availableProvidersWithModels.value) {
     if (provider.models.includes(model)) {
-      return provider.type;
+      return provider;
     }
   }
 
   return null;
 };
 
-const configuredToolModelSelection = computed<ToolModelSelection | null>(() => {
+const configuredToolModelSelection = computed<ResolvedToolModelSelection | null>(() => {
   const configuredModel = config.value.toolModel.model.trim();
   if (!configuredModel) return null;
 
-  const configuredProviderType =
-    config.value.toolModel.providerType.trim() || resolveConfiguredProviderType(configuredModel);
-  if (!configuredProviderType) return null;
+  const configuredProvider = resolveConfiguredProvider(
+    configuredModel,
+    config.value.toolModel.providerId
+  );
+  if (!configuredProvider) return null;
 
   return {
-    providerType: configuredProviderType,
+    providerId: configuredProvider.id,
+    providerType: configuredProvider.type,
     model: configuredModel,
   };
+});
+
+const configuredToolModelTestConfig = computed<ToolModelSelectionInput | null>(() => {
+  const configuredModel = config.value.toolModel.model.trim();
+  if (!configuredModel) return null;
+
+  if (configuredToolModelSelection.value) {
+    return configuredToolModelSelection.value;
+  }
+
+  const configuredProviderId = config.value.toolModel.providerId.trim();
+  return configuredProviderId
+    ? {
+        providerId: configuredProviderId,
+        model: configuredModel,
+      }
+    : {
+        model: configuredModel,
+      };
 });
 
 const selectedToolModelOptionValue = computed(() => {
@@ -723,7 +766,7 @@ const selectedToolModelOptionValue = computed(() => {
 
   if (!configuredToolModelSelection.value) {
     return serializeToolModelSelection({
-      providerType: config.value.toolModel.providerType.trim() || '__unresolved__',
+      providerId: config.value.toolModel.providerId.trim() || '__unresolved__',
       model: configuredModel,
     });
   }
@@ -858,8 +901,8 @@ const updateStatusMeta = computed(() => {
   return '';
 });
 
-const formatTestedToolModel = (selection: ToolModelSelection): string =>
-  `${selection.model} (${selection.providerType})`;
+const formatTestedToolModel = (selection: ToolModelSelectionInput): string =>
+  selection.providerType ? `${selection.model} (${selection.providerType})` : selection.model;
 
 let removeUpdateStatusListener: () => void = () => undefined;
 
@@ -944,7 +987,7 @@ const testToolModel = async () => {
   toolModelTestResult.value = null;
 
   try {
-    const result = await electronAPI.toolModel.testLatency(configuredToolModelSelection.value);
+    const result = await electronAPI.toolModel.testLatency(configuredToolModelTestConfig.value);
     if (
       !result.success ||
       typeof result.responseTimeMs !== 'number' ||
@@ -961,6 +1004,7 @@ const testToolModel = async () => {
     }
 
     const testedToolModel = formatTestedToolModel({
+      providerId: result.providerId,
       providerType: result.providerType,
       model: result.model,
     });
@@ -1008,7 +1052,7 @@ const updateToolModelSelection = (value: string) => {
 
   if (value === AUTO_DETECT_TOOL_MODEL_VALUE) {
     configStore.setToolModel({
-      providerType: '',
+      providerId: '',
       model: '',
     });
     autoSave();
@@ -1030,7 +1074,7 @@ const updateToolModelSelection = (value: string) => {
   }
 
   configStore.setToolModel({
-    providerType: selection.providerType,
+    providerId: selection.providerId || '',
     model: selection.model,
   });
   autoSave();

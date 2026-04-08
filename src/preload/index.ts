@@ -172,7 +172,7 @@ const electronApi: ElectronApi = {
     get: () => ipcRenderer.invoke('toolModel:get'),
     generateTitle: (conversationContent: string) =>
       ipcRenderer.invoke('toolModel:generateTitle', conversationContent),
-    testLatency: (config?: { providerType: string; model: string } | null) =>
+    testLatency: (config?: { providerId?: string; providerType?: string; model: string } | null) =>
       ipcRenderer.invoke('toolModel:testLatency', config ?? null),
   },
   tools: {

@@ -24,7 +24,7 @@ describe('config store settings write actions', () => {
     store.config = createDefaultAppConfig();
 
     store.setToolModel({
-      providerType: 'deepseek',
+      providerId: 'provider-deepseek',
       model: 'deepseek-chat',
     });
     store.updateToolExecution('shellApprovalMode', 'always');
@@ -42,7 +42,7 @@ describe('config store settings write actions', () => {
     });
 
     expect(store.config.toolModel).toEqual({
-      providerType: 'deepseek',
+      providerId: 'provider-deepseek',
       model: 'deepseek-chat',
     });
     expect(store.config.toolExecution.shellApprovalMode).toBe('always');
@@ -69,17 +69,17 @@ describe('config store settings write actions', () => {
     const store = useConfigStore();
     store.config = createDefaultAppConfig();
     store.config.toolModel = {
-      providerType: 'openai',
+      providerId: 'provider-openai',
       model: 'gpt-4o-mini',
     };
 
     store.setToolModel({
-      providerType: '',
+      providerId: '',
       model: '',
     });
 
     expect(store.config.toolModel).toEqual({
-      providerType: '',
+      providerId: '',
       model: '',
     });
   });

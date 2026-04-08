@@ -45,11 +45,15 @@ export const registerToolModelIpc = (): void => {
 
   ipcMain.handle(
     'toolModel:testLatency',
-    async (_event, config?: { providerType?: string; model?: string } | null) => {
+    async (
+      _event,
+      config?: { providerId?: string; providerType?: string; model?: string } | null
+    ) => {
       try {
         const result = await testToolModelLatency(config ?? null);
         return {
           success: true,
+          ...(result.providerId ? { providerId: result.providerId } : {}),
           providerType: result.providerType,
           model: result.model,
           responseTimeMs: result.responseTimeMs,

@@ -267,7 +267,10 @@ describe('preload task IPC payload serialization', () => {
 
     await exposedApi.toolModel.get();
     await exposedApi.toolModel.generateTitle('Conversation');
-    await exposedApi.toolModel.testLatency({ providerType: 'openai', model: 'gpt-4o-mini' });
+    await exposedApi.toolModel.testLatency({
+      providerId: 'provider-openai',
+      model: 'gpt-4o-mini',
+    });
     await exposedApi.tools.list();
 
     await exposedApi.speech.getStatus();

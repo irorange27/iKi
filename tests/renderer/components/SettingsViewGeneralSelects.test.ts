@@ -191,10 +191,10 @@ describe('SettingsView general custom selects', () => {
     await option.trigger('click');
 
     expect(setToolModel).toHaveBeenCalledWith({
-      providerType: 'deepseek',
+      providerId: 'provider-deepseek',
       model: 'deepseek-chat',
     });
-    expect(store.config.toolModel.providerType).toBe('deepseek');
+    expect(store.config.toolModel.providerId).toBe('provider-deepseek');
     expect(store.config.toolModel.model).toBe('deepseek-chat');
 
     await vi.advanceTimersByTimeAsync(300);
