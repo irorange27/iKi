@@ -68,7 +68,7 @@ export interface DaemonControlResult {
   embeddedRunning: boolean;
 }
 
-export type NetworkDiagnosticTargetKey = 'internet' | 'google';
+export type NetworkDiagnosticTargetKey = 'internet' | 'searchEngine';
 
 export interface NetworkDiagnosticProbeResult {
   key: NetworkDiagnosticTargetKey;
@@ -87,6 +87,8 @@ export interface NetworkDiagnosticResult {
   error: string | null;
   results: NetworkDiagnosticProbeResult[];
 }
+
+export type WebSearchEngine = 'google' | 'duckduckgo' | 'bing';
 
 export interface AppConfig {
   general: {
@@ -118,6 +120,9 @@ export interface AppConfig {
       port: number | null;
       username?: string;
       password?: string;
+    };
+    webSearch: {
+      preferredEngine: WebSearchEngine;
     };
     timeout: number;
     retryAttempts: number;

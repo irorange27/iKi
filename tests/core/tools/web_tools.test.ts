@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { getAppConfigMock } = vi.hoisted(() => ({
+  getAppConfigMock: vi.fn(),
+}));
+
 // Avoid importing Electron-backed sqlite config in unit tests.
 vi.mock('../../../src/core/db/database', () => ({
   getConfig: vi.fn(() => null),
 }));
 
+vi.mock('../../../src/core/config', () => ({
+  getAppConfig: getAppConfigMock,
+}));
+
+import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
 import { FetchTool, WebSearchTool } from '../../../src/core/tools/web_tools';
 
 const asResults = (value: unknown): Array<{ title: string; url: string }> => {
@@ -15,6 +24,7 @@ const asResults = (value: unknown): Array<{ title: string; url: string }> => {
 describe('WebSearchTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getAppConfigMock.mockReturnValue(createDefaultAppConfig());
   });
 
   afterEach(() => {
@@ -207,6 +217,40 @@ describe('WebSearchTool', () => {
     expect(init.headers).toMatchObject({
       'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
     });
+  });
+
+  it('starts from the configured preferred search engine', async () => {
+    const config = createDefaultAppConfig();
+    config.network.webSearch.preferredEngine = 'bing';
+    getAppConfigMock.mockReturnValue(config);
+
+    const rss = `
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Bing First</title>
+            <link>https://news.example.com/bing-first</link>
+          </item>
+        </channel>
+      </rss>
+    `;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (!url.includes('bing.com')) {
+        throw new Error(`Unexpected URL: ${url}`);
+      }
+      return new Response(rss, {
+        status: 200,
+        headers: { 'content-type': 'application/rss+xml; charset=utf-8' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const tool = new WebSearchTool();
+    const output = await tool.execute({ query: 'market headlines', limit: 5 });
+
+    expect((output as { source?: string }).source).toBe('bing');
+    expect((output as { sourcesTried?: string[] }).sourcesTried).toEqual(['bing']);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('bing.com/search');
   });
 
   it('can search and then fetch page content for a London spot-gold query', async () => {

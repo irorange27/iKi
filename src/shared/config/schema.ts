@@ -76,6 +76,13 @@ const NetworkSchema = z
         password: z.string().optional(),
       })
       .catch(DEFAULT_APP_CONFIG.network.proxy),
+    webSearch: z
+      .object({
+        preferredEngine: z
+          .enum(['google', 'duckduckgo', 'bing'])
+          .catch(DEFAULT_APP_CONFIG.network.webSearch.preferredEngine),
+      })
+      .catch(DEFAULT_APP_CONFIG.network.webSearch),
     timeout: numberField(DEFAULT_APP_CONFIG.network.timeout),
     retryAttempts: numberField(DEFAULT_APP_CONFIG.network.retryAttempts),
   })

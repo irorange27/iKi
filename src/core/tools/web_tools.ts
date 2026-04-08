@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { BaseTool } from './base';
 import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '../network/http';
+import { getAppConfig } from '../config';
+import type { WebSearchEngine } from '../../shared/types/config';
 import {
   DEFAULT_FETCH_MAX_CHARS,
   DEFAULT_SEARCH_RESULT_LIMIT,
@@ -38,7 +40,7 @@ type SearchLocale = {
   acceptLanguage: string;
 };
 
-type SearchProviderName = 'google' | 'duckduckgo' | 'bing';
+type SearchProviderName = WebSearchEngine;
 type SearchResult = { title: string; url: string };
 
 const CJK_QUERY_PATTERN = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
@@ -63,6 +65,10 @@ const inferSearchLocale = (query: string): SearchLocale => {
     bingCountry: 'US',
     acceptLanguage: 'en-US,en;q=0.9',
   };
+};
+
+const getPreferredSearchProvider = (): SearchProviderName => {
+  return getAppConfig().network.webSearch.preferredEngine;
 };
 
 const decodeHtmlEntities = (value: string): string =>
@@ -508,19 +514,35 @@ export class WebSearchTool extends BaseTool {
       return results;
     };
 
-    const providers: Array<{
+    const providersByName: Record<
+      SearchProviderName,
+      {
+        name: SearchProviderName;
+        execute: () => Promise<SearchResult[]>;
+      }
+    > = {
+      google: { name: 'google', execute: tryGoogle },
+      duckduckgo: { name: 'duckduckgo', execute: tryDuckDuckGo },
+      bing: { name: 'bing', execute: tryBingRss },
+    };
+    const preferredProvider = getPreferredSearchProvider();
+    const providerOrder: SearchProviderName[] = [
+      preferredProvider,
+      ...(['google', 'duckduckgo', 'bing'] as SearchProviderName[]).filter(
+        provider => provider !== preferredProvider
+      ),
+    ];
+    const providers = providerOrder.map(provider => providersByName[provider]);
+
+    const providersConfig: Array<{
       name: SearchProviderName;
       execute: () => Promise<SearchResult[]>;
-    }> = [
-      { name: 'google', execute: tryGoogle },
-      { name: 'duckduckgo', execute: tryDuckDuckGo },
-      { name: 'bing', execute: tryBingRss },
-    ];
+    }> = providers;
 
     let source: SearchProviderName = 'google';
     let results: SearchResult[] = [];
 
-    for (const provider of providers) {
+    for (const provider of providersConfig) {
       sourcesTried.push(provider.name);
       try {
         results = await provider.execute();

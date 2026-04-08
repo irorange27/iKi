@@ -314,6 +314,9 @@ describe('config IPC', () => {
         username: 'user',
         password: 'secret',
       },
+      webSearch: {
+        preferredEngine: 'google',
+      },
       timeout: 5000,
       retryAttempts: 3,
     };

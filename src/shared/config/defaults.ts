@@ -1,4 +1,4 @@
-import type { AppConfig } from '../types/config';
+import type { AppConfig, WebSearchEngine } from '../types/config';
 import { clonePlainData } from '../utils/clone';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../constants/daemon';
 import { createDefaultThemeConfig } from '../theme/registry';
@@ -31,6 +31,9 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       type: 'http',
       host: '',
       port: null,
+    },
+    webSearch: {
+      preferredEngine: 'google',
     },
     timeout: 5000,
     retryAttempts: 3,
@@ -169,14 +172,24 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
 
 export const createDefaultAppConfig = (): AppConfig => clonePlainData(DEFAULT_APP_CONFIG);
 
+const normalizeLegacyWebSearchEngine = (value: unknown): WebSearchEngine | null => {
+  if (value === 'google' || value === 'duckduckgo' || value === 'bing') {
+    return value;
+  }
+  return null;
+};
+
 export const mergeAppConfigWithBase = (
   base: AppConfig,
   rawConfig?: Partial<AppConfig> | null
 ): AppConfig => {
   if (!rawConfig) return base;
-  const { webSearch: _legacyWebSearch, ...restRawConfig } = rawConfig as Partial<AppConfig> & {
-    webSearch?: unknown;
+  const { webSearch: legacyWebSearch, ...restRawConfig } = rawConfig as Partial<AppConfig> & {
+    webSearch?: {
+      engine?: unknown;
+    };
   };
+  const legacyPreferredEngine = normalizeLegacyWebSearchEngine(legacyWebSearch?.engine);
 
   return {
     ...base,
@@ -203,6 +216,11 @@ export const mergeAppConfigWithBase = (
       proxy: {
         ...base.network.proxy,
         ...((rawConfig.network ?? {}).proxy ?? {}),
+      },
+      webSearch: {
+        ...base.network.webSearch,
+        ...(legacyPreferredEngine ? { preferredEngine: legacyPreferredEngine } : {}),
+        ...((rawConfig.network ?? {}).webSearch ?? {}),
       },
     },
     security: {

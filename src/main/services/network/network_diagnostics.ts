@@ -10,6 +10,7 @@ import type {
   NetworkDiagnosticProbeResult,
   NetworkDiagnosticResult,
   NetworkDiagnosticTargetKey,
+  WebSearchEngine,
 } from '../../../shared/types/config';
 import { getErrorMessage } from '../../../shared/utils/errors';
 
@@ -18,14 +19,24 @@ type NetworkDiagnosticTarget = {
   url: string;
 };
 
-const NETWORK_DIAGNOSTIC_TARGETS: NetworkDiagnosticTarget[] = [
+const getSearchEngineDiagnosticUrl = (engine: WebSearchEngine): string => {
+  if (engine === 'duckduckgo') {
+    return 'https://html.duckduckgo.com/html/?q=ping';
+  }
+  if (engine === 'bing') {
+    return 'https://www.bing.com/search?format=rss&q=ping';
+  }
+  return 'https://www.google.com/generate_204';
+};
+
+const buildNetworkDiagnosticTargets = (network: AppConfig['network']): NetworkDiagnosticTarget[] => [
   {
     key: 'internet',
     url: 'https://example.com/',
   },
   {
-    key: 'google',
-    url: 'https://www.google.com/generate_204',
+    key: 'searchEngine',
+    url: getSearchEngineDiagnosticUrl(network.webSearch.preferredEngine),
   },
 ];
 
@@ -205,7 +216,7 @@ export const testNetworkConnectivity = async (
     const credentials = getProxyCredentials(network);
     const results: NetworkDiagnosticProbeResult[] = [];
 
-    for (const target of NETWORK_DIAGNOSTIC_TARGETS) {
+    for (const target of buildNetworkDiagnosticTargets(network)) {
       results.push(await runNetworkProbe(ses, target, timeoutMs, credentials));
     }
 

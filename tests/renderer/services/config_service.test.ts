@@ -77,6 +77,9 @@ describe('configService', () => {
           host: '127.0.0.1',
           port: 1080,
         },
+        webSearch: {
+          preferredEngine: 'google',
+        },
         timeout: 5000,
         retryAttempts: 3,
       })
@@ -88,6 +91,9 @@ describe('configService', () => {
           type: 'socks5',
           host: '127.0.0.1',
           port: 1080,
+        },
+        webSearch: {
+          preferredEngine: 'google',
         },
         timeout: 5000,
         retryAttempts: 3,
@@ -108,6 +114,9 @@ describe('configService', () => {
         type: 'socks5',
         host: '127.0.0.1',
         port: 1080,
+      },
+      webSearch: {
+        preferredEngine: 'google',
       },
       timeout: 5000,
       retryAttempts: 3,
@@ -142,6 +151,9 @@ describe('configService', () => {
           type: 'http',
           host: '',
           port: null,
+        },
+        webSearch: {
+          preferredEngine: 'google',
         },
         timeout: 5000,
         retryAttempts: 3,

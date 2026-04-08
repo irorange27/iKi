@@ -51,33 +51,42 @@ const mountSettingsNetworkSection = async (options?: {
   const pinia = createPinia();
   setActivePinia(pinia);
 
-  const testNetwork = vi.fn(async () => ({
-    success: true,
-    testedAt: '2026-04-07T00:00:00.000Z',
-    effectiveProxy: 'socks5://127.0.0.1:1080',
-    error: null,
-    results: [
-      {
-        key: 'internet',
-        url: 'https://example.com/',
-        success: true,
-        statusCode: 200,
-        durationMs: 120,
-        error: null,
-        resolvedProxy: 'SOCKS5 127.0.0.1:1080',
-      },
-      {
-        key: 'google',
-        url: 'https://www.google.com/generate_204',
-        success: true,
-        statusCode: 204,
-        durationMs: 180,
-        error: null,
-        resolvedProxy: 'SOCKS5 127.0.0.1:1080',
-      },
-    ],
-    ...(options?.testNetworkResult ?? {}),
-  }));
+  const testNetwork = vi.fn(async (network: ReturnType<typeof createDefaultAppConfig>['network']) => {
+    const searchEngineUrl =
+      network.webSearch.preferredEngine === 'duckduckgo'
+        ? 'https://html.duckduckgo.com/html/?q=ping'
+        : network.webSearch.preferredEngine === 'bing'
+          ? 'https://www.bing.com/search?format=rss&q=ping'
+          : 'https://www.google.com/generate_204';
+
+    return {
+      success: true,
+      testedAt: '2026-04-07T00:00:00.000Z',
+      effectiveProxy: 'socks5://127.0.0.1:1080',
+      error: null,
+      results: [
+        {
+          key: 'internet',
+          url: 'https://example.com/',
+          success: true,
+          statusCode: 200,
+          durationMs: 120,
+          error: null,
+          resolvedProxy: 'SOCKS5 127.0.0.1:1080',
+        },
+        {
+          key: 'searchEngine',
+          url: searchEngineUrl,
+          success: true,
+          statusCode: network.webSearch.preferredEngine === 'google' ? 204 : 200,
+          durationMs: 180,
+          error: null,
+          resolvedProxy: 'SOCKS5 127.0.0.1:1080',
+        },
+      ],
+      ...(options?.testNetworkResult ?? {}),
+    };
+  });
 
   setElectronApi({
     config: {
@@ -117,13 +126,14 @@ describe('SettingsNetworkSection', () => {
     document.body.innerHTML = '';
   });
 
-  it('updates SOCKS5 proxy settings and runs a connectivity test with the current draft values', async () => {
+  it('updates the preferred search engine, proxy settings, and runs a connectivity test with the current draft values', async () => {
     const { wrapper, store, testNetwork } = await mountSettingsNetworkSection({
       setupStore: configStore => {
         configStore.config.network.proxy.enable = true;
       },
     });
 
+    await selectSettingsOption(wrapper, 'Preferred Search Engine', 'DuckDuckGo');
     await selectSettingsOption(wrapper, 'Type', 'SOCKS5');
 
     const hostInput = findLabelByText(wrapper, 'Host').find('input');
@@ -142,6 +152,7 @@ describe('SettingsNetworkSection', () => {
     await flushPromises();
 
     expect(store.config.network.proxy.type).toBe('socks5');
+    expect(store.config.network.webSearch.preferredEngine).toBe('duckduckgo');
     expect(store.config.network.proxy.host).toBe('127.0.0.1');
     expect(store.config.network.proxy.port).toBe(1080);
     expect(store.config.network.proxy.username).toBe('alice');
@@ -155,10 +166,13 @@ describe('SettingsNetworkSection', () => {
         username: 'alice',
         password: 'secret',
       },
+      webSearch: {
+        preferredEngine: 'duckduckgo',
+      },
       timeout: 5000,
       retryAttempts: 3,
     });
-    expect(wrapper.text()).toContain('Google reachability');
+    expect(wrapper.text()).toContain('DuckDuckGo reachability');
     expect(wrapper.text()).toContain('Network ready');
     expect(wrapper.emitted('config-change')?.length).toBeGreaterThan(0);
   });

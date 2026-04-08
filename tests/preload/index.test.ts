@@ -168,6 +168,9 @@ describe('preload task IPC payload serialization', () => {
         host: '127.0.0.1',
         port: 1080,
       },
+      webSearch: {
+        preferredEngine: 'google',
+      },
       timeout: 5000,
       retryAttempts: 3,
     });

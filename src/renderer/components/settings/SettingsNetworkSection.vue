@@ -3,6 +3,28 @@
     <div class="config-group">
       <div class="card-header">
         <div>
+          <h3>{{ t('settings.network.webSearch.title') }}</h3>
+          <p class="group-description">{{ t('settings.network.webSearch.description') }}</p>
+        </div>
+      </div>
+
+      <label class="input-label">
+        <span>{{ t('settings.network.webSearch.engine') }}</span>
+        <SettingsSelect
+          class="network-web-search-select"
+          :model-value="config.network.webSearch.preferredEngine"
+          :options="webSearchEngineOptions"
+          :aria-label="t('settings.network.webSearch.engineAria')"
+          @update:model-value="updateWebSearchEngineSelection"
+        />
+      </label>
+
+      <p class="card-help">{{ t('settings.network.webSearch.fallbackHint') }}</p>
+    </div>
+
+    <div class="config-group">
+      <div class="card-header">
+        <div>
           <h3>{{ t('settings.network.proxy.title') }}</h3>
           <p class="group-description">{{ t('settings.network.proxy.description') }}</p>
         </div>
@@ -189,6 +211,7 @@ import type {
   NetworkDiagnosticProbeResult,
   NetworkDiagnosticResult,
   NetworkDiagnosticTargetKey,
+  WebSearchEngine,
 } from '../../../shared/types/config';
 import { buildProxyUrl } from '../../../shared/network/proxy';
 import { getErrorMessage } from '../../../shared/utils/errors';
@@ -215,6 +238,18 @@ const proxyTypeOptions = computed(() => [
   { value: 'socks5', label: t('settings.network.proxy.socks5') },
 ]);
 
+const getSearchEngineLabel = (engine: WebSearchEngine): string => {
+  if (engine === 'duckduckgo') return t('settings.network.webSearch.duckduckgo');
+  if (engine === 'bing') return t('settings.network.webSearch.bing');
+  return t('settings.network.webSearch.google');
+};
+
+const webSearchEngineOptions = computed(() => [
+  { value: 'google', label: getSearchEngineLabel('google') },
+  { value: 'duckduckgo', label: getSearchEngineLabel('duckduckgo') },
+  { value: 'bing', label: getSearchEngineLabel('bing') },
+]);
+
 const getInputValue = (event: Event): string =>
   (event.target as HTMLInputElement | null)?.value ?? '';
 
@@ -232,7 +267,7 @@ const emitConfigChange = (): void => {
   emit('config-change');
 };
 
-const updateNetwork = <K extends Exclude<keyof AppConfig['network'], 'proxy'>>(
+const updateNetwork = <K extends Exclude<keyof AppConfig['network'], 'proxy' | 'webSearch'>>(
   key: K,
   value: AppConfig['network'][K]
 ) => {
@@ -248,9 +283,23 @@ const updateProxy = <K extends keyof AppConfig['network']['proxy']>(
   emitConfigChange();
 };
 
+const updateWebSearch = <K extends keyof AppConfig['network']['webSearch']>(
+  key: K,
+  value: AppConfig['network']['webSearch'][K]
+) => {
+  configStore.updateNetworkWebSearch(key, value);
+  emitConfigChange();
+};
+
 const updateProxyTypeSelection = (value: string) => {
   if (value === 'http' || value === 'https' || value === 'socks5') {
     updateProxy('type', value);
+  }
+};
+
+const updateWebSearchEngineSelection = (value: string) => {
+  if (value === 'google' || value === 'duckduckgo' || value === 'bing') {
+    updateWebSearch('preferredEngine', value);
   }
 };
 
@@ -335,7 +384,11 @@ const summaryBody = computed(() => {
 const canTestNetwork = computed(() => !isTesting.value && !proxyValidationError.value);
 
 const getProbeLabel = (key: NetworkDiagnosticTargetKey): string => {
-  if (key === 'google') return t('settings.network.diagnostics.targetGoogle');
+  if (key === 'searchEngine') {
+    return t('settings.network.diagnostics.targetSearchEngine', {
+      engine: getSearchEngineLabel(config.value.network.webSearch.preferredEngine),
+    });
+  }
   return t('settings.network.diagnostics.targetInternet');
 };
 

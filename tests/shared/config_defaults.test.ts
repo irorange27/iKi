@@ -15,20 +15,24 @@ describe('default app config', () => {
       preferredProviderId: '',
       preferredModel: '',
     });
+    expect(config.network.webSearch).toEqual({
+      preferredEngine: 'google',
+    });
     expect(Object.prototype.hasOwnProperty.call(config, 'webSearch')).toBe(false);
   });
 
-  it('drops legacy webSearch config during merge', () => {
+  it('migrates legacy webSearch config into network.webSearch while dropping the root field', () => {
     const config = mergeAppConfig({
       general: { language: 'zh-CN' },
       webSearch: {
-        engine: 'google',
+        engine: 'bing',
         fallbackToDefault: false,
         saveFailureArtifacts: false,
       },
     } as never);
 
     expect(config.general.language).toBe('zh-CN');
+    expect(config.network.webSearch.preferredEngine).toBe('bing');
     expect(Object.prototype.hasOwnProperty.call(config, 'webSearch')).toBe(false);
   });
 });

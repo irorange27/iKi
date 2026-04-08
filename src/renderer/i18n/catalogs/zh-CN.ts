@@ -616,6 +616,15 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.network.proxy.http': 'HTTP',
   'settings.network.proxy.https': 'HTTPS',
   'settings.network.proxy.socks5': 'SOCKS5',
+  'settings.network.webSearch.title': '网页搜索',
+  'settings.network.webSearch.description': '选择 iKi 内置网页搜索工具优先尝试的公开搜索引擎。',
+  'settings.network.webSearch.engine': '首选搜索引擎',
+  'settings.network.webSearch.engineAria': '首选搜索引擎',
+  'settings.network.webSearch.google': 'Google',
+  'settings.network.webSearch.duckduckgo': 'DuckDuckGo',
+  'settings.network.webSearch.bing': 'Bing',
+  'settings.network.webSearch.fallbackHint':
+    '会先尝试你选择的引擎；如果失败，iKi 会自动回退到其他内置引擎。',
   'settings.network.diagnostics.title': '连接测试',
   'settings.network.diagnostics.description':
     '在继续做基于 Google 的搜索接入之前，先用当前网络设置做一次快速连通性检查。',
@@ -635,7 +644,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.network.diagnostics.routeProxy': ({ proxy }) => `当前使用 ${asText(proxy)}。`,
   'settings.network.diagnostics.routeDirect': '当前使用直连。',
   'settings.network.diagnostics.targetInternet': '通用网页连通性',
-  'settings.network.diagnostics.targetGoogle': 'Google 可达性',
+  'settings.network.diagnostics.targetSearchEngine': ({ engine }) =>
+    `${asText(engine)} 可达性`,
   'settings.network.diagnostics.reachable': '可达',
   'settings.network.diagnostics.statusCode': ({ code }) => `HTTP ${asText(code)}`,
   'settings.network.diagnostics.duration': ({ ms }) => `${asText(ms)} 毫秒`,

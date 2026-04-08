@@ -71,7 +71,7 @@ export const useConfigStore = defineStore('config', {
     ) {
       this.config.toolExecution[key] = value;
     },
-    updateNetwork<K extends Exclude<keyof AppConfig['network'], 'proxy'>>(
+    updateNetwork<K extends Exclude<keyof AppConfig['network'], 'proxy' | 'webSearch'>>(
       key: K,
       value: AppConfig['network'][K]
     ) {
@@ -82,6 +82,12 @@ export const useConfigStore = defineStore('config', {
       value: AppConfig['network']['proxy'][K]
     ) {
       this.config.network.proxy[key] = value;
+    },
+    updateNetworkWebSearch<K extends keyof AppConfig['network']['webSearch']>(
+      key: K,
+      value: AppConfig['network']['webSearch'][K]
+    ) {
+      this.config.network.webSearch[key] = value;
     },
     updateSecurity<K extends keyof AppConfig['security']>(
       key: K,

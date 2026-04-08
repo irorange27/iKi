@@ -644,6 +644,16 @@ export const en = defineCatalog({
   'settings.network.proxy.http': 'HTTP',
   'settings.network.proxy.https': 'HTTPS',
   'settings.network.proxy.socks5': 'SOCKS5',
+  'settings.network.webSearch.title': 'Web Search',
+  'settings.network.webSearch.description':
+    'Choose which public search engine iKi should try first for the built-in web tool.',
+  'settings.network.webSearch.engine': 'Preferred Search Engine',
+  'settings.network.webSearch.engineAria': 'Preferred Search Engine',
+  'settings.network.webSearch.google': 'Google',
+  'settings.network.webSearch.duckduckgo': 'DuckDuckGo',
+  'settings.network.webSearch.bing': 'Bing',
+  'settings.network.webSearch.fallbackHint':
+    'The selected engine is tried first. If it fails, iKi falls back to the other built-in engines.',
   'settings.network.diagnostics.title': 'Connection Test',
   'settings.network.diagnostics.description':
     'Run a quick connectivity check with the current network settings before continuing Google-based search work.',
@@ -663,7 +673,8 @@ export const en = defineCatalog({
   'settings.network.diagnostics.routeProxy': ({ proxy }) => `Using ${asText(proxy)}.`,
   'settings.network.diagnostics.routeDirect': 'Using a direct connection.',
   'settings.network.diagnostics.targetInternet': 'General web access',
-  'settings.network.diagnostics.targetGoogle': 'Google reachability',
+  'settings.network.diagnostics.targetSearchEngine': ({ engine }) =>
+    `${asText(engine)} reachability`,
   'settings.network.diagnostics.reachable': 'Reachable',
   'settings.network.diagnostics.statusCode': ({ code }) => `HTTP ${asText(code)}`,
   'settings.network.diagnostics.duration': ({ ms }) => `${asText(ms)} ms`,
