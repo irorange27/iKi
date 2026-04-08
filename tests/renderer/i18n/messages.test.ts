@@ -9,4 +9,9 @@ describe('renderer i18n messages', () => {
   it('keeps the same translation keys across locales', () => {
     expect(sortedKeys('zh-CN')).toEqual(sortedKeys('en'));
   });
+
+  it('keeps the network diagnostics description search-engine agnostic', () => {
+    expect(messages.en['settings.network.diagnostics.description']).not.toMatch(/Google-based/i);
+    expect(messages['zh-CN']['settings.network.diagnostics.description']).not.toContain('基于 Google');
+  });
 });

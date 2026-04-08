@@ -627,7 +627,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     '会先尝试你选择的引擎；如果失败，iKi 会自动回退到其他内置引擎。',
   'settings.network.diagnostics.title': '连接测试',
   'settings.network.diagnostics.description':
-    '在继续做基于 Google 的搜索接入之前，先用当前网络设置做一次快速连通性检查。',
+    '在继续网页搜索相关操作之前，先用当前网络设置做一次快速连通性检查。',
   'settings.network.diagnostics.usesDraft':
     '测试会直接使用这里当前显示的值，包括还没完成自动保存的编辑。',
   'settings.network.diagnostics.testing': '测试中...',

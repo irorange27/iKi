@@ -656,7 +656,7 @@ export const en = defineCatalog({
     'The selected engine is tried first. If it fails, iKi falls back to the other built-in engines.',
   'settings.network.diagnostics.title': 'Connection Test',
   'settings.network.diagnostics.description':
-    'Run a quick connectivity check with the current network settings before continuing Google-based search work.',
+    'Run a quick connectivity check with the current network settings before continuing web search work.',
   'settings.network.diagnostics.usesDraft':
     'This test uses the values currently shown here, including edits that have not finished autosaving yet.',
   'settings.network.diagnostics.testing': 'Testing...',
