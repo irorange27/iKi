@@ -8,6 +8,7 @@ benchmark-runs/
 scripts/
 research/
 
+.agents/
 
 .vscode/
 .VSCodeCounter/
