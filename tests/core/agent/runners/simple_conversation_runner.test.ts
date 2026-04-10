@@ -11,6 +11,7 @@ const {
   streamTextMock,
   toolMock,
   createModelMock,
+  disposeLanguageModelMock,
   getModelGenerationSettingsMock,
   getFullSystemPromptMock,
 } = vi.hoisted(() => {
@@ -33,6 +34,7 @@ const {
     streamTextMock: vi.fn(),
     toolMock: vi.fn((definition: unknown) => definition),
     createModelMock: vi.fn(),
+    disposeLanguageModelMock: vi.fn(),
     getModelGenerationSettingsMock: vi.fn(() => ({})),
     getFullSystemPromptMock: vi.fn(),
   };
@@ -48,6 +50,7 @@ vi.mock('ai', () => ({
 
 vi.mock('../../../../src/core/provider/llm/factory', () => ({
   createModel: createModelMock,
+  disposeLanguageModel: disposeLanguageModelMock,
   getModelGenerationSettings: getModelGenerationSettingsMock,
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
@@ -218,6 +221,7 @@ describe('SimpleConversationRunner', () => {
     );
     expect(getAppConfigMock).not.toHaveBeenCalled();
     expect(loggerSpanFailMock).not.toHaveBeenCalled();
+    expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
   });
 
   it('passes stored provider call settings through to AI SDK generation', async () => {
@@ -485,5 +489,6 @@ describe('SimpleConversationRunner', () => {
     );
     expect(getAppConfigMock).not.toHaveBeenCalled();
     expect(loggerSpanFailMock).not.toHaveBeenCalled();
+    expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
   });
 });

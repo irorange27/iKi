@@ -1,7 +1,11 @@
 import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai';
 
 import { createLogger } from '../../logger';
-import { createModel, getModelGenerationSettings } from '../../provider/llm/factory';
+import {
+  createModel,
+  disposeLanguageModel,
+  getModelGenerationSettings,
+} from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import { ToolRegistry } from '../../tools/base';
 import {
@@ -73,7 +77,13 @@ export class SimpleConversationRunner implements ConversationRunner {
   }
 
   private buildToolSet(): ToolSet | undefined {
-    return buildAiToolSet(this.config, this.toolRegistry.getAll()) as ToolSet | undefined;
+    return buildAiToolSet(
+      {
+        enableTools: this.config.enableTools,
+        providerType: this.config.providerType,
+      },
+      this.toolRegistry.getAll()
+    ) as ToolSet | undefined;
   }
 
   private persistHistory(history: ModelMessage[], responseMessages: unknown): void {
@@ -161,6 +171,8 @@ export class SimpleConversationRunner implements ConversationRunner {
         },
       });
       throw error;
+    } finally {
+      disposeLanguageModel(model);
     }
   }
 
@@ -178,79 +190,83 @@ export class SimpleConversationRunner implements ConversationRunner {
     );
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
 
-    const result = streamText({
-      model,
-      system: systemPrompt,
-      messages,
-      tools,
-      ...(this.prepareStep ? { prepareStep: this.prepareStep } : {}),
-      ...getModelGenerationSettings({
-        providerType: this.config.providerType,
-        modelId: this.config.model,
-        providerId: this.config.providerId,
-        temperature: this.config.temperature,
-      }),
-      maxOutputTokens: this.config.maxTokens,
-      stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
-      abortSignal: request.abortSignal,
-    });
+    try {
+      const result = streamText({
+        model,
+        system: systemPrompt,
+        messages,
+        tools,
+        ...(this.prepareStep ? { prepareStep: this.prepareStep } : {}),
+        ...getModelGenerationSettings({
+          providerType: this.config.providerType,
+          modelId: this.config.model,
+          providerId: this.config.providerId,
+          temperature: this.config.temperature,
+        }),
+        maxOutputTokens: this.config.maxTokens,
+        stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
+        abortSignal: request.abortSignal,
+      });
 
-    let finalResponse = '';
+      let finalResponse = '';
 
-    for await (const part of result.fullStream) {
-      if (part.type === 'text-delta' && part.text) {
-        finalResponse += part.text;
-        yield part.text;
-        continue;
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta' && part.text) {
+          finalResponse += part.text;
+          yield part.text;
+          continue;
+        }
+
+        if (
+          part.type === 'tool-input-start' ||
+          part.type === 'tool-input-delta' ||
+          part.type === 'tool-input-end' ||
+          part.type === 'tool-call' ||
+          part.type === 'tool-result' ||
+          part.type === 'tool-error' ||
+          part.type === 'tool-output-denied' ||
+          part.type === 'tool-approval-request'
+        ) {
+          request.onStreamPart?.(part as { type: string; [key: string]: unknown });
+        }
       }
 
-      if (
-        part.type === 'tool-input-start' ||
-        part.type === 'tool-input-delta' ||
-        part.type === 'tool-input-end' ||
-        part.type === 'tool-call' ||
-        part.type === 'tool-result' ||
-        part.type === 'tool-error' ||
-        part.type === 'tool-output-denied' ||
-        part.type === 'tool-approval-request'
-      ) {
-        request.onStreamPart?.(part as { type: string; [key: string]: unknown });
+      const responseObj = await result.response;
+      const contentParts = await result.content;
+      const totalUsage = normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage));
+
+      this.persistHistory(history, responseObj.messages);
+
+      const approvalRequests = collectApprovalRequests(contentParts);
+      if (approvalRequests.length > 0) {
+        return {
+          response: finalResponse,
+          toolApprovalRequests: approvalRequests,
+          usage: totalUsage,
+          iterations: (await result.steps).length || 1,
+        };
       }
-    }
 
-    const responseObj = await result.response;
-    const contentParts = await result.content;
-    const totalUsage = normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage));
+      if (!finalResponse) {
+        try {
+          const streamedText = await Promise.resolve(result.text);
+          if (streamedText) {
+            yield streamedText;
+            finalResponse = streamedText;
+          }
+        } catch {
+          finalResponse = '';
+        }
+      }
 
-    this.persistHistory(history, responseObj.messages);
-
-    const approvalRequests = collectApprovalRequests(contentParts);
-    if (approvalRequests.length > 0) {
       return {
         response: finalResponse,
-        toolApprovalRequests: approvalRequests,
         usage: totalUsage,
         iterations: (await result.steps).length || 1,
       };
+    } finally {
+      disposeLanguageModel(model);
     }
-
-    if (!finalResponse) {
-      try {
-        const streamedText = await Promise.resolve(result.text);
-        if (streamedText) {
-          yield streamedText;
-          finalResponse = streamedText;
-        }
-      } catch {
-        finalResponse = '';
-      }
-    }
-
-    return {
-      response: finalResponse,
-      usage: totalUsage,
-      iterations: (await result.steps).length || 1,
-    };
   }
 }
 

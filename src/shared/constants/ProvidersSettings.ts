@@ -51,4 +51,12 @@ export const BUILTIN_PROVIDERS: BuiltInProvider[] = [
     docsUrl: 'https://ollama.com',
     requiresApiKey: false,
   },
+  {
+    id: 'acp',
+    name: 'ACP Agent',
+    description:
+      'Agent Client Protocol bridge for Codex, Claude Code, Gemini, and other ACP-capable agents',
+    docsUrl: 'https://agentclientprotocol.com/libraries/typescript',
+    requiresApiKey: false,
+  },
 ];

@@ -143,6 +143,14 @@ describe('runProactiveTask', () => {
     const toolCall = chatServiceMock.send.mock.calls[0][0];
     expect(toolCall.tools).toEqual(['web', 'fetch', 'read_file', 'list_dir']);
     expect(toolCall.threadId).toBe('thread_1');
+    expect(toolCall.runConfig).toEqual({
+      kind: 'proactive-task',
+      metadata: {
+        source: 'proactive-task',
+        taskId: 'task_1',
+        reason: 'manual',
+      },
+    });
     expect(toolCall.messages[0]).toMatchObject({
       role: 'system',
     });

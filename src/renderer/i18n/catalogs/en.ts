@@ -169,6 +169,8 @@ export const en = defineCatalog({
     `Failed to verify the ${asText(provider)} provider configuration. Please try again.`,
   'chat.provider.configureApiKey': ({ provider }) =>
     `Please configure the ${asText(provider)} API key in Settings.`,
+  'chat.provider.configureCommand': ({ provider }) =>
+    `Please configure the ${asText(provider)} ACP command in Settings.`,
   'chat.provider.modelRequired': ({ provider }) =>
     `Please add at least one model for ${asText(provider)} in Settings.`,
   'chat.thread.newTitle': 'New Chat',
@@ -1032,6 +1034,24 @@ export const en = defineCatalog({
   'settings.providers.baseUrlHelp.optionalOverride': 'Optional override for the provider endpoint.',
   'settings.providers.baseUrlHelp.useDefault': ({ name }) =>
     `Leave empty to use the default ${asText(name)} API endpoint.`,
+  'settings.providers.acp.command': 'ACP Command',
+  'settings.providers.acp.commandPlaceholder': 'e.g. codex-acp',
+  'settings.providers.acp.commandHelp':
+    'Executable to launch for the ACP agent bridge. Keep command and arguments separate.',
+  'settings.providers.acp.args': 'ACP Arguments',
+  'settings.providers.acp.argsPlaceholder': '--profile default\n--sandbox workspace-write',
+  'settings.providers.acp.argsHelp':
+    'Use shell-style arguments here (quotes allowed), or paste a JSON string array for exact argv ordering.',
+  'settings.providers.acp.apiProvider': 'Credential Source Provider',
+  'settings.providers.acp.apiProviderAuto': 'Use ACP provider fields only',
+  'settings.providers.acp.apiProviderHelp':
+    'Optional existing provider whose API key/base URL should be injected into the ACP command environment.',
+  'settings.providers.acp.authMethodId': 'ACP Auth Method ID',
+  'settings.providers.acp.authMethodPlaceholder': 'Optional auth method id',
+  'settings.providers.acp.authMethodHelp':
+    'Optional ACP auth method used for lazy authentication when the agent advertises auth methods.',
+  'settings.providers.acp.baseUrlHelp':
+    'Optional OpenAI-compatible base URL injected into the ACP command environment for Codex/OpenAI-style adapters.',
   'settings.providers.promptModelName': 'Enter model name:',
   'settings.providers.confirmRemove':
     'Are you sure you want to remove this provider configuration?',
@@ -1072,6 +1092,8 @@ export const en = defineCatalog({
   'settings.providers.description.minimax':
     'Official MiniMax models via the AI SDK MiniMax provider',
   'settings.providers.description.ollama': 'Run open-source LLMs locally with Ollama',
+  'settings.providers.description.acp':
+    'Agent Client Protocol bridge for Codex, Claude Code, Gemini, and other ACP-capable agents',
   'settings.mcp.title': 'MCP (Model Context Protocol)',
   'settings.mcp.description':
     'Connect external tool servers and expose their tools in iKi. Remote servers are disabled by default and require explicit opt-in.',

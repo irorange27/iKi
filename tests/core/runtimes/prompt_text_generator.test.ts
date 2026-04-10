@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   generateTextMock,
   createModelMock,
+  disposeLanguageModelMock,
   getModelGenerationSettingsMock,
   getFullSystemPromptMock,
   getAppConfigMock,
@@ -10,6 +11,7 @@ const {
   vi.hoisted(() => ({
     generateTextMock: vi.fn(),
     createModelMock: vi.fn(),
+    disposeLanguageModelMock: vi.fn(),
     getModelGenerationSettingsMock: vi.fn(() => ({})),
     getFullSystemPromptMock: vi.fn(),
     getAppConfigMock: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock('ai', () => ({
 
 vi.mock('../../../src/core/provider/llm/factory', () => ({
   createModel: createModelMock,
+  disposeLanguageModel: disposeLanguageModelMock,
   getModelGenerationSettings: getModelGenerationSettingsMock,
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
@@ -70,6 +73,7 @@ describe('SimplePromptTextGenerator', () => {
       temperature: 0.4,
       maxOutputTokens: 256,
     });
+    expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
     expect(getAppConfigMock).not.toHaveBeenCalled();
   });
 });

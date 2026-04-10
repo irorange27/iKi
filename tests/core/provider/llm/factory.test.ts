@@ -1,18 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  createACPProviderMock,
   createAnthropicMock,
   createDeepSeekMock,
   createLoggerMock,
   createMinimaxMock,
   createOpenAICompatibleMock,
   createOpenAIMock,
+  ensureThreadWorkspaceSelectionMock,
   fetchWithTimeoutMock,
   generateTextMock,
+  getProviderMock,
   getProvidersMock,
   getPersonaPromptMock,
+  getToolRuntimeContextMock,
+  getUserDataPathMock,
   streamTextMock,
 } = vi.hoisted(() => ({
+  createACPProviderMock: vi.fn(),
   createAnthropicMock: vi.fn(),
   createDeepSeekMock: vi.fn(),
   createLoggerMock: vi.fn(() => ({
@@ -25,16 +31,24 @@ const {
   createMinimaxMock: vi.fn(),
   createOpenAICompatibleMock: vi.fn(),
   createOpenAIMock: vi.fn(),
+  ensureThreadWorkspaceSelectionMock: vi.fn(() => null),
   fetchWithTimeoutMock: vi.fn(),
   generateTextMock: vi.fn(),
+  getProviderMock: vi.fn(() => null),
   getProvidersMock: vi.fn(),
   getPersonaPromptMock: vi.fn(),
+  getToolRuntimeContextMock: vi.fn(() => ({})),
+  getUserDataPathMock: vi.fn(() => '/tmp/iki-user-data'),
   streamTextMock: vi.fn(),
 }));
 
 vi.mock('ai', () => ({
   generateText: generateTextMock,
   streamText: streamTextMock,
+}));
+
+vi.mock('@mcpc-tech/acp-ai-provider', () => ({
+  createACPProvider: createACPProviderMock,
 }));
 
 vi.mock('@ai-sdk/openai', () => ({
@@ -59,6 +73,7 @@ vi.mock('vercel-minimax-ai-provider', () => ({
 
 vi.mock('../../../../src/core/db/providers', () => ({
   getProviders: getProvidersMock,
+  getProvider: getProviderMock,
 }));
 
 vi.mock('../../../../src/core/logger', () => ({
@@ -73,9 +88,23 @@ vi.mock('../../../../src/core/network/http', () => ({
   fetchWithTimeout: fetchWithTimeoutMock,
 }));
 
+vi.mock('../../../../src/core/platform', () => ({
+  getUserDataPath: getUserDataPathMock,
+}));
+
+vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
+  ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
+}));
+
+vi.mock('../../../../src/core/tools/runtime_context', () => ({
+  getToolRuntimeContext: getToolRuntimeContextMock,
+}));
+
 import {
   createModel,
+  disposeLanguageModel,
   fetchModelCapabilityFromDev,
+  fetchAcpModels,
   getModelCallSettings,
   getModelGenerationSettings,
   generateChatWithUsage,
@@ -115,6 +144,8 @@ beforeEach(() => {
       models: JSON.stringify(['gpt-4o-mini']),
     },
   ]);
+  getProviderMock.mockReturnValue(null);
+  getToolRuntimeContextMock.mockReturnValue({});
   getPersonaPromptMock.mockReturnValue('persona prompt');
   createOpenAIMock.mockReturnValue(() => 'mock-model');
 });
@@ -251,6 +282,170 @@ describe('llm factory', () => {
     expect(compatibleFactory.languageModel).toHaveBeenCalledWith('gpt-5.4', {
       supportsStructuredOutputs: true,
     });
+  });
+
+  it('instantiates ACP models through the ACP provider bridge with persistent sessions', () => {
+    const acpLanguageModel = {
+      specificationVersion: 'v3' as const,
+      provider: 'acp',
+      modelId: 'codex-mini-latest',
+      supportedUrls: {},
+      doGenerate: vi.fn(),
+      doStream: vi.fn(),
+      forceCleanup: vi.fn(),
+    };
+    const acpProvider = {
+      languageModel: vi.fn(() => acpLanguageModel),
+    };
+    createACPProviderMock.mockReturnValue(acpProvider);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_acp',
+        type: 'acp',
+        enabled: true,
+        api_key: '',
+        base_url: '',
+        models: JSON.stringify(['codex-mini-latest']),
+        acp_command: 'codex-acp',
+        acp_args: '["--sandbox","workspace-write"]',
+      },
+    ]);
+
+    expect(createModel('acp', 'codex-mini-latest')).toBe(acpLanguageModel);
+    expect(createACPProviderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'codex-acp',
+        args: ['--sandbox', 'workspace-write'],
+        persistSession: true,
+        session: {
+          cwd: '/tmp/iki-user-data/acp-session',
+          mcpServers: [],
+        },
+      })
+    );
+    expect(acpProvider.languageModel).toHaveBeenCalledWith('codex-mini-latest', undefined);
+  });
+
+  it('shell-splits ACP argument strings before launching the ACP bridge', () => {
+    const acpLanguageModel = {
+      specificationVersion: 'v3' as const,
+      provider: 'acp',
+      modelId: 'codex-mini-latest',
+      supportedUrls: {},
+      doGenerate: vi.fn(),
+      doStream: vi.fn(),
+      forceCleanup: vi.fn(),
+    };
+    const acpProvider = {
+      languageModel: vi.fn(() => acpLanguageModel),
+    };
+    createACPProviderMock.mockReturnValue(acpProvider);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_acp',
+        type: 'acp',
+        enabled: true,
+        api_key: '',
+        base_url: '',
+        models: JSON.stringify(['codex-mini-latest']),
+        acp_command: 'codex-acp',
+        acp_args: '--profile default\n--label "Codex Mini"',
+      },
+    ]);
+
+    expect(createModel('acp', 'codex-mini-latest')).toBe(acpLanguageModel);
+    expect(createACPProviderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: ['--profile', 'default', '--label', 'Codex Mini'],
+      })
+    );
+  });
+
+  it('discovers ACP models through session initialization', async () => {
+    const acpProvider = {
+      languageModel: vi.fn(),
+      initSession: vi.fn(async () => ({
+        sessionId: 'session_1',
+        models: {
+          availableModels: [
+            {
+              modelId: 'codex-mini-latest',
+              name: 'Codex Mini',
+            },
+          ],
+          currentModelId: 'codex-mini-latest',
+        },
+      })),
+      cleanup: vi.fn(),
+    };
+    createACPProviderMock.mockReturnValue(acpProvider);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_acp',
+        type: 'acp',
+        enabled: true,
+        api_key: '',
+        base_url: '',
+        models: JSON.stringify([]),
+        acp_command: 'codex-acp',
+      },
+    ]);
+
+    await expect(fetchAcpModels('acp')).resolves.toEqual([
+      {
+        id: 'codex-mini-latest',
+        displayName: 'Codex Mini',
+        supportsToolCalls: true,
+        source: 'provider',
+      },
+    ]);
+    expect(acpProvider.initSession).toHaveBeenCalledTimes(1);
+    expect(acpProvider.cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up ACP language models explicitly after a turn finishes', () => {
+    const forceCleanup = vi.fn();
+    disposeLanguageModel({
+      specificationVersion: 'v3',
+      provider: 'acp',
+      modelId: 'codex-mini-latest',
+      supportedUrls: {},
+      doGenerate: vi.fn(),
+      doStream: vi.fn(),
+      forceCleanup,
+    });
+
+    expect(forceCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips models.dev capability fetches for ACP models and relies on stored overrides', async () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_acp',
+        type: 'acp',
+        enabled: true,
+        api_key: '',
+        base_url: '',
+        models: JSON.stringify(['codex-mini-latest']),
+        model_options: JSON.stringify({
+          'codex-mini-latest': {
+            displayName: 'Codex Mini',
+            maxOutputTokens: 16384,
+            supportsToolCalls: true,
+          },
+        }),
+        acp_command: 'codex-acp',
+      },
+    ]);
+
+    await expect(resolveModelCapability('acp', 'codex-mini-latest')).resolves.toEqual(
+      expect.objectContaining({
+        displayName: 'Codex Mini',
+        maxOutputTokens: 16384,
+        supportsToolCalls: true,
+      })
+    );
+    expect(fetchWithTimeoutMock).not.toHaveBeenCalled();
   });
 
   it('rejects invalid anthropic adapter results at the runtime boundary', () => {

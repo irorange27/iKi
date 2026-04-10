@@ -3,12 +3,18 @@ import type { ProviderMetadata } from 'ai';
 import type { DynamicToolPart, DynamicToolState } from '../message_parts';
 import { isObjectRecord } from '../message_parts';
 import { getApprovalIdValue, getToolCallIdFromPart } from './ids';
+import { unwrapAcpDynamicToolCall } from '../../utils/acp';
 
 export const normalizeToolNameKey = (value: string): string =>
   value.trim().toLowerCase().replace(/[-\s]+/g, '_');
 
 export const getToolName = (part: unknown): string => {
   if (!isObjectRecord(part)) return 'tool';
+
+  const acpDynamicTool = getAcpDynamicToolInput(part);
+  if (acpDynamicTool?.toolName) {
+    return acpDynamicTool.toolName;
+  }
 
   if (typeof part.toolName === 'string' && part.toolName.trim()) {
     return part.toolName;
@@ -38,7 +44,7 @@ export const getToolName = (part: unknown): string => {
   return 'tool';
 };
 
-export const getToolInput = (part: unknown): unknown => {
+const getRawToolInput = (part: unknown): unknown => {
   if (!isObjectRecord(part)) return undefined;
   if (part.input !== undefined) return part.input;
   if (part.args !== undefined) return part.args;
@@ -47,6 +53,15 @@ export const getToolInput = (part: unknown): unknown => {
     if (part.toolCall.input !== undefined) return part.toolCall.input;
   }
   return undefined;
+};
+
+export const getToolInput = (part: unknown): unknown => {
+  const acpDynamicTool = getAcpDynamicToolInput(part);
+  if (acpDynamicTool) {
+    return acpDynamicTool.args ?? {};
+  }
+
+  return getRawToolInput(part);
 };
 
 export const getToolOutput = (part: unknown): unknown => {
@@ -120,6 +135,24 @@ const getCallProviderMetadata = (part: Record<string, unknown>): ProviderMetadat
   isObjectRecord(part.callProviderMetadata)
     ? (part.callProviderMetadata as ProviderMetadata)
     : undefined;
+
+const getAcpDynamicToolInput = (
+  part: unknown
+): { toolCallId?: string; toolName: string; args: unknown } | null => {
+  if (!isObjectRecord(part)) return null;
+
+  const partToolName = typeof part.toolName === 'string' ? part.toolName.trim() : '';
+  const toolCallToolName =
+    isObjectRecord(part.toolCall) && typeof part.toolCall.toolName === 'string'
+      ? part.toolCall.toolName.trim()
+      : '';
+  const effectiveToolName = partToolName || toolCallToolName;
+
+  return unwrapAcpDynamicToolCall({
+    toolName: effectiveToolName,
+    input: getRawToolInput(part),
+  });
+};
 
 const toNormalizedDynamicToolState = (
   part: Record<string, unknown>

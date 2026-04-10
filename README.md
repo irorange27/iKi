@@ -8,8 +8,12 @@ A local agent pet for AI provider orchestration.
 
 - Orchestrates multiple AI providers.
 - Ships first-class built-in provider entries for OpenAI, Anthropic, DeepSeek, Moonshot AI
-  (Kimi), MiniMax, and Ollama, while still allowing custom OpenAI-compatible and
+  (Kimi), MiniMax, Ollama, and ACP agents, while still allowing custom OpenAI-compatible and
   Anthropic-compatible endpoints.
+
+- ACP-backed agents can now run through the same local chat/tool loop as the built-in HTTP
+  providers, which lets iKi drive Codex-style ACP adapters without bypassing the existing tool
+  approval and workspace-boundary model.
 
 - Acts as a local agent for streamlined AI interactions.
 
@@ -86,6 +90,12 @@ A local agent pet for AI provider orchestration.
    it exposes at least one model (for example OpenAI, Anthropic, DeepSeek, or MiniMax), then send
    your first chat message. You can still open `Settings` directly at any time if you prefer the
    full control surface.
+
+7. To use an ACP-backed agent such as a Codex ACP bridge, add the built-in `ACP Agent` provider in
+   `Settings -> Providers`, set the ACP command plus shell-style arguments (or a JSON string
+   array), optionally point it at an existing OpenAI-compatible provider for credential
+   injection, fetch the ACP-exposed models, and then select that provider in chat like any other
+   model source.
 
 ## Useful Commands
 

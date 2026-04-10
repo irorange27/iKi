@@ -7,7 +7,11 @@ import {
   validateAgentConfig,
 } from '../agent/ai_sdk_runtime';
 import type { AgentConfig, AgentResult, PartialAgentConfig } from '../agent/types';
-import { createModel, getModelGenerationSettings } from '../provider/llm/factory';
+import {
+  createModel,
+  disposeLanguageModel,
+  getModelGenerationSettings,
+} from '../provider/llm/factory';
 
 export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
 
@@ -34,20 +38,24 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
     const history = appendUserPromptToHistory([], prompt);
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
     const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      messages,
-      ...getModelGenerationSettings({
-        providerType: this.config.providerType,
-        modelId: this.config.model,
-        providerId: this.config.providerId,
-        temperature: this.config.temperature,
-      }),
-      maxOutputTokens: this.config.maxTokens,
-    });
+    try {
+      const result = await generateText({
+        model,
+        system: systemPrompt,
+        messages,
+        ...getModelGenerationSettings({
+          providerType: this.config.providerType,
+          modelId: this.config.model,
+          providerId: this.config.providerId,
+          temperature: this.config.temperature,
+        }),
+        maxOutputTokens: this.config.maxTokens,
+      });
 
-    return { response: result.text };
+      return { response: result.text };
+    } finally {
+      disposeLanguageModel(model);
+    }
   }
 }
 

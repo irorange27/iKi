@@ -9,6 +9,7 @@ import { getProviders } from '../../db/providers';
 import { createLogger } from '../../logger';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
+import { getToolRuntimeContext } from '../../tools/runtime_context';
 import {
   getProviderModelOptions,
   listModelsDevProviderModels,
@@ -21,6 +22,12 @@ import {
 } from '../../../shared/utils/provider_models';
 import type { ProviderModelOptions, ProviderModelOptionsMap } from '../../../shared/types/provider';
 import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
+import {
+  createAcpLanguageModel,
+  disposeAcpLanguageModel,
+  fetchAcpModels as fetchAcpModelsFromSession,
+  isAcpProviderType,
+} from './acp';
 import { normalizeLanguageModelUsage } from './usage';
 
 const factoryLogger = createLogger({ module: 'llm_factory' });
@@ -41,6 +48,12 @@ export interface ProviderConfig {
   models: string[];
   modelOptions: ProviderModelOptionsMap;
   isResponseApi: boolean;
+  acpCommand: string;
+  acpArgs: string;
+  acpMcpServerIds: string;
+  acpAuthMethodId: string;
+  acpApiProviderId: string;
+  acpModelMapping: string;
 }
 
 export interface ChatGenerationResult {
@@ -110,6 +123,12 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     models,
     modelOptions: parseProviderModelOptionsMap(provider.model_options),
     isResponseApi: provider.is_response_api === true,
+    acpCommand: provider.acp_command || '',
+    acpArgs: provider.acp_args || '',
+    acpMcpServerIds: provider.acp_mcp_server_ids || '',
+    acpAuthMethodId: provider.acp_auth_method_id || '',
+    acpApiProviderId: provider.acp_api_provider_id || '',
+    acpModelMapping: provider.acp_model_mapping || '',
   };
 };
 
@@ -239,6 +258,24 @@ export const createModel = (
 
   const storedModelOptions = getProviderModelOptions(config.modelOptions, modelId);
 
+  if (isAcpProviderType(providerType)) {
+    const toolRuntimeContext = getToolRuntimeContext();
+    return createAcpLanguageModel(
+      {
+        id: config.id,
+        apiKey: config.apiKey,
+        baseURL: config.baseURL,
+        acpCommand: config.acpCommand,
+        acpArgs: config.acpArgs,
+        acpAuthMethodId: config.acpAuthMethodId,
+        acpApiProviderId: config.acpApiProviderId,
+        acpModelMapping: config.acpModelMapping,
+      },
+      modelId,
+      toolRuntimeContext.threadId
+    );
+  }
+
   if (providerType === 'openai') {
     const client = createOpenAI({
       apiKey: config.apiKey,
@@ -301,6 +338,10 @@ export const createModel = (
   return client(modelId);
 };
 
+export const disposeLanguageModel = (model: LanguageModel): void => {
+  disposeAcpLanguageModel(model);
+};
+
 export const getFullSystemPrompt = (providerType: string, providerId?: string | null) => {
   getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();
@@ -345,40 +386,44 @@ export const streamChatWithUsage = async (
     .filter(value => typeof value === 'string' && value.trim().length > 0)
     .join('\n\n');
 
-  const result = streamText({
-    model,
-    system: systemPrompt,
-    messages: toModelMessages(options.messages),
-    ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
-    ...(typeof options.maxOutputTokens === 'number'
-      ? { maxOutputTokens: options.maxOutputTokens }
-      : {}),
-    abortSignal,
-  });
+  try {
+    const result = streamText({
+      model,
+      system: systemPrompt,
+      messages: toModelMessages(options.messages),
+      ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
+      ...(typeof options.maxOutputTokens === 'number'
+        ? { maxOutputTokens: options.maxOutputTokens }
+        : {}),
+      abortSignal,
+    });
 
-  let fullText = '';
-  for await (const part of result.fullStream) {
-    if (shouldCancel?.()) {
-      break;
+    let fullText = '';
+    for await (const part of result.fullStream) {
+      if (shouldCancel?.()) {
+        break;
+      }
+      if (part.type !== 'text-delta' || !part.text) {
+        continue;
+      }
+      fullText += part.text;
+      onChunk(part.text);
     }
-    if (part.type !== 'text-delta' || !part.text) {
-      continue;
+
+    if (!fullText) {
+      const streamedText = await Promise.resolve(result.text);
+      if (streamedText) {
+        fullText = streamedText;
+      }
     }
-    fullText += part.text;
-    onChunk(part.text);
+
+    return {
+      text: fullText,
+      usage: normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage ?? result.usage)),
+    };
+  } finally {
+    disposeLanguageModel(model);
   }
-
-  if (!fullText) {
-    const streamedText = await Promise.resolve(result.text);
-    if (streamedText) {
-      fullText = streamedText;
-    }
-  }
-
-  return {
-    text: fullText,
-    usage: normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage ?? result.usage)),
-  };
 };
 
 export const generateChat = async (options: {
@@ -409,20 +454,24 @@ export const generateChatWithUsage = async (options: {
     .filter(value => typeof value === 'string' && value.trim().length > 0)
     .join('\n\n');
 
-  const result = await generateText({
-    model,
-    system: systemPrompt,
-    messages: toModelMessages(options.messages),
-    ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
-    ...(typeof options.maxOutputTokens === 'number'
-      ? { maxOutputTokens: options.maxOutputTokens }
-      : {}),
-  });
+  try {
+    const result = await generateText({
+      model,
+      system: systemPrompt,
+      messages: toModelMessages(options.messages),
+      ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
+      ...(typeof options.maxOutputTokens === 'number'
+        ? { maxOutputTokens: options.maxOutputTokens }
+        : {}),
+    });
 
-  return {
-    text: result.text,
-    usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
-  };
+    return {
+      text: result.text,
+      usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
+    };
+  } finally {
+    disposeLanguageModel(model);
+  }
 };
 
 export const fetchModelsFromDev = async (providerType: string) => {
@@ -432,6 +481,24 @@ export const fetchModelsFromDev = async (providerType: string) => {
   } catch {
     return [];
   }
+};
+
+export const fetchAcpModels = async (providerType: string, providerId?: string | null) => {
+  const config = getProviderConfig(providerType, providerId);
+  if (!isAcpProviderType(config.type)) {
+    return [];
+  }
+
+  return await fetchAcpModelsFromSession({
+    id: config.id,
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    acpCommand: config.acpCommand,
+    acpArgs: config.acpArgs,
+    acpAuthMethodId: config.acpAuthMethodId,
+    acpApiProviderId: config.acpApiProviderId,
+    acpModelMapping: config.acpModelMapping,
+  });
 };
 
 const hasFreshModelsDevCatalog = (now = Date.now()) =>
@@ -515,6 +582,7 @@ export const fetchModelCapabilityFromDev = async (
 ): Promise<ModelCapability | null> => {
   const trimmedModelId = modelId.trim();
   if (!trimmedModelId) return null;
+  if (isAcpProviderType(providerType)) return null;
 
   const catalog = getModelsDevCatalogSnapshot();
   return catalog ? lookupModelsDevModelCapability(catalog, providerType, trimmedModelId) : null;

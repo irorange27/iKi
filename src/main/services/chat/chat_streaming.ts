@@ -24,14 +24,17 @@ import * as openaiProvider from '../../../core/provider/llm/openai';
 import { defaultToolRegistry } from '../../../core/tools';
 import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { buildThreadWorkspaceSystemMessage } from '../../../core/workspaces/thread_workspace';
+import { ACP_PROVIDER_TYPE } from '../../../shared/constants/acp';
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import type {
   ChatAffectExperimentMode,
   ChatExperimentalContext,
   InterventionPolicySignal,
 } from '../../../shared/chat/intervention_policy';
+import type { AgentRunKind } from '../../../shared/types/agent_run';
 import type { ProviderModelDescriptor } from '../../../shared/types/provider';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
+import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { getErrorMessage } from '../../utils/errors';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
@@ -411,6 +414,46 @@ export const createChatStreaming = (deps: {
         );
       };
 
+      if (providerType === ACP_PROVIDER_TYPE) {
+        const acpDescriptors = await llmFactory.fetchAcpModels(providerType, providerId);
+        return await Promise.all(
+          acpDescriptors.map(async descriptor => {
+            const capability = await llmFactory.resolveModelCapability(
+              providerType,
+              descriptor.id,
+              providerId
+            );
+
+            return {
+              ...descriptor,
+              displayName: capability?.displayName || descriptor.displayName || descriptor.id,
+              contextWindow: capability?.contextWindow ?? descriptor.contextWindow ?? null,
+              maxInputTokens:
+                capability?.maxInputTokens ??
+                capability?.contextWindow ??
+                descriptor.maxInputTokens ??
+                descriptor.contextWindow ??
+                null,
+              maxOutputTokens: capability?.maxOutputTokens ?? descriptor.maxOutputTokens ?? null,
+              supportsToolCalls:
+                capability?.supportsToolCalls ?? descriptor.supportsToolCalls ?? true,
+              ...(capability?.supportsReasoning !== null &&
+              capability?.supportsReasoning !== undefined
+                ? { supportsReasoning: capability.supportsReasoning }
+                : descriptor.supportsReasoning !== undefined
+                  ? { supportsReasoning: descriptor.supportsReasoning }
+                  : {}),
+              ...(capability?.supportsVision !== null && capability?.supportsVision !== undefined
+                ? { supportsVision: capability.supportsVision }
+                : descriptor.supportsVision !== undefined
+                  ? { supportsVision: descriptor.supportsVision }
+                  : {}),
+              source: capability?.source || descriptor.source || 'provider',
+            } satisfies ProviderModelDescriptor;
+          })
+        );
+      }
+
       // 1. Try provider-specific cache if it exists (e.g. for DeepSeek special logic)
       if (providerType === 'deepseek') {
         return await toDescriptors(await deepseekProvider.getDeepSeekModels());
@@ -436,6 +479,9 @@ export const createChatStreaming = (deps: {
   const isProviderConfigured = (providerType: string, providerId?: string) => {
     try {
       const config = llmFactory.getProviderConfig(providerType, providerId);
+      if (providerType.trim().toLowerCase() === ACP_PROVIDER_TYPE) {
+        return config.acpCommand.trim().length > 0;
+      }
       return !!config.apiKey;
     } catch {
       return false;
@@ -471,6 +517,10 @@ export const createChatStreaming = (deps: {
     threadId?: string;
     maxIterations?: number;
     experimentalContext?: ChatExperimentalContext;
+    runConfig?: {
+      kind?: AgentRunKind;
+      metadata?: Record<string, unknown>;
+    };
   };
 
   type PreparedChatTurn = {
@@ -629,7 +679,10 @@ export const createChatStreaming = (deps: {
       affectSignal,
       interventionPolicy,
       guardedTools,
-      enableTools: guardedTools.length > 0 || selectedSkillIds.length > 0,
+      enableTools:
+        guardedTools.length > 0 ||
+        selectedSkillIds.length > 0 ||
+        options.providerType.trim().toLowerCase() === ACP_PROVIDER_TYPE,
     };
   };
 
@@ -643,7 +696,7 @@ export const createChatStreaming = (deps: {
         : NO_TOOLS_SYSTEM_PROMPT;
 
       runTracker = createAgentRunTracker({
-        kind: 'chat-turn',
+        kind: options.runConfig?.kind ?? 'chat-turn',
         threadId: options.threadId,
         providerType: options.providerType,
         providerId: options.providerId,
@@ -655,6 +708,7 @@ export const createChatStreaming = (deps: {
           ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
           messages: preparedTurn.finalMessages,
           metadata: {
+            ...(options.runConfig?.metadata ?? {}),
             transport: 'send',
             contextTokens: preparedTurn.report.totalEstimatedTokens,
             skillMode: preparedTurn.skillMode,
@@ -691,10 +745,13 @@ export const createChatStreaming = (deps: {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        const result = await harness.generate({
-          history: preparedTurn.history,
-          prompt: preparedTurn.prompt,
-        });
+        const result = await runWithToolRuntimeContext({ runId: runTracker.id }, async () =>
+          await harness.generate({
+            history: preparedTurn.history,
+            prompt: preparedTurn.prompt,
+          })
+        );
+        runTracker.recordToolCalls(result.toolCalls);
         runTracker.syncModelMessages(harness.getHistory?.() ?? preparedTurn.history);
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
@@ -824,7 +881,7 @@ export const createChatStreaming = (deps: {
         ? TOOL_AGENT_SYSTEM_PROMPT
         : NO_TOOLS_SYSTEM_PROMPT;
       runTracker = createAgentRunTracker({
-        kind: 'chat-turn',
+        kind: options.runConfig?.kind ?? 'chat-turn',
         threadId: options.threadId,
         providerType: options.providerType,
         providerId: options.providerId,
@@ -836,6 +893,7 @@ export const createChatStreaming = (deps: {
           ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
           messages: preparedTurn.finalMessages,
           metadata: {
+            ...(options.runConfig?.metadata ?? {}),
             transport: 'stream',
             contextTokens: preparedTurn.report.totalEstimatedTokens,
             skillMode: preparedTurn.skillMode,
@@ -888,45 +946,47 @@ export const createChatStreaming = (deps: {
         throw new Error('No user prompt provided for streaming');
       }
 
-      const streamResult = await toolLoopRunner.stream({
-        harness,
-        webContents,
-        history: preparedTurn.history,
-        prompt: preparedTurn.prompt,
-        approvalContext,
-        shouldCancel: () => streamState.cancelled,
-        onToolEvent: eventPart => {
-          runTracker?.recordToolEvent(eventPart);
-          if (
-            eventPart.type === 'tool-approval-request' &&
-            typeof eventPart.approvalId === 'string' &&
-            eventPart.approvalId.length > 0
-          ) {
-            deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
-              harness,
-              webContents,
-              history: preparedTurn.history,
-              recoveryContext: approvalContext,
-            });
-          }
-          uiChunkEmitter.emitToolEvent(eventPart);
-        },
-        abortSignal: streamState.abortController.signal,
-        uiChunkEmitter,
-        tokenUsageContext: {
-          ...(typeof preparedTurn.maxInputTokens === 'number'
-            ? { maxInputTokens: preparedTurn.maxInputTokens }
-            : {}),
-          ...(typeof preparedTurn.maxOutputTokens === 'number'
-            ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-            : {}),
-          model: options.model,
-          providerType: options.providerType,
-          ...(typeof options.providerId === 'string' && options.providerId.trim()
-            ? { providerId: options.providerId.trim() }
-            : {}),
-        },
-      });
+      const streamResult = await runWithToolRuntimeContext({ runId: runTracker.id }, async () =>
+        await toolLoopRunner.stream({
+          harness,
+          webContents,
+          history: preparedTurn.history,
+          prompt: preparedTurn.prompt,
+          approvalContext,
+          shouldCancel: () => streamState.cancelled,
+          onToolEvent: eventPart => {
+            runTracker?.recordToolEvent(eventPart);
+            if (
+              eventPart.type === 'tool-approval-request' &&
+              typeof eventPart.approvalId === 'string' &&
+              eventPart.approvalId.length > 0
+            ) {
+              deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
+                harness,
+                webContents,
+                history: preparedTurn.history,
+                recoveryContext: approvalContext,
+              });
+            }
+            uiChunkEmitter.emitToolEvent(eventPart);
+          },
+          abortSignal: streamState.abortController.signal,
+          uiChunkEmitter,
+          tokenUsageContext: {
+            ...(typeof preparedTurn.maxInputTokens === 'number'
+              ? { maxInputTokens: preparedTurn.maxInputTokens }
+              : {}),
+            ...(typeof preparedTurn.maxOutputTokens === 'number'
+              ? { maxOutputTokens: preparedTurn.maxOutputTokens }
+              : {}),
+            model: options.model,
+            providerType: options.providerType,
+            ...(typeof options.providerId === 'string' && options.providerId.trim()
+              ? { providerId: options.providerId.trim() }
+              : {}),
+          },
+        })
+      );
       runTracker.syncModelMessages(harness.getHistory?.() ?? preparedTurn.history);
       if (!streamResult.cancelled) {
         deps.usage.recordUsageEvent({

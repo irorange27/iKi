@@ -163,6 +163,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     `校验 ${asText(provider)} Provider 配置失败，请重试。`,
   'chat.provider.configureApiKey': ({ provider }) =>
     `请先在设置中配置 ${asText(provider)} 的 API Key。`,
+  'chat.provider.configureCommand': ({ provider }) =>
+    `请先在设置中配置 ${asText(provider)} 的 ACP 命令。`,
   'chat.provider.modelRequired': ({ provider }) =>
     `请先在设置中为 ${asText(provider)} 添加至少一个模型。`,
   'chat.thread.newTitle': '新对话',
@@ -990,6 +992,24 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.baseUrlHelp.optionalOverride': '可选，用于覆盖 Provider 默认端点。',
   'settings.providers.baseUrlHelp.useDefault': ({ name }) =>
     `留空以使用默认的 ${asText(name)} API 端点。`,
+  'settings.providers.acp.command': 'ACP 命令',
+  'settings.providers.acp.commandPlaceholder': '例如：codex-acp',
+  'settings.providers.acp.commandHelp':
+    '用于启动 ACP agent bridge 的可执行命令。请把命令本体和参数分开填写。',
+  'settings.providers.acp.args': 'ACP 参数',
+  'settings.providers.acp.argsPlaceholder': '--profile default\n--sandbox workspace-write',
+  'settings.providers.acp.argsHelp':
+    '这里按 shell 风格填写参数即可（支持引号）；如果需要精确 argv 顺序，也可以直接粘贴 JSON 字符串数组。',
+  'settings.providers.acp.apiProvider': '凭据来源 Provider',
+  'settings.providers.acp.apiProviderAuto': '仅使用当前 ACP Provider 字段',
+  'settings.providers.acp.apiProviderHelp':
+    '可选。选中的已有 Provider 的 API Key/Base URL 会被注入到 ACP 命令环境中。',
+  'settings.providers.acp.authMethodId': 'ACP 鉴权方法 ID',
+  'settings.providers.acp.authMethodPlaceholder': '可选的 auth method id',
+  'settings.providers.acp.authMethodHelp':
+    '可选。若 agent 暴露了认证方法，可用它作为 lazy authentication 的默认方法。',
+  'settings.providers.acp.baseUrlHelp':
+    '可选。会把 OpenAI 兼容的 Base URL 注入到 ACP 命令环境中，适用于 Codex / OpenAI 风格适配器。',
   'settings.providers.promptModelName': '输入模型名称：',
   'settings.providers.confirmRemove': '确定要移除这个 Provider 配置吗？',
   'settings.providers.modelOptions.edit': '模型选项',
@@ -1027,6 +1047,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.description.minimax':
     '通过 AI SDK 的 MiniMax Provider 使用官方 MiniMax 模型',
   'settings.providers.description.ollama': '通过 Ollama 在本地运行开源大模型',
+  'settings.providers.description.acp':
+    '通过 Agent Client Protocol 对接 Codex、Claude Code、Gemini 等 ACP agent',
   'settings.mcp.title': 'MCP（Model Context Protocol）',
   'settings.mcp.description':
     '连接外部工具服务器，并将它们的工具暴露给 iKi。远程服务器默认禁用，需要显式开启。',

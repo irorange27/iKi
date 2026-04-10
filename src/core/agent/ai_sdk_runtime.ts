@@ -7,10 +7,13 @@ import {
   type ToolApprovalResponse,
   type ToolSet,
 } from 'ai';
+import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
 import { getAppConfig } from '../config';
 import { createLogger } from '../logger';
 import { getFullSystemPrompt } from '../provider/llm/factory';
+import { ACP_PROVIDER_TYPE } from '../../shared/constants/acp';
+import { unwrapAcpDynamicToolCall } from '../../shared/utils/acp';
 import {
   extractTextFromModelMessageContent,
   sanitizeModelConversationMessages,
@@ -116,10 +119,13 @@ export const validateAgentConfig = (config: AgentConfig): void => {
 };
 
 export const buildAiToolSet = (
-  config: Pick<AgentConfig, 'enableTools'>,
+  config: Pick<AgentConfig, 'enableTools' | 'providerType'>,
   registeredTools: AgentTool[]
 ): ToolSet | undefined => {
-  if (!config.enableTools || registeredTools.length === 0) {
+  const requiresAcpDynamicTool =
+    config.enableTools && config.providerType.trim().toLowerCase() === ACP_PROVIDER_TYPE;
+
+  if (!config.enableTools || (registeredTools.length === 0 && !requiresAcpDynamicTool)) {
     agentRuntimeLogger.event({
       level: 'debug',
       event: 'agent.tools.build',
@@ -207,8 +213,13 @@ export const buildAiToolSet = (
     data: {
       built_tool_count: Object.keys(tools).length,
       tool_names: Object.keys(tools),
+      acp_dynamic_tool: requiresAcpDynamicTool,
     },
   });
+
+  if (requiresAcpDynamicTool) {
+    return acpTools(tools);
+  }
 
   return Object.keys(tools).length > 0 ? tools : undefined;
 };
@@ -317,6 +328,25 @@ export const normalizeToolArgs = (input: unknown): Record<string, unknown> => {
   return { value: input };
 };
 
+const getToolCallInput = (toolCall: { input?: unknown; args?: unknown }): unknown =>
+  toolCall.input !== undefined ? toolCall.input : toolCall.args;
+
+const normalizeCollectedToolCall = (toolCall: {
+  toolName: string;
+  input?: unknown;
+  args?: unknown;
+}): { toolName: string; args: Record<string, unknown> } => {
+  const acpDynamicTool = unwrapAcpDynamicToolCall({
+    toolName: toolCall.toolName,
+    input: getToolCallInput(toolCall),
+  });
+
+  return {
+    toolName: acpDynamicTool?.toolName ?? toolCall.toolName,
+    args: normalizeToolArgs(acpDynamicTool ? acpDynamicTool.args : getToolCallInput(toolCall)),
+  };
+};
+
 export const collectToolCalls = (
   steps?: Array<{ toolCalls?: unknown[] }> | null,
   fallbackToolCalls?: unknown[] | null
@@ -337,10 +367,7 @@ export const collectToolCalls = (
 
   if (toolCalls.length === 0) return undefined;
 
-  return toolCalls.map(toolCall => ({
-    toolName: toolCall.toolName,
-    args: normalizeToolArgs(toolCall.input),
-  }));
+  return toolCalls.map(normalizeCollectedToolCall);
 };
 
 const isApprovalRequestPart = (
@@ -348,7 +375,7 @@ const isApprovalRequestPart = (
 ): value is {
   type: 'tool-approval-request';
   approvalId: string;
-  toolCall: { toolName: string; toolCallId?: string; input?: unknown };
+  toolCall: { toolName: string; toolCallId?: string; input?: unknown; args?: unknown };
 } =>
   typeof value === 'object' &&
   value !== null &&
@@ -359,14 +386,14 @@ const isApprovalRequestPart = (
 export const collectApprovalRequests = (contentParts: unknown): ToolApprovalRequest[] => {
   if (!Array.isArray(contentParts)) return [];
 
-  return contentParts.filter(isApprovalRequestPart).map(part => ({
-    approvalId: part.approvalId,
-    toolCallId: part.toolCall.toolCallId,
-    toolCall: {
-      toolName: part.toolCall.toolName,
-      args: normalizeToolArgs(part.toolCall.input),
-    },
-  }));
+  return contentParts.filter(isApprovalRequestPart).map(part => {
+    const toolCall = normalizeCollectedToolCall(part.toolCall);
+    return {
+      approvalId: part.approvalId,
+      toolCallId: part.toolCall.toolCallId,
+      toolCall,
+    };
+  });
 };
 
 const isModelMessageLike = (value: unknown): value is ModelMessage =>

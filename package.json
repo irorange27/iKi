@@ -95,12 +95,14 @@
     "vue-tsc": "^3.2.6"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.18.2",
     "@ai-sdk-tool/parser": "^3.1.0",
     "@ai-sdk/anthropic": "^3.0.64",
     "@ai-sdk/deepseek": "^2.0.1",
     "@ai-sdk/openai": "^3.0.2",
     "@ai-sdk/openai-compatible": "^2.0.1",
     "@ai-sdk/vue": "^3.0.3",
+    "@mcpc-tech/acp-ai-provider": "^0.3.2",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "@tailwindcss/vite": "^4.1.18",
     "ai": "^6.0.3",

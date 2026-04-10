@@ -13,6 +13,7 @@ const {
   getAppConfigMock,
   shouldGuardToolsMock,
   generateChatWithUsageMock,
+  fetchAcpModelsMock,
   resolveModelCapabilityMock,
   assembleContextMock,
   createChatConversationRunnerMock,
@@ -52,6 +53,7 @@ const {
   })),
   shouldGuardToolsMock: vi.fn(() => false),
   generateChatWithUsageMock: vi.fn(),
+  fetchAcpModelsMock: vi.fn(async () => []),
   resolveModelCapabilityMock: vi.fn(async () => null),
   assembleContextMock: vi.fn(),
   createChatConversationRunnerMock: vi.fn(),
@@ -115,6 +117,7 @@ vi.mock('../../../../src/core/provider/emotion_model', () => ({
 
 vi.mock('../../../../src/core/provider/llm/factory', () => ({
   generateChatWithUsage: generateChatWithUsageMock,
+  fetchAcpModels: fetchAcpModelsMock,
   fetchModelsFromDev: vi.fn(async () => []),
   resolveModelCapability: resolveModelCapabilityMock,
   getProviderConfig: vi.fn(() => ({ apiKey: 'test-key' })),
@@ -297,6 +300,7 @@ beforeEach(() => {
       getRun: () => ({ status }),
       syncModelMessages: vi.fn(() => ({ status })),
       recordToolEvent: vi.fn(),
+      recordToolCalls: vi.fn(() => ({ status })),
       markCompleted: vi.fn(() => {
         status = 'completed';
         return { status };
@@ -333,6 +337,32 @@ describe('createChatStreaming', () => {
       },
     ]);
     expect(getMinimaxModelsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('getModels() routes ACP providers through ACP session discovery', async () => {
+    fetchAcpModelsMock.mockResolvedValueOnce([
+      {
+        id: 'codex-mini-latest',
+        displayName: 'Codex Mini',
+        supportsToolCalls: true,
+        source: 'provider',
+      },
+    ]);
+
+    const { streaming } = createDeps();
+
+    await expect(streaming.getModels('acp', 'provider_acp')).resolves.toEqual([
+      {
+        id: 'codex-mini-latest',
+        displayName: 'Codex Mini',
+        contextWindow: null,
+        maxInputTokens: null,
+        maxOutputTokens: null,
+        supportsToolCalls: true,
+        source: 'provider',
+      },
+    ]);
+    expect(fetchAcpModelsMock).toHaveBeenCalledWith('acp', 'provider_acp');
   });
 
   it('stream() emits skill usage citations and reports real token usage before rendering the response', async () => {
@@ -527,6 +557,91 @@ describe('createChatStreaming', () => {
       expect.objectContaining({
         threadId: 'thread_1',
         tools: [],
+      })
+    );
+  });
+
+  it('send() routes ACP turns through the harness path even without explicit local tools', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 0,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 700,
+      },
+    });
+
+    const { streaming } = createDeps();
+
+    const result = await streaming.send({
+      providerType: 'acp',
+      providerId: 'provider_acp',
+      model: 'codex-mini-latest',
+      messages: [{ role: 'user', content: 'hello' }],
+      threadId: 'thread_acp',
+    });
+
+    expect(result).toEqual({ success: true, text: 'tool result' });
+    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'acp',
+        providerId: 'provider_acp',
+        enableTools: true,
+      })
+    );
+    expect(generateChatWithUsageMock).not.toHaveBeenCalled();
+  });
+
+  it('send() allows proactive-task run metadata to override the default run kind', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 0,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 700,
+      },
+    });
+
+    const { streaming } = createDeps();
+
+    await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hello' }],
+      threadId: 'thread_proactive_1',
+      runConfig: {
+        kind: 'proactive-task',
+        metadata: {
+          source: 'proactive-task',
+          taskId: 'task_1',
+          reason: 'manual',
+        },
+      },
+    });
+
+    expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'proactive-task',
+        input: expect.objectContaining({
+          metadata: expect.objectContaining({
+            transport: 'send',
+            source: 'proactive-task',
+            taskId: 'task_1',
+            reason: 'manual',
+          }),
+        }),
       })
     );
   });

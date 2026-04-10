@@ -188,6 +188,36 @@ describe('chat provider selection', () => {
     });
   });
 
+  it('surfaces ACP command configuration failures before send', async () => {
+    const acpProvider = buildProvider({
+      id: 'acp_1',
+      name: 'ACP Agent',
+      type: 'acp',
+      models: '["codex-mini-latest"]',
+    });
+
+    const providerList = vi.fn(async () => [acpProvider]);
+    const isProviderConfigured = vi.fn(async () => false);
+    const selection = useChatProviderSelection({
+      electronAPI: {
+        providers: {
+          list: providerList,
+        },
+        chat: {
+          isProviderConfigured,
+        },
+      } as never,
+    });
+
+    await selection.loadAvailableProviders();
+    const result = await selection.ensureProviderReady();
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'Please configure the ACP Agent ACP command in Settings.',
+    });
+  });
+
   it('surfaces provider verification exceptions before send', async () => {
     const openai = buildProvider({
       id: 'openai',

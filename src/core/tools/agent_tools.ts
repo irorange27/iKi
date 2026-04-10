@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { AgentResult, AgentTool } from '../agent/types';
+import { createAgentRunTracker } from '../agent/run_tracker';
 import { createSimpleConversationRunner } from '../agent/runners/simple_conversation_runner';
 import { getToolModel } from '../provider/tool_model';
 import { BaseTool, defaultToolRegistry } from './base';
@@ -200,6 +201,7 @@ export class DelegatedAgentTool extends BaseTool {
     const conversationModel = resolveConversationModel();
     const delegatedTools = resolveDelegableTools(args.tools);
     const delegatedToolNames = delegatedTools.map(tool => tool.name);
+    const prompt = buildDelegationPrompt(args, delegatedToolNames);
 
     const runner = createSimpleConversationRunner({
       enabled: true,
@@ -227,18 +229,55 @@ export class DelegatedAgentTool extends BaseTool {
       runner.registerTool(tool);
     }
 
-    const result = await runWithToolRuntimeContext(
-      {
-        ...runtimeContext,
-        availableTools: delegatedTools,
-        conversationModel,
-        delegationDepth: delegationDepth + 1,
+    const runTracker = createAgentRunTracker({
+      kind: 'delegated-agent',
+      threadId: runtimeContext.threadId,
+      parentRunId: runtimeContext.runId,
+      providerType: conversationModel.providerType,
+      providerId: conversationModel.providerId,
+      model: conversationModel.model,
+      systemPrompt: SUBAGENT_SYSTEM_PROMPT,
+      enabledTools: delegatedToolNames,
+      availableSkillIds: runtimeContext.availableSkillIds ?? [],
+      input: {
+        prompt,
+        metadata: {
+          source: 'delegated-agent',
+          requestedToolNames: delegatedToolNames,
+          maxIterations: Math.max(1, Math.trunc(args.maxIterations || DEFAULT_AGENT_MAX_ITERATIONS)),
+        },
       },
-      async () =>
-        await runner.generate({
-          prompt: buildDelegationPrompt(args, delegatedToolNames),
-        })
-    );
+      working: {
+        modelMessages: [],
+        accumulatedText: '',
+        pendingApprovalIds: [],
+        lastStepIndex: 0,
+      },
+    });
+
+    let result: AgentResult;
+    try {
+      result = await runWithToolRuntimeContext(
+        {
+          ...runtimeContext,
+          runId: runTracker.id,
+          availableTools: delegatedTools,
+          conversationModel,
+          delegationDepth: delegationDepth + 1,
+        },
+        async () =>
+          await runner.generate({
+            prompt,
+          })
+      );
+      runTracker.recordToolCalls(result.toolCalls);
+      runTracker.syncModelMessages(runner.getHistory?.() ?? []);
+    } catch (error) {
+      runTracker.markFailed({
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
 
     if ((result.toolApprovalRequests?.length ?? 0) > 0) {
       const toolNames = Array.from(
@@ -251,10 +290,19 @@ export class DelegatedAgentTool extends BaseTool {
             )
         )
       );
+      runTracker.markFailed({
+        message: `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool.`,
+      });
       throw new Error(
         `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool. Run that step directly from the parent agent instead.`
       );
     }
+
+    runTracker.markCompleted({
+      text: result.response,
+      ...(result.usage ? { usage: result.usage } : {}),
+      finishReason: 'completed',
+    });
 
     return {
       response: result.response,

@@ -11,6 +11,7 @@ export type ToolRuntimeConversationModel = {
 
 export type ToolRuntimeContext = {
   threadId?: string;
+  runId?: string;
   availableSkillIds?: string[];
   availableTools?: AgentTool[];
   conversationModel?: ToolRuntimeConversationModel;

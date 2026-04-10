@@ -6,6 +6,7 @@ import type {
   Provider,
   ProviderModelDescriptor,
 } from '../../shared/types/provider';
+import { ACP_PROVIDER_TYPE } from '../../shared/constants/acp';
 import { createLogger } from '../logger';
 import {
   getProviderModelOptions,
@@ -309,7 +310,10 @@ export const useChatProviderSelection = (deps: {
     if (!configured) {
       return {
         ok: false,
-        message: translate('chat.provider.configureApiKey', { provider: selectedProviderName }),
+        message:
+          selectedProvider.value.type === ACP_PROVIDER_TYPE
+            ? translate('chat.provider.configureCommand', { provider: selectedProviderName })
+            : translate('chat.provider.configureApiKey', { provider: selectedProviderName }),
       };
     }
 

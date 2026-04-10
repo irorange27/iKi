@@ -334,6 +334,69 @@ describe('ProvidersSettings', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
+  it('surfaces ACP as a built-in provider and saves ACP runtime settings', async () => {
+    const list = vi.fn(async () => []);
+    const add = vi.fn(async () => ({ id: 'acp_176' }));
+
+    setElectronApi({
+      providers: {
+        list,
+        add,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const acpRow = wrapper
+      .findAll('.provider-list-item')
+      .find(item => item.text().includes('ACP Agent'));
+
+    if (!acpRow) {
+      throw new Error('ACP provider row not found');
+    }
+
+    await acpRow.trigger('click');
+    await flushPromises();
+
+    await wrapper.find('input[placeholder="e.g. codex-acp"]').setValue('codex-acp');
+    await wrapper
+      .find('textarea[placeholder="--profile default\n--sandbox workspace-write"]')
+      .setValue('--sandbox\nworkspace-write');
+    await wrapper.find('.provider-switch input').setValue(true);
+    await findButtonByText(wrapper, 'Save').trigger('click');
+    await flushPromises();
+
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^acp_\d+$/),
+        name: 'ACP Agent',
+        type: 'acp',
+        acp_command: 'codex-acp',
+        acp_args: '--sandbox\nworkspace-write',
+        enabled: true,
+      })
+    );
+  });
+
   it('creates a custom provider with the selected shared dropdown type', async () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'custom_176' }));

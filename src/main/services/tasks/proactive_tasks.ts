@@ -257,6 +257,14 @@ export const runProactiveTask = async (
           ? { tools: [] }
           : {}),
       threadId,
+      runConfig: {
+        kind: 'proactive-task',
+        metadata: {
+          source: 'proactive-task',
+          taskId: task.id,
+          reason: options?.reason || 'schedule',
+        },
+      },
     });
 
     const nextRunAt = computeNextRunAt(task, startedAt);

@@ -5,6 +5,7 @@ import type { Provider } from '../../../src/shared/types/provider';
 
 const {
   createModelMock,
+  disposeLanguageModelMock,
   generateTextMock,
   getAppConfigMock,
   getFullSystemPromptMock,
@@ -12,6 +13,7 @@ const {
   getProvidersMock,
 } = vi.hoisted(() => ({
   createModelMock: vi.fn(),
+  disposeLanguageModelMock: vi.fn(),
   generateTextMock: vi.fn(),
   getAppConfigMock: vi.fn(),
   getFullSystemPromptMock: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock('ai', () => ({
 
 vi.mock('../../../src/core/provider/llm/factory', () => ({
   createModel: createModelMock,
+  disposeLanguageModel: disposeLanguageModelMock,
   getFullSystemPrompt: getFullSystemPromptMock,
   getModelCallSettings: getModelCallSettingsMock,
 }));
@@ -184,6 +187,7 @@ describe('tool model provider', () => {
       messages: [{ role: 'user', content: 'Reply with OK.' }],
       maxOutputTokens: 8,
     });
+    expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
   });
 
   it('rejects invalid explicit providerId selections instead of silently picking another provider', async () => {

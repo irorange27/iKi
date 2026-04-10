@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AgentResult, AgentTool, ConversationRunner } from '../../../../src/core/agent';
 import { createConversationHarness } from '../../../../src/core/agent';
-import { getToolRuntimeContext } from '../../../../src/core/tools/runtime_context';
+import {
+  getToolRuntimeContext,
+  runWithToolRuntimeContext,
+} from '../../../../src/core/tools/runtime_context';
 
 const createTool = (name: string): AgentTool =>
   ({
@@ -61,10 +64,12 @@ describe('ConversationHarness', () => {
     });
 
     harness.registerTool(webTool);
-    const result = await harness.generate({
-      history: [{ role: 'system', content: 'history' }],
-      prompt: 'hello',
-    });
+    const result = await runWithToolRuntimeContext({ runId: 'run_parent_1' }, async () =>
+      await harness.generate({
+        history: [{ role: 'system', content: 'history' }],
+        prompt: 'hello',
+      })
+    );
 
     expect(result).toEqual({
       response: 'ok',
@@ -73,6 +78,7 @@ describe('ConversationHarness', () => {
     expect(seenContexts).toEqual([
       {
         threadId: 'thread_1',
+        runId: 'run_parent_1',
         availableSkillIds: ['user:planner'],
         availableTools: [webTool],
         conversationModel: {

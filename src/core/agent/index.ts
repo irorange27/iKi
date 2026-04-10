@@ -39,6 +39,8 @@ export {
 } from './runners/simple_conversation_runner';
 
 export { createConversationHarness } from './harnesses/conversation_harness';
+export { createAgentRunTracker } from './run_tracker';
+export type { AgentRunTracker } from './run_tracker';
 
 export { getConversationRunnerConfig } from './config';
 

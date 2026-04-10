@@ -1,10 +1,20 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-const { getFullSystemPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(() => ({
-  getFullSystemPromptMock: vi.fn(),
-  getAppConfigMock: vi.fn(),
-  loggerEventMock: vi.fn(),
+const { acpToolsMock, getFullSystemPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(
+  () => ({
+    acpToolsMock: vi.fn((tools: Record<string, unknown>) => ({
+      ...tools,
+      'acp.acp_provider_agent_dynamic_tool': { type: 'provider' },
+    })),
+    getFullSystemPromptMock: vi.fn(),
+    getAppConfigMock: vi.fn(),
+    loggerEventMock: vi.fn(),
+  })
+);
+
+vi.mock('@mcpc-tech/acp-ai-provider', () => ({
+  acpTools: acpToolsMock,
 }));
 
 vi.mock('../../../src/core/provider/llm/factory', () => ({
@@ -34,6 +44,7 @@ import {
   buildPromptContext,
   cloneModelMessages,
   collectApprovalRequests,
+  collectToolCalls,
   getDefaultAgentConfig,
   loadAgentConfig,
 } from '../../../src/core/agent/ai_sdk_runtime';
@@ -210,6 +221,91 @@ describe('ai_sdk_runtime', () => {
     ]);
   });
 
+  it('unwraps ACP dynamic approval requests into the host tool name and args', () => {
+    expect(
+      collectApprovalRequests([
+        {
+          type: 'tool-approval-request',
+          approvalId: 'approval_2',
+          toolCall: {
+            toolCallId: 'call_2',
+            toolName: 'acp.acp_provider_agent_dynamic_tool',
+            input: JSON.stringify({
+              toolCallId: 'call_2',
+              toolName: 'write_file',
+              args: {
+                path: 'notes.md',
+              },
+            }),
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        approvalId: 'approval_2',
+        toolCallId: 'call_2',
+        toolCall: {
+          toolName: 'write_file',
+          args: {
+            path: 'notes.md',
+          },
+        },
+      },
+    ]);
+  });
+
+  it('collects tool calls from args when input is absent', () => {
+    expect(
+      collectToolCalls(undefined, [
+        {
+          toolName: 'lookup',
+          args: {
+            query: 'hello',
+          },
+        },
+      ])
+    ).toEqual([
+      {
+        toolName: 'lookup',
+        args: {
+          query: 'hello',
+        },
+      },
+    ]);
+  });
+
+  it('unwraps ACP dynamic tool calls into the actual host tool payload', () => {
+    expect(
+      collectToolCalls(
+        [
+          {
+            toolCalls: [
+              {
+                toolName: 'acp.acp_provider_agent_dynamic_tool',
+                input: JSON.stringify({
+                  toolName: 'write_file',
+                  args: {
+                    path: 'notes.md',
+                    text: 'hello',
+                  },
+                }),
+              },
+            ],
+          },
+        ],
+        undefined
+      )
+    ).toEqual([
+      {
+        toolName: 'write_file',
+        args: {
+          path: 'notes.md',
+          text: 'hello',
+        },
+      },
+    ]);
+  });
+
   it('uses explicit runtime overrides without touching app config', () => {
     getAppConfigMock.mockImplementation(() => {
       throw new Error('app config should not be loaded');
@@ -290,7 +386,7 @@ describe('ai_sdk_runtime', () => {
     const zodHandler = vi.fn(async (args: unknown) => ({ source: 'zod', args }));
     const jsonHandler = vi.fn(async (args: unknown) => ({ source: 'json', args }));
 
-    const tools = buildAiToolSet({ enableTools: true }, [
+    const tools = buildAiToolSet({ enableTools: true, providerType: 'openai' }, [
       {
         name: 'lookup',
         type: 'function',
@@ -342,5 +438,14 @@ describe('ai_sdk_runtime', () => {
     });
     expect(zodHandler).toHaveBeenCalledWith({ query: 'hello' });
     expect(jsonHandler).toHaveBeenCalledWith({ url: 'https://example.com' });
+  });
+
+  it('wraps ACP tool-capable runtimes with the ACP dynamic tool even when no local tools are registered', () => {
+    const tools = buildAiToolSet({ enableTools: true, providerType: 'acp' }, []);
+
+    expect(acpToolsMock).toHaveBeenCalledWith({});
+    expect(tools).toEqual({
+      'acp.acp_provider_agent_dynamic_tool': { type: 'provider' },
+    });
   });
 });

@@ -3,12 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   createSimpleConversationRunnerMock,
   generateMock,
+  getHistoryMock,
   registerToolMock,
+  createAgentRunTrackerMock,
   getToolModelMock,
 } = vi.hoisted(() => ({
   createSimpleConversationRunnerMock: vi.fn(),
   generateMock: vi.fn(),
+  getHistoryMock: vi.fn(() => [{ role: 'assistant', content: 'delegated history' }]),
   registerToolMock: vi.fn(),
+  createAgentRunTrackerMock: vi.fn(),
   getToolModelMock: vi.fn(() => ({ providerType: 'openai', model: 'gpt-4o-mini' })),
 }));
 
@@ -20,6 +24,10 @@ vi.mock('../../../src/core/provider/tool_model', () => ({
   getToolModel: getToolModelMock,
 }));
 
+vi.mock('../../../src/core/agent/run_tracker', () => ({
+  createAgentRunTracker: createAgentRunTrackerMock,
+}));
+
 import { DelegatedAgentTool } from '../../../src/core/tools/agent_tools';
 import { ListDirTool } from '../../../src/core/tools/file_tools';
 import { ShellExecutionTool } from '../../../src/core/tools/shell_tools';
@@ -29,8 +37,20 @@ describe('DelegatedAgentTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createSimpleConversationRunnerMock.mockReturnValue({
+      getHistory: getHistoryMock,
       registerTool: registerToolMock,
       generate: generateMock,
+    });
+    createAgentRunTrackerMock.mockReturnValue({
+      id: 'run_child_1',
+      getRun: vi.fn(() => ({ status: 'running' })),
+      syncModelMessages: vi.fn(),
+      recordToolEvent: vi.fn(),
+      recordToolCalls: vi.fn(),
+      markCompleted: vi.fn(),
+      markBlocked: vi.fn(),
+      markFailed: vi.fn(),
+      markCancelled: vi.fn(),
     });
   });
 
@@ -56,6 +76,7 @@ describe('DelegatedAgentTool', () => {
           new ShellExecutionTool().toAgentTool(),
           new DelegatedAgentTool().toAgentTool(),
         ],
+        runId: 'run_parent_1',
         conversationModel: {
           providerType: 'openai',
           model: 'gpt-4o-mini',
@@ -79,6 +100,13 @@ describe('DelegatedAgentTool', () => {
         maxIterations: 3,
       })
     );
+    expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'delegated-agent',
+        parentRunId: 'run_parent_1',
+        enabledTools: ['list_dir'],
+      })
+    );
     expect(registerToolMock).toHaveBeenCalledTimes(1);
     expect(registerToolMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -88,6 +116,19 @@ describe('DelegatedAgentTool', () => {
     expect(generateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining('<delegated_subtask>'),
+      })
+    );
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.recordToolCalls).toHaveBeenCalledWith([
+      { toolName: 'list_dir', args: {} },
+      { toolName: 'list_dir', args: {} },
+    ]);
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.syncModelMessages).toHaveBeenCalledWith(
+      [{ role: 'assistant', content: 'delegated history' }]
+    );
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.markCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Inspected the directory structure.',
+        finishReason: 'completed',
       })
     );
     expect(result).toEqual({
@@ -122,6 +163,7 @@ describe('DelegatedAgentTool', () => {
       )
     ).rejects.toThrow(/requires approval/i);
 
+    expect(createAgentRunTrackerMock).not.toHaveBeenCalled();
     expect(registerToolMock).not.toHaveBeenCalled();
     expect(generateMock).not.toHaveBeenCalled();
   });

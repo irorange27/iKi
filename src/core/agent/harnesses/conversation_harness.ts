@@ -1,6 +1,7 @@
 import type { ToolRuntimeContext } from '../../tools/runtime_context';
 import {
   bindToolRuntimeContextToGenerator,
+  getToolRuntimeContext,
   runWithToolRuntimeContext,
 } from '../../tools/runtime_context';
 import type { AgentResult, AgentTool } from '../types';
@@ -53,6 +54,7 @@ class DefaultConversationHarness implements ConversationHarness {
 
   private getEffectiveToolRuntimeContext(): ToolRuntimeContext {
     return {
+      ...getToolRuntimeContext(),
       ...this.toolRuntimeContext,
       availableTools: this.getRegisteredTools(),
     };

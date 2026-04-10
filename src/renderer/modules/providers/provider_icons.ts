@@ -34,6 +34,7 @@ export const getProviderIconName = (providerId: string): string => {
     deepseek: 'deepseek',
     kimi: 'kimi',
     ollama: 'ollama',
+    acp: 'bot',
     openrouter: 'openrouter',
     azure: 'azure',
     qwen: 'qwen',

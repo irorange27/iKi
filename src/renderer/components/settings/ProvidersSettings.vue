@@ -154,6 +154,72 @@
                 </p>
               </div>
 
+              <template v-if="isSelectedAcpProvider">
+                <div class="provider-field">
+                  <label class="input-label provider-field-label">
+                    <span class="provider-field-title">{{
+                      t('settings.providers.acp.command')
+                    }}</span>
+                    <input
+                      type="text"
+                      v-model="selectedProviderDraft.acp_command"
+                      :placeholder="t('settings.providers.acp.commandPlaceholder')"
+                    />
+                  </label>
+                  <p class="provider-field-help">
+                    {{ t('settings.providers.acp.commandHelp') }}
+                  </p>
+                </div>
+
+                <div class="provider-field">
+                  <label class="input-label provider-field-label">
+                    <span class="provider-field-title">{{
+                      t('settings.providers.acp.args')
+                    }}</span>
+                    <textarea
+                      v-model="selectedProviderDraft.acp_args"
+                      :placeholder="t('settings.providers.acp.argsPlaceholder')"
+                      class="provider-multiline-input"
+                      rows="4"
+                    ></textarea>
+                  </label>
+                  <p class="provider-field-help">
+                    {{ t('settings.providers.acp.argsHelp') }}
+                  </p>
+                </div>
+
+                <div class="provider-field">
+                  <span class="provider-field-title">{{ t('settings.providers.acp.apiProvider') }}</span>
+                  <SettingsSelect
+                    :model-value="selectedProviderDraft.acp_api_provider_id"
+                    :options="acpCredentialProviderOptions"
+                    :aria-label="t('settings.providers.acp.apiProvider')"
+                    @update:model-value="
+                      selectedProviderDraft.acp_api_provider_id = String($event || '')
+                    "
+                  />
+                  <p class="provider-field-help">
+                    {{ t('settings.providers.acp.apiProviderHelp') }}
+                  </p>
+                </div>
+
+                <div class="provider-field">
+                  <label class="input-label provider-field-label">
+                    <span class="provider-field-title">{{
+                      t('settings.providers.acp.authMethodId')
+                    }}</span>
+                    <input
+                      type="text"
+                      v-model="selectedProviderDraft.acp_auth_method_id"
+                      :placeholder="t('settings.providers.acp.authMethodPlaceholder')"
+                    />
+                  </label>
+                  <p class="provider-field-help">
+                    {{ t('settings.providers.acp.authMethodHelp') }}
+                  </p>
+                </div>
+              </template>
+
               <ProviderModelsPanel
                 :open="modelsPanelOpen"
                 :is-fetching-models="isFetchingModels"
@@ -324,6 +390,7 @@ import SettingsSelect from './SettingsSelect.vue';
 import ProviderModelOptionsModal from './providers/ProviderModelOptionsModal.vue';
 import ProviderModelsPanel from './providers/ProviderModelsPanel.vue';
 import { useI18n } from '../../i18n';
+import { ACP_PROVIDER_TYPE } from '../../../shared/constants/acp';
 import type { BuiltInProvider } from '../../../shared/types/settings';
 import type { ProviderModelOptions } from '../../../shared/types/provider';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
@@ -652,6 +719,7 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
       kimi: t('settings.providers.description.kimi'),
       minimax: t('settings.providers.description.minimax'),
       ollama: t('settings.providers.description.ollama'),
+      acp: t('settings.providers.description.acp'),
     };
     return {
       ...builtIn,
@@ -679,6 +747,31 @@ const selectedProviderRequiresApiKey = computed(() => {
   return selectedProviderInfo.value?.requiresApiKey !== false;
 });
 
+const isSelectedAcpProvider = computed(() => selectedProviderInfo.value?.id === ACP_PROVIDER_TYPE);
+
+const acpCredentialProviderOptions = computed(() => {
+  const options = [
+    {
+      value: '',
+      label: t('settings.providers.acp.apiProviderAuto'),
+    },
+  ];
+
+  const currentProviderId = selectedProviderConfig.value?.id;
+  for (const provider of providers.value) {
+    if (!provider.enabled) continue;
+    if (provider.type === ACP_PROVIDER_TYPE) continue;
+    if (currentProviderId && provider.id === currentProviderId) continue;
+
+    options.push({
+      value: provider.id,
+      label: `${provider.name} (${provider.id})`,
+    });
+  }
+
+  return options;
+});
+
 const selectedProviderSupportLink = computed(() => {
   const info = selectedProviderInfo.value;
   if (!info) return null;
@@ -704,6 +797,9 @@ const selectedProviderSupportLink = computed(() => {
 
 const selectedProviderBaseUrlHelp = computed(() => {
   const info = selectedProviderInfo.value;
+  if (info?.id === ACP_PROVIDER_TYPE) {
+    return t('settings.providers.acp.baseUrlHelp');
+  }
   if (!info?.defaultBaseUrl) {
     return t('settings.providers.baseUrlHelp.optionalOverride');
   }
@@ -718,6 +814,10 @@ const isSelectedProviderDirty = computed(() => {
   return (
     draft.api_key !== snapshot.api_key ||
     draft.base_url.trim() !== snapshot.base_url ||
+    draft.acp_command.trim() !== snapshot.acp_command ||
+    draft.acp_args.trim() !== snapshot.acp_args ||
+    draft.acp_auth_method_id.trim() !== snapshot.acp_auth_method_id ||
+    draft.acp_api_provider_id.trim() !== snapshot.acp_api_provider_id ||
     draft.enabled !== snapshot.enabled ||
     !arrayEquals(selectedModelsList.value, snapshot.models) ||
     !arrayEquals(selectedDraftAvailableModels.value, snapshot.availableModels) ||
@@ -733,6 +833,10 @@ const canSaveSelectedProvider = computed(() => {
   }
 
   if (draft.enabled && selectedProviderRequiresApiKey.value && draft.api_key.trim().length === 0) {
+    return false;
+  }
+
+  if (draft.enabled && isSelectedAcpProvider.value && draft.acp_command.trim().length === 0) {
     return false;
   }
 
@@ -763,6 +867,14 @@ const saveProviderConfig = async () => {
   );
   const normalizedBaseUrl =
     draft.base_url.trim() || selectedProviderInfo.value.defaultBaseUrl || '';
+  const acpConfigPatch = isSelectedAcpProvider.value
+    ? {
+        acp_command: draft.acp_command.trim(),
+        acp_args: draft.acp_args.trim() || null,
+        acp_auth_method_id: draft.acp_auth_method_id.trim() || null,
+        acp_api_provider_id: draft.acp_api_provider_id.trim() || null,
+      }
+    : {};
 
   try {
     if (existingConfig) {
@@ -772,6 +884,7 @@ const saveProviderConfig = async () => {
           : {}),
         api_key: draft.api_key.trim(),
         base_url: normalizedBaseUrl,
+        ...acpConfigPatch,
         enabled: draft.enabled,
         models: JSON.stringify(modelsToSave),
         model_options: modelOptionsToSave,
@@ -782,6 +895,10 @@ const saveProviderConfig = async () => {
       const hasMeaningfulDraft =
         draft.api_key.trim().length > 0 ||
         draft.base_url.trim().length > 0 ||
+        draft.acp_command.trim().length > 0 ||
+        draft.acp_args.trim().length > 0 ||
+        draft.acp_auth_method_id.trim().length > 0 ||
+        draft.acp_api_provider_id.trim().length > 0 ||
         modelsToSave.length > 0 ||
         availableToSave.length > 0 ||
         draft.enabled;
@@ -796,6 +913,7 @@ const saveProviderConfig = async () => {
         type: builtIn.id,
         api_key: draft.api_key.trim(),
         base_url: normalizedBaseUrl,
+        ...acpConfigPatch,
         models: JSON.stringify(modelsToSave),
         model_options: modelOptionsToSave,
         enabled: draft.enabled,
@@ -965,6 +1083,12 @@ onMounted(() => {
 .providers-search .search-input:focus {
   outline: none;
   border-color: var(--accent-color);
+}
+
+.provider-multiline-input {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
 }
 
 .providers-actions {

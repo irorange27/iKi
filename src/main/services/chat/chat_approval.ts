@@ -12,6 +12,7 @@ import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
 import { defaultToolRegistry } from '../../../core/tools';
 import { LoadSkillTool } from '../../../core/tools/skill_tools';
+import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_approval';
 import { getErrorMessage } from '../../utils/errors';
@@ -542,48 +543,52 @@ export const createChatApproval = (deps: {
     deps.activeStreams.set(resumedSenderId, streamState);
 
     try {
-      const streamResult = await toolLoopRunner.stream({
-        harness: session.harness,
-        webContents: session.webContents,
-        history: session.history,
-        prompt: '',
-        approvalResponses: Array.from(session.collectedApprovalResponses.values()),
-        approvalContext: nextApprovalContext,
-        shouldCancel: () => streamState.cancelled,
-        onToolEvent: eventPart => {
-          resumeRunTracker?.recordToolEvent(eventPart);
-          if (
-            eventPart.type === 'tool-approval-request' &&
-            typeof eventPart.approvalId === 'string' &&
-            eventPart.approvalId.length > 0
-          ) {
-            ensurePendingApprovalSession(eventPart.approvalId, {
-              harness: session.harness,
-              webContents: session.webContents,
-              history: session.harness.getHistory?.() ?? session.history,
-              recoveryContext: nextApprovalContext,
-            });
-          }
-          uiChunkEmitter.emitToolEvent(eventPart);
-        },
-        abortSignal: streamState.abortController.signal,
-        uiChunkEmitter,
-        tokenUsageContext: {
-          ...(typeof nextApprovalContext?.maxInputTokens === 'number'
-            ? { maxInputTokens: nextApprovalContext.maxInputTokens }
-            : {}),
-          ...(typeof nextApprovalContext?.maxOutputTokens === 'number'
-            ? { maxOutputTokens: nextApprovalContext.maxOutputTokens }
-            : {}),
-          ...(nextApprovalContext?.model ? { model: nextApprovalContext.model } : {}),
-          ...(nextApprovalContext?.providerType
-            ? { providerType: nextApprovalContext.providerType }
-            : {}),
-          ...(nextApprovalContext?.providerId
-            ? { providerId: nextApprovalContext.providerId }
-            : {}),
-        },
-      });
+      const streamResult = await runWithToolRuntimeContext(
+        { runId: resumeRunTracker?.id ?? nextApprovalContext?.runId },
+        async () =>
+          await toolLoopRunner.stream({
+            harness: session.harness,
+            webContents: session.webContents,
+            history: session.history,
+            prompt: '',
+            approvalResponses: Array.from(session.collectedApprovalResponses.values()),
+            approvalContext: nextApprovalContext,
+            shouldCancel: () => streamState.cancelled,
+            onToolEvent: eventPart => {
+              resumeRunTracker?.recordToolEvent(eventPart);
+              if (
+                eventPart.type === 'tool-approval-request' &&
+                typeof eventPart.approvalId === 'string' &&
+                eventPart.approvalId.length > 0
+              ) {
+                ensurePendingApprovalSession(eventPart.approvalId, {
+                  harness: session.harness,
+                  webContents: session.webContents,
+                  history: session.harness.getHistory?.() ?? session.history,
+                  recoveryContext: nextApprovalContext,
+                });
+              }
+              uiChunkEmitter.emitToolEvent(eventPart);
+            },
+            abortSignal: streamState.abortController.signal,
+            uiChunkEmitter,
+            tokenUsageContext: {
+              ...(typeof nextApprovalContext?.maxInputTokens === 'number'
+                ? { maxInputTokens: nextApprovalContext.maxInputTokens }
+                : {}),
+              ...(typeof nextApprovalContext?.maxOutputTokens === 'number'
+                ? { maxOutputTokens: nextApprovalContext.maxOutputTokens }
+                : {}),
+              ...(nextApprovalContext?.model ? { model: nextApprovalContext.model } : {}),
+              ...(nextApprovalContext?.providerType
+                ? { providerType: nextApprovalContext.providerType }
+                : {}),
+              ...(nextApprovalContext?.providerId
+                ? { providerId: nextApprovalContext.providerId }
+                : {}),
+            },
+          })
+      );
       resumeRunTracker?.syncModelMessages(session.harness.getHistory?.() ?? session.history ?? []);
       if (!streamResult.cancelled && nextApprovalContext) {
         deps.usage.recordUsageEvent({
