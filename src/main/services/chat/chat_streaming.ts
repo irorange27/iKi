@@ -42,6 +42,7 @@ import type { ChatMemory } from './chat_memory';
 import { createChatContextAssembler } from './chat_context';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
 import { createChatConversationRunner } from './chat_conversation_runner';
+import { createAgentRunTracker } from './chat_run_tracking';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
 import type {
@@ -89,6 +90,7 @@ export const createChatStreaming = (deps: {
       session: {
         harness: ConversationHarness;
         webContents: ChatWebContents;
+        history?: import('ai').ModelMessage[];
         recoveryContext?: ApprovalRecoveryContext;
       }
     ) => unknown;
@@ -325,6 +327,7 @@ export const createChatStreaming = (deps: {
   const createApprovalRecoveryContext = (params: {
     threadId?: string;
     sessionId: string;
+    runId?: string;
     providerType: string;
     providerId?: string;
     model: string;
@@ -343,6 +346,9 @@ export const createChatStreaming = (deps: {
       sessionId,
       threadId,
       assistantMessageId: sessionId,
+      ...(typeof params.runId === 'string' && params.runId.trim()
+        ? { runId: params.runId.trim() }
+        : {}),
       providerType: params.providerType,
       ...(typeof params.providerId === 'string' && params.providerId.trim()
         ? { providerId: params.providerId.trim() }
@@ -628,9 +634,41 @@ export const createChatStreaming = (deps: {
   };
 
   const send = async (options: ChatTurnOptions) => {
+    let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
     try {
       const preparedTurn = await prepareChatTurn(options);
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
+      const systemPrompt = preparedTurn.enableTools
+        ? TOOL_AGENT_SYSTEM_PROMPT
+        : NO_TOOLS_SYSTEM_PROMPT;
+
+      runTracker = createAgentRunTracker({
+        kind: 'chat-turn',
+        threadId: options.threadId,
+        providerType: options.providerType,
+        providerId: options.providerId,
+        model: options.model,
+        systemPrompt,
+        enabledTools: preparedTurn.guardedTools,
+        availableSkillIds: preparedTurn.selectedSkillIds,
+        input: {
+          ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
+          messages: preparedTurn.finalMessages,
+          metadata: {
+            transport: 'send',
+            contextTokens: preparedTurn.report.totalEstimatedTokens,
+            skillMode: preparedTurn.skillMode,
+            maxIterations,
+            enableTools: preparedTurn.enableTools,
+          },
+        },
+        working: {
+          modelMessages: preparedTurn.history,
+          accumulatedText: '',
+          pendingApprovalIds: [],
+          lastStepIndex: 0,
+        },
+      });
 
       if (preparedTurn.enableTools) {
         const harness = createChatHarness({
@@ -638,7 +676,7 @@ export const createChatStreaming = (deps: {
           providerType: options.providerType,
           providerId: options.providerId,
           model: options.model,
-          systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
+          systemPrompt,
           enableTools: true,
           enabledTools: preparedTurn.guardedTools,
           availableSkillIds: preparedTurn.selectedSkillIds,
@@ -657,6 +695,7 @@ export const createChatStreaming = (deps: {
           history: preparedTurn.history,
           prompt: preparedTurn.prompt,
         });
+        runTracker.syncModelMessages(harness.getHistory?.() ?? preparedTurn.history);
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -670,6 +709,11 @@ export const createChatStreaming = (deps: {
         });
         if (result.toolApprovalRequests && result.toolApprovalRequests.length > 0) {
           const approvalError = describeApprovalRequiredTools(result.toolApprovalRequests);
+          runTracker.markBlocked({
+            text: result.response,
+            usage: result.usage ? { ...result.usage } : undefined,
+            pendingApprovalIds: result.toolApprovalRequests.map(request => request.approvalId),
+          });
           chatStreamingLogger.event({
             level: 'warn',
             event: 'chat.send.approval_required',
@@ -687,6 +731,11 @@ export const createChatStreaming = (deps: {
           });
           throw new Error(approvalError);
         }
+        runTracker.markCompleted({
+          text: result.response,
+          usage: result.usage ? { ...result.usage } : undefined,
+          finishReason: 'completed',
+        });
         return { success: true, text: result.response };
       }
 
@@ -711,9 +760,18 @@ export const createChatStreaming = (deps: {
           contextTokens: preparedTurn.report.totalEstimatedTokens,
         },
       });
+      runTracker.markCompleted({
+        text: result.text,
+        usage: result.usage ? { ...result.usage } : undefined,
+        finishReason: 'completed',
+      });
       return { success: true, text: result.text };
     } catch (error: unknown) {
-      return { success: false, error: getErrorMessage(error) };
+      const message = getErrorMessage(error);
+      if (runTracker && runTracker.getRun().status === 'running') {
+        runTracker.markFailed({ message });
+      }
+      return { success: false, error: message };
     }
   };
 
@@ -732,6 +790,7 @@ export const createChatStreaming = (deps: {
     };
     const uiChunkEmitter = createUiChunkEmitter(webContents);
     deps.activeStreams.set(senderId, streamState);
+    let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
       const preparedTurn = await prepareChatTurn({
@@ -764,10 +823,39 @@ export const createChatStreaming = (deps: {
       const systemPrompt = preparedTurn.enableTools
         ? TOOL_AGENT_SYSTEM_PROMPT
         : NO_TOOLS_SYSTEM_PROMPT;
+      runTracker = createAgentRunTracker({
+        kind: 'chat-turn',
+        threadId: options.threadId,
+        providerType: options.providerType,
+        providerId: options.providerId,
+        model: options.model,
+        systemPrompt,
+        enabledTools: preparedTurn.guardedTools,
+        availableSkillIds: preparedTurn.selectedSkillIds,
+        input: {
+          ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
+          messages: preparedTurn.finalMessages,
+          metadata: {
+            transport: 'stream',
+            contextTokens: preparedTurn.report.totalEstimatedTokens,
+            skillMode: preparedTurn.skillMode,
+            maxIterations,
+            enableTools: preparedTurn.enableTools,
+            assistantMessageId: uiChunkEmitter.messageId,
+          },
+        },
+        working: {
+          modelMessages: preparedTurn.history,
+          accumulatedText: '',
+          pendingApprovalIds: [],
+          lastStepIndex: 0,
+        },
+      });
       const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
             threadId: options.threadId,
             sessionId: uiChunkEmitter.messageId,
+            runId: runTracker.id,
             providerType: options.providerType,
             providerId: options.providerId,
             model: options.model,
@@ -808,6 +896,7 @@ export const createChatStreaming = (deps: {
         approvalContext,
         shouldCancel: () => streamState.cancelled,
         onToolEvent: eventPart => {
+          runTracker?.recordToolEvent(eventPart);
           if (
             eventPart.type === 'tool-approval-request' &&
             typeof eventPart.approvalId === 'string' &&
@@ -816,6 +905,7 @@ export const createChatStreaming = (deps: {
             deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
               harness,
               webContents,
+              history: preparedTurn.history,
               recoveryContext: approvalContext,
             });
           }
@@ -837,6 +927,7 @@ export const createChatStreaming = (deps: {
             : {}),
         },
       });
+      runTracker.syncModelMessages(harness.getHistory?.() ?? preparedTurn.history);
       if (!streamResult.cancelled) {
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
@@ -851,6 +942,22 @@ export const createChatStreaming = (deps: {
           },
         });
       }
+      if (streamResult.cancelled) {
+        runTracker.markCancelled({
+          ...(streamResult.response ? { text: streamResult.response } : {}),
+        });
+      } else if (streamResult.awaitingApproval) {
+        runTracker.markBlocked({
+          ...(streamResult.response ? { text: streamResult.response } : {}),
+          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
+        });
+      } else {
+        runTracker.markCompleted({
+          ...(streamResult.response ? { text: streamResult.response } : {}),
+          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
+          finishReason: 'completed',
+        });
+      }
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
@@ -860,6 +967,9 @@ export const createChatStreaming = (deps: {
     } catch (error: unknown) {
       if (streamState.cancelled) {
         uiChunkEmitter.abort();
+        if (runTracker && runTracker.getRun().status === 'running') {
+          runTracker.markCancelled();
+        }
         return { success: true, stopped: streamState.stoppedByUser };
       }
       const message = getErrorMessage(error);
@@ -876,6 +986,9 @@ export const createChatStreaming = (deps: {
           user_facing_error: message,
         },
       });
+      if (runTracker && runTracker.getRun().status === 'running') {
+        runTracker.markFailed({ message });
+      }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_CHAT_TOOL_MAX_ITERATIONS,
   NO_TOOLS_SYSTEM_PROMPT,
+  TOOL_AGENT_SYSTEM_PROMPT,
 } from '../../../../src/main/services/chat/chat_constants';
 
 const {
@@ -24,6 +25,7 @@ const {
   createToolLoopRunnerMock,
   toolLoopStreamMock,
   defaultToolRegistryGetMock,
+  createAgentRunTrackerMock,
   getErrorMessageMock,
   getMinimaxModelsMock,
 } = vi.hoisted(() => ({
@@ -62,6 +64,7 @@ const {
   createToolLoopRunnerMock: vi.fn(),
   toolLoopStreamMock: vi.fn(),
   defaultToolRegistryGetMock: vi.fn(),
+  createAgentRunTrackerMock: vi.fn(),
   getErrorMessageMock: vi.fn((error: unknown) =>
     error instanceof Error ? error.message : String(error)
   ),
@@ -170,6 +173,10 @@ vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
 
 vi.mock('../../../../src/main/services/chat/chat_tool_loop', () => ({
   createToolLoopRunner: createToolLoopRunnerMock,
+}));
+
+vi.mock('../../../../src/main/services/chat/chat_run_tracking', () => ({
+  createAgentRunTracker: createAgentRunTrackerMock,
 }));
 
 import { createChatStreaming } from '../../../../src/main/services/chat/chat_streaming';
@@ -281,6 +288,32 @@ beforeEach(() => {
     finish: vi.fn(),
     abort: vi.fn(),
     error: vi.fn(),
+  });
+
+  createAgentRunTrackerMock.mockImplementation(() => {
+    let status = 'running';
+    return {
+      id: 'run_1',
+      getRun: () => ({ status }),
+      syncModelMessages: vi.fn(() => ({ status })),
+      recordToolEvent: vi.fn(),
+      markCompleted: vi.fn(() => {
+        status = 'completed';
+        return { status };
+      }),
+      markBlocked: vi.fn(() => {
+        status = 'blocked';
+        return { status };
+      }),
+      markFailed: vi.fn(() => {
+        status = 'failed';
+        return { status };
+      }),
+      markCancelled: vi.fn(() => {
+        status = 'cancelled';
+        return { status };
+      }),
+    };
   });
 });
 
@@ -454,6 +487,25 @@ describe('createChatStreaming', () => {
     });
 
     expect(result).toEqual({ success: true, text: 'assistant result' });
+    expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'chat-turn',
+        systemPrompt: NO_TOOLS_SYSTEM_PROMPT,
+        input: expect.objectContaining({
+          metadata: expect.objectContaining({
+            transport: 'send',
+            contextTokens: 0,
+            enableTools: false,
+          }),
+        }),
+      })
+    );
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.markCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'assistant result',
+        finishReason: 'completed',
+      })
+    );
     expect(generateChatWithUsageMock).toHaveBeenCalledTimes(1);
     expect(generateChatWithUsageMock).toHaveBeenCalledWith({
       providerType: 'openai',
@@ -681,6 +733,12 @@ describe('createChatStreaming', () => {
       success: false,
       error: 'Tool approval required for non-interactive chat: shell',
     });
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.markBlocked).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: '让我尝试访问BBC新闻：',
+        pendingApprovalIds: ['approval_shell_1'],
+      })
+    );
     expect(recordUsageEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'chat.send.tools',
@@ -903,6 +961,27 @@ describe('createChatStreaming', () => {
       awaitingApproval: true,
       stopped: false,
     });
+    expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'chat-turn',
+        systemPrompt: TOOL_AGENT_SYSTEM_PROMPT,
+        input: expect.objectContaining({
+          metadata: expect.objectContaining({
+            transport: 'stream',
+            assistantMessageId: 'assistant_stream',
+          }),
+        }),
+      })
+    );
+    expect(
+      createAgentRunTrackerMock.mock.results[0]?.value.recordToolEvent
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-approval-request',
+        approvalId: 'approval_1',
+      })
+    );
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.markBlocked).toHaveBeenCalled();
     expect(ensurePendingApprovalSession).toHaveBeenCalledWith(
       'approval_1',
       expect.objectContaining({
@@ -913,6 +992,7 @@ describe('createChatStreaming', () => {
         webContents,
         recoveryContext: expect.objectContaining({
           threadId: 'thread_3',
+          runId: 'run_1',
           maxOutputTokens: 512,
           maxIterations: DEFAULT_CHAT_TOOL_MAX_ITERATIONS,
           enabledTools: ['web'],

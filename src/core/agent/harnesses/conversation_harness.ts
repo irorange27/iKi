@@ -13,6 +13,7 @@ import type {
 export interface ConversationHarness {
   registerTool(tool: AgentTool): void;
   getRegisteredTools(): AgentTool[];
+  getHistory?(): import('ai').ModelMessage[] | undefined;
   generate(request: ConversationRunnerGenerateRequest): Promise<AgentResult>;
   stream(
     request: ConversationRunnerStreamRequest
@@ -44,6 +45,10 @@ class DefaultConversationHarness implements ConversationHarness {
 
   getRegisteredTools(): AgentTool[] {
     return Array.from(this.registeredTools.values());
+  }
+
+  getHistory(): import('ai').ModelMessage[] | undefined {
+    return this.runner.getHistory?.();
   }
 
   private getEffectiveToolRuntimeContext(): ToolRuntimeContext {

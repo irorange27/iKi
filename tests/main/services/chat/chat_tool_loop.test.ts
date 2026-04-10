@@ -119,6 +119,7 @@ describe('tool loop runner', () => {
     expect(registerApprovalBatch).toHaveBeenCalledWith(agentResult.toolApprovalRequests, {
       harness: conversationHarness,
       webContents,
+      history: [{ role: 'system', content: 'history' }],
     });
     expect(uiChunkEmitter.emitTokenUsage).toHaveBeenCalledWith({
       inputTokens: 2,

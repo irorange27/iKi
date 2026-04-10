@@ -33,6 +33,8 @@ import { migration as migration031DropPresenceTables } from './031_drop_presence
 import { migration as migration032RepairIdentityProfileForeignKeys } from './032_repair_identity_profile_foreign_keys';
 import { migration as migration033AddChatToolApprovalProviderId } from './033_add_chat_tool_approval_provider_id';
 import { migration as migration034AddChatToolApprovalMaxInputTokens } from './034_add_chat_tool_approval_max_input_tokens';
+import { migration as migration035AddAgentRunTables } from './035_add_agent_run_tables';
+import { migration as migration036AddChatToolApprovalRunId } from './036_add_chat_tool_approval_run_id';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -70,6 +72,8 @@ export const registeredMigrations = [
   migration032RepairIdentityProfileForeignKeys,
   migration033AddChatToolApprovalProviderId,
   migration034AddChatToolApprovalMaxInputTokens,
+  migration035AddAgentRunTables,
+  migration036AddChatToolApprovalRunId,
   // Add more migrations here as needed
 ];
 

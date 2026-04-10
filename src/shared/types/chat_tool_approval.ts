@@ -6,6 +6,7 @@ export interface ChatToolApprovalSession {
   session_id: string;
   thread_id: string;
   assistant_message_id: string;
+  run_id?: string | null;
   provider_type: string;
   provider_id?: string | null;
   model: string;

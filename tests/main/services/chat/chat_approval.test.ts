@@ -14,6 +14,11 @@ vi.mock('../../../../src/core/db/chat_message', () => ({
   getChatMessages: vi.fn(),
 }));
 
+vi.mock('../../../../src/core/db/agent_runs', () => ({
+  getAgentRun: vi.fn(),
+  getLatestAgentRunCheckpoint: vi.fn(),
+}));
+
 vi.mock('../../../../src/core/tools', () => ({
   defaultToolRegistry: {
     get: vi.fn(),
@@ -48,15 +53,24 @@ vi.mock('../../../../src/main/services/chat/chat_tool_loop', () => ({
   createToolLoopRunner: vi.fn(),
 }));
 
+vi.mock('../../../../src/main/services/chat/chat_run_tracking', () => ({
+  createAgentRunTracker: vi.fn(),
+}));
+
+import * as agentRunDb from '../../../../src/core/db/agent_runs';
 import * as chatToolApprovalDb from '../../../../src/core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../../src/core/db/chat_message';
 import { defaultToolRegistry } from '../../../../src/core/tools';
 import { createChatApproval } from '../../../../src/main/services/chat/chat_approval';
 import { createChatConversationRunner } from '../../../../src/main/services/chat/chat_conversation_runner';
+import { createAgentRunTracker } from '../../../../src/main/services/chat/chat_run_tracking';
 import { createToolLoopRunner } from '../../../../src/main/services/chat/chat_tool_loop';
 
 const createToolLoopRunnerMock = vi.mocked(createToolLoopRunner);
 const createChatConversationRunnerMock = vi.mocked(createChatConversationRunner);
+const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);
+const getAgentRunMock = vi.mocked(agentRunDb.getAgentRun);
+const getLatestAgentRunCheckpointMock = vi.mocked(agentRunDb.getLatestAgentRunCheckpoint);
 const getChatMessagesMock = vi.mocked(chatMessageDb.getChatMessages);
 const defaultToolRegistryGetMock = vi.mocked(defaultToolRegistry.get);
 const upsertChatToolApprovalSessionMock = vi.mocked(
@@ -77,6 +91,33 @@ beforeEach(() => {
   vi.clearAllMocks();
   createToolLoopRunnerMock.mockReturnValue({
     stream: vi.fn().mockResolvedValue({ awaitingApproval: false }),
+  });
+  getAgentRunMock.mockReturnValue(null);
+  getLatestAgentRunCheckpointMock.mockReturnValue(null);
+  createAgentRunTrackerMock.mockImplementation(() => {
+    let status = 'running';
+    return {
+      id: 'run_resume_1',
+      getRun: () => ({ status }),
+      syncModelMessages: vi.fn(() => ({ status })),
+      recordToolEvent: vi.fn(),
+      markCompleted: vi.fn(() => {
+        status = 'completed';
+        return { status };
+      }),
+      markBlocked: vi.fn(() => {
+        status = 'blocked';
+        return { status };
+      }),
+      markFailed: vi.fn(() => {
+        status = 'failed';
+        return { status };
+      }),
+      markCancelled: vi.fn(() => {
+        status = 'cancelled';
+        return { status };
+      }),
+    };
   });
 });
 
@@ -113,6 +154,7 @@ describe('createChatApproval', () => {
           sessionId: 'assistant_1',
           threadId: 'thread_1',
           assistantMessageId: 'assistant_1',
+          runId: 'run_1',
           providerType: 'openai',
           providerId: 'primary-openai',
           model: 'gpt-4o-mini',
@@ -130,6 +172,7 @@ describe('createChatApproval', () => {
       session_id: 'assistant_1',
       thread_id: 'thread_1',
       assistant_message_id: 'assistant_1',
+      run_id: 'run_1',
       provider_type: 'openai',
       provider_id: 'primary-openai',
       model: 'gpt-4o-mini',
@@ -152,7 +195,7 @@ describe('createChatApproval', () => {
     ]);
   });
 
-  it('recovers approval sessions from structured approval rows and resumes the tool loop', async () => {
+  it('recovers approval sessions from runtime checkpoints and resumes the tool loop', async () => {
     const resumedStream = vi.fn().mockResolvedValue({ awaitingApproval: false });
     createToolLoopRunnerMock.mockReturnValue({
       stream: resumedStream,
@@ -186,6 +229,7 @@ describe('createChatApproval', () => {
       session_id: 'assistant_1',
       thread_id: 'thread_1',
       assistant_message_id: 'assistant_1',
+      run_id: 'run_blocked_1',
       provider_type: 'openai',
       provider_id: 'primary-openai',
       model: 'gpt-4o-mini',
@@ -213,24 +257,45 @@ describe('createChatApproval', () => {
         updated_at: '2026-03-19T00:00:00.000Z',
       },
     ]);
-    getChatMessagesMock.mockReturnValue([
-      {
-        id: 'msg_1',
-        thread_id: 'thread_1',
-        parent_id: null,
-        slot_id: null,
-        depth: 0,
-        message: JSON.stringify({
-          id: 'msg_1',
-          role: 'user',
-          parts: [{ type: 'text', text: 'hello' }],
-        }),
-        timestamp: '2026-03-19T00:00:00.000Z',
-        metadata: '{}',
-        created_at: '2026-03-19T00:00:00.000Z',
-        updated_at: '2026-03-19T00:00:00.000Z',
+    getLatestAgentRunCheckpointMock.mockReturnValue({
+      id: 'checkpoint_1',
+      runId: 'run_blocked_1',
+      stepIndex: 2,
+      reason: 'approval-requested',
+      snapshot: {
+        id: 'run_blocked_1',
+        kind: 'chat-turn',
+        status: 'blocked',
+        threadId: 'thread_1',
+        parentRunId: null,
+        rootRunId: 'run_blocked_1',
+        providerType: 'openai',
+        providerId: 'primary-openai',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'system prompt',
+        enabledTools: ['web'],
+        availableSkillIds: [],
+        input: {
+          metadata: {
+            maxIterations: 12,
+          },
+        },
+        working: {
+          modelMessages: [{ role: 'user', content: 'hello' }],
+          accumulatedText: 'partial',
+          pendingApprovalIds: ['approval_1'],
+          lastStepIndex: 2,
+        },
+        output: {
+          text: 'partial',
+          finishReason: 'approval-requested',
+        },
+        error: null,
+        createdAt: '2026-03-19T00:00:00.000Z',
+        updatedAt: '2026-03-19T00:00:00.000Z',
       },
-    ]);
+      createdAt: '2026-03-19T00:00:00.000Z',
+    });
     const injectMemoryIntoMessagesMock = vi.fn(messages => messages);
 
     const approvals = createChatApproval({
@@ -260,28 +325,28 @@ describe('createChatApproval', () => {
       'approved',
       'User approved tool execution.'
     );
-    expect(injectMemoryIntoMessagesMock).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({
-          role: 'user',
-          parts: [{ type: 'text', text: 'hello' }],
-        }),
-      ],
-      'thread_1',
-      { skipRetrieval: true }
-    );
+    expect(getChatMessagesMock).not.toHaveBeenCalled();
+    expect(injectMemoryIntoMessagesMock).not.toHaveBeenCalled();
     expect(consumeChatToolApprovalSessionMock).toHaveBeenCalledWith('assistant_1');
+    expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'approval-resume',
+        threadId: 'thread_1',
+        parentRunId: 'run_blocked_1',
+      })
+    );
     expect(resumedStream).toHaveBeenCalledWith(
       expect.objectContaining({
         harness: expect.objectContaining({
           getRegisteredTools: expect.any(Function),
+          getHistory: expect.any(Function),
           stream: expect.any(Function),
         }),
         prompt: '',
         history: [
           expect.objectContaining({
             role: 'user',
-            parts: [{ type: 'text', text: 'hello' }],
+            content: 'hello',
           }),
         ],
         approvalResponses: [
@@ -294,6 +359,7 @@ describe('createChatApproval', () => {
           sessionId: 'assistant_resume',
           assistantMessageId: 'assistant_resume',
           threadId: 'thread_1',
+          runId: 'run_resume_1',
           providerType: 'openai',
           providerId: 'primary-openai',
           model: 'gpt-4o-mini',
@@ -303,6 +369,14 @@ describe('createChatApproval', () => {
           enabledTools: ['web'],
           availableSkillIds: [],
         }),
+      })
+    );
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.syncModelMessages).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'hello' }]
+    );
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.markCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        finishReason: 'completed',
       })
     );
     expect(result).toEqual({
@@ -346,6 +420,7 @@ describe('createChatApproval', () => {
       session_id: 'assistant_skill_1',
       thread_id: 'thread_skill_1',
       assistant_message_id: 'assistant_skill_1',
+      run_id: null,
       provider_type: 'openai',
       model: 'gpt-4o-mini',
       system_prompt: 'system prompt',
@@ -401,6 +476,7 @@ describe('createChatApproval', () => {
 
     await approvals.approveTool({ id: 11, send: vi.fn() }, 'approval_2', true);
 
+    expect(getChatMessagesMock).toHaveBeenCalledWith('thread_skill_1');
     expect(runner.registerTool).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -416,6 +492,7 @@ describe('createChatApproval', () => {
     expect(resumedStream).toHaveBeenCalledWith(
       expect.objectContaining({
         approvalContext: expect.objectContaining({
+          runId: 'run_resume_1',
           availableSkillIds: ['user:planner'],
         }),
       })

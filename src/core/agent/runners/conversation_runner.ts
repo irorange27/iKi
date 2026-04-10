@@ -27,6 +27,7 @@ export interface ConversationRunner {
   registerTool(tool: AgentTool): void;
   generate(request: ConversationRunnerGenerateRequest): Promise<AgentResult>;
   stream(request: ConversationRunnerStreamRequest): AsyncGenerator<string, AgentResult, unknown>;
+  getHistory?(): ModelMessage[] | undefined;
 }
 
 export type ConversationRunnerFactory = (config?: PartialAgentConfig) => ConversationRunner;

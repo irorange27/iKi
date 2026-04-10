@@ -14,6 +14,7 @@ export type RegisterApprovalBatch = (
   session: {
     harness: ConversationHarness;
     webContents: ChatWebContents;
+    history?: ModelMessage[];
     recoveryContext?: ApprovalRecoveryContext;
   }
 ) => void;
@@ -159,6 +160,7 @@ const streamToolLoop = async (
     params.registerApprovalBatch(agentResult.toolApprovalRequests, {
       harness: params.harness,
       webContents: params.webContents,
+      history: params.harness.getHistory?.() ?? params.history,
       ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
     });
     return { awaitingApproval: true, usage: agentResult.usage };

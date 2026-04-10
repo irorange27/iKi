@@ -46,6 +46,10 @@ export class SimpleConversationRunner implements ConversationRunner {
     this.toolRegistry.register(tool);
   }
 
+  getHistory(): ModelMessage[] {
+    return cloneModelMessages(this.history);
+  }
+
   private resolveBaseHistory(history?: ModelMessage[]): ModelMessage[] {
     if (history !== undefined) {
       return cloneModelMessages(history);
