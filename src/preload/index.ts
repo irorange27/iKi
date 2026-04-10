@@ -226,7 +226,7 @@ const electronApi: ElectronApi = {
     disconnect: (id: string) => ipcRenderer.invoke('mcp:disconnect', id),
     refreshTools: (id: string) => ipcRenderer.invoke('mcp:refresh-tools', id),
   },
-  openSettings: () => ipcRenderer.send('open-settings'),
+  openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
   closeWindow: () => ipcRenderer.send('close-window'),
   setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
 };

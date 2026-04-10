@@ -52,10 +52,83 @@ export const en = defineCatalog({
   'language.chineseSimplified': '简体中文',
   'chat.newChat': 'New Chat',
   'chat.messagesCount': ({ count }) => `${asCount(count)} messages`,
-  'chat.welcome.subtitle': 'An elegant desktop for AI provider orchestration',
-  'chat.welcome.configureProvider': 'Configure Provider',
+  'chat.welcome.kicker': 'Local Desktop Pet',
   'chat.welcome.settings': 'Settings',
-  'chat.welcome.configureHint': 'Please configure at least one AI provider to start chatting',
+  'chat.welcome.status.checking': 'Checking',
+  'chat.welcome.status.sleeping': 'Sleeping',
+  'chat.welcome.status.warming': 'Warming',
+  'chat.welcome.status.awake': 'Awake',
+  'chat.welcome.headline.setup':
+    'Wake iKi with one provider, one model, and one real piece of context.',
+  'chat.welcome.headline.awake':
+    'iKi is awake. Give it a project, a task, or pasted text so it can take the first real step.',
+  'chat.welcome.body.setup':
+    'Start with the smallest possible setup. Connect one provider, expose one model, then give iKi a project folder, the thing you are trying to do, or text you want it to work through.',
+  'chat.welcome.body.finishProvider':
+    'You already have a provider in motion. Finish its credentials or enable a working one. Once it is ready, give iKi one concrete source of context and let it start.',
+  'chat.welcome.body.awake':
+    'Your first provider and model are ready. Now give iKi one concrete source to work from: a project folder, your current task, or pasted text.',
+  'chat.welcome.primary.connectProvider': 'Connect First Provider',
+  'chat.welcome.primary.finishProvider': 'Finish Provider Setup',
+  'chat.welcome.primary.pickModel': 'Review Provider Models',
+  'chat.welcome.primary.draftHello': 'Set Up First Request',
+  'chat.welcome.hint.loading': 'Checking your local provider setup now.',
+  'chat.welcome.hint.connectProvider':
+    'No provider is ready yet. Open Provider settings, add one API key, and enable one model source.',
+  'chat.welcome.hint.finishProvider':
+    'At least one provider is enabled but not ready. Finish its credentials to wake iKi.',
+  'chat.welcome.hint.addModel':
+    'Your provider is awake, but it still needs at least one model before the first chat can start.',
+  'chat.welcome.hint.modelReady':
+    'A provider is ready. Use Provider settings to make sure at least one model is exposed for the first chat.',
+  'chat.welcome.hint.ready':
+    'Use a starter below, then fill in the project, task, or text it asks for.',
+  'chat.welcome.contextSources.label': 'Good First Context',
+  'chat.welcome.contextSources.project.title': 'Project Folder',
+  'chat.welcome.contextSources.project.body':
+    'Choose a workspace, then ask iKi what to inspect first.',
+  'chat.welcome.contextSources.task.title': 'Current Task',
+  'chat.welcome.contextSources.task.body':
+    'Describe what you are trying to do, and let iKi shape the next steps.',
+  'chat.welcome.contextSources.text.title': 'Pasted Text',
+  'chat.welcome.contextSources.text.body':
+    'Drop in notes, logs, or drafts; iKi can summarize and organize them.',
+  'chat.welcome.milestone.label': 'Success',
+  'chat.welcome.milestone.provider.title': 'First provider connected',
+  'chat.welcome.milestone.provider.body': ({ provider }) =>
+    `${asText(provider)} is ready. Next: expose one model so the first chat can start cleanly.`,
+  'chat.welcome.milestone.model.title': 'First model ready',
+  'chat.welcome.milestone.model.body': ({ provider, model }) =>
+    `${asText(provider)} · ${asText(model)} is ready. Next: give iKi a project, a goal, or pasted text and send the first request.`,
+  'chat.welcome.contextLabel': 'Ready Now',
+  'chat.welcome.progressLabel': 'Awakening Path',
+  'chat.welcome.step.provider.title': 'Connect one provider',
+  'chat.welcome.step.provider.checking': 'Checking your local providers…',
+  'chat.welcome.step.provider.pending': 'Add one provider and API key in Provider settings.',
+  'chat.welcome.step.provider.finish': 'Finish one enabled provider with valid credentials.',
+  'chat.welcome.step.provider.ready': ({ provider }) => `${asText(provider)} is ready.`,
+  'chat.welcome.step.model.title': 'Pick one model',
+  'chat.welcome.step.model.pending': 'Choose a provider first.',
+  'chat.welcome.step.model.add': 'Add at least one model in Provider settings.',
+  'chat.welcome.step.model.choose': 'Review the provider and make sure a first model is available.',
+  'chat.welcome.step.model.ready': ({ model }) => `${asText(model)} is selected.`,
+  'chat.welcome.step.message.title': 'Send the first request',
+  'chat.welcome.step.message.pending': 'Give iKi context after the first two steps.',
+  'chat.welcome.step.message.ready': 'Pick one starter below and fill in the missing context.',
+  'chat.welcome.prompt.intro':
+    'I am going to tell you what I am trying to do. Help me turn it into the next three concrete steps.',
+  'chat.welcome.prompt.plan':
+    'Once I give you a project folder, tell me the three places I should inspect first and why.',
+  'chat.welcome.prompt.learn':
+    'I am going to paste some text. Summarize it, then turn it into follow-up actions.',
+  'chat.welcome.prompt.blank': 'Start with a blank draft',
+  'chat.onboarding.banner.label': 'First-run feedback',
+  'chat.onboarding.banner.sent.title': 'First message sent',
+  'chat.onboarding.banner.sent.body':
+    'iKi is working on your opening message now. If the reply needs grounding, add a project folder, describe the task, or paste the material you want it to process.',
+  'chat.onboarding.banner.started.title': 'First conversation started',
+  'chat.onboarding.banner.started.body':
+    'The first conversation is underway. Next: keep grounding iKi with project context, task intent, and source text so it can act more precisely.',
   'chat.sidebar.toggle': 'Toggle sidebar',
   'chat.sidebar.search': 'Search',
   'chat.sidebar.newChat': 'New chat',
@@ -103,6 +176,7 @@ export const en = defineCatalog({
   'chat.external.notice': ({ channel }) =>
     `Viewing ${asText(channel)} in the desktop control plane. Messages you send here stay local to iKi and are not delivered back to the external channel.`,
   'chat.model.selectModel': 'Select Model',
+  'chat.model.trigger.choose': 'Choose model',
   'chat.model.searchPlaceholder': 'Search models...',
   'chat.model.noProviders': 'No providers configured.',
   'chat.model.noProviderMetadata': 'No enabled provider exposes model metadata.',
@@ -130,6 +204,9 @@ export const en = defineCatalog({
   'chat.tools.title': 'Tools',
   'chat.tools.description':
     'Allow iKi to use built-in tools for the next response. Auto mode considers all built-in tools plus all tools from enabled MCP servers.',
+  'chat.tools.trigger.choose': 'Choose tools',
+  'chat.tools.trigger.auto': 'Tools: auto',
+  'chat.tools.trigger.selected': ({ count }) => `Tools: ${asCount(count)} selected`,
   'chat.tools.autoDescription':
     'Auto considers all built-in tools plus all tools from the MCP servers enabled below.',
   'chat.tools.auto': 'Auto',
@@ -154,6 +231,9 @@ export const en = defineCatalog({
   'chat.skills.title': 'Skills',
   'chat.skills.description':
     'Inject reusable instructions (workflows, best practices) into the next response. Skills are loaded from your local filesystem.',
+  'chat.skills.trigger.choose': 'Choose skills',
+  'chat.skills.trigger.auto': 'Skills: auto',
+  'chat.skills.trigger.selected': ({ count }) => `Skills: ${asCount(count)} selected`,
   'chat.skills.autoHint': 'iKi will automatically pick relevant skills based on your message.',
   'chat.skills.noSkills': 'No skills found.',
   'chat.references.affect': 'affect',

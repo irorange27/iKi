@@ -302,7 +302,7 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.mcp.disconnect('server_1');
     await exposedApi.mcp.refreshTools('server_1');
 
-    exposedApi.openSettings();
+    exposedApi.openSettings('provider');
     exposedApi.closeWindow();
 
     expect(invokeMock.mock.calls.map(call => call[0])).toEqual(
@@ -415,7 +415,7 @@ describe('preload task IPC payload serialization', () => {
     expect(removeListenerMock).toHaveBeenCalledWith('providers:updated', expect.any(Function));
     expect(sendMock.mock.calls).toEqual(
       expect.arrayContaining([
-        ['open-settings'],
+        ['open-settings', 'provider'],
         ['close-window'],
       ])
     );

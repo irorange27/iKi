@@ -57,6 +57,10 @@ describe('ChatModelSelector', () => {
       },
     });
 
+    expect(wrapper.find('.model-selector-trigger').attributes('title')).toBe(
+      'DeepSeek · deepseek-chat'
+    );
+
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
@@ -104,6 +108,10 @@ describe('ChatModelSelector', () => {
       },
     });
 
+    expect(wrapper.find('.model-selector-trigger').attributes('title')).toBe(
+      'Proxy Gateway · proxy-model'
+    );
+
     const triggerIcon = wrapper.find('.model-selector-trigger-icon .lobe-icon-stub');
     expect(triggerIcon.attributes('data-name')).toBe('grid-2x2');
     expect(triggerIcon.attributes('data-cdn-prefix')).toBe(
@@ -122,5 +130,23 @@ describe('ChatModelSelector', () => {
     );
     expect(groupIcon.attributes('data-use-cdn')).toBe('true');
     expect(groupIcon.attributes('data-fallback-text')).toBe('PR');
+  });
+
+  it('shows a chooser tooltip when no provider/model is selected', () => {
+    const wrapper = mount(ChatModelSelector, {
+      props: {
+        availableProviders: [],
+        selectedProvider: null,
+        selectedModel: '',
+      },
+      global: {
+        stubs: {
+          LobeIcon: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.model-selector-trigger').attributes('title')).toBe('Choose model');
+    expect(wrapper.find('.model-selector-trigger').attributes('aria-label')).toBe('Choose model');
   });
 });

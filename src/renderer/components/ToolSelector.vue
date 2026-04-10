@@ -6,6 +6,8 @@
         'ui-text-accent':
           isAutoToolMode || selectedTools.length > 0 || selectedMcpServerIds.length > 0,
       }"
+      :title="triggerTitle"
+      :aria-label="triggerTitle"
       @click="showToolSelector = !showToolSelector"
       @mouseenter="openToolSelector"
       @mouseleave="scheduleCloseToolSelector"
@@ -145,6 +147,7 @@
               class="selector-icon-btn"
               :disabled="mcpServersLoading"
               :title="t('chat.tools.refreshMcpTitle')"
+              :aria-label="t('chat.tools.refreshMcpTitle')"
               @click.stop="refreshMcpServers"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -276,6 +279,7 @@ const lastLoadedAt = ref(0);
 const mcpServersLoading = ref(false);
 const isMcpSectionExpanded = ref(false);
 const isAutoToolMode = computed(() => props.mode === 'auto');
+const SELECTOR_CLOSE_DELAY_MS = 320;
 
 const normalizeStringArray = (input: unknown): string[] => {
   if (!Array.isArray(input)) return [];
@@ -377,6 +381,17 @@ const selectedMcpServerIds = computed(() => {
 const selectedTools = computed(() =>
   normalizeStringArray(props.tools).filter(toolName => builtinToolNameSet.value.has(toolName))
 );
+
+const triggerTitle = computed(() => {
+  if (isAutoToolMode.value) {
+    return t('chat.tools.trigger.auto');
+  }
+  const totalCount = selectedTools.value.length + selectedMcpServerIds.value.length;
+  if (totalCount > 0) {
+    return t('chat.tools.trigger.selected', { count: totalCount });
+  }
+  return t('chat.tools.trigger.choose');
+});
 
 const getMcpToolNamesForServer = (serverId: string): string[] =>
   availableTools.value
@@ -600,7 +615,7 @@ const scheduleCloseToolSelector = () => {
   toolSelectorCloseTimer.value = window.setTimeout(() => {
     showToolSelector.value = false;
     toolSelectorCloseTimer.value = null;
-  }, 180);
+  }, SELECTOR_CLOSE_DELAY_MS);
 };
 
 onMounted(() => {

@@ -237,6 +237,24 @@ describe('renderer style system foundation', () => {
     );
   });
 
+  it('adapts the provider settings flow for the default settings window width instead of forcing a cramped split pane', () => {
+    const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+    const settingsViewSource = readFileSync(SETTINGS_VIEW_VUE_PATH, 'utf8');
+
+    expect(providersSource).toMatch(
+      /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.providers-layout\s*\{[\s\S]*flex-direction:\s*column;/i
+    );
+    expect(providersSource).toMatch(
+      /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.providers-sidebar\s*\{[\s\S]*width:\s*100%;/i
+    );
+    expect(providersSource).toMatch(
+      /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.providers-scroll-list-inner\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/i
+    );
+    expect(settingsViewSource).toMatch(
+      /@media \(max-width:\s*980px\)\s*\{[\s\S]*\.settings-nav\s*\{[\s\S]*width:\s*188px;/i
+    );
+  });
+
   it('centralizes app-shell text and selector affordances in globals.css', () => {
     const globalsSource = readFileSync(GLOBALS_CSS_PATH, 'utf8');
 
@@ -335,6 +353,10 @@ describe('renderer style system foundation', () => {
     expect(welcomeScreenSource).toMatch(/ui-text-primary/);
     expect(welcomeScreenSource).toMatch(/ui-text-secondary/);
     expect(welcomeScreenSource).toMatch(/ui-text-muted/);
+    expect(welcomeScreenSource).toMatch(/welcome-context-grid/);
+    expect(welcomeScreenSource).toMatch(
+      /@media \(max-height:\s*760px\)\s*\{[\s\S]*\.welcome-figure\s*\{[\s\S]*display:\s*none;/i
+    );
     expect(welcomeScreenSource).not.toMatch(/\.text-primary\s*\{/);
     expect(welcomeScreenSource).not.toMatch(/\.text-secondary\s*\{/);
     expect(welcomeScreenSource).not.toMatch(/\.text-muted\s*\{/);

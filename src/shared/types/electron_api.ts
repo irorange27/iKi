@@ -290,7 +290,7 @@ export interface ElectronApi {
     disconnect: (id: string) => Promise<WindowActionResult>;
     refreshTools: (id: string) => Promise<unknown>;
   };
-  openSettings: () => void;
+  openSettings: (section?: string) => void;
   closeWindow: () => void;
   setWindowShadow: (enabled: boolean) => void;
 }

@@ -8,8 +8,10 @@ export const registerWindowIpc = (): void => {
   if (windowIpcRegistered) return;
   windowIpcRegistered = true;
 
-  ipcMain.on('open-settings', () => {
-    createSettingsWindow();
+  ipcMain.on('open-settings', (_event, section?: string) => {
+    createSettingsWindow({
+      section: typeof section === 'string' ? section : undefined,
+    });
   });
 
   ipcMain.on('close-window', event => {

@@ -98,8 +98,10 @@ const props = defineProps<{
   todoPlan?: TaskPlan | null;
 }>();
 
-const inputRef = ref<HTMLInputElement | null>(null);
-const setInputRef = (element: HTMLInputElement | null) => {
+type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
+
+const inputRef = ref<ComposerTextControl | null>(null);
+const setInputRef = (element: ComposerTextControl | null) => {
   inputRef.value = element;
 };
 const message = ref('');

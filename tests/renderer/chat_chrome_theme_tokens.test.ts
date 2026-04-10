@@ -54,10 +54,12 @@ describe('chat chrome theme tokens', () => {
     expect(chatComposerShellSource).toMatch(/background:\s*var\(--chat-composer-background\);/);
     expect(chatComposerShellSource).toMatch(/box-shadow:\s*var\(--chat-composer-shadow\);/);
     expect(chatComposerShellSource).toMatch(/backdrop-filter:\s*var\(--chat-composer-backdrop-filter\);/);
+    expect(chatComposerShellSource).not.toMatch(/\.chat-input-container\s*\{[^}]*overflow:\s*hidden;/);
     expect(chatComposerShellSource).toMatch(
       /border-top-color:\s*var\(--chat-composer-toolbar-border-color\);/
     );
     expect(chatComposerShellSource).toMatch(/background:\s*var\(--chat-composer-toolbar-background\);/);
+    expect(chatComposerShellSource).toMatch(/border-radius:\s*0 0 12px 12px;/);
     expect(chatComposerActionsSource).toMatch(
       /border:\s*1px solid var\(--chat-composer-control-border-color\);/
     );

@@ -7,13 +7,13 @@ import { describe, expect, it } from 'vitest';
 import ChatComposerShell from '../../../src/renderer/components/ChatComposerShell.vue';
 
 const mountComponent = (overrides?: Record<string, unknown>) => {
-  const inputRef = ref<HTMLInputElement | null>(null);
+  const inputRef = ref<HTMLTextAreaElement | null>(null);
   const wrapper = mount(ChatComposerShell, {
     props: {
       modelValue: '',
       placeholder: 'Type a message',
       feedback: '',
-      setInputRef: (element: HTMLInputElement | null) => {
+      setInputRef: (element: HTMLTextAreaElement | null) => {
         inputRef.value = element;
       },
       ...(overrides ?? {}),
@@ -37,6 +37,9 @@ describe('ChatComposerShell', () => {
     expect(wrapper.find('.toolbar-left-slot').text()).toBe('left');
     expect(wrapper.find('.toolbar-right-slot').text()).toBe('right');
     expect(wrapper.find('.chat-input-field').element).toBe(inputRef.value);
+    expect(wrapper.find('.chat-input-field').element.tagName).toBe('TEXTAREA');
+    expect(wrapper.find('.composer-toolbar-slot-left').exists()).toBe(true);
+    expect(wrapper.find('.composer-toolbar-slot-right').exists()).toBe(true);
     expect(wrapper.find('.composer-feedback').text()).toBe('Provider verification failed.');
   });
 

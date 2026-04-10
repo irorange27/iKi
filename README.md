@@ -82,9 +82,10 @@ A local agent pet for AI provider orchestration.
    npm run app:dev
    ```
 
-6. Open `Settings`, configure at least one provider API key and model (for example OpenAI,
-   Anthropic, DeepSeek, or MiniMax), then send
-   your first chat message.
+6. Launch iKi and follow the first-run welcome flow to wake it up: connect one provider, make sure
+   it exposes at least one model (for example OpenAI, Anthropic, DeepSeek, or MiniMax), then send
+   your first chat message. You can still open `Settings` directly at any time if you prefer the
+   full control surface.
 
 ## Useful Commands
 

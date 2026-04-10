@@ -1,21 +1,33 @@
 <template>
   <div>
     <div class="relative rounded-[22px] border chat-input-container">
-      <input
-        :ref="assignInputRef"
-        :value="props.modelValue"
-        type="text"
-        :placeholder="props.placeholder"
-        class="chat-input-field ui-text-primary w-full border-0 bg-transparent px-4 py-6 placeholder-muted focus:outline-none"
-        @input="emitModelValue"
-        @keydown.enter="emit('keydownEnter', $event)"
-        @compositionstart="emit('compositionStart', $event)"
-        @compositionend="emit('compositionEnd', $event)"
-      />
+      <div class="composer-input-region">
+        <textarea
+          rows="1"
+          spellcheck="true"
+          enterkeyhint="send"
+          autocapitalize="sentences"
+          autocomplete="off"
+          autocorrect="on"
+          data-gramm="false"
+          :ref="assignInputRef"
+          :value="props.modelValue"
+          :placeholder="props.placeholder"
+          class="chat-input-field ui-text-primary placeholder-muted focus:outline-none"
+          @input="emitModelValue"
+          @keydown.enter="emit('keydownEnter', $event)"
+          @compositionstart="emit('compositionStart', $event)"
+          @compositionend="emit('compositionEnd', $event)"
+        />
+      </div>
 
-      <div class="composer-toolbar flex items-center justify-between border-t border-color px-3 py-2">
-        <slot name="toolbar-left" />
-        <slot name="toolbar-right" />
+      <div class="composer-toolbar border-t border-color">
+        <div class="composer-toolbar-slot composer-toolbar-slot-left">
+          <slot name="toolbar-left" />
+        </div>
+        <div class="composer-toolbar-slot composer-toolbar-slot-right">
+          <slot name="toolbar-right" />
+        </div>
       </div>
     </div>
     <p v-if="props.feedback" class="composer-feedback" role="alert" aria-live="assertive">
@@ -25,11 +37,15 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, onMounted, ref, watch } from 'vue';
+
+type ComposerTextControl = HTMLTextAreaElement;
+
 const props = defineProps<{
   modelValue: string;
   placeholder: string;
   feedback?: string;
-  setInputRef?: ((element: HTMLInputElement | null) => void) | null;
+  setInputRef?: ((element: ComposerTextControl | null) => void) | null;
 }>();
 
 const emit = defineEmits<{
@@ -39,23 +55,66 @@ const emit = defineEmits<{
   (event: 'compositionEnd', value: CompositionEvent): void;
 }>();
 
+const inputRef = ref<ComposerTextControl | null>(null);
+const MIN_INPUT_HEIGHT_PX = 68;
+const MAX_INPUT_HEIGHT_PX = 220;
+
+const resizeInputField = () => {
+  const input = inputRef.value;
+  if (!input) return;
+  input.style.height = '0px';
+  const nextHeight = Math.min(Math.max(input.scrollHeight, MIN_INPUT_HEIGHT_PX), MAX_INPUT_HEIGHT_PX);
+  input.style.height = `${nextHeight}px`;
+  input.style.overflowY = input.scrollHeight > MAX_INPUT_HEIGHT_PX ? 'auto' : 'hidden';
+};
+
+const queueResize = () => {
+  void nextTick(() => {
+    resizeInputField();
+  });
+};
+
 const assignInputRef = (element: Element | null) => {
-  props.setInputRef?.(element instanceof HTMLInputElement ? element : null);
+  inputRef.value = element instanceof HTMLTextAreaElement ? element : null;
+  props.setInputRef?.(inputRef.value);
+  queueResize();
 };
 
 const emitModelValue = (event: Event) => {
   const target = event.target;
-  emit('update:modelValue', target instanceof HTMLInputElement ? target.value : '');
+  emit('update:modelValue', target instanceof HTMLTextAreaElement ? target.value : '');
+  queueResize();
 };
+
+watch(
+  () => props.modelValue,
+  () => {
+    queueResize();
+  },
+  { flush: 'post' }
+);
+
+onMounted(() => {
+  queueResize();
+});
 </script>
 
 <style scoped>
 .chat-input-container {
+  display: flex;
+  flex-direction: column;
   border-color: var(--chat-composer-border-color);
   border-radius: 12px;
   background: var(--chat-composer-background);
   box-shadow: var(--chat-composer-shadow);
   backdrop-filter: var(--chat-composer-backdrop-filter);
+}
+
+.composer-input-region {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  padding: 18px 16px 10px;
 }
 
 .composer-feedback {
@@ -70,15 +129,55 @@ const emitModelValue = (event: Event) => {
 }
 
 .chat-input-field {
-  padding-top: 28px;
-  padding-bottom: 28px;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 68px;
+  max-height: 220px;
+  resize: none;
+  overflow-y: hidden;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  line-height: 1.6;
   font-size: 15px;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.chat-input-field::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-input-field::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 34%, transparent);
 }
 
 .composer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
   padding: 10px 12px 12px;
+  border-radius: 0 0 12px 12px;
   border-top-color: var(--chat-composer-toolbar-border-color);
   background: var(--chat-composer-toolbar-background);
+}
+
+.composer-toolbar-slot {
+  display: flex;
+  min-width: 0;
+}
+
+.composer-toolbar-slot-left {
+  flex: 1 1 320px;
+}
+
+.composer-toolbar-slot-right {
+  flex: 0 1 auto;
+  margin-left: auto;
 }
 
 .placeholder-muted::placeholder {

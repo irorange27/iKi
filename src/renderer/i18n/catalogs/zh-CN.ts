@@ -53,10 +53,76 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'language.chineseSimplified': '简体中文',
   'chat.newChat': '新对话',
   'chat.messagesCount': ({ count }) => `${asCount(count)} 条消息`,
-  'chat.welcome.subtitle': '面向 AI Provider 编排的优雅桌面端',
-  'chat.welcome.configureProvider': '配置 Provider',
+  'chat.welcome.kicker': '本地桌宠 Agent',
   'chat.welcome.settings': '设置',
-  'chat.welcome.configureHint': '请至少配置一个 AI Provider 后再开始聊天',
+  'chat.welcome.status.checking': '检查中',
+  'chat.welcome.status.sleeping': '休眠中',
+  'chat.welcome.status.warming': '唤醒中',
+  'chat.welcome.status.awake': '已苏醒',
+  'chat.welcome.headline.setup': '用一个 Provider、一个模型、再给一点真实上下文，把 iKi 唤醒。',
+  'chat.welcome.headline.awake':
+    'iKi 已经醒了。给它一个项目、一件眼前的事，或一段内容，它就能接住第一步。',
+  'chat.welcome.body.setup':
+    '先走最小可用路径。接入一个 Provider，暴露一个模型，再给 iKi 一个项目目录、你正在做的事，或一段要处理的内容。',
+  'chat.welcome.body.finishProvider':
+    '你已经开始配置 Provider 了。把凭证补齐，或启用一个可用 Provider。准备好后，再给 iKi 一个明确的上下文入口。',
+  'chat.welcome.body.awake':
+    '第一个 Provider 和模型已经准备好。现在给 iKi 一个明确来源：项目目录、当前要做的事，或你贴进来的内容。',
+  'chat.welcome.primary.connectProvider': '连接第一个 Provider',
+  'chat.welcome.primary.finishProvider': '完成 Provider 配置',
+  'chat.welcome.primary.pickModel': '检查 Provider 模型',
+  'chat.welcome.primary.draftHello': '开始第一个真实请求',
+  'chat.welcome.hint.loading': '正在检查你的本地 Provider 配置。',
+  'chat.welcome.hint.connectProvider':
+    '当前还没有可用 Provider。打开 Provider 设置，填入一个 API Key，并启用一个模型来源即可。',
+  'chat.welcome.hint.finishProvider':
+    '至少有一个 Provider 已启用但还没准备好。把凭证补齐后，iKi 就能继续醒来。',
+  'chat.welcome.hint.addModel':
+    'Provider 已经准备好，但还需要至少一个模型，首次对话才能真正开始。',
+  'chat.welcome.hint.modelReady':
+    'Provider 已就绪。请在 Provider 设置里确认至少暴露一个模型给首次对话使用。',
+  'chat.welcome.hint.ready':
+    '先选下面一个起手式，再把它需要的项目、任务或内容补进去。',
+  'chat.welcome.contextSources.label': '适合先给的上下文',
+  'chat.welcome.contextSources.project.title': '项目目录',
+  'chat.welcome.contextSources.project.body': '选一个工作区后，让 iKi 先告诉你该看哪里。',
+  'chat.welcome.contextSources.task.title': '当前要做的事',
+  'chat.welcome.contextSources.task.body': '先描述你在处理什么，再让 iKi 帮你理出下一步。',
+  'chat.welcome.contextSources.text.title': '贴进来的内容',
+  'chat.welcome.contextSources.text.body': '贴入笔记、日志或草稿，让 iKi 先总结再整理。',
+  'chat.welcome.milestone.label': '已完成',
+  'chat.welcome.milestone.provider.title': '第一个 Provider 已连接',
+  'chat.welcome.milestone.provider.body': ({ provider }) =>
+    `${asText(provider)} 已准备好。下一步：确认至少暴露一个模型，让第一轮对话顺利开始。`,
+  'chat.welcome.milestone.model.title': '第一个模型已就绪',
+  'chat.welcome.milestone.model.body': ({ provider, model }) =>
+    `${asText(provider)} · ${asText(model)} 已可用。下一步：给 iKi 一个项目、目标或贴入内容，再发出第一个请求。`,
+  'chat.welcome.contextLabel': '当前就绪',
+  'chat.welcome.progressLabel': '唤醒路径',
+  'chat.welcome.step.provider.title': '连接一个 Provider',
+  'chat.welcome.step.provider.checking': '正在检查本地 Provider…',
+  'chat.welcome.step.provider.pending': '去 Provider 设置里添加一个 Provider 和 API Key。',
+  'chat.welcome.step.provider.finish': '把一个已启用 Provider 的凭证补齐。',
+  'chat.welcome.step.provider.ready': ({ provider }) => `${asText(provider)} 已准备好。`,
+  'chat.welcome.step.model.title': '选一个模型',
+  'chat.welcome.step.model.pending': '先完成 Provider 这一步。',
+  'chat.welcome.step.model.add': '在 Provider 设置里至少添加一个模型。',
+  'chat.welcome.step.model.choose': '检查 Provider，确认首次对话可用的模型已经暴露。',
+  'chat.welcome.step.model.ready': ({ model }) => `已选中 ${asText(model)}。`,
+  'chat.welcome.step.message.title': '发出第一个请求',
+  'chat.welcome.step.message.pending': '前两步完成后，再给 iKi 一点上下文。',
+  'chat.welcome.step.message.ready': '先选一个起手式，再把缺的上下文补进去。',
+  'chat.welcome.prompt.intro': '我先告诉你我现在要做什么。请帮我拆成接下来三步。',
+  'chat.welcome.prompt.plan': '等我给你一个项目目录后，请告诉我最该先看的三个地方，以及原因。',
+  'chat.welcome.prompt.learn': '我会贴一段内容给你。请先总结，再整理成后续动作。',
+  'chat.welcome.prompt.blank': '从空白草稿开始',
+  'chat.onboarding.banner.label': '首配反馈',
+  'chat.onboarding.banner.sent.title': '第一条消息已发出',
+  'chat.onboarding.banner.sent.body':
+    'iKi 已经开始处理你的开场消息。如果还不够准，就补充项目目录、正在做的事，或要处理的内容。',
+  'chat.onboarding.banner.started.title': '第一次对话已经开始',
+  'chat.onboarding.banner.started.body':
+    '第一轮来回已经建立。下一步：继续用项目背景、任务意图和原始内容给 iKi 定锚，它才会更准地行动。',
   'chat.sidebar.toggle': '切换侧边栏',
   'chat.sidebar.search': '搜索',
   'chat.sidebar.newChat': '新对话',
@@ -104,6 +170,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.external.notice': ({ channel }) =>
     `正在桌面控制台中查看 ${asText(channel)}。你在这里发送的消息只会保留在 iKi 本地，不会回传到外部频道。`,
   'chat.model.selectModel': '选择模型',
+  'chat.model.trigger.choose': '选择模型',
   'chat.model.searchPlaceholder': '搜索模型...',
   'chat.model.noProviders': '还没有可用的 Provider。',
   'chat.model.noProviderMetadata': '没有已启用的 Provider 暴露模型元数据。',
@@ -130,6 +197,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.tools.title': '工具',
   'chat.tools.description':
     '允许 iKi 在下一次回复中使用内置工具。自动模式会同时考虑所有内置工具和已启用 MCP 服务器提供的全部工具。',
+  'chat.tools.trigger.choose': '选择工具',
+  'chat.tools.trigger.auto': '工具：自动',
+  'chat.tools.trigger.selected': ({ count }) => `工具：已选 ${asCount(count)} 项`,
   'chat.tools.autoDescription':
     '自动模式会同时考虑所有内置工具，以及下方已启用 MCP 服务器提供的全部工具。',
   'chat.tools.auto': '自动',
@@ -151,6 +221,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.skills.title': '技能',
   'chat.skills.description':
     '将可复用指令（工作流、最佳实践）注入到下一次回复中。技能从你的本地文件系统加载。',
+  'chat.skills.trigger.choose': '选择技能',
+  'chat.skills.trigger.auto': '技能：自动',
+  'chat.skills.trigger.selected': ({ count }) => `技能：已选 ${asCount(count)} 项`,
   'chat.skills.autoHint': 'iKi 会根据你的消息自动选择相关技能。',
   'chat.skills.noSkills': '没有找到技能。',
   'chat.references.affect': '情绪',

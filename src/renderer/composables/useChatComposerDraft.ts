@@ -1,7 +1,9 @@
 import { nextTick, ref, type Ref } from 'vue';
 
+type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
+
 export const useChatComposerDraft = (deps: {
-  inputRef: Ref<HTMLInputElement | null>;
+  inputRef: Ref<ComposerTextControl | null>;
   message: Ref<string>;
   sendMessage: () => Promise<void> | void;
   isRecording: Ref<boolean>;
@@ -46,6 +48,12 @@ export const useChatComposerDraft = (deps: {
     ) {
       return;
     }
+
+    if (event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
 
     if (deps.isRecording.value || deps.isTranscribing.value) {
       return;

@@ -1,7 +1,7 @@
 <template>
   <div class="app-container">
     <div class="titlebar-drag-region"></div>
-    <SettingsView v-if="isSettings" @close="closeSettings" />
+    <SettingsView v-if="isSettings" :initial-section="settingsSection" @close="closeSettings" />
     <ChatView v-else />
   </div>
 </template>
@@ -24,6 +24,14 @@ const updateHash = () => {
   currentHash.value = window.location.hash;
 };
 
+const extractSettingsSection = (hash: string): string | undefined => {
+  const normalized = hash.replace(/^#/, '').trim();
+  if (!normalized.startsWith('settings/')) return undefined;
+
+  const [, section] = normalized.split('/', 2);
+  return typeof section === 'string' && section.trim().length > 0 ? section.trim() : undefined;
+};
+
 onMounted(() => {
   window.addEventListener('hashchange', updateHash);
 });
@@ -33,6 +41,7 @@ onUnmounted(() => {
 });
 
 const isSettings = computed(() => currentHash.value.includes('settings'));
+const settingsSection = computed(() => extractSettingsSection(currentHash.value));
 const closeSettings = () => {
   electronAPI?.closeWindow?.();
 };

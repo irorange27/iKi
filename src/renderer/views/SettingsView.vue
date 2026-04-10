@@ -508,7 +508,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   Cog,
@@ -553,11 +553,38 @@ const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
 const { t } = useI18n();
 
+const SETTINGS_SECTION_KEYS = new Set([
+  'general',
+  'provider',
+  'mcp',
+  'bridges',
+  'usage',
+  'skills',
+  'memory',
+  'network',
+  'ui',
+  'colorScheme',
+  'speech',
+  'tasks',
+  'security',
+  'advanced',
+  'keybindings',
+]);
+
+const resolveSettingsSection = (value?: string): string => {
+  if (typeof value !== 'string') return 'general';
+  const trimmed = value.trim();
+  return SETTINGS_SECTION_KEYS.has(trimmed) ? trimmed : 'general';
+};
+
+const props = defineProps<{
+  initialSection?: string;
+}>();
 const emit = defineEmits(['close']);
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
 
-const activeSection = ref('general');
+const activeSection = ref(resolveSettingsSection(props.initialSection));
 const saved = ref(true);
 const providers = ref<Provider[]>([]);
 const isTestingModel = ref(false);
@@ -568,6 +595,13 @@ const toolModelTestResult = ref<{
 } | null>(null);
 const updateStatus = ref<AppUpdateStatus | null>(null);
 let removeProviderUpdateListener: () => void = () => undefined;
+
+watch(
+  () => props.initialSection,
+  nextValue => {
+    activeSection.value = resolveSettingsSection(nextValue);
+  }
+);
 
 type AvailableProvider = {
   id: string;
@@ -595,9 +629,6 @@ const getCheckedValue = (event: Event): boolean =>
   (event.target as HTMLInputElement | null)?.checked ?? false;
 
 const parseRequiredInteger = (value: string): number => Number.parseInt(value || '0', 10);
-
-const parseOptionalInteger = (value: string): number | null =>
-  value ? Number.parseInt(value, 10) : null;
 
 const UNCONFIGURED_TOOL_MODEL_VALUE = '';
 
@@ -1861,6 +1892,38 @@ onBeforeUnmount(() => {
 .update-install-btn:hover {
   background: rgba(var(--success-rgb), 0.24);
   border-color: rgba(var(--success-rgb), 0.55);
+}
+
+@media (max-width: 980px) {
+  .settings-container {
+    gap: 4px;
+    padding: 4px 4px 0;
+  }
+
+  .settings-nav {
+    width: 188px;
+    padding: 20px 12px;
+    padding-top: 36px;
+  }
+
+  .nav-menu {
+    margin-top: 16px;
+  }
+
+  .nav-menu li {
+    padding: 9px 10px;
+    gap: 7px;
+    font-size: 13px;
+  }
+
+  .settings-content {
+    padding: 0 16px;
+  }
+
+  .settings-header {
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+  }
 }
 
 @media (max-width: 760px) {

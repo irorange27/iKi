@@ -1,14 +1,14 @@
 <template>
   <div v-if="hasSummary" class="chat-message-references">
     <div class="reference-summary">
-      <span v-if="affectSummary.label" class="reference-summary-item" :data-tooltip="affectTooltip">
+      <span v-if="affectSummary.label" class="reference-summary-item" :title="affectTooltip">
         <Heart :size="14" class="reference-summary-icon" />
         {{ t('chat.references.affect') }}
       </span>
       <span
         v-if="memorySummary.items.length > 0"
         class="reference-summary-item"
-        :data-tooltip="memoryTooltip"
+        :title="memoryTooltip"
       >
         <Brain :size="14" class="reference-summary-icon" />
         {{ t('chat.references.memories', { count: memorySummary.items.length }) }}
@@ -16,7 +16,7 @@
       <span
         v-if="toolSummary.kindCount > 0"
         class="reference-summary-item"
-        :data-tooltip="toolTooltip"
+        :title="toolTooltip"
       >
         <Wrench :size="14" class="reference-summary-icon" />
         {{ t('chat.references.tools', { count: toolSummary.kindCount }) }}
@@ -24,7 +24,7 @@
       <span
         v-if="skillSummary.items.length > 0"
         class="reference-summary-item"
-        :data-tooltip="skillTooltip"
+        :title="skillTooltip"
       >
         <Sparkles :size="14" class="reference-summary-icon" />
         {{ t('chat.references.skills', { count: skillSummary.items.length }) }}
@@ -125,42 +125,12 @@ const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
 }
 
 .reference-summary-item {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   cursor: help;
   font-size: 13px;
   color: var(--reference-inline-color);
-}
-
-.reference-summary-item::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
-  z-index: 20;
-  width: max-content;
-  max-width: min(360px, calc(100vw - 32px));
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  box-shadow: var(--surface-shadow-md);
-  color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.45;
-  letter-spacing: 0.01em;
-  white-space: pre-wrap;
-  word-break: break-word;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.reference-summary-item:hover::after {
-  opacity: 1;
-  visibility: visible;
 }
 
 .reference-summary-icon {

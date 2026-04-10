@@ -1483,4 +1483,91 @@ onMounted(() => {
   background: color-mix(in srgb, var(--status-success-color) 16%, var(--bg-secondary));
   color: var(--status-success-color);
 }
+
+@media (max-width: 1180px) {
+  .providers-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .providers-search {
+    max-width: none;
+  }
+
+  .providers-actions {
+    justify-content: flex-start;
+  }
+
+  .providers-layout {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .providers-sidebar {
+    width: 100%;
+  }
+
+  .providers-scroll-list {
+    height: auto;
+    max-height: 228px;
+  }
+
+  .providers-scroll-list-inner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .provider-list-item {
+    align-items: flex-start;
+    min-height: 76px;
+    padding: 12px;
+  }
+
+  .provider-status-dot {
+    margin-top: 6px;
+  }
+
+  .provider-details-panel {
+    padding: 18px;
+  }
+
+  .provider-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .provider-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .provider-card-actions {
+    flex-wrap: wrap;
+  }
+
+  .provider-card-actions > button {
+    flex: 1 1 160px;
+  }
+}
+
+@media (max-width: 760px) {
+  .providers-scroll-list-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-title-row {
+    flex-wrap: wrap;
+  }
+
+  .provider-secret-input {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .provider-secret-toggle {
+    width: 100%;
+  }
+}
 </style>

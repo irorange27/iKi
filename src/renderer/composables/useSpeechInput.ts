@@ -6,7 +6,7 @@ import { translate } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
 
 type SpeechInputOptions = {
-  inputRef: Ref<HTMLInputElement | null>;
+  inputRef: Ref<HTMLInputElement | HTMLTextAreaElement | null>;
   message: Ref<string>;
 };
 

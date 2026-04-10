@@ -5,6 +5,7 @@
       @mouseenter="showActions"
       @mouseleave="scheduleHideActions"
       @focusin="showActions"
+      @focusout="handleShellFocusOut"
     >
       <ChatMessageReferences v-if="message.role === 'assistant'" :message="message" />
 
@@ -34,9 +35,9 @@
           class="message-action-btn"
           type="button"
           :class="{ copied: copyFeedbackVisible }"
-          :data-tooltip="copyTooltip"
           :data-copied="copyFeedbackVisible ? 'true' : undefined"
           :aria-label="copyTooltip"
+          :title="copyTooltip"
           @click.stop="handleCopyMessage"
         >
           <Copy class="message-action-icon" :size="14" />
@@ -44,8 +45,8 @@
         <button
           class="message-action-btn"
           type="button"
-          :data-tooltip="t('chat.regenerate.label')"
           :aria-label="t('chat.regenerate.label')"
+          :title="t('chat.regenerate.label')"
           @click.stop="handleRegenerate"
         >
           <RotateCcw class="message-action-icon" :size="14" />
@@ -53,8 +54,8 @@
         <button
           class="message-action-btn"
           type="button"
-          :data-tooltip="t('chat.edit.label')"
           :aria-label="t('chat.edit.label')"
+          :title="t('chat.edit.label')"
           @click.stop="handleEdit"
         >
           <Pencil class="message-action-icon" :size="14" />
@@ -63,8 +64,8 @@
           <button
             class="message-action-btn"
             type="button"
-            :data-tooltip="t('chat.more.label')"
             :aria-label="t('chat.more.label')"
+            :title="t('chat.more.label')"
             aria-haspopup="menu"
             :aria-expanded="isMoreMenuOpen"
             @click.stop="toggleMoreMenu"
@@ -77,6 +78,8 @@
               class="message-more-menu-item"
               type="button"
               role="menuitem"
+              :title="copyTooltip"
+              :aria-label="copyTooltip"
               @click="handleCopyMessage"
             >
               {{ t('chat.copy.label') }}
@@ -85,6 +88,8 @@
               class="message-more-menu-item"
               type="button"
               role="menuitem"
+              :title="t('chat.regenerate.label')"
+              :aria-label="t('chat.regenerate.label')"
               @click="handleRegenerate"
             >
               {{ t('chat.regenerate.label') }}
@@ -93,6 +98,8 @@
               class="message-more-menu-item"
               type="button"
               role="menuitem"
+              :title="t('chat.edit.label')"
+              :aria-label="t('chat.edit.label')"
               @click="handleEdit"
             >
               {{ t('chat.edit.label') }}
@@ -138,7 +145,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const ACTIONS_HIDE_DELAY_MS = 160;
+const ACTIONS_HIDE_DELAY_MS = 360;
 const isMoreMenuOpen = ref(false);
 const areActionsVisible = ref(false);
 const copyFeedbackVisible = ref(false);
@@ -226,6 +233,20 @@ const handleActionsFocusOut = (event: FocusEvent) => {
   }
 };
 
+const handleShellFocusOut = (event: FocusEvent) => {
+  const currentTarget = event.currentTarget;
+  const nextTarget = event.relatedTarget;
+  if (!(currentTarget instanceof HTMLElement)) {
+    closeMoreMenu();
+    return;
+  }
+  if (nextTarget instanceof Node && currentTarget.contains(nextTarget)) {
+    return;
+  }
+  closeMoreMenu();
+  scheduleHideActions();
+};
+
 onBeforeUnmount(() => {
   clearCopyFeedbackTimer();
   clearHideActionsTimer();
@@ -261,7 +282,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: 6px;
   position: absolute;
   right: 10px;
   bottom: -36px;
@@ -295,7 +316,8 @@ onBeforeUnmount(() => {
   position: relative;
   transition:
     color 0.15s ease,
-    background-color 0.15s ease;
+    background-color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .message-action-btn:hover,
@@ -309,34 +331,6 @@ onBeforeUnmount(() => {
 .message-action-btn[data-copied='true'],
 .message-action-btn.copied {
   color: var(--success-color, var(--accent-color));
-}
-
-.message-action-btn::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  white-space: nowrap;
-  padding: 6px 8px;
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--surface-shadow-md);
-  color: var(--text-primary);
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  opacity: 0;
-  transform: translate(-50%, 4px);
-  pointer-events: none;
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
-}
-
-.message-action-btn:hover::after,
-.message-action-btn:focus-visible::after {
-  opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 .message-more-shell {
@@ -389,6 +383,7 @@ onBeforeUnmount(() => {
 
 .message-action-icon {
   display: block;
+  flex: 0 0 auto;
 }
 
 .message-wrapper.user .message-content {
@@ -405,6 +400,23 @@ onBeforeUnmount(() => {
   padding: var(--chat-bubble-padding-y, 12px) var(--chat-bubble-padding-x, 16px);
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .message-wrapper.user .message-actions {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+  }
+
+  .message-wrapper.user .message-shell:hover .message-actions,
+  .message-wrapper.user .message-shell:focus-within .message-actions,
+  .message-wrapper.user .message-actions.actions-visible,
+  .message-wrapper.user .message-actions[data-menu-open='true'] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 768px) {
   .message-wrapper.user .message-shell,
   .message-wrapper.assistant .message-shell {
@@ -419,10 +431,16 @@ onBeforeUnmount(() => {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
+    gap: 4px;
   }
 
   .message-wrapper.user {
     margin-bottom: calc(var(--chat-message-gap, 18px) + 28px);
+  }
+
+  .message-action-btn {
+    width: 28px;
+    height: 28px;
   }
 }
 </style>

@@ -100,6 +100,7 @@
         props.isTranscribing
       "
       :aria-label="props.isRecording ? t('chat.input.voiceStop') : t('chat.input.voiceStart')"
+      :title="voiceInputTooltip"
       @click="$emit('toggle-voice-input')"
     >
       <svg v-if="props.isRecording" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -142,6 +143,7 @@
         props.isStopping ? 'is-stopping' : '',
       ]"
       :aria-label="props.isLoading ? t('chat.input.stopGeneration') : t('chat.input.send')"
+      :title="sendButtonTooltip"
       :disabled="
         props.isPreparingSend || props.isStopping || props.isRecording || props.isTranscribing
       "
@@ -202,6 +204,12 @@ const incognitoAriaLabel = computed(() =>
 );
 const incognitoTooltip = computed(() =>
   props.isIncognito ? t('chat.input.incognitoOn') : t('chat.input.incognitoOff')
+);
+const voiceInputTooltip = computed(() =>
+  props.isRecording ? t('chat.input.voiceStop') : t('chat.input.voiceStart')
+);
+const sendButtonTooltip = computed(() =>
+  props.isLoading ? t('chat.input.stopGeneration') : t('chat.input.send')
 );
 </script>
 

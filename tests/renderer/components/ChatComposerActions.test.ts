@@ -42,6 +42,9 @@ describe('ChatComposerActions', () => {
     const button = wrapper.find('.composer-mode-btn');
     expect(button.attributes('aria-pressed')).toBe('false');
     expect(button.attributes('title')).toContain('Memory is enabled');
+    expect(wrapper.find('.composer-context-indicator').attributes('title')).toContain(
+      'Context usage: 4.2K tok / 8K'
+    );
 
     await button.trigger('click');
 
@@ -54,12 +57,14 @@ describe('ChatComposerActions', () => {
     await wrapper.find('.send-btn').trigger('click');
     expect(wrapper.emitted('send-message')).toEqual([[]]);
     expect(wrapper.emitted('stop-streaming')).toBeUndefined();
+    expect(wrapper.find('.send-btn').attributes('title')).toContain('Send message');
 
     await wrapper.setProps({ isLoading: true });
     await wrapper.find('.send-btn').trigger('click');
 
     expect(wrapper.emitted('stop-streaming')).toEqual([[]]);
     expect(wrapper.find('.send-btn').attributes('aria-label')).toContain('Stop generation');
+    expect(wrapper.find('.send-btn').attributes('title')).toContain('Stop generation');
   });
 
   it('shows waveform and speech status, and forwards voice-toggle intent', async () => {
@@ -72,9 +77,17 @@ describe('ChatComposerActions', () => {
 
     expect(wrapper.findAll('.speech-waveform-bar')).toHaveLength(3);
     expect(wrapper.text()).toContain('Listening');
+    expect(wrapper.find('.speech-btn').attributes('title')).toContain('Start voice input');
 
     await wrapper.find('.speech-btn').trigger('click');
 
     expect(wrapper.emitted('toggle-voice-input')).toEqual([[]]);
+  });
+
+  it('updates the voice button tooltip while recording', async () => {
+    const wrapper = mountComponent({ isRecording: true });
+
+    expect(wrapper.find('.speech-btn').attributes('aria-label')).toContain('Stop voice input');
+    expect(wrapper.find('.speech-btn').attributes('title')).toContain('Stop voice input');
   });
 });

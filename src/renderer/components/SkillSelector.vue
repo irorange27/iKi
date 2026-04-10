@@ -3,6 +3,8 @@
     <button
       class="composer-control-btn composer-selector-trigger ui-text-secondary relative flex h-10 w-10 items-center justify-center rounded-[14px]"
       :class="{ 'ui-text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
+      :title="triggerTitle"
+      :aria-label="triggerTitle"
       @click="showSkillSelector = !showSkillSelector"
       @mouseenter="openSkillSelector"
       @mouseleave="scheduleCloseSkillSelector"
@@ -124,6 +126,17 @@ const availableSkills = ref<SkillSummary[]>([]);
 const skillSelectorCloseTimer = ref<number | null>(null);
 const isAutoSkillMode = computed(() => props.mode === 'auto');
 const selectedSkillIds = computed(() => props.skillIds);
+const SELECTOR_CLOSE_DELAY_MS = 320;
+
+const triggerTitle = computed(() => {
+  if (isAutoSkillMode.value) {
+    return t('chat.skills.trigger.auto');
+  }
+  if (selectedSkillIds.value.length > 0) {
+    return t('chat.skills.trigger.selected', { count: selectedSkillIds.value.length });
+  }
+  return t('chat.skills.trigger.choose');
+});
 
 const normalizeSkills = (input: unknown): SkillSummary[] => {
   if (!Array.isArray(input)) return [];
@@ -201,7 +214,7 @@ const scheduleCloseSkillSelector = () => {
   skillSelectorCloseTimer.value = window.setTimeout(() => {
     showSkillSelector.value = false;
     skillSelectorCloseTimer.value = null;
-  }, 180);
+  }, SELECTOR_CLOSE_DELAY_MS);
 };
 
 onMounted(() => {

@@ -27,10 +27,37 @@
         class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"
         ref="messagesContainer"
       >
-        <WelcomeScreen v-if="showWelcome && chatMessages.length === 0" @new-chat="handleNewChat" />
+        <WelcomeScreen
+          v-if="showWelcome && chatMessages.length === 0"
+          :active-model="currentModel"
+          :active-provider-id="currentProviderId"
+          @compose-starter="handleComposeStarter"
+        />
 
         <!-- Messages List -->
         <div v-else class="messages-area w-full h-full min-w-0">
+          <div
+            v-if="visibleOnboardingBanner"
+            class="onboarding-banner"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="onboarding-banner-topline">
+              <span class="onboarding-banner-label">{{ t('chat.onboarding.banner.label') }}</span>
+              <button
+                class="onboarding-banner-dismiss"
+                type="button"
+                :aria-label="t('common.close')"
+                @click="dismissOnboardingBanner"
+              >
+                <X :size="14" />
+              </button>
+            </div>
+            <div class="onboarding-banner-copy">
+              <strong>{{ visibleOnboardingBanner.title }}</strong>
+              <span>{{ visibleOnboardingBanner.body }}</span>
+            </div>
+          </div>
           <div v-if="externalThreadNotice" class="thread-origin-banner">
             {{ externalThreadNotice }}
           </div>
@@ -90,7 +117,7 @@ import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
-import { FolderOpen } from 'lucide-vue-next';
+import { FolderOpen, X } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 import { getTokenUsageSummary } from '../modules/chat/ui_message_references';
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
@@ -158,6 +185,7 @@ const chatMessages = computed<ChatUiMessage[]>(() => chat.messages);
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
+const dismissedOnboardingStageKey = ref<string | null>(null);
 const persistence = createUiMessagePersistence({ electronAPI });
 const messageStore = createChatMessageStore(chat);
 const { handleMarkdownClick } = useMarkdownCopy();
@@ -179,6 +207,46 @@ const latestAssistantTokenUsage = computed(() => {
   }
 
   return null;
+});
+
+const userMessageCount = computed(
+  () => chatMessages.value.filter(message => message?.role === 'user').length
+);
+const assistantMessageCount = computed(
+  () => chatMessages.value.filter(message => message?.role === 'assistant').length
+);
+
+const onboardingBannerStageKey = computed<string | null>(() => {
+  if (showWelcome.value || currentThreadOrigin.value?.isExternal) return null;
+  if (userMessageCount.value !== 1) return null;
+  return assistantMessageCount.value === 0 ? 'sent' : 'started';
+});
+
+const onboardingBanner = computed<null | { title: string; body: string }>(() => {
+  if (!onboardingBannerStageKey.value) return null;
+
+  if (onboardingBannerStageKey.value === 'sent') {
+    return {
+      title: t('chat.onboarding.banner.sent.title'),
+      body: t('chat.onboarding.banner.sent.body'),
+    };
+  }
+
+  return {
+    title: t('chat.onboarding.banner.started.title'),
+    body: t('chat.onboarding.banner.started.body'),
+  };
+});
+
+const visibleOnboardingBanner = computed<null | { title: string; body: string }>(() => {
+  if (!onboardingBanner.value) return null;
+  if (
+    onboardingBannerStageKey.value &&
+    dismissedOnboardingStageKey.value === onboardingBannerStageKey.value
+  ) {
+    return null;
+  }
+  return onboardingBanner.value;
 });
 
 const currentThreadOrigin = computed(() =>
@@ -307,6 +375,19 @@ const cancelEditing = async () => {
   await streaming.cancelEditing(clearDraft);
 };
 
+const handleComposeStarter = async (text: string) => {
+  await chatInputRef.value?.setDraftMessage(text, {
+    focus: true,
+    select: true,
+  });
+  scrollToBottom();
+};
+
+const dismissOnboardingBanner = () => {
+  if (!onboardingBannerStageKey.value) return;
+  dismissedOnboardingStageKey.value = onboardingBannerStageKey.value;
+};
+
 useChatViewLifecycle({
   configStore,
   refreshThreads,
@@ -325,6 +406,88 @@ useChatViewLifecycle({
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
+}
+
+.onboarding-banner {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 860px);
+  margin: 0 auto 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--success-color) 34%, var(--border-color));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--success-color) 11%, var(--bg-secondary)),
+      color-mix(in srgb, var(--accent-color) 5%, var(--bg-primary))
+    );
+}
+
+.onboarding-banner-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.onboarding-banner-label {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--success-color) 18%, var(--bg-primary));
+  color: color-mix(in srgb, var(--success-color) 84%, white 16%);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.onboarding-banner-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.onboarding-banner-dismiss:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-color) 28%, var(--border-color));
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.onboarding-banner-dismiss:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 62%, white 38%);
+  outline-offset: 2px;
+}
+
+.onboarding-banner-copy {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.onboarding-banner-copy strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
 }
 
 .chat-main-area {

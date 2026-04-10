@@ -100,12 +100,11 @@ describe('ChatMessageReferences', () => {
     expect(wrapper.text()).toContain('1 tool');
     expect(wrapper.text()).toContain('1 memories');
     expect(wrapper.text()).toContain('affect');
-    expect(summaryItems[2].attributes('data-tooltip')).toContain('Tools: web');
-    expect(summaryItems[3].attributes('data-tooltip')).toContain('Loaded skills: Planner');
-    expect(summaryItems[3].attributes('data-tooltip')).toContain(
+    expect(summaryItems[2].attributes('title')).toContain('Tools: web');
+    expect(summaryItems[3].attributes('title')).toContain('Loaded skills: Planner');
+    expect(summaryItems[3].attributes('title')).toContain(
       'Selected not loaded: openai-docs'
     );
-    expect(summaryItems[3].attributes('title')).toBeUndefined();
 
     await summaryItems[3].trigger('click');
 

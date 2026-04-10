@@ -4,6 +4,8 @@
       class="model-selector-trigger"
       :class="{ 'model-selector-trigger-open': showModelSelector }"
       type="button"
+      :title="triggerTitle"
+      :aria-label="triggerTitle"
       @click="toggleModelSelector"
     >
       <span class="model-selector-trigger-icon">
@@ -225,6 +227,13 @@ const selectedProviderIconProps = computed<ProviderIconProps | null>(() =>
 const selectedProviderFallbackText = computed(() =>
   getProviderFallbackText(props.selectedProvider)
 );
+
+const triggerTitle = computed(() => {
+  if (props.selectedProvider && props.selectedModel.trim().length > 0) {
+    return `${getProviderDisplayName(props.selectedProvider)} · ${props.selectedModel}`;
+  }
+  return t('chat.model.trigger.choose');
+});
 
 const closeModelSelector = () => {
   showModelSelector.value = false;

@@ -66,6 +66,7 @@
               class="selector-icon-btn workspace-selector-refresh flex h-8 w-8 items-center justify-center rounded-[10px]"
               :disabled="loadingWorkspaces || isPickingDirectory"
               :title="t('chat.workspace.refreshTitle')"
+              :aria-label="t('chat.workspace.refreshTitle')"
               @click.stop="loadWorkspaces"
             >
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -183,6 +184,7 @@ const getVisibleWorkspaces = getElectronApiSliceMethod('workspaces', 'getVisible
 const getWorkspace = getElectronApiSliceMethod('workspaces', 'get');
 const pickWorkspaceDirectoryFromApi = getElectronApiSliceMethod('workspaces', 'pickDirectory');
 const { t } = useI18n();
+const SELECTOR_CLOSE_DELAY_MS = 320;
 
 const showWorkspaceSelector = ref(false);
 const isWorkspaceTriggerHovered = ref(false);
@@ -339,7 +341,7 @@ const scheduleCloseWorkspaceSelector = () => {
     isWorkspaceTriggerHovered.value = false;
     showWorkspaceSelector.value = false;
     workspaceSelectorCloseTimer.value = null;
-  }, 180);
+  }, SELECTOR_CLOSE_DELAY_MS);
 };
 
 const toggleWorkspaceSelector = () => {

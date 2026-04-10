@@ -73,6 +73,7 @@ describe('ToolSelector', () => {
     });
 
     await flushPromises();
+    expect(wrapper.find('.composer-selector-trigger').attributes('title')).toBe('Choose tools');
     await wrapper.find('.composer-selector-trigger').trigger('click');
     await flushPromises();
 
@@ -101,5 +102,31 @@ describe('ToolSelector', () => {
 
     expect(wrapper.emitted('update:mcpServerIds')).toEqual([[['server_1']]]);
     expect(wrapper.emitted('update:tools')).toEqual([[['web', 'mcp_lookup']]]);
+  });
+
+  it('exposes trigger tooltip state for auto mode and selected counts', async () => {
+    const autoWrapper = mount(ToolSelector, {
+      props: {
+        tools: [],
+        mcpServerIds: [],
+        mode: 'auto',
+      },
+    });
+
+    await flushPromises();
+    expect(autoWrapper.find('.composer-selector-trigger').attributes('title')).toBe('Tools: auto');
+
+    const selectedWrapper = mount(ToolSelector, {
+      props: {
+        tools: ['web'],
+        mcpServerIds: ['server_1'],
+        mode: 'manual',
+      },
+    });
+
+    await flushPromises();
+    expect(selectedWrapper.find('.composer-selector-trigger').attributes('title')).toBe(
+      'Tools: 2 selected'
+    );
   });
 });

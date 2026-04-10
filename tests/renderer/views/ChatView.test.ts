@@ -45,8 +45,14 @@ const {
 } = vi.hoisted(() => {
   const makeRef = <T>(value: T) => ({ value, __v_isRef: true as const });
 
+  const chatMessagesRef = makeRef<UIMessage[]>([]);
   const chatState = {
-    messages: [] as UIMessage[],
+    get messages() {
+      return chatMessagesRef.value;
+    },
+    set messages(value: UIMessage[]) {
+      chatMessagesRef.value = value;
+    },
   };
 
   const currentThreadRef = makeRef<{
@@ -108,7 +114,9 @@ const {
   const getTokenUsageSummaryMock = vi.fn();
   const createUiMessagePersistenceMock = vi.fn(() => ({ resetPersistedMessageIds: vi.fn() }));
   const createChatMessageStoreMock = vi.fn(() => ({
-    messages: chatState.messages,
+    get messages() {
+      return chatState.messages;
+    },
   }));
 
   return {
@@ -154,7 +162,9 @@ const {
 vi.mock('@ai-sdk/vue', () => ({
   Chat: function Chat() {
     return {
-      messages: chatState.messages,
+      get messages() {
+        return chatState.messages;
+      },
     };
   },
 }));
@@ -218,9 +228,13 @@ const SidebarStub = defineComponent({
 
 const WelcomeScreenStub = defineComponent({
   name: 'WelcomeScreen',
-  emits: ['new-chat'],
+  emits: ['compose-starter'],
   setup(_, { emit }) {
-    return () => h('button', { class: 'welcome-screen-stub', onClick: () => emit('new-chat') });
+    return () =>
+      h('button', {
+        class: 'welcome-screen-stub',
+        onClick: () => emit('compose-starter', 'Hello from welcome'),
+      });
   },
 });
 
@@ -562,6 +576,79 @@ describe('ChatView', () => {
     const chatInput = wrapper.findComponent(ChatInputStub);
 
     expect(chatInput.props('workspaceLocked')).toBe(true);
+  });
+
+  it('hydrates the composer when the welcome flow emits a starter prompt', async () => {
+    showWelcomeRef.value = true;
+
+    const wrapper = await mountChatView();
+
+    await wrapper.find('.welcome-screen-stub').trigger('click');
+
+    expect(setDraftMessageMock).toHaveBeenCalledWith('Hello from welcome', {
+      focus: true,
+      select: true,
+    });
+  });
+
+  it('shows first-run feedback after the first user message is sent', async () => {
+    showWelcomeRef.value = false;
+    chatState.messages.splice(0, chatState.messages.length, {
+      id: 'msg_user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Hello' }],
+    } as UIMessage);
+
+    const wrapper = await mountChatView();
+
+    expect(wrapper.find('.onboarding-banner').exists()).toBe(true);
+    expect(wrapper.find('.onboarding-banner').text()).toContain('First message sent');
+    expect(wrapper.find('.onboarding-banner').text()).toContain(
+      'add a project folder, describe the task, or paste the material'
+    );
+  });
+
+  it('lets users dismiss the current onboarding banner', async () => {
+    showWelcomeRef.value = false;
+    chatState.messages.splice(0, chatState.messages.length, {
+      id: 'msg_user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Hello' }],
+    } as UIMessage);
+
+    const wrapper = await mountChatView();
+
+    expect(wrapper.find('.onboarding-banner').exists()).toBe(true);
+
+    await wrapper.find('.onboarding-banner-dismiss').trigger('click');
+
+    expect(wrapper.find('.onboarding-banner').exists()).toBe(false);
+  });
+
+  it('shifts first-run feedback once the assistant has replied to the first user message', async () => {
+    showWelcomeRef.value = false;
+    chatState.messages.splice(
+      0,
+      chatState.messages.length,
+      {
+        id: 'msg_user_1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Hello' }],
+      } as UIMessage,
+      {
+        id: 'msg_assistant_1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Hi there' }],
+      } as UIMessage
+    );
+
+    const wrapper = await mountChatView();
+
+    expect(wrapper.find('.onboarding-banner').exists()).toBe(true);
+    expect(wrapper.find('.onboarding-banner').text()).toContain('First conversation started');
+    expect(wrapper.find('.onboarding-banner').text()).toContain(
+      'project context, task intent, and source text'
+    );
   });
 
   it('shows an external-thread control-plane notice when viewing bridge-owned chats', async () => {

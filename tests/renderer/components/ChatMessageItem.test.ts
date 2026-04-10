@@ -44,12 +44,15 @@ describe('ChatMessageItem', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the user hover actions in copy-regenerate-edit-more order', () => {
+  it('renders the user actions in copy-regenerate-edit-more order with hover labels', () => {
     const wrapper = mountChatMessageItem();
+    const buttons = wrapper.findAll('.message-action-btn');
 
-    const labels = wrapper.findAll('.message-action-btn').map(button => button.attributes('aria-label'));
+    const labels = buttons.map(button => button.attributes('aria-label'));
+    const titles = buttons.map(button => button.attributes('title'));
 
     expect(labels).toEqual(['Copy', 'Regenerate', 'Edit', 'More']);
+    expect(titles).toEqual(['Copy', 'Regenerate', 'Edit', 'More']);
   });
 
   it('copies the user message text and clears the copied state after the timeout', async () => {
@@ -89,7 +92,7 @@ describe('ChatMessageItem', () => {
     expect(actions.classes()).toContain('actions-visible');
 
     await actions.trigger('mouseleave');
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(400);
     expect(actions.classes()).not.toContain('actions-visible');
   });
 
@@ -110,5 +113,29 @@ describe('ChatMessageItem', () => {
       'Regenerate',
       'Edit',
     ]);
+    expect(wrapper.findAll('[role="menuitem"]').map(item => item.attributes('title'))).toEqual([
+      'Copy',
+      'Regenerate',
+      'Edit',
+    ]);
+  });
+
+  it('keeps actions visible while focus remains inside the message shell', async () => {
+    const wrapper = mountChatMessageItem();
+    const shell = wrapper.find('.message-shell');
+    const actions = wrapper.find('.message-actions');
+    const nextTarget = document.createElement('button');
+    shell.element.appendChild(nextTarget);
+
+    await shell.trigger('focusin');
+    expect(actions.classes()).toContain('actions-visible');
+
+    await shell.trigger('focusout', { relatedTarget: nextTarget });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(actions.classes()).toContain('actions-visible');
+
+    await shell.trigger('focusout', { relatedTarget: document.body });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(actions.classes()).not.toContain('actions-visible');
   });
 });

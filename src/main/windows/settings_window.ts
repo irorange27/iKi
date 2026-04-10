@@ -8,7 +8,15 @@ import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
 
 const windowLogger = createLogger({ module: 'settings_window' });
 
-export const createSettingsWindow = (): BrowserWindow => {
+const sanitizeSettingsSection = (value?: string): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^[a-z][a-z0-9-]*$/i.test(trimmed)) return null;
+  return trimmed;
+};
+
+export const createSettingsWindow = (options?: { section?: string }): BrowserWindow => {
+  const section = sanitizeSettingsSection(options?.section);
   const settingsWindow = new BrowserWindow({
     width: 900,
     height: 680,
@@ -29,7 +37,7 @@ export const createSettingsWindow = (): BrowserWindow => {
 
   void loadRendererEntry(settingsWindow, {
     isPackaged: app.isPackaged,
-    hash: 'settings',
+    hash: section ? `settings/${section}` : 'settings',
   });
 
   maybeOpenDevTools(

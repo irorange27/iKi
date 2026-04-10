@@ -33,6 +33,7 @@ const buildProvider = (
 });
 
 const mountSettingsView = async (options?: {
+  props?: Record<string, unknown>;
   setupStore?: (store: ReturnType<typeof useConfigStore>) => void;
 }) => {
   const pinia = createPinia();
@@ -117,6 +118,7 @@ const mountSettingsView = async (options?: {
   });
 
   const wrapper = mount(SettingsView, {
+    props: options?.props,
     global: {
       plugins: [pinia],
       stubs: {
@@ -289,6 +291,19 @@ describe('SettingsView general custom selects', () => {
     await wrapper.find('.general-update-check-btn').trigger('click');
 
     expect(checkUpdates).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('opens the requested initial settings section when routed directly', async () => {
+    const { wrapper } = await mountSettingsView({
+      props: {
+        initialSection: 'provider',
+      },
+    });
+
+    expect(wrapper.findComponent({ name: 'ProvidersSettings' }).exists()).toBe(true);
+    expect(wrapper.find('.nav-menu li.active').text()).toContain('Providers');
 
     wrapper.unmount();
   });
