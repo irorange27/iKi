@@ -548,6 +548,7 @@ import type { AppUpdateStatus } from '../../shared/types/update';
 import { getErrorMessage } from '../../shared/utils/errors';
 import { parseModelList } from '../../shared/utils/provider_models';
 import { formatLabel } from '../components/settings/settings_formatters';
+import { getProviderDisplayName } from '../modules/providers/provider_display';
 
 const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
@@ -686,7 +687,7 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
       const models = parseModelList(provider.models);
       return {
         id: provider.id,
-        name: provider.name,
+        name: getProviderDisplayName(provider),
         type: provider.type,
         models,
       };

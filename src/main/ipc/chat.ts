@@ -28,9 +28,17 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:messages:delete', (_, id) => chatService.deleteMessage(id));
 
   // Chat/LLM Integration
-  ipcMain.handle('chat:getModels', async (_, providerType: string, providerId?: string) => {
-    return await chatService.getModels(providerType, providerId);
-  });
+  ipcMain.handle(
+    'chat:getModels',
+    async (
+      _,
+      providerType: string,
+      providerId?: string,
+      providerOverride?: Record<string, unknown> | null
+    ) => {
+      return await chatService.getModels(providerType, providerId, providerOverride ?? null);
+    }
+  );
 
   ipcMain.handle('chat:isProviderConfigured', (_, providerType: string, providerId?: string) => {
     return chatService.isProviderConfigured(providerType, providerId);

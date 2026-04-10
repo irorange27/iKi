@@ -188,7 +188,7 @@ describe('chat IPC', () => {
     expect(chatServiceMock.createMessage).toHaveBeenCalledWith(messagePayload);
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
     expect(chatServiceMock.deleteMessage).toHaveBeenCalledWith('message_1');
-    expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai', undefined);
+    expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai', undefined, null);
     expect(chatServiceMock.isProviderConfigured).toHaveBeenCalledWith('openai', undefined);
     expect(chatServiceMock.stopStream).toHaveBeenCalledWith(77);
     expect(chatServiceMock.send).toHaveBeenCalledWith(sendPayload);

@@ -32,7 +32,10 @@ import type {
   InterventionPolicySignal,
 } from '../../../shared/chat/intervention_policy';
 import type { AgentRunKind } from '../../../shared/types/agent_run';
-import type { ProviderModelDescriptor } from '../../../shared/types/provider';
+import type {
+  ProviderModelDescriptor,
+  ProviderModelDiscoveryOverride,
+} from '../../../shared/types/provider';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { getErrorMessage } from '../../utils/errors';
@@ -372,7 +375,8 @@ export const createChatStreaming = (deps: {
 
   const getModels = async (
     providerType: string,
-    providerId?: string
+    providerId?: string,
+    providerOverride?: ProviderModelDiscoveryOverride | null
   ): Promise<ProviderModelDescriptor[]> => {
     try {
       const toDescriptors = async (modelIds: string[]) => {
@@ -415,7 +419,11 @@ export const createChatStreaming = (deps: {
       };
 
       if (providerType === ACP_PROVIDER_TYPE) {
-        const acpDescriptors = await llmFactory.fetchAcpModels(providerType, providerId);
+        const acpDescriptors = await llmFactory.fetchAcpModels(
+          providerType,
+          providerId,
+          providerOverride ?? undefined
+        );
         return await Promise.all(
           acpDescriptors.map(async descriptor => {
             const capability = await llmFactory.resolveModelCapability(

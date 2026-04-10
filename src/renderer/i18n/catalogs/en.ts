@@ -982,15 +982,28 @@ export const en = defineCatalog({
   'settings.providers.noApiKeyRequired': 'This provider can run without an API key.',
   'settings.providers.baseUrlOptional': 'Base URL (Optional)',
   'settings.providers.models': 'Models',
-  'settings.providers.modelsSubtitle': 'Select which models this provider exposes to the app.',
-  'settings.providers.modelsSelected': ({ count }) => `${asCount(count)} selected`,
-  'settings.providers.availableModels': 'Available Models',
-  'settings.providers.fetchModels': 'Fetch from models.dev',
+  'settings.providers.modelsSubtitle':
+    'Review discovered models, then enable the ones you want to expose to the app.',
+  'settings.providers.modelsSelected': ({ count }) => `${asCount(count)} enabled`,
+  'settings.providers.modelsSummaryTitle': 'Model changes apply when you save this provider.',
+  'settings.providers.availableModels': 'Discovered Models',
+  'settings.providers.fetchModels': 'Fetch',
+  'settings.providers.fetchModelsTitle':
+    'Refresh the available model list from this provider or client.',
   'settings.providers.fetchingModels': 'Fetching...',
   'settings.providers.selectionCount': ({ selected, total }) =>
-    `${asText(selected)} of ${asText(total)} selected`,
-  'settings.providers.selectAll': 'Select All',
-  'settings.providers.deselectAll': 'Deselect All',
+    `Showing ${asText(total)} models · ${asText(selected)} enabled`,
+  'settings.providers.modelSearchPlaceholder': 'Search models...',
+  'settings.providers.modelAddIdPlaceholder': 'Model ID',
+  'settings.providers.modelAddDisplayNamePlaceholder': 'Display Name (optional)',
+  'settings.providers.modelAdd': 'Add',
+  'settings.providers.modelAddTitle':
+    'Add this model to the list. Review it, then enable it with the toggle.',
+  'settings.providers.modelsEmpty':
+    'No models yet. Fetch available models or add one manually.',
+  'settings.providers.modelsEmptySearch': 'No models match this search.',
+  'settings.providers.modelToggleEnable': ({ model }) => `Enable ${asText(model)}`,
+  'settings.providers.modelToggleDisable': ({ model }) => `Disable ${asText(model)}`,
   'settings.providers.noSelection': 'Select a provider from the list to configure it.',
   'settings.providers.modal.edit': 'Edit',
   'settings.providers.modal.add': 'Add',
@@ -1034,28 +1047,39 @@ export const en = defineCatalog({
   'settings.providers.baseUrlHelp.optionalOverride': 'Optional override for the provider endpoint.',
   'settings.providers.baseUrlHelp.useDefault': ({ name }) =>
     `Leave empty to use the default ${asText(name)} API endpoint.`,
-  'settings.providers.acp.command': 'ACP Command',
+  'settings.providers.acp.command': 'Command',
   'settings.providers.acp.commandPlaceholder': 'e.g. codex-acp',
   'settings.providers.acp.commandHelp':
-    'Executable to launch for the ACP agent bridge. Keep command and arguments separate.',
-  'settings.providers.acp.args': 'ACP Arguments',
+    'Executable used to launch Codex CLI through ACP. Keep the command itself separate from its arguments.',
+  'settings.providers.acp.args': 'Arguments',
   'settings.providers.acp.argsPlaceholder': '--profile default\n--sandbox workspace-write',
   'settings.providers.acp.argsHelp':
     'Use shell-style arguments here (quotes allowed), or paste a JSON string array for exact argv ordering.',
-  'settings.providers.acp.apiProvider': 'Credential Source Provider',
-  'settings.providers.acp.apiProviderAuto': 'Use ACP provider fields only',
+  'settings.providers.acp.apiProvider': 'API Provider',
+  'settings.providers.acp.apiProviderAuto': 'None (use built-in authentication)',
   'settings.providers.acp.apiProviderHelp':
-    'Optional existing provider whose API key/base URL should be injected into the ACP command environment.',
-  'settings.providers.acp.authMethodId': 'ACP Auth Method ID',
-  'settings.providers.acp.authMethodPlaceholder': 'Optional auth method id',
+    'Select an existing provider only when Codex CLI should reuse that provider\'s API credentials. Leave this as None to rely on built-in authentication.',
+  'settings.providers.acp.authMethodId': 'Authentication Method',
+  'settings.providers.acp.authMethodPlaceholder': 'Optional authentication method id',
   'settings.providers.acp.authMethodHelp':
-    'Optional ACP auth method used for lazy authentication when the agent advertises auth methods.',
+    'Optional ACP authentication method id to use when Codex CLI advertises multiple login flows.',
+  'settings.providers.acp.mcpServers': 'MCP Servers',
+  'settings.providers.acp.mcpServersHelp':
+    'Choose which configured MCP servers this Codex CLI session should connect to.',
+  'settings.providers.acp.mcpServersEmpty':
+    'No MCP servers are configured yet. Add them in Settings -> MCP.',
+  'settings.providers.acp.mcpServersEnabled': 'Enabled',
+  'settings.providers.acp.mcpServersDisabled': 'Disabled in MCP settings',
+  'settings.providers.acp.mcpServersMissing': 'Saved server no longer exists',
+  'settings.providers.acp.mcpServersMissingName': ({ id }) => `Unavailable server (${asText(id)})`,
   'settings.providers.acp.baseUrlHelp':
     'Optional OpenAI-compatible base URL injected into the ACP command environment for Codex/OpenAI-style adapters.',
   'settings.providers.promptModelName': 'Enter model name:',
   'settings.providers.confirmRemove':
     'Are you sure you want to remove this provider configuration?',
   'settings.providers.modelOptions.edit': 'Model Options',
+  'settings.providers.modelOptions.editAria': ({ model }) =>
+    `Edit model options for ${asText(model)}`,
   'settings.providers.modelOptions.title': ({ model }) => `Model Options · ${asText(model)}`,
   'settings.providers.modelOptions.displayName': 'Display Name',
   'settings.providers.modelOptions.displayNamePlaceholder': 'Optional friendly label',
@@ -1072,6 +1096,8 @@ export const en = defineCatalog({
     '{\n  "reasoningEffort": "medium",\n  "parallelToolCalls": true\n}',
   'settings.providers.modelOptions.providerOptionsHelp':
     'Optional provider-specific AI SDK call options. Leave blank to use default runtime behavior.',
+  'settings.providers.modelOptions.tooltip':
+    'Display name, context window, capability overrides, and provider-specific options.',
   'settings.providers.modelOptions.capability.default': 'Use Default',
   'settings.providers.modelOptions.capability.enabled': 'Enabled',
   'settings.providers.modelOptions.capability.disabled': 'Disabled',
@@ -1093,7 +1119,7 @@ export const en = defineCatalog({
     'Official MiniMax models via the AI SDK MiniMax provider',
   'settings.providers.description.ollama': 'Run open-source LLMs locally with Ollama',
   'settings.providers.description.acp':
-    'Agent Client Protocol bridge for Codex, Claude Code, Gemini, and other ACP-capable agents',
+    'Codex CLI via Agent Client Protocol, with compatibility for Claude Code, Gemini, and other ACP-capable agents',
   'settings.mcp.title': 'MCP (Model Context Protocol)',
   'settings.mcp.description':
     'Connect external tool servers and expose their tools in iKi. Remote servers are disabled by default and require explicit opt-in.',

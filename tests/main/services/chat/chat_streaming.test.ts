@@ -362,7 +362,7 @@ describe('createChatStreaming', () => {
         source: 'provider',
       },
     ]);
-    expect(fetchAcpModelsMock).toHaveBeenCalledWith('acp', 'provider_acp');
+    expect(fetchAcpModelsMock).toHaveBeenCalledWith('acp', 'provider_acp', undefined);
   });
 
   it('stream() emits skill usage citations and reports real token usage before rendering the response', async () => {

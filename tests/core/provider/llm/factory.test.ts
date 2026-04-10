@@ -16,6 +16,7 @@ const {
   getPersonaPromptMock,
   getToolRuntimeContextMock,
   getUserDataPathMock,
+  listMcpServersMock,
   streamTextMock,
 } = vi.hoisted(() => ({
   createACPProviderMock: vi.fn(),
@@ -39,6 +40,7 @@ const {
   getPersonaPromptMock: vi.fn(),
   getToolRuntimeContextMock: vi.fn(() => ({})),
   getUserDataPathMock: vi.fn(() => '/tmp/iki-user-data'),
+  listMcpServersMock: vi.fn(() => []),
   streamTextMock: vi.fn(),
 }));
 
@@ -74,6 +76,10 @@ vi.mock('vercel-minimax-ai-provider', () => ({
 vi.mock('../../../../src/core/db/providers', () => ({
   getProviders: getProvidersMock,
   getProvider: getProviderMock,
+}));
+
+vi.mock('../../../../src/core/db/mcp_servers', () => ({
+  listMcpServers: listMcpServersMock,
 }));
 
 vi.mock('../../../../src/core/logger', () => ({
@@ -145,6 +151,7 @@ beforeEach(() => {
     },
   ]);
   getProviderMock.mockReturnValue(null);
+  listMcpServersMock.mockReturnValue([]);
   getToolRuntimeContextMock.mockReturnValue({});
   getPersonaPromptMock.mockReturnValue('persona prompt');
   createOpenAIMock.mockReturnValue(() => 'mock-model');
@@ -361,6 +368,97 @@ describe('llm factory', () => {
     );
   });
 
+  it('passes selected MCP servers into the ACP session configuration', () => {
+    const acpLanguageModel = {
+      specificationVersion: 'v3' as const,
+      provider: 'acp',
+      modelId: 'codex-mini-latest',
+      supportedUrls: {},
+      doGenerate: vi.fn(),
+      doStream: vi.fn(),
+      forceCleanup: vi.fn(),
+    };
+    const acpProvider = {
+      languageModel: vi.fn(() => acpLanguageModel),
+    };
+    createACPProviderMock.mockReturnValue(acpProvider);
+    listMcpServersMock.mockReturnValue([
+      {
+        id: 'docs_server',
+        name: 'Repo Docs',
+        transport: 'streamable-http',
+        base_url: 'https://mcp.example.com',
+        headers: {
+          Authorization: 'Bearer token',
+        },
+        auth_ref: null,
+        enabled: true,
+        command: null,
+        args: null,
+        cwd: null,
+        env: null,
+        tool_allowlist: null,
+        approval_mode: null,
+        created_at: '2026-03-21T12:00:00.000Z',
+        updated_at: '2026-03-21T12:00:00.000Z',
+      },
+      {
+        id: 'fs_server',
+        name: 'Filesystem',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '@example/filesystem'],
+        cwd: null,
+        env: {
+          MCP_LOG_LEVEL: 'debug',
+        },
+        base_url: null,
+        headers: null,
+        auth_ref: null,
+        enabled: true,
+        tool_allowlist: null,
+        approval_mode: null,
+        created_at: '2026-03-21T12:00:00.000Z',
+        updated_at: '2026-03-21T12:00:00.000Z',
+      },
+    ]);
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_acp',
+        type: 'acp',
+        enabled: true,
+        api_key: '',
+        base_url: '',
+        models: JSON.stringify(['codex-mini-latest']),
+        acp_command: 'codex-acp',
+        acp_mcp_server_ids: '["docs_server","fs_server"]',
+      },
+    ]);
+
+    expect(createModel('acp', 'codex-mini-latest')).toBe(acpLanguageModel);
+    expect(createACPProviderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: {
+          cwd: '/tmp/iki-user-data/acp-session',
+          mcpServers: [
+            {
+              type: 'http',
+              name: 'Repo Docs',
+              url: 'https://mcp.example.com',
+              headers: [{ name: 'Authorization', value: 'Bearer token' }],
+            },
+            {
+              name: 'Filesystem',
+              command: 'npx',
+              args: ['-y', '@example/filesystem'],
+              env: [{ name: 'MCP_LOG_LEVEL', value: 'debug' }],
+            },
+          ],
+        },
+      })
+    );
+  });
+
   it('discovers ACP models through session initialization', async () => {
     const acpProvider = {
       languageModel: vi.fn(),
@@ -401,6 +499,47 @@ describe('llm factory', () => {
     ]);
     expect(acpProvider.initSession).toHaveBeenCalledTimes(1);
     expect(acpProvider.cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('discovers ACP models from an unsaved draft override without requiring a persisted provider', async () => {
+    const acpProvider = {
+      languageModel: vi.fn(),
+      initSession: vi.fn(async () => ({
+        sessionId: 'session_draft',
+        models: {
+          availableModels: [
+            {
+              modelId: 'codex-mini-latest',
+              name: 'Codex Mini',
+            },
+          ],
+        },
+      })),
+      cleanup: vi.fn(),
+    };
+    createACPProviderMock.mockReturnValue(acpProvider);
+    getProvidersMock.mockReturnValue([]);
+
+    await expect(
+      fetchAcpModels('acp', undefined, {
+        type: 'acp',
+        acp_command: 'codex',
+        acp_args: '--profile default',
+      })
+    ).resolves.toEqual([
+      {
+        id: 'codex-mini-latest',
+        displayName: 'Codex Mini',
+        supportsToolCalls: true,
+        source: 'provider',
+      },
+    ]);
+    expect(createACPProviderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: 'codex',
+        args: ['--profile', 'default'],
+      })
+    );
   });
 
   it('cleans up ACP language models explicitly after a turn finishes', () => {

@@ -11,6 +11,7 @@ import type {
   ModelCapabilitySnapshot,
   Provider,
   ProviderModelDescriptor,
+  ProviderModelDiscoveryOverride,
   ProviderUpdatedEvent,
 } from './provider';
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
@@ -166,7 +167,11 @@ export interface ElectronApi {
     onUpdated: (callback: (event: ProviderUpdatedEvent) => void) => () => void;
   };
   chat: {
-    getModels: (providerType: string, providerId?: string) => Promise<ProviderModelDescriptor[]>;
+    getModels: (
+      providerType: string,
+      providerId?: string,
+      providerOverride?: ProviderModelDiscoveryOverride | null
+    ) => Promise<ProviderModelDescriptor[]>;
     isProviderConfigured: (providerType: string, providerId?: string) => Promise<boolean>;
     send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;

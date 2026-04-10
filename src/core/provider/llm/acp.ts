@@ -1,15 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createACPProvider, type ACPProvider } from '@mcpc-tech/acp-ai-provider';
+import {
+  createACPProvider,
+  type ACPProvider,
+  type ACPProviderSettings,
+} from '@mcpc-tech/acp-ai-provider';
 import type { LanguageModel } from 'ai';
 
+import { listMcpServers } from '../../db/mcp_servers';
 import { getProvider } from '../../db/providers';
 import { createLogger } from '../../logger';
 import { getUserDataPath } from '../../platform';
 import { ensureThreadWorkspaceSelection } from '../../workspaces/thread_workspace';
 import { ACP_PROVIDER_TYPE } from '../../../shared/constants/acp';
 import type { ProviderModelDescriptor } from '../../../shared/types/provider';
+import type { McpServer as IkiMcpServer } from '../../../shared/types/mcp';
 
 const acpProviderLogger = createLogger({ module: 'acp_provider' });
 const ACP_SESSION_DIR = 'acp-session';
@@ -20,6 +26,7 @@ export type AcpProviderConfig = {
   baseURL: string;
   acpCommand?: string | null;
   acpArgs?: string | null;
+  acpMcpServerIds?: string | null;
   acpAuthMethodId?: string | null;
   acpApiProviderId?: string | null;
   acpModelMapping?: string | null;
@@ -34,6 +41,13 @@ type AcpModelMappingEntry = {
 type AcpModelTarget = AcpModelMappingEntry & {
   requestedModelId: string;
 };
+
+type AcpSessionMcpServer = ACPProviderSettings['session']['mcpServers'][number];
+type AcpSessionHttpServer = Extract<AcpSessionMcpServer, { type: 'http' }>;
+type AcpSessionSseServer = Extract<AcpSessionMcpServer, { type: 'sse' }>;
+type AcpSessionStdioServer = Exclude<AcpSessionMcpServer, AcpSessionHttpServer | AcpSessionSseServer>;
+type AcpSessionEnvVariable = AcpSessionStdioServer['env'][number];
+type AcpSessionHttpHeader = AcpSessionHttpServer['headers'][number];
 
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -55,6 +69,23 @@ const normalizeStringArray = (value: unknown): string[] => {
     .filter((entry): entry is string => typeof entry === 'string')
     .map(entry => entry.trim())
     .filter(Boolean);
+};
+
+const parseSelectedMcpServerIds = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return [...new Set(normalizeStringArray(value))];
+  }
+
+  if (typeof value !== 'string') return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return [...new Set(normalizeStringArray(parsed))];
+  } catch {
+    return [];
+  }
 };
 
 export const isAcpProviderType = (providerType: string): boolean =>
@@ -292,6 +323,114 @@ export const resolveAcpSessionCwd = (threadId?: string): string => {
   return ensureDefaultAcpSessionDirectory();
 };
 
+const toAcpEnvVariables = (
+  env: Record<string, string> | null | undefined
+): AcpSessionEnvVariable[] =>
+  Object.entries(env ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => ({ name, value }));
+
+const toAcpHttpHeaders = (
+  headers: Record<string, string> | null | undefined
+): AcpSessionHttpHeader[] =>
+  Object.entries(headers ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => ({ name, value }));
+
+const mapMcpServerToAcpSessionServer = (server: IkiMcpServer): AcpSessionMcpServer | null => {
+  const name = normalizeString(server.name) || server.id;
+
+  if (server.transport === 'stdio') {
+    const command = normalizeString(server.command);
+    if (!command) {
+      acpProviderLogger.event({
+        level: 'warn',
+        event: 'acp.mcp_server.invalid',
+        outcome: 'degraded',
+        message: `Skipping MCP server "${server.id}" because it does not have a command.`,
+      });
+      return null;
+    }
+
+    return {
+      name,
+      command,
+      args: normalizeStringArray(server.args ?? []),
+      env: toAcpEnvVariables(server.env),
+    };
+  }
+
+  const url = normalizeString(server.base_url);
+  if (!url) {
+    acpProviderLogger.event({
+      level: 'warn',
+      event: 'acp.mcp_server.invalid',
+      outcome: 'degraded',
+      message: `Skipping MCP server "${server.id}" because it does not have a URL.`,
+    });
+    return null;
+  }
+
+  if (server.transport === 'streamable-http') {
+    return {
+      type: 'http',
+      name,
+      url,
+      headers: toAcpHttpHeaders(server.headers),
+    };
+  }
+
+  if (server.transport === 'sse') {
+    return {
+      type: 'sse',
+      name,
+      url,
+      headers: toAcpHttpHeaders(server.headers),
+    };
+  }
+
+  return null;
+};
+
+const buildAcpSessionMcpServers = (config: AcpProviderConfig): AcpSessionMcpServer[] => {
+  const selectedServerIds = parseSelectedMcpServerIds(config.acpMcpServerIds);
+  if (selectedServerIds.length === 0) return [];
+
+  const availableById = new Map(listMcpServers().map(server => [server.id, server]));
+  const resolvedServers: AcpSessionMcpServer[] = [];
+
+  for (const serverId of selectedServerIds) {
+    const server = availableById.get(serverId);
+
+    if (!server) {
+      acpProviderLogger.event({
+        level: 'warn',
+        event: 'acp.mcp_server.missing',
+        outcome: 'degraded',
+        message: `Skipping missing MCP server "${serverId}" for ACP provider "${config.id}".`,
+      });
+      continue;
+    }
+
+    if (!server.enabled) {
+      acpProviderLogger.event({
+        level: 'warn',
+        event: 'acp.mcp_server.disabled',
+        outcome: 'degraded',
+        message: `Skipping disabled MCP server "${serverId}" for ACP provider "${config.id}".`,
+      });
+      continue;
+    }
+
+    const mapped = mapMcpServerToAcpSessionServer(server);
+    if (mapped) {
+      resolvedServers.push(mapped);
+    }
+  }
+
+  return resolvedServers;
+};
+
 const buildAcpProvider = (config: AcpProviderConfig, threadId?: string): ACPProvider => {
   const command = normalizeString(config.acpCommand);
   if (!command) {
@@ -301,6 +440,7 @@ const buildAcpProvider = (config: AcpProviderConfig, threadId?: string): ACPProv
   const args = parseAcpArgs(config.acpArgs);
   const env = buildAcpEnv(config);
   const cwd = resolveAcpSessionCwd(threadId);
+  const mcpServers = buildAcpSessionMcpServers(config);
 
   return createACPProvider({
     command,
@@ -311,7 +451,7 @@ const buildAcpProvider = (config: AcpProviderConfig, threadId?: string): ACPProv
       : {}),
     session: {
       cwd,
-      mcpServers: [],
+      mcpServers,
     },
     persistSession: true,
   });

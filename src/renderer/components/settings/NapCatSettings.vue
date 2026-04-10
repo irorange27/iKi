@@ -293,6 +293,7 @@ import {
 } from '../../../shared/logging/console_formatter';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { parseModelList } from '../../../shared/utils/provider_models';
+import { getProviderDisplayName } from '../../modules/providers/provider_display';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;
@@ -364,7 +365,7 @@ const providerOptions = computed<ProviderOption[]>(() => {
 
     byType.set(type, {
       type,
-      label: `${provider.name} (${type})`,
+      label: `${getProviderDisplayName(provider)} (${type})`,
       models,
       duplicateCount: 1,
     });

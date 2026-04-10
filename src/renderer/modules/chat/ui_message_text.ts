@@ -1,9 +1,7 @@
 import {
   extractTextFromMessageParts,
-  isObjectRecord,
   isTextPart,
   type ChatUiMessage,
-  type TextPart,
 } from '../../../shared/chat/message_parts';
 
 export const extractTextFromMessage = (message: ChatUiMessage | undefined): string => {

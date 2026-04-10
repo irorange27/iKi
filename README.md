@@ -91,11 +91,12 @@ A local agent pet for AI provider orchestration.
    your first chat message. You can still open `Settings` directly at any time if you prefer the
    full control surface.
 
-7. To use an ACP-backed agent such as a Codex ACP bridge, add the built-in `ACP Agent` provider in
-   `Settings -> Providers`, set the ACP command plus shell-style arguments (or a JSON string
-   array), optionally point it at an existing OpenAI-compatible provider for credential
-   injection, fetch the ACP-exposed models, and then select that provider in chat like any other
-   model source.
+7. To use an ACP-backed agent such as Codex, add the built-in `Codex CLI` provider in
+   `Settings -> Providers`, set the command plus shell-style arguments (or a JSON string array),
+   optionally choose an authentication method, optionally point `API Provider` at an existing
+   provider for credential reuse, select any MCP servers that session should connect to, fetch the
+   ACP-exposed models, and then select that provider in chat like any other model source. `Codex CLI`
+   does not require manual base-URL setup in the provider form.
 
 ## Useful Commands
 

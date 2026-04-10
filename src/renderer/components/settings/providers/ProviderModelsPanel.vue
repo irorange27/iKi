@@ -1,6 +1,11 @@
 <template>
-  <div class="provider-models-panel">
-    <button type="button" class="provider-models-toggle" @click="$emit('toggle-open')">
+  <div class="provider-models-panel" :class="{ 'provider-models-panel-open': props.open }">
+    <button
+      type="button"
+      class="provider-models-toggle"
+      :title="t('settings.providers.modelsSummaryTitle')"
+      @click="$emit('toggle-open')"
+    >
       <div class="provider-models-toggle-main">
         <span class="provider-models-title">{{ t('settings.providers.models') }}</span>
         <span class="provider-models-subtitle">
@@ -16,12 +21,13 @@
     </button>
 
     <div v-if="props.open" class="provider-models-body">
-      <div class="label-header">
-        <span class="provider-field-title">{{ t('settings.providers.availableModels') }}</span>
+      <div class="provider-models-toolbar">
         <button
-          class="fetch-models-btn"
-          @click="$emit('fetch-models')"
+          type="button"
+          class="fetch-models-btn secondary-btn"
+          :title="t('settings.providers.fetchModelsTitle')"
           :disabled="props.isFetchingModels"
+          @click="$emit('fetch-models')"
         >
           <RefreshCw :size="14" :class="{ 'animate-spin': props.isFetchingModels }" />
           {{
@@ -32,71 +38,112 @@
         </button>
       </div>
 
-      <div v-if="props.availableModels.length > 0" class="models-selection-container">
-        <div class="models-selection-header">
-          <span class="models-count">{{
-            t('settings.providers.selectionCount', {
-              selected: props.selectedModels.length,
-              total: props.availableModels.length,
-            })
-          }}</span>
-          <div class="models-actions">
-            <button class="select-all-btn" @click="$emit('select-all')">
-              {{ t('settings.providers.selectAll') }}
-            </button>
-            <button class="deselect-all-btn" @click="$emit('deselect-all')">
-              {{ t('settings.providers.deselectAll') }}
-            </button>
-          </div>
-        </div>
-        <div class="models-checkbox-list">
-          <div v-for="model in props.availableModels" :key="model" class="model-checkbox-item">
-            <label class="model-checkbox-main">
-              <input
-                type="checkbox"
-                :checked="props.selectedModels.includes(model)"
-                @change="$emit('toggle-model', model)"
-              />
-              <span class="model-copy">
-                <span class="model-name">{{ getModelLabel(model) }}</span>
-                <span v-if="getModelCaption(model)" class="model-caption">
-                  {{ getModelCaption(model) }}
-                </span>
-                <span v-if="getModelOptionSummaryText(model)" class="model-summary">
-                  {{ getModelOptionSummaryText(model) }}
-                </span>
-              </span>
-            </label>
-            <button
-              type="button"
-              class="model-options-btn"
-              @click="$emit('edit-model-options', model)"
-            >
-              <SlidersHorizontal :size="14" />
-              {{ t('settings.providers.modelOptions.edit') }}
-            </button>
-          </div>
-        </div>
+      <div class="provider-models-manual">
+        <input
+          v-model="pendingModelId"
+          class="provider-models-inline-input"
+          :placeholder="t('settings.providers.modelAddIdPlaceholder')"
+          :title="t('settings.providers.modelAddTitle')"
+          @keydown.enter.prevent="submitManualModel"
+        />
+        <input
+          v-model="pendingDisplayName"
+          class="provider-models-inline-input"
+          :placeholder="t('settings.providers.modelAddDisplayNamePlaceholder')"
+          :title="t('settings.providers.modelOptions.tooltip')"
+          @keydown.enter.prevent="submitManualModel"
+        />
+        <button
+          type="button"
+          class="manual-add-btn secondary-btn"
+          :title="t('settings.providers.modelAddTitle')"
+          :disabled="pendingModelId.trim().length === 0"
+          @click="submitManualModel"
+        >
+          <Plus :size="14" />
+          {{ t('settings.providers.modelAdd') }}
+        </button>
       </div>
 
-      <div v-else class="models-chips">
-        <button class="add-model-btn" @click="$emit('add-model')">+</button>
-        <span
-          v-for="model in props.fallbackModels"
-          :key="model"
-          class="model-chip"
-          :class="{ 'dynamic-chip': props.hasDynamicModels }"
-        >
-          {{ model }}
-        </span>
+      <label class="provider-models-search">
+        <Search :size="16" class="provider-models-search-icon" />
+        <input
+          v-model="searchQuery"
+          class="provider-models-search-input"
+          :placeholder="t('settings.providers.modelSearchPlaceholder')"
+        />
+      </label>
+
+      <div class="provider-models-list-summary" :title="t('settings.providers.modelsSummaryTitle')">
+        {{ t('settings.providers.selectionCount', { selected: props.selectedModels.length, total: allModels.length }) }}
+      </div>
+
+      <div class="provider-models-list-shell">
+        <div v-if="filteredModelRows.length > 0" class="provider-models-list">
+          <div
+            v-for="model in filteredModelRows"
+            :key="model.id"
+            class="provider-model-row"
+            :class="{
+              'provider-model-row-enabled': model.enabled,
+              'provider-model-row-configured': model.hasOptions,
+            }"
+            :title="model.rowTooltip"
+          >
+            <div class="provider-model-row-copy">
+              <span class="provider-model-row-title">{{ model.label }}</span>
+              <span v-if="model.secondary" class="provider-model-row-secondary">
+                {{ model.secondary }}
+              </span>
+            </div>
+
+            <div class="provider-model-row-actions">
+              <button
+                type="button"
+                class="model-options-btn"
+                :class="{ 'model-options-btn-configured': model.hasOptions }"
+                :title="model.optionsTooltip"
+                :aria-label="model.optionsAriaLabel"
+                @click="$emit('edit-model-options', model.id)"
+              >
+                <SlidersHorizontal :size="15" />
+              </button>
+
+              <label class="model-toggle" :title="model.toggleTooltip">
+                <input
+                  type="checkbox"
+                  :checked="model.enabled"
+                  @change="$emit('toggle-model', model.id)"
+                />
+                <span class="model-toggle-track">
+                  <span class="model-toggle-thumb" />
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="provider-models-empty">
+          {{
+            searchQuery.trim().length > 0
+              ? t('settings.providers.modelsEmptySearch')
+              : t('settings.providers.modelsEmpty')
+          }}
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { ChevronDown, RefreshCw, SlidersHorizontal } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
+import {
+  ChevronDown,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-vue-next';
 
 import type { ProviderModelOptionsMap } from '../../../../shared/types/provider';
 import { getProviderModelOptions } from '../../../../shared/utils/provider_models';
@@ -113,17 +160,32 @@ const props = defineProps<{
   hasDynamicModels: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'toggle-open'): void;
   (event: 'fetch-models'): void;
   (event: 'toggle-model', modelId: string): void;
-  (event: 'select-all'): void;
-  (event: 'deselect-all'): void;
   (event: 'edit-model-options', modelId: string): void;
-  (event: 'add-model'): void;
+  (event: 'add-model', payload: { modelId: string; displayName: string }): void;
 }>();
 
+type ModelRow = {
+  id: string;
+  label: string;
+  secondary: string;
+  enabled: boolean;
+  hasOptions: boolean;
+  rowTooltip: string;
+  optionsAriaLabel: string;
+  optionsTooltip: string;
+  toggleTooltip: string;
+  searchText: string;
+};
+
 const { t } = useI18n();
+
+const searchQuery = ref('');
+const pendingModelId = ref('');
+const pendingDisplayName = ref('');
 
 const summaryLabels = computed(() => ({
   vision: t('settings.providers.modelOptions.summary.vision'),
@@ -134,19 +196,88 @@ const summaryLabels = computed(() => ({
     t('settings.providers.modelOptions.summary.contextWindow', { count }),
 }));
 
+const selectedModelSet = computed(() => new Set(props.selectedModels));
+
 const getSelectedModelOptions = (modelId: string) =>
   getProviderModelOptions(props.modelOptions, modelId);
 
-const getModelLabel = (modelId: string): string =>
-  getSelectedModelOptions(modelId)?.displayName || modelId;
+const allModels = computed(() => {
+  const seen = new Set<string>();
+  const source = [...props.availableModels, ...props.fallbackModels];
 
-const getModelCaption = (modelId: string): string => {
-  const label = getModelLabel(modelId);
-  return label === modelId ? '' : modelId;
+  return source
+    .map(model => model.trim())
+    .filter(model => {
+      if (!model || seen.has(model)) {
+        return false;
+      }
+      seen.add(model);
+      return true;
+    });
+});
+
+const modelRows = computed<ModelRow[]>(() =>
+  allModels.value
+    .map(modelId => {
+      const options = getSelectedModelOptions(modelId);
+      const label = options?.displayName || modelId;
+      const summary = getModelOptionSummary(options, summaryLabels.value);
+      const hasOptions = Boolean(options && Object.keys(options).length > 0);
+      const secondary = label !== modelId ? modelId : summary;
+      const enabled = selectedModelSet.value.has(modelId);
+      const rowTooltip = label === modelId ? summary : [modelId, summary].filter(Boolean).join('\n');
+      const optionsAriaLabel = t('settings.providers.modelOptions.editAria', { model: label });
+      const optionsTooltip = [
+        optionsAriaLabel,
+        summary || (hasOptions ? t('settings.providers.modelOptions.tooltip') : ''),
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      return {
+        id: modelId,
+        label,
+        secondary,
+        enabled,
+        hasOptions,
+        rowTooltip,
+        optionsAriaLabel,
+        optionsTooltip,
+        toggleTooltip: enabled
+          ? t('settings.providers.modelToggleDisable', { model: label })
+          : t('settings.providers.modelToggleEnable', { model: label }),
+        searchText: `${label} ${modelId} ${summary}`.toLowerCase(),
+      };
+    })
+    .sort((left, right) => {
+      if (left.enabled !== right.enabled) {
+        return left.enabled ? -1 : 1;
+      }
+      return left.label.localeCompare(right.label, undefined, { sensitivity: 'base' });
+    })
+);
+
+const filteredModelRows = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) {
+    return modelRows.value;
+  }
+
+  return modelRows.value.filter(model => model.searchText.includes(query));
+});
+
+const submitManualModel = () => {
+  const modelId = pendingModelId.value.trim();
+  if (!modelId) return;
+
+  emit('add-model', {
+    modelId,
+    displayName: pendingDisplayName.value.trim(),
+  });
+
+  pendingModelId.value = '';
+  pendingDisplayName.value = '';
 };
-
-const getModelOptionSummaryText = (modelId: string): string =>
-  getModelOptionSummary(getSelectedModelOptions(modelId), summaryLabels.value);
 </script>
 
 <style scoped src="../settings_shared.css"></style>
@@ -154,8 +285,13 @@ const getModelOptionSummaryText = (modelId: string): string =>
 <style scoped>
 .provider-models-panel {
   border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-tertiary));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-secondary) 76%, var(--bg-tertiary));
+  overflow: hidden;
+}
+
+.provider-models-panel-open {
+  box-shadow: var(--surface-inset-highlight);
 }
 
 .provider-models-toggle {
@@ -167,7 +303,7 @@ const getModelOptionSummaryText = (modelId: string): string =>
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   cursor: pointer;
 }
 
@@ -180,12 +316,14 @@ const getModelOptionSummaryText = (modelId: string): string =>
 .provider-models-toggle-main {
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .provider-models-toggle-meta {
   gap: 10px;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .provider-models-title {
@@ -194,16 +332,11 @@ const getModelOptionSummaryText = (modelId: string): string =>
   color: var(--text-primary);
 }
 
-.provider-field-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
 .provider-models-subtitle {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.45;
+  max-width: 460px;
 }
 
 .provider-models-summary {
@@ -211,232 +344,255 @@ const getModelOptionSummaryText = (modelId: string): string =>
   font-weight: 600;
 }
 
-.provider-models-body {
-  padding: 0 16px 16px;
-}
-
 .models-toggle-open {
   transform: rotate(180deg);
 }
 
-.label-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.fetch-models-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.fetch-models-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-}
-
-.fetch-models-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-.models-selection-container {
-  margin-top: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 14px;
-  background: var(--bg-secondary);
-  max-height: 400px;
+.provider-models-body {
+  padding: 0 18px 18px;
   display: flex;
   flex-direction: column;
-}
-
-.models-selection-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
-}
-
-.models-count {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.models-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.select-all-btn,
-.deselect-all-btn {
-  padding: 4px 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border-radius: 999px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.select-all-btn:hover,
-.deselect-all-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-}
-
-.models-checkbox-list {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
-}
-
-.models-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.model-chip {
-  background: var(--bg-active);
-  color: var(--text-primary);
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: monospace;
-}
-
-.dynamic-chip {
-  background: rgba(var(--accent-rgb, 74, 158, 255), 0.15) !important;
-  border-color: var(--accent-color) !important;
-  color: var(--accent-color) !important;
-}
-
-.model-checkbox-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
 }
 
-.model-checkbox-item:hover {
-  background: var(--bg-hover);
-  border-color: color-mix(in srgb, var(--accent-color) 25%, var(--border-color));
-}
-
-.model-checkbox-item input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  accent-color: var(--accent-color);
-  flex-shrink: 0;
-}
-
-.model-checkbox-main {
+.provider-models-toolbar {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  flex: 1;
-  cursor: pointer;
+  justify-content: flex-end;
 }
 
-.model-copy {
+.fetch-models-btn,
+.manual-add-btn {
+  min-height: 38px;
+  border-radius: 999px;
+}
+
+.provider-models-manual {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.provider-models-inline-input,
+.provider-models-search-input {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.provider-models-inline-input {
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.provider-models-inline-input::placeholder,
+.provider-models-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.provider-models-inline-input:focus,
+.provider-models-search-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.provider-models-search {
+  position: relative;
+  display: block;
+}
+
+.provider-models-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.provider-models-search-input {
+  min-height: 42px;
+  border-radius: 14px;
+  padding: 11px 14px 11px 40px;
+}
+
+.provider-models-list-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.provider-models-list-shell {
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
+  overflow: hidden;
+}
+
+.provider-models-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.provider-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.provider-model-row:last-child {
+  border-bottom: none;
+}
+
+.provider-model-row:hover {
+  background: color-mix(in srgb, var(--bg-hover) 86%, transparent);
+}
+
+.provider-model-row-enabled {
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
+}
+
+.provider-model-row-configured:not(.provider-model-row-enabled) {
+  background: color-mix(in srgb, var(--accent-color) 4%, var(--bg-primary));
+}
+
+.provider-model-row-copy {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
 }
 
-.model-caption,
-.model-summary {
+.provider-model-row-title {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.provider-model-row-secondary {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.4;
+  word-break: break-word;
 }
 
-.model-name {
-  font-family: monospace;
-  font-size: 13px;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-.model-checkbox-item:has(input:checked) {
-  background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-tertiary));
-  border-color: var(--accent-color);
-}
-
-.model-checkbox-item:has(input:checked) .model-name {
-  color: var(--accent-color);
-  font-weight: 500;
+.provider-model-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .model-options-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .model-options-btn:hover {
-  border-color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
   color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
+.model-options-btn-configured {
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
 
-  to {
-    transform: rotate(360deg);
-  }
+.model-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.model-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.model-toggle-track {
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-tertiary) 90%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--border-color) 85%, transparent);
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.model-toggle-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 40%, var(--bg-primary));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.model-toggle input:checked + .model-toggle-track {
+  background: color-mix(in srgb, var(--accent-color) 80%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--accent-color) 88%, transparent);
+}
+
+.model-toggle input:checked + .model-toggle-track .model-toggle-thumb {
+  transform: translateX(20px);
+  background: var(--accent-contrast);
+}
+
+.provider-models-empty {
+  padding: 18px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 @media (max-width: 900px) {
-  .model-checkbox-item {
-    align-items: stretch;
-    flex-direction: column;
+  .provider-models-manual {
+    grid-template-columns: 1fr;
   }
 
-  .model-options-btn {
+  .manual-add-btn {
     width: 100%;
-    justify-content: center;
+  }
+
+  .provider-model-row {
+    align-items: flex-start;
   }
 }
 </style>

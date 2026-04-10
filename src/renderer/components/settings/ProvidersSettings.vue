@@ -98,169 +98,220 @@
             </div>
           </div>
 
-          <div class="provider-config-form">
-            <div class="provider-config-group provider-form-stack">
-              <div class="provider-field">
-                <label class="input-label provider-field-label">
-                  <span class="provider-field-title">{{ t('settings.providers.apiKey') }}</span>
-                  <div class="provider-secret-input">
-                    <input
-                      :type="selectedProviderDraft.showApiKey ? 'text' : 'password'"
-                      v-model="selectedProviderDraft.api_key"
-                      :placeholder="t('settings.providers.apiKeyPlaceholder')"
-                    />
-                    <button
-                      type="button"
-                      class="provider-secret-toggle"
-                      @click="toggleSelectedProviderApiKeyVisibility"
+          <div class="provider-details-scroll">
+            <div class="provider-config-form">
+              <div class="provider-config-group provider-form-stack">
+                <div v-if="!isSelectedAcpProvider" class="provider-field">
+                  <label class="input-label provider-field-label">
+                    <span class="provider-field-title">{{ t('settings.providers.apiKey') }}</span>
+                    <div class="provider-secret-input">
+                      <input
+                        :type="selectedProviderDraft.showApiKey ? 'text' : 'password'"
+                        v-model="selectedProviderDraft.api_key"
+                        :placeholder="t('settings.providers.apiKeyPlaceholder')"
+                      />
+                      <button
+                        type="button"
+                        class="provider-secret-toggle"
+                        @click="toggleSelectedProviderApiKeyVisibility"
+                      >
+                        <EyeOff v-if="selectedProviderDraft.showApiKey" :size="18" />
+                        <Eye v-else :size="18" />
+                      </button>
+                    </div>
+                  </label>
+                  <p v-if="selectedProviderSupportLink" class="provider-field-help">
+                    {{ selectedProviderSupportLink.prefix }}
+                    <a
+                      :href="selectedProviderSupportLink.url"
+                      target="_blank"
+                      rel="noreferrer"
+                      class="provider-inline-link"
                     >
-                      <EyeOff v-if="selectedProviderDraft.showApiKey" :size="18" />
-                      <Eye v-else :size="18" />
-                    </button>
+                      {{ selectedProviderSupportLink.label }}
+                      <ExternalLink :size="14" />
+                    </a>
+                  </p>
+                  <p v-else-if="!selectedProviderRequiresApiKey" class="provider-field-help">
+                    {{ t('settings.providers.noApiKeyRequired') }}
+                  </p>
+                </div>
+
+                <div v-if="!isSelectedAcpProvider" class="provider-field">
+                  <label class="input-label provider-field-label">
+                    <span class="provider-field-title">{{
+                      t('settings.providers.baseUrlOptional')
+                    }}</span>
+                    <input
+                      type="text"
+                      v-model="selectedProviderDraft.base_url"
+                      :placeholder="
+                        selectedProviderInfo.defaultBaseUrl || 'https://api.example.com/v1'
+                      "
+                    />
+                  </label>
+                  <p class="provider-field-help">
+                    {{ selectedProviderBaseUrlHelp }}
+                  </p>
+                </div>
+
+                <template v-if="isSelectedAcpProvider">
+                  <div class="provider-field">
+                    <label class="input-label provider-field-label">
+                      <span class="provider-field-title">{{
+                        t('settings.providers.acp.command')
+                      }}</span>
+                      <input
+                        type="text"
+                        v-model="selectedProviderDraft.acp_command"
+                        :placeholder="t('settings.providers.acp.commandPlaceholder')"
+                      />
+                    </label>
+                    <p class="provider-field-help">
+                      {{ t('settings.providers.acp.commandHelp') }}
+                    </p>
                   </div>
-                </label>
-                <p v-if="selectedProviderSupportLink" class="provider-field-help">
-                  {{ selectedProviderSupportLink.prefix }}
-                  <a
-                    :href="selectedProviderSupportLink.url"
-                    target="_blank"
-                    rel="noreferrer"
-                    class="provider-inline-link"
-                  >
-                    {{ selectedProviderSupportLink.label }}
-                    <ExternalLink :size="14" />
-                  </a>
-                </p>
-                <p v-else-if="!selectedProviderRequiresApiKey" class="provider-field-help">
-                  {{ t('settings.providers.noApiKeyRequired') }}
-                </p>
+
+                  <div class="provider-field">
+                    <label class="input-label provider-field-label">
+                      <span class="provider-field-title">{{
+                        t('settings.providers.acp.args')
+                      }}</span>
+                      <textarea
+                        v-model="selectedProviderDraft.acp_args"
+                        :placeholder="t('settings.providers.acp.argsPlaceholder')"
+                        class="provider-multiline-input"
+                        rows="4"
+                      ></textarea>
+                    </label>
+                    <p class="provider-field-help">
+                      {{ t('settings.providers.acp.argsHelp') }}
+                    </p>
+                  </div>
+
+                  <div class="provider-field">
+                    <label class="input-label provider-field-label">
+                      <span class="provider-field-title">{{
+                        t('settings.providers.acp.authMethodId')
+                      }}</span>
+                      <input
+                        type="text"
+                        v-model="selectedProviderDraft.acp_auth_method_id"
+                        :placeholder="t('settings.providers.acp.authMethodPlaceholder')"
+                      />
+                    </label>
+                    <p class="provider-field-help">
+                      {{ t('settings.providers.acp.authMethodHelp') }}
+                    </p>
+                  </div>
+
+                  <div class="provider-field">
+                    <label class="input-label provider-field-label">
+                      <span class="provider-field-title">{{
+                        t('settings.providers.acp.apiProvider')
+                      }}</span>
+                      <SettingsSelect
+                        :model-value="selectedProviderDraft.acp_api_provider_id"
+                        :options="acpCredentialProviderOptions"
+                        :aria-label="t('settings.providers.acp.apiProvider')"
+                        @update:model-value="
+                          selectedProviderDraft.acp_api_provider_id = String($event || '')
+                        "
+                      />
+                    </label>
+                    <p class="provider-field-help">
+                      {{ t('settings.providers.acp.apiProviderHelp') }}
+                    </p>
+                  </div>
+
+                  <div class="provider-field">
+                    <span class="provider-field-title">{{ t('settings.providers.acp.mcpServers') }}</span>
+                    <div class="provider-mcp-list">
+                      <p v-if="mcpServersLoading" class="provider-field-help">
+                        {{ t('common.loading') }}
+                      </p>
+                      <p
+                        v-else-if="mcpServersError"
+                        class="provider-field-help provider-field-error"
+                      >
+                        {{ mcpServersError }}
+                      </p>
+                      <template v-else-if="acpMcpServerEntries.length > 0">
+                        <label
+                          v-for="server in acpMcpServerEntries"
+                          :key="server.id"
+                          class="provider-mcp-option"
+                          :class="{
+                            'provider-mcp-option-disabled': !server.enabled,
+                            'provider-mcp-option-missing': server.missing,
+                          }"
+                        >
+                          <input
+                            type="checkbox"
+                            :checked="selectedProviderDraft.acp_mcp_server_ids.includes(server.id)"
+                            @change="
+                              toggleSelectedAcpMcpServer(
+                                server.id,
+                                ($event.target as HTMLInputElement).checked
+                              )
+                            "
+                          />
+                          <span class="provider-mcp-option-copy">
+                            <span class="provider-mcp-option-name">{{ server.name }}</span>
+                            <span class="provider-mcp-option-meta">{{ server.meta }}</span>
+                          </span>
+                        </label>
+                      </template>
+                      <p v-else class="provider-field-help">
+                        {{ t('settings.providers.acp.mcpServersEmpty') }}
+                      </p>
+                    </div>
+                    <p class="provider-field-help">
+                      {{ t('settings.providers.acp.mcpServersHelp') }}
+                    </p>
+                  </div>
+                </template>
+
+                <ProviderModelsPanel
+                  :open="modelsPanelOpen"
+                  :is-fetching-models="isFetchingModels"
+                  :available-models="availableModelsList"
+                  :selected-models="selectedModelsList"
+                  :fallback-models="selectedProviderInfo.models"
+                  :model-options="selectedProviderDraft.model_options"
+                  :has-dynamic-models="Boolean(dynamicModels[selectedProviderId!])"
+                  @toggle-open="toggleModelsPanel"
+                  @fetch-models="fetchLatestModels"
+                  @toggle-model="toggleModel"
+                  @edit-model-options="openModelOptionsEditor"
+                  @add-model="addModel"
+                />
               </div>
-
-              <div class="provider-field">
-                <label class="input-label provider-field-label">
-                  <span class="provider-field-title">{{
-                    t('settings.providers.baseUrlOptional')
-                  }}</span>
-                  <input
-                    type="text"
-                    v-model="selectedProviderDraft.base_url"
-                    :placeholder="
-                      selectedProviderInfo.defaultBaseUrl || 'https://api.example.com/v1'
-                    "
-                  />
-                </label>
-                <p class="provider-field-help">
-                  {{ selectedProviderBaseUrlHelp }}
-                </p>
-              </div>
-
-              <template v-if="isSelectedAcpProvider">
-                <div class="provider-field">
-                  <label class="input-label provider-field-label">
-                    <span class="provider-field-title">{{
-                      t('settings.providers.acp.command')
-                    }}</span>
-                    <input
-                      type="text"
-                      v-model="selectedProviderDraft.acp_command"
-                      :placeholder="t('settings.providers.acp.commandPlaceholder')"
-                    />
-                  </label>
-                  <p class="provider-field-help">
-                    {{ t('settings.providers.acp.commandHelp') }}
-                  </p>
-                </div>
-
-                <div class="provider-field">
-                  <label class="input-label provider-field-label">
-                    <span class="provider-field-title">{{
-                      t('settings.providers.acp.args')
-                    }}</span>
-                    <textarea
-                      v-model="selectedProviderDraft.acp_args"
-                      :placeholder="t('settings.providers.acp.argsPlaceholder')"
-                      class="provider-multiline-input"
-                      rows="4"
-                    ></textarea>
-                  </label>
-                  <p class="provider-field-help">
-                    {{ t('settings.providers.acp.argsHelp') }}
-                  </p>
-                </div>
-
-                <div class="provider-field">
-                  <span class="provider-field-title">{{ t('settings.providers.acp.apiProvider') }}</span>
-                  <SettingsSelect
-                    :model-value="selectedProviderDraft.acp_api_provider_id"
-                    :options="acpCredentialProviderOptions"
-                    :aria-label="t('settings.providers.acp.apiProvider')"
-                    @update:model-value="
-                      selectedProviderDraft.acp_api_provider_id = String($event || '')
-                    "
-                  />
-                  <p class="provider-field-help">
-                    {{ t('settings.providers.acp.apiProviderHelp') }}
-                  </p>
-                </div>
-
-                <div class="provider-field">
-                  <label class="input-label provider-field-label">
-                    <span class="provider-field-title">{{
-                      t('settings.providers.acp.authMethodId')
-                    }}</span>
-                    <input
-                      type="text"
-                      v-model="selectedProviderDraft.acp_auth_method_id"
-                      :placeholder="t('settings.providers.acp.authMethodPlaceholder')"
-                    />
-                  </label>
-                  <p class="provider-field-help">
-                    {{ t('settings.providers.acp.authMethodHelp') }}
-                  </p>
-                </div>
-              </template>
-
-              <ProviderModelsPanel
-                :open="modelsPanelOpen"
-                :is-fetching-models="isFetchingModels"
-                :available-models="availableModelsList"
-                :selected-models="selectedModelsList"
-                :fallback-models="selectedProviderInfo.models"
-                :model-options="selectedProviderDraft.model_options"
-                :has-dynamic-models="Boolean(dynamicModels[selectedProviderId!])"
-                @toggle-open="modelsPanelOpen = !modelsPanelOpen"
-                @fetch-models="fetchLatestModels"
-                @toggle-model="toggleModel"
-                @select-all="selectAllModels(availableModelsList)"
-                @deselect-all="deselectAllModels"
-                @edit-model-options="openModelOptionsEditor"
-                @add-model="addModel"
-              />
             </div>
+          </div>
 
-            <div class="provider-card-actions">
-              <button
-                v-if="selectedProviderConfig"
-                class="danger-btn"
-                @click="removeProviderConfig"
-              >
-                {{ t('common.delete') }}
-              </button>
-              <button
-                class="secondary-btn"
-                @click="resetSelectedProviderDraft"
-                :disabled="!isSelectedProviderDirty"
-              >
-                {{ t('common.cancel') }}
-              </button>
-              <button
-                class="primary-btn"
-                @click="saveProviderConfig"
-                :disabled="!canSaveSelectedProvider"
-              >
-                {{ t('common.save') }}
-              </button>
-            </div>
+          <div class="provider-card-actions">
+            <button
+              v-if="selectedProviderConfig"
+              class="danger-btn"
+              @click="removeProviderConfig"
+            >
+              {{ t('common.delete') }}
+            </button>
+            <button
+              class="secondary-btn"
+              @click="resetSelectedProviderDraft"
+              :disabled="!isSelectedProviderDirty"
+            >
+              {{ t('common.cancel') }}
+            </button>
+            <button
+              class="primary-btn"
+              @click="saveProviderConfig"
+              :disabled="!canSaveSelectedProvider"
+            >
+              {{ t('common.save') }}
+            </button>
           </div>
         </template>
 
@@ -392,7 +443,11 @@ import ProviderModelsPanel from './providers/ProviderModelsPanel.vue';
 import { useI18n } from '../../i18n';
 import { ACP_PROVIDER_TYPE } from '../../../shared/constants/acp';
 import type { BuiltInProvider } from '../../../shared/types/settings';
-import type { ProviderModelOptions } from '../../../shared/types/provider';
+import type {
+  ProviderModelDiscoveryOverride,
+  ProviderModelOptions,
+} from '../../../shared/types/provider';
+import type { McpServerSummary, McpTransport } from '../../../shared/types/mcp';
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import {
@@ -404,8 +459,9 @@ import {
   getCustomProviderIconProps,
   getProviderIconName,
 } from '../../modules/providers/provider_icons';
+import { getProviderDisplayName } from '../../modules/providers/provider_display';
 import { useProviderDrafts, type ProviderRecord } from '../../composables/useProviderDrafts';
-import { getElectronAPI } from '../../services/electron_api';
+import { getElectronAPI, getElectronApiSliceMethod } from '../../services/electron_api';
 
 type EditableProvider = Pick<
   ProviderRecord,
@@ -438,11 +494,23 @@ type ActiveModelOptionsEditor = {
   modelId: string;
 };
 
+type AcpMcpServerEntry = {
+  id: string;
+  name: string;
+  meta: string;
+  enabled: boolean;
+  missing: boolean;
+};
+
 const electronAPI = getElectronAPI();
+const listMcpServers = getElectronApiSliceMethod('mcp', 'list');
 const providersSettingsLogger = createLogger({ module: 'providers_settings' });
 const { t } = useI18n();
 
 const providers = ref<ProviderRecord[]>([]);
+const mcpServers = ref<McpServerSummary[]>([]);
+const mcpServersLoading = ref(false);
+const mcpServersError = ref('');
 const editingProvider = ref<EditableProvider | null>(null);
 const showProviderEditor = ref(false);
 
@@ -526,6 +594,25 @@ const BUILTIN_PROVIDER_ORDER = new Map(
 const arrayEquals = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
+const normalizeSelectedAcpMcpServerIds = (value: string[]): string[] => {
+  const seen = new Set<string>();
+
+  return value
+    .map(entry => entry.trim())
+    .filter(entry => {
+      if (!entry || seen.has(entry)) {
+        return false;
+      }
+      seen.add(entry);
+      return true;
+    });
+};
+
+const sortNormalizedStringList = (value: string[]) => [...normalizeSelectedAcpMcpServerIds(value)].sort();
+
+const arraySetEquals = (left: string[], right: string[]) =>
+  arrayEquals(sortNormalizedStringList(left), sortNormalizedStringList(right));
+
 const {
   dynamicModels,
   selectedModels,
@@ -546,8 +633,6 @@ const {
   toggleSelectedProviderApiKeyVisibility,
   setFetchedModels,
   toggleModel,
-  selectAllModels,
-  deselectAllModels,
   addDynamicModel,
 } = useProviderDrafts({
   providers,
@@ -561,6 +646,27 @@ const openModelOptionsEditor = (modelId: string) => {
   modelOptionsEditor.value = {
     providerId: selectedProviderId.value,
     modelId,
+  };
+};
+
+const buildSelectedAcpModelDiscoveryOverride = (): ProviderModelDiscoveryOverride | null => {
+  const draft = selectedProviderDraft.value;
+  if (!isSelectedAcpProvider.value || !draft) return null;
+
+  const command = draft.acp_command.trim();
+  if (!command) return null;
+
+  const providerId = selectedProviderConfig.value?.id;
+
+  return {
+    ...(providerId ? { id: providerId } : {}),
+    type: ACP_PROVIDER_TYPE,
+    acp_command: command,
+    acp_args: draft.acp_args.trim() || '',
+    acp_mcp_server_ids:
+      draft.acp_mcp_server_ids.length > 0 ? JSON.stringify(draft.acp_mcp_server_ids) : '',
+    acp_auth_method_id: draft.acp_auth_method_id.trim() || '',
+    acp_api_provider_id: draft.acp_api_provider_id.trim() || '',
   };
 };
 
@@ -595,9 +701,11 @@ const fetchLatestModels = async () => {
   isFetchingModels.value = true;
   try {
     const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
+    const providerOverride = buildSelectedAcpModelDiscoveryOverride();
     const fetched = await electronAPI.chat.getModels(
       providerLookupKey,
-      selectedProviderConfig.value?.id
+      selectedProviderConfig.value?.id,
+      providerOverride
     );
     if (fetched && fetched.length > 0) {
       setFetchedModels(fetched.map(model => model.id));
@@ -638,6 +746,35 @@ const availableModelsList = computed(() => {
   return builtIn?.models || [];
 });
 
+const formatMcpTransport = (transport: McpTransport): string =>
+  transport === 'stdio'
+    ? t('settings.mcp.transport.stdioShort')
+    : transport === 'sse'
+      ? 'SSE'
+      : t('settings.mcp.transport.httpShort');
+
+const loadMcpServers = async () => {
+  if (!listMcpServers) {
+    mcpServers.value = [];
+    mcpServersError.value = '';
+    return;
+  }
+
+  mcpServersLoading.value = true;
+  mcpServersError.value = '';
+  try {
+    const list = await listMcpServers();
+    mcpServers.value = Array.isArray(list) ? list : [];
+  } catch (error) {
+    mcpServers.value = [];
+    mcpServersError.value = t('settings.mcp.error.loadFailed', {
+      error: getErrorMessage(error),
+    });
+  } finally {
+    mcpServersLoading.value = false;
+  }
+};
+
 const loadProviders = async () => {
   providers.value = await electronAPI.providers.list();
 
@@ -655,11 +792,22 @@ const loadProviders = async () => {
   }
 };
 
-const addModel = () => {
-  const model = prompt(t('settings.providers.promptModelName'));
-  if (model) {
-    addDynamicModel(model);
-  }
+const addModel = (payload: { modelId: string; displayName: string }) => {
+  const modelId = payload.modelId.trim();
+  if (!modelId) return;
+
+  addDynamicModel(modelId);
+
+  const displayName = payload.displayName.trim();
+  if (!displayName || !selectedProviderDraft.value) return;
+
+  selectedProviderDraft.value.model_options = {
+    ...selectedProviderDraft.value.model_options,
+    [modelId]: {
+      ...selectedProviderDraft.value.model_options[modelId],
+      displayName,
+    },
+  };
 };
 
 const sidebarProviders = computed<SidebarProvider[]>(() => {
@@ -675,11 +823,11 @@ const sidebarProviders = computed<SidebarProvider[]>(() => {
     .filter(provider => !isCanonicalBuiltInConfig(provider))
     .map(provider => ({
       id: provider.id,
-      name: provider.name,
+      name: getProviderDisplayName(provider),
       isCustom: true,
       icon: provider.icon,
       enabled: isProviderEnabled(provider.id),
-      searchText: `${provider.name} ${provider.type} ${provider.id}`.toLowerCase(),
+      searchText: `${getProviderDisplayName(provider)} ${provider.type} ${provider.id}`.toLowerCase(),
     }));
 
   const matchesQuery = (provider: SidebarProvider) =>
@@ -733,7 +881,7 @@ const selectedProviderInfo = computed((): BuiltInProvider | null => {
     const selected = selectedModels.value[custom.id] || parseModelList(custom.models);
     return {
       id: custom.id,
-      name: custom.name,
+      name: getProviderDisplayName(custom),
       description: t('settings.providers.customDescription'),
       models: selected,
       defaultBaseUrl: custom.base_url,
@@ -765,11 +913,49 @@ const acpCredentialProviderOptions = computed(() => {
 
     options.push({
       value: provider.id,
-      label: `${provider.name} (${provider.id})`,
+      label: `${getProviderDisplayName(provider)} (${provider.id})`,
     });
   }
 
   return options;
+});
+
+const acpMcpServerEntries = computed<AcpMcpServerEntry[]>(() => {
+  const selectedIds = normalizeSelectedAcpMcpServerIds(
+    selectedProviderDraft.value?.acp_mcp_server_ids ?? []
+  );
+  const knownById = new Map(mcpServers.value.map(server => [server.id, server]));
+  const entries: AcpMcpServerEntry[] = [...mcpServers.value]
+    .sort((left, right) => {
+      if (left.enabled !== right.enabled) {
+        return left.enabled ? -1 : 1;
+      }
+      return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+    })
+    .map(server => ({
+      id: server.id,
+      name: server.name,
+      meta: `${formatMcpTransport(server.transport)} · ${
+        server.enabled
+          ? t('settings.providers.acp.mcpServersEnabled')
+          : t('settings.providers.acp.mcpServersDisabled')
+      }`,
+      enabled: server.enabled,
+      missing: false,
+    }));
+
+  for (const serverId of selectedIds) {
+    if (knownById.has(serverId)) continue;
+    entries.push({
+      id: serverId,
+      name: t('settings.providers.acp.mcpServersMissingName', { id: serverId }),
+      meta: t('settings.providers.acp.mcpServersMissing'),
+      enabled: false,
+      missing: true,
+    });
+  }
+
+  return entries;
 });
 
 const selectedProviderSupportLink = computed(() => {
@@ -806,6 +992,18 @@ const selectedProviderBaseUrlHelp = computed(() => {
   return t('settings.providers.baseUrlHelp.useDefault', { name: info.name });
 });
 
+const toggleSelectedAcpMcpServer = (serverId: string, checked: boolean) => {
+  if (!selectedProviderDraft.value) return;
+
+  const next = new Set(selectedProviderDraft.value.acp_mcp_server_ids);
+  if (checked) {
+    next.add(serverId);
+  } else {
+    next.delete(serverId);
+  }
+  selectedProviderDraft.value.acp_mcp_server_ids = normalizeSelectedAcpMcpServerIds([...next]);
+};
+
 const isSelectedProviderDirty = computed(() => {
   const draft = selectedProviderDraft.value;
   const snapshot = selectedProviderPersistedState.value;
@@ -816,6 +1014,7 @@ const isSelectedProviderDirty = computed(() => {
     draft.base_url.trim() !== snapshot.base_url ||
     draft.acp_command.trim() !== snapshot.acp_command ||
     draft.acp_args.trim() !== snapshot.acp_args ||
+    !arraySetEquals(draft.acp_mcp_server_ids, snapshot.acp_mcp_server_ids) ||
     draft.acp_auth_method_id.trim() !== snapshot.acp_auth_method_id ||
     draft.acp_api_provider_id.trim() !== snapshot.acp_api_provider_id ||
     draft.enabled !== snapshot.enabled ||
@@ -848,6 +1047,24 @@ const selectProvider = (providerId: string) => {
   modelsPanelOpen.value = false;
   closeModelOptionsEditor();
   ensureProviderDraft(providerId);
+
+  if (providerId === ACP_PROVIDER_TYPE) {
+    void loadMcpServers();
+  }
+};
+
+const toggleModelsPanel = () => {
+  modelsPanelOpen.value = !modelsPanelOpen.value;
+
+  if (
+    modelsPanelOpen.value &&
+    isSelectedAcpProvider.value &&
+    !isFetchingModels.value &&
+    availableModelsList.value.length === 0 &&
+    selectedProviderDraft.value?.acp_command.trim()
+  ) {
+    void fetchLatestModels();
+  }
 };
 
 const saveProviderConfig = async () => {
@@ -867,10 +1084,13 @@ const saveProviderConfig = async () => {
   );
   const normalizedBaseUrl =
     draft.base_url.trim() || selectedProviderInfo.value.defaultBaseUrl || '';
+  const normalizedAcpMcpServerIds = normalizeSelectedAcpMcpServerIds(draft.acp_mcp_server_ids);
   const acpConfigPatch = isSelectedAcpProvider.value
     ? {
         acp_command: draft.acp_command.trim(),
         acp_args: draft.acp_args.trim() || null,
+        acp_mcp_server_ids:
+          normalizedAcpMcpServerIds.length > 0 ? JSON.stringify(normalizedAcpMcpServerIds) : null,
         acp_auth_method_id: draft.acp_auth_method_id.trim() || null,
         acp_api_provider_id: draft.acp_api_provider_id.trim() || null,
       }
@@ -897,6 +1117,7 @@ const saveProviderConfig = async () => {
         draft.base_url.trim().length > 0 ||
         draft.acp_command.trim().length > 0 ||
         draft.acp_args.trim().length > 0 ||
+        normalizedAcpMcpServerIds.length > 0 ||
         draft.acp_auth_method_id.trim().length > 0 ||
         draft.acp_api_provider_id.trim().length > 0 ||
         modelsToSave.length > 0 ||
@@ -1015,6 +1236,7 @@ const saveProvider = async () => {
 
 onMounted(() => {
   void loadProviders();
+  void loadMcpServers();
 });
 </script>
 
@@ -1043,6 +1265,11 @@ onMounted(() => {
 
 .providers-section {
   max-width: none !important;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .providers-toolbar {
@@ -1057,6 +1284,9 @@ onMounted(() => {
   display: flex;
   gap: 16px;
   min-height: 460px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .providers-sidebar {
@@ -1221,15 +1451,43 @@ onMounted(() => {
 /* Provider Details Panel */
 .provider-details-panel {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--surface-radius);
   padding: 20px 22px;
   box-shadow: var(--surface-shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border-color) 88%, transparent) transparent;
+}
+
+.provider-details-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.provider-details-panel::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+
+.provider-details-panel::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--border-color) 88%, transparent);
+  border-radius: 999px;
+}
+
+.provider-details-panel::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
 }
 
 .provider-header {
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .provider-card-header {
@@ -1338,7 +1596,11 @@ onMounted(() => {
 }
 
 .provider-config-form {
-  margin-top: 16px;
+  margin-top: 0;
+}
+
+.provider-details-scroll {
+  padding-top: 4px;
 }
 
 .provider-card-actions {
@@ -1346,6 +1608,14 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 12px;
   margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  flex-shrink: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 0%, transparent),
+    var(--bg-primary)
+  );
 }
 
 .provider-form-stack {
@@ -1412,6 +1682,60 @@ onMounted(() => {
   line-height: 1.5;
 }
 
+.provider-field-error {
+  color: var(--status-danger-color);
+}
+
+.provider-mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+}
+
+.provider-mcp-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  background: var(--bg-primary);
+  cursor: pointer;
+}
+
+.provider-mcp-option input {
+  margin-top: 2px;
+}
+
+.provider-mcp-option-disabled {
+  opacity: 0.78;
+}
+
+.provider-mcp-option-missing {
+  border-style: dashed;
+}
+
+.provider-mcp-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.provider-mcp-option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.provider-mcp-option-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .provider-format-section {
   gap: 10px;
 }
@@ -1471,7 +1795,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   color: var(--text-muted);
 }
 
@@ -1655,6 +1980,10 @@ onMounted(() => {
 
   .provider-details-panel {
     padding: 18px;
+  }
+
+  .provider-details-scroll {
+    padding-top: 2px;
   }
 
   .provider-card-header {

@@ -11,7 +11,11 @@ import {
   NetworkDiagnosticResult,
 } from '../shared/types/config';
 import type { AppUpdateStatus } from '../shared/types/update';
-import type { Provider, ProviderUpdatedEvent } from '../shared/types/provider';
+import type {
+  Provider,
+  ProviderUpdatedEvent,
+  ProviderModelDiscoveryOverride,
+} from '../shared/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usage';
 import type { AffectStateEntry } from '../shared/types/memory';
 import type { ProactiveTask } from '../shared/types/tasks';
@@ -84,8 +88,11 @@ const electronApi: ElectronApi = {
       subscribe('providers:updated', callback),
   },
   chat: {
-    getModels: (providerType: string, providerId?: string) =>
-      ipcRenderer.invoke('chat:getModels', providerType, providerId),
+    getModels: (
+      providerType: string,
+      providerId?: string,
+      providerOverride?: ProviderModelDiscoveryOverride | null
+    ) => ipcRenderer.invoke('chat:getModels', providerType, providerId, providerOverride ?? null),
     isProviderConfigured: (providerType: string, providerId?: string) =>
       ipcRenderer.invoke('chat:isProviderConfigured', providerType, providerId),
     send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),

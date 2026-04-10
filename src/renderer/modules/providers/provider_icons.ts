@@ -1,6 +1,6 @@
 import { BUILTIN_PROVIDERS } from '../../../shared/constants/ProvidersSettings';
 import type { Provider } from '../../../shared/types/provider';
-import { getProviderFallbackText } from './provider_display';
+import { getCanonicalBuiltInProviderName, getProviderFallbackText } from './provider_display';
 
 export type ProviderIconProps = {
   name: string;
@@ -46,8 +46,11 @@ export const getProviderIconName = (providerId: string): string => {
 
 export const isCanonicalBuiltInProvider = (provider: Pick<Provider, 'name' | 'type'>): boolean => {
   const normalizedType = normalizeProviderField(provider.type).toLowerCase();
-  const builtInName = BUILTIN_PROVIDER_NAME_BY_ID.get(normalizedType);
-  return builtInName ? normalizeProviderField(provider.name) === builtInName : false;
+  if (!BUILTIN_PROVIDER_NAME_BY_ID.has(normalizedType)) {
+    return false;
+  }
+
+  return getCanonicalBuiltInProviderName(provider) !== null;
 };
 
 export const getCustomProviderIconProps = (

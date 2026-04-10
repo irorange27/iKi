@@ -6,9 +6,22 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ProvidersSettings from '../../../src/renderer/components/settings/ProvidersSettings.vue';
 
 const setElectronApi = (api: unknown) => {
+  const defaultApi = {
+    mcp: {
+      list: vi.fn(async () => []),
+    },
+  };
+
   Object.defineProperty(window, 'electronAPI', {
     configurable: true,
-    value: api,
+    value: {
+      ...defaultApi,
+      ...(api as Record<string, unknown>),
+      mcp: {
+        ...defaultApi.mcp,
+        ...((api as { mcp?: Record<string, unknown> }).mcp ?? {}),
+      },
+    },
   });
 };
 
@@ -337,10 +350,179 @@ describe('ProvidersSettings', () => {
   it('surfaces ACP as a built-in provider and saves ACP runtime settings', async () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'acp_176' }));
+    const listMcpServers = vi.fn(async () => [
+      {
+        id: 'docs_server',
+        name: 'Repo Docs',
+        transport: 'streamable-http',
+        base_url: 'https://mcp.example.com',
+        headers: null,
+        auth_ref: null,
+        enabled: true,
+        command: null,
+        args: null,
+        cwd: null,
+        env: null,
+        tool_allowlist: null,
+        approval_mode: null,
+        created_at: '2026-03-21T12:00:00.000Z',
+        updated_at: '2026-03-21T12:00:00.000Z',
+      },
+    ]);
 
     setElectronApi({
       providers: {
         list,
+        add,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+      mcp: {
+        list: listMcpServers,
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const acpRow = wrapper
+      .findAll('.provider-list-item')
+      .find(item => item.text().includes('Codex CLI'));
+
+    if (!acpRow) {
+      throw new Error('ACP provider row not found');
+    }
+
+    await acpRow.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('input[type="password"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Base URL (Optional)');
+    expect(wrapper.text()).toContain('Authentication Method');
+    expect(wrapper.text()).toContain('API Provider');
+    expect(wrapper.text()).toContain('None (use built-in authentication)');
+    expect(wrapper.text()).toContain('MCP Servers');
+    expect(wrapper.text()).toContain('Repo Docs');
+
+    await wrapper.find('input[placeholder="e.g. codex-acp"]').setValue('codex-acp');
+    await wrapper
+      .find('textarea[placeholder="--profile default\n--sandbox workspace-write"]')
+      .setValue('--sandbox\nworkspace-write');
+    await findLabelByText(wrapper, 'Repo Docs').find('input[type="checkbox"]').setValue(true);
+    await wrapper.find('.provider-switch input').setValue(true);
+    await findButtonByText(wrapper, 'Save').trigger('click');
+    await flushPromises();
+
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^acp_\d+$/),
+        name: 'Codex CLI',
+        type: 'acp',
+        acp_command: 'codex-acp',
+        acp_args: '--sandbox\nworkspace-write',
+        acp_mcp_server_ids: '["docs_server"]',
+        enabled: true,
+      })
+    );
+    expect(listMcpServers).toHaveBeenCalled();
+  });
+
+  it('fetches ACP models from the current Codex CLI draft instead of models.dev', async () => {
+    const getModels = vi.fn(async () => [
+      {
+        id: 'codex-mini-latest',
+        displayName: 'Codex Mini',
+        contextWindow: null,
+        maxInputTokens: null,
+        maxOutputTokens: null,
+        supportsToolCalls: true,
+        source: 'provider',
+      },
+    ]);
+
+    setElectronApi({
+      providers: {
+        list: vi.fn(async () => []),
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels,
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const acpRow = wrapper
+      .findAll('.provider-list-item')
+      .find(item => item.text().includes('Codex CLI'));
+
+    if (!acpRow) {
+      throw new Error('ACP provider row not found');
+    }
+
+    await acpRow.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('models.dev');
+
+    await wrapper.find('input[placeholder="e.g. codex-acp"]').setValue('codex-acp');
+    await wrapper
+      .find('textarea[placeholder="--profile default\n--sandbox workspace-write"]')
+      .setValue('--profile default');
+    await wrapper.find('.provider-models-toggle').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Fetch');
+    expect(getModels).toHaveBeenCalledWith(
+      'acp',
+      undefined,
+      expect.objectContaining({
+        type: 'acp',
+        acp_command: 'codex-acp',
+        acp_args: '--profile default',
+      })
+    );
+    expect(wrapper.text()).toContain('codex-mini-latest');
+  });
+
+  it('adds a manual model to the list before enabling it', async () => {
+    const add = vi.fn(async () => ({ id: 'acp_176' }));
+
+    setElectronApi({
+      providers: {
+        list: vi.fn(async () => []),
         add,
         update: vi.fn(),
         delete: vi.fn(),
@@ -368,7 +550,7 @@ describe('ProvidersSettings', () => {
 
     const acpRow = wrapper
       .findAll('.provider-list-item')
-      .find(item => item.text().includes('ACP Agent'));
+      .find(item => item.text().includes('Codex CLI'));
 
     if (!acpRow) {
       throw new Error('ACP provider row not found');
@@ -376,25 +558,46 @@ describe('ProvidersSettings', () => {
 
     await acpRow.trigger('click');
     await flushPromises();
+    await wrapper.find('.provider-models-toggle').trigger('click');
+    await flushPromises();
 
-    await wrapper.find('input[placeholder="e.g. codex-acp"]').setValue('codex-acp');
+    await wrapper.find('input[placeholder="Model ID"]').setValue('gpt-5.4/high');
     await wrapper
-      .find('textarea[placeholder="--profile default\n--sandbox workspace-write"]')
-      .setValue('--sandbox\nworkspace-write');
-    await wrapper.find('.provider-switch input').setValue(true);
+      .find('input[placeholder="Display Name (optional)"]')
+      .setValue('GPT-5.4 High');
+    await wrapper.find('.manual-add-btn').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('GPT-5.4 High');
+    expect(wrapper.text()).toContain('0 enabled');
+
+    const toggle = wrapper.find('.model-toggle input');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+
+    await toggle.setValue(true);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('1 enabled');
+
     await findButtonByText(wrapper, 'Save').trigger('click');
     await flushPromises();
 
-    expect(add).toHaveBeenCalledWith(
+    expect(add).toHaveBeenCalledTimes(1);
+    const [payload] = add.mock.calls[0];
+    expect(payload).toEqual(
       expect.objectContaining({
         id: expect.stringMatching(/^acp_\d+$/),
-        name: 'ACP Agent',
+        name: 'Codex CLI',
         type: 'acp',
-        acp_command: 'codex-acp',
-        acp_args: '--sandbox\nworkspace-write',
-        enabled: true,
+        models: '["gpt-5.4/high"]',
+        available_models: '["gpt-5.4/high"]',
       })
     );
+    expect(JSON.parse(payload.model_options as string)).toEqual({
+      'gpt-5.4/high': {
+        displayName: 'GPT-5.4 High',
+      },
+    });
   });
 
   it('creates a custom provider with the selected shared dropdown type', async () => {
@@ -842,7 +1045,7 @@ describe('ProvidersSettings', () => {
     await flushPromises();
     await wrapper.find('.provider-models-toggle').trigger('click');
     await flushPromises();
-    await findButtonByText(wrapper, 'Model Options').trigger('click');
+    await wrapper.find('.model-options-btn').trigger('click');
     await flushPromises();
 
     await findLabelByText(wrapper, 'Display Name').find('input').setValue('GPT-5.4 Gateway');

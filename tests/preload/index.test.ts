@@ -147,6 +147,22 @@ describe('preload task IPC payload serialization', () => {
     expect(sendMock).toHaveBeenCalledWith('window:set-shadow', true);
   });
 
+  it('forwards model discovery overrides when fetching models from the renderer', async () => {
+    invokeMock.mockResolvedValue([]);
+
+    await exposedApi.chat.getModels('acp', undefined, {
+      type: 'acp',
+      acp_command: 'codex',
+      acp_args: '--profile default',
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('chat:getModels', 'acp', undefined, {
+      type: 'acp',
+      acp_command: 'codex',
+      acp_args: '--profile default',
+    });
+  });
+
   it('exposes the shared Electron API contract across renderer namespaces', async () => {
     invokeMock.mockResolvedValue({});
 

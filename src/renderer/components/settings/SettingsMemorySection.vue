@@ -741,6 +741,7 @@ import type {
 } from '../../../shared/types/memory';
 import { getErrorMessage } from '../../../shared/utils/errors';
 import { listProviderEmbeddingModels } from '../../../shared/utils/memory_embedding_models';
+import { getProviderDisplayName } from '../../modules/providers/provider_display';
 import {
   formatJson,
   formatJsonList,
@@ -909,7 +910,7 @@ const embeddingModelSelectOptions = computed(() => [
       if (embeddingModels.length === 0) return null;
 
       return {
-        label: provider.name || provider.id,
+        label: getProviderDisplayName(provider),
         options: embeddingModels.map(model => ({
           value: serializeEmbeddingModelSelection({
             providerId: provider.id,

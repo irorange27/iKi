@@ -214,7 +214,7 @@ describe('chat provider selection', () => {
 
     expect(result).toEqual({
       ok: false,
-      message: 'Please configure the ACP Agent ACP command in Settings.',
+      message: 'Please configure the Codex CLI ACP command in Settings.',
     });
   });
 

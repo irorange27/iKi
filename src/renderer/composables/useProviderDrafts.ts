@@ -14,6 +14,7 @@ export type ProviderDraft = {
   base_url: string;
   acp_command: string;
   acp_args: string;
+  acp_mcp_server_ids: string[];
   acp_auth_method_id: string;
   acp_api_provider_id: string;
   enabled: boolean;
@@ -26,6 +27,7 @@ export type PersistedProviderSnapshot = {
   base_url: string;
   acp_command: string;
   acp_args: string;
+  acp_mcp_server_ids: string[];
   acp_auth_method_id: string;
   acp_api_provider_id: string;
   enabled: boolean;
@@ -78,6 +80,18 @@ export const useProviderDrafts = (params: {
     return trimmed;
   };
 
+  const normalizeSelectedIds = (value: unknown): string[] => {
+    const seen = new Set<string>();
+
+    return parseModelList(value).filter(entry => {
+      if (seen.has(entry)) {
+        return false;
+      }
+      seen.add(entry);
+      return true;
+    });
+  };
+
   const getPersistedProviderSnapshot = (providerId: string): PersistedProviderSnapshot => {
     const record = getProviderRecord(providerId);
 
@@ -86,6 +100,7 @@ export const useProviderDrafts = (params: {
       base_url: normalizeBaseUrlForDraft(providerId, record?.base_url),
       acp_command: record?.acp_command ?? '',
       acp_args: record?.acp_args ?? '',
+      acp_mcp_server_ids: normalizeSelectedIds(record?.acp_mcp_server_ids),
       acp_auth_method_id: record?.acp_auth_method_id ?? '',
       acp_api_provider_id: record?.acp_api_provider_id ?? '',
       enabled: record?.enabled === true,
@@ -107,6 +122,7 @@ export const useProviderDrafts = (params: {
       base_url: snapshot.base_url,
       acp_command: snapshot.acp_command,
       acp_args: snapshot.acp_args,
+      acp_mcp_server_ids: [...snapshot.acp_mcp_server_ids],
       acp_auth_method_id: snapshot.acp_auth_method_id,
       acp_api_provider_id: snapshot.acp_api_provider_id,
       enabled: snapshot.enabled,
@@ -233,13 +249,6 @@ export const useProviderDrafts = (params: {
     }
     if (!dynamicModels.value[providerId].includes(trimmedModel)) {
       dynamicModels.value[providerId].push(trimmedModel);
-    }
-
-    if (!selectedModels.value[providerId]) {
-      selectedModels.value[providerId] = [];
-    }
-    if (!selectedModels.value[providerId].includes(trimmedModel)) {
-      selectedModels.value[providerId].push(trimmedModel);
     }
   };
 

@@ -53,9 +53,9 @@ export const BUILTIN_PROVIDERS: BuiltInProvider[] = [
   },
   {
     id: 'acp',
-    name: 'ACP Agent',
+    name: 'Codex CLI',
     description:
-      'Agent Client Protocol bridge for Codex, Claude Code, Gemini, and other ACP-capable agents',
+      'Codex CLI via Agent Client Protocol, with compatibility for Claude Code, Gemini, and other ACP-capable agents',
     docsUrl: 'https://agentclientprotocol.com/libraries/typescript',
     requiresApiKey: false,
   },

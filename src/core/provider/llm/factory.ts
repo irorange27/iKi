@@ -20,7 +20,11 @@ import {
   type ModelCapability,
   type ModelsDevCatalog,
 } from '../../../shared/utils/provider_models';
-import type { ProviderModelOptions, ProviderModelOptionsMap } from '../../../shared/types/provider';
+import type {
+  ProviderModelDiscoveryOverride,
+  ProviderModelOptions,
+  ProviderModelOptionsMap,
+} from '../../../shared/types/provider';
 import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
 import {
   createAcpLanguageModel,
@@ -129,6 +133,87 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     acpAuthMethodId: provider.acp_auth_method_id || '',
     acpApiProviderId: provider.acp_api_provider_id || '',
     acpModelMapping: provider.acp_model_mapping || '',
+  };
+};
+
+const normalizeOptionalString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const buildProviderConfigForDiscovery = (params: {
+  providerType: string;
+  providerId?: string | null;
+  providerOverride?: ProviderModelDiscoveryOverride | null;
+}): ProviderConfig => {
+  const override = params.providerOverride;
+  if (!override) {
+    return getProviderConfig(params.providerType, params.providerId);
+  }
+
+  let persisted: ProviderConfig | null = null;
+  try {
+    persisted = getProviderConfig(params.providerType, params.providerId);
+  } catch {
+    persisted = null;
+  }
+
+  const resolvedType =
+    normalizeOptionalString(override.type) ?? normalizeOptionalString(persisted?.type) ?? params.providerType;
+  const resolvedId =
+    normalizeOptionalString(override.id) ??
+    normalizeOptionalString(persisted?.id) ??
+    normalizeOptionalString(params.providerId) ??
+    `${resolvedType}_draft`;
+
+  return {
+    id: resolvedId,
+    type: resolvedType,
+    apiKey:
+      normalizeOptionalString(override.api_key) ?? normalizeOptionalString(persisted?.apiKey) ?? '',
+    baseURL:
+      normalizeOptionalString(override.base_url) ??
+      normalizeOptionalString(persisted?.baseURL) ??
+      '',
+    models:
+      override.models !== undefined
+        ? parseModelList(override.models)
+        : persisted?.models
+          ? [...persisted.models]
+          : [],
+    modelOptions:
+      override.model_options !== undefined
+        ? parseProviderModelOptionsMap(override.model_options)
+        : persisted?.modelOptions
+          ? structuredClone(persisted.modelOptions)
+          : {},
+    isResponseApi:
+      typeof override.is_response_api === 'boolean'
+        ? override.is_response_api
+        : persisted?.isResponseApi === true,
+    acpCommand:
+      normalizeOptionalString(override.acp_command) ??
+      normalizeOptionalString(persisted?.acpCommand) ??
+      '',
+    acpArgs:
+      normalizeOptionalString(override.acp_args) ?? normalizeOptionalString(persisted?.acpArgs) ?? '',
+    acpMcpServerIds:
+      normalizeOptionalString(override.acp_mcp_server_ids) ??
+      normalizeOptionalString(persisted?.acpMcpServerIds) ??
+      '',
+    acpAuthMethodId:
+      normalizeOptionalString(override.acp_auth_method_id) ??
+      normalizeOptionalString(persisted?.acpAuthMethodId) ??
+      '',
+    acpApiProviderId:
+      normalizeOptionalString(override.acp_api_provider_id) ??
+      normalizeOptionalString(persisted?.acpApiProviderId) ??
+      '',
+    acpModelMapping:
+      normalizeOptionalString(override.acp_model_mapping) ??
+      normalizeOptionalString(persisted?.acpModelMapping) ??
+      '',
   };
 };
 
@@ -267,6 +352,7 @@ export const createModel = (
         baseURL: config.baseURL,
         acpCommand: config.acpCommand,
         acpArgs: config.acpArgs,
+        acpMcpServerIds: config.acpMcpServerIds,
         acpAuthMethodId: config.acpAuthMethodId,
         acpApiProviderId: config.acpApiProviderId,
         acpModelMapping: config.acpModelMapping,
@@ -483,8 +569,16 @@ export const fetchModelsFromDev = async (providerType: string) => {
   }
 };
 
-export const fetchAcpModels = async (providerType: string, providerId?: string | null) => {
-  const config = getProviderConfig(providerType, providerId);
+export const fetchAcpModels = async (
+  providerType: string,
+  providerId?: string | null,
+  providerOverride?: ProviderModelDiscoveryOverride | null
+) => {
+  const config = buildProviderConfigForDiscovery({
+    providerType,
+    providerId,
+    providerOverride,
+  });
   if (!isAcpProviderType(config.type)) {
     return [];
   }
@@ -495,6 +589,7 @@ export const fetchAcpModels = async (providerType: string, providerId?: string |
     baseURL: config.baseURL,
     acpCommand: config.acpCommand,
     acpArgs: config.acpArgs,
+    acpMcpServerIds: config.acpMcpServerIds,
     acpAuthMethodId: config.acpAuthMethodId,
     acpApiProviderId: config.acpApiProviderId,
     acpModelMapping: config.acpModelMapping,
