@@ -15,6 +15,17 @@ describe('default app config', () => {
       preferredProviderId: '',
       preferredModel: '',
     });
+    expect(config.ui.companion).toEqual({
+      enabled: true,
+      alwaysOnTop: true,
+      rememberPosition: true,
+      reduceMotion: false,
+      openMainWindowOnClick: true,
+      position: {
+        x: null,
+        y: null,
+      },
+    });
     expect(config.network.webSearch).toEqual({
       preferredEngine: 'google',
     });
@@ -49,5 +60,30 @@ describe('default app config', () => {
     expect(config.general.language).toBe('zh-CN');
     expect(config.network.webSearch.preferredEngine).toBe('bing');
     expect(Object.prototype.hasOwnProperty.call(config, 'webSearch')).toBe(false);
+  });
+
+  it('merges nested companion position config without dropping defaults', () => {
+    const config = mergeAppConfig({
+      ui: {
+        companion: {
+          position: {
+            x: 1440,
+            y: 860,
+          },
+        },
+      },
+    } as never);
+
+    expect(config.ui.companion).toEqual({
+      enabled: true,
+      alwaysOnTop: true,
+      rememberPosition: true,
+      reduceMotion: false,
+      openMainWindowOnClick: true,
+      position: {
+        x: 1440,
+        y: 860,
+      },
+    });
   });
 });

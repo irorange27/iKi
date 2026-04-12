@@ -21,6 +21,7 @@ import { createChatTurnPreparer, type ChatTurnOptions } from './chat_turn_prepar
 import type { ActiveStreamState, ChatWebContents } from './chat_types';
 import { createUiChunkEmitter, toLlmChatMessages } from './chat_ui';
 import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_loop';
+import { companionService } from '../companion/companion_service';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -238,6 +239,7 @@ export const createChatStreaming = (deps: {
       stoppedByUser: false,
       abortController: new AbortController(),
     };
+    const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
     const uiChunkEmitter = createUiChunkEmitter(webContents);
     deps.activeStreams.set(senderId, streamState);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
@@ -269,6 +271,8 @@ export const createChatStreaming = (deps: {
       if (preparedTurn.affectSignal) {
         uiChunkEmitter.emitAffectSignal(preparedTurn.affectSignal);
       }
+
+      companionService.setChatPolicy(preparedTurn.interventionPolicy);
 
       const systemPrompt = preparedTurn.enableTools
         ? TOOL_AGENT_SYSTEM_PROMPT
@@ -339,6 +343,7 @@ export const createChatStreaming = (deps: {
         throw new Error('No user prompt provided for streaming');
       }
 
+      companionService.beginThinking(companionThinkingKey);
       const streamResult = await runWithToolRuntimeContext(
         { runId: runTracker.id, runTracker },
         async () =>
@@ -448,6 +453,7 @@ export const createChatStreaming = (deps: {
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {
+      companionService.endThinking(companionThinkingKey);
       if (deps.activeStreams.get(senderId) === streamState) {
         deps.activeStreams.delete(senderId);
       }

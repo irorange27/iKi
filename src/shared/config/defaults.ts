@@ -23,6 +23,17 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     messageBubblePaddingX: 16,
     messageBubblePaddingY: 12,
     messageGap: 18,
+    companion: {
+      enabled: true,
+      alwaysOnTop: true,
+      rememberPosition: true,
+      reduceMotion: false,
+      openMainWindowOnClick: true,
+      position: {
+        x: null,
+        y: null,
+      },
+    },
   },
   themes: createDefaultThemeConfig(),
   network: {
@@ -201,6 +212,14 @@ export const mergeAppConfigWithBase = (
     ui: {
       ...base.ui,
       ...(rawConfig.ui ?? {}),
+      companion: {
+        ...base.ui.companion,
+        ...((rawConfig.ui ?? {}).companion ?? {}),
+        position: {
+          ...base.ui.companion.position,
+          ...(((rawConfig.ui ?? {}).companion ?? {}).position ?? {}),
+        },
+      },
     },
     themes: {
       ...base.themes,

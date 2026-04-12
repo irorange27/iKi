@@ -16,13 +16,15 @@ const toCatchRecord = (value: AppConfig): Record<string, unknown> =>
     return record;
   }, {});
 
-const defaultBase46Presets: Record<string, z.output<typeof Base46ThemePresetInputSchema>> =
-  Object.fromEntries(
-    Object.entries(DEFAULT_APP_CONFIG.themes.base46Presets).map(([presetId, preset]) => [
-      presetId,
-      Base46ThemePresetInputSchema.parse(preset),
-    ])
-  );
+const defaultBase46Presets: Record<
+  string,
+  z.output<typeof Base46ThemePresetInputSchema>
+> = Object.fromEntries(
+  Object.entries(DEFAULT_APP_CONFIG.themes.base46Presets).map(([presetId, preset]) => [
+    presetId,
+    Base46ThemePresetInputSchema.parse(preset),
+  ])
+);
 const defaultThemeConfig = {
   base46Presets: defaultBase46Presets,
 };
@@ -53,14 +55,27 @@ const UiSchema = z
     messageBubblePaddingX: numberField(DEFAULT_APP_CONFIG.ui.messageBubblePaddingX),
     messageBubblePaddingY: numberField(DEFAULT_APP_CONFIG.ui.messageBubblePaddingY),
     messageGap: numberField(DEFAULT_APP_CONFIG.ui.messageGap),
+    companion: z
+      .object({
+        enabled: booleanField(DEFAULT_APP_CONFIG.ui.companion.enabled),
+        alwaysOnTop: booleanField(DEFAULT_APP_CONFIG.ui.companion.alwaysOnTop),
+        rememberPosition: booleanField(DEFAULT_APP_CONFIG.ui.companion.rememberPosition),
+        reduceMotion: booleanField(DEFAULT_APP_CONFIG.ui.companion.reduceMotion),
+        openMainWindowOnClick: booleanField(DEFAULT_APP_CONFIG.ui.companion.openMainWindowOnClick),
+        position: z
+          .object({
+            x: z.number().finite().nullable().catch(DEFAULT_APP_CONFIG.ui.companion.position.x),
+            y: z.number().finite().nullable().catch(DEFAULT_APP_CONFIG.ui.companion.position.y),
+          })
+          .catch(DEFAULT_APP_CONFIG.ui.companion.position),
+      })
+      .catch(DEFAULT_APP_CONFIG.ui.companion),
   })
   .catch(DEFAULT_APP_CONFIG.ui);
 
 const ThemesSchema = z
   .object({
-    base46Presets: z
-      .record(z.string(), Base46ThemePresetInputSchema)
-      .catch(defaultBase46Presets),
+    base46Presets: z.record(z.string(), Base46ThemePresetInputSchema).catch(defaultBase46Presets),
   })
   .catch(defaultThemeConfig);
 
@@ -188,9 +203,7 @@ const MemorySchema = z
 const ContinuitySchema = z
   .object({
     enabled: booleanField(DEFAULT_APP_CONFIG.continuity.enabled),
-    autoCaptureExplicitFacts: booleanField(
-      DEFAULT_APP_CONFIG.continuity.autoCaptureExplicitFacts
-    ),
+    autoCaptureExplicitFacts: booleanField(DEFAULT_APP_CONFIG.continuity.autoCaptureExplicitFacts),
     injectToSystemPrompt: booleanField(DEFAULT_APP_CONFIG.continuity.injectToSystemPrompt),
     maxRetrievedItems: intField(DEFAULT_APP_CONFIG.continuity.maxRetrievedItems),
   })

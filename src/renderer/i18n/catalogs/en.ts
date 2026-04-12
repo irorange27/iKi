@@ -361,6 +361,15 @@ export const en = defineCatalog({
   'settings.general.language.title': 'Language',
   'settings.general.language.label': 'Language',
   'settings.general.startupBehavior.title': 'Startup Behavior',
+  'settings.general.companion.title': 'Companion Pebble',
+  'settings.general.companion.description':
+    'Control the floating desktop presence layer that reflects iKi state outside the main chat window.',
+  'settings.general.companion.enabled': 'Enable floating companion window',
+  'settings.general.companion.alwaysOnTop': 'Keep companion above other windows',
+  'settings.general.companion.rememberPosition': 'Remember companion position',
+  'settings.general.companion.reduceMotion': 'Reduce companion motion',
+  'settings.general.companion.openMainWindowOnClick':
+    'Open the main chat when the companion is clicked',
   'settings.general.updates.title': 'Automatic Updates',
   'settings.general.updates.description':
     'Packaged Windows and macOS builds can check published GitHub Releases and download updates in the background.',
@@ -999,8 +1008,7 @@ export const en = defineCatalog({
   'settings.providers.modelAdd': 'Add',
   'settings.providers.modelAddTitle':
     'Add this model to the list. Review it, then enable it with the toggle.',
-  'settings.providers.modelsEmpty':
-    'No models yet. Fetch available models or add one manually.',
+  'settings.providers.modelsEmpty': 'No models yet. Fetch available models or add one manually.',
   'settings.providers.modelsEmptySearch': 'No models match this search.',
   'settings.providers.modelToggleEnable': ({ model }) => `Enable ${asText(model)}`,
   'settings.providers.modelToggleDisable': ({ model }) => `Disable ${asText(model)}`,
@@ -1058,7 +1066,7 @@ export const en = defineCatalog({
   'settings.providers.acp.apiProvider': 'API Provider',
   'settings.providers.acp.apiProviderAuto': 'None (use built-in authentication)',
   'settings.providers.acp.apiProviderHelp':
-    'Select an existing provider only when Codex CLI should reuse that provider\'s API credentials. Leave this as None to rely on built-in authentication.',
+    "Select an existing provider only when Codex CLI should reuse that provider's API credentials. Leave this as None to rely on built-in authentication.",
   'settings.providers.acp.authMethodId': 'Authentication Method',
   'settings.providers.acp.authMethodPlaceholder': 'Optional authentication method id',
   'settings.providers.acp.authMethodHelp':

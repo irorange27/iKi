@@ -1,15 +1,21 @@
 <template>
-  <div class="app-container">
-    <div class="titlebar-drag-region"></div>
-    <SettingsView v-if="isSettings" :initial-section="settingsSection" @close="closeSettings" />
+  <div class="app-container" :data-shell="shellKind">
+    <div v-if="!isCompanion" class="titlebar-drag-region"></div>
+    <CompanionView v-if="isCompanion" />
+    <SettingsView
+      v-else-if="isSettings"
+      :initial-section="settingsSection"
+      @close="closeSettings"
+    />
     <ChatView v-else />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import SettingsView from './views/SettingsView.vue';
 import ChatView from './views/ChatView.vue';
+import CompanionView from './views/CompanionView.vue';
 import { useAppConfig } from './composables/useAppConfig';
 import { useAppLocale } from './composables/useAppLocale';
 import { createSidebar } from './composables/useSidebar';
@@ -38,13 +44,28 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('hashchange', updateHash);
+  document.documentElement.classList.remove('companion-shell-mode');
+  document.body.classList.remove('companion-shell-mode');
 });
 
+const isCompanion = computed(() => currentHash.value.includes('companion'));
 const isSettings = computed(() => currentHash.value.includes('settings'));
 const settingsSection = computed(() => extractSettingsSection(currentHash.value));
+const shellKind = computed(() =>
+  isCompanion.value ? 'companion' : isSettings.value ? 'settings' : 'main'
+);
 const closeSettings = () => {
   electronAPI?.closeWindow?.();
 };
+
+watch(
+  isCompanion,
+  enabled => {
+    document.documentElement.classList.toggle('companion-shell-mode', enabled);
+    document.body.classList.toggle('companion-shell-mode', enabled);
+  },
+  { immediate: true }
+);
 
 useAppConfig();
 </script>
@@ -70,6 +91,13 @@ body,
   background-color: var(--bg-primary);
 }
 
+html.companion-shell-mode,
+body.companion-shell-mode,
+html.companion-shell-mode #app,
+html.companion-shell-mode .app-container {
+  background-color: transparent;
+}
+
 #app,
 .app-container {
   /* Keep renderer content clipped to native window corners to avoid halo edges. */
@@ -81,6 +109,12 @@ body,
   box-sizing: border-box;
   border: 1px solid var(--app-shell-border-color);
   box-shadow: var(--app-shell-shadow);
+}
+
+.app-container[data-shell='companion'] {
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
 }
 
 /* 可拖拽区域 - 在 macOS 上 */

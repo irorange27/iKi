@@ -171,6 +171,7 @@ describe('preload task IPC payload serialization', () => {
     const chatChunk = vi.fn();
     const taskPush = vi.fn();
     const speechProgress = vi.fn();
+    const companionUpdated = vi.fn();
 
     await exposedApi.config.get();
     await exposedApi.config.getRuntimeInfo();
@@ -320,6 +321,9 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.mcp.connect('server_1');
     await exposedApi.mcp.disconnect('server_1');
     await exposedApi.mcp.refreshTools('server_1');
+    await exposedApi.companion.getSnapshot();
+    exposedApi.companion.onUpdated(companionUpdated);
+    await exposedApi.companion.openMainWindow();
 
     exposedApi.openSettings('provider');
     exposedApi.closeWindow();
@@ -414,6 +418,8 @@ describe('preload task IPC payload serialization', () => {
         'mcp:connect',
         'mcp:disconnect',
         'mcp:refresh-tools',
+        'companion:get-snapshot',
+        'companion:open-main-window',
       ])
     );
     expect(onMock.mock.calls.map(call => call[0])).toEqual(
@@ -424,6 +430,7 @@ describe('preload task IPC payload serialization', () => {
         'chat:ui-chunk',
         'speech:download-progress',
         'tasks:push',
+        'companion:updated',
       ])
     );
     expect(removeAllListenersMock.mock.calls.map(call => call[0])).toEqual(
@@ -436,10 +443,7 @@ describe('preload task IPC payload serialization', () => {
     );
     expect(removeListenerMock).toHaveBeenCalledWith('providers:updated', expect.any(Function));
     expect(sendMock.mock.calls).toEqual(
-      expect.arrayContaining([
-        ['open-settings', 'provider'],
-        ['close-window'],
-      ])
+      expect.arrayContaining([['open-settings', 'provider'], ['close-window']])
     );
   });
 });

@@ -34,6 +34,8 @@ import {
   NAPCAT_REVERSE_WS_PATH,
 } from '../../shared/constants/daemon';
 import { getAllBrowserWindows } from '../utils/browser_windows';
+import { companionService } from '../services/companion/companion_service';
+import { syncCompanionWindowToConfig } from '../windows/companion_window';
 
 let configIpcRegistered = false;
 let configMigrationRun = false;
@@ -350,6 +352,8 @@ export const registerConfigIpc = (): void => {
     const prevConfig = getAppConfig();
     const normalized = saveConfig(config);
     applyAppUpdateConfig(normalized);
+    syncCompanionWindowToConfig(normalized);
+    companionService.refreshAvailability();
 
     for (const win of getAllBrowserWindows()) {
       win.webContents.send('config:updated', normalized);

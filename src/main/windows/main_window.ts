@@ -8,7 +8,22 @@ import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
 
 const windowLogger = createLogger({ module: 'main_window' });
 
+let mainWindowRef: BrowserWindow | null = null;
+
+export const getMainWindow = (): BrowserWindow | null => {
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) {
+    mainWindowRef = null;
+    return null;
+  }
+  return mainWindowRef;
+};
+
 export const createMainWindow = (): BrowserWindow => {
+  const existingWindow = getMainWindow();
+  if (existingWindow) {
+    return existingWindow;
+  }
+
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 680,
@@ -27,6 +42,8 @@ export const createMainWindow = (): BrowserWindow => {
     },
   });
 
+  mainWindowRef = mainWindow;
+
   void loadRendererEntry(mainWindow, { isPackaged: app.isPackaged });
 
   maybeOpenDevTools(mainWindow.webContents, {
@@ -44,6 +61,9 @@ export const createMainWindow = (): BrowserWindow => {
   });
 
   mainWindow.on('closed', () => {
+    if (mainWindowRef === mainWindow) {
+      mainWindowRef = null;
+    }
     windowLogger.event({
       level: 'info',
       event: 'window.closed',
@@ -54,5 +74,17 @@ export const createMainWindow = (): BrowserWindow => {
     });
   });
 
+  return mainWindow;
+};
+
+export const showMainWindow = (): BrowserWindow => {
+  const mainWindow = getMainWindow() ?? createMainWindow();
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  mainWindow.focus();
   return mainWindow;
 };

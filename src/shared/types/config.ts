@@ -110,6 +110,17 @@ export interface AppConfig {
     messageBubblePaddingX: number; // 8-28px
     messageBubblePaddingY: number; // 6-20px
     messageGap: number; // 8-32px
+    companion: {
+      enabled: boolean;
+      alwaysOnTop: boolean;
+      rememberPosition: boolean;
+      reduceMotion: boolean;
+      openMainWindowOnClick: boolean;
+      position: {
+        x: number | null;
+        y: number | null;
+      };
+    };
   };
   themes: ThemeConfig;
   network: {

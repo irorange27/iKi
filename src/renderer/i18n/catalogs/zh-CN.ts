@@ -77,12 +77,10 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     '当前还没有可用 Provider。打开 Provider 设置，填入一个 API Key，并启用一个模型来源即可。',
   'chat.welcome.hint.finishProvider':
     '至少有一个 Provider 已启用但还没准备好。把凭证补齐后，iKi 就能继续醒来。',
-  'chat.welcome.hint.addModel':
-    'Provider 已经准备好，但还需要至少一个模型，首次对话才能真正开始。',
+  'chat.welcome.hint.addModel': 'Provider 已经准备好，但还需要至少一个模型，首次对话才能真正开始。',
   'chat.welcome.hint.modelReady':
     'Provider 已就绪。请在 Provider 设置里确认至少暴露一个模型给首次对话使用。',
-  'chat.welcome.hint.ready':
-    '先选下面一个起手式，再把它需要的项目、任务或内容补进去。',
+  'chat.welcome.hint.ready': '先选下面一个起手式，再把它需要的项目、任务或内容补进去。',
   'chat.welcome.contextSources.label': '适合先给的上下文',
   'chat.welcome.contextSources.project.title': '项目目录',
   'chat.welcome.contextSources.project.body': '选一个工作区后，让 iKi 先告诉你该看哪里。',
@@ -346,6 +344,14 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.general.language.title': '语言',
   'settings.general.language.label': '语言',
   'settings.general.startupBehavior.title': '启动行为',
+  'settings.general.companion.title': 'Companion Pebble',
+  'settings.general.companion.description':
+    '控制桌面上的浮动外显层，让 iKi 在主聊天窗口之外也能表达当前状态。',
+  'settings.general.companion.enabled': '启用浮动 companion 窗口',
+  'settings.general.companion.alwaysOnTop': '让 companion 始终置顶',
+  'settings.general.companion.rememberPosition': '记住 companion 位置',
+  'settings.general.companion.reduceMotion': '降低 companion 动效',
+  'settings.general.companion.openMainWindowOnClick': '点击 companion 时打开主聊天窗口',
   'settings.general.updates.title': '自动更新',
   'settings.general.updates.description':
     '已打包的 Windows 和 macOS 版本可以检查已发布的 GitHub Release，并在后台下载更新。',
@@ -719,8 +725,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.network.diagnostics.routeProxy': ({ proxy }) => `当前使用 ${asText(proxy)}。`,
   'settings.network.diagnostics.routeDirect': '当前使用直连。',
   'settings.network.diagnostics.targetInternet': '通用网页连通性',
-  'settings.network.diagnostics.targetSearchEngine': ({ engine }) =>
-    `${asText(engine)} 可达性`,
+  'settings.network.diagnostics.targetSearchEngine': ({ engine }) => `${asText(engine)} 可达性`,
   'settings.network.diagnostics.reachable': '可达',
   'settings.network.diagnostics.statusCode': ({ code }) => `HTTP ${asText(code)}`,
   'settings.network.diagnostics.duration': ({ ms }) => `${asText(ms)} 毫秒`,
@@ -1018,10 +1023,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.acp.authMethodHelp':
     '可选。当 Codex CLI 暴露多个登录方式时，可在这里指定默认使用的 ACP authentication method id。',
   'settings.providers.acp.mcpServers': 'MCP Servers',
-  'settings.providers.acp.mcpServersHelp':
-    '选择这个 Codex CLI 会话应连接哪些已配置的 MCP 服务器。',
-  'settings.providers.acp.mcpServersEmpty':
-    '还没有配置 MCP 服务器。请先到 Settings -> MCP 添加。',
+  'settings.providers.acp.mcpServersHelp': '选择这个 Codex CLI 会话应连接哪些已配置的 MCP 服务器。',
+  'settings.providers.acp.mcpServersEmpty': '还没有配置 MCP 服务器。请先到 Settings -> MCP 添加。',
   'settings.providers.acp.mcpServersEnabled': '已启用',
   'settings.providers.acp.mcpServersDisabled': '已在 MCP 设置中禁用',
   'settings.providers.acp.mcpServersMissing': '已保存的服务器已不存在',
@@ -1065,8 +1068,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     '通过 AI SDK 的 Anthropic Provider 使用官方 Claude 模型',
   'settings.providers.description.deepseek': 'DeepSeek AI 模型，具备更强的推理能力',
   'settings.providers.description.kimi': 'Moonshot AI 模型，例如支持超长上下文的 Kimi',
-  'settings.providers.description.minimax':
-    '通过 AI SDK 的 MiniMax Provider 使用官方 MiniMax 模型',
+  'settings.providers.description.minimax': '通过 AI SDK 的 MiniMax Provider 使用官方 MiniMax 模型',
   'settings.providers.description.ollama': '通过 Ollama 在本地运行开源大模型',
   'settings.providers.description.acp':
     '通过 Agent Client Protocol 对接 Codex CLI，并兼容 Claude Code、Gemini 等其他 ACP agent',

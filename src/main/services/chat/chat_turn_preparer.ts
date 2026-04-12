@@ -1,10 +1,7 @@
 import { getAppConfig } from '../../../core/config';
 import * as affectDb from '../../../core/db/affect_state';
 import * as chatThreadDb from '../../../core/db/chat_thread';
-import {
-  type AffectState,
-  rehydrateAffectState,
-} from '../../../core/emotion/affect_state';
+import { type AffectState, rehydrateAffectState } from '../../../core/emotion/affect_state';
 import {
   buildInterventionPolicySystemMessage,
   deriveInterventionPolicy,
@@ -27,10 +24,7 @@ import type { ChatMemory } from './chat_memory';
 import type { ChatInputMessage, ChatTransportMessage } from './chat_types';
 import { persistThreadRuntimeHints } from './chat_thread_hints';
 import { resolveToolNames } from './chat_tools';
-import {
-  getPromptFromMessage,
-  toModelInputMessages,
-} from './chat_ui';
+import { getPromptFromMessage, toModelInputMessages } from './chat_ui';
 import { TODO_PLANNING_TOOL_NAME } from './chat_todo_planning';
 
 export type ChatTurnOptions = {
@@ -87,7 +81,10 @@ const getStoredAffectState = (threadId: string | undefined): AffectState | null 
   return rehydrateAffectState(record.state, { maxAgeMinutes: emotionConfig.maxAgeMinutes });
 };
 
-const getAffectStateForPolicy = (memory: ChatMemory, threadId: string | undefined): AffectState | null => {
+const getAffectStateForPolicy = (
+  memory: ChatMemory,
+  threadId: string | undefined
+): AffectState | null => {
   const emotionConfig = getEmotionConfig();
   if (!emotionConfig?.enabled) return null;
 
@@ -251,7 +248,7 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
     const affectStateForRouting =
       experimentalModeActive || !emotionConfig?.injectToSystemPrompt
         ? null
-        : affectSignal?.state ?? null;
+        : (affectSignal?.state ?? null);
     const realtimeAffectMessage =
       rawAffectEnabled || shouldAwaitRealtimeAffect ? realtimeAffectContext.message : '';
 
@@ -268,17 +265,16 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
       realtimeAffectMessage,
       onMemoryRetrieved: options.onMemoryRetrieved,
     });
-    const interventionPolicy =
-      experimentalAffectMode !== null
-        ? {
-            ...deriveInterventionPolicy({
-              messages: modelMessages,
-              affectState:
-                experimentalAffectMode === 'explicit_policy' ? effectiveAffectState : null,
-            }),
-            applied: experimentalAffectMode === 'explicit_policy',
-          }
-        : null;
+    const interventionPolicy = {
+      ...deriveInterventionPolicy({
+        messages: modelMessages,
+        affectState:
+          experimentalAffectMode === 'no_affect' || experimentalAffectMode === 'tone_only'
+            ? null
+            : effectiveAffectState,
+      }),
+      applied: experimentalAffectMode === 'explicit_policy',
+    };
     const finalMessages = interventionPolicy?.applied
       ? insertSystemMessages(assembledContext.messages, [
           buildInterventionPolicySystemMessage(interventionPolicy),

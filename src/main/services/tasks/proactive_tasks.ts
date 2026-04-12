@@ -13,6 +13,7 @@ import {
 import { createPrefixedId } from '../../../shared/utils/id';
 import { toIsoNow } from '../../../shared/utils/text';
 import { chatService } from '../chat/chat_service';
+import { companionService } from '../companion/companion_service';
 import { getErrorMessage } from '../../utils/errors';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
@@ -319,6 +320,11 @@ export const runProactiveTask = async (
         });
       }
 
+      companionService.pushTaskNudge({
+        kind: 'task-error',
+        taskName: task.name,
+      });
+
       sendPushEventToRenderers({
         type: 'task-result',
         taskId: task.id,
@@ -402,6 +408,11 @@ export const runProactiveTask = async (
         });
       }
 
+      companionService.pushTaskNudge({
+        kind: 'task-error',
+        taskName: task.name,
+      });
+
       sendPushEventToRenderers({
         type: 'task-result',
         taskId: task.id,
@@ -453,6 +464,11 @@ export const runProactiveTask = async (
       });
     }
 
+    companionService.pushTaskNudge({
+      kind: 'task-success',
+      taskName: task.name,
+    });
+
     sendPushEventToRenderers({
       type: 'task-result',
       taskId: task.id,
@@ -471,6 +487,10 @@ export const runProactiveTask = async (
       next_run_at: nextRunAt,
       last_status: 'error',
       last_error: errorText,
+    });
+    companionService.pushTaskNudge({
+      kind: 'task-error',
+      taskName: task.name,
     });
     return { success: false, error: errorText };
   } finally {

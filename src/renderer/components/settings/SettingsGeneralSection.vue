@@ -91,6 +91,29 @@
     </div>
 
     <div class="config-group">
+      <h3>{{ t('settings.general.companion.title') }}</h3>
+      <p class="group-description">{{ t('settings.general.companion.description') }}</p>
+      <label
+        v-for="key in [
+          'enabled',
+          'alwaysOnTop',
+          'rememberPosition',
+          'reduceMotion',
+          'openMainWindowOnClick',
+        ] as const"
+        :key="key"
+        class="checkbox-label"
+      >
+        <input
+          type="checkbox"
+          :checked="config.ui.companion[key]"
+          @change="updateCompanion(key, ($event.target as HTMLInputElement).checked)"
+        />
+        {{ formatCompanionLabel(key) }}
+      </label>
+    </div>
+
+    <div class="config-group">
       <div class="update-status-header">
         <div>
           <h3>{{ t('settings.general.updates.title') }}</h3>
@@ -213,6 +236,7 @@ const {
   canTestToolModel,
   checkForUpdatesNow,
   config,
+  formatCompanionLabel,
   formatGeneralLabel,
   installDownloadedUpdate,
   isCheckingForUpdates,
@@ -226,6 +250,7 @@ const {
   toggleAutoApproveToolRequests,
   toolModelSelectOptions,
   toolModelTestResult,
+  updateCompanion,
   updateGeneral,
   updateLanguageSelection,
   updateShellApprovalMode,

@@ -37,6 +37,7 @@ import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
 import type { ChatExperimentalContext } from '../chat/intervention_policy';
 import type { AgentRun, AgentRunTrace, AgentRunTree } from './agent_run';
+import type { CompanionSnapshot } from './companion';
 
 export type ProviderInput = Partial<Provider> &
   Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
@@ -300,6 +301,11 @@ export interface ElectronApi {
     connect: (id: string) => Promise<unknown>;
     disconnect: (id: string) => Promise<WindowActionResult>;
     refreshTools: (id: string) => Promise<unknown>;
+  };
+  companion: {
+    getSnapshot: () => Promise<CompanionSnapshot>;
+    onUpdated: (callback: (snapshot: CompanionSnapshot) => void) => () => void;
+    openMainWindow: () => Promise<WindowActionResult>;
   };
   openSettings: (section?: string) => void;
   closeWindow: () => void;

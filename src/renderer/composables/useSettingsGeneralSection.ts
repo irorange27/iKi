@@ -544,6 +544,26 @@ export const useSettingsGeneralSection = (params: {
     params.onConfigChange();
   };
 
+  const formatCompanionLabel = (key: string): string => {
+    const translatedLabels: Record<string, string> = {
+      enabled: t('settings.general.companion.enabled'),
+      alwaysOnTop: t('settings.general.companion.alwaysOnTop'),
+      rememberPosition: t('settings.general.companion.rememberPosition'),
+      reduceMotion: t('settings.general.companion.reduceMotion'),
+      openMainWindowOnClick: t('settings.general.companion.openMainWindowOnClick'),
+    };
+
+    return translatedLabels[key] || formatLabel(key);
+  };
+
+  const updateCompanion = <K extends keyof AppConfig['ui']['companion']>(
+    key: K,
+    value: AppConfig['ui']['companion'][K]
+  ) => {
+    config.value.ui.companion[key] = value;
+    params.onConfigChange();
+  };
+
   const updateLanguageSelection = (value: string) => {
     if (value === 'en' || value === 'zh-CN') {
       updateGeneral('language', value);
@@ -574,6 +594,7 @@ export const useSettingsGeneralSection = (params: {
     canTestToolModel,
     checkForUpdatesNow,
     config,
+    formatCompanionLabel,
     formatGeneralLabel,
     installDownloadedUpdate,
     isCheckingForUpdates,
@@ -587,6 +608,7 @@ export const useSettingsGeneralSection = (params: {
     toggleAutoApproveToolRequests,
     toolModelSelectOptions,
     toolModelTestResult,
+    updateCompanion,
     updateGeneral,
     updateLanguageSelection,
     updateShellApprovalMode,

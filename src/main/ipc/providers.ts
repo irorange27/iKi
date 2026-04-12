@@ -4,6 +4,7 @@ import * as providerDb from '../../core/db/providers';
 import { createLogger } from '../../core/logger';
 import type { ProviderUpdatedEvent } from '../../shared/types/provider';
 import { getAllBrowserWindows } from '../utils/browser_windows';
+import { companionService } from '../services/companion/companion_service';
 
 let providersIpcRegistered = false;
 const providersIpcLogger = createLogger({ module: 'providers_ipc' });
@@ -13,6 +14,7 @@ const broadcastProviderUpdate = (payload: ProviderUpdatedEvent): void => {
   for (const win of getAllBrowserWindows()) {
     win.webContents.send(PROVIDERS_UPDATED_CHANNEL, payload);
   }
+  companionService.refreshAvailability();
 };
 
 export const registerProvidersIpc = (): void => {

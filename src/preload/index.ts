@@ -11,6 +11,7 @@ import {
   NetworkDiagnosticResult,
 } from '../shared/types/config';
 import type { AppUpdateStatus } from '../shared/types/update';
+import type { CompanionSnapshot } from '../shared/types/companion';
 import type {
   Provider,
   ProviderUpdatedEvent,
@@ -241,6 +242,12 @@ const electronApi: ElectronApi = {
     connect: (id: string) => ipcRenderer.invoke('mcp:connect', id),
     disconnect: (id: string) => ipcRenderer.invoke('mcp:disconnect', id),
     refreshTools: (id: string) => ipcRenderer.invoke('mcp:refresh-tools', id),
+  },
+  companion: {
+    getSnapshot: (): Promise<CompanionSnapshot> => ipcRenderer.invoke('companion:get-snapshot'),
+    onUpdated: (callback: (snapshot: CompanionSnapshot) => void) =>
+      subscribe('companion:updated', callback),
+    openMainWindow: () => ipcRenderer.invoke('companion:open-main-window'),
   },
   openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
   closeWindow: () => ipcRenderer.send('close-window'),

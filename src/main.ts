@@ -17,7 +17,9 @@ import {
   stopBackgroundRuntime,
 } from './main/services/runtime/background_runtime';
 import { startAppUpdateService } from './main/services/update/auto_update_service';
+import { companionService } from './main/services/companion/companion_service';
 import { createMainWindow } from './main/windows/main_window';
+import { syncCompanionWindowToConfig } from './main/windows/companion_window';
 
 const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
 const appLogger = createLogger({ module: 'app' });
@@ -139,6 +141,8 @@ if (isDaemonMode) {
     startAppUpdateService(getAppConfig());
     void startDesktopDaemon();
     createMainWindow();
+    syncCompanionWindowToConfig(getAppConfig());
+    companionService.refreshAvailability();
   });
 
   app.on('before-quit', () => {
@@ -165,6 +169,8 @@ if (isDaemonMode) {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
+      syncCompanionWindowToConfig(getAppConfig());
+      companionService.refreshAvailability();
     }
   });
 }
