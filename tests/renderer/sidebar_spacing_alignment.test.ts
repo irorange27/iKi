@@ -3,17 +3,20 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const SIDEBAR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/Sidebar.vue');
+const SIDEBAR_CSS_PATH = resolve(process.cwd(), 'src/renderer/components/sidebar.css');
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
 
 describe('sidebar/composer spacing alignment', () => {
   it('anchors sidebar bottom gap to the same composer spacing token', () => {
     const sidebarSource = readFileSync(SIDEBAR_VUE_PATH, 'utf8');
+    const sidebarCssSource = readFileSync(SIDEBAR_CSS_PATH, 'utf8');
     const chatInputSource = readFileSync(CHAT_INPUT_VUE_PATH, 'utf8');
 
-    expect(sidebarSource).toMatch(
+    expect(sidebarSource).toMatch(/<style scoped src="\.\/sidebar\.css"><\/style>/);
+    expect(sidebarCssSource).toMatch(
       /\.sidebar-shell\s*\{[\s\S]*margin-bottom:\s*var\(--chat-composer-padding,\s*10px\);/
     );
-    expect(sidebarSource).toMatch(/\.sidebar-shell-collapsed\s*\{[\s\S]*margin-bottom:\s*0;/);
+    expect(sidebarCssSource).toMatch(/\.sidebar-shell-collapsed\s*\{[\s\S]*margin-bottom:\s*0;/);
     expect(chatInputSource).toMatch(/padding:\s*var\(--chat-composer-padding,\s*10px\);/);
   });
 });

@@ -17,13 +17,45 @@ const NAPCAT_SETTINGS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/NapCatSettings.vue'
 );
+const NAPCAT_SETTINGS_CSS_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/settings_napcat.css'
+);
 const PROVIDERS_SETTINGS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/ProvidersSettings.vue'
 );
+const PROVIDERS_SETTINGS_CSS_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/providers_settings.css'
+);
+const PROVIDER_DETAILS_PANE_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/providers/ProviderDetailsPane.vue'
+);
+const PROVIDER_EDITOR_MODAL_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/providers/ProviderEditorModal.vue'
+);
+const SETTINGS_GENERAL_SECTION_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsGeneralSection.vue'
+);
+const SETTINGS_UI_SECTION_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsUiSection.vue'
+);
+const SETTINGS_SECURITY_SECTION_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/SettingsSecuritySection.vue'
+);
 const SETTINGS_SELECT_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsSelect.vue'
+);
+const SETTINGS_SELECT_CSS_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/settings_select.css'
 );
 const SETTINGS_USAGE_VUE_PATH = resolve(
   process.cwd(),
@@ -37,9 +69,21 @@ const SETTINGS_TASKS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsTasksSection.vue'
 );
+const SETTINGS_TASKS_CSS_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/settings_tasks_section.css'
+);
 const SETTINGS_MEMORY_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/settings/SettingsMemorySection.vue'
+);
+const SETTINGS_MEMORY_RETRIEVAL_CARDS_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/memory/SettingsMemoryRetrievalCards.vue'
+);
+const SETTINGS_MEMORY_VIEWER_CARD_VUE_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/settings/memory/SettingsMemoryViewerCard.vue'
 );
 const SETTINGS_COLOR_SCHEME_VUE_PATH = resolve(
   process.cwd(),
@@ -54,6 +98,7 @@ const THEME_PREVIEW_VUE_PATH = resolve(
   'src/renderer/components/settings/ThemePreview.vue'
 );
 const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/SettingsView.vue');
+const SETTINGS_VIEW_CSS_PATH = resolve(process.cwd(), 'src/renderer/views/settings_view.css');
 const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
 const CHAT_COMPOSER_ACTIONS_VUE_PATH = resolve(
   process.cwd(),
@@ -74,8 +119,13 @@ const WORKSPACE_SELECTOR_VUE_PATH = resolve(
   'src/renderer/components/WorkspaceSelector.vue'
 );
 const WELCOME_SCREEN_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/WelcomeScreen.vue');
+const WELCOME_SCREEN_CSS_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/welcome_screen.css'
+);
 const CHAT_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/ChatView.vue');
 const SIDEBAR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/Sidebar.vue');
+const SIDEBAR_CSS_PATH = resolve(process.cwd(), 'src/renderer/components/sidebar.css');
 
 describe('renderer style system foundation', () => {
   it('loads renderer theme tokens from globals.css instead of App.vue or a second palette', () => {
@@ -127,19 +177,29 @@ describe('renderer style system foundation', () => {
 
   it('uses a shared custom settings select for dropdowns that need app-controlled expanded styling', () => {
     const settingsSelectSource = readFileSync(SETTINGS_SELECT_VUE_PATH, 'utf8');
+    const settingsSelectCssSource = readFileSync(SETTINGS_SELECT_CSS_PATH, 'utf8');
     const usageSource = readFileSync(SETTINGS_USAGE_VUE_PATH, 'utf8');
     const speechSource = readFileSync(SETTINGS_SPEECH_VUE_PATH, 'utf8');
     const tasksSource = readFileSync(SETTINGS_TASKS_VUE_PATH, 'utf8');
     const memorySource = readFileSync(SETTINGS_MEMORY_VUE_PATH, 'utf8');
+    const memoryRetrievalCardsSource = readFileSync(SETTINGS_MEMORY_RETRIEVAL_CARDS_VUE_PATH, 'utf8');
+    const memoryViewerCardSource = readFileSync(SETTINGS_MEMORY_VIEWER_CARD_VUE_PATH, 'utf8');
     const mcpSource = readFileSync(MCP_SETTINGS_VUE_PATH, 'utf8');
     const napcatSource = readFileSync(NAPCAT_SETTINGS_VUE_PATH, 'utf8');
     const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+    const providerDetailsSource = readFileSync(PROVIDER_DETAILS_PANE_VUE_PATH, 'utf8');
+    const providerEditorSource = readFileSync(PROVIDER_EDITOR_MODAL_VUE_PATH, 'utf8');
+    const generalSectionSource = readFileSync(SETTINGS_GENERAL_SECTION_VUE_PATH, 'utf8');
+    const uiSectionSource = readFileSync(SETTINGS_UI_SECTION_VUE_PATH, 'utf8');
+    const securitySectionSource = readFileSync(SETTINGS_SECURITY_SECTION_VUE_PATH, 'utf8');
     const colorSchemeSource = readFileSync(SETTINGS_COLOR_SCHEME_VUE_PATH, 'utf8');
     const themeEditorModalSource = readFileSync(THEME_EDITOR_MODAL_VUE_PATH, 'utf8');
     const settingsViewSource = readFileSync(SETTINGS_VIEW_VUE_PATH, 'utf8');
 
     expect(settingsSelectSource).toMatch(/class="settings-select-trigger"/);
+    expect(settingsSelectSource).toMatch(/<style scoped src="\.\/settings_select\.css"><\/style>/);
     expect(settingsSelectSource).toMatch(/class="settings-select-panel"/);
+    expect(settingsSelectCssSource).toMatch(/\.settings-select-panel\s*\{/);
     expect(settingsSelectSource).toMatch(/settings-select-group-label/);
     expect(settingsSelectSource).toMatch(/aria-haspopup="listbox"/);
     expect(usageSource).toMatch(/<SettingsSelect/);
@@ -147,28 +207,52 @@ describe('renderer style system foundation', () => {
     expect(speechSource).toMatch(/import SettingsSelect from/);
     expect(speechSource).not.toMatch(/<select/);
     expect(tasksSource).toMatch(/import SettingsSelect from/);
+    expect(tasksSource).toMatch(/<style scoped src="\.\/settings_tasks_section\.css"><\/style>/);
     expect(tasksSource).not.toMatch(/<select/);
-    expect(memorySource).toMatch(/import SettingsSelect from/);
-    expect(memorySource).not.toMatch(/<select/);
+    expect(memorySource).toMatch(/import SettingsMemoryRetrievalCards from/);
+    expect(memorySource).toMatch(/import SettingsMemoryViewerCard from/);
+    expect(memoryRetrievalCardsSource).toMatch(/import SettingsSelect from/);
+    expect(memoryViewerCardSource).toMatch(/import SettingsSelect from/);
+    expect([memorySource, memoryRetrievalCardsSource, memoryViewerCardSource].join('\n')).not.toMatch(
+      /<select/
+    );
     expect(mcpSource).toMatch(/import SettingsSelect from/);
     expect(mcpSource).not.toMatch(/<select/);
     expect(napcatSource).toMatch(/import SettingsSelect from/);
+    expect(napcatSource).toMatch(/<style scoped src="\.\/settings_napcat\.css"><\/style>/);
     expect(napcatSource).not.toMatch(/<select/);
-    expect(providersSource).toMatch(/import SettingsSelect from/);
     expect(providersSource).not.toMatch(/<select/);
+    expect(providersSource).toMatch(/import ProviderDetailsPane from/);
+    expect(providersSource).toMatch(/import ProviderEditorModal from/);
+    expect(providersSource).toMatch(/import ProvidersSidebar from/);
+    expect(providerDetailsSource).toMatch(/import SettingsSelect from/);
+    expect(providerDetailsSource).not.toMatch(/<select/);
+    expect(providerEditorSource).toMatch(/import SettingsSelect from/);
+    expect(providerEditorSource).not.toMatch(/<select/);
+    expect(generalSectionSource).toMatch(/import SettingsSelect from/);
+    expect(generalSectionSource).toMatch(/toolModelSelectOptions/);
+    expect(generalSectionSource).not.toMatch(/<select/);
+    expect(securitySectionSource).toMatch(/import SettingsSelect from/);
+    expect(securitySectionSource).not.toMatch(/<select/);
+    expect(uiSectionSource).toMatch(/density-preview/);
     expect(colorSchemeSource).toMatch(/import ThemeEditorModal from/);
     expect(themeEditorModalSource).toMatch(/import SettingsSelect from/);
     expect(themeEditorModalSource).not.toMatch(/<select/);
     expect(colorSchemeSource).not.toMatch(/<select/);
-    expect(settingsViewSource).toMatch(/import SettingsSelect from/);
-    expect(settingsViewSource).toMatch(/toolModelSelectOptions/);
+    expect(settingsViewSource).toMatch(/import SettingsGeneralSection from/);
+    expect(settingsViewSource).toMatch(/import SettingsUiSection from/);
+    expect(settingsViewSource).toMatch(/import SettingsSecuritySection from/);
     expect(settingsViewSource).not.toMatch(/<select/);
   });
 
   it('migrates MCP, NapCat, and Providers settings onto shared primitives and canonical tokens', () => {
     const mcpSource = readFileSync(MCP_SETTINGS_VUE_PATH, 'utf8');
     const napcatSource = readFileSync(NAPCAT_SETTINGS_VUE_PATH, 'utf8');
+    const napcatCssSource = readFileSync(NAPCAT_SETTINGS_CSS_PATH, 'utf8');
     const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+    const providersCssSource = readFileSync(PROVIDERS_SETTINGS_CSS_PATH, 'utf8');
+    const providerDetailsSource = readFileSync(PROVIDER_DETAILS_PANE_VUE_PATH, 'utf8');
+    const providerEditorSource = readFileSync(PROVIDER_EDITOR_MODAL_VUE_PATH, 'utf8');
     const colorSchemeSource = readFileSync(SETTINGS_COLOR_SCHEME_VUE_PATH, 'utf8');
     const themeEditorModalSource = readFileSync(THEME_EDITOR_MODAL_VUE_PATH, 'utf8');
     const themePreviewSource = readFileSync(THEME_PREVIEW_VUE_PATH, 'utf8');
@@ -180,27 +264,33 @@ describe('renderer style system foundation', () => {
 
     expect(mcpSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
     expect(napcatSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
+    expect(napcatSource).toMatch(/<style scoped src="\.\/settings_napcat\.css"><\/style>/);
     expect(providersSource).toMatch(/<style scoped src="\.\/settings_shared\.css"><\/style>/);
+    expect(providersSource).toMatch(/<style src="\.\/providers_settings\.css"><\/style>/);
+    expect(providerDetailsSource).toMatch(/<style scoped src="\.\.\/settings_shared\.css"><\/style>/);
+    expect(providerEditorSource).toMatch(/<style scoped src="\.\.\/settings_shared\.css"><\/style>/);
 
     expect(mcpSource).not.toMatch(/\.secondary-btn\s*\{/);
     expect(mcpSource).not.toMatch(/var\(--warning-color,\s*#/);
     expect(mcpSource).not.toMatch(/var\(--danger-color,\s*#/);
 
-    expect(napcatSource).not.toMatch(/#d18a32/);
-    expect(napcatSource).not.toMatch(/#cc5a5a/);
-    expect(napcatSource).not.toMatch(/\.reset-btn\s*\{/);
+    expect(napcatCssSource).not.toMatch(/#d18a32/);
+    expect(napcatCssSource).not.toMatch(/#cc5a5a/);
+    expect(napcatCssSource).not.toMatch(/\.reset-btn\s*\{/);
 
-    expect(providersSource).toMatch(/provider-config-group/);
+    expect([providersSource, providerDetailsSource, providerEditorSource].join('\n')).toMatch(
+      /provider-config-group/
+    );
     expect(providersSource).not.toMatch(/class="secondary"/);
     expect(providersSource).not.toMatch(/class="primary"/);
-    expect(providersSource).not.toMatch(/\.config-group\s*\{/);
-    expect(providersSource).not.toMatch(/\.secondary-btn\s*\{/);
-    expect(providersSource).not.toMatch(/#ef4444/);
-    expect(providersSource).not.toMatch(/#22c55e/);
-    expect(providersSource).not.toMatch(/\.icon-btn\s*\{/);
-    expect(providersSource).toMatch(/surface-inset-highlight/);
-    expect(providersSource).toMatch(/surface-shadow-lg/);
-    expect(providersSource).not.toMatch(/var\(--accent-rgb,\s*0,\s*0,\s*0\)/);
+    expect(providersCssSource).not.toMatch(/\.config-group\s*\{/);
+    expect(providersCssSource).not.toMatch(/\.secondary-btn\s*\{/);
+    expect(providersCssSource).not.toMatch(/#ef4444/);
+    expect(providersCssSource).not.toMatch(/#22c55e/);
+    expect(providersCssSource).not.toMatch(/\.icon-btn\s*\{/);
+    expect(providersCssSource).toMatch(/surface-inset-highlight/);
+    expect(providersCssSource).toMatch(/surface-shadow-lg/);
+    expect(providersCssSource).not.toMatch(/var\(--accent-rgb,\s*0,\s*0,\s*0\)/);
 
     expect(combinedColorSchemeSource).toMatch(/surface-shadow-md/);
     expect(combinedColorSchemeSource).toMatch(/surface-shadow-lg/);
@@ -215,42 +305,57 @@ describe('renderer style system foundation', () => {
     expect(combinedColorSchemeSource).not.toMatch(/background:\s*#22c55e/);
   });
 
-  it('styles enabled provider affordances with semantic status tokens', () => {
-    const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+  it('moves task-specific layout primitives into dedicated CSS without reintroducing local dropdowns', () => {
+    const tasksSource = readFileSync(SETTINGS_TASKS_VUE_PATH, 'utf8');
+    const tasksCssSource = readFileSync(SETTINGS_TASKS_CSS_PATH, 'utf8');
 
-    expect(providersSource).toMatch(/\.provider-status-dot\.enabled\s*\{/);
-    expect(providersSource).toMatch(/\.status-badge\.enabled\s*\{/);
-    expect(providersSource).toMatch(/var\(--status-success-color\)/);
+    expect(tasksSource).toMatch(/<style scoped src="\.\/settings_tasks_section\.css"><\/style>/);
+    expect(tasksCssSource).toMatch(/\.task-form-grid\s*\{/);
+    expect(tasksCssSource).toMatch(/\.task-tools-grid\s*\{/);
+    expect(tasksCssSource).toMatch(
+      /@media \(max-width:\s*840px\)\s*\{[\s\S]*\.task-form-grid\s*\{[\s\S]*grid-template-columns:\s*1fr;/i
+    );
+    expect(tasksCssSource).not.toMatch(/<select/);
+  });
+
+  it('styles enabled provider affordances with semantic status tokens', () => {
+    const providersCssSource = readFileSync(PROVIDERS_SETTINGS_CSS_PATH, 'utf8');
+
+    expect(providersCssSource).toMatch(/\.provider-status-dot\.enabled\s*\{/);
+    expect(providersCssSource).toMatch(/\.status-badge\.enabled\s*\{/);
+    expect(providersCssSource).toMatch(/var\(--status-success-color\)/);
   });
 
   it('keeps the custom provider modal viewport-safe with scrollable bounds', () => {
-    const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+    const providersCssSource = readFileSync(PROVIDERS_SETTINGS_CSS_PATH, 'utf8');
 
-    expect(providersSource).toMatch(
+    expect(providersCssSource).toMatch(
       /\.modal-overlay\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*padding:\s*24px;/i
     );
-    expect(providersSource).toMatch(
+    expect(providersCssSource).toMatch(
       /\.modal-content\s*\{[\s\S]*max-height:\s*calc\(100vh - 48px\);[\s\S]*overflow:\s*hidden;[\s\S]*display:\s*flex;/i
     );
-    expect(providersSource).toMatch(
+    expect(providersCssSource).toMatch(
       /\.provider-editor-scroll\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*scrollbar-width:\s*thin;/i
     );
   });
 
   it('adapts the provider settings flow for the default settings window width instead of forcing a cramped split pane', () => {
-    const providersSource = readFileSync(PROVIDERS_SETTINGS_VUE_PATH, 'utf8');
+    const providersCssSource = readFileSync(PROVIDERS_SETTINGS_CSS_PATH, 'utf8');
     const settingsViewSource = readFileSync(SETTINGS_VIEW_VUE_PATH, 'utf8');
+    const settingsViewCssSource = readFileSync(SETTINGS_VIEW_CSS_PATH, 'utf8');
 
-    expect(providersSource).toMatch(
+    expect(providersCssSource).toMatch(
       /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.providers-layout\s*\{[\s\S]*flex-direction:\s*column;/i
     );
-    expect(providersSource).toMatch(
+    expect(providersCssSource).toMatch(
       /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.providers-sidebar\s*\{[\s\S]*width:\s*100%;/i
     );
-    expect(providersSource).toMatch(
+    expect(providersCssSource).toMatch(
       /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.providers-scroll-list-inner\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/i
     );
-    expect(settingsViewSource).toMatch(
+    expect(settingsViewSource).toMatch(/<style scoped src="\.\/settings_view\.css"><\/style>/);
+    expect(settingsViewCssSource).toMatch(
       /@media \(max-width:\s*980px\)\s*\{[\s\S]*\.settings-nav\s*\{[\s\S]*width:\s*188px;/i
     );
   });
@@ -285,6 +390,7 @@ describe('renderer style system foundation', () => {
     const skillSelectorSource = readFileSync(SKILL_SELECTOR_VUE_PATH, 'utf8');
     const workspaceSelectorSource = readFileSync(WORKSPACE_SELECTOR_VUE_PATH, 'utf8');
     const welcomeScreenSource = readFileSync(WELCOME_SCREEN_VUE_PATH, 'utf8');
+    const welcomeScreenCssSource = readFileSync(WELCOME_SCREEN_CSS_PATH, 'utf8');
     const chatViewSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
 
     expect(chatInputSource).not.toMatch(/bg-\[#4a9eff\]/);
@@ -354,7 +460,7 @@ describe('renderer style system foundation', () => {
     expect(welcomeScreenSource).toMatch(/ui-text-secondary/);
     expect(welcomeScreenSource).toMatch(/ui-text-muted/);
     expect(welcomeScreenSource).toMatch(/welcome-context-grid/);
-    expect(welcomeScreenSource).toMatch(
+    expect(welcomeScreenCssSource).toMatch(
       /@media \(max-height:\s*760px\)\s*\{[\s\S]*\.welcome-figure\s*\{[\s\S]*display:\s*none;/i
     );
     expect(welcomeScreenSource).not.toMatch(/\.text-primary\s*\{/);
@@ -379,16 +485,18 @@ describe('renderer style system foundation', () => {
 
   it('removes hardcoded sidebar chrome colors in favor of shared primitives and tokens', () => {
     const sidebarSource = readFileSync(SIDEBAR_VUE_PATH, 'utf8');
+    const sidebarCssSource = readFileSync(SIDEBAR_CSS_PATH, 'utf8');
 
     expect(sidebarSource).toMatch(/sidebar-shell/);
     expect(sidebarSource).toMatch(/sidebar-tool-btn icon-btn/);
-    expect(sidebarSource).toMatch(/status-danger-color/);
-    expect(sidebarSource).toMatch(/sidebar-resize-indicator-color/);
-    expect(sidebarSource).not.toMatch(/text-gray-400/);
-    expect(sidebarSource).not.toMatch(/hover:text-white/);
-    expect(sidebarSource).not.toMatch(/hover:bg-blue-400\/50/);
-    expect(sidebarSource).not.toMatch(/bg-gray-400\/50/);
-    expect(sidebarSource).not.toMatch(/border-\[#fff\]/);
-    expect(sidebarSource).not.toMatch(/#f87171/);
+    expect(sidebarSource).toMatch(/<style scoped src="\.\/sidebar\.css"><\/style>/);
+    expect(sidebarCssSource).toMatch(/status-danger-color/);
+    expect(sidebarCssSource).toMatch(/sidebar-resize-indicator-color/);
+    expect(sidebarCssSource).not.toMatch(/text-gray-400/);
+    expect(sidebarCssSource).not.toMatch(/hover:text-white/);
+    expect(sidebarCssSource).not.toMatch(/hover:bg-blue-400\/50/);
+    expect(sidebarCssSource).not.toMatch(/bg-gray-400\/50/);
+    expect(sidebarCssSource).not.toMatch(/border-\[#fff\]/);
+    expect(sidebarCssSource).not.toMatch(/#f87171/);
   });
 });

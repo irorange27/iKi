@@ -19,6 +19,14 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
     createMessage: vi.fn((message: Record<string, unknown>) => ({ id: 'message_new', ...message })),
     updateMessage: vi.fn((id: string, message: Record<string, unknown>) => ({ id, ...message })),
     deleteMessage: vi.fn((id: string) => ({ success: true, id })),
+    listRuns: vi.fn((threadId: string) => [{ id: 'run_1', threadId }]),
+    getRunTrace: vi.fn((runId: string) => ({
+      run: { id: runId },
+      steps: [],
+      latestCheckpoint: null,
+      children: [],
+    })),
+    getRunTree: vi.fn((rootRunId: string) => ({ rootRunId, traces: [] })),
     getModels: vi.fn(async (providerType: string) => [
       {
         id: `${providerType}-model`,
@@ -80,6 +88,9 @@ describe('chat IPC', () => {
       'chat:messages:create',
       'chat:messages:update',
       'chat:messages:delete',
+      'chat:runs:list',
+      'chat:runs:trace:get',
+      'chat:runs:tree:get',
       'chat:getModels',
       'chat:isProviderConfigured',
       'chat:stop-stream',
@@ -104,10 +115,17 @@ describe('chat IPC', () => {
     const threadPayload = { title: 'Thread' };
     const messagePayload = { thread_id: 'thread_1', message: '{}' };
     const sendPayload = { providerType: 'openai', model: 'gpt-4.1', messages: [] };
-    const streamPayload = { providerType: 'openai', model: 'gpt-4.1', messages: [], tools: ['web'] };
+    const streamPayload = {
+      providerType: 'openai',
+      model: 'gpt-4.1',
+      messages: [],
+      tools: ['web'],
+    };
 
     expect(await ipcHandlers.get('chat:threads:list')?.(null)).toEqual([{ id: 'thread_1' }]);
-    expect(await ipcHandlers.get('chat:threads:get')?.(null, 'thread_1')).toEqual({ id: 'thread_1' });
+    expect(await ipcHandlers.get('chat:threads:get')?.(null, 'thread_1')).toEqual({
+      id: 'thread_1',
+    });
     expect(await ipcHandlers.get('chat:threads:todo:get')?.(null, 'thread_1')).toEqual({
       thread_id: 'thread_1',
       items: [],
@@ -116,10 +134,12 @@ describe('chat IPC', () => {
       id: 'thread_new',
       title: 'Thread',
     });
-    expect(await ipcHandlers.get('chat:threads:update')?.(null, 'thread_1', threadPayload)).toEqual({
-      id: 'thread_1',
-      title: 'Thread',
-    });
+    expect(await ipcHandlers.get('chat:threads:update')?.(null, 'thread_1', threadPayload)).toEqual(
+      {
+        id: 'thread_1',
+        title: 'Thread',
+      }
+    );
     expect(await ipcHandlers.get('chat:threads:delete')?.(null, 'thread_1')).toEqual({
       success: true,
       id: 'thread_1',
@@ -136,7 +156,9 @@ describe('chat IPC', () => {
       thread_id: 'thread_1',
       message: '{}',
     });
-    expect(await ipcHandlers.get('chat:messages:update')?.(null, 'message_1', messagePayload)).toEqual({
+    expect(
+      await ipcHandlers.get('chat:messages:update')?.(null, 'message_1', messagePayload)
+    ).toEqual({
       id: 'message_1',
       thread_id: 'thread_1',
       message: '{}',
@@ -144,6 +166,19 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:messages:delete')?.(null, 'message_1')).toEqual({
       success: true,
       id: 'message_1',
+    });
+    expect(await ipcHandlers.get('chat:runs:list')?.(null, 'thread_1')).toEqual([
+      { id: 'run_1', threadId: 'thread_1' },
+    ]);
+    expect(await ipcHandlers.get('chat:runs:trace:get')?.(null, 'run_1')).toEqual({
+      run: { id: 'run_1' },
+      steps: [],
+      latestCheckpoint: null,
+      children: [],
+    });
+    expect(await ipcHandlers.get('chat:runs:tree:get')?.(null, 'run_root_1')).toEqual({
+      rootRunId: 'run_root_1',
+      traces: [],
     });
 
     expect(await ipcHandlers.get('chat:getModels')?.(null, 'openai')).toEqual([
@@ -156,7 +191,10 @@ describe('chat IPC', () => {
       },
     ]);
     expect(await ipcHandlers.get('chat:isProviderConfigured')?.(null, 'openai')).toBe(true);
-    expect(await ipcHandlers.get('chat:stop-stream')?.(event)).toEqual({ success: true, senderId: 77 });
+    expect(await ipcHandlers.get('chat:stop-stream')?.(event)).toEqual({
+      success: true,
+      senderId: 77,
+    });
     expect(await ipcHandlers.get('chat:send')?.(null, sendPayload)).toEqual({
       success: true,
       options: sendPayload,
@@ -188,6 +226,9 @@ describe('chat IPC', () => {
     expect(chatServiceMock.createMessage).toHaveBeenCalledWith(messagePayload);
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
     expect(chatServiceMock.deleteMessage).toHaveBeenCalledWith('message_1');
+    expect(chatServiceMock.listRuns).toHaveBeenCalledWith('thread_1');
+    expect(chatServiceMock.getRunTrace).toHaveBeenCalledWith('run_1');
+    expect(chatServiceMock.getRunTree).toHaveBeenCalledWith('run_root_1');
     expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai', undefined, null);
     expect(chatServiceMock.isProviderConfigured).toHaveBeenCalledWith('openai', undefined);
     expect(chatServiceMock.stopStream).toHaveBeenCalledWith(77);

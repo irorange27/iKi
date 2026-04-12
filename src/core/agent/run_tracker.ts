@@ -98,6 +98,13 @@ export type AgentRunTracker = {
   getRun: () => AgentRun;
   syncModelMessages: (messages: unknown[]) => AgentRun;
   recordToolEvent: (event: ConversationRunnerStreamEvent) => void;
+  recordChildRun: (params: {
+    childRunId: string;
+    childKind: AgentRunKind;
+    summary?: string;
+    input?: Record<string, unknown> | null;
+    output?: Record<string, unknown> | null;
+  }) => AgentRun;
   recordToolCalls: (toolCalls?: AgentResult['toolCalls']) => AgentRun;
   markCompleted: (params: FinalizeRunParams) => AgentRun;
   markBlocked: (params: BlockRunParams) => AgentRun;
@@ -295,6 +302,24 @@ export const createAgentRunTracker = (
         });
         createCheckpoint('approval-requested');
       }
+    },
+    recordChildRun: params => {
+      appendStep({
+        type: 'child-run',
+        status: 'completed',
+        summary: toSummary(
+          params.summary || `Spawned ${params.childKind} run ${params.childRunId}`,
+          'Child run spawned'
+        ),
+        input: {
+          childRunId: params.childRunId,
+          childKind: params.childKind,
+          ...(params.input ?? {}),
+        },
+        output: params.output ?? null,
+      });
+      createCheckpoint('child-run-spawned');
+      return currentRun;
     },
     recordToolCalls: toolCalls => {
       for (const toolCall of toolCalls ?? []) {

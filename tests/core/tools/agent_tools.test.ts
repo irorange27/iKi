@@ -41,11 +41,12 @@ describe('DelegatedAgentTool', () => {
       registerTool: registerToolMock,
       generate: generateMock,
     });
-    createAgentRunTrackerMock.mockReturnValue({
+  createAgentRunTrackerMock.mockReturnValue({
       id: 'run_child_1',
       getRun: vi.fn(() => ({ status: 'running' })),
       syncModelMessages: vi.fn(),
       recordToolEvent: vi.fn(),
+      recordChildRun: vi.fn(),
       recordToolCalls: vi.fn(),
       markCompleted: vi.fn(),
       markBlocked: vi.fn(),
@@ -69,6 +70,10 @@ describe('DelegatedAgentTool', () => {
     });
 
     const tool = new DelegatedAgentTool();
+    const parentRunTracker = {
+      id: 'run_parent_1',
+      recordChildRun: vi.fn(),
+    };
     const result = await runWithToolRuntimeContext(
       {
         availableTools: [
@@ -77,6 +82,7 @@ describe('DelegatedAgentTool', () => {
           new DelegatedAgentTool().toAgentTool(),
         ],
         runId: 'run_parent_1',
+        runTracker: parentRunTracker,
         conversationModel: {
           providerType: 'openai',
           model: 'gpt-4o-mini',
@@ -105,6 +111,12 @@ describe('DelegatedAgentTool', () => {
         kind: 'delegated-agent',
         parentRunId: 'run_parent_1',
         enabledTools: ['list_dir'],
+      })
+    );
+    expect(parentRunTracker.recordChildRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        childRunId: 'run_child_1',
+        childKind: 'delegated-agent',
       })
     );
     expect(registerToolMock).toHaveBeenCalledTimes(1);

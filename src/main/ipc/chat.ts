@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 
+import { toIpcSerializable } from '../../shared/utils/ipc_serialization';
 import { chatService, type ChatWebContents } from '../services/chat/chat_service';
 
 let chatIpcRegistered = false;
@@ -26,6 +27,15 @@ export const registerChatIpc = (): void => {
     chatService.updateMessage(id, message)
   );
   ipcMain.handle('chat:messages:delete', (_, id) => chatService.deleteMessage(id));
+  ipcMain.handle('chat:runs:list', (_, threadId: string) =>
+    toIpcSerializable(chatService.listRuns(threadId))
+  );
+  ipcMain.handle('chat:runs:trace:get', (_, runId: string) =>
+    toIpcSerializable(chatService.getRunTrace(runId))
+  );
+  ipcMain.handle('chat:runs:tree:get', (_, rootRunId: string) =>
+    toIpcSerializable(chatService.getRunTree(rootRunId))
+  );
 
   // Chat/LLM Integration
   ipcMain.handle(

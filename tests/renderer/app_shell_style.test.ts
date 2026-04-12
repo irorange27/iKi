@@ -8,11 +8,16 @@ const CHAT_TOOL_PART_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/chat/ChatToolPart.vue'
 );
+const CHAT_TOOL_PART_CSS_PATH = resolve(
+  process.cwd(),
+  'src/renderer/components/chat/chat_tool_part.css'
+);
 const CHAT_MESSAGE_PARTS_VUE_PATH = resolve(
   process.cwd(),
   'src/renderer/components/chat/ChatMessageParts.vue'
 );
 const SETTINGS_VIEW_VUE_PATH = resolve(process.cwd(), 'src/renderer/views/SettingsView.vue');
+const SETTINGS_VIEW_CSS_PATH = resolve(process.cwd(), 'src/renderer/views/settings_view.css');
 const VARIABLES_CSS_PATH = resolve(process.cwd(), 'src/renderer/assets/styles/variables.css');
 
 describe('renderer app shell styles', () => {
@@ -41,21 +46,24 @@ describe('renderer app shell styles', () => {
   it('sizes chat and settings views from the app shell instead of viewport height', () => {
     const chatSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
     const settingsSource = readFileSync(SETTINGS_VIEW_VUE_PATH, 'utf8');
+    const settingsCssSource = readFileSync(SETTINGS_VIEW_CSS_PATH, 'utf8');
 
     expect(chatSource).not.toMatch(/\bh-screen\b/);
     expect(chatSource).toMatch(/class="flex h-full min-h-0 app-background app-text"/);
     expect(chatSource).toMatch(/class="flex min-h-0 min-w-0 flex-1 flex-col"/);
     expect(settingsSource).not.toMatch(/height:\s*100vh/);
     expect(settingsSource).not.toMatch(/calc\(100vh/i);
-    expect(settingsSource).toMatch(/\.settings-container\s*\{[\s\S]*height:\s*100%;/i);
-    expect(settingsSource).toMatch(/\.settings-nav\s*\{[\s\S]*min-height:\s*0;/i);
-    expect(settingsSource).toMatch(/\.settings-content\s*\{[\s\S]*min-height:\s*0;/i);
+    expect(settingsSource).toMatch(/<style scoped src="\.\/settings_view\.css"><\/style>/);
+    expect(settingsCssSource).toMatch(/\.settings-container\s*\{[\s\S]*height:\s*100%;/i);
+    expect(settingsCssSource).toMatch(/\.settings-nav\s*\{[\s\S]*min-height:\s*0;/i);
+    expect(settingsCssSource).toMatch(/\.settings-content\s*\{[\s\S]*min-height:\s*0;/i);
   });
 
   it('lets the chat column and tool cards shrink cleanly when the sidebar narrows content space', () => {
     const chatSource = readFileSync(CHAT_VIEW_VUE_PATH, 'utf8');
     const chatMessagePartsSource = readFileSync(CHAT_MESSAGE_PARTS_VUE_PATH, 'utf8');
     const toolPartSource = readFileSync(CHAT_TOOL_PART_VUE_PATH, 'utf8');
+    const toolPartCssSource = readFileSync(CHAT_TOOL_PART_CSS_PATH, 'utf8');
 
     expect(chatSource).toMatch(
       /class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"/
@@ -68,10 +76,11 @@ describe('renderer app shell styles', () => {
     expect(chatMessagePartsSource).toMatch(
       /<ChatToolPart[\s\S]*:mcp-server-label="getMcpServerLabel\(part\)"/
     );
-    expect(toolPartSource).toMatch(
+    expect(toolPartSource).toMatch(/<style scoped src="\.\/chat_tool_part\.css"><\/style>/);
+    expect(toolPartCssSource).toMatch(
       /\.tool-result-content,[\s\S]*\.tool-fallback-content\s*\{[\s\S]*width:\s*100%;[\s\S]*box-sizing:\s*border-box;[\s\S]*min-width:\s*0;/i
     );
-    expect(toolPartSource).toMatch(
+    expect(toolPartCssSource).toMatch(
       /\.tool-card-meta\s*\{[\s\S]*flex-wrap:\s*wrap;[\s\S]*min-width:\s*0;/i
     );
   });

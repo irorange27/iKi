@@ -1,0 +1,76 @@
+.bridges-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-card-gap);
+}
+
+.config-group,
+.settings-card {
+  margin-bottom: 0;
+  box-shadow: none;
+}
+
+.config-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.summary-label {
+  color: var(--text-secondary);
+}
+
+.summary-code {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.log-view {
+  margin: 16px 0 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 14px;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--danger-color) 18%, var(--bg-primary));
+  color: var(--danger-color);
+}
+
+.status-chip.active {
+  background: color-mix(in srgb, var(--success-color) 18%, var(--bg-primary));
+  color: var(--success-color);
+}
+
+.config-actions {
+  justify-content: flex-end;
+}

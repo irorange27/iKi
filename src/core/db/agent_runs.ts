@@ -5,6 +5,8 @@ import type {
   AgentRunError,
   AgentRunInput,
   AgentRunOutput,
+  AgentRunTrace,
+  AgentRunTree,
   AgentRunStep,
   AgentRunWorkingState,
 } from '../../shared/types/agent_run';
@@ -190,6 +192,29 @@ const mapAgentRunCheckpointRow = (row: AgentRunCheckpointRow): AgentRunCheckpoin
   createdAt: row.created_at,
 });
 
+const normalizeRunIds = (runIds: string[]): string[] => {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const runId of runIds) {
+    const normalizedRunId = normalizeWhitespace(runId);
+    if (!normalizedRunId || seen.has(normalizedRunId)) continue;
+    seen.add(normalizedRunId);
+    normalized.push(normalizedRunId);
+  }
+
+  return normalized;
+};
+
+const buildInClause = (values: string[]): { placeholders: string; values: string[] } | null => {
+  const normalizedValues = normalizeRunIds(values);
+  if (normalizedValues.length === 0) return null;
+  return {
+    placeholders: normalizedValues.map(() => '?').join(', '),
+    values: normalizedValues,
+  };
+};
+
 export const createAgentRun = (
   input: Omit<AgentRun, 'createdAt' | 'updatedAt'>
 ): AgentRun => {
@@ -250,6 +275,26 @@ export const listAgentRunsByThread = (threadId: string): AgentRun[] => {
   const rows = getDb()
     .prepare('SELECT * FROM agent_runs WHERE thread_id = ? ORDER BY updated_at DESC')
     .all(normalizedThreadId) as AgentRunRow[];
+  return rows.map(mapAgentRunRow);
+};
+
+export const listAgentRunsByRootRunId = (rootRunId: string): AgentRun[] => {
+  const normalizedRootRunId = normalizeWhitespace(rootRunId);
+  if (!normalizedRootRunId) return [];
+
+  const rows = getDb()
+    .prepare('SELECT * FROM agent_runs WHERE root_run_id = ? ORDER BY created_at ASC, id ASC')
+    .all(normalizedRootRunId) as AgentRunRow[];
+  return rows.map(mapAgentRunRow);
+};
+
+export const listAgentRunsByParentRunId = (parentRunId: string): AgentRun[] => {
+  const normalizedParentRunId = normalizeWhitespace(parentRunId);
+  if (!normalizedParentRunId) return [];
+
+  const rows = getDb()
+    .prepare('SELECT * FROM agent_runs WHERE parent_run_id = ? ORDER BY created_at ASC, id ASC')
+    .all(normalizedParentRunId) as AgentRunRow[];
   return rows.map(mapAgentRunRow);
 };
 
@@ -377,6 +422,34 @@ export const listAgentRunSteps = (runId: string): AgentRunStep[] => {
   return rows.map(mapAgentRunStepRow);
 };
 
+const listAgentRunStepsByRunIds = (runIds: string[]): Map<string, AgentRunStep[]> => {
+  const clause = buildInClause(runIds);
+  if (!clause) return new Map();
+
+  const rows = getDb()
+    .prepare(
+      `
+        SELECT * FROM agent_run_steps
+        WHERE run_id IN (${clause.placeholders})
+        ORDER BY run_id ASC, step_index ASC
+      `
+    )
+    .all(...clause.values) as AgentRunStepRow[];
+
+  const stepsByRunId = new Map<string, AgentRunStep[]>();
+  for (const row of rows) {
+    const step = mapAgentRunStepRow(row);
+    const steps = stepsByRunId.get(step.runId);
+    if (steps) {
+      steps.push(step);
+    } else {
+      stepsByRunId.set(step.runId, [step]);
+    }
+  }
+
+  return stepsByRunId;
+};
+
 export const createAgentRunCheckpoint = (
   checkpoint: Omit<AgentRunCheckpoint, 'createdAt'> & { createdAt?: string }
 ): AgentRunCheckpoint => {
@@ -438,4 +511,81 @@ export const getLatestAgentRunCheckpoint = (runId: string): AgentRunCheckpoint |
     .get(runId) as AgentRunCheckpointRow | undefined;
 
   return row ? mapAgentRunCheckpointRow(row) : null;
+};
+
+const getLatestAgentRunCheckpointsByRunIds = (
+  runIds: string[]
+): Map<string, AgentRunCheckpoint> => {
+  const clause = buildInClause(runIds);
+  if (!clause) return new Map();
+
+  const rows = getDb()
+    .prepare(
+      `
+        SELECT * FROM agent_run_checkpoints
+        WHERE run_id IN (${clause.placeholders})
+        ORDER BY run_id ASC, step_index DESC, created_at DESC
+      `
+    )
+    .all(...clause.values) as AgentRunCheckpointRow[];
+
+  const checkpointsByRunId = new Map<string, AgentRunCheckpoint>();
+  for (const row of rows) {
+    if (checkpointsByRunId.has(row.run_id)) continue;
+    checkpointsByRunId.set(row.run_id, mapAgentRunCheckpointRow(row));
+  }
+
+  return checkpointsByRunId;
+};
+
+export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
+  const normalizedRunId = normalizeWhitespace(runId);
+  if (!normalizedRunId) return null;
+
+  const run = getAgentRun(normalizedRunId);
+  if (!run) return null;
+
+  return {
+    run,
+    steps: listAgentRunSteps(normalizedRunId),
+    latestCheckpoint: getLatestAgentRunCheckpoint(normalizedRunId),
+    children: listAgentRunsByParentRunId(normalizedRunId),
+  };
+};
+
+export const getAgentRunTree = (rootRunId: string): AgentRunTree => {
+  const normalizedRootRunId = normalizeWhitespace(rootRunId);
+  if (!normalizedRootRunId) {
+    return {
+      rootRunId: '',
+      traces: [],
+    };
+  }
+
+  const runs = listAgentRunsByRootRunId(normalizedRootRunId);
+  const runIds = runs.map(run => run.id);
+  const stepsByRunId = listAgentRunStepsByRunIds(runIds);
+  const checkpointsByRunId = getLatestAgentRunCheckpointsByRunIds(runIds);
+  const childrenByParentRunId = new Map<string, AgentRun[]>();
+
+  for (const run of runs) {
+    const parentRunId = normalizeWhitespace(run.parentRunId);
+    if (!parentRunId) continue;
+    const siblings = childrenByParentRunId.get(parentRunId);
+    if (siblings) {
+      siblings.push(run);
+    } else {
+      childrenByParentRunId.set(parentRunId, [run]);
+    }
+  }
+
+  return {
+    rootRunId: normalizedRootRunId,
+    traces: runs.map(run => ({
+      run,
+      steps: stepsByRunId.get(run.id) ?? [],
+      latestCheckpoint: checkpointsByRunId.get(run.id) ?? null,
+      children: childrenByParentRunId.get(run.id) ?? [],
+    })),
+  };
 };

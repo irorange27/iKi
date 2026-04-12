@@ -544,7 +544,10 @@ export const createChatApproval = (deps: {
 
     try {
       const streamResult = await runWithToolRuntimeContext(
-        { runId: resumeRunTracker?.id ?? nextApprovalContext?.runId },
+        {
+          runId: resumeRunTracker?.id ?? nextApprovalContext?.runId,
+          ...(resumeRunTracker ? { runTracker: resumeRunTracker } : {}),
+        },
         async () =>
           await toolLoopRunner.stream({
             harness: session.harness,

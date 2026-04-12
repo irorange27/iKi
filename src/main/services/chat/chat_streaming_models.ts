@@ -1,0 +1,147 @@
+import * as llmFactory from '../../../core/provider/llm/factory';
+import * as deepseekProvider from '../../../core/provider/llm/deepseek';
+import * as kimiProvider from '../../../core/provider/llm/kimi';
+import * as minimaxProvider from '../../../core/provider/llm/minimax';
+import * as openaiProvider from '../../../core/provider/llm/openai';
+import { createLogger } from '../../../core/logger';
+import { ACP_PROVIDER_TYPE } from '../../../shared/constants/acp';
+import type {
+  ProviderModelDescriptor,
+  ProviderModelDiscoveryOverride,
+} from '../../../shared/types/provider';
+
+const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
+
+export const createChatStreamingModels = () => {
+  const toDescriptors = async (
+    providerType: string,
+    providerId: string | undefined,
+    modelIds: string[]
+  ) => {
+    const normalizedIds = modelIds
+      .filter((modelId): modelId is string => typeof modelId === 'string')
+      .map(modelId => modelId.trim())
+      .filter(Boolean)
+      .filter((modelId, index, list) => list.indexOf(modelId) === index);
+
+    return await Promise.all(
+      normalizedIds.map(async modelId => {
+        const capability = await llmFactory.resolveModelCapability(
+          providerType,
+          modelId,
+          providerId
+        );
+
+        return {
+          id: modelId,
+          displayName: capability?.displayName || modelId,
+          contextWindow: capability?.contextWindow ?? null,
+          maxInputTokens: capability?.maxInputTokens ?? capability?.contextWindow ?? null,
+          maxOutputTokens: capability?.maxOutputTokens ?? null,
+          ...(capability?.supportsToolCalls !== null &&
+          capability?.supportsToolCalls !== undefined
+            ? { supportsToolCalls: capability.supportsToolCalls }
+            : {}),
+          ...(capability?.supportsReasoning !== null &&
+          capability?.supportsReasoning !== undefined
+            ? { supportsReasoning: capability.supportsReasoning }
+            : {}),
+          ...(capability?.supportsVision !== null && capability?.supportsVision !== undefined
+            ? { supportsVision: capability.supportsVision }
+            : {}),
+          ...(capability?.source ? { source: capability.source } : {}),
+        } satisfies ProviderModelDescriptor;
+      })
+    );
+  };
+
+  const getModels = async (
+    providerType: string,
+    providerId?: string,
+    providerOverride?: ProviderModelDiscoveryOverride | null
+  ): Promise<ProviderModelDescriptor[]> => {
+    try {
+      if (providerType === ACP_PROVIDER_TYPE) {
+        const acpDescriptors = await llmFactory.fetchAcpModels(
+          providerType,
+          providerId,
+          providerOverride ?? undefined
+        );
+        return await Promise.all(
+          acpDescriptors.map(async descriptor => {
+            const capability = await llmFactory.resolveModelCapability(
+              providerType,
+              descriptor.id,
+              providerId
+            );
+
+            return {
+              ...descriptor,
+              displayName: capability?.displayName || descriptor.displayName || descriptor.id,
+              contextWindow: capability?.contextWindow ?? descriptor.contextWindow ?? null,
+              maxInputTokens:
+                capability?.maxInputTokens ??
+                capability?.contextWindow ??
+                descriptor.maxInputTokens ??
+                descriptor.contextWindow ??
+                null,
+              maxOutputTokens: capability?.maxOutputTokens ?? descriptor.maxOutputTokens ?? null,
+              supportsToolCalls:
+                capability?.supportsToolCalls ?? descriptor.supportsToolCalls ?? true,
+              ...(capability?.supportsReasoning !== null &&
+              capability?.supportsReasoning !== undefined
+                ? { supportsReasoning: capability.supportsReasoning }
+                : descriptor.supportsReasoning !== undefined
+                  ? { supportsReasoning: descriptor.supportsReasoning }
+                  : {}),
+              ...(capability?.supportsVision !== null && capability?.supportsVision !== undefined
+                ? { supportsVision: capability.supportsVision }
+                : descriptor.supportsVision !== undefined
+                  ? { supportsVision: descriptor.supportsVision }
+                  : {}),
+              source: capability?.source || descriptor.source || 'provider',
+            } satisfies ProviderModelDescriptor;
+          })
+        );
+      }
+
+      if (providerType === 'deepseek') {
+        return await toDescriptors(providerType, providerId, await deepseekProvider.getDeepSeekModels());
+      }
+      if (providerType === 'openai') {
+        return await toDescriptors(providerType, providerId, await openaiProvider.getOpenAIModels());
+      }
+      if (providerType === 'kimi') {
+        return await toDescriptors(providerType, providerId, await kimiProvider.getKimiModels());
+      }
+      if (providerType === 'minimax') {
+        return await toDescriptors(providerType, providerId, await minimaxProvider.getMinimaxModels());
+      }
+
+      return await toDescriptors(
+        providerType,
+        providerId,
+        await llmFactory.fetchModelsFromDev(providerType)
+      );
+    } catch (error: unknown) {
+      chatStreamingLogger.error(`Failed to get models for ${providerType}`, error);
+      return [];
+    }
+  };
+
+  const isProviderConfigured = (providerType: string, providerId?: string) => {
+    try {
+      const config = llmFactory.getProviderConfig(providerType, providerId);
+      if (providerType.trim().toLowerCase() === ACP_PROVIDER_TYPE) {
+        return config.acpCommand.trim().length > 0;
+      }
+      return Boolean(config.apiKey);
+    } catch {
+      return false;
+    }
+  };
+
+  return { getModels, isProviderConfigured };
+};
+
+export type ChatStreamingModels = ReturnType<typeof createChatStreamingModels>;

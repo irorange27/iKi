@@ -1,0 +1,140 @@
+.task-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.task-tools {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  margin-bottom: 14px;
+}
+
+.task-tools-title {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.92em;
+  margin-bottom: 10px;
+}
+
+.task-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.task-item {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  padding: 14px;
+}
+
+.task-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-name {
+  max-width: 520px;
+}
+
+.task-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.task-item-meta {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.task-compact-check {
+  margin-bottom: 0;
+}
+
+.task-inline-field {
+  margin-bottom: 0;
+  width: 160px;
+}
+
+.task-cron-field {
+  width: 260px;
+  flex: 1 1 260px;
+}
+
+.task-timezone-field {
+  width: 160px;
+}
+
+.task-inline-field input {
+  margin-top: 4px;
+}
+
+.task-item-schedule {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+.task-item-times {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+.task-error-block {
+  margin-top: 12px;
+  background: color-mix(in srgb, var(--danger-color) 7%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--danger-color) 25%, var(--border-color));
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.skills-mini-btn {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9em;
+}
+
+.skills-mini-btn:hover {
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
+}
+
+@media (max-width: 840px) {
+  .task-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .task-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .task-name {
+    max-width: 320px;
+  }
+}

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { AgentTool } from '../agent/types';
+import type { AgentRunTracker } from '../agent/run_tracker';
 
 export type ToolRuntimeConversationModel = {
   providerType: string;
@@ -12,6 +13,7 @@ export type ToolRuntimeConversationModel = {
 export type ToolRuntimeContext = {
   threadId?: string;
   runId?: string;
+  runTracker?: Pick<AgentRunTracker, 'id' | 'recordChildRun'>;
   availableSkillIds?: string[];
   availableTools?: AgentTool[];
   conversationModel?: ToolRuntimeConversationModel;

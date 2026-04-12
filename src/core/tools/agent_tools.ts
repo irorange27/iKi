@@ -254,6 +254,18 @@ export class DelegatedAgentTool extends BaseTool {
         lastStepIndex: 0,
       },
     });
+    runtimeContext.runTracker?.recordChildRun({
+      childRunId: runTracker.id,
+      childKind: 'delegated-agent',
+      summary: `Delegated agent subtask: ${args.task}`,
+      input: {
+        toolName: AGENT_TOOL_NAME,
+        delegatedTools: delegatedToolNames,
+      },
+      output: {
+        childRunId: runTracker.id,
+      },
+    });
 
     let result: AgentResult;
     try {

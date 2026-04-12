@@ -20,6 +20,7 @@ import type { ChatUsagePeriod, ChatUsageSummary } from '../shared/types/chat_usa
 import type { AffectStateEntry } from '../shared/types/memory';
 import type { ProactiveTask } from '../shared/types/tasks';
 import type { McpServerInput, McpServerSummary } from '../shared/types/mcp';
+import type { AgentRun, AgentRunTrace, AgentRunTree } from '../shared/types/agent_run';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -121,6 +122,14 @@ const electronApi: ElectronApi = {
       update: (id: string, message: ChatMessageInput) =>
         ipcRenderer.invoke('chat:messages:update', id, message),
       delete: (id: string) => ipcRenderer.invoke('chat:messages:delete', id),
+    },
+    runs: {
+      list: (threadId: string): Promise<AgentRun[]> =>
+        ipcRenderer.invoke('chat:runs:list', threadId),
+      getTrace: (runId: string): Promise<AgentRunTrace | null> =>
+        ipcRenderer.invoke('chat:runs:trace:get', runId),
+      getTree: (rootRunId: string): Promise<AgentRunTree> =>
+        ipcRenderer.invoke('chat:runs:tree:get', rootRunId),
     },
     usage: {
       summary: (period: ChatUsagePeriod = '30d'): Promise<ChatUsageSummary> =>

@@ -2,6 +2,7 @@ import type { ActiveStreamState } from './chat_types';
 import { createChatApproval } from './chat_approval';
 import { createChatMemory } from './chat_memory';
 import { createChatPersistence } from './chat_persistence';
+import { createChatRuns } from './chat_runs';
 import { createChatStreaming } from './chat_streaming';
 import { createChatUsage } from './chat_usage';
 
@@ -20,6 +21,7 @@ export const createChatService = () => {
     },
   });
   const persistence = createChatPersistence({ memory });
+  const runs = createChatRuns();
   const streaming = createChatStreaming({
     activeStreams,
     memory,
@@ -34,6 +36,7 @@ export const createChatService = () => {
 
   return {
     ...persistence,
+    ...runs,
     ...streaming,
     getUsageSummary: usage.getUsageSummary,
     approveTool: approvals.approveTool,

@@ -100,3 +100,15 @@ export interface AgentRunCheckpoint {
   snapshot: AgentRun;
   createdAt: string;
 }
+
+export interface AgentRunTrace {
+  run: AgentRun;
+  steps: AgentRunStep[];
+  latestCheckpoint?: AgentRunCheckpoint | null;
+  children: AgentRun[];
+}
+
+export interface AgentRunTree {
+  rootRunId: string;
+  traces: AgentRunTrace[];
+}

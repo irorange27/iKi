@@ -1,0 +1,135 @@
+.config-section {
+  max-width: 860px;
+  padding-top: 8px;
+}
+
+.config-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.server-row {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--bg-secondary);
+}
+
+.server-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.server-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.server-name {
+  font-weight: 600;
+}
+
+.server-transport {
+  font-size: 0.8em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--accent-color) 30%, var(--border-color));
+}
+
+.server-status {
+  font-size: 0.8em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.status-connected {
+  color: var(--success-color);
+  border-color: color-mix(in srgb, var(--success-color) 40%, var(--border-color));
+}
+
+.status-connecting {
+  color: var(--warning-color);
+  border-color: color-mix(in srgb, var(--warning-color) 40%, var(--border-color));
+}
+
+.status-error {
+  color: var(--danger-color);
+  border-color: color-mix(in srgb, var(--danger-color) 40%, var(--border-color));
+}
+
+.status-disconnected,
+.status-disabled {
+  color: var(--text-muted);
+}
+
+.server-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+
+.server-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 160px;
+}
+
+.server-error {
+  margin-top: 4px;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.empty-state {
+  color: var(--text-secondary);
+  padding: 12px 4px;
+}
+
+@media (max-width: 840px) {
+  .config-inline,
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .server-row {
+    flex-direction: column;
+  }
+
+  .server-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}

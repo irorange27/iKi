@@ -36,6 +36,7 @@ import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
 import type { ChatExperimentalContext } from '../chat/intervention_policy';
+import type { AgentRun, AgentRunTrace, AgentRunTree } from './agent_run';
 
 export type ProviderInput = Partial<Provider> &
   Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
@@ -193,6 +194,11 @@ export interface ElectronApi {
       create: (message: ChatMessageInput) => Promise<ChatMessage | null>;
       update: (id: string, message: ChatMessageInput) => Promise<unknown>;
       delete: (id: string) => Promise<unknown>;
+    };
+    runs: {
+      list: (threadId: string) => Promise<AgentRun[]>;
+      getTrace: (runId: string) => Promise<AgentRunTrace | null>;
+      getTree: (rootRunId: string) => Promise<AgentRunTree>;
     };
     usage: {
       summary: (period?: ChatUsagePeriod) => Promise<ChatUsageSummary>;
