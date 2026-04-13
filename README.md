@@ -47,6 +47,11 @@ A local agent pet for AI provider orchestration.
   delete user-managed `SKILL.md` files under the Personal skills root without needing workspace
   hacks; destructive skill changes remain explicitly approval-gated.
 
+- First-class proactive-task management tools so iKi can create, inspect, update, and delete
+  recurring reminders/watchers directly from chat, with new chat-created tasks defaulting to the
+  current thread and current provider/model identity instead of requiring a manual trip through
+  Settings.
+
 - A user-editable local `brain/` markdown folder under the app user-data directory
   (`iki.md`, `owner.md`) so assistant baseline notes stay local and
   inspectable; those files complement, but do not replace, the typed continuity model.

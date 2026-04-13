@@ -3,10 +3,14 @@ import { z } from 'zod';
 import {
   AgentToolInputSchemaUi,
   AgentToolOutputSchema,
+  DeleteProactiveTaskInputSchemaUi,
+  DeleteProactiveTaskOutputSchema,
   DeletePersonalSkillInputSchemaUi,
   DeletePersonalSkillOutputSchema,
   TodoToolInputSchemaUi,
   TodoToolOutputSchema,
+  ListProactiveTasksInputSchemaUi,
+  ListProactiveTasksOutputSchema,
   DeleteTodoListInputSchemaUi,
   DeleteTodoListOutputSchema,
   DeleteFileInputSchemaUi,
@@ -25,6 +29,8 @@ import {
   ListDirOutputSchema,
   ReadPersonalSkillInputSchemaUi,
   ReadPersonalSkillOutputSchema,
+  ReadProactiveTaskInputSchemaUi,
+  ReadProactiveTaskOutputSchema,
   ReadTodoListInputSchemaUi,
   ReadTodoListOutputSchema,
   ReadFileInputSchemaUi,
@@ -33,6 +39,8 @@ import {
   ShellToolOutputSchema,
   WebToolInputSchemaUi,
   WebToolOutputSchema,
+  WriteProactiveTaskInputSchemaUi,
+  WriteProactiveTaskOutputSchema,
   WritePersonalSkillInputSchemaUi,
   WritePersonalSkillOutputSchema,
   WriteTodoListInputSchemaUi,
@@ -62,6 +70,10 @@ export type ListTodoListsToolInput = z.infer<typeof ListTodoListsInputSchemaUi>;
 export type ReadTodoListToolInput = z.infer<typeof ReadTodoListInputSchemaUi>;
 export type WriteTodoListToolInput = z.infer<typeof WriteTodoListInputSchemaUi>;
 export type DeleteTodoListToolInput = z.infer<typeof DeleteTodoListInputSchemaUi>;
+export type ListProactiveTasksToolInput = z.infer<typeof ListProactiveTasksInputSchemaUi>;
+export type ReadProactiveTaskToolInput = z.infer<typeof ReadProactiveTaskInputSchemaUi>;
+export type WriteProactiveTaskToolInput = z.infer<typeof WriteProactiveTaskInputSchemaUi>;
+export type DeleteProactiveTaskToolInput = z.infer<typeof DeleteProactiveTaskInputSchemaUi>;
 
 export type WebToolOutput = z.infer<typeof WebToolOutputSchema>;
 export type FetchToolOutput = z.infer<typeof FetchToolOutputSchema>;
@@ -82,6 +94,10 @@ export type ListTodoListsToolOutput = z.infer<typeof ListTodoListsOutputSchema>;
 export type ReadTodoListToolOutput = z.infer<typeof ReadTodoListOutputSchema>;
 export type WriteTodoListToolOutput = z.infer<typeof WriteTodoListOutputSchema>;
 export type DeleteTodoListToolOutput = z.infer<typeof DeleteTodoListOutputSchema>;
+export type ListProactiveTasksToolOutput = z.infer<typeof ListProactiveTasksOutputSchema>;
+export type ReadProactiveTaskToolOutput = z.infer<typeof ReadProactiveTaskOutputSchema>;
+export type WriteProactiveTaskToolOutput = z.infer<typeof WriteProactiveTaskOutputSchema>;
+export type DeleteProactiveTaskToolOutput = z.infer<typeof DeleteProactiveTaskOutputSchema>;
 
 type ToolKind =
   | 'web'
@@ -102,7 +118,11 @@ type ToolKind =
   | 'list_todo_lists'
   | 'read_todo_list'
   | 'write_todo_list'
-  | 'delete_todo_list';
+  | 'delete_todo_list'
+  | 'list_proactive_tasks'
+  | 'read_proactive_task'
+  | 'write_proactive_task'
+  | 'delete_proactive_task';
 
 export type ParsedToolInput =
   | { kind: 'web'; input: WebToolInput }
@@ -124,6 +144,10 @@ export type ParsedToolInput =
   | { kind: 'read_todo_list'; input: ReadTodoListToolInput }
   | { kind: 'write_todo_list'; input: WriteTodoListToolInput }
   | { kind: 'delete_todo_list'; input: DeleteTodoListToolInput }
+  | { kind: 'list_proactive_tasks'; input: ListProactiveTasksToolInput }
+  | { kind: 'read_proactive_task'; input: ReadProactiveTaskToolInput }
+  | { kind: 'write_proactive_task'; input: WriteProactiveTaskToolInput }
+  | { kind: 'delete_proactive_task'; input: DeleteProactiveTaskToolInput }
   | { kind: 'unknown'; input: unknown };
 
 export type ParsedToolOutput =
@@ -146,6 +170,10 @@ export type ParsedToolOutput =
   | { kind: 'read_todo_list'; output: ReadTodoListToolOutput }
   | { kind: 'write_todo_list'; output: WriteTodoListToolOutput }
   | { kind: 'delete_todo_list'; output: DeleteTodoListToolOutput }
+  | { kind: 'list_proactive_tasks'; output: ListProactiveTasksToolOutput }
+  | { kind: 'read_proactive_task'; output: ReadProactiveTaskToolOutput }
+  | { kind: 'write_proactive_task'; output: WriteProactiveTaskToolOutput }
+  | { kind: 'delete_proactive_task'; output: DeleteProactiveTaskToolOutput }
   | { kind: 'unknown'; output: unknown };
 
 const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny }> = {
@@ -180,6 +208,22 @@ const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny
   read_todo_list: { input: ReadTodoListInputSchemaUi, output: ReadTodoListOutputSchema },
   write_todo_list: { input: WriteTodoListInputSchemaUi, output: WriteTodoListOutputSchema },
   delete_todo_list: { input: DeleteTodoListInputSchemaUi, output: DeleteTodoListOutputSchema },
+  list_proactive_tasks: {
+    input: ListProactiveTasksInputSchemaUi,
+    output: ListProactiveTasksOutputSchema,
+  },
+  read_proactive_task: {
+    input: ReadProactiveTaskInputSchemaUi,
+    output: ReadProactiveTaskOutputSchema,
+  },
+  write_proactive_task: {
+    input: WriteProactiveTaskInputSchemaUi,
+    output: WriteProactiveTaskOutputSchema,
+  },
+  delete_proactive_task: {
+    input: DeleteProactiveTaskInputSchemaUi,
+    output: DeleteProactiveTaskOutputSchema,
+  },
 };
 
 const TOOL_ALIASES: Record<string, ToolKind> = {

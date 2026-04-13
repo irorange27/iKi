@@ -52,7 +52,7 @@
         <label class="input-label">
           <span>{{ t('common.provider') }}</span>
           <SettingsSelect
-            :model-value="taskForm.provider_type"
+            :model-value="taskForm.provider_id"
             :options="taskProviderOptions"
             :disabled="taskProviderOptions.length === 0"
             :placeholder="t('settings.tasks.selectProvider')"

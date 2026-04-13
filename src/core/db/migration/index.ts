@@ -35,6 +35,7 @@ import { migration as migration033AddChatToolApprovalProviderId } from './033_ad
 import { migration as migration034AddChatToolApprovalMaxInputTokens } from './034_add_chat_tool_approval_max_input_tokens';
 import { migration as migration035AddAgentRunTables } from './035_add_agent_run_tables';
 import { migration as migration036AddChatToolApprovalRunId } from './036_add_chat_tool_approval_run_id';
+import { migration as migration037AddProactiveTaskProviderId } from './037_add_proactive_task_provider_id';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -74,6 +75,7 @@ export const registeredMigrations = [
   migration034AddChatToolApprovalMaxInputTokens,
   migration035AddAgentRunTables,
   migration036AddChatToolApprovalRunId,
+  migration037AddProactiveTaskProviderId,
   // Add more migrations here as needed
 ];
 

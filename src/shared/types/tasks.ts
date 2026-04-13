@@ -2,6 +2,8 @@ export type ProactiveTaskScheduleType = 'interval' | 'cron';
 export type ProactiveTaskStatus = 'idle' | 'running' | 'success' | 'error';
 export type ProactiveTaskToolMode = 'auto' | 'manual' | 'disabled';
 
+export const DEFAULT_PROACTIVE_TASK_LIST_LIMIT = 20;
+export const MAX_PROACTIVE_TASK_LIST_LIMIT = 100;
 export const SAFE_PROACTIVE_TASK_TOOLS = ['web', 'fetch', 'read_file', 'list_dir'] as const;
 export type SafeProactiveTaskTool = (typeof SAFE_PROACTIVE_TASK_TOOLS)[number];
 
@@ -74,6 +76,7 @@ export interface ProactiveTask {
   schedule_timezone?: string | null;
   enabled: boolean;
   provider_type: string;
+  provider_id?: string | null;
   model: string;
   tool_mode: ProactiveTaskToolMode;
   tools?: string | null; // JSON string, default null

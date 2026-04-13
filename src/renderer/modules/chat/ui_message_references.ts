@@ -3,6 +3,7 @@ import type {
   SkillUsageEntry,
 } from '../../../shared/chat/message_parts';
 import { isAffectLabel, type AffectLabel } from '../../../shared/emotion/affect';
+import { normalizeModelCapabilityLimits } from '../../../shared/utils/provider_models';
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import { translate } from '../../i18n';
 
@@ -470,19 +471,18 @@ export const buildTokenUsageIndicator = (
   }
 
   const usedTokens = Math.max(0, Math.trunc(summary.inputTokens));
-  const budgetTokens =
-    summary.maxInputTokens !== null && Number.isFinite(summary.maxInputTokens)
-      ? Math.max(0, Math.trunc(summary.maxInputTokens))
-      : null;
+  const budgetTokens = normalizeModelCapabilityLimits({
+    maxInputTokens: summary.maxInputTokens,
+  }).maxInputTokens;
   const percent =
-    budgetTokens !== null && budgetTokens > 0
+    budgetTokens > 0
       ? Math.min(999, Math.max(0, Math.round((usedTokens / budgetTokens) * 100)))
       : null;
   const percentLabel = percent === null ? '' : `${percent}%`;
   const tokenLabel = formatTokenCount(usedTokens);
 
   const tooltipLines = [
-    budgetTokens !== null && budgetTokens > 0
+    budgetTokens > 0
       ? translate('chat.contextUsage.headerWithBudget', {
           used: tokenLabel,
           budget: budgetTokens.toLocaleString(),

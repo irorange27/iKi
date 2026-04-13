@@ -35,6 +35,10 @@ const TEST_TOOL_NAMES = [
   'read_todo_list',
   'write_todo_list',
   'delete_todo_list',
+  'list_proactive_tasks',
+  'read_proactive_task',
+  'write_proactive_task',
+  'delete_proactive_task',
   'write_personal_skill',
 ];
 
@@ -182,6 +186,25 @@ describe('resolveToolNames', () => {
       'read_todo_list',
       'write_todo_list',
       'delete_todo_list',
+    ]);
+  });
+
+  it('includes proactive task management tools in auto mode for task-management turns', async () => {
+    registerTool({ name: 'list_proactive_tasks', source: { kind: 'builtin' } });
+    registerTool({ name: 'read_proactive_task', source: { kind: 'builtin' } });
+    registerTool({ name: 'write_proactive_task', source: { kind: 'builtin' } });
+    registerTool({ name: 'delete_proactive_task', source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual([
+      'list_proactive_tasks',
+      'read_proactive_task',
+      'write_proactive_task',
+      'delete_proactive_task',
     ]);
   });
 

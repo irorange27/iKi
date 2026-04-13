@@ -1,6 +1,10 @@
 import { z } from 'zod';
+import { DEFAULT_PROACTIVE_TASK_LIST_LIMIT, SAFE_PROACTIVE_TASK_TOOLS } from '../../shared/types/tasks';
 import { MAX_EXECUTION_TASK_PLAN_ITEMS } from '../../shared/types/task_plan';
 
+// Renderer tool-payload parsing imports this module via shared/chat/tool_payloads.
+// Keep this file limited to shared/browser-safe dependencies so the renderer bundle never pulls
+// Node-only core runtime modules into Vite.
 export const DEFAULT_SEARCH_RESULT_LIMIT = 5;
 export const MAX_SEARCH_RESULT_LIMIT = 10;
 export const DEFAULT_FETCH_MAX_CHARS = 12000;
@@ -108,6 +112,11 @@ const todoListLookupInputFields = {
   title: z.string().describe('Todo list title'),
 };
 
+const proactiveTaskLookupInputFields = {
+  id: z.string().describe('Proactive task id'),
+  name: z.string().describe('Exact proactive task name'),
+};
+
 const todoListItemInputSchema = z.object({
   content: z.string().min(1).describe('Todo item text'),
   notes: z.string().describe('Optional notes for the todo item').optional(),
@@ -119,6 +128,58 @@ const todoPlanItemInputSchema = z.object({
   text: z.string().min(1).describe('Todo item text'),
   status: z.enum(['pending', 'in_progress', 'completed']).describe('Todo item status').optional(),
 });
+
+const proactiveTaskSafeToolSchema = z.enum(SAFE_PROACTIVE_TASK_TOOLS);
+
+const proactiveTaskScheduleBaseFields = {
+  timezone: z
+    .string()
+    .trim()
+    .describe('Optional IANA timezone such as "Asia/Shanghai"')
+    .optional(),
+};
+
+const proactiveTaskScheduleInputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('interval'),
+    intervalMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .describe('Run every N minutes'),
+  }),
+  z.object({
+    kind: z.literal('cron'),
+    cronExpression: z
+      .string()
+      .trim()
+      .min(1)
+      .describe('Five-field cron expression'),
+    ...proactiveTaskScheduleBaseFields,
+  }),
+  z.object({
+    kind: z.literal('daily'),
+    time: z
+      .string()
+      .trim()
+      .regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Expected HH:MM in 24-hour time')
+      .describe('Local wall-clock time in HH:MM 24-hour format'),
+    ...proactiveTaskScheduleBaseFields,
+  }),
+  z.object({
+    kind: z.literal('weekly'),
+    daysOfWeek: z
+      .array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']))
+      .min(1)
+      .describe('One or more weekdays for the recurring run'),
+    time: z
+      .string()
+      .trim()
+      .regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Expected HH:MM in 24-hour time')
+      .describe('Local wall-clock time in HH:MM 24-hour format'),
+    ...proactiveTaskScheduleBaseFields,
+  }),
+]);
 
 const agentUsedToolOutputSchema = z
   .object({
@@ -389,6 +450,215 @@ export const DeleteTodoListInputSchemaUi = z
   .object({
     id: z.string().optional(),
     title: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const ListProactiveTasksInputSchema = z.object({
+  query: z.string().trim().describe('Optional search text for matching proactive tasks').optional(),
+  limit: z
+    .number()
+    .int()
+    .describe('Maximum number of proactive tasks to return')
+    .optional()
+    .default(DEFAULT_PROACTIVE_TASK_LIST_LIMIT),
+  description: toolCallDescriptionField,
+});
+
+export const ListProactiveTasksInputSchemaUi = z
+  .object({
+    query: z.string().optional(),
+    limit: z.number().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const ReadProactiveTaskInputSchema = z
+  .object({
+    id: proactiveTaskLookupInputFields.id.optional(),
+    name: proactiveTaskLookupInputFields.name.optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasName = typeof value.name === 'string' && value.name.trim().length > 0;
+    if (!hasId && !hasName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or name is required',
+      });
+    }
+  });
+
+export const ReadProactiveTaskInputSchemaUi = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const WriteProactiveTaskInputSchema = z
+  .object({
+    action: z
+      .enum(['create', 'update'])
+      .describe('Create a new proactive task or update an existing one'),
+    id: proactiveTaskLookupInputFields.id.optional(),
+    currentName: proactiveTaskLookupInputFields.name
+      .describe('Exact existing task name when updating by name')
+      .optional(),
+    name: proactiveTaskLookupInputFields.name
+      .describe('Display name for the task')
+      .optional(),
+    prompt: z
+      .string()
+      .trim()
+      .describe('Instruction the scheduled task should execute on each run')
+      .optional(),
+    schedule: proactiveTaskScheduleInputSchema.describe(
+      'Recurring schedule. Use daily/weekly presets instead of raw cron when possible.'
+    ).optional(),
+    enabled: z.boolean().describe('Whether the task should be enabled after this write').optional(),
+    notify: z
+      .boolean()
+      .describe('Whether the desktop app should show completion/failure notifications')
+      .optional(),
+    delivery: z
+      .enum(['current_thread', 'dedicated_thread', 'specific_thread'])
+      .describe('Where scheduled messages should be posted')
+      .optional(),
+    threadId: z
+      .string()
+      .trim()
+      .describe('Explicit thread id when delivery is specific_thread')
+      .optional(),
+    providerType: z
+      .string()
+      .trim()
+      .describe('Optional provider type override; defaults to the current chat model')
+      .optional(),
+    providerId: z
+      .string()
+      .trim()
+      .describe('Optional provider id override; defaults to the current chat provider instance')
+      .optional(),
+    model: z
+      .string()
+      .trim()
+      .describe('Optional model override; defaults to the current chat model')
+      .optional(),
+    toolMode: z
+      .enum(['auto', 'manual', 'disabled'])
+      .describe('How the scheduled task may use safe tools when it runs')
+      .optional(),
+    tools: z
+      .array(proactiveTaskSafeToolSchema)
+      .describe('Safe tool allowlist when toolMode is manual')
+      .optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasCurrentName = typeof value.currentName === 'string' && value.currentName.trim().length > 0;
+    const hasName = typeof value.name === 'string' && value.name.trim().length > 0;
+    const hasPrompt = typeof value.prompt === 'string' && value.prompt.trim().length > 0;
+
+    if (value.action === 'create') {
+      if (!hasName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['name'],
+          message: 'name is required when action=create',
+        });
+      }
+      if (!hasPrompt) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['prompt'],
+          message: 'prompt is required when action=create',
+        });
+      }
+      if (!value.schedule) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['schedule'],
+          message: 'schedule is required when action=create',
+        });
+      }
+    }
+
+    if (value.action === 'update' && !hasId && !hasCurrentName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or currentName is required when action=update',
+      });
+    }
+
+    if (value.delivery === 'specific_thread') {
+      const hasThreadId = typeof value.threadId === 'string' && value.threadId.trim().length > 0;
+      if (!hasThreadId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['threadId'],
+          message: 'threadId is required when delivery=specific_thread',
+        });
+      }
+    }
+
+    if (value.toolMode === 'manual' && (!value.tools || value.tools.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['tools'],
+        message: 'tools are required when toolMode=manual',
+      });
+    }
+  });
+
+export const WriteProactiveTaskInputSchemaUi = z
+  .object({
+    action: z.enum(['create', 'update']).optional(),
+    id: z.string().optional(),
+    currentName: z.string().optional(),
+    name: z.string().optional(),
+    prompt: z.string().optional(),
+    schedule: proactiveTaskScheduleInputSchema.optional(),
+    enabled: z.boolean().optional(),
+    notify: z.boolean().optional(),
+    delivery: z.enum(['current_thread', 'dedicated_thread', 'specific_thread']).optional(),
+    threadId: z.string().optional(),
+    providerType: z.string().optional(),
+    providerId: z.string().optional(),
+    model: z.string().optional(),
+    toolMode: z.enum(['auto', 'manual', 'disabled']).optional(),
+    tools: z.array(proactiveTaskSafeToolSchema).optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const DeleteProactiveTaskInputSchema = z
+  .object({
+    id: proactiveTaskLookupInputFields.id.optional(),
+    name: proactiveTaskLookupInputFields.name.optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasName = typeof value.name === 'string' && value.name.trim().length > 0;
+    if (!hasId && !hasName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or name is required',
+      });
+    }
+  });
+
+export const DeleteProactiveTaskInputSchemaUi = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
     description: toolCallDescriptionField,
   })
   .passthrough();
@@ -750,5 +1020,62 @@ export const DeleteTodoListOutputSchema = z
     deleted: z.boolean().optional(),
     listId: z.string().nullable().optional(),
     title: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const ProactiveTaskRecordOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    prompt: z.string().optional(),
+    schedule_type: z.enum(['interval', 'cron']).optional(),
+    interval_minutes: z.number().optional(),
+    cron_expression: z.string().nullable().optional(),
+    schedule_timezone: z.string().nullable().optional(),
+    schedule_summary: z.string().optional(),
+    enabled: z.boolean().optional(),
+    provider_type: z.string().optional(),
+    provider_id: z.string().nullable().optional(),
+    model: z.string().optional(),
+    tool_mode: z.enum(['auto', 'manual', 'disabled']).optional(),
+    tools: z.array(z.string()).optional(),
+    tool_summary: z.string().optional(),
+    thread_id: z.string().nullable().optional(),
+    notify: z.boolean().optional(),
+    last_run_at: z.string().nullable().optional(),
+    next_run_at: z.string().nullable().optional(),
+    last_status: z.enum(['idle', 'running', 'success', 'error']).nullable().optional(),
+    last_output: z.string().nullable().optional(),
+    last_error: z.string().nullable().optional(),
+    created_at: z.string().optional(),
+    updated_at: z.string().optional(),
+  })
+  .passthrough();
+
+export const ListProactiveTasksOutputSchema = z
+  .object({
+    tasks: z.array(ProactiveTaskRecordOutputSchema).optional(),
+    resultCount: z.number().optional(),
+  })
+  .passthrough();
+
+export const ReadProactiveTaskOutputSchema = z
+  .object({
+    task: ProactiveTaskRecordOutputSchema.nullable().optional(),
+  })
+  .passthrough();
+
+export const WriteProactiveTaskOutputSchema = z
+  .object({
+    action: z.enum(['created', 'updated']).optional(),
+    task: ProactiveTaskRecordOutputSchema.optional(),
+  })
+  .passthrough();
+
+export const DeleteProactiveTaskOutputSchema = z
+  .object({
+    deleted: z.boolean().optional(),
+    taskId: z.string().nullable().optional(),
+    taskName: z.string().nullable().optional(),
   })
   .passthrough();

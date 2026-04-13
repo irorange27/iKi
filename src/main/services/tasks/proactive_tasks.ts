@@ -3,6 +3,7 @@ import { Notification, app } from 'electron';
 import * as tasksDb from '../../../core/db/tasks';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import { createLogger } from '../../../core/logger';
+import { clampIntervalMinutes, computeNextRunAt } from '../../../core/tasks/task_schedule';
 import { deliverBridgeThreadMessage } from '../../../daemon/bridge_dispatch';
 import {
   filterSafeProactiveTaskTools,
@@ -16,7 +17,6 @@ import { chatService } from '../chat/chat_service';
 import { companionService } from '../companion/companion_service';
 import { getErrorMessage } from '../../utils/errors';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
-import { clampIntervalMinutes, computeNextRunAt } from './task_schedule';
 
 const SCHEDULER_TICK_MS = 30_000;
 const proactiveTaskLogger = createLogger({ module: 'proactive_tasks' });
@@ -134,6 +134,7 @@ const ensureTaskThread = async (task: {
   id: string;
   name: string;
   model: string;
+  provider_id?: string | null;
   thread_id?: string | null;
   prompt: string;
   schedule_type?: string;
@@ -226,6 +227,7 @@ export const runProactiveTask = async (
       id: task.id,
       name: task.name,
       model: task.model,
+      provider_id: task.provider_id ?? null,
       thread_id: task.thread_id ?? null,
       prompt: task.prompt,
       schedule_type: task.schedule_type,
@@ -241,6 +243,7 @@ export const runProactiveTask = async (
 
     const result = await chatService.send({
       providerType: task.provider_type,
+      providerId: task.provider_id ?? undefined,
       model: task.model,
       messages: [
         { role: 'system', content: PROACTIVE_TASK_AGENT_SYSTEM_PROMPT },

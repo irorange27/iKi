@@ -9,6 +9,7 @@ import type {
   ProviderModelDescriptor,
   ProviderModelDiscoveryOverride,
 } from '../../../shared/types/provider';
+import { ensureModelCapability } from '../../../shared/utils/provider_models';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -26,17 +27,18 @@ export const createChatStreamingModels = () => {
 
     return await Promise.all(
       normalizedIds.map(async modelId => {
-        const capability = await llmFactory.resolveModelCapability(
+        const resolvedCapability = await llmFactory.resolveModelCapability(
           providerType,
           modelId,
           providerId
         );
+        const capability = ensureModelCapability(providerType, modelId, resolvedCapability);
 
         return {
           id: modelId,
           displayName: capability?.displayName || modelId,
-          contextWindow: capability?.contextWindow ?? null,
-          maxInputTokens: capability?.maxInputTokens ?? capability?.contextWindow ?? null,
+          contextWindow: capability.contextWindow,
+          maxInputTokens: capability.maxInputTokens,
           maxOutputTokens: capability?.maxOutputTokens ?? null,
           ...(capability?.supportsToolCalls !== null &&
           capability?.supportsToolCalls !== undefined
@@ -49,7 +51,7 @@ export const createChatStreamingModels = () => {
           ...(capability?.supportsVision !== null && capability?.supportsVision !== undefined
             ? { supportsVision: capability.supportsVision }
             : {}),
-          ...(capability?.source ? { source: capability.source } : {}),
+          ...(capability.source !== 'default' ? { source: capability.source } : {}),
         } satisfies ProviderModelDescriptor;
       })
     );
@@ -69,37 +71,44 @@ export const createChatStreamingModels = () => {
         );
         return await Promise.all(
           acpDescriptors.map(async descriptor => {
-            const capability = await llmFactory.resolveModelCapability(
+            const resolvedCapability = await llmFactory.resolveModelCapability(
               providerType,
               descriptor.id,
               providerId
             );
+            const capability = ensureModelCapability(providerType, descriptor.id, resolvedCapability, {
+              contextWindow: descriptor.contextWindow ?? null,
+              maxInputTokens: descriptor.maxInputTokens ?? null,
+              maxOutputTokens: descriptor.maxOutputTokens ?? null,
+            });
+            const descriptorSource =
+              capability.source !== 'default'
+                ? capability.source
+                : descriptor.source;
+            const displayName =
+              capability.source === 'default'
+                ? descriptor.displayName || descriptor.id
+                : capability.displayName || descriptor.displayName || descriptor.id;
 
             return {
               ...descriptor,
-              displayName: capability?.displayName || descriptor.displayName || descriptor.id,
-              contextWindow: capability?.contextWindow ?? descriptor.contextWindow ?? null,
-              maxInputTokens:
-                capability?.maxInputTokens ??
-                capability?.contextWindow ??
-                descriptor.maxInputTokens ??
-                descriptor.contextWindow ??
-                null,
-              maxOutputTokens: capability?.maxOutputTokens ?? descriptor.maxOutputTokens ?? null,
+              displayName,
+              contextWindow: capability.contextWindow,
+              maxInputTokens: capability.maxInputTokens,
+              maxOutputTokens: capability.maxOutputTokens ?? null,
               supportsToolCalls:
-                capability?.supportsToolCalls ?? descriptor.supportsToolCalls ?? true,
-              ...(capability?.supportsReasoning !== null &&
-              capability?.supportsReasoning !== undefined
+                capability.supportsToolCalls ?? descriptor.supportsToolCalls ?? true,
+              ...(capability.supportsReasoning !== null && capability.supportsReasoning !== undefined
                 ? { supportsReasoning: capability.supportsReasoning }
                 : descriptor.supportsReasoning !== undefined
                   ? { supportsReasoning: descriptor.supportsReasoning }
                   : {}),
-              ...(capability?.supportsVision !== null && capability?.supportsVision !== undefined
+              ...(capability.supportsVision !== null && capability.supportsVision !== undefined
                 ? { supportsVision: capability.supportsVision }
                 : descriptor.supportsVision !== undefined
                   ? { supportsVision: descriptor.supportsVision }
                   : {}),
-              source: capability?.source || descriptor.source || 'provider',
+              ...(descriptorSource ? { source: descriptorSource } : {}),
             } satisfies ProviderModelDescriptor;
           })
         );

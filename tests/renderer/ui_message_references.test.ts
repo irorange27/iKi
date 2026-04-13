@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '../../src/shared/utils/provider_models';
 
 import {
   getAffectReferenceSummary,
@@ -411,6 +412,33 @@ describe('ui_message_references', () => {
     expect(indicator?.tooltip).toContain('Output tokens: 32 tok');
     expect(indicator?.tooltip).toContain('Total tokens: 672 tok');
     expect(indicator?.tooltip).toContain('Model: gpt-5-mini');
+  });
+
+  it('falls back to the shared 128k default when token usage metadata omits a budget', () => {
+    const indicator = buildTokenUsageIndicator({
+      inputTokens: 640,
+      outputTokens: null,
+      totalTokens: 640,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      reasoningTokens: null,
+      estimatedCostUsd: null,
+      maxInputTokens: null,
+      maxOutputTokens: null,
+      model: 'gpt-unknown',
+      providerType: 'openai',
+      providerId: '',
+    });
+
+    expect(indicator).toEqual(
+      expect.objectContaining({
+        usedTokens: 640,
+        budgetTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+        percent: 1,
+        percentLabel: '1%',
+      })
+    );
+    expect(indicator?.tooltip).toContain('Context usage: 640 tok / 128,000 tok (1%)');
   });
 
   it('does not treat context-only metadata as an expandable reference summary', () => {

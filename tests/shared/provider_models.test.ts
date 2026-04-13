@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createModelCapabilityFromProviderModelOptions,
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  ensureModelCapability,
   getModelsDevProviderKey,
   getProviderModelOptions,
   listModelsDevProviderModels,
   lookupModelsDevModelCapability,
   mergeModelCapability,
+  normalizeModelCapabilityLimits,
   parseModelList,
   parseProviderModelOptionsMap,
   serializeProviderModelOptionsMap,
@@ -218,6 +221,27 @@ describe('provider_models helpers', () => {
       supportsToolCalls: true,
       supportsReasoning: true,
       source: 'provider',
+    });
+  });
+
+  it('normalizes missing capability limits to the shared 128k default', () => {
+    expect(normalizeModelCapabilityLimits()).toEqual({
+      contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+      maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+      maxOutputTokens: null,
+    });
+
+    expect(ensureModelCapability('openai', 'gpt-unknown')).toEqual({
+      providerType: 'openai',
+      providerKey: 'openai',
+      modelId: 'gpt-unknown',
+      displayName: 'gpt-unknown',
+      contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+      maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+      maxOutputTokens: null,
+      supportsToolCalls: null,
+      supportsReasoning: null,
+      source: 'default',
     });
   });
 });

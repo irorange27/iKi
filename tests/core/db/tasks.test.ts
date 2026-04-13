@@ -47,7 +47,8 @@ describe('addProactiveTask', () => {
     expect(params.cron_expression).toBeNull();
     expect(params.schedule_timezone).toBeNull();
     expect(params.tool_mode).toBe('auto');
-    expect(params.enabled).toBe(0);
+    expect(params.enabled).toBe(1);
+    expect(params.provider_id).toBeNull();
     expect(params.notify).toBe(1);
     expect(params.last_status).toBe('idle');
     expect(params.next_run_at).toBe('2026-03-18T09:00:00.000Z');

@@ -51,6 +51,64 @@ export const createMainWindow = (): BrowserWindow => {
     autoOpenEnv: process.env.IKI_AUTO_OPEN_DEVTOOLS,
   });
 
+  mainWindow.webContents.on('console-message', details => {
+    const consoleLevel =
+      details.level === 'error'
+        ? 'error'
+        : details.level === 'warning'
+          ? 'warn'
+          : 'info';
+
+    windowLogger.event({
+      level: consoleLevel,
+      event: 'window.console',
+      message: 'Renderer emitted a console message',
+      data: {
+        window_kind: 'main',
+        console_level: details.level,
+        console_message: details.message,
+        source_id: details.sourceId || null,
+        line: typeof details.lineNumber === 'number' ? details.lineNumber : null,
+      },
+    });
+  });
+
+  mainWindow.webContents.on(
+    'render-process-gone',
+    (_event, details: { reason: string; exitCode: number }) => {
+      windowLogger.event({
+        level: 'error',
+        event: 'window.render_process_gone',
+        outcome: 'failed',
+        message: 'Renderer process exited unexpectedly',
+        data: {
+          window_kind: 'main',
+          reason: details.reason,
+          exit_code: details.exitCode,
+        },
+      });
+    }
+  );
+
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      windowLogger.event({
+        level: 'error',
+        event: 'window.load_failed',
+        outcome: 'failed',
+        message: 'Main window failed to load renderer content',
+        data: {
+          window_kind: 'main',
+          error_code: errorCode,
+          error_description: errorDescription,
+          validated_url: validatedURL,
+          is_main_frame: isMainFrame,
+        },
+      });
+    }
+  );
+
   windowLogger.event({
     level: 'info',
     event: 'window.created',

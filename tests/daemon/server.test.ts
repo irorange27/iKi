@@ -220,6 +220,10 @@ const {
     'read_todo_list',
     'write_todo_list',
     'delete_todo_list',
+    'list_proactive_tasks',
+    'read_proactive_task',
+    'write_proactive_task',
+    'delete_proactive_task',
     'mcp:*',
   ];
   const getDefaultAllowedToolsMock = vi.fn(() => [...defaultAllowedTools]);
@@ -640,6 +644,10 @@ describe('daemon server', () => {
         'read_todo_list',
         'write_todo_list',
         'delete_todo_list',
+        'list_proactive_tasks',
+        'read_proactive_task',
+        'write_proactive_task',
+        'delete_proactive_task',
         'mcp:*',
       ],
     });

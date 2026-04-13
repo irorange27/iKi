@@ -1,27 +1,43 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   AgentToolInputSchema,
   DeletePersonalSkillInputSchema,
+  DeleteProactiveTaskInputSchema,
   TodoToolInputSchema,
   DeleteTodoListInputSchema,
   DeleteFileInputSchema,
   EditFileInputSchema,
   FetchToolInputSchema,
   ListPersonalSkillsInputSchema,
+  ListProactiveTasksInputSchema,
   ListTodoListsInputSchema,
   ListDirInputSchema,
   ReadPersonalSkillInputSchema,
+  ReadProactiveTaskInputSchema,
   ReadTodoListInputSchema,
   ReadFileInputSchema,
   ShellToolInputSchema,
   WebToolInputSchema,
+  WriteProactiveTaskInputSchema,
   WritePersonalSkillInputSchema,
   WriteTodoListInputSchema,
   WriteFileInputSchema,
 } from '../../../src/core/tools/schemas';
 
 describe('tool input schemas', () => {
+  it('keeps tool schemas browser-safe for renderer payload parsing', () => {
+    const source = readFileSync(new URL('../../../src/core/tools/schemas.ts', import.meta.url), 'utf8');
+    const importSpecifiers = Array.from(source.matchAll(/from ['"]([^'"]+)['"]/g), match => match[1]);
+
+    expect(importSpecifiers.length).toBeGreaterThan(0);
+    expect(importSpecifiers.every(specifier => specifier === 'zod' || specifier.startsWith('../../shared/'))).toBe(
+      true
+    );
+  });
+
   it('preserves tool-call description across built-in tools', () => {
     expect(
       WebToolInputSchema.parse({
@@ -152,6 +168,41 @@ describe('tool input schemas', () => {
         description: 'Remove a stale checklist the user no longer wants.',
       }).description
     ).toBe('Remove a stale checklist the user no longer wants.');
+
+    expect(
+      ListProactiveTasksInputSchema.parse({
+        query: 'gold',
+        description: 'Find the recurring market watchers.',
+      }).description
+    ).toBe('Find the recurring market watchers.');
+
+    expect(
+      ReadProactiveTaskInputSchema.parse({
+        name: 'Daily Gold',
+        description: 'Inspect the current recurring task before updating it.',
+      }).description
+    ).toBe('Inspect the current recurring task before updating it.');
+
+    expect(
+      WriteProactiveTaskInputSchema.parse({
+        action: 'create',
+        name: 'Daily Gold',
+        prompt: 'Summarize the latest gold price in USD.',
+        schedule: {
+          kind: 'daily',
+          time: '09:00',
+          timezone: 'Asia/Shanghai',
+        },
+        description: 'Create the recurring market update task.',
+      }).description
+    ).toBe('Create the recurring market update task.');
+
+    expect(
+      DeleteProactiveTaskInputSchema.parse({
+        name: 'Daily Gold',
+        description: 'Remove the obsolete recurring task.',
+      }).description
+    ).toBe('Remove the obsolete recurring task.');
   });
 
   it('caps execution todo plans at five broad steps', () => {

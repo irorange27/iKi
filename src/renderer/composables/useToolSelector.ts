@@ -92,6 +92,14 @@ const getBuiltinToolOrder = (toolName: string): number => {
     delete_file: 14,
     shell: 20,
     agent: 21,
+    list_todo_lists: 50,
+    read_todo_list: 51,
+    write_todo_list: 52,
+    delete_todo_list: 53,
+    list_proactive_tasks: 60,
+    read_proactive_task: 61,
+    write_proactive_task: 62,
+    delete_proactive_task: 63,
   };
 
   return explicitOrder[toolName] ?? 100;

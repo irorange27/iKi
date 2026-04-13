@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '../../../src/shared/utils/provider_models';
 
 const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
@@ -544,6 +545,53 @@ describe('ChatInput', () => {
           contextWindow: 128000,
           maxInputTokens: 128000,
           maxOutputTokens: 16384,
+        },
+      })
+    );
+  });
+
+  it('falls back to the shared 128k context denominator when model metadata is unavailable', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, stream } = await mountChatInput({
+      providers: [provider],
+      props: {
+        latestTokenUsage: {
+          inputTokens: 1200,
+          outputTokens: 90,
+          totalTokens: 1290,
+          cacheReadTokens: null,
+          cacheWriteTokens: null,
+          reasoningTokens: null,
+          estimatedCostUsd: null,
+          maxInputTokens: null,
+          maxOutputTokens: null,
+          model: 'gpt-4.1',
+          providerType: 'openai',
+          providerId: 'openai',
+        },
+      },
+    });
+
+    expect(wrapper.find('.composer-context-value').text()).toBe('1%');
+
+    await wrapper.find('.chat-input-field').setValue('Use the default limit');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'openai',
+        providerId: 'openai',
+        model: 'gpt-4.1',
+        modelCapability: {
+          contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+          maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
         },
       })
     );

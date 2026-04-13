@@ -19,6 +19,7 @@ import type {
 } from '../../../shared/chat/intervention_policy';
 import type { AgentRunKind } from '../../../shared/types/agent_run';
 import type { SkillSummary } from '../../../shared/types/skill';
+import { ensureModelCapability } from '../../../shared/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './chat_context';
 import type { ChatMemory } from './chat_memory';
 import type { ChatInputMessage, ChatTransportMessage } from './chat_types';
@@ -203,18 +204,19 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
     }
   ): Promise<PreparedChatTurn> => {
     const modelMessages = await toModelInputMessages(options.messages);
-    const modelCapability = await llmFactory.resolveModelCapability(
+    const resolvedModelCapability = await llmFactory.resolveModelCapability(
       options.providerType,
       options.model,
       options.providerId
     );
-    const maxInputTokens =
-      options.modelCapability?.maxInputTokens ??
-      options.modelCapability?.contextWindow ??
-      modelCapability?.maxInputTokens ??
-      modelCapability?.contextWindow;
-    const maxOutputTokens =
-      options.modelCapability?.maxOutputTokens ?? modelCapability?.maxOutputTokens;
+    const modelCapability = ensureModelCapability(
+      options.providerType,
+      options.model,
+      resolvedModelCapability,
+      options.modelCapability
+    );
+    const maxInputTokens = modelCapability.maxInputTokens;
+    const maxOutputTokens = modelCapability.maxOutputTokens ?? undefined;
     const lastModelMessage = modelMessages[modelMessages.length - 1];
     const emotionConfig = getEmotionConfig();
     const experimentalAffectMode = getExperimentalAffectMode(options.experimentalContext);

@@ -21,6 +21,10 @@ const FALLBACK_DEFAULT_BUILTIN_TOOL_NAMES = [
   'read_todo_list',
   'write_todo_list',
   'delete_todo_list',
+  'list_proactive_tasks',
+  'read_proactive_task',
+  'write_proactive_task',
+  'delete_proactive_task',
 ];
 
 const normalizeStringArray = (input: unknown): string[] => {
@@ -59,6 +63,10 @@ const getBuiltinToolOrder = (toolName: string): number => {
     read_todo_list: 51,
     write_todo_list: 52,
     delete_todo_list: 53,
+    list_proactive_tasks: 60,
+    read_proactive_task: 61,
+    write_proactive_task: 62,
+    delete_proactive_task: 63,
   };
 
   return explicitOrder[toolName] ?? 100;

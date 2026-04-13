@@ -89,6 +89,21 @@ describe('parseToolInput', () => {
     expect(parsed.input.edits?.[0]?.newText).toBe('after');
     expect(parsed.input.edits?.[0]?.replaceAll).toBe(false);
   });
+
+  it('parses proactive task write inputs from JSON', () => {
+    const parsed = parseToolInput(
+      'write_proactive_task',
+      '{"action":"create","name":"Daily Gold","prompt":"Summarize gold price","schedule":{"kind":"daily","time":"09:00","timezone":"Asia/Shanghai"},"tools":["web","fetch"]}'
+    );
+
+    expect(parsed.kind).toBe('write_proactive_task');
+    if (parsed.kind !== 'write_proactive_task') {
+      throw new Error('Expected write_proactive_task payload');
+    }
+    expect(parsed.input.name).toBe('Daily Gold');
+    expect(parsed.input.schedule?.kind).toBe('daily');
+    expect(parsed.input.tools).toEqual(['web', 'fetch']);
+  });
 });
 
 describe('parseToolOutput', () => {
@@ -181,5 +196,19 @@ describe('parseToolOutput', () => {
     expect(parsed.output.path).toBe('src/app.ts');
     expect(parsed.output.changed).toBe(true);
     expect(parsed.output.totalReplacements).toBe(1);
+  });
+
+  it('parses proactive task outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'read_proactive_task',
+      '{"task":{"id":"task_1","name":"Daily Gold","schedule_type":"cron","cron_expression":"0 9 * * *","schedule_timezone":"Asia/Shanghai","schedule_summary":"0 9 * * * (Asia/Shanghai)","tool_mode":"manual","tools":["web","fetch"],"tool_summary":"Manual safe tools: web, fetch"}}'
+    );
+
+    expect(parsed.kind).toBe('read_proactive_task');
+    if (parsed.kind !== 'read_proactive_task') {
+      throw new Error('Expected read_proactive_task payload');
+    }
+    expect(parsed.output.task?.name).toBe('Daily Gold');
+    expect(parsed.output.task?.tools).toEqual(['web', 'fetch']);
   });
 });

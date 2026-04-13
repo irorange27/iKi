@@ -10,6 +10,7 @@ import { ACP_PROVIDER_TYPE } from '../../shared/constants/acp';
 import { createLogger } from '../logger';
 import {
   getProviderModelOptions,
+  normalizeModelCapabilityLimits,
   parseModelList,
   parseProviderModelOptionsMap,
 } from '../../shared/utils/provider_models';
@@ -94,26 +95,13 @@ export const useChatProviderSelection = (deps: {
 
   const toCapabilitySnapshot = (
     descriptor: ProviderModelDescriptor | null | undefined
-  ): ModelCapabilitySnapshot | null => {
-    if (!descriptor) return null;
-
-    const contextWindow =
-      typeof descriptor.contextWindow === 'number' ? descriptor.contextWindow : null;
-    const maxInputTokens =
-      typeof descriptor.maxInputTokens === 'number'
-        ? descriptor.maxInputTokens
-        : contextWindow;
-    const maxOutputTokens =
-      typeof descriptor.maxOutputTokens === 'number' ? descriptor.maxOutputTokens : null;
-
-    if (contextWindow === null && maxInputTokens === null && maxOutputTokens === null) {
-      return null;
-    }
+  ): ModelCapabilitySnapshot => {
+    const limits = normalizeModelCapabilityLimits(descriptor);
 
     return {
-      ...(contextWindow !== null ? { contextWindow } : {}),
-      ...(maxInputTokens !== null ? { maxInputTokens } : {}),
-      ...(maxOutputTokens !== null ? { maxOutputTokens } : {}),
+      contextWindow: limits.contextWindow,
+      maxInputTokens: limits.maxInputTokens,
+      ...(limits.maxOutputTokens !== null ? { maxOutputTokens: limits.maxOutputTokens } : {}),
     };
   };
 
@@ -214,9 +202,12 @@ export const useChatProviderSelection = (deps: {
     return fetchedModel || getStoredModelDescriptor(provider, modelId);
   });
 
-  const selectedModelCapability = computed<ModelCapabilitySnapshot | null>(() =>
-    toCapabilitySnapshot(selectedModelDescriptor.value)
-  );
+  const selectedModelCapability = computed<ModelCapabilitySnapshot | null>(() => {
+    const provider = selectedProvider.value;
+    const modelId = selectedModel.value.trim();
+    if (!provider || !modelId) return null;
+    return toCapabilitySnapshot(selectedModelDescriptor.value);
+  });
 
   const loadAvailableProviders = async (
     preferredModel?: string | null,

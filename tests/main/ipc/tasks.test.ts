@@ -45,6 +45,7 @@ const createStoredTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask
   schedule_timezone: null,
   enabled: true,
   provider_type: 'openai',
+  provider_id: null,
   model: 'gpt-4',
   tool_mode: 'auto',
   tools: null,
@@ -66,6 +67,11 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  addProactiveTaskMock.mockReset();
+  getProactiveTaskMock.mockReset();
+  updateProactiveTaskMock.mockReset();
+  deleteProactiveTaskMock.mockReset();
+  runProactiveTaskMock.mockReset();
 });
 
 afterEach(() => {
@@ -87,6 +93,7 @@ describe('tasks IPC', () => {
       name: '  Daily  ',
       prompt: '  Summarize  ',
       provider_type: ' openai ',
+      provider_id: ' provider_primary ',
       model: ' gpt-4 ',
       interval_minutes: 0,
       tools: ['web', ' fetch ', ''],
@@ -99,6 +106,7 @@ describe('tasks IPC', () => {
     expect(params.name).toBe('Daily');
     expect(params.prompt).toBe('Summarize');
     expect(params.provider_type).toBe('openai');
+    expect(params.provider_id).toBe('provider_primary');
     expect(params.model).toBe('gpt-4');
     expect(params.enabled).toBe(true);
     expect(params.notify).toBe(true);
@@ -302,6 +310,7 @@ describe('tasks IPC', () => {
     const handler = ipcHandlers.get('tasks:delete');
     if (!handler) throw new Error('tasks:delete handler not registered');
 
+    getProactiveTaskMock.mockReturnValue(createStoredTask({ id: 'task_4', name: 'Daily' }));
     deleteProactiveTaskMock.mockReturnValue(
       { changes: 1 } as unknown as ReturnType<typeof tasksDb.deleteProactiveTask>
     );

@@ -89,8 +89,15 @@ export type ModelCapability = {
   supportsToolCalls: boolean | null;
   supportsReasoning: boolean | null;
   supportsVision?: boolean | null;
-  source: 'models.dev' | 'provider';
+  source: 'models.dev' | 'provider' | 'default';
 };
+
+export type ModelCapabilityLimits = Pick<
+  ModelCapability,
+  'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
+>;
+
+export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 128_000;
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -440,5 +447,58 @@ export const mergeModelCapability = (
     supportsReasoning: providerCapability.supportsReasoning ?? baseCapability.supportsReasoning,
     ...(supportsVision !== undefined ? { supportsVision } : {}),
     source: 'provider',
+  };
+};
+
+export const normalizeModelCapabilityLimits = (
+  limits?: Partial<ModelCapabilityLimits> | null
+): {
+  contextWindow: number;
+  maxInputTokens: number;
+  maxOutputTokens: number | null;
+} => {
+  const maxInputTokens = normalizePositiveInteger(limits?.maxInputTokens);
+  const contextWindow =
+    normalizePositiveInteger(limits?.contextWindow) ??
+    maxInputTokens ??
+    DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
+
+  return {
+    contextWindow,
+    maxInputTokens: maxInputTokens ?? contextWindow,
+    maxOutputTokens: normalizePositiveInteger(limits?.maxOutputTokens),
+  };
+};
+
+export const ensureModelCapability = (
+  providerType: string,
+  modelId: string,
+  capability?: ModelCapability | null,
+  overrides?: Partial<ModelCapabilityLimits> | null
+): ModelCapability => {
+  const trimmedModelId = modelId.trim();
+  const normalizedLimits = normalizeModelCapabilityLimits({
+    contextWindow: overrides?.contextWindow ?? capability?.contextWindow,
+    maxInputTokens: overrides?.maxInputTokens ?? capability?.maxInputTokens,
+    maxOutputTokens: overrides?.maxOutputTokens ?? capability?.maxOutputTokens,
+  });
+
+  if (capability) {
+    return {
+      ...capability,
+      displayName: capability.displayName || trimmedModelId,
+      ...normalizedLimits,
+    };
+  }
+
+  return {
+    providerType,
+    providerKey: getModelsDevProviderKey(providerType),
+    modelId: trimmedModelId,
+    displayName: trimmedModelId,
+    ...normalizedLimits,
+    supportsToolCalls: null,
+    supportsReasoning: null,
+    source: 'default',
   };
 };

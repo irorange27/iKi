@@ -4,6 +4,7 @@ import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
 } from '../../../../src/main/services/chat/chat_constants';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '../../../../src/shared/utils/provider_models';
 
 const {
   dbPrepareMock,
@@ -331,8 +332,8 @@ describe('createChatStreaming', () => {
       {
         id: 'MiniMax-M2',
         displayName: 'MiniMax-M2',
-        contextWindow: null,
-        maxInputTokens: null,
+        contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+        maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
         maxOutputTokens: null,
       },
     ]);
@@ -355,8 +356,8 @@ describe('createChatStreaming', () => {
       {
         id: 'codex-mini-latest',
         displayName: 'Codex Mini',
-        contextWindow: null,
-        maxInputTokens: null,
+        contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+        maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
         maxOutputTokens: null,
         supportsToolCalls: true,
         source: 'provider',
@@ -486,6 +487,45 @@ describe('createChatStreaming', () => {
           model: 'gpt-4o-mini',
           providerType: 'openai',
           providerId: 'provider_openai',
+        },
+      })
+    );
+  });
+
+  it('stream() falls back to the shared 128k token budget when capability metadata is unavailable', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 0,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 2048,
+      },
+    });
+    resolveModelCapabilityMock.mockResolvedValueOnce(null);
+
+    const { streaming } = createDeps();
+    const webContents = { id: 12, send: vi.fn() };
+
+    await streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hello' }],
+      threadId: 'thread_default_budget',
+    });
+
+    expect(toolLoopStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokenUsageContext: {
+          maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+          maxOutputTokens: 2048,
+          model: 'gpt-4o-mini',
+          providerType: 'openai',
         },
       })
     );

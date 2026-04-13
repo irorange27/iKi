@@ -32,6 +32,7 @@ type TaskForm = {
   schedule_timezone: string;
   enabled: boolean;
   notify: boolean;
+  provider_id: string;
   provider_type: string;
   model: string;
   thread_id: string;
@@ -48,6 +49,7 @@ const createDefaultTaskForm = (): TaskForm => ({
   schedule_timezone: '',
   enabled: true,
   notify: true,
+  provider_id: '',
   provider_type: '',
   model: '',
   thread_id: '',
@@ -89,34 +91,19 @@ export const useSettingsTasksSection = (params: {
     { value: 'disabled', label: t('settings.tasks.toolMode.disabled') },
   ]);
 
-  const uniqueProviderTypes = computed(() => {
-    const seen = new Set<string>();
-    return params.providers.value
-      .filter(provider => {
-        if (!provider.type) return false;
-        if (seen.has(provider.type)) return false;
-        seen.add(provider.type);
-        return true;
-      })
-      .map(provider => ({
-        type: provider.type,
-        name: `${provider.name} (${provider.type})`,
-        models: provider.models,
-      }));
-  });
-
   const taskProviderOptions = computed(() =>
-    uniqueProviderTypes.value.map(provider => ({
-      value: provider.type,
-      label: provider.name,
+    params.providers.value.map(provider => ({
+      value: provider.id,
+      label: `${provider.name} (${provider.type})`,
     }))
   );
 
+  const selectedProvider = computed(() =>
+    params.providers.value.find(provider => provider.id === taskForm.value.provider_id) || null
+  );
+
   const taskAvailableModels = computed(() => {
-    const providerType = taskForm.value.provider_type;
-    if (!providerType) return [];
-    const provider = params.providers.value.find(candidate => candidate.type === providerType);
-    return provider?.models || [];
+    return selectedProvider.value?.models || [];
   });
 
   const taskModelOptions = computed(() =>
@@ -139,7 +126,9 @@ export const useSettingsTasksSection = (params: {
   };
 
   const updateTaskProviderSelection = (value: string) => {
-    taskForm.value.provider_type = value;
+    taskForm.value.provider_id = value;
+    const provider = params.providers.value.find(candidate => candidate.id === value) || null;
+    taskForm.value.provider_type = provider?.type || '';
   };
 
   const updateTaskModelSelection = (value: string) => {
@@ -261,6 +250,7 @@ export const useSettingsTasksSection = (params: {
       const result = await electronAPI.tasks.create({
         name,
         prompt,
+        provider_id: form.provider_id || null,
         provider_type: form.provider_type,
         model: form.model,
         interval_minutes: form.interval_minutes,
@@ -411,9 +401,14 @@ export const useSettingsTasksSection = (params: {
   watch(
     () => params.providers.value,
     providers => {
-      if (!taskForm.value.provider_type && providers.length > 0) {
+      if (!taskForm.value.provider_id && providers.length > 0) {
+        taskForm.value.provider_id = providers[0].id;
         taskForm.value.provider_type = providers[0].type;
       }
+
+      const provider =
+        providers.find(candidate => candidate.id === taskForm.value.provider_id) || null;
+      taskForm.value.provider_type = provider?.type || '';
 
       const models = taskAvailableModels.value;
       if (!taskForm.value.model || (models.length > 0 && !models.includes(taskForm.value.model))) {
@@ -424,8 +419,11 @@ export const useSettingsTasksSection = (params: {
   );
 
   watch(
-    () => taskForm.value.provider_type,
+    () => taskForm.value.provider_id,
     () => {
+      const provider =
+        params.providers.value.find(candidate => candidate.id === taskForm.value.provider_id) || null;
+      taskForm.value.provider_type = provider?.type || '';
       const models = taskAvailableModels.value;
       if (!taskForm.value.model || (models.length > 0 && !models.includes(taskForm.value.model))) {
         taskForm.value.model = models[0] || '';

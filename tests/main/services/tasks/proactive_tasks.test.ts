@@ -42,6 +42,12 @@ vi.mock('../../../../src/main/services/chat/chat_service', () => ({
   },
 }));
 
+vi.mock('../../../../src/main/services/companion/companion_service', () => ({
+  companionService: {
+    pushTaskNudge: vi.fn(),
+  },
+}));
+
 import { BrowserWindow, Notification } from 'electron';
 
 import type { ProactiveTask } from '../../../../src/shared/types/tasks';
@@ -59,6 +65,7 @@ const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
   interval_minutes: 30,
   enabled: true,
   provider_type: 'openai',
+  provider_id: 'provider_primary',
   model: 'gpt-4',
   tool_mode: 'auto',
   tools: null,
@@ -141,6 +148,7 @@ describe('runProactiveTask', () => {
     });
 
     const toolCall = chatServiceMock.send.mock.calls[0][0];
+    expect(toolCall.providerId).toBe('provider_primary');
     expect(toolCall.tools).toEqual(['web', 'fetch', 'read_file', 'list_dir']);
     expect(toolCall.threadId).toBe('thread_1');
     expect(toolCall.runConfig).toEqual({
