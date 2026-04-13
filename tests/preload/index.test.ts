@@ -324,6 +324,7 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.companion.getSnapshot();
     exposedApi.companion.onUpdated(companionUpdated);
     await exposedApi.companion.openMainWindow();
+    await exposedApi.companion.disable();
 
     exposedApi.openSettings('provider');
     exposedApi.closeWindow();
@@ -420,6 +421,7 @@ describe('preload task IPC payload serialization', () => {
         'mcp:refresh-tools',
         'companion:get-snapshot',
         'companion:open-main-window',
+        'companion:disable',
       ])
     );
     expect(onMock.mock.calls.map(call => call[0])).toEqual(

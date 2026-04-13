@@ -9,9 +9,9 @@ import { loadRendererEntry } from './renderer';
 
 const companionLogger = createLogger({ module: 'companion_window' });
 
-const COMPANION_WIDTH = 272;
-const COMPANION_HEIGHT = 176;
-const COMPANION_MARGIN = 24;
+const COMPANION_WIDTH = 236;
+const COMPANION_HEIGHT = 170;
+const COMPANION_MARGIN = 28;
 const MIN_VISIBLE_PIXELS = 56;
 
 let companionWindowRef: BrowserWindow | null = null;

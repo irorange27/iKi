@@ -248,6 +248,7 @@ const electronApi: ElectronApi = {
     onUpdated: (callback: (snapshot: CompanionSnapshot) => void) =>
       subscribe('companion:updated', callback),
     openMainWindow: () => ipcRenderer.invoke('companion:open-main-window'),
+    disable: () => ipcRenderer.invoke('companion:disable'),
   },
   openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
   closeWindow: () => ipcRenderer.send('close-window'),

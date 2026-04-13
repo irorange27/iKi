@@ -306,6 +306,7 @@ export interface ElectronApi {
     getSnapshot: () => Promise<CompanionSnapshot>;
     onUpdated: (callback: (snapshot: CompanionSnapshot) => void) => () => void;
     openMainWindow: () => Promise<WindowActionResult>;
+    disable: () => Promise<WindowActionResult>;
   };
   openSettings: (section?: string) => void;
   closeWindow: () => void;
