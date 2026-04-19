@@ -381,6 +381,27 @@ npm run benchmark:affect:thesis:summary -- \
   --run explicit_policy=benchmark-runs/affect-thesis-v1/deepseek-chat/deepseek-deepseek-chat-explicit_policy
 ```
 
+For the thesis-facing desktop-pet system evaluation package, keep the existing run directories and
+combine them with a manually recorded observation file:
+
+```bash
+npm run benchmark:desktop-pet:system:summary -- \
+  --output-dir benchmark-runs/desktop-pet-system-eval/deepseek-chat \
+  --run no_affect=benchmark-runs/affect-thesis-v1/deepseek-chat/deepseek-deepseek-chat-no_affect \
+  --run tone_only=benchmark-runs/affect-thesis-v1/deepseek-chat/deepseek-deepseek-chat-tone_only \
+  --run explicit_policy=benchmark-runs/affect-thesis-v1/deepseek-chat/deepseek-deepseek-chat-explicit_policy \
+  --observations research/desktop-pet-system-eval/system-eval-observations.json
+```
+
+That command writes:
+
+- `system-eval-summary.json`
+- `paper-system-eval-section.md`
+
+The expected manual observation template lives at:
+
+- `research/desktop-pet-system-eval/system-eval-observations.template.json`
+
 When `--profile-latency` is enabled on the daemon harness (directly or via the affect wrapper), the
 run also emits:
 

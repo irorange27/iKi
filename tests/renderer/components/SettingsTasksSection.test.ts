@@ -187,6 +187,7 @@ describe('SettingsTasksSection', () => {
     expect(create).toHaveBeenCalledWith({
       name: 'Docs monitor',
       prompt: 'Watch the docs and summarize changes.',
+      provider_id: 'deepseek-1',
       provider_type: 'deepseek',
       model: 'deepseek-chat',
       interval_minutes: 60,

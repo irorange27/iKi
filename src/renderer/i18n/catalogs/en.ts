@@ -370,6 +370,13 @@ export const en = defineCatalog({
   'settings.general.companion.reduceMotion': 'Reduce companion motion',
   'settings.general.companion.openMainWindowOnClick':
     'Open the main chat when the companion is clicked',
+  'settings.general.companion.statusOnTitle': 'Companion is enabled',
+  'settings.general.companion.statusOnDescription':
+    'The desktop pebble should be visible now. If you close it from the pebble itself, come back here to show it again.',
+  'settings.general.companion.statusOffTitle': 'Companion is hidden',
+  'settings.general.companion.statusOffDescription':
+    'The desktop pebble is currently off. Use the button here to bring it back immediately.',
+  'settings.general.companion.showNow': 'Show companion now',
   'settings.general.updates.title': 'Automatic Updates',
   'settings.general.updates.description':
     'Packaged Windows and macOS builds can check published GitHub Releases and download updates in the background.',

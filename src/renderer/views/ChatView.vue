@@ -10,10 +10,10 @@
     <!-- Main Content -->
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <!-- Header -->
-      <div class="flex items-center justify-center p-4">
+      <div v-if="showHeaderMeta" class="flex items-center justify-center p-4">
         <div class="ui-text-secondary flex items-center gap-1 text-sm">
-          <span>{{ t('chat.messagesCount', { count: chatMessages.length }) }}</span>
-          <span v-if="currentThread">·</span>
+          <span v-if="showMessageCount">{{ t('chat.messagesCount', { count: chatMessages.length }) }}</span>
+          <span v-if="showMessageCount && currentThread">·</span>
           <FolderOpen v-if="currentThread" :size="12" />
           <span v-if="currentThread">{{ currentThread.title }}</span>
           <span v-if="currentThreadOrigin?.isExternal" class="thread-origin-chip">
@@ -24,11 +24,12 @@
 
       <!-- Main Area -->
       <div
-        class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-y-auto"
+        class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 overflow-y-auto"
+        :class="showWelcomeScreen ? 'chat-main-area-welcome' : 'items-center justify-center'"
         ref="messagesContainer"
       >
         <WelcomeScreen
-          v-if="showWelcome && chatMessages.length === 0"
+          v-if="showWelcomeScreen"
           :active-model="currentModel"
           :active-provider-id="currentProviderId"
           @compose-starter="handleComposeStarter"
@@ -208,6 +209,10 @@ const latestAssistantTokenUsage = computed(() => {
 
   return null;
 });
+
+const showMessageCount = computed(() => chatMessages.value.length > 0);
+const showHeaderMeta = computed(() => showMessageCount.value || Boolean(currentThread.value));
+const showWelcomeScreen = computed(() => showWelcome.value && chatMessages.value.length === 0);
 
 const userMessageCount = computed(
   () => chatMessages.value.filter(message => message?.role === 'user').length
@@ -495,6 +500,13 @@ useChatViewLifecycle({
   min-width: 0;
   overscroll-behavior: contain;
   scrollbar-gutter: stable both-edges;
+}
+
+.chat-main-area-welcome {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: max(10px, calc(var(--chat-content-padding, 24px) - 12px));
+  padding-bottom: max(16px, calc(var(--chat-content-padding, 24px) + 4px));
 }
 
 .messages-container {

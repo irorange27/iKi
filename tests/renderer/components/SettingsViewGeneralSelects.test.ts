@@ -258,9 +258,7 @@ describe('SettingsView general custom selects', () => {
 
     expect(wrapper.find('.general-auto-approve-switch').attributes('aria-checked')).toBe('false');
     expect(
-      wrapper
-        .find('.general-shell-approval-select .settings-select-trigger')
-        .attributes('disabled')
+      wrapper.find('.general-shell-approval-select .settings-select-trigger').attributes('disabled')
     ).toBeUndefined();
 
     await wrapper.find('.general-auto-approve-switch').trigger('click');
@@ -269,9 +267,7 @@ describe('SettingsView general custom selects', () => {
     expect(wrapper.find('.general-auto-approve-switch').attributes('aria-checked')).toBe('true');
     expect(wrapper.text()).toContain('including shell commands');
     expect(
-      wrapper
-        .find('.general-shell-approval-select .settings-select-trigger')
-        .attributes('disabled')
+      wrapper.find('.general-shell-approval-select .settings-select-trigger').attributes('disabled')
     ).toBeDefined();
 
     await vi.advanceTimersByTimeAsync(300);
@@ -291,6 +287,28 @@ describe('SettingsView general custom selects', () => {
     await wrapper.find('.general-update-check-btn').trigger('click');
 
     expect(checkUpdates).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('surfaces a direct reopen action when the companion pebble is disabled', async () => {
+    const { wrapper, store, saveConfig } = await mountSettingsView({
+      setupStore: currentStore => {
+        currentStore.config.ui.companion.enabled = false;
+      },
+    });
+
+    expect(wrapper.text()).toContain('Companion is hidden');
+    expect(wrapper.text()).toContain('Show companion now');
+
+    await wrapper.find('.companion-show-btn').trigger('click');
+
+    expect(store.config.ui.companion.enabled).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('Companion is enabled');
 
     wrapper.unmount();
   });

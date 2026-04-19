@@ -13,6 +13,7 @@
     "app:preview": "node scripts/run-packaged-preview.cjs",
     "benchmark:daemon": "node scripts/benchmarks/run-daemon-benchmark.cjs",
     "benchmark:affect": "node scripts/benchmarks/run-affect-benchmark.cjs",
+    "benchmark:desktop-pet:system:summary": "node scripts/benchmarks/summarize-desktop-pet-system-eval.cjs",
     "benchmark:affect:thesis:run": "node scripts/benchmarks/run-affect-thesis-matrix.cjs",
     "benchmark:affect:thesis:summary": "node scripts/benchmarks/summarize-affect-thesis-results.cjs",
     "benchmark:affect:thesis:v2:scaffold": "node scripts/benchmarks/scaffold-affect-thesis-v2-manifest.cjs",

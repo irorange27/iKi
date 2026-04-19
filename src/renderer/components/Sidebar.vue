@@ -145,12 +145,17 @@
       @focusin="openMenu"
       @focusout="handleMenuFocusOut"
     >
-      <button class="sidebar-menu-item" role="menuitem" @click="handleOpenSettings">
+      <button
+        class="sidebar-menu-item sidebar-menu-item-settings"
+        role="menuitem"
+        @click="handleOpenSettings"
+      >
         <span class="sidebar-menu-item-icon">
           <Settings2 :size="14" />
         </span>
         <span class="sidebar-menu-item-label text-sm">{{ t('chat.welcome.settings') }}</span>
       </button>
+      <div class="sidebar-menu-divider" role="separator" aria-hidden="true"></div>
       <button
         class="sidebar-menu-item"
         role="menuitemcheckbox"

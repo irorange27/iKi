@@ -54,7 +54,11 @@
         <button class="welcome-primary-btn" type="button" @click="handlePrimaryAction">
           {{ primaryActionLabel }}
         </button>
-        <button class="welcome-secondary-btn" type="button" @click="openSettingsOverview">
+        <button
+          class="welcome-secondary-btn welcome-secondary-btn-settings"
+          type="button"
+          @click="openSettingsOverview"
+        >
           {{ t('chat.welcome.settings') }}
         </button>
       </div>

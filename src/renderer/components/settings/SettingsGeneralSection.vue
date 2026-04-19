@@ -111,6 +111,37 @@
         />
         {{ formatCompanionLabel(key) }}
       </label>
+      <div
+        class="companion-status-card"
+        :class="{
+          'companion-status-card-disabled': !config.ui.companion.enabled,
+        }"
+      >
+        <div class="companion-status-copy">
+          <span class="companion-status-title">
+            {{
+              config.ui.companion.enabled
+                ? t('settings.general.companion.statusOnTitle')
+                : t('settings.general.companion.statusOffTitle')
+            }}
+          </span>
+          <span class="companion-status-description">
+            {{
+              config.ui.companion.enabled
+                ? t('settings.general.companion.statusOnDescription')
+                : t('settings.general.companion.statusOffDescription')
+            }}
+          </span>
+        </div>
+        <button
+          v-if="!config.ui.companion.enabled"
+          type="button"
+          class="test-model-btn companion-show-btn"
+          @click="updateCompanion('enabled', true)"
+        >
+          {{ t('settings.general.companion.showNow') }}
+        </button>
+      </div>
     </div>
 
     <div class="config-group">

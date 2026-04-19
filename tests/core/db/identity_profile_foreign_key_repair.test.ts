@@ -278,6 +278,15 @@ describe('identity_profile_foreign_key_repair', () => {
         PRAGMA foreign_keys = OFF;
 
         ALTER TABLE identity_profiles RENAME TO identity_profiles_legacy_030;
+        ALTER TABLE assistant_profiles RENAME TO assistant_profiles_pre_legacy_fk;
+        ALTER TABLE continuity_items RENAME TO continuity_items_pre_legacy_fk;
+        ALTER TABLE continuity_evidence RENAME TO continuity_evidence_pre_legacy_fk;
+
+        DROP INDEX idx_assistant_profiles_updated;
+        DROP INDEX idx_continuity_items_profile_status;
+        DROP INDEX idx_continuity_items_kind;
+        DROP INDEX idx_continuity_items_source_ref;
+        DROP INDEX idx_continuity_evidence_item;
 
         CREATE TABLE identity_profiles (
           id TEXT PRIMARY KEY,
@@ -323,7 +332,162 @@ describe('identity_profile_foreign_key_repair', () => {
           updated_at
         FROM identity_profiles_legacy_030;
 
-        DROP TABLE identity_profiles_legacy_030;
+        CREATE TABLE assistant_profiles (
+          id TEXT PRIMARY KEY,
+          profile_id TEXT NOT NULL UNIQUE,
+          display_name TEXT NOT NULL,
+          role_summary TEXT NOT NULL DEFAULT '',
+          owner_display_name TEXT NOT NULL DEFAULT '',
+          tone_guidance TEXT NOT NULL DEFAULT '',
+          hard_boundaries_json TEXT,
+          collaboration_style_json TEXT,
+          metadata_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (profile_id) REFERENCES identity_profiles_legacy_030(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_assistant_profiles_updated
+          ON assistant_profiles(updated_at DESC);
+
+        INSERT INTO assistant_profiles (
+          id,
+          profile_id,
+          display_name,
+          role_summary,
+          owner_display_name,
+          tone_guidance,
+          hard_boundaries_json,
+          collaboration_style_json,
+          metadata_json,
+          created_at,
+          updated_at
+        )
+        SELECT
+          id,
+          profile_id,
+          display_name,
+          role_summary,
+          owner_display_name,
+          tone_guidance,
+          hard_boundaries_json,
+          collaboration_style_json,
+          metadata_json,
+          created_at,
+          updated_at
+        FROM assistant_profiles_pre_legacy_fk;
+
+        CREATE TABLE continuity_items (
+          id TEXT PRIMARY KEY,
+          profile_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'candidate',
+          confidence REAL NOT NULL DEFAULT 0,
+          priority REAL NOT NULL DEFAULT 0,
+          scope TEXT NOT NULL DEFAULT 'global',
+          subject_key TEXT,
+          source_kind TEXT NOT NULL DEFAULT 'manual',
+          source_ref TEXT,
+          first_seen_at TEXT,
+          last_confirmed_at TEXT,
+          last_used_at TEXT,
+          metadata_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (profile_id) REFERENCES identity_profiles_legacy_030(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX idx_continuity_items_profile_status
+          ON continuity_items(profile_id, status, updated_at DESC);
+
+        CREATE INDEX idx_continuity_items_kind
+          ON continuity_items(profile_id, kind, updated_at DESC);
+
+        CREATE UNIQUE INDEX idx_continuity_items_source_ref
+          ON continuity_items(profile_id, source_ref)
+          WHERE source_ref IS NOT NULL;
+
+        INSERT INTO continuity_items (
+          id,
+          profile_id,
+          kind,
+          title,
+          summary,
+          status,
+          confidence,
+          priority,
+          scope,
+          subject_key,
+          source_kind,
+          source_ref,
+          first_seen_at,
+          last_confirmed_at,
+          last_used_at,
+          metadata_json,
+          created_at,
+          updated_at
+        )
+        SELECT
+          id,
+          profile_id,
+          kind,
+          title,
+          summary,
+          status,
+          confidence,
+          priority,
+          scope,
+          subject_key,
+          source_kind,
+          source_ref,
+          first_seen_at,
+          last_confirmed_at,
+          last_used_at,
+          metadata_json,
+          created_at,
+          updated_at
+        FROM continuity_items_pre_legacy_fk;
+
+        CREATE TABLE continuity_evidence (
+          id TEXT PRIMARY KEY,
+          item_id TEXT NOT NULL,
+          thread_id TEXT,
+          message_id TEXT,
+          excerpt TEXT NOT NULL,
+          extractor_version TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (item_id) REFERENCES continuity_items(id) ON DELETE CASCADE,
+          FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE SET NULL,
+          FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX idx_continuity_evidence_item
+          ON continuity_evidence(item_id, created_at DESC);
+
+        INSERT INTO continuity_evidence (
+          id,
+          item_id,
+          thread_id,
+          message_id,
+          excerpt,
+          extractor_version,
+          created_at
+        )
+        SELECT
+          id,
+          item_id,
+          thread_id,
+          message_id,
+          excerpt,
+          extractor_version,
+          created_at
+        FROM continuity_evidence_pre_legacy_fk;
+
+        DROP TABLE continuity_evidence_pre_legacy_fk;
+        DROP TABLE continuity_items_pre_legacy_fk;
+        DROP TABLE assistant_profiles_pre_legacy_fk;
 
         PRAGMA foreign_keys = ON;
       `

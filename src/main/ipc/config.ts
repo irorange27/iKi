@@ -311,6 +311,20 @@ const handleMcpConfigUpdate = async (prevConfig: AppConfig, nextConfig: AppConfi
   }
 };
 
+const applyCompanionConfigSideEffects = (config: AppConfig): void => {
+  try {
+    syncCompanionWindowToConfig(config);
+  } catch (error) {
+    configLogger.warn('Failed to sync companion window after config update', error);
+  }
+
+  try {
+    companionService.refreshAvailability();
+  } catch (error) {
+    configLogger.warn('Failed to refresh companion availability after config update', error);
+  }
+};
+
 export const registerConfigIpc = (): void => {
   if (configIpcRegistered) return;
   configIpcRegistered = true;
@@ -352,8 +366,7 @@ export const registerConfigIpc = (): void => {
     const prevConfig = getAppConfig();
     const normalized = saveConfig(config);
     applyAppUpdateConfig(normalized);
-    syncCompanionWindowToConfig(normalized);
-    companionService.refreshAvailability();
+    applyCompanionConfigSideEffects(normalized);
 
     for (const win of getAllBrowserWindows()) {
       win.webContents.send('config:updated', normalized);

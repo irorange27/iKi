@@ -17,17 +17,8 @@
       @click="handleOpenMainWindow"
     >
       <div class="companion-body-wrap" aria-hidden="true">
-        <span class="companion-stem" />
-        <div class="companion-body">
-          <span class="companion-aura" />
-          <span class="companion-fin companion-fin-left" />
-          <span class="companion-fin companion-fin-top" />
-          <span class="companion-orbit" />
-          <span class="companion-orbit companion-orbit-secondary" />
-          <span class="companion-core" />
-          <span class="companion-pupil" />
-          <span class="companion-lattice" />
-        </div>
+        <span class="companion-base" />
+        <div class="companion-body" />
       </div>
 
       <div class="companion-caption">
@@ -206,20 +197,12 @@ onUnmounted(() => {
 
 <style scoped>
 .companion-root {
-  --companion-accent: oklch(0.7 0.11 220);
-  --companion-ink: color-mix(in oklch, var(--companion-accent) 18%, oklch(0.2 0.01 248));
-  --companion-shell: color-mix(in oklch, var(--companion-accent) 12%, rgba(255, 255, 255, 0.9));
-  --companion-edge: color-mix(in oklch, var(--companion-accent) 22%, rgba(255, 255, 255, 0.44));
-  --orbit-speed: 7.6s;
-  --body-tilt: -5deg;
+  --companion-accent: oklch(0.76 0.018 150);
+  --companion-ink: color-mix(in oklch, var(--companion-accent) 12%, oklch(0.34 0.015 72));
+  --companion-shell: color-mix(in oklch, var(--companion-accent) 2.5%, oklch(0.985 0.006 96));
+  --companion-edge: color-mix(in oklch, var(--companion-accent) 7%, rgba(128, 109, 90, 0.18));
   --body-rise: 0px;
-  --body-radius: 42px 30px 44px 26px / 38px 36px 42px 30px;
-  --pupil-x: -4px;
-  --pupil-y: 1px;
-  --aura-opacity: 0.78;
-  --fin-left-scale: 1;
-  --fin-top-scale: 1;
-  --caption-shift: 0px;
+  --body-scale: 1;
   position: relative;
   width: 100%;
   height: 100%;
@@ -228,81 +211,42 @@ onUnmounted(() => {
 }
 
 .companion-root[data-phase='dormant'] {
-  --companion-accent: oklch(0.62 0.03 245);
-  --orbit-speed: 10.8s;
-  --body-tilt: -1deg;
-  --pupil-x: 0px;
-  --pupil-y: 0px;
-  --aura-opacity: 0.44;
-  --fin-left-scale: 0.88;
-  --fin-top-scale: 0.82;
+  --companion-accent: oklch(0.73 0.018 250);
+  --body-scale: 0.99;
 }
 
 .companion-root[data-phase='idle'] {
-  --body-tilt: -6deg;
-  --pupil-x: -3px;
-  --pupil-y: 1px;
 }
 
 .companion-root[data-phase='thinking'] {
-  --companion-accent: oklch(0.71 0.12 225);
-  --orbit-speed: 4.2s;
-  --body-tilt: 10deg;
-  --body-rise: -2px;
-  --pupil-x: 11px;
-  --pupil-y: -5px;
-  --fin-top-scale: 1.18;
+  --companion-accent: oklch(0.78 0.024 226);
+  --body-rise: -1px;
+  --body-scale: 1.01;
 }
 
 .companion-root[data-phase='clarify'] {
-  --companion-accent: oklch(0.77 0.12 95);
-  --orbit-speed: 6.3s;
-  --body-tilt: -13deg;
-  --pupil-x: -12px;
-  --pupil-y: -3px;
-  --fin-left-scale: 1.12;
+  --companion-accent: oklch(0.82 0.028 88);
 }
 
 .companion-root[data-phase='co_plan'] {
-  --companion-accent: oklch(0.76 0.11 170);
-  --orbit-speed: 5.7s;
-  --body-tilt: 7deg;
-  --body-rise: -2px;
-  --pupil-x: 8px;
-  --pupil-y: -2px;
-  --fin-left-scale: 1.16;
-  --fin-top-scale: 1.08;
+  --companion-accent: oklch(0.8 0.024 164);
+  --body-rise: -1px;
+  --body-scale: 1.005;
 }
 
 .companion-root[data-phase='stabilize'] {
-  --companion-accent: oklch(0.7 0.11 26);
-  --orbit-speed: 9.4s;
-  --body-tilt: 0deg;
-  --body-radius: 38px 34px 38px 34px / 34px 34px 40px 40px;
-  --pupil-x: 0px;
-  --pupil-y: 2px;
-  --aura-opacity: 0.54;
-  --fin-left-scale: 0.82;
-  --fin-top-scale: 0.78;
+  --companion-accent: oklch(0.8 0.02 58);
 }
 
 .companion-root[data-phase='execute'] {
-  --companion-accent: oklch(0.72 0.14 150);
-  --orbit-speed: 4.8s;
-  --body-tilt: 14deg;
-  --body-rise: -4px;
-  --pupil-x: 12px;
-  --pupil-y: -2px;
+  --companion-accent: oklch(0.79 0.03 142);
+  --body-rise: -1px;
 }
 
 .companion-root[data-phase='nudge'] {
-  --companion-accent: oklch(0.8 0.12 85);
-  --orbit-speed: 3.8s;
-  --body-tilt: -15deg;
-  --body-rise: -3px;
-  --pupil-x: -10px;
-  --pupil-y: -4px;
-  --aura-opacity: 0.96;
+  --companion-accent: oklch(0.83 0.035 76);
+  --body-rise: -1px;
+  --body-scale: 1.01;
 }
 
 .companion-drag-strip {
@@ -316,14 +260,23 @@ onUnmounted(() => {
   width: 34px;
   height: 4px;
   border-radius: 999px;
-  background: color-mix(in oklch, var(--companion-accent) 15%, transparent);
+  background: color-mix(in oklch, var(--companion-accent) 8%, rgba(79, 56, 35, 0.12));
 }
 
 .companion-shell {
   position: relative;
-  display: block;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-areas:
+    'body caption'
+    'body action';
+  align-items: end;
+  align-content: end;
+  column-gap: 8px;
+  row-gap: 4px;
   width: 100%;
   min-height: calc(100% - 12px);
+  padding: 18px 8px 12px;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -334,58 +287,41 @@ onUnmounted(() => {
   -webkit-app-region: no-drag;
 }
 
-.companion-shell::before {
-  content: '';
-  position: absolute;
-  left: 10px;
-  right: 18px;
-  bottom: 8px;
-  height: 22px;
-  border-radius: 999px;
-  background: radial-gradient(
-    ellipse at center,
-    color-mix(in oklch, var(--companion-accent) 18%, rgba(9, 15, 26, 0.16)),
-    transparent 72%
-  );
-  filter: blur(8px);
-  pointer-events: none;
-}
-
 .companion-shell-clickable {
   cursor: pointer;
 }
 
 .companion-shell-clickable:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--companion-accent) 48%, white);
+  outline: 2px solid color-mix(in oklch, var(--companion-accent) 32%, white);
   outline-offset: 3px;
 }
 
 .companion-dismiss {
   position: absolute;
-  top: 16px;
-  right: 8px;
+  top: 18px;
+  right: 12px;
   z-index: 4;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 1px solid color-mix(in oklch, var(--companion-accent) 18%, rgba(255, 255, 255, 0.54));
+  border: 1px solid color-mix(in oklch, var(--companion-accent) 10%, rgba(109, 85, 61, 0.16));
   border-radius: 999px;
-  background: color-mix(in oklch, var(--companion-shell) 92%, rgba(255, 255, 255, 0.9));
+  background: color-mix(in oklch, var(--companion-shell) 97%, rgba(255, 255, 255, 0.98));
   box-shadow:
-    0 8px 16px rgba(9, 15, 26, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
-  color: color-mix(in oklch, var(--companion-ink) 74%, white);
-  font-size: 17px;
+    0 3px 8px rgba(68, 49, 31, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  color: color-mix(in oklch, var(--companion-ink) 82%, white);
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.88;
+  opacity: 0.56;
   transition:
-    opacity 180ms ease,
-    transform 180ms ease,
-    box-shadow 180ms ease;
+    opacity 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
   -webkit-app-region: no-drag;
 }
 
@@ -394,231 +330,83 @@ onUnmounted(() => {
   opacity: 1;
   transform: translateY(-1px);
   box-shadow:
-    0 10px 20px rgba(9, 15, 26, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    0 6px 12px rgba(68, 49, 31, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .companion-dismiss:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--companion-accent) 40%, white);
+  outline: 2px solid color-mix(in oklch, var(--companion-accent) 28%, white);
   outline-offset: 2px;
 }
 
 .companion-body-wrap {
-  position: absolute;
-  top: 0;
-  right: 4px;
-  width: 118px;
-  height: 116px;
+  grid-area: body;
+  position: relative;
+  width: 18px;
+  height: 18px;
   z-index: 2;
+  align-self: end;
+  justify-self: end;
+  margin-bottom: 6px;
   transform: translateY(var(--body-rise));
-  transition: transform 260ms ease;
+  transition: transform 180ms ease;
 }
 
-.companion-stem {
-  position: absolute;
-  left: 30px;
-  bottom: -6px;
-  width: 44px;
-  height: 48px;
-  border-radius: 18px 18px 24px 24px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--companion-accent) 30%, rgba(255, 255, 255, 0.58)),
-    color-mix(in oklch, var(--companion-accent) 12%, rgba(255, 255, 255, 0.12))
-  );
-  border: 1px solid color-mix(in oklch, var(--companion-accent) 16%, rgba(255, 255, 255, 0.22));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
-  opacity: 0.86;
+.companion-base {
+  display: none;
 }
 
 .companion-body {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: var(--body-radius);
-  transform: rotate(var(--body-tilt));
-  background:
-    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.78), transparent 34%),
-    linear-gradient(
-      165deg,
-      color-mix(in oklch, var(--companion-accent) 20%, white),
-      color-mix(in oklch, var(--companion-accent) 56%, rgba(16, 22, 34, 0.06))
-    );
-  box-shadow:
-    0 20px 34px rgba(9, 15, 26, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    inset 0 -18px 28px color-mix(in oklch, var(--companion-accent) 14%, transparent);
-  transition:
-    transform 260ms ease,
-    box-shadow 260ms ease,
-    border-radius 260ms ease;
-}
-
-.companion-aura {
   position: absolute;
-  inset: -14px;
-  border-radius: 48px;
-  background: radial-gradient(
-    circle at center,
-    color-mix(in oklch, var(--companion-accent) 28%, transparent),
-    transparent 68%
-  );
-  filter: blur(10px);
-  opacity: var(--aura-opacity);
-}
-
-.companion-fin,
-.companion-orbit,
-.companion-core,
-.companion-lattice,
-.companion-pupil {
-  position: absolute;
-  pointer-events: none;
-}
-
-.companion-fin {
-  background: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.74),
-    color-mix(in oklch, var(--companion-accent) 18%, rgba(255, 255, 255, 0.34))
-  );
-  border: 1px solid color-mix(in oklch, var(--companion-accent) 20%, rgba(255, 255, 255, 0.4));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
-}
-
-.companion-fin-left {
-  left: -8px;
-  top: 40px;
-  width: 25px;
-  height: 23px;
-  border-radius: 18px 11px 11px 18px;
-  transform: rotate(-22deg) scale(var(--fin-left-scale));
-}
-
-.companion-fin-top {
-  top: -7px;
-  right: 30px;
-  width: 30px;
-  height: 15px;
-  border-radius: 10px 18px 10px 16px;
-  transform: rotate(14deg) scale(var(--fin-top-scale));
-}
-
-.companion-orbit {
-  inset: 11px;
-  border-radius: 32px 24px 34px 22px / 28px 30px 36px 24px;
-  border: 1px solid color-mix(in oklch, var(--companion-accent) 34%, rgba(255, 255, 255, 0.66));
-  animation: companion-orbit var(--orbit-speed) linear infinite;
-}
-
-.companion-orbit-secondary {
-  inset: 23px;
-  border-radius: 22px 18px 24px 16px / 18px 22px 28px 18px;
-  opacity: 0.62;
-  animation-direction: reverse;
-}
-
-.companion-core {
-  inset: 31px;
-  border-radius: 26px 18px 24px 18px / 22px 18px 24px 20px;
-  background:
-    radial-gradient(circle at 38% 34%, rgba(255, 255, 255, 0.98), transparent 33%),
-    radial-gradient(
-      circle at center,
-      color-mix(in oklch, var(--companion-accent) 34%, white),
-      color-mix(in oklch, var(--companion-accent) 74%, rgba(16, 21, 32, 0.05))
-    );
-  box-shadow: 0 0 24px color-mix(in oklch, var(--companion-accent) 24%, transparent);
-  animation: companion-breathe 3.3s ease-in-out infinite;
-}
-
-.companion-pupil {
-  top: calc(46px + var(--pupil-y));
-  left: calc(54px + var(--pupil-x));
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 0 0 6px color-mix(in oklch, var(--companion-accent) 18%, transparent),
-    0 0 18px rgba(255, 255, 255, 0.48);
-  transition:
-    left 260ms ease,
-    top 260ms ease;
-}
-
-.companion-lattice {
   inset: 0;
-  border-radius: inherit;
-  background-image:
-    linear-gradient(
-      transparent 0,
-      transparent calc(50% - 0.5px),
-      color-mix(in oklch, var(--companion-accent) 18%, transparent) calc(50% - 0.5px),
-      color-mix(in oklch, var(--companion-accent) 18%, transparent) calc(50% + 0.5px),
-      transparent calc(50% + 0.5px),
-      transparent 100%
-    ),
-    linear-gradient(
-      90deg,
-      transparent 0,
-      transparent calc(50% - 0.5px),
-      color-mix(in oklch, var(--companion-accent) 18%, transparent) calc(50% - 0.5px),
-      color-mix(in oklch, var(--companion-accent) 18%, transparent) calc(50% + 0.5px),
-      transparent calc(50% + 0.5px),
-      transparent 100%
-    );
-  opacity: 0.54;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklch, var(--companion-accent) 10%, rgba(108, 83, 61, 0.16));
+  background: color-mix(in oklch, var(--companion-shell) 96%, rgba(248, 245, 239, 0.95));
+  box-shadow:
+    0 4px 8px rgba(62, 46, 30, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  transform: scale(calc(var(--body-scale) * 0.98));
+  animation: none;
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.companion-body::before {
+  display: none;
 }
 
 .companion-caption {
-  position: absolute;
-  left: 0;
-  right: 6px;
-  bottom: 0;
+  grid-area: caption;
+  position: relative;
   z-index: 1;
   display: grid;
-  gap: 4px;
-  min-height: 76px;
-  padding: 16px 14px 13px;
-  border: 1px solid var(--companion-edge);
-  border-radius: 28px 24px 24px 26px / 22px 24px 20px 24px;
-  background: linear-gradient(
-    150deg,
-    color-mix(in oklch, var(--companion-shell) 88%, rgba(255, 255, 255, 0.92)),
-    color-mix(in oklch, var(--companion-accent) 8%, rgba(11, 17, 28, 0.05))
-  );
-  box-shadow:
-    0 16px 28px rgba(10, 16, 28, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.64);
-  transform: translateY(var(--caption-shift));
-  transition:
-    transform 260ms ease,
-    box-shadow 260ms ease;
-}
-
-.companion-caption::before {
-  content: '';
-  position: absolute;
-  right: 58px;
-  top: -10px;
-  width: 40px;
-  height: 18px;
-  border-radius: 14px 14px 10px 10px;
+  align-self: end;
+  gap: 1px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px 6px;
+  border: 1px solid color-mix(in oklch, var(--companion-edge) 70%, rgba(255, 255, 255, 0.18));
+  border-radius: 12px;
   background: linear-gradient(
     180deg,
-    color-mix(in oklch, var(--companion-shell) 94%, rgba(255, 255, 255, 0.94)),
-    color-mix(in oklch, var(--companion-accent) 10%, rgba(11, 17, 28, 0.04))
+    color-mix(in oklch, var(--companion-shell) 98%, rgba(248, 245, 239, 0.9)),
+    color-mix(in oklch, var(--companion-accent) 1.2%, rgba(241, 236, 229, 0.86))
   );
-  border: 1px solid var(--companion-edge);
-  border-bottom: 0;
+  box-shadow:
+    0 2px 4px rgba(64, 46, 30, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .companion-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -626,72 +414,66 @@ onUnmounted(() => {
   margin: 0;
   min-width: 0;
   overflow: hidden;
-  font-size: 10px;
+  font-size: 6.6px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: color-mix(in oklch, var(--companion-ink) 72%, white);
+  color: color-mix(in oklch, var(--companion-ink) 68%, rgba(255, 255, 255, 0.8));
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .companion-updated {
   flex-shrink: 0;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 6.4px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: color-mix(in oklch, var(--companion-ink) 56%, white);
+  color: color-mix(in oklch, var(--companion-ink) 48%, rgba(255, 255, 255, 0.72));
 }
 
 .companion-headline {
   margin: 0;
-  max-width: 11ch;
-  font-size: 24px;
-  line-height: 0.96;
-  font-weight: 700;
-  letter-spacing: -0.035em;
+  max-width: 7ch;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .companion-detail {
   margin: 0;
   max-width: 14ch;
-  max-height: 1.35em;
+  max-height: 0;
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: 8.2px;
   line-height: 1.35;
-  color: color-mix(in oklch, var(--companion-ink) 70%, white);
-  opacity: 0.8;
-  transform: translateY(1px);
+  color: color-mix(in oklch, var(--companion-ink) 62%, rgba(255, 255, 255, 0.74));
+  opacity: 0;
   transition:
-    max-height 240ms ease,
-    opacity 240ms ease,
-    transform 240ms ease;
+    max-height 220ms ease,
+    opacity 220ms ease;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
 }
 
 .companion-action {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 3;
+  grid-area: action;
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 22px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--companion-accent) 16%, rgba(255, 255, 255, 0.8));
-  border: 1px solid color-mix(in oklch, var(--companion-accent) 24%, rgba(255, 255, 255, 0.55));
-  font-size: 10px;
-  letter-spacing: 0.08em;
+  gap: 6px;
+  min-height: 9px;
+  padding: 0 0 0 9px;
+  font-size: 6.4px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: color-mix(in oklch, var(--companion-ink) 74%, white);
+  color: color-mix(in oklch, var(--companion-ink) 62%, rgba(255, 255, 255, 0.74));
   opacity: 0;
-  transform: translateY(7px);
+  transform: translateY(2px);
   transition:
-    opacity 220ms ease,
-    transform 220ms ease;
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .companion-action-sep {
@@ -704,30 +486,29 @@ onUnmounted(() => {
 
 .companion-shell-clickable:hover .companion-body-wrap,
 .companion-shell-clickable:focus-visible .companion-body-wrap {
-  transform: translateY(calc(var(--body-rise) - 4px));
+  transform: translateY(calc(var(--body-rise) - 1px));
 }
 
 .companion-shell-clickable:hover .companion-body,
 .companion-shell-clickable:focus-visible .companion-body {
   box-shadow:
-    0 24px 38px rgba(9, 15, 26, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.86),
-    inset 0 -20px 32px color-mix(in oklch, var(--companion-accent) 16%, transparent);
+    0 10px 16px rgba(62, 46, 30, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    inset 0 -7px 12px color-mix(in oklch, var(--companion-accent) 11%, rgba(83, 61, 41, 0.04));
 }
 
 .companion-shell-clickable:hover .companion-caption,
 .companion-shell-clickable:focus-visible .companion-caption {
-  transform: translateY(-2px);
+  transform: translateX(-1px);
   box-shadow:
-    0 20px 30px rgba(10, 16, 28, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    0 6px 12px rgba(64, 46, 30, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .companion-shell-clickable:hover .companion-detail,
 .companion-shell-clickable:focus-visible .companion-detail {
   max-height: 3.1em;
   opacity: 1;
-  transform: translateY(0);
   -webkit-line-clamp: 2;
 }
 
@@ -737,31 +518,23 @@ onUnmounted(() => {
   transform: translateY(0);
 }
 
-.companion-root-reduced .companion-orbit,
-.companion-root-reduced .companion-core {
-  animation: none;
-}
-
 .companion-root-reduced .companion-body-wrap,
 .companion-root-reduced .companion-body,
 .companion-root-reduced .companion-caption,
 .companion-root-reduced .companion-detail,
 .companion-root-reduced .companion-action,
-.companion-root-reduced .companion-pupil,
 .companion-root-reduced .companion-dismiss {
   transition: none;
 }
 
 .companion-root-reduced .companion-shell-clickable:hover .companion-body-wrap,
 .companion-root-reduced .companion-shell-clickable:hover .companion-caption,
-.companion-root-reduced .companion-shell-clickable:hover .companion-detail,
 .companion-root-reduced .companion-shell-clickable:hover .companion-action {
   transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .companion-orbit,
-  .companion-core {
+  .companion-body {
     animation: none;
   }
 
@@ -770,37 +543,25 @@ onUnmounted(() => {
   .companion-caption,
   .companion-detail,
   .companion-action,
-  .companion-pupil,
   .companion-dismiss {
     transition: none;
   }
 
   .companion-shell-clickable:hover .companion-body-wrap,
   .companion-shell-clickable:hover .companion-caption,
-  .companion-shell-clickable:hover .companion-detail,
   .companion-shell-clickable:hover .companion-action {
     transform: none;
-  }
-}
-
-@keyframes companion-orbit {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
   }
 }
 
 @keyframes companion-breathe {
   0%,
   100% {
-    transform: scale(0.95);
+    transform: scale(calc(var(--body-scale) - 0.006));
   }
 
   50% {
-    transform: scale(1);
+    transform: scale(calc(var(--body-scale) + 0.006));
   }
 }
 </style>

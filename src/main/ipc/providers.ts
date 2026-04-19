@@ -10,11 +10,19 @@ let providersIpcRegistered = false;
 const providersIpcLogger = createLogger({ module: 'providers_ipc' });
 const PROVIDERS_UPDATED_CHANNEL = 'providers:updated';
 
+const refreshCompanionAvailability = (): void => {
+  try {
+    companionService.refreshAvailability();
+  } catch (error) {
+    providersIpcLogger.warn('Failed to refresh companion availability after provider update.', error);
+  }
+};
+
 const broadcastProviderUpdate = (payload: ProviderUpdatedEvent): void => {
   for (const win of getAllBrowserWindows()) {
     win.webContents.send(PROVIDERS_UPDATED_CHANNEL, payload);
   }
-  companionService.refreshAvailability();
+  refreshCompanionAvailability();
 };
 
 export const registerProvidersIpc = (): void => {

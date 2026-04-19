@@ -591,6 +591,26 @@ describe('ChatView', () => {
     });
   });
 
+  it('hides the top message count during the empty welcome state', async () => {
+    currentThreadRef.value = null;
+    showWelcomeRef.value = true;
+
+    const wrapper = await mountChatView();
+
+    expect(wrapper.text()).not.toContain('0 messages');
+    expect(wrapper.find('.chat-main-area').classes()).toContain('chat-main-area-welcome');
+  });
+
+  it('keeps the thread title visible for empty threads without showing a zero message count', async () => {
+    currentThreadRef.value = { id: 'thread_1', title: 'New Chat' };
+    showWelcomeRef.value = false;
+
+    const wrapper = await mountChatView();
+
+    expect(wrapper.text()).toContain('New Chat');
+    expect(wrapper.text()).not.toContain('0 messages');
+  });
+
   it('shows first-run feedback after the first user message is sent', async () => {
     showWelcomeRef.value = false;
     chatState.messages.splice(0, chatState.messages.length, {

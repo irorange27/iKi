@@ -11,6 +11,7 @@ const { registerMocks, callOrder } = vi.hoisted(() => {
     callOrder,
     registerMocks: {
       registerWindowIpc: namedRegister('window'),
+      registerCompanionIpc: namedRegister('companion'),
       registerConfigIpc: namedRegister('config'),
       registerProvidersIpc: namedRegister('providers'),
       registerMcpIpc: namedRegister('mcp'),
@@ -34,6 +35,9 @@ vi.mock('../../../src/main/ipc/window', () => ({
 }));
 vi.mock('../../../src/main/ipc/config', () => ({
   registerConfigIpc: registerMocks.registerConfigIpc,
+}));
+vi.mock('../../../src/main/ipc/companion', () => ({
+  registerCompanionIpc: registerMocks.registerCompanionIpc,
 }));
 vi.mock('../../../src/main/ipc/providers', () => ({
   registerProvidersIpc: registerMocks.registerProvidersIpc,
@@ -89,6 +93,7 @@ describe('main IPC registration', () => {
 
     expect(callOrder).toEqual([
       'window',
+      'companion',
       'config',
       'updater',
       'providers',

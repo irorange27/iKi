@@ -67,11 +67,11 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.welcome.body.finishProvider':
     '你已经开始配置 Provider 了。把凭证补齐，或启用一个可用 Provider。准备好后，再给 iKi 一个明确的上下文入口。',
   'chat.welcome.body.awake':
-    '第一个 Provider 和模型已经准备好。现在给 iKi 一个明确来源：项目目录、当前要做的事，或你贴进来的内容。',
+    '第一个 Provider 和模型已经准备好。现在给 iKi 一个明确来源：项目目录、当前任务，或贴入内容。',
   'chat.welcome.primary.connectProvider': '连接第一个 Provider',
   'chat.welcome.primary.finishProvider': '完成 Provider 配置',
   'chat.welcome.primary.pickModel': '检查 Provider 模型',
-  'chat.welcome.primary.draftHello': '开始第一个真实请求',
+  'chat.welcome.primary.draftHello': '发出第一个请求',
   'chat.welcome.hint.loading': '正在检查你的本地 Provider 配置。',
   'chat.welcome.hint.connectProvider':
     '当前还没有可用 Provider。打开 Provider 设置，填入一个 API Key，并启用一个模型来源即可。',
@@ -80,13 +80,13 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.welcome.hint.addModel': 'Provider 已经准备好，但还需要至少一个模型，首次对话才能真正开始。',
   'chat.welcome.hint.modelReady':
     'Provider 已就绪。请在 Provider 设置里确认至少暴露一个模型给首次对话使用。',
-  'chat.welcome.hint.ready': '先选下面一个起手式，再把它需要的项目、任务或内容补进去。',
+  'chat.welcome.hint.ready': '先选一个起手式，再补上项目、任务或内容。',
   'chat.welcome.contextSources.label': '适合先给的上下文',
   'chat.welcome.contextSources.project.title': '项目目录',
   'chat.welcome.contextSources.project.body': '选一个工作区后，让 iKi 先告诉你该看哪里。',
-  'chat.welcome.contextSources.task.title': '当前要做的事',
+  'chat.welcome.contextSources.task.title': '当前任务',
   'chat.welcome.contextSources.task.body': '先描述你在处理什么，再让 iKi 帮你理出下一步。',
-  'chat.welcome.contextSources.text.title': '贴进来的内容',
+  'chat.welcome.contextSources.text.title': '贴入内容',
   'chat.welcome.contextSources.text.body': '贴入笔记、日志或草稿，让 iKi 先总结再整理。',
   'chat.welcome.milestone.label': '已完成',
   'chat.welcome.milestone.provider.title': '第一个 Provider 已连接',
@@ -94,7 +94,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     `${asText(provider)} 已准备好。下一步：确认至少暴露一个模型，让第一轮对话顺利开始。`,
   'chat.welcome.milestone.model.title': '第一个模型已就绪',
   'chat.welcome.milestone.model.body': ({ provider, model }) =>
-    `${asText(provider)} · ${asText(model)} 已可用。下一步：给 iKi 一个项目、目标或贴入内容，再发出第一个请求。`,
+    `${asText(provider)} · ${asText(model)} 已可用。下一步：给 iKi 一个项目、任务或内容，再发出第一条请求。`,
   'chat.welcome.contextLabel': '当前就绪',
   'chat.welcome.progressLabel': '唤醒路径',
   'chat.welcome.step.provider.title': '连接一个 Provider',
@@ -352,6 +352,13 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.general.companion.rememberPosition': '记住 companion 位置',
   'settings.general.companion.reduceMotion': '降低 companion 动效',
   'settings.general.companion.openMainWindowOnClick': '点击 companion 时打开主聊天窗口',
+  'settings.general.companion.statusOnTitle': '桌宠已启用',
+  'settings.general.companion.statusOnDescription':
+    '桌面上的 pebble 现在应该可见。如果你从桌宠本身把它关掉，可以回到这里重新显示。',
+  'settings.general.companion.statusOffTitle': '桌宠当前已隐藏',
+  'settings.general.companion.statusOffDescription':
+    '桌面 pebble 现在是关闭状态。用这里的按钮可以立刻把它重新打开。',
+  'settings.general.companion.showNow': '立即显示桌宠',
   'settings.general.updates.title': '自动更新',
   'settings.general.updates.description':
     '已打包的 Windows 和 macOS 版本可以检查已发布的 GitHub Release，并在后台下载更新。',

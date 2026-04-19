@@ -97,6 +97,47 @@
   margin-bottom: 0;
 }
 
+.companion-status-card {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+}
+
+.companion-status-card-disabled {
+  border-color: color-mix(in srgb, var(--accent-color) 22%, var(--border-color));
+  background: color-mix(in srgb, var(--bg-secondary) 76%, var(--accent-color) 6%);
+}
+
+.companion-status-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.companion-status-title {
+  font-size: 0.96em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.companion-status-description {
+  font-size: 0.9em;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.companion-show-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .update-status-header {
   display: flex;
   align-items: flex-start;
