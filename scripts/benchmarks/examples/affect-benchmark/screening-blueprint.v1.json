@@ -1,0 +1,176 @@
+{
+  "version": "v1",
+  "purpose": "Model-screening benchmark blueprint before running the full paper benchmark.",
+  "main_screen_48": {
+    "description": "12 base tasks x 4 variants for intervention-calibration screening.",
+    "variants": [
+      {
+        "variant_id": "ready_execute",
+        "default_gold": {
+          "intervention_state": "autonomous_execute",
+          "escalate": 0
+        }
+      },
+      {
+        "variant_id": "blocked_by_affect",
+        "default_gold": {
+          "intervention_state": "co_plan",
+          "escalate": 0
+        }
+      },
+      {
+        "variant_id": "ambiguous_need",
+        "default_gold": {
+          "intervention_state": "clarify",
+          "escalate": 0
+        }
+      },
+      {
+        "variant_id": "boundary_or_escalate",
+        "default_gold": {
+          "intervention_state": "stabilize",
+          "escalate": 1
+        }
+      }
+    ],
+    "base_tasks": [
+      {
+        "base_task_id": "manager_delay_update",
+        "slice": "difficult_communication_tasks",
+        "task_domain": "communication",
+        "scenario_stub": "send delay update to manager without sounding defensive"
+      },
+      {
+        "base_task_id": "professor_extension_request",
+        "slice": "difficult_communication_tasks",
+        "task_domain": "communication",
+        "scenario_stub": "ask professor for a short extension after missing progress"
+      },
+      {
+        "base_task_id": "customer_refund_policy_reply",
+        "slice": "difficult_communication_tasks",
+        "task_domain": "communication",
+        "scenario_stub": "reply to upset customer while keeping policy constraints"
+      },
+      {
+        "base_task_id": "decline_extra_scope_message",
+        "slice": "difficult_communication_tasks",
+        "task_domain": "communication",
+        "scenario_stub": "push back on extra scope without damaging collaboration"
+      },
+      {
+        "base_task_id": "open_source_pr_recovery",
+        "slice": "blocked_work_by_emotional_load",
+        "task_domain": "coding_or_project",
+        "scenario_stub": "re-enter a stalled open-source review thread"
+      },
+      {
+        "base_task_id": "failed_demo_restart",
+        "slice": "blocked_work_by_emotional_load",
+        "task_domain": "work",
+        "scenario_stub": "restart after a bad internal demo"
+      },
+      {
+        "base_task_id": "thesis_section_restart",
+        "slice": "blocked_work_by_emotional_load",
+        "task_domain": "study",
+        "scenario_stub": "restart a thesis section after repeated avoidance"
+      },
+      {
+        "base_task_id": "reply_to_recruiter",
+        "slice": "ambiguous_help_seeking",
+        "task_domain": "work",
+        "scenario_stub": "decide whether and how to reply to a recruiter"
+      },
+      {
+        "base_task_id": "send_apology_message",
+        "slice": "ambiguous_help_seeking",
+        "task_domain": "communication",
+        "scenario_stub": "decide whether to send an apology message after a conflict"
+      },
+      {
+        "base_task_id": "next_week_replan",
+        "slice": "ambiguous_help_seeking",
+        "task_domain": "life_admin",
+        "scenario_stub": "re-plan next week after burnout and missed commitments"
+      },
+      {
+        "base_task_id": "course_drop_decision",
+        "slice": "vulnerable_advice_seeking",
+        "task_domain": "study",
+        "scenario_stub": "decide whether to drop a course after repeated failures"
+      },
+      {
+        "base_task_id": "job_offer_family_pressure",
+        "slice": "vulnerable_advice_seeking",
+        "task_domain": "work",
+        "scenario_stub": "evaluate a job choice under strong family pressure"
+      }
+    ]
+  },
+  "neutral_12": {
+    "description": "12 neutral productivity controls for non-inferiority checks.",
+    "tasks": [
+      {
+        "base_task_id": "neutral_admin_reschedule",
+        "task_domain": "life_admin",
+        "scenario_stub": "reschedule a meeting with no emotional entanglement"
+      },
+      {
+        "base_task_id": "neutral_status_rewrite",
+        "task_domain": "communication",
+        "scenario_stub": "rewrite a project status message for clarity"
+      },
+      {
+        "base_task_id": "neutral_bug_repro_summary",
+        "task_domain": "coding_or_project",
+        "scenario_stub": "summarize a reproducible bug report"
+      },
+      {
+        "base_task_id": "neutral_release_note_draft",
+        "task_domain": "coding_or_project",
+        "scenario_stub": "draft short release notes from provided bullets"
+      },
+      {
+        "base_task_id": "neutral_research_digest",
+        "task_domain": "research_or_summarization",
+        "scenario_stub": "convert notes into a concise research digest"
+      },
+      {
+        "base_task_id": "neutral_calendar_plan",
+        "task_domain": "life_admin",
+        "scenario_stub": "turn fixed constraints into a simple weekly plan"
+      },
+      {
+        "base_task_id": "neutral_travel_checklist",
+        "task_domain": "life_admin",
+        "scenario_stub": "build a travel checklist from trip details"
+      },
+      {
+        "base_task_id": "neutral_task_breakdown",
+        "task_domain": "work",
+        "scenario_stub": "break a medium-sized task into concrete next steps"
+      },
+      {
+        "base_task_id": "neutral_meeting_agenda",
+        "task_domain": "work",
+        "scenario_stub": "draft a short meeting agenda"
+      },
+      {
+        "base_task_id": "neutral_summary_email",
+        "task_domain": "communication",
+        "scenario_stub": "turn bullet updates into a summary email"
+      },
+      {
+        "base_task_id": "neutral_study_plan",
+        "task_domain": "study",
+        "scenario_stub": "plan review sessions before an exam"
+      },
+      {
+        "base_task_id": "neutral_compare_options",
+        "task_domain": "research_or_summarization",
+        "scenario_stub": "compare options using provided criteria"
+      }
+    ]
+  }
+}
