@@ -1,0 +1,113 @@
+import { describe, expect, it } from 'vitest';
+import * as changelogScaffold from '../../scripts/scaffold-changelog.cjs';
+
+const {
+  extractIssueRefs,
+  formatCommitEntry,
+  humanizeScope,
+  isReleaseBookkeepingCommit,
+  normalizeRepoWebUrl,
+  normalizeVersionTag,
+  parseConventionalSubject,
+  renderChangelog,
+  resolveSection,
+  resolveStartRefFromMergedTags,
+} = changelogScaffold;
+
+describe('scaffold-changelog', () => {
+  it('normalizes version tags and repository URLs', () => {
+    expect(normalizeVersionTag('0.0.2')).toBe('v0.0.2');
+    expect(normalizeVersionTag('v0.0.2')).toBe('v0.0.2');
+    expect(normalizeRepoWebUrl('git+https://github.com/irorange27/iKi.git')).toBe(
+      'https://github.com/irorange27/iKi'
+    );
+    expect(normalizeRepoWebUrl('git@github.com:irorange27/iKi.git')).toBe(
+      'https://github.com/irorange27/iKi'
+    );
+  });
+
+  it('parses conventional commit subjects and maps them to changelog sections', () => {
+    expect(parseConventionalSubject('feat(companion): add floating companion window')).toEqual({
+      type: 'feat',
+      scope: 'companion',
+      description: 'add floating companion window',
+      breaking: false,
+    });
+    expect(resolveSection('feat')).toBe('features');
+    expect(resolveSection('fix')).toBe('fixes');
+    expect(resolveSection('refactor')).toBe('optimizations');
+    expect(resolveSection('build')).toBe('misc');
+    expect(humanizeScope('desktop-pet/system_eval')).toBe('Desktop Pet System Eval');
+    expect(humanizeScope('ui/api')).toBe('UI API');
+  });
+
+  it('extracts issue refs and formats entries with fallback commit links', () => {
+    expect(extractIssueRefs('fix(ui): handle proxy issue (#12) and #34')).toEqual(['12', '34']);
+    expect(
+      formatCommitEntry(
+        {
+          hash: '304b68ecf0d1',
+          shortHash: '304b68e',
+          subject: 'build: migrate from npm to pnpm with workspace configuration',
+          body: '',
+        },
+        'https://github.com/irorange27/iKi'
+      )
+    ).toBe(
+      '- Migrate from npm to pnpm with workspace configuration ([304b68e](https://github.com/irorange27/iKi/commit/304b68ecf0d1))'
+    );
+  });
+
+  it('skips release bookkeeping commits and renders AstrBot-style grouped sections', () => {
+    expect(
+      isReleaseBookkeepingCommit({
+        subject: 'docs: update changelog with release notes',
+        body: '',
+      })
+    ).toBe(true);
+
+    const markdown = renderChangelog({
+      versionTag: 'v0.0.2',
+      entriesBySection: {
+        features: ['- Companion: add floating companion window'],
+        fixes: ['- UI: fix provider selector overflow'],
+        optimizations: ['- Chat: reduce first-token latency'],
+        misc: ['- Build: migrate from npm to pnpm'],
+      },
+    });
+
+    expect(markdown).toBe(
+      [
+        '## 更新内容',
+        '',
+        '### 新功能',
+        '- Companion: add floating companion window',
+        '',
+        '### 修复',
+        '- UI: fix provider selector overflow',
+        '',
+        '### 优化',
+        '- Chat: reduce first-token latency',
+        '',
+        '### 杂项',
+        '- Build: migrate from npm to pnpm',
+        '',
+      ].join('\n')
+    );
+  });
+
+  it('resolves the previous merged tag when the target tag already exists', () => {
+    expect(
+      resolveStartRefFromMergedTags({
+        versionTag: 'v0.0.2',
+        mergedTags: ['v0.0.3', 'v0.0.2', 'v0.0.1'],
+      })
+    ).toBe('v0.0.1');
+    expect(
+      resolveStartRefFromMergedTags({
+        versionTag: 'v0.0.4',
+        mergedTags: ['v0.0.3', 'v0.0.2', 'v0.0.1'],
+      })
+    ).toBe('v0.0.3');
+  });
+});

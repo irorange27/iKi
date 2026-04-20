@@ -80,6 +80,7 @@ jobs:
         run: |
           if [[ ! -f "${{ steps.meta.outputs.changelog_path }}" ]]; then
             echo "Missing curated release notes at ${{ steps.meta.outputs.changelog_path }}"
+            echo "Generate a draft with: pnpm run changelog:scaffold -- --version ${{ steps.meta.outputs.release_tag }}"
             exit 1
           fi
 

@@ -162,6 +162,9 @@ existing packaged output under `out/`.
 - Conventional Commits remain required for history hygiene, but release intent is manual
 - Curated product notes live in `changelogs/`; there is no `release-please` or machine-generated
   root `CHANGELOG.md` flow
+- `pnpm run changelog:scaffold -- --version vX.Y.Z` generates an AstrBot-style grouped draft
+  (`新功能 / 修复 / 优化 / 杂项`) from Conventional Commit history; review and tighten the copy
+  before tagging so release notes stay concise but curated
 - Local release verification path: run `pnpm run app:build` before a version cut; `app:preview`
   remains available for a manual visual pass
 - CI/CD release builds are tag-driven: push `vX.Y.Z` after `package.json` and

@@ -1,7 +1,7 @@
 {
   "name": "iki",
   "productName": "iki",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A local agent pet for AI provider orchestration",
   "main": ".vite/build/main.js",
   "scripts": {
@@ -28,6 +28,7 @@
     "benchmark:affect:thesis:v2:backfill": "node scripts/benchmarks/backfill-affect-thesis-v2-manifest-labels.cjs",
     "benchmark:affect:thesis:v2:freeze": "node scripts/benchmarks/freeze-affect-thesis-v2-dataset.cjs",
     "daemon:start": "tsc && node scripts/start-daemon.cjs",
+    "changelog:scaffold": "node scripts/scaffold-changelog.cjs",
     "ts": "tsc",
     "watch": "tsc -w",
     "start": "electron-forge start",
