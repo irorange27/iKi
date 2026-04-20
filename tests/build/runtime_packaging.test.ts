@@ -67,37 +67,12 @@ const seedRuntimePackages = (
   projectDir: string,
   buildFixtures: readonly BuildFixture[] = DEFAULT_BUILD_FIXTURES
 ) => {
-  writeJson(path.join(projectDir, 'package-lock.json'), {
-    name: 'fixture',
-    lockfileVersion: 3,
-    packages: {
-      '': {},
-      'node_modules/ajv': {},
-      'node_modules/ajv-formats': {
-        dependencies: {
-          ajv: '^8.0.0',
-        },
-      },
-      'node_modules/better-sqlite3': {
-        dependencies: {
-          bindings: '^1.5.0',
-        },
-      },
-      'node_modules/bindings': {
-        dependencies: {
-          'file-uri-to-path': '^1.0.0',
-        },
-      },
-      'node_modules/ffmpeg-static': {},
-      'node_modules/file-uri-to-path': {},
-      'node_modules/ws': {},
-      'node_modules/whisper-node': {},
-    },
-  });
-
   writeJson(path.join(projectDir, 'node_modules/better-sqlite3/package.json'), {
     name: 'better-sqlite3',
     version: '1.0.0',
+    dependencies: {
+      bindings: '^1.5.0',
+    },
   });
   writeText(path.join(projectDir, 'node_modules/better-sqlite3/lib/index.js'), 'module.exports = {};');
   writeText(
@@ -108,6 +83,9 @@ const seedRuntimePackages = (
   writeJson(path.join(projectDir, 'node_modules/bindings/package.json'), {
     name: 'bindings',
     version: '1.0.0',
+    dependencies: {
+      'file-uri-to-path': '^1.0.0',
+    },
   });
   writeText(path.join(projectDir, 'node_modules/bindings/index.js'), 'module.exports = {};');
 
@@ -149,6 +127,9 @@ const seedRuntimePackages = (
   writeJson(path.join(projectDir, 'node_modules/ajv-formats/package.json'), {
     name: 'ajv-formats',
     version: '1.0.0',
+    peerDependencies: {
+      ajv: '^8.0.0',
+    },
   });
   writeText(path.join(projectDir, 'node_modules/ajv-formats/dist/formats.js'), 'module.exports = {};');
 
@@ -166,7 +147,7 @@ describe('runtime_packaging', () => {
     }
   });
 
-  it('resolves only the runtime files that packaged apps need', () => {
+  it('resolves only the runtime files that packaged apps need from installed package manifests', () => {
     const projectDir = createTempProject();
     seedRuntimePackages(projectDir);
 

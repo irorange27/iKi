@@ -65,7 +65,7 @@ A local agent pet for AI provider orchestration.
 
 ## Getting Started
 
-1. Install Node.js 20.x and npm 10.x.
+1. Install Node.js 20.x and enable Corepack so the pinned `pnpm@10.33.0` version can be used.
 
 2. Clone the repository:
 
@@ -79,24 +79,30 @@ A local agent pet for AI provider orchestration.
    cd iKi
    ```
 
-4. Install dependencies:
+4. Enable Corepack:
 
    ```bash
-   npm ci
+   corepack enable
    ```
 
-5. Start the desktop app in development mode:
+5. Install dependencies:
 
    ```bash
-   npm run app:dev
+   pnpm install --frozen-lockfile
    ```
 
-6. Launch iKi and follow the first-run welcome flow to wake it up: connect one provider, make sure
+6. Start the desktop app in development mode:
+
+   ```bash
+   pnpm run app:dev
+   ```
+
+7. Launch iKi and follow the first-run welcome flow to wake it up: connect one provider, make sure
    it exposes at least one model (for example OpenAI, Anthropic, DeepSeek, or MiniMax), then send
    your first chat message. You can still open `Settings` directly at any time if you prefer the
    full control surface.
 
-7. To use an ACP-backed agent such as Codex, add the built-in `Codex CLI` provider in
+8. To use an ACP-backed agent such as Codex, add the built-in `Codex CLI` provider in
    `Settings -> Providers`, set the command plus shell-style arguments (or a JSON string array),
    optionally choose an authentication method, optionally point `API Provider` at an existing
    provider for credential reuse, select any MCP servers that session should connect to, fetch the
@@ -105,13 +111,13 @@ A local agent pet for AI provider orchestration.
 
 ## Useful Commands
 
-- `npm run app:dev`: start the desktop app through Electron Forge's Vite flow.
-- `npm run app:preview`: launch the latest local packaged app from `out/` for manual eyeballing.
-- `npm run app:build`: create distributable artifacts via Electron Forge makers.
-- `npm run -s ci:quality`: run the repository quality gate locally.
+- `pnpm run app:dev`: start the desktop app through Electron Forge's Vite flow.
+- `pnpm run app:preview`: launch the latest local packaged app from `out/` for manual eyeballing.
+- `pnpm run app:build`: create distributable artifacts via Electron Forge makers.
+- `pnpm run -s ci:quality`: run the repository quality gate locally.
 
 Packaging may download platform-specific Electron artifacts the first time it
-runs, so `app:build` and `npm run package` expect normal network access. `app:preview` expects an
+runs, so `app:build` and `pnpm run package` expect normal network access. `app:preview` expects an
 existing packaged output under `out/`.
 
 ## Development Notes
@@ -125,16 +131,19 @@ existing packaged output under `out/`.
   successful client registration; treat it as a one-time local setup credential.
 - Downloaded `whisper-node` models are stored under iKi's user-data directory,
   not inside the packaged app bundle.
+- `pnpm` installs are guarded by an explicit reviewed build-script allowlist in
+  `pnpm-workspace.yaml`; when a new dependency introduces an install script, it
+  should be reviewed and added intentionally instead of allowing all scripts by default.
 
 ## Commit Governance
 
-- Interactive semantic commit: `npm run commit`
-- Commit message lint (recent history): `npm run commit:check`
-- Local hooks are managed by Husky and installed through `npm install` (`prepare`)
+- Interactive semantic commit: `pnpm run commit`
+- Commit message lint (recent history): `pnpm run commit:check`
+- Local hooks are managed by Husky and installed through `pnpm install` (`prepare`)
 - PR title must follow semantic format (CI enforced)
 - Architecture-impacting code changes should include docs/changelog updates when the repository
   keeps those artifacts in version control
-- CI quality gate runs `npm run -s ci:quality` (`eslint --ext .ts,.tsx,.vue .` + `tsc` +
+- CI quality gate runs `pnpm run -s ci:quality` (`eslint --ext .ts,.tsx,.vue .` + `tsc` +
   `vue-tsc --noEmit` + tests with coverage)
 - Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; the
   current repository-wide floor is `lines 60 / functions 59 / branches 46 / statements 59`, and it
@@ -146,20 +155,20 @@ existing packaged output under `out/`.
 - Coverage now counts Vue single-file components (`src/**/*.vue`) in addition to `ts/tsx`, so
   renderer interaction logic is part of the same regression floor as the rest of the codebase
 - Renderer component tests now run in Vitest with Vue SFC transform and `happy-dom`
-- Quick renderer-only regression pass: `npm run -s test:renderer`
+- Quick renderer-only regression pass: `pnpm run -s test:renderer`
 
 ## Release Flow
 
 - Conventional Commits remain required for history hygiene, but release intent is manual
 - Curated product notes live in `changelogs/`; there is no `release-please` or machine-generated
   root `CHANGELOG.md` flow
-- Local release verification path: run `npm run app:build` before a version cut; `app:preview`
+- Local release verification path: run `pnpm run app:build` before a version cut; `app:preview`
   remains available for a manual visual pass
 - CI/CD release builds are tag-driven: push `vX.Y.Z` after `package.json` and
   `changelogs/vX.Y.Z.md` are in sync
-- `release-build` first runs the full repository gate (`npm run -s ci:quality`) on Ubuntu before
+- `release-build` first runs the full repository gate (`pnpm run -s ci:quality`) on Ubuntu before
   any matrix packaging starts
-- `release-build` then runs `npm run -s app:build` on macOS, Windows, and Linux, uploading maker
+- `release-build` then runs `pnpm run -s app:build` on macOS, Windows, and Linux, uploading maker
   outputs as workflow artifacts per OS
 - Tag builds automatically create or update a draft GitHub Release whose body comes from the
   curated `changelogs/vX.Y.Z.md` file and whose assets include a `SHA256SUMS.txt` manifest

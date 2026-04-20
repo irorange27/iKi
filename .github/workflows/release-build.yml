@@ -61,11 +61,18 @@ jobs:
         with:
           ref: ${{ steps.meta.outputs.checkout_ref }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Validate release metadata
         if: steps.meta.outputs.should_publish == 'true'
@@ -83,10 +90,10 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run release quality gate
-        run: npm run -s ci:quality
+        run: pnpm run -s ci:quality
 
   build:
     name: Build (${{ matrix.label }})
@@ -97,7 +104,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             label: darwin-arm64
           - os: windows-latest
             label: windows-x64
@@ -110,17 +117,24 @@ jobs:
         with:
           ref: ${{ needs.verify.outputs.checkout_ref }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build distributables
-        run: npm run -s app:build
+        run: pnpm run -s app:build
         env:
           CI: "1"
 

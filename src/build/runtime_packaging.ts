@@ -8,13 +8,10 @@ export const VITE_EXTERNAL_RUNTIME_DEPS = [
   'ffmpeg-static',
 ] as const;
 
-type PackageLockPackage = {
+type InstalledPackageManifest = {
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
-};
-
-type PackageLock = {
-  packages?: Record<string, PackageLockPackage>;
+  peerDependencies?: Record<string, string>;
 };
 
 type RuntimePackageRule = {
@@ -32,13 +29,15 @@ const resolveRealPath = (value: string): string => {
   }
 };
 
-const readPackageLockPackages = (projectDir: string): Record<string, PackageLockPackage> => {
+const readInstalledPackageManifest = (
+  projectDir: string,
+  packagePath: string
+): InstalledPackageManifest => {
   try {
-    const lockPath = path.join(projectDir, 'package-lock.json');
-    if (!fs.existsSync(lockPath)) return {};
-    const raw = fs.readFileSync(lockPath, 'utf8');
-    const parsed = JSON.parse(raw) as PackageLock;
-    return parsed.packages ?? {};
+    const packageJsonPath = path.join(projectDir, packagePath, 'package.json');
+    if (!fs.existsSync(packageJsonPath)) return {};
+    const raw = fs.readFileSync(packageJsonPath, 'utf8');
+    return JSON.parse(raw) as InstalledPackageManifest;
   } catch {
     return {};
   }
@@ -187,7 +186,6 @@ const resolveRuntimeDependencyPackagePaths = (
   projectDir: string,
   packageNames: readonly string[]
 ): string[] => {
-  const lockPackages = readPackageLockPackages(projectDir);
   const visited = new Set<string>();
   const queue = packageNames
     .map(packageName => resolveInstalledPackagePath(projectDir, packageName))
@@ -199,10 +197,11 @@ const resolveRuntimeDependencyPackagePaths = (
 
     visited.add(packagePath);
 
-    const lockEntry = lockPackages[packagePath];
+    const manifest = readInstalledPackageManifest(projectDir, packagePath);
     const dependencyNames = new Set<string>([
-      ...Object.keys(lockEntry?.dependencies ?? {}),
-      ...Object.keys(lockEntry?.optionalDependencies ?? {}),
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.optionalDependencies ?? {}),
+      ...Object.keys(manifest.peerDependencies ?? {}),
     ]);
 
     for (const dependencyName of dependencyNames) {

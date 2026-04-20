@@ -85,7 +85,7 @@ limitations.
 ## Usage
 
 ```bash
-npm run benchmark:daemon -- \
+pnpm run benchmark:daemon -- \
   --benchmark browsecomp \
   --provider openai \
   --model gpt-4.1-mini \
@@ -101,7 +101,7 @@ omitted.
 To use a separate judge model with the public BrowseComp grader prompt:
 
 ```bash
-npm run benchmark:daemon -- \
+pnpm run benchmark:daemon -- \
   --benchmark browsecomp \
   --provider openai \
   --model gpt-4.1-mini \
@@ -116,7 +116,7 @@ npm run benchmark:daemon -- \
 To run a local/manual sample file instead of the official BrowseComp dataset:
 
 ```bash
-npm run benchmark:daemon -- \
+pnpm run benchmark:daemon -- \
   --benchmark generic \
   --tasks scripts/benchmarks/examples/manual-sample.tasks.json \
   --provider openai \
@@ -129,7 +129,7 @@ npm run benchmark:daemon -- \
 To score a local affect benchmark prediction file and build blinded judge packets:
 
 ```bash
-npm run benchmark:affect -- \
+pnpm run benchmark:affect -- \
   --cases scripts/benchmarks/examples/affect-benchmark/sample.cases.jsonl \
   --gold scripts/benchmarks/examples/affect-benchmark/sample.gold.jsonl \
   --predictions scripts/benchmarks/examples/affect-benchmark/sample.predictions.jsonl \
@@ -202,7 +202,7 @@ runtime conditions sequentially on the frozen thesis dataset and then compiles a
 paper-facing summary:
 
 ```bash
-npm run benchmark:affect:thesis:run -- \
+pnpm run benchmark:affect:thesis:run -- \
   --main-cases research/affect-thesis/thesis-screening-main-v1.cases.jsonl \
   --main-gold research/affect-thesis/thesis-screening-main-v1.gold.jsonl \
   --neutral-cases research/affect-thesis/thesis-screening-neutral-v1.cases.jsonl \
@@ -251,20 +251,20 @@ The intended order is:
 To scaffold the v2 manifest:
 
 ```bash
-npm run benchmark:affect:thesis:v2:scaffold
+pnpm run benchmark:affect:thesis:v2:scaffold
 ```
 
 To build authoring packets from the scaffolded manifest:
 
 ```bash
-npm run benchmark:affect:thesis:v2:packets
+pnpm run benchmark:affect:thesis:v2:packets
 ```
 
 If you need to rebalance a thin slice without invalidating an already-reviewed manifest, append a
 supplement blueprint instead of regenerating the whole manifest:
 
 ```bash
-npm run benchmark:affect:thesis:v2:append -- \
+pnpm run benchmark:affect:thesis:v2:append -- \
   --manifest research/affect-thesis-v2/dataset-manifest.v1.jsonl \
   --blueprint research/affect-thesis-v2/blueprint.neutral-balance-supplement.v1.json \
   --summary research/affect-thesis-v2/manifest-summary.v1.json \
@@ -274,7 +274,7 @@ npm run benchmark:affect:thesis:v2:append -- \
 To ingest batch responses into a flat candidate pool:
 
 ```bash
-npm run benchmark:affect:thesis:v2:ingest -- \
+pnpm run benchmark:affect:thesis:v2:ingest -- \
   --input research/affect-thesis-v2/candidate-batches.v1.jsonl \
   --output-dir research/affect-thesis-v2
 ```
@@ -282,7 +282,7 @@ npm run benchmark:affect:thesis:v2:ingest -- \
 To audit a flattened candidate pool:
 
 ```bash
-npm run benchmark:affect:thesis:v2:audit -- \
+pnpm run benchmark:affect:thesis:v2:audit -- \
   --candidates research/affect-thesis-v2/candidate-pool.v1.jsonl \
   --output-dir research/affect-thesis-v2/audits
 ```
@@ -290,7 +290,7 @@ npm run benchmark:affect:thesis:v2:audit -- \
 To backfill reviewed candidate selections into the manifest:
 
 ```bash
-npm run benchmark:affect:thesis:v2:select -- \
+pnpm run benchmark:affect:thesis:v2:select -- \
   --manifest research/affect-thesis-v2/dataset-manifest.v1.jsonl \
   --selections research/affect-thesis-v2/selection-log.v1.jsonl \
   --candidates research/affect-thesis-v2/seed-merged/candidate-pool.v1.jsonl \
@@ -306,7 +306,7 @@ editing the manifest by hand.
 To scaffold a formal annotation round from the selected candidates:
 
 ```bash
-npm run benchmark:affect:thesis:v2:prepare-annotation -- \
+pnpm run benchmark:affect:thesis:v2:prepare-annotation -- \
   --manifest research/affect-thesis-v2/dataset-manifest.v1.jsonl \
   --candidates research/affect-thesis-v2/seed-merged/candidate-pool.v1.jsonl \
   --round-id formal_v2 \
@@ -321,7 +321,7 @@ unless `--force` is provided, because these files may already contain human labe
 If humans should annotate in a spreadsheet rather than editing JSONL directly, export CSV sheets:
 
 ```bash
-npm run benchmark:affect:thesis:v2:export-annotation-sheets -- \
+pnpm run benchmark:affect:thesis:v2:export-annotation-sheets -- \
   --workset research/affect-thesis-v2/annotation-workset.formal_v2.jsonl \
   --annotations research/affect-thesis-v2/annotation-log.formal_v2.annotator_a.jsonl,research/affect-thesis-v2/annotation-log.formal_v2.annotator_b.jsonl \
   --output-dir research/affect-thesis-v2
@@ -330,7 +330,7 @@ npm run benchmark:affect:thesis:v2:export-annotation-sheets -- \
 After the annotators fill those CSV sheets, import each sheet back into its canonical JSONL log:
 
 ```bash
-npm run benchmark:affect:thesis:v2:import-annotation-sheet -- \
+pnpm run benchmark:affect:thesis:v2:import-annotation-sheet -- \
   --sheet research/affect-thesis-v2/annotation-sheet.formal_v2.annotator_a.csv \
   --template research/affect-thesis-v2/annotation-log.formal_v2.annotator_a.jsonl \
   --output research/affect-thesis-v2/annotation-log.formal_v2.annotator_a.jsonl
@@ -339,7 +339,7 @@ npm run benchmark:affect:thesis:v2:import-annotation-sheet -- \
 To backfill annotation/adjudication results into the manifest:
 
 ```bash
-npm run benchmark:affect:thesis:v2:backfill -- \
+pnpm run benchmark:affect:thesis:v2:backfill -- \
   --annotations research/affect-thesis-v2/annotation-log.formal_v2.annotator_a.jsonl,research/affect-thesis-v2/annotation-log.formal_v2.annotator_b.jsonl \
   --adjudications research/affect-thesis-v2/adjudication-log.formal_v2.jsonl \
   --round-id formal_v2 \
@@ -350,7 +350,7 @@ npm run benchmark:affect:thesis:v2:backfill -- \
 To freeze the selected candidates into a final dataset:
 
 ```bash
-npm run benchmark:affect:thesis:v2:freeze -- \
+pnpm run benchmark:affect:thesis:v2:freeze -- \
   --manifest research/affect-thesis-v2/dataset-manifest.v1.jsonl \
   --candidates research/affect-thesis-v2/seed-merged/candidate-pool.v1.jsonl \
   --audit research/affect-thesis-v2/seed-merged/audits/candidate-audit.v1.jsonl \
@@ -370,7 +370,7 @@ defend.
 If the runs already exist and you only want to rebuild the thesis tables / prose:
 
 ```bash
-npm run benchmark:affect:thesis:summary -- \
+pnpm run benchmark:affect:thesis:summary -- \
   --main-cases research/affect-thesis/thesis-screening-main-v1.cases.jsonl \
   --main-gold research/affect-thesis/thesis-screening-main-v1.gold.jsonl \
   --neutral-cases research/affect-thesis/thesis-screening-neutral-v1.cases.jsonl \
@@ -385,7 +385,7 @@ For the thesis-facing desktop-pet system evaluation package, keep the existing r
 combine them with a manually recorded observation file:
 
 ```bash
-npm run benchmark:desktop-pet:system:summary -- \
+pnpm run benchmark:desktop-pet:system:summary -- \
   --output-dir benchmark-runs/desktop-pet-system-eval/deepseek-chat \
   --run no_affect=benchmark-runs/affect-thesis-v1/deepseek-chat/deepseek-deepseek-chat-no_affect \
   --run tone_only=benchmark-runs/affect-thesis-v1/deepseek-chat/deepseek-deepseek-chat-tone_only \

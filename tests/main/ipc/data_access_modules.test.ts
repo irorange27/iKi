@@ -243,18 +243,32 @@ describe('data access IPC modules', () => {
       success: true,
     });
     expect(await ipcHandlers.get('providers:delete')?.(null, 'provider_1')).toEqual({ success: true });
-    expect(providerWindowSendMock).toHaveBeenNthCalledWith(1, 'providers:updated', {
-      action: 'added',
-      providerId: 'provider_new',
-    });
-    expect(providerWindowSendMock).toHaveBeenNthCalledWith(2, 'providers:updated', {
-      action: 'updated',
-      providerId: 'provider_1',
-    });
-    expect(providerWindowSendMock).toHaveBeenNthCalledWith(3, 'providers:updated', {
-      action: 'deleted',
-      providerId: 'provider_1',
-    });
+    const providerUpdateEvents = providerWindowSendMock.mock.calls.filter(
+      (call): call is [string, { action: string; providerId: string }] => call[0] === 'providers:updated'
+    );
+    expect(providerUpdateEvents).toEqual([
+      [
+        'providers:updated',
+        {
+          action: 'added',
+          providerId: 'provider_new',
+        },
+      ],
+      [
+        'providers:updated',
+        {
+          action: 'updated',
+          providerId: 'provider_1',
+        },
+      ],
+      [
+        'providers:updated',
+        {
+          action: 'deleted',
+          providerId: 'provider_1',
+        },
+      ],
+    ]);
 
     const addError = new Error('add failed');
     addProviderMock.mockImplementationOnce(() => {

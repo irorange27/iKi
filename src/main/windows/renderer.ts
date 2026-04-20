@@ -156,8 +156,8 @@ const buildRendererUnavailablePage = (params: {
       <ul>
         <li>Expected dev server: <code>${escapeHtml(params.devServerUrl)}${escapeHtml(routeSuffix)}</code></li>
         <li>Expected built file: <code>${escapeHtml(params.prodHtmlPath)}</code></li>
-        <li>For development, start with <code>npm run app:dev</code> (or <code>npm run start</code>).</li>
-        <li>For a packaged local preview, run <code>npm run app:preview</code>.</li>
+        <li>For development, start with <code>pnpm run app:dev</code> (or <code>pnpm run start</code>).</li>
+        <li>For a packaged local preview, run <code>pnpm run app:preview</code>.</li>
       </ul>
     </main>
   </body>
