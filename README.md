@@ -167,14 +167,15 @@ existing packaged output under `out/`.
   before tagging so release notes stay concise but curated
 - Local release verification path: run `pnpm run app:build` before a version cut; `app:preview`
   remains available for a manual visual pass
-- CI/CD release builds are tag-driven: push `vX.Y.Z` after `package.json` and
-  `changelogs/vX.Y.Z.md` are in sync
+- CI/CD release builds are tag-driven: push `vX.Y.Z` after `package.json` is in sync with the
+  version you intend to release
 - `release-build` first runs the full repository gate (`pnpm run -s ci:quality`) on Ubuntu before
   any matrix packaging starts
 - `release-build` then runs `pnpm run -s app:build` on macOS, Windows, and Linux, uploading maker
   outputs as workflow artifacts per OS
-- Tag builds automatically create or update a draft GitHub Release whose body comes from the
-  curated `changelogs/vX.Y.Z.md` file and whose assets include a `SHA256SUMS.txt` manifest
+- Tag builds automatically create or update a draft GitHub Release whose body prefers the
+  curated `changelogs/vX.Y.Z.md` file when present and otherwise falls back to a short generated
+  note; assets include a `SHA256SUMS.txt` manifest
 - Packaged macOS and Windows builds now use Electron's native `autoUpdater` via
   `update.electronjs.org`, so the desktop client only sees releases after the GitHub draft release
   has been explicitly published; draft assets remain invisible to auto-update checks

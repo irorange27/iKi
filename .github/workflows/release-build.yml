@@ -74,16 +74,10 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Validate release metadata
+      - name: Validate release version
         if: steps.meta.outputs.should_publish == 'true'
         shell: bash
         run: |
-          if [[ ! -f "${{ steps.meta.outputs.changelog_path }}" ]]; then
-            echo "Missing curated release notes at ${{ steps.meta.outputs.changelog_path }}"
-            echo "Generate a draft with: pnpm run changelog:scaffold -- --version ${{ steps.meta.outputs.release_tag }}"
-            exit 1
-          fi
-
           package_version="$(node -p "require('./package.json').version")"
           if [[ "$package_version" != "${{ steps.meta.outputs.release_version }}" ]]; then
             echo "package.json version ($package_version) does not match tag ${{ steps.meta.outputs.release_tag }}"
@@ -184,12 +178,33 @@ jobs:
             | sort -z \
             | xargs -0 shasum -a 256 > SHA256SUMS.txt
 
+      - name: Prepare release notes
+        id: notes
+        shell: bash
+        run: |
+          release_notes_path="release-notes.md"
+
+          if [[ -f "${{ needs.verify.outputs.changelog_path }}" ]]; then
+            cp "${{ needs.verify.outputs.changelog_path }}" "$release_notes_path"
+          else
+            {
+              echo "## 更新内容"
+              echo
+              echo "### 杂项"
+              echo
+              echo "- 发布构建产物：${{ needs.verify.outputs.release_tag }}。"
+              echo "- 本次标签未提交 \`${{ needs.verify.outputs.changelog_path }}\`，因此使用自动生成的兜底说明。"
+            } > "$release_notes_path"
+          fi
+
+          echo "path=$release_notes_path" >> "$GITHUB_OUTPUT"
+
       - name: Upload assets to draft release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.verify.outputs.release_tag }}
           name: iki ${{ needs.verify.outputs.release_tag }}
-          body_path: ${{ needs.verify.outputs.changelog_path }}
+          body_path: ${{ steps.notes.outputs.path }}
           draft: true
           files: |
             release-artifacts/**/*
