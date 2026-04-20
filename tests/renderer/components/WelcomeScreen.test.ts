@@ -107,16 +107,18 @@ describe('WelcomeScreen', () => {
     expect(wrapper.text()).toContain('OpenAI');
     expect(wrapper.text()).toContain('gpt-4.1-mini');
     expect(wrapper.text()).toContain('Good First Context');
+    expect(wrapper.text()).toContain('Names & Tone');
     expect(wrapper.text()).toContain('Project Folder');
     expect(wrapper.text()).toContain('Current Task');
     expect(wrapper.text()).toContain('Pasted Text');
     expect(wrapper.findAll('.welcome-prompt-btn')).toHaveLength(4);
+    expect(wrapper.find('.welcome-primary-btn').text()).toContain('Get Acquainted First');
 
     await wrapper.find('.welcome-primary-btn').trigger('click');
 
     const firstEmission = wrapper.emitted('compose-starter')?.[0]?.[0];
     expect(firstEmission).toBe(
-      'I am going to tell you what I am trying to do. Help me turn it into the next three concrete steps.'
+      'Speak with me naturally and start in a warm, low-pressure way. First help us establish how we should address each other: ask what I want to call you, what kind of presence I want you to be, what tone I prefer, how you should address me, and whether I want a small emoji or symbol. Keep it conversational rather than form-like.'
     );
 
     wrapper.unmount();

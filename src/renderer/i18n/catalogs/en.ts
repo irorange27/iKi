@@ -67,11 +67,11 @@ export const en = defineCatalog({
   'chat.welcome.body.finishProvider':
     'You already have a provider in motion. Finish its credentials or enable a working one. Once it is ready, give iKi one concrete source of context and let it start.',
   'chat.welcome.body.awake':
-    'Your first provider and model are ready. Now give iKi one concrete source to work from: a project folder, your current task, or pasted text.',
+    'Your first provider and model are ready. You can start by setting names and tone, or give iKi one concrete source to work from: a project folder, your current task, or pasted text.',
   'chat.welcome.primary.connectProvider': 'Connect First Provider',
   'chat.welcome.primary.finishProvider': 'Finish Provider Setup',
   'chat.welcome.primary.pickModel': 'Review Provider Models',
-  'chat.welcome.primary.draftHello': 'Set Up First Request',
+  'chat.welcome.primary.meetFirst': 'Get Acquainted First',
   'chat.welcome.hint.loading': 'Checking your local provider setup now.',
   'chat.welcome.hint.connectProvider':
     'No provider is ready yet. Open Provider settings, add one API key, and enable one model source.',
@@ -82,8 +82,11 @@ export const en = defineCatalog({
   'chat.welcome.hint.modelReady':
     'A provider is ready. Use Provider settings to make sure at least one model is exposed for the first chat.',
   'chat.welcome.hint.ready':
-    'Use a starter below, then fill in the project, task, or text it asks for.',
+    'Start by setting names and tone, or use one of the starters below and fill in the missing context.',
   'chat.welcome.contextSources.label': 'Good First Context',
+  'chat.welcome.contextSources.identity.title': 'Names & Tone',
+  'chat.welcome.contextSources.identity.body':
+    'Set how you want to address each other before jumping into work.',
   'chat.welcome.contextSources.project.title': 'Project Folder',
   'chat.welcome.contextSources.project.body':
     'Choose a workspace, then ask iKi what to inspect first.',
@@ -112,11 +115,12 @@ export const en = defineCatalog({
   'chat.welcome.step.model.add': 'Add at least one model in Provider settings.',
   'chat.welcome.step.model.choose': 'Review the provider and make sure a first model is available.',
   'chat.welcome.step.model.ready': ({ model }) => `${asText(model)} is selected.`,
-  'chat.welcome.step.message.title': 'Send the first request',
+  'chat.welcome.step.message.title': 'Start the first chat',
   'chat.welcome.step.message.pending': 'Give iKi context after the first two steps.',
-  'chat.welcome.step.message.ready': 'Pick one starter below and fill in the missing context.',
-  'chat.welcome.prompt.intro':
-    'I am going to tell you what I am trying to do. Help me turn it into the next three concrete steps.',
+  'chat.welcome.step.message.ready':
+    'Start by getting acquainted, or pick one of the starters below and fill in the missing context.',
+  'chat.welcome.prompt.meet':
+    'Speak with me naturally and start in a warm, low-pressure way. First help us establish how we should address each other: ask what I want to call you, what kind of presence I want you to be, what tone I prefer, how you should address me, and whether I want a small emoji or symbol. Keep it conversational rather than form-like.',
   'chat.welcome.prompt.plan':
     'Once I give you a project folder, tell me the three places I should inspect first and why.',
   'chat.welcome.prompt.learn':

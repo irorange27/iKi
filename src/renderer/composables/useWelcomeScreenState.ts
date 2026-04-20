@@ -153,7 +153,7 @@ export const useWelcomeScreenState = (params: {
         ? t('chat.welcome.primary.pickModel')
         : t('chat.welcome.primary.finishProvider');
     }
-    return t('chat.welcome.primary.draftHello');
+    return t('chat.welcome.primary.meetFirst');
   });
 
   const onboardingHint = computed(() => {
@@ -215,6 +215,10 @@ export const useWelcomeScreenState = (params: {
 
     return [
       {
+        title: t('chat.welcome.contextSources.identity.title'),
+        body: t('chat.welcome.contextSources.identity.body'),
+      },
+      {
         title: t('chat.welcome.contextSources.project.title'),
         body: t('chat.welcome.contextSources.project.body'),
       },
@@ -230,7 +234,7 @@ export const useWelcomeScreenState = (params: {
   });
 
   const starterPrompts = computed(() => [
-    t('chat.welcome.prompt.intro'),
+    t('chat.welcome.prompt.meet'),
     t('chat.welcome.prompt.plan'),
     t('chat.welcome.prompt.learn'),
   ]);
