@@ -2,23 +2,28 @@
   <div>
     <div class="relative rounded-[22px] border chat-input-container">
       <div class="composer-input-region">
-        <textarea
-          rows="1"
-          spellcheck="true"
-          enterkeyhint="send"
-          autocapitalize="sentences"
-          autocomplete="off"
-          autocorrect="on"
-          data-gramm="false"
-          :ref="assignInputRef"
-          :value="props.modelValue"
-          :placeholder="props.placeholder"
-          class="chat-input-field ui-text-primary placeholder-muted focus:outline-none"
-          @input="emitModelValue"
-          @keydown.enter="emit('keydownEnter', $event)"
-          @compositionstart="emit('compositionStart', $event)"
-          @compositionend="emit('compositionEnd', $event)"
-        />
+        <div class="composer-input-stack">
+          <slot name="input-context" />
+          <textarea
+            rows="1"
+            spellcheck="true"
+            enterkeyhint="send"
+            autocapitalize="sentences"
+            autocomplete="off"
+            autocorrect="on"
+            data-gramm="false"
+            :ref="assignInputRef"
+            :value="props.modelValue"
+            :placeholder="props.placeholder"
+            class="chat-input-field ui-text-primary placeholder-muted focus:outline-none"
+            @input="emitModelValue"
+            @keydown="emit('keydown', $event)"
+            @keydown.enter="emit('keydownEnter', $event)"
+            @compositionstart="emit('compositionStart', $event)"
+            @compositionend="emit('compositionEnd', $event)"
+          />
+        </div>
+        <slot name="input-overlay" />
       </div>
 
       <div class="composer-toolbar border-t border-color">
@@ -50,20 +55,24 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: string): void;
+  (event: 'keydown', value: KeyboardEvent): void;
   (event: 'keydownEnter', value: KeyboardEvent): void;
   (event: 'compositionStart', value: CompositionEvent): void;
   (event: 'compositionEnd', value: CompositionEvent): void;
 }>();
 
 const inputRef = ref<ComposerTextControl | null>(null);
-const MIN_INPUT_HEIGHT_PX = 68;
+const MIN_INPUT_HEIGHT_PX = 48;
 const MAX_INPUT_HEIGHT_PX = 220;
 
 const resizeInputField = () => {
   const input = inputRef.value;
   if (!input) return;
   input.style.height = '0px';
-  const nextHeight = Math.min(Math.max(input.scrollHeight, MIN_INPUT_HEIGHT_PX), MAX_INPUT_HEIGHT_PX);
+  const nextHeight = Math.min(
+    Math.max(input.scrollHeight, MIN_INPUT_HEIGHT_PX),
+    MAX_INPUT_HEIGHT_PX
+  );
   input.style.height = `${nextHeight}px`;
   input.style.overflowY = input.scrollHeight > MAX_INPUT_HEIGHT_PX ? 'auto' : 'hidden';
 };
@@ -111,10 +120,22 @@ onMounted(() => {
 }
 
 .composer-input-region {
+  position: relative;
   display: flex;
   min-width: 0;
-  align-items: flex-end;
-  padding: 18px 16px 10px;
+  align-items: stretch;
+  padding: 14px 14px 8px;
+}
+
+.composer-input-stack {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 6px;
 }
 
 .composer-feedback {
@@ -131,14 +152,15 @@ onMounted(() => {
 .chat-input-field {
   display: block;
   width: 100%;
-  min-width: 0;
-  min-height: 68px;
+  min-width: 120px;
+  flex: 999 1 140px;
+  min-height: 36px;
   max-height: 220px;
   resize: none;
   overflow-y: hidden;
   border: 0;
   background: transparent;
-  padding: 0;
+  padding: 2px 0 0;
   line-height: 1.6;
   font-size: 15px;
   box-sizing: border-box;
@@ -159,8 +181,8 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 10px 16px;
-  padding: 10px 12px 12px;
+  gap: 8px 14px;
+  padding: 8px 12px 10px;
   border-radius: 0 0 12px 12px;
   border-top-color: var(--chat-composer-toolbar-border-color);
   background: var(--chat-composer-toolbar-background);

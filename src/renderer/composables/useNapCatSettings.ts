@@ -153,6 +153,30 @@ export const useNapCatSettings = (params: {
   });
 
   const configPathSummary = computed(() => runtimeInfo.value?.dbPath || t('common.unavailable'));
+  const napcatBridgeStatus = computed(() => daemonStatus.value?.bridges?.napcat || null);
+  const hasNapCatBridgeRuntime = computed(() => Boolean(napcatBridgeStatus.value));
+  const napcatHeartbeat = computed(() => napcatBridgeStatus.value?.heartbeat || null);
+  const activeNapCatConnectionCount = computed(() => {
+    const count = napcatBridgeStatus.value?.activeConnectionCount;
+    return typeof count === 'number' && Number.isFinite(count) && count >= 0 ? count : null;
+  });
+  const hasActiveNapCatTransport = computed(() => (activeNapCatConnectionCount.value || 0) > 0);
+
+  const formatDurationMs = (value: number | null): string => {
+    if (value === null || !Number.isFinite(value) || value < 0) return t('common.unavailable');
+    if (value < 1000) return `${Math.round(value)}ms`;
+
+    const seconds = value / 1000;
+    if (seconds < 60) {
+      return `${seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1)}s`;
+    }
+
+    const minutes = seconds / 60;
+    if (minutes < 60) return `${minutes >= 10 ? Math.round(minutes) : minutes.toFixed(1)}m`;
+
+    const hours = minutes / 60;
+    return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)}h`;
+  };
 
   const daemonStatusChip = computed(() => {
     if (daemonStatusLoading.value) return t('settings.napcat.daemonChecking');
@@ -163,6 +187,93 @@ export const useNapCatSettings = (params: {
   const daemonStatusClass = computed(() => ({
     active: Boolean(daemonStatus.value?.online),
   }));
+
+  const transportStatusChip = computed(() => {
+    if (daemonStatusLoading.value) return t('settings.napcat.transportChecking');
+    if (daemonStatus.value && !daemonStatus.value.online) {
+      return t('settings.napcat.transportBlockedByDaemon');
+    }
+    if (!hasNapCatBridgeRuntime.value) {
+      return t('settings.napcat.transportUnavailable');
+    }
+
+    const state = napcatBridgeStatus.value?.state;
+    if (state === 'disabled') return t('settings.napcat.transportDisabled');
+    if (hasActiveNapCatTransport.value) return t('settings.napcat.transportConnected');
+    if (state === 'disconnected') return t('settings.napcat.transportDisconnected');
+    return t('settings.napcat.transportUnavailable');
+  });
+
+  const transportStatusClass = computed(() => {
+    if (daemonStatus.value && !daemonStatus.value.online) {
+      return {};
+    }
+    if (!hasNapCatBridgeRuntime.value) {
+      return {
+        idle: true,
+      };
+    }
+
+    const state = napcatBridgeStatus.value?.state;
+    return {
+      active: hasActiveNapCatTransport.value,
+      warning: !hasActiveNapCatTransport.value && state === 'disconnected',
+      idle: state === 'disabled' || state === 'unknown' || !state,
+    };
+  });
+
+  const heartbeatStatusChip = computed(() => {
+    if (daemonStatusLoading.value) return t('settings.napcat.heartbeatChecking');
+    if (daemonStatus.value && !daemonStatus.value.online) {
+      return t('settings.napcat.heartbeatBlockedByDaemon');
+    }
+    if (!hasNapCatBridgeRuntime.value) {
+      return t('settings.napcat.heartbeatUnavailable');
+    }
+
+    const state = napcatBridgeStatus.value?.state;
+    if (state === 'disabled') return t('settings.napcat.heartbeatDisabled');
+    if (state === 'unknown') return t('settings.napcat.heartbeatUnavailable');
+    if (!hasActiveNapCatTransport.value) {
+      return t('settings.napcat.heartbeatWaitingForTransport');
+    }
+
+    const heartbeat = napcatHeartbeat.value;
+    if (!heartbeat?.lastReceivedAt) return t('settings.napcat.heartbeatUnobserved');
+    if (heartbeat.stale) return t('settings.napcat.heartbeatStale');
+    if (heartbeat.online === false || heartbeat.good === false) {
+      return t('settings.napcat.heartbeatUnhealthy');
+    }
+    return t('settings.napcat.heartbeatHealthy');
+  });
+
+  const heartbeatStatusClass = computed(() => {
+    if (daemonStatus.value && !daemonStatus.value.online) {
+      return {};
+    }
+    if (!hasNapCatBridgeRuntime.value) {
+      return {
+        idle: true,
+      };
+    }
+
+    const state = napcatBridgeStatus.value?.state;
+    const heartbeat = napcatHeartbeat.value;
+    return {
+      active:
+        hasActiveNapCatTransport.value &&
+        Boolean(heartbeat?.lastReceivedAt) &&
+        heartbeat?.stale !== true &&
+        heartbeat?.online !== false &&
+        heartbeat?.good !== false,
+      warning:
+        hasActiveNapCatTransport.value &&
+        (!!heartbeat?.lastReceivedAt
+          ? heartbeat?.stale === true || heartbeat?.online === false || heartbeat?.good === false
+          : false),
+      idle: state === 'disabled' || state === 'unknown',
+    };
+  });
 
   const formatDaemonSourceLabel = (source: DaemonStatusInfo['source']): string => {
     if (source === 'health') return t('settings.napcat.daemonSource.health');
@@ -179,10 +290,119 @@ export const useNapCatSettings = (params: {
         seconds: daemonStatus.value.uptimeSeconds.toFixed(0),
       });
     }
-    if (daemonStatus.value.error) return daemonStatus.value.error;
+    if (daemonStatus.value.error) {
+      return daemonStatus.value.online
+        ? daemonStatus.value.error
+        : t('settings.napcat.daemonOfflineDetail', {
+            error: daemonStatus.value.error,
+          });
+    }
     return t('settings.napcat.daemonSource', {
       source: formatDaemonSourceLabel(daemonStatus.value.source),
     });
+  });
+
+  const transportStatusDetail = computed(() => {
+    if (daemonStatusLoading.value) return t('settings.napcat.transportCheckingDetail');
+    if (daemonStatusError.value || !daemonStatus.value) {
+      return t('settings.napcat.transportUnavailableDetail');
+    }
+
+    const state = napcatBridgeStatus.value?.state;
+    if (!daemonStatus.value.online) {
+      return state === 'disabled'
+        ? t('settings.napcat.transportDisabledDetail')
+        : t('settings.napcat.transportBlockedByDaemonDetail');
+    }
+    if (!hasNapCatBridgeRuntime.value) return t('settings.napcat.transportUnknownDetail');
+    if (state === 'disabled') return t('settings.napcat.transportDisabledDetail');
+    if (hasActiveNapCatTransport.value) return t('settings.napcat.transportConnectedDetail');
+    if (state === 'disconnected') return t('settings.napcat.transportDisconnectedDetail');
+    return t('settings.napcat.transportUnknownDetail');
+  });
+
+  const heartbeatStatusDetail = computed(() => {
+    if (daemonStatusLoading.value) return t('settings.napcat.heartbeatCheckingDetail');
+    if (daemonStatusError.value || !daemonStatus.value) {
+      return t('settings.napcat.heartbeatUnavailableDetail');
+    }
+
+    const state = napcatBridgeStatus.value?.state;
+    const heartbeat = napcatHeartbeat.value;
+    if (!daemonStatus.value.online) {
+      return state === 'disabled'
+        ? t('settings.napcat.heartbeatDisabledDetail')
+        : t('settings.napcat.heartbeatBlockedByDaemonDetail');
+    }
+    if (!hasNapCatBridgeRuntime.value) return t('settings.napcat.heartbeatUnknownDetail');
+    if (state === 'disabled') return t('settings.napcat.heartbeatDisabledDetail');
+    if (state === 'unknown') return t('settings.napcat.heartbeatUnknownDetail');
+    if (!hasActiveNapCatTransport.value) {
+      return t('settings.napcat.heartbeatWaitingForTransportDetail');
+    }
+    if (!heartbeat?.lastReceivedAt) return t('settings.napcat.heartbeatUnobservedDetail');
+    if (heartbeat.stale) {
+      return t('settings.napcat.heartbeatStaleDetail', {
+        age: formatDurationMs(heartbeat.ageMs),
+        interval: formatDurationMs(heartbeat.intervalMs),
+      });
+    }
+    if (heartbeat.online === false || heartbeat.good === false) {
+      return t('settings.napcat.heartbeatUnhealthyDetail');
+    }
+    return t('settings.napcat.heartbeatHealthyDetail');
+  });
+
+  const bridgeConnectionCount = computed(() => {
+    if (daemonStatusLoading.value) return t('settings.napcat.loadingCount');
+
+    const count = activeNapCatConnectionCount.value;
+    if (count === null || count === undefined) return t('common.unavailable');
+    return String(count);
+  });
+
+  const lastHeartbeatSummary = computed(() => {
+    if (daemonStatusLoading.value) return t('settings.napcat.loadingCount');
+    if (daemonStatusError.value || !daemonStatus.value) return t('common.unavailable');
+    if (!hasNapCatBridgeRuntime.value) return t('common.unavailable');
+    if (napcatBridgeStatus.value?.state === 'disabled') {
+      return t('settings.napcat.lastHeartbeatDisabled');
+    }
+
+    const heartbeat = napcatHeartbeat.value;
+    if (!heartbeat?.lastReceivedAt) return t('settings.napcat.lastHeartbeatNever');
+    return t('settings.napcat.lastHeartbeatValue', {
+      age: formatDurationMs(heartbeat.ageMs),
+      interval: formatDurationMs(heartbeat.intervalMs),
+    });
+  });
+
+  const connectionDiagnosis = computed(() => {
+    if (daemonStatusLoading.value) return t('settings.napcat.connectionDiagnosis.checking');
+    if (daemonStatus.value && !daemonStatus.value.online) {
+      return t('settings.napcat.connectionDiagnosis.daemonOffline');
+    }
+    if (!hasNapCatBridgeRuntime.value) {
+      return t('settings.napcat.connectionDiagnosis.bridgeUnknown');
+    }
+    if (!hasActiveNapCatTransport.value) {
+      return t('settings.napcat.connectionDiagnosis.waitingForTransport');
+    }
+
+    const state = napcatBridgeStatus.value?.state;
+    if (state === 'disabled') return t('settings.napcat.connectionDiagnosis.bridgeDisabled');
+
+    const heartbeat = napcatHeartbeat.value;
+    if (!heartbeat?.lastReceivedAt) {
+      return t('settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat');
+    }
+    if (heartbeat.stale) {
+      return t('settings.napcat.connectionDiagnosis.connectedHeartbeatStale');
+    }
+    if (heartbeat.online === false || heartbeat.good === false) {
+      return t('settings.napcat.connectionDiagnosis.connectedHeartbeatUnhealthy');
+    }
+    return t('settings.napcat.connectionDiagnosis.connected');
   });
 
   const activeDaemonHost = computed(() => daemonStatus.value?.host || daemonHost.value);
@@ -480,6 +700,8 @@ export const useNapCatSettings = (params: {
 
   return {
     activeDaemonAddress,
+    bridgeConnectionCount,
+    connectionDiagnosis,
     configPathSummary,
     daemonControlLoading,
     daemonControlMessage,
@@ -496,6 +718,10 @@ export const useNapCatSettings = (params: {
     dockerWsUrl,
     handleDaemonControl,
     hasDuplicateProviderType,
+    heartbeatStatusChip,
+    heartbeatStatusClass,
+    heartbeatStatusDetail,
+    lastHeartbeatSummary,
     loadDaemonLogs,
     loadDaemonStatus,
     localWsUrl,
@@ -511,6 +737,9 @@ export const useNapCatSettings = (params: {
     t,
     toolListText,
     toolSummary,
+    transportStatusChip,
+    transportStatusClass,
+    transportStatusDetail,
     updateDaemonHost,
     updateDaemonPort,
     updateNapCat,

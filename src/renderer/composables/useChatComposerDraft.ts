@@ -39,6 +39,10 @@ export const useChatComposerDraft = (deps: {
   };
 
   const handleEnter = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+
     if (
       event.isComposing ||
       event.keyCode === 229 ||

@@ -44,6 +44,15 @@ const findCardByTitle = (wrapper: VueWrapper, title: string) => {
   return match;
 };
 
+const emptyHeartbeat = {
+  lastReceivedAt: null,
+  intervalMs: null,
+  ageMs: null,
+  online: null,
+  good: null,
+  stale: null,
+};
+
 describe('NapCatSettings', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -76,6 +85,13 @@ describe('NapCatSettings', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'disconnected',
+          activeConnectionCount: 0,
+          heartbeat: emptyHeartbeat,
+        },
+      },
     });
     getDaemonLogsMock.mockResolvedValue({
       filePath: '/tmp/iki-user-data/logs/daemon.log',
@@ -105,6 +121,13 @@ describe('NapCatSettings', () => {
         status: 'ok',
         source: 'health',
         uptimeSeconds: 42,
+        bridges: {
+          napcat: {
+            state: 'disconnected',
+            activeConnectionCount: 0,
+            heartbeat: emptyHeartbeat,
+          },
+        },
       },
     });
   });
@@ -121,6 +144,7 @@ describe('NapCatSettings', () => {
 
     const store = useConfigStore();
     store.config = createDefaultAppConfig();
+    store.config.bridges.napcat.enabled = true;
 
     const wrapper = mount(NapCatSettings, {
       props: {
@@ -144,6 +168,251 @@ describe('NapCatSettings', () => {
     expect(card.text()).toContain('30003');
     expect(card.text()).toContain('reply_eligible');
     expect(card.text()).toContain('Recent QQ Messages');
+
+    wrapper.unmount();
+  });
+
+  it('shows daemon health separately from live NapCat bridge connectivity', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    const store = useConfigStore();
+    store.config = createDefaultAppConfig();
+    store.config.bridges.napcat.enabled = true;
+
+    const wrapper = mount(NapCatSettings, {
+      props: {
+        active: true,
+      },
+      global: {
+        plugins: [pinia],
+      },
+    });
+
+    await flushPromises();
+
+    const card = findCardByTitle(wrapper, 'Runtime Status');
+
+    expect(card.text()).toContain('Daemon');
+    expect(card.text()).toContain('Online');
+    expect(card.text()).toContain('Reverse WebSocket');
+    expect(card.text()).toContain('Waiting for NapCat');
+    expect(card.text()).toContain('Heartbeat');
+    expect(card.text()).toContain('Waiting for transport');
+    expect(card.text()).toContain('Active Connections');
+    expect(card.text()).toContain('0');
+    expect(card.text()).toContain('Last Heartbeat');
+    expect(card.text()).toContain('Not received yet');
+    expect(card.text()).toContain('Diagnosis');
+    expect(card.text()).toContain('Daemon is healthy; waiting for NapCat reverse WebSocket transport');
+    expect(card.text()).toContain('Daemon is reachable, but NapCat has not opened a reverse WebSocket yet.');
+    expect(card.text()).toContain(
+      'Heartbeat data is unavailable until NapCat opens a reverse WebSocket session.'
+    );
+
+    wrapper.unmount();
+  });
+
+  it('surfaces daemon-down as the root cause of bridge unavailability', async () => {
+    getDaemonStatusMock.mockResolvedValueOnce({
+      online: false,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'offline',
+      source: 'recorded',
+      uptimeSeconds: null,
+      error: 'connect ECONNREFUSED 127.0.0.1:6127',
+      bridges: {
+        napcat: {
+          state: 'unknown',
+          activeConnectionCount: null,
+          heartbeat: emptyHeartbeat,
+        },
+      },
+    });
+
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    const store = useConfigStore();
+    store.config = createDefaultAppConfig();
+    store.config.bridges.napcat.enabled = true;
+
+    const wrapper = mount(NapCatSettings, {
+      props: {
+        active: true,
+      },
+      global: {
+        plugins: [pinia],
+      },
+    });
+
+    await flushPromises();
+
+    const card = findCardByTitle(wrapper, 'Runtime Status');
+
+    expect(card.text()).toContain('Offline');
+    expect(card.text()).toContain('Blocked by Daemon');
+    expect(card.text()).toContain('Daemon is down or unreachable');
+    expect(card.text()).toContain('Daemon is unreachable: connect ECONNREFUSED 127.0.0.1:6127');
+    expect(card.text()).toContain(
+      'Reverse WebSocket transport cannot connect because the daemon is offline or not listening on the configured port.'
+    );
+    expect(card.text()).toContain(
+      'Heartbeat liveness is unavailable because the daemon is offline or unreachable.'
+    );
+
+    wrapper.unmount();
+  });
+
+  it('keeps the status card internally consistent when an older main process omits bridge runtime', async () => {
+    getDaemonStatusMock.mockResolvedValueOnce({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+    } as never);
+
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    const store = useConfigStore();
+    store.config = createDefaultAppConfig();
+    store.config.bridges.napcat.enabled = true;
+
+    const wrapper = mount(NapCatSettings, {
+      props: {
+        active: true,
+      },
+      global: {
+        plugins: [pinia],
+      },
+    });
+
+    await flushPromises();
+
+    const card = findCardByTitle(wrapper, 'Runtime Status');
+
+    expect(card.text()).toContain('Reverse WebSocket');
+    expect(card.text()).toContain('Unavailable');
+    expect(card.text()).toContain('Heartbeat');
+    expect(card.text()).toContain('Diagnosis');
+    expect(card.text()).toContain('Daemon is online, but bridge runtime was not reported');
+    expect(card.text()).toContain(
+      'Daemon is online, but it did not report reverse WebSocket transport state.'
+    );
+    expect(card.text()).toContain('Daemon is online, but it did not report heartbeat runtime.');
+
+    wrapper.unmount();
+  });
+
+  it('treats recent healthy heartbeat as the end-to-end availability signal', async () => {
+    getDaemonStatusMock.mockResolvedValueOnce({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'connected',
+          activeConnectionCount: 1,
+          heartbeat: {
+            lastReceivedAt: '2026-04-22T00:00:00.000Z',
+            intervalMs: 5000,
+            ageMs: 1200,
+            online: true,
+            good: true,
+            stale: false,
+          },
+        },
+      },
+    });
+
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    const store = useConfigStore();
+    store.config = createDefaultAppConfig();
+    store.config.bridges.napcat.enabled = true;
+
+    const wrapper = mount(NapCatSettings, {
+      props: {
+        active: true,
+      },
+      global: {
+        plugins: [pinia],
+      },
+    });
+
+    await flushPromises();
+
+    const card = findCardByTitle(wrapper, 'Runtime Status');
+
+    expect(card.text()).toContain('Connected');
+    expect(card.text()).toContain('Healthy');
+    expect(card.text()).toContain('1');
+    expect(card.text()).toContain('1.2s ago / 5.0s interval');
+    expect(card.text()).toContain('Reverse WebSocket is connected and heartbeat looks healthy');
+    expect(card.text()).toContain(
+      'A recent healthy NapCat heartbeat confirms the reverse WebSocket session is alive.'
+    );
+
+    wrapper.unmount();
+  });
+
+  it('does not mark NapCat unavailable when reverse WebSocket is connected but heartbeat is not observed yet', async () => {
+    getDaemonStatusMock.mockResolvedValueOnce({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'connected',
+          activeConnectionCount: 1,
+          heartbeat: emptyHeartbeat,
+        },
+      },
+    });
+
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    const store = useConfigStore();
+    store.config = createDefaultAppConfig();
+    store.config.bridges.napcat.enabled = true;
+
+    const wrapper = mount(NapCatSettings, {
+      props: {
+        active: true,
+      },
+      global: {
+        plugins: [pinia],
+      },
+    });
+
+    await flushPromises();
+
+    const card = findCardByTitle(wrapper, 'Runtime Status');
+
+    expect(card.text()).toContain('Reverse WebSocket');
+    expect(card.text()).toContain('Connected');
+    expect(card.text()).toContain('Heartbeat');
+    expect(card.text()).toContain('Not observed yet');
+    expect(card.text()).toContain('Active Connections');
+    expect(card.text()).toContain('1');
+    expect(card.text()).toContain(
+      'Reverse WebSocket is connected; heartbeat has not been observed yet'
+    );
+    expect(card.text()).toContain(
+      'Reverse WebSocket transport is already connected. No heartbeat has been observed yet'
+    );
 
     wrapper.unmount();
   });

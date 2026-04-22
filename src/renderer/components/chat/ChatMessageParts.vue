@@ -5,7 +5,21 @@
       :key="getPartRenderKey(part, partIndex)"
       class="message-part"
     >
-      <div v-if="isStreamingTextPart(part)" class="message-text">
+      <div v-if="isComposerInvocationPart(part)" class="message-invocation-tokens">
+        <span
+          v-for="token in getComposerInvocationTokens(part)"
+          :key="token.id"
+          class="message-invocation-token"
+          :class="getComposerInvocationToneClass(token.kind)"
+          :title="token.title || token.label"
+        >
+          <span v-if="token.prefix" class="message-invocation-token-prefix" aria-hidden="true">
+            {{ token.prefix }}
+          </span>
+          <span class="message-invocation-token-label">{{ token.label }}</span>
+        </span>
+      </div>
+      <div v-else-if="isStreamingTextPart(part)" class="message-text">
         {{ getTextPartContent(part) }}
       </div>
       <div v-else-if="isTextPart(part)" class="message-text markdown-content">
@@ -28,6 +42,8 @@ import VueMarkdown from 'vue-markdown-render';
 
 import {
   type ChatUiMessage,
+  getComposerInvocationPartData,
+  isComposerInvocationPart,
   isDataPart,
   isTextPart,
 } from '../../../shared/chat/message_parts';
@@ -58,7 +74,7 @@ const emit = defineEmits<{
 }>();
 
 const getRenderableParts = (parts: ChatUiMessage['parts']): ChatUiMessage['parts'] =>
-  parts.filter(part => !isDataPart(part));
+  parts.filter(part => isComposerInvocationPart(part) || !isDataPart(part));
 
 const getPartType = (part: unknown): string =>
   isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
@@ -83,11 +99,99 @@ const isStreamingTextPart = (part: unknown): boolean => {
   if (props.message.id !== props.activeAssistantMessageId) return false;
   return isObjectRecord(part) && part.state === 'streaming';
 };
+
+const getComposerInvocationTokens = (part: unknown) =>
+  getComposerInvocationPartData(part)?.tokens ?? [];
+
+const getComposerInvocationToneClass = (kind?: string) => {
+  if (kind === 'skill') return 'message-invocation-token--skill';
+  if (kind === 'prompt-app') return 'message-invocation-token--prompt';
+  return 'message-invocation-token--command';
+};
 </script>
 
 <style scoped>
 .chat-message-parts {
   min-width: 0;
+}
+
+.message-invocation-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-invocation-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  max-width: min(100%, 240px);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 16%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+  padding: 2px 7px 2px 6px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+
+.message-invocation-token-prefix,
+.message-invocation-token-label {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    Courier New,
+    monospace;
+}
+
+.message-invocation-token-prefix {
+  flex: 0 0 auto;
+  opacity: 0.82;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.message-invocation-token-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-invocation-token--skill {
+  color: color-mix(in srgb, var(--accent-color) 88%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-color) 20%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+
+.message-invocation-token--prompt {
+  color: color-mix(in srgb, var(--accent-color) 74%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-color) 16%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 7%, transparent);
+}
+
+.message-invocation-token--command {
+  color: color-mix(in srgb, var(--warning-color) 82%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--warning-color) 20%, transparent);
+  background: color-mix(in srgb, var(--warning-color) 9%, transparent);
+}
+
+.chat-message-parts.user .message-invocation-token {
+  border-color: color-mix(in srgb, var(--chat-user-bubble-text) 18%, transparent);
+  background: color-mix(in srgb, var(--chat-user-bubble-text) 10%, transparent);
+}
+
+.chat-message-parts.user .message-invocation-token--skill,
+.chat-message-parts.user .message-invocation-token--prompt,
+.chat-message-parts.user .message-invocation-token--command {
+  color: var(--chat-user-bubble-text);
 }
 
 .message-text {

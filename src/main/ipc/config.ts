@@ -16,10 +16,13 @@ import type {
   DaemonControlResult,
   DaemonLogsInfo,
   DaemonStatusInfo,
+  NapCatBridgeHeartbeatInfo,
+  NapCatBridgeStatusInfo,
   NetworkDiagnosticResult,
 } from '../../shared/types/config';
 import {
   applyDesktopDaemonConfigUpdate,
+  getDesktopEmbeddedDaemonStatus,
   isDesktopDaemonEmbeddedRunning,
   restartDesktopDaemon,
   startDesktopDaemon,
@@ -117,10 +120,101 @@ const requestDaemonHealth = (port: number): Promise<{ statusCode: number; body: 
     req.on('error', reject);
   });
 
+const buildFallbackNapCatHeartbeatStatus = (): NapCatBridgeHeartbeatInfo => ({
+  lastReceivedAt: null,
+  intervalMs: null,
+  ageMs: null,
+  online: null,
+  good: null,
+  stale: null,
+});
+
+const buildFallbackNapCatBridgeStatus = (config: AppConfig): NapCatBridgeStatusInfo => ({
+  state: config.bridges?.napcat?.enabled ? 'unknown' : 'disabled',
+  activeConnectionCount: null,
+  heartbeat: buildFallbackNapCatHeartbeatStatus(),
+});
+
+const normalizeNapCatHeartbeatStatus = (
+  value: unknown,
+  fallback: NapCatBridgeHeartbeatInfo
+): NapCatBridgeHeartbeatInfo => {
+  if (!value || typeof value !== 'object') return fallback;
+
+  const lastReceivedAt = Reflect.get(value, 'lastReceivedAt');
+  const intervalMs = Reflect.get(value, 'intervalMs');
+  const ageMs = Reflect.get(value, 'ageMs');
+  const online = Reflect.get(value, 'online');
+  const good = Reflect.get(value, 'good');
+  const stale = Reflect.get(value, 'stale');
+
+  return {
+    lastReceivedAt:
+      typeof lastReceivedAt === 'string' && lastReceivedAt.trim() ? lastReceivedAt : null,
+    intervalMs:
+      typeof intervalMs === 'number' && Number.isFinite(intervalMs) && intervalMs >= 0
+        ? Math.trunc(intervalMs)
+        : fallback.intervalMs,
+    ageMs:
+      typeof ageMs === 'number' && Number.isFinite(ageMs) && ageMs >= 0 ? Math.trunc(ageMs) : null,
+    online: typeof online === 'boolean' ? online : null,
+    good: typeof good === 'boolean' ? good : null,
+    stale: typeof stale === 'boolean' ? stale : null,
+  };
+};
+
+const normalizeNapCatBridgeStatus = (
+  value: unknown,
+  fallback: NapCatBridgeStatusInfo
+): NapCatBridgeStatusInfo => {
+  if (!value || typeof value !== 'object') return fallback;
+
+  const rawState = Reflect.get(value, 'state');
+  const state =
+    rawState === 'disabled' ||
+    rawState === 'disconnected' ||
+    rawState === 'degraded' ||
+    rawState === 'connected' ||
+    rawState === 'unknown'
+      ? rawState
+      : fallback.state;
+  const rawCount = Reflect.get(value, 'activeConnectionCount');
+  const activeConnectionCount =
+    typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount >= 0
+      ? Math.trunc(rawCount)
+      : fallback.activeConnectionCount;
+  const heartbeat = normalizeNapCatHeartbeatStatus(
+    Reflect.get(value, 'heartbeat'),
+    fallback.heartbeat
+  );
+
+  return {
+    state,
+    activeConnectionCount,
+    heartbeat,
+  };
+};
+
 const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
   const userDataPath = app.getPath('userData');
   const config = loadConfig();
   const recorded = readRecordedDaemonLocation(userDataPath, config);
+  const fallbackNapCatBridgeStatus = buildFallbackNapCatBridgeStatus(config);
+  const embeddedStatus = getDesktopEmbeddedDaemonStatus();
+
+  if (embeddedStatus) {
+    return {
+      ...embeddedStatus,
+      host: embeddedStatus.host || recorded.host,
+      port: Number.isFinite(embeddedStatus.port) ? embeddedStatus.port : recorded.port,
+      bridges: {
+        napcat: normalizeNapCatBridgeStatus(
+          embeddedStatus.bridges?.napcat,
+          fallbackNapCatBridgeStatus
+        ),
+      },
+    };
+  }
 
   try {
     const health = await requestDaemonHealth(recorded.port);
@@ -132,6 +226,9 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
         status: 'offline',
         source: recorded.source,
         uptimeSeconds: null,
+        bridges: {
+          napcat: fallbackNapCatBridgeStatus,
+        },
         error: `Health check returned HTTP ${health.statusCode}`,
       };
     }
@@ -141,6 +238,9 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
       port?: number;
       status?: string;
       uptime?: number;
+      bridges?: {
+        napcat?: unknown;
+      };
     };
 
     return {
@@ -156,6 +256,9 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
         typeof payload.uptime === 'number' && Number.isFinite(payload.uptime)
           ? payload.uptime
           : null,
+      bridges: {
+        napcat: normalizeNapCatBridgeStatus(payload.bridges?.napcat, fallbackNapCatBridgeStatus),
+      },
     };
   } catch (error) {
     return {
@@ -165,6 +268,9 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
       status: 'offline',
       source: recorded.source,
       uptimeSeconds: null,
+      bridges: {
+        napcat: fallbackNapCatBridgeStatus,
+      },
       error: error instanceof Error ? error.message : 'Failed to contact daemon',
     };
   }

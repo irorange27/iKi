@@ -8,6 +8,7 @@ import { getAppConfig } from '../core/config';
 import { createDaemonLogger, recordNapCatMessagePreview } from '../core/daemon_logs';
 import { getProviders } from '../core/db/providers';
 import type { ChatThread } from '../shared/types/chat';
+import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '../shared/types/config';
 import { parseModelList } from '../shared/utils/provider_models';
 import { isObjectRecord } from '../shared/utils/guards';
 import { renderMarkdownToPlainText } from '../shared/utils/plain_text_markdown';
@@ -60,6 +61,17 @@ type NapCatMessageEvent = {
   sender?: Record<string, unknown>;
 };
 
+type NapCatMetaEvent = {
+  post_type?: string;
+  meta_event_type?: string;
+  sub_type?: string;
+  status?: {
+    online?: boolean;
+    good?: boolean;
+  };
+  interval?: number;
+};
+
 type NapCatActionResponse = {
   status?: string;
   retcode?: number;
@@ -90,8 +102,19 @@ type PendingAction = {
   timeout: NodeJS.Timeout;
 };
 
+type NapCatHeartbeatSnapshot = {
+  receivedAt: string;
+  receivedAtMs: number;
+  intervalMs: number | null;
+  online: boolean | null;
+  good: boolean | null;
+};
+
 const SAFE_NAPCAT_TOOLS = ['web', 'fetch'] as const;
 const SAFE_NAPCAT_TOOL_SET = new Set<string>(SAFE_NAPCAT_TOOLS);
+// Use NapCat's own advertised heartbeat interval, with one grace interval, to avoid
+// hard-coding transport timing assumptions into desktop settings.
+const HEARTBEAT_STALE_MULTIPLIER = 2;
 
 const DEFAULT_SYSTEM_PROMPT = [
   'You are iKi, responding to QQ messages via NapCat.',
@@ -156,6 +179,58 @@ const getRemoteLabel = (req: http.IncomingMessage): string => {
 const normalizeId = (value: unknown): string => {
   if (value === undefined || value === null) return '';
   return String(value).trim();
+};
+
+const normalizeHeartbeatIntervalMs = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return Math.trunc(value);
+};
+
+const buildEmptyHeartbeatInfo = (): NapCatBridgeHeartbeatInfo => ({
+  lastReceivedAt: null,
+  intervalMs: null,
+  ageMs: null,
+  online: null,
+  good: null,
+  stale: null,
+});
+
+const isHeartbeatSnapshotFresh = (
+  snapshot: NapCatHeartbeatSnapshot,
+  nowMs: number
+): boolean | null => {
+  if (snapshot.intervalMs === null) return null;
+  return nowMs - snapshot.receivedAtMs <= snapshot.intervalMs * HEARTBEAT_STALE_MULTIPLIER;
+};
+
+const isHeartbeatSnapshotHealthy = (
+  snapshot: NapCatHeartbeatSnapshot,
+  nowMs: number
+): boolean => {
+  const fresh = isHeartbeatSnapshotFresh(snapshot, nowMs);
+  const online = snapshot.online !== false;
+  const good = snapshot.good !== false;
+  return fresh !== false && online && good;
+};
+
+const buildHeartbeatInfo = (
+  snapshot: NapCatHeartbeatSnapshot | null,
+  nowMs: number
+): NapCatBridgeHeartbeatInfo => {
+  if (!snapshot) {
+    return buildEmptyHeartbeatInfo();
+  }
+
+  const fresh = isHeartbeatSnapshotFresh(snapshot, nowMs);
+
+  return {
+    lastReceivedAt: snapshot.receivedAt,
+    intervalMs: snapshot.intervalMs,
+    ageMs: Math.max(0, nowMs - snapshot.receivedAtMs),
+    online: snapshot.online,
+    good: snapshot.good,
+    stale: fresh === null ? null : !fresh,
+  };
 };
 
 const decodeCqText = (value: string): string =>
@@ -460,7 +535,43 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
   const wss = new WebSocketServer({ noServer: true });
   const pendingActions = new Map<string, PendingAction>();
   const activeSockets: ReverseBridgeSocket[] = [];
+  const heartbeatSnapshots = new Map<ReverseBridgeSocket, NapCatHeartbeatSnapshot>();
   let nextEcho = 1;
+
+  const getStatus = (): NapCatBridgeStatusInfo => {
+    const napcatConfig = getNapCatConfig();
+    const readySockets = activeSockets.filter(socket => socket?.readyState === 1);
+    const activeConnectionCount = readySockets.length;
+    const nowMs = Date.now();
+    const activeHeartbeats = readySockets
+      .map(socket => heartbeatSnapshots.get(socket) || null)
+      .filter((snapshot): snapshot is NapCatHeartbeatSnapshot => Boolean(snapshot));
+    const latestHealthyHeartbeat = activeHeartbeats
+      .filter(snapshot => isHeartbeatSnapshotHealthy(snapshot, nowMs))
+      .sort((left, right) => right.receivedAtMs - left.receivedAtMs)[0];
+    const latestHeartbeat =
+      latestHealthyHeartbeat ||
+      activeHeartbeats.sort((left, right) => right.receivedAtMs - left.receivedAtMs)[0] ||
+      null;
+    const heartbeat = buildHeartbeatInfo(latestHeartbeat, nowMs);
+
+    if (!napcatConfig.enabled) {
+      return {
+        state: 'disabled',
+        activeConnectionCount,
+        heartbeat,
+      };
+    }
+
+    return {
+      state:
+        activeConnectionCount === 0
+          ? 'disconnected'
+          : 'connected',
+      activeConnectionCount,
+      heartbeat,
+    };
+  };
 
   const sendAction = (ws: ReverseBridgeSocket, action: string, params: Record<string, unknown>) =>
     new Promise<NapCatActionResponse>((resolve, reject) => {
@@ -487,6 +598,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     if (index >= 0) {
       activeSockets.splice(index, 1);
     }
+    heartbeatSnapshots.delete(ws);
   };
 
   const sendThreadMessage = async (params: { thread: ChatThread; text: string }) => {
@@ -540,6 +652,23 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     }
 
     pending.reject(new Error(buildActionFailureMessage(pending.action, payload)));
+    return true;
+  };
+
+  const handleMetaEvent = (payload: NapCatMetaEvent, ws: ReverseBridgeSocket) => {
+    if (payload.post_type !== 'meta_event') return false;
+
+    if (payload.meta_event_type === 'heartbeat') {
+      const receivedAtMs = Date.now();
+      heartbeatSnapshots.set(ws, {
+        receivedAt: new Date(receivedAtMs).toISOString(),
+        receivedAtMs,
+        intervalMs: normalizeHeartbeatIntervalMs(payload.interval),
+        online: typeof payload.status?.online === 'boolean' ? payload.status.online : null,
+        good: typeof payload.status?.good === 'boolean' ? payload.status.good : null,
+      });
+    }
+
     return true;
   };
 
@@ -835,6 +964,10 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
         return;
       }
 
+      if (handleMetaEvent(payload as NapCatMetaEvent, ws)) {
+        return;
+      }
+
       try {
         await handleIncomingMessage(payload as NapCatMessageEvent, ws);
       } catch (error) {
@@ -852,10 +985,12 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
   return {
     wss,
     handleUpgrade,
+    getStatus,
     sendThreadMessage,
     dispose: () => {
       unregisterBridgeThreadSender();
       activeSockets.splice(0, activeSockets.length);
+      heartbeatSnapshots.clear();
 
       for (const pending of pendingActions.values()) {
         clearTimeout(pending.timeout);

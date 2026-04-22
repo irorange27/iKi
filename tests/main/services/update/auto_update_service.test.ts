@@ -186,6 +186,24 @@ describe('app update service', () => {
     );
   });
 
+  it('reports Windows packages as unsupported under the current macOS-only release policy', () => {
+    const { service, autoUpdater, config } = createServiceHarness({
+      platform: 'win32',
+    });
+
+    service.start(config);
+
+    expect(autoUpdater.setFeedURL).not.toHaveBeenCalled();
+    expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    expect(service.getStatus()).toEqual(
+      expect.objectContaining({
+        state: 'unsupported',
+        supported: false,
+        unsupportedReason: 'platform',
+      })
+    );
+  });
+
   it('prompts for restart after a download and installs immediately when accepted', async () => {
     const { service, autoUpdater, showMessageBox, config } = createServiceHarness();
     showMessageBox.mockResolvedValueOnce({ response: 0 });

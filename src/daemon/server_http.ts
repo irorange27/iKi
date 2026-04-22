@@ -5,6 +5,7 @@ import { createAppClient } from '../core/db/app_clients';
 import type { McpManager } from '../core/mcp';
 import type { ChatTransportMessage } from '../main/services/chat/chat_types';
 import type { ChatService } from '../main/services/chat/chat_service';
+import type { NapCatBridgeStatusInfo } from '../shared/types/config';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {
   logDaemonHandlerFailure,
@@ -49,6 +50,7 @@ type CreateDaemonRequestHandlerDeps = {
   userDataPath: string;
   bootstrapTokenRef: { current: string };
   napcatClientId: string;
+  getNapCatBridgeStatus: () => NapCatBridgeStatusInfo;
   chatService: ChatService;
   mcpManager: McpManager;
   sessions: Map<number, WsSession>;
@@ -91,6 +93,9 @@ export const createDaemonRequestHandler =
           uptime: process.uptime(),
           host: deps.host,
           port: deps.port,
+          bridges: {
+            napcat: deps.getNapCatBridgeStatus(),
+          },
         });
         return;
       }

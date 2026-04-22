@@ -55,4 +55,50 @@ describe('ChatMessageParts', () => {
     expect(wrapper.text()).not.toContain('sadness');
     expect(wrapper.find('.tool-fallback-content').exists()).toBe(false);
   });
+
+  it('renders composer invocation tokens inside the message body', () => {
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: {
+          id: 'user_1',
+          role: 'user',
+          parts: [
+            {
+              type: 'data-composer-invocation',
+              data: {
+                tokens: [
+                  {
+                    id: 'skill:codex:frontend-dev',
+                    kind: 'skill',
+                    prefix: '$',
+                    label: 'frontend-dev',
+                  },
+                  {
+                    id: 'prompt_music',
+                    kind: 'prompt-app',
+                    prefix: '',
+                    label: 'music',
+                  },
+                ],
+              },
+            },
+            {
+              type: 'text',
+              text: 'Build a landing page and matching soundtrack.',
+            },
+          ],
+        } as unknown as UIMessage,
+        messageIndex: 0,
+        activeAssistantMessageId: null,
+        streamRenderTick: 0,
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    expect(wrapper.text()).toContain('$frontend-dev');
+    expect(wrapper.text()).toContain('music');
+    expect(wrapper.text()).toContain('Build a landing page and matching soundtrack.');
+    expect(wrapper.findAll('.message-part')).toHaveLength(2);
+  });
 });

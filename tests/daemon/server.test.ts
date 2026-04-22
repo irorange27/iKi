@@ -263,6 +263,18 @@ const {
 
   const napCatBridgeMock = {
     handleUpgrade: vi.fn(() => false),
+    getStatus: vi.fn(() => ({
+      state: 'disconnected',
+      activeConnectionCount: 0,
+      heartbeat: {
+        lastReceivedAt: null,
+        intervalMs: null,
+        ageMs: null,
+        online: null,
+        good: null,
+        stale: null,
+      },
+    })),
     dispose: vi.fn(),
   };
   const createNapCatReverseBridgeMock = vi.fn(() => napCatBridgeMock);

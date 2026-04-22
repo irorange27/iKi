@@ -12,7 +12,9 @@
       <!-- Header -->
       <div v-if="showHeaderMeta" class="flex items-center justify-center p-4">
         <div class="ui-text-secondary flex items-center gap-1 text-sm">
-          <span v-if="showMessageCount">{{ t('chat.messagesCount', { count: chatMessages.length }) }}</span>
+          <span v-if="showMessageCount">{{
+            t('chat.messagesCount', { count: chatMessages.length })
+          }}</span>
           <span v-if="showMessageCount && currentThread">·</span>
           <FolderOpen v-if="currentThread" :size="12" />
           <span v-if="currentThread">{{ currentThread.title }}</span>
@@ -104,6 +106,7 @@
           :prepare-message-send="prepareMessageSend"
           @incognito-changed="handleIncognitoChanged"
           @model-selected="handleModelSelected"
+          @new-chat-requested="handleNewChat"
           @workspace-changed="handleWorkspaceChanged"
         />
       </div>
@@ -421,12 +424,11 @@ useChatViewLifecycle({
   padding: 14px 16px;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--success-color) 34%, var(--border-color));
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--success-color) 11%, var(--bg-secondary)),
-      color-mix(in srgb, var(--accent-color) 5%, var(--bg-primary))
-    );
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--success-color) 11%, var(--bg-secondary)),
+    color-mix(in srgb, var(--accent-color) 5%, var(--bg-primary))
+  );
 }
 
 .onboarding-banner-topline {

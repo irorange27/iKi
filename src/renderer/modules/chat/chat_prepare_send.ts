@@ -1,4 +1,4 @@
-import type { ChatUiMessage } from '../../../shared/chat/message_parts';
+import type { ChatUiMessage, ComposerInvocationPartData } from '../../../shared/chat/message_parts';
 
 export type PrepareMessageSendPayload = {
   content: string;
@@ -6,6 +6,8 @@ export type PrepareMessageSendPayload = {
   providerId?: string;
   tools?: string[];
   mcpServerIds?: string[];
+  promptAppId?: string;
+  composerInvocations?: ComposerInvocationPartData;
 };
 
 export type PreparedMessageSend = {

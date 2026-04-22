@@ -5,6 +5,7 @@ import { createChatUiStreamController } from '../modules/chat/ui_stream_controll
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import {
+  upsertComposerInvocationIntoMessageParts,
   upsertTextIntoMessageParts,
   extractTextFromMessage,
 } from '../modules/chat/ui_message_text';
@@ -125,7 +126,7 @@ export const useChatStreaming = (deps: {
   const prepareMessageSend = async (
     payload: PrepareMessageSendPayload
   ): Promise<PreparedMessageSend | null> => {
-    const { content, model, tools } = payload;
+    const { content, model, tools, promptAppId, composerInvocations } = payload;
     const pendingEditMessageId = editingUserMessageId.value;
 
     if (!deps.currentThread.value) {
@@ -168,6 +169,17 @@ export const useChatStreaming = (deps: {
       deps.currentModel.value = model;
     }
 
+    if (
+      promptAppId &&
+      deps.messageStore.messages.length === 0 &&
+      deps.currentThread.value.prompt_app_id !== promptAppId
+    ) {
+      await deps.electronAPI.chat.threads.update(deps.currentThread.value.id, {
+        prompt_app_id: promptAppId,
+      });
+      deps.currentThread.value.prompt_app_id = promptAppId;
+    }
+
     if (tools) {
       deps.selectedTools.value = tools;
     }
@@ -186,7 +198,10 @@ export const useChatStreaming = (deps: {
         } else {
           const updatedUserMessage: ChatUiMessage = {
             ...currentUserMessage,
-            parts: upsertTextIntoMessageParts(currentUserMessage.parts, content),
+            parts: upsertComposerInvocationIntoMessageParts(
+              upsertTextIntoMessageParts(currentUserMessage.parts, content),
+              composerInvocations
+            ),
           };
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
@@ -218,7 +233,10 @@ export const useChatStreaming = (deps: {
     const userMessage: ChatUiMessage = {
       id: deps.createMessageId(),
       role: 'user',
-      parts: [{ type: 'text', text: content, state: 'done' }],
+      parts: upsertComposerInvocationIntoMessageParts(
+        [{ type: 'text', text: content, state: 'done' }],
+        composerInvocations
+      ),
     };
 
     deps.messageStore.append(userMessage);

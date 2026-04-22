@@ -71,6 +71,16 @@
   color: var(--success-color);
 }
 
+.status-chip.warning {
+  background: color-mix(in srgb, var(--warning-color) 18%, var(--bg-primary));
+  color: var(--warning-color);
+}
+
+.status-chip.idle {
+  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-primary));
+  color: var(--text-secondary);
+}
+
 .config-actions {
   justify-content: flex-end;
 }

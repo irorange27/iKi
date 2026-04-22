@@ -55,6 +55,7 @@ const createHarness = (options?: {
         message: string;
       };
   prepareMessageSend?: ReturnType<typeof vi.fn>;
+  resolveSendRequest?: ReturnType<typeof vi.fn>;
   stopStreamResult?: { success?: boolean; error?: string };
 }) => {
   const message = ref(options?.message ?? 'Need help');
@@ -115,6 +116,7 @@ const createHarness = (options?: {
     prepareFailedMessage: 'Prepare failed',
     stopFailedMessage: 'Stop failed',
     prepareMessageSend,
+    resolveSendRequest: options?.resolveSendRequest,
     ensureProviderReady,
     resolveSelectedMcpServerIds,
     stopVoiceInput,
@@ -173,6 +175,58 @@ describe('useChatComposerSend', () => {
         level: 'warn',
         event: 'chat.stream.stop',
         outcome: 'failed',
+      })
+    );
+  });
+
+  it('uses resolved send-request skill overrides and commits invocation cleanup only after prepare succeeds', async () => {
+    const onCommitted = vi.fn();
+    const resolveSendRequest = vi.fn(async () => ({
+      kind: 'message' as const,
+      content: 'build a landing page',
+      skillMode: 'manual' as const,
+      skillIds: ['codex:frontend-dev'],
+      composerInvocations: {
+        tokens: [
+          {
+            id: 'skill:codex:frontend-dev',
+            kind: 'skill' as const,
+            prefix: '$',
+            label: 'frontend-dev',
+          },
+        ],
+      },
+      onCommitted,
+    }));
+
+    const harness = createHarness({
+      message: 'draft text',
+      resolveSendRequest,
+    });
+
+    await harness.state.sendMessage();
+
+    expect(resolveSendRequest).toHaveBeenCalledWith('draft text');
+    expect(onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.prepareMessageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'build a landing page',
+        composerInvocations: {
+          tokens: [
+            {
+              id: 'skill:codex:frontend-dev',
+              kind: 'skill',
+              prefix: '$',
+              label: 'frontend-dev',
+            },
+          ],
+        },
+      })
+    );
+    expect(harness.stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillMode: 'manual',
+        skillIds: ['codex:frontend-dev'],
       })
     );
   });

@@ -1,7 +1,10 @@
 import {
+  createComposerInvocationPart,
   extractTextFromMessageParts,
+  isComposerInvocationPart,
   isTextPart,
   type ChatUiMessage,
+  type ComposerInvocationPartData,
 } from '../../../shared/chat/message_parts';
 
 export const extractTextFromMessage = (message: ChatUiMessage | undefined): string => {
@@ -36,4 +39,29 @@ export const upsertTextIntoMessageParts = (
   }
 
   return nextParts;
+};
+
+export const upsertComposerInvocationIntoMessageParts = (
+  parts: ChatUiMessage['parts'],
+  nextComposerInvocations?: ComposerInvocationPartData
+): ChatUiMessage['parts'] => {
+  const nextParts = parts.filter(part => !isComposerInvocationPart(part));
+  const tokens = nextComposerInvocations?.tokens?.filter(
+    token =>
+      token &&
+      typeof token.id === 'string' &&
+      typeof token.label === 'string' &&
+      token.label.trim().length > 0
+  );
+
+  if (!tokens || tokens.length === 0) {
+    return nextParts;
+  }
+
+  return [
+    createComposerInvocationPart({
+      tokens,
+    }),
+    ...nextParts,
+  ];
 };

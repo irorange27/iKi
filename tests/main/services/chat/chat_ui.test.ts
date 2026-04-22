@@ -25,6 +25,17 @@ describe('chat_ui message serialization', () => {
           query: 'project constraints',
           results: [{ id: 'mem_1', summary: 'Prefer maintainable changes.', score: 0.82 }],
         },
+        {
+          type: 'composer-invocation',
+          tokens: [
+            {
+              id: 'skill:codex:frontend-dev',
+              kind: 'skill',
+              prefix: '$',
+              label: 'frontend-dev',
+            },
+          ],
+        },
         { type: 'text', text: 'Final answer.' },
       ],
     });
@@ -55,6 +66,19 @@ describe('chat_ui message serialization', () => {
         data: {
           query: 'project constraints',
           results: [{ id: 'mem_1', summary: 'Prefer maintainable changes.', score: 0.82 }],
+        },
+      },
+      {
+        type: 'data-composer-invocation',
+        data: {
+          tokens: [
+            {
+              id: 'skill:codex:frontend-dev',
+              kind: 'skill',
+              prefix: '$',
+              label: 'frontend-dev',
+            },
+          ],
         },
       },
       { type: 'text', text: 'Final answer.' },

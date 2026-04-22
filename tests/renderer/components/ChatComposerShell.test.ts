@@ -19,6 +19,8 @@ const mountComponent = (overrides?: Record<string, unknown>) => {
       ...(overrides ?? {}),
     },
     slots: {
+      'input-context': '<div class="input-context-slot">context</div>',
+      'input-overlay': '<div class="input-overlay-slot">overlay</div>',
       'toolbar-left': '<div class="toolbar-left-slot">left</div>',
       'toolbar-right': '<div class="toolbar-right-slot">right</div>',
     },
@@ -36,6 +38,8 @@ describe('ChatComposerShell', () => {
 
     expect(wrapper.find('.toolbar-left-slot').text()).toBe('left');
     expect(wrapper.find('.toolbar-right-slot').text()).toBe('right');
+    expect(wrapper.find('.input-context-slot').text()).toBe('context');
+    expect(wrapper.find('.input-overlay-slot').text()).toBe('overlay');
     expect(wrapper.find('.chat-input-field').element).toBe(inputRef.value);
     expect(wrapper.find('.chat-input-field').element.tagName).toBe('TEXTAREA');
     expect(wrapper.find('.composer-toolbar-slot-left').exists()).toBe(true);
@@ -49,10 +53,12 @@ describe('ChatComposerShell', () => {
     const input = wrapper.find('.chat-input-field');
     await input.setValue('Use the focused shell seam');
     await input.trigger('keydown.enter', { key: 'Enter' });
+    await input.trigger('keydown', { key: 'ArrowDown' });
     await input.trigger('compositionstart');
     await input.trigger('compositionend');
 
     expect(wrapper.emitted('update:modelValue')).toEqual([['Use the focused shell seam']]);
+    expect(wrapper.emitted('keydown')).toHaveLength(2);
     expect(wrapper.emitted('keydownEnter')).toHaveLength(1);
     expect(wrapper.emitted('compositionStart')).toHaveLength(1);
     expect(wrapper.emitted('compositionEnd')).toHaveLength(1);

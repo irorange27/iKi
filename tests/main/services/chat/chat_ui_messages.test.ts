@@ -23,6 +23,12 @@ describe('chat_ui message conversion', () => {
               results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
             },
           },
+          {
+            type: 'data-composer-invocation',
+            data: {
+              tokens: [{ id: 'prompt_music', kind: 'prompt-app', prefix: '', label: 'music' }],
+            },
+          },
           { type: 'text', text: 'Final answer.' },
         ],
       },

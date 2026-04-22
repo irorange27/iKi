@@ -16,6 +16,7 @@ const {
   readRecentDaemonLogsMock,
   applyAppUpdateConfigMock,
   applyDesktopDaemonConfigUpdateMock,
+  getDesktopEmbeddedDaemonStatusMock,
   isDesktopDaemonEmbeddedRunningMock,
   restartDesktopDaemonMock,
   startDesktopDaemonMock,
@@ -56,6 +57,7 @@ const {
   })),
   applyAppUpdateConfigMock: vi.fn(),
   applyDesktopDaemonConfigUpdateMock: vi.fn(async () => undefined),
+  getDesktopEmbeddedDaemonStatusMock: vi.fn(() => null),
   isDesktopDaemonEmbeddedRunningMock: vi.fn(() => true),
   restartDesktopDaemonMock: vi.fn(),
   startDesktopDaemonMock: vi.fn(),
@@ -115,6 +117,11 @@ vi.mock('../../../src/core/db/database', () => ({
 
 vi.mock('../../../src/core/config', () => ({
   getAppConfig: vi.fn(() => ({
+    bridges: {
+      napcat: {
+        enabled: true,
+      },
+    },
     daemon: {
       host: '',
       port: 6127,
@@ -136,6 +143,7 @@ vi.mock('../../../src/core/daemon_logs', () => ({
 
 vi.mock('../../../src/main/services/daemon/daemon_lifecycle', () => ({
   applyDesktopDaemonConfigUpdate: applyDesktopDaemonConfigUpdateMock,
+  getDesktopEmbeddedDaemonStatus: getDesktopEmbeddedDaemonStatusMock,
   isDesktopDaemonEmbeddedRunning: isDesktopDaemonEmbeddedRunningMock,
   restartDesktopDaemon: restartDesktopDaemonMock,
   startDesktopDaemon: startDesktopDaemonMock,
@@ -171,9 +179,26 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getDesktopEmbeddedDaemonStatusMock.mockReturnValue(null);
 });
 
-const installHealthResponse = (uptimeSeconds: number) => {
+const emptyHeartbeat = {
+  lastReceivedAt: null,
+  intervalMs: null,
+  ageMs: null,
+  online: null,
+  good: null,
+  stale: null,
+};
+
+const installHealthResponse = (
+  uptimeSeconds: number,
+  bridge: Record<string, unknown> = {
+    state: 'disconnected',
+    activeConnectionCount: 0,
+    heartbeat: emptyHeartbeat,
+  }
+) => {
   httpGetMock.mockImplementation(
     (_options: unknown, callback: (response: HttpResponseMock) => void) => {
       const response: HttpResponseMock = {
@@ -187,6 +212,9 @@ const installHealthResponse = (uptimeSeconds: number) => {
                 host: '127.0.0.1',
                 port: 6131,
                 uptime: uptimeSeconds,
+                bridges: {
+                  napcat: bridge,
+                },
               })
             );
           }
@@ -243,6 +271,135 @@ describe('config IPC', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'disconnected',
+          activeConnectionCount: 0,
+          heartbeat: emptyHeartbeat,
+        },
+      },
+    });
+  });
+
+  it('prefers in-process embedded daemon runtime status over localhost probing', async () => {
+    getDesktopEmbeddedDaemonStatusMock.mockReturnValue({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 84,
+      bridges: {
+        napcat: {
+          state: 'connected',
+          activeConnectionCount: 1,
+          heartbeat: {
+            lastReceivedAt: '2026-04-22T00:00:00.000Z',
+            intervalMs: 5000,
+            ageMs: 1200,
+            online: true,
+            good: true,
+            stale: false,
+          },
+        },
+      },
+    });
+
+    const handler = ipcHandlers.get('config:get-daemon-status');
+    if (!handler) throw new Error('config:get-daemon-status handler not registered');
+
+    const result = await handler(null);
+
+    expect(httpGetMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 84,
+      bridges: {
+        napcat: {
+          state: 'connected',
+          activeConnectionCount: 1,
+          heartbeat: {
+            lastReceivedAt: '2026-04-22T00:00:00.000Z',
+            intervalMs: 5000,
+            ageMs: 1200,
+            online: true,
+            good: true,
+            stale: false,
+          },
+        },
+      },
+    });
+  });
+
+  it('falls back to unknown NapCat runtime when daemon health omits bridge details', async () => {
+    installHealthResponse(42, {});
+
+    const handler = ipcHandlers.get('config:get-daemon-status');
+    if (!handler) throw new Error('config:get-daemon-status handler not registered');
+
+    const result = await handler(null);
+
+    expect(result).toEqual({
+      online: true,
+      host: '127.0.0.1',
+      port: 6131,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'unknown',
+          activeConnectionCount: null,
+          heartbeat: emptyHeartbeat,
+        },
+      },
+    });
+  });
+
+  it('preserves heartbeat-backed degraded bridge runtime from daemon health', async () => {
+    installHealthResponse(42, {
+      state: 'degraded',
+      activeConnectionCount: 1,
+      heartbeat: {
+        lastReceivedAt: '2026-04-22T00:00:00.000Z',
+        intervalMs: 5000,
+        ageMs: 11000,
+        online: true,
+        good: true,
+        stale: true,
+      },
+    });
+
+    const handler = ipcHandlers.get('config:get-daemon-status');
+    if (!handler) throw new Error('config:get-daemon-status handler not registered');
+
+    const result = await handler(null);
+
+    expect(result).toEqual({
+      online: true,
+      host: '127.0.0.1',
+      port: 6131,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'degraded',
+          activeConnectionCount: 1,
+          heartbeat: {
+            lastReceivedAt: '2026-04-22T00:00:00.000Z',
+            intervalMs: 5000,
+            ageMs: 11000,
+            online: true,
+            good: true,
+            stale: true,
+          },
+        },
+      },
     });
   });
 
@@ -296,6 +453,13 @@ describe('config IPC', () => {
         status: 'ok',
         source: 'health',
         uptimeSeconds: 99,
+        bridges: {
+          napcat: {
+            state: 'disconnected',
+            activeConnectionCount: 0,
+            heartbeat: emptyHeartbeat,
+          },
+        },
       },
       embeddedRunning: true,
     });

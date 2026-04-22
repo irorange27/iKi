@@ -150,6 +150,12 @@ export const en = defineCatalog({
   'chat.editingBanner.title': 'Editing a previous message.',
   'chat.editingBanner.body': 'Resending will remove later messages in this thread.',
   'chat.input.placeholder': 'Type a message...',
+  'chat.input.placeholder.skillInvocation': ({ skill }) =>
+    `Describe what to do with ${asText(skill)}...`,
+  'chat.input.placeholder.promptInvocation': ({ name }) => `Add the request for ${asText(name)}...`,
+  'chat.input.placeholder.commandInvocation': ({ name }) =>
+    `Add optional arguments for ${asText(name)}...`,
+  'chat.input.placeholder.skillsActive': 'Type with the selected skills...',
   'chat.input.contextUsage': 'Context usage',
   'chat.input.enableIncognito': 'Enable incognito mode',
   'chat.input.disableIncognito': 'Disable incognito mode',
@@ -161,6 +167,24 @@ export const en = defineCatalog({
   'chat.input.stopGeneration': 'Stop generation',
   'chat.input.stopFailed': 'Failed to stop generation. Please try again.',
   'chat.input.prepareFailed': 'Failed to prepare the message. Please try again.',
+  'chat.input.slashCommandsTitle': 'Slash commands',
+  'chat.input.slash.new.name': 'New chat',
+  'chat.input.slash.new.description': 'Start a fresh chat thread immediately.',
+  'chat.input.slash.new.executed': 'Started a new chat.',
+  'chat.input.slash.new.invalidArgs': '`/new` does not take extra text.',
+  'chat.input.slash.clear.name': 'Clear draft',
+  'chat.input.slash.clear.description': 'Clear the current composer draft.',
+  'chat.input.slash.clear.executed': 'Cleared the current draft.',
+  'chat.input.slash.clear.invalidArgs': '`/clear` does not take extra text.',
+  'chat.input.slash.incognito.name': 'Toggle incognito',
+  'chat.input.slash.incognito.description': 'Turn incognito mode on, off, or toggle it.',
+  'chat.input.slash.incognito.enabled': 'Incognito mode is now enabled.',
+  'chat.input.slash.incognito.disabled': 'Incognito mode is now disabled.',
+  'chat.input.slash.incognito.invalidArgs':
+    'Use `/incognito`, `/incognito on`, or `/incognito off`.',
+  'chat.input.slash.skillsSection': 'Skills',
+  'chat.input.slash.skill.needsRequest': ({ skill }) =>
+    `Add a request for ${asText(skill)} before sending.`,
   'chat.speech.unavailable': 'Speech service unavailable',
   'chat.speech.noSpeechDetected': 'No speech detected',
   'chat.speech.transcriptionFailed': 'Transcription failed',
@@ -671,13 +695,18 @@ export const en = defineCatalog({
   'settings.napcat.allowedTools': 'Allowed Tools (one per line)',
   'settings.napcat.toolsPlaceholder': 'web\nfetch',
   'settings.napcat.toolsHelp': 'Leave empty to disable tool use for QQ replies.',
-  'settings.napcat.connectionTitle': 'Connection Summary',
+  'settings.napcat.connectionTitle': 'Runtime Status',
   'settings.napcat.connectionDescription':
-    'What NapCat needs to connect successfully. Auto-refreshes every 5s while open.',
+    'Separates daemon health, reverse WebSocket transport, and heartbeat liveness. Auto-refreshes every 5s while open.',
   'settings.napcat.refreshStatus': 'Refresh Status',
   'settings.napcat.listening': 'Listening',
   'settings.napcat.endpoint': 'Endpoint',
   'settings.napcat.authentication': 'Authentication',
+  'settings.napcat.transportLabel': 'Reverse WebSocket',
+  'settings.napcat.heartbeatLabel': 'Heartbeat',
+  'settings.napcat.activeConnections': 'Active Connections',
+  'settings.napcat.lastHeartbeatLabel': 'Last Heartbeat',
+  'settings.napcat.connectionDiagnosisLabel': 'Diagnosis',
   'settings.napcat.authRequired': 'Bearer token required',
   'settings.napcat.authNone': 'No token required',
   'settings.napcat.providerSummary.auto': 'Auto-select first enabled provider and model',
@@ -694,10 +723,76 @@ export const en = defineCatalog({
   'settings.napcat.daemonCheckingDetail': 'Checking daemon health...',
   'settings.napcat.daemonUnavailable': 'Daemon status unavailable.',
   'settings.napcat.daemonUptime': ({ seconds }) => `Uptime ${asText(seconds)}s`,
+  'settings.napcat.daemonOfflineDetail': ({ error }) => `Daemon is unreachable: ${asText(error)}`,
   'settings.napcat.daemonSource': ({ source }) => `Using ${asText(source)} address information.`,
   'settings.napcat.daemonSource.health': 'health',
   'settings.napcat.daemonSource.recorded': 'recorded',
   'settings.napcat.daemonSource.default': 'default',
+  'settings.napcat.transportChecking': 'Checking',
+  'settings.napcat.transportBlockedByDaemon': 'Blocked by Daemon',
+  'settings.napcat.transportConnected': 'Connected',
+  'settings.napcat.transportDisconnected': 'Waiting for NapCat',
+  'settings.napcat.transportDisabled': 'Disabled',
+  'settings.napcat.transportUnavailable': 'Unavailable',
+  'settings.napcat.transportCheckingDetail': 'Checking reverse WebSocket transport...',
+  'settings.napcat.transportBlockedByDaemonDetail':
+    'Reverse WebSocket transport cannot connect because the daemon is offline or not listening on the configured port.',
+  'settings.napcat.transportConnectedDetail': 'NapCat reverse WebSocket transport is connected.',
+  'settings.napcat.transportDisconnectedDetail':
+    'Daemon is reachable, but NapCat has not opened a reverse WebSocket yet.',
+  'settings.napcat.transportDisabledDetail':
+    'Bridge is disabled in config, so reverse WebSocket connections are not accepted.',
+  'settings.napcat.transportUnavailableDetail':
+    'Transport runtime is unavailable until the daemon responds.',
+  'settings.napcat.transportUnknownDetail':
+    'Daemon is online, but it did not report reverse WebSocket transport state.',
+  'settings.napcat.heartbeatChecking': 'Checking',
+  'settings.napcat.heartbeatBlockedByDaemon': 'Blocked by Daemon',
+  'settings.napcat.heartbeatHealthy': 'Healthy',
+  'settings.napcat.heartbeatWaitingForTransport': 'Waiting for transport',
+  'settings.napcat.heartbeatUnobserved': 'Not observed yet',
+  'settings.napcat.heartbeatStale': 'Stale',
+  'settings.napcat.heartbeatUnhealthy': 'Reported unhealthy',
+  'settings.napcat.heartbeatDisabled': 'Disabled',
+  'settings.napcat.heartbeatUnavailable': 'Unavailable',
+  'settings.napcat.heartbeatCheckingDetail': 'Checking NapCat heartbeat liveness...',
+  'settings.napcat.heartbeatBlockedByDaemonDetail':
+    'Heartbeat liveness is unavailable because the daemon is offline or unreachable.',
+  'settings.napcat.heartbeatHealthyDetail':
+    'A recent healthy NapCat heartbeat confirms the reverse WebSocket session is alive.',
+  'settings.napcat.heartbeatWaitingForTransportDetail':
+    'Heartbeat data is unavailable until NapCat opens a reverse WebSocket session.',
+  'settings.napcat.heartbeatUnobservedDetail':
+    'Reverse WebSocket transport is already connected. No heartbeat has been observed yet, which can happen before the first interval or when heartbeat is not emitted as expected.',
+  'settings.napcat.heartbeatStaleDetail': ({ age, interval }) =>
+    `Last heartbeat was ${asText(age)} ago (expected every ${asText(interval)}).`,
+  'settings.napcat.heartbeatUnhealthyDetail':
+    'NapCat heartbeat reported that the bot session is not healthy.',
+  'settings.napcat.heartbeatDisabledDetail':
+    'Bridge is disabled in config, so heartbeat liveness is not expected.',
+  'settings.napcat.heartbeatUnavailableDetail':
+    'Heartbeat runtime is unavailable until the daemon responds.',
+  'settings.napcat.heartbeatUnknownDetail':
+    'Daemon is online, but it did not report heartbeat runtime.',
+  'settings.napcat.lastHeartbeatDisabled': 'Bridge disabled',
+  'settings.napcat.lastHeartbeatNever': 'Not received yet',
+  'settings.napcat.lastHeartbeatValue': ({ age, interval }) =>
+    `${asText(age)} ago / ${asText(interval)} interval`,
+  'settings.napcat.connectionDiagnosis.checking': 'Checking runtime state',
+  'settings.napcat.connectionDiagnosis.daemonOffline': 'Daemon is down or unreachable',
+  'settings.napcat.connectionDiagnosis.connected':
+    'Reverse WebSocket is connected and heartbeat looks healthy',
+  'settings.napcat.connectionDiagnosis.waitingForTransport':
+    'Daemon is healthy; waiting for NapCat reverse WebSocket transport',
+  'settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat':
+    'Reverse WebSocket is connected; heartbeat has not been observed yet',
+  'settings.napcat.connectionDiagnosis.connectedHeartbeatStale':
+    'Reverse WebSocket is connected, but heartbeat is stale',
+  'settings.napcat.connectionDiagnosis.connectedHeartbeatUnhealthy':
+    'Reverse WebSocket is connected, but heartbeat reports NapCat as unhealthy',
+  'settings.napcat.connectionDiagnosis.bridgeDisabled': 'Bridge is disabled in config',
+  'settings.napcat.connectionDiagnosis.bridgeUnknown':
+    'Daemon is online, but bridge runtime was not reported',
   'settings.napcat.embeddedOnly': 'These controls manage the desktop-managed embedded daemon only.',
   'settings.napcat.runtimePathsTitle': 'Runtime Paths',
   'settings.napcat.runtimePathsDescription':

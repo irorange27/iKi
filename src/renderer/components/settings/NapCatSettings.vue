@@ -161,6 +161,30 @@
           </span>
         </div>
         <div class="summary-row">
+          <span class="summary-label">{{ t('settings.napcat.transportLabel') }}</span>
+          <span class="status-chip" :class="transportStatusClass">
+            {{ transportStatusChip }}
+          </span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">{{ t('settings.napcat.heartbeatLabel') }}</span>
+          <span class="status-chip" :class="heartbeatStatusClass">
+            {{ heartbeatStatusChip }}
+          </span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">{{ t('settings.napcat.activeConnections') }}</span>
+          <span>{{ bridgeConnectionCount }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">{{ t('settings.napcat.lastHeartbeatLabel') }}</span>
+          <span>{{ lastHeartbeatSummary }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">{{ t('settings.napcat.connectionDiagnosisLabel') }}</span>
+          <span>{{ connectionDiagnosis }}</span>
+        </div>
+        <div class="summary-row">
           <span class="summary-label">{{ t('settings.napcat.listening') }}</span>
           <code class="summary-code">{{ activeDaemonAddress }}</code>
         </div>
@@ -187,6 +211,8 @@
       </div>
 
       <p class="group-description">{{ daemonStatusDetail }}</p>
+      <p class="group-description">{{ transportStatusDetail }}</p>
+      <p class="group-description">{{ heartbeatStatusDetail }}</p>
       <p
         v-if="daemonControlMessage"
         class="group-description"
@@ -279,6 +305,8 @@ const props = defineProps<{
 }>();
 const {
   activeDaemonAddress,
+  bridgeConnectionCount,
+  connectionDiagnosis,
   configPathSummary,
   daemonControlLoading,
   daemonControlMessage,
@@ -295,6 +323,10 @@ const {
   dockerWsUrl,
   handleDaemonControl,
   hasDuplicateProviderType,
+  heartbeatStatusChip,
+  heartbeatStatusClass,
+  heartbeatStatusDetail,
+  lastHeartbeatSummary,
   loadDaemonLogs,
   loadDaemonStatus,
   localWsUrl,
@@ -310,6 +342,9 @@ const {
   t,
   toolListText,
   toolSummary,
+  transportStatusChip,
+  transportStatusClass,
+  transportStatusDetail,
   updateDaemonHost,
   updateDaemonPort,
   updateNapCat,

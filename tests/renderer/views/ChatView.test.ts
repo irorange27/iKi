@@ -250,7 +250,7 @@ const ChatInputStub = defineComponent({
     todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
   },
-  emits: ['incognito-changed', 'model-selected', 'workspace-changed'],
+  emits: ['incognito-changed', 'model-selected', 'new-chat-requested', 'workspace-changed'],
   setup(_, { expose }) {
     expose({
       setDraftMessage: setDraftMessageMock,

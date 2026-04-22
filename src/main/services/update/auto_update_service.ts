@@ -10,7 +10,6 @@ import { getAllBrowserWindows } from '../../utils/browser_windows';
 const UPDATE_SERVER_BASE_URL = 'https://update.electronjs.org';
 const DEFAULT_GITHUB_REPOSITORY = 'irorange27/iKi';
 const AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const WINDOWS_FIRST_RUN_ARG = '--squirrel-firstrun';
 const UPDATE_STATUS_CHANNEL = 'updates:status-changed';
 
 type AppUpdateServiceDeps = {
@@ -115,8 +114,7 @@ export const buildUpdateFeedUrl = (params: {
 }): string =>
   `${UPDATE_SERVER_BASE_URL}/${params.owner}/${params.name}/${params.platform}-${params.arch}/${params.version}`;
 
-const isSupportedPlatform = (platform: NodeJS.Platform): boolean =>
-  platform === 'darwin' || platform === 'win32';
+const isSupportedPlatform = (platform: NodeJS.Platform): boolean => platform === 'darwin';
 
 export const createAppUpdateService = (deps: AppUpdateServiceDeps) => {
   let started = false;
@@ -156,9 +154,6 @@ export const createAppUpdateService = (deps: AppUpdateServiceDeps) => {
   const getUnsupportedReason = (): AppUpdateUnsupportedReason | null => {
     if (!isSupportedPlatform(deps.platform)) return 'platform';
     if (!deps.app.isPackaged) return 'not-packaged';
-    if (deps.platform === 'win32' && deps.argv.includes(WINDOWS_FIRST_RUN_ARG)) {
-      return 'first-run';
-    }
     return null;
   };
 

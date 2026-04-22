@@ -142,7 +142,10 @@ describe('useChatStreaming', () => {
       initialMessages: [userMessage],
     });
 
-    await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
+    await state.beginEditMessage(
+      userMessage,
+      vi.fn(async () => undefined)
+    );
     state.streamController.beginTurn({
       threadId: 'thread_1',
       parentId: 'user_1',
@@ -181,7 +184,10 @@ describe('useChatStreaming', () => {
       initialMessages: [userMessage, assistantMessage, trailingUserMessage],
     });
 
-    await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
+    await state.beginEditMessage(
+      userMessage,
+      vi.fn(async () => undefined)
+    );
 
     const result = await state.prepareMessageSend({
       content: 'Updated question',
@@ -236,6 +242,93 @@ describe('useChatStreaming', () => {
     expect(getTextPart(messageStore.messages[0] as UIMessage)).toBe('Hello from a fresh composer');
     expect(result?.threadId).toBe('thread_new');
     expect(result?.messagesSnapshot).toHaveLength(1);
+  });
+
+  it('persists composer invocation tokens alongside the user text when a message is sent', async () => {
+    const { state, messageStore, upsertUiMessage } = createHarness({
+      currentThread: createStoredThread({ id: 'thread_1', model: 'gpt-4.1' }),
+      currentModel: 'gpt-4.1',
+    });
+
+    await state.prepareMessageSend({
+      content: 'Build a landing page',
+      model: 'gpt-4.1',
+      composerInvocations: {
+        tokens: [
+          {
+            id: 'skill:codex:frontend-dev',
+            kind: 'skill',
+            prefix: '$',
+            label: 'frontend-dev',
+          },
+          {
+            id: 'prompt_music',
+            kind: 'prompt-app',
+            prefix: '',
+            label: 'music',
+          },
+        ],
+      },
+    });
+    await flushMicrotasks();
+
+    expect(messageStore.messages).toHaveLength(1);
+    expect(messageStore.messages[0]?.parts).toEqual([
+      {
+        type: 'data-composer-invocation',
+        data: {
+          tokens: [
+            {
+              id: 'skill:codex:frontend-dev',
+              kind: 'skill',
+              prefix: '$',
+              label: 'frontend-dev',
+            },
+            {
+              id: 'prompt_music',
+              kind: 'prompt-app',
+              prefix: '',
+              label: 'music',
+            },
+          ],
+        },
+      },
+      { type: 'text', text: 'Build a landing page', state: 'done' },
+    ]);
+    expect(upsertUiMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          parts: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'data-composer-invocation',
+            }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('stores the starting prompt app on an empty thread before the first turn is persisted', async () => {
+    const { state, updateThread, currentThread } = createHarness({
+      currentThread: createStoredThread({
+        id: 'thread_1',
+        prompt_app_id: undefined,
+      }),
+      currentModel: 'gpt-4.1',
+    });
+
+    const result = await state.prepareMessageSend({
+      content: 'Summarize carefully:\nRelease notes draft',
+      model: 'gpt-4.1',
+      promptAppId: 'prompt_summarize',
+    });
+    await flushMicrotasks();
+
+    expect(updateThread).toHaveBeenCalledWith('thread_1', {
+      prompt_app_id: 'prompt_summarize',
+    });
+    expect(currentThread.value?.prompt_app_id).toBe('prompt_summarize');
+    expect(result?.threadId).toBe('thread_1');
   });
 
   it('refreshes workspace binding before sending on an existing unscoped thread', async () => {

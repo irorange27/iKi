@@ -20,7 +20,8 @@ vi.mock('../../../src/renderer/logger', () => ({
 }));
 
 import type { Provider } from '../../../src/shared/types/provider';
-import type { Workspace } from '../../../src/shared/types/chat';
+import type { PromptApp, Workspace } from '../../../src/shared/types/chat';
+import type { SkillSummary } from '../../../src/shared/types/skill';
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -74,6 +75,41 @@ const buildWorkspace = (
   updated_at: overrides.updated_at ?? '2026-03-21T00:00:00.000Z',
 });
 
+const buildPromptApp = (
+  overrides: Partial<PromptApp> & Pick<PromptApp, 'id' | 'name' | 'prompt_template'>
+): PromptApp => ({
+  id: overrides.id,
+  name: overrides.name,
+  description: overrides.description,
+  icon: overrides.icon,
+  prompt_template: overrides.prompt_template,
+  placeholders: overrides.placeholders ?? '[]',
+  model: overrides.model,
+  enabled: overrides.enabled ?? 1,
+  sort_order: overrides.sort_order ?? 0,
+  created_at: overrides.created_at ?? '2026-03-21T00:00:00.000Z',
+  updated_at: overrides.updated_at ?? '2026-03-21T00:00:00.000Z',
+  tools: overrides.tools,
+  reasoning_effort: overrides.reasoning_effort,
+  expects_image_result: overrides.expects_image_result ?? 0,
+  is_incognito: overrides.is_incognito ?? 0,
+  shortcut: overrides.shortcut,
+  window_width: overrides.window_width,
+  window_height: overrides.window_height,
+  font_size: overrides.font_size,
+});
+
+const buildSkill = (
+  overrides: Partial<SkillSummary> & Pick<SkillSummary, 'id' | 'name'>
+): SkillSummary => ({
+  id: overrides.id,
+  name: overrides.name,
+  description: overrides.description ?? '',
+  source: overrides.source ?? 'codex',
+  requiredTools: overrides.requiredTools,
+  path: overrides.path,
+});
+
 const createElectronApi = (options?: {
   providers?: Provider[];
   modelCatalogByProviderId?: Record<
@@ -88,6 +124,8 @@ const createElectronApi = (options?: {
   >;
   workspaces?: Workspace[];
   pickedWorkspace?: Workspace | null;
+  skills?: SkillSummary[];
+  promptApps?: PromptApp[];
   configured?: boolean;
   configuredError?: Error;
   thread?: {
@@ -97,6 +135,7 @@ const createElectronApi = (options?: {
     metadata?: string | null;
     model?: string | null;
     is_incognito?: number;
+    prompt_app_id?: string;
   } | null;
 }) => {
   const stream = vi.fn(async () => ({ success: true }));
@@ -148,6 +187,12 @@ const createElectronApi = (options?: {
         ),
         pickDirectory: vi.fn(async () => options?.pickedWorkspace ?? null),
       },
+      promptApps: {
+        getEnabled: vi.fn(async () => options?.promptApps ?? []),
+      },
+      skills: {
+        list: vi.fn(async () => options?.skills ?? []),
+      },
       tools: {
         list: vi.fn(async () => []),
       },
@@ -175,6 +220,8 @@ const mountChatInput = async (options?: {
   >;
   configured?: boolean;
   configuredError?: Error;
+  skills?: SkillSummary[];
+  promptApps?: PromptApp[];
   thread?: {
     id: string;
     title: string;
@@ -182,6 +229,7 @@ const mountChatInput = async (options?: {
     metadata?: string | null;
     model?: string | null;
     is_incognito?: number;
+    prompt_app_id?: string;
   } | null;
   messages?: unknown[];
   prepareMessageSend?: (payload: {
@@ -190,6 +238,7 @@ const mountChatInput = async (options?: {
     providerId?: string;
     tools?: string[];
     mcpServerIds?: string[];
+    promptAppId?: string;
   }) => Promise<{
     threadId: string;
     messagesSnapshot: unknown[];
@@ -207,6 +256,7 @@ const mountChatInput = async (options?: {
       providerId?: string;
       tools?: string[];
       mcpServerIds?: string[];
+      promptAppId?: string;
     }) => {
       if (options?.prepareMessageSend) {
         return await options.prepareMessageSend(payload);
@@ -296,8 +346,9 @@ describe('ChatInput', () => {
     expect(plan.text()).toContain('Ship composer card');
     expect(plan.text()).toContain('Task five');
     expect(plan.text()).not.toContain('Task six');
-    expect(plan.element.compareDocumentPosition(composer.element) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
+    expect(
+      plan.element.compareDocumentPosition(composer.element) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
 
     await wrapper.setProps({ todoPlan: null });
     await flushPromises();
@@ -489,6 +540,301 @@ describe('ChatInput', () => {
       parts: [{ type: 'text', text: 'Need help with the repo' }],
     });
     expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
+  });
+
+  it('shows built-in slash command suggestions as soon as the user types slash', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, prepareMessageSend } = await mountChatInput({
+      providers: [provider],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/');
+    await flushPromises();
+
+    const menu = wrapper.find('.slash-command-menu');
+    expect(menu.exists()).toBe(true);
+    expect(menu.text()).toContain('/new');
+    expect(menu.text()).toContain('/clear');
+    expect(menu.text()).toContain('/incognito');
+
+    await wrapper.find('.chat-input-field').trigger('keydown.enter', { key: 'Enter' });
+    await flushPromises();
+
+    const chip = wrapper.find('.composer-inline-token--command');
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain('/new');
+    expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
+    expect(prepareMessageSend).not.toHaveBeenCalled();
+  });
+
+  it('shows skills as compact slash commands and routes requests through manual skill selection', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const frontendSkill = buildSkill({
+      id: 'codex:frontend-dev',
+      name: 'frontend-dev',
+      description: 'Premium frontend page building',
+      source: 'codex',
+      path: '/Users/nina/.codex/minimax-skills/skills/frontend-dev/SKILL.md',
+    });
+
+    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+      providers: [provider],
+      skills: [frontendSkill],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/front');
+    await flushPromises();
+
+    const menu = wrapper.find('.slash-command-menu');
+    expect(menu.exists()).toBe(true);
+    expect(menu.text()).toContain('Skills');
+    expect(menu.text()).toContain('/frontend-dev');
+    expect(menu.text()).toContain('/Users/nina/.codex/minimax-skills/skills/frontend-dev/SKILL.md');
+
+    await wrapper.find('.chat-input-field').trigger('keydown.enter', { key: 'Enter' });
+    await flushPromises();
+
+    const slashChip = wrapper.find('.composer-inline-token--skill');
+    expect(slashChip.exists()).toBe(true);
+    expect(slashChip.text()).toContain('$frontend-dev');
+    expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
+
+    await wrapper.find('.chat-input-field').setValue('build a landing page');
+    await flushPromises();
+
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(prepareMessageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'build a landing page',
+      })
+    );
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillMode: 'manual',
+        skillIds: ['codex:frontend-dev'],
+      })
+    );
+  });
+
+  it('shows selected skills as a dedicated composer context and lets the user clear them inline', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const frontendSkill = buildSkill({
+      id: 'codex:frontend-dev',
+      name: 'frontend-dev',
+      description: 'Premium frontend page building',
+      source: 'codex',
+      path: '/Users/nina/.codex/minimax-skills/skills/frontend-dev/SKILL.md',
+    });
+
+    const { wrapper } = await mountChatInput({
+      providers: [provider],
+      skills: [frontendSkill],
+    });
+
+    wrapper
+      .findComponent({ name: 'SkillSelector' })
+      .vm.$emit('update:skillIds', ['codex:frontend-dev']);
+    wrapper.findComponent({ name: 'SkillSelector' }).vm.$emit('update:mode', 'manual');
+    await flushPromises();
+
+    const selectedSkillChip = wrapper.find('.composer-inline-token--skill');
+    expect(selectedSkillChip.exists()).toBe(true);
+    expect(selectedSkillChip.text()).toContain('$frontend-dev');
+    expect(wrapper.find('.chat-input-field').attributes('placeholder') ?? '').toContain(
+      'selected skills'
+    );
+
+    await selectedSkillChip.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.composer-inline-token--skill').exists()).toBe(false);
+  });
+
+  it('clears active invocation and selected skills with backspace when the draft is empty', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const frontendSkill = buildSkill({
+      id: 'codex:frontend-dev',
+      name: 'frontend-dev',
+      description: 'Premium frontend page building',
+      source: 'codex',
+      path: '/Users/nina/.codex/minimax-skills/skills/frontend-dev/SKILL.md',
+    });
+
+    const { wrapper } = await mountChatInput({
+      providers: [provider],
+      skills: [frontendSkill],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/front');
+    await flushPromises();
+    await wrapper.find('.chat-input-field').trigger('keydown.enter', { key: 'Enter' });
+    await flushPromises();
+
+    expect(wrapper.find('.composer-inline-token--skill').text()).toContain('$frontend-dev');
+
+    await wrapper.find('.chat-input-field').trigger('keydown', { key: 'Backspace' });
+    await flushPromises();
+
+    expect(wrapper.find('.composer-inline-token--skill').exists()).toBe(false);
+
+    wrapper
+      .findComponent({ name: 'SkillSelector' })
+      .vm.$emit('update:skillIds', ['codex:frontend-dev']);
+    wrapper.findComponent({ name: 'SkillSelector' }).vm.$emit('update:mode', 'manual');
+    await flushPromises();
+
+    expect(wrapper.find('.composer-inline-token--skill').text()).toContain('$frontend-dev');
+
+    await wrapper.find('.chat-input-field').trigger('keydown', { key: 'Backspace' });
+    await flushPromises();
+
+    expect(wrapper.find('.composer-inline-token--skill').exists()).toBe(false);
+  });
+
+  it('executes the built-in new-chat slash command locally without streaming', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+      providers: [provider],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/new');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('new-chat-requested')).toEqual([[]]);
+    expect(prepareMessageSend).not.toHaveBeenCalled();
+    expect(stream).not.toHaveBeenCalled();
+    expect(wrapper.find('.composer-feedback').text()).toContain('Started a new chat');
+  });
+
+  it('executes the built-in incognito slash command locally without streaming', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+      providers: [provider],
+      props: {
+        isIncognito: false,
+      },
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/incognito on');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('incognito-changed')).toEqual([[true]]);
+    expect(prepareMessageSend).not.toHaveBeenCalled();
+    expect(stream).not.toHaveBeenCalled();
+    expect(wrapper.find('.composer-feedback').text()).toContain('Incognito mode is now enabled');
+  });
+
+  it('shows selected prompt shortcuts as plain labels inside the composer token', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const musicPrompt = buildPromptApp({
+      id: 'prompt_music',
+      name: 'Music',
+      shortcut: 'music',
+      prompt_template: 'Compose music for:\n{{input}}',
+    });
+
+    const { wrapper } = await mountChatInput({
+      providers: [provider],
+      promptApps: [musicPrompt],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/mus');
+    await flushPromises();
+    await wrapper.find('.chat-input-field').trigger('keydown.enter', { key: 'Enter' });
+    await flushPromises();
+
+    const promptChip = wrapper.find('.composer-inline-token--prompt');
+    expect(promptChip.exists()).toBe(true);
+    expect(promptChip.text()).toContain('music');
+    expect(promptChip.text()).not.toContain('/music');
+  });
+
+  it('expands slash commands through prompt templates before preparing the send payload', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const summarizePrompt = buildPromptApp({
+      id: 'prompt_summarize',
+      name: 'Summarize',
+      shortcut: 'summarize',
+      prompt_template: 'Summarize carefully:\n{{input}}',
+    });
+
+    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+      providers: [provider],
+      promptApps: [summarizePrompt],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/summarize Release notes draft');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(prepareMessageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'Summarize carefully:\nRelease notes draft',
+        promptAppId: 'prompt_summarize',
+      })
+    );
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            role: 'user',
+            parts: [{ type: 'text', text: 'Summarize carefully:\nRelease notes draft' }],
+          }),
+        ],
+      })
+    );
   });
 
   it('uses the selected model capability as the context denominator and forwards it with the stream payload', async () => {

@@ -31,12 +31,35 @@ describe('configService', () => {
     vi.restoreAllMocks();
   });
 
+  const emptyHeartbeat = {
+    lastReceivedAt: null,
+    intervalMs: null,
+    ageMs: null,
+    online: null,
+    good: null,
+    stale: null,
+  };
+
   it('delegates all config IPC methods when the Electron config bridge is available', async () => {
     const config = createDefaultAppConfig();
     const get = vi.fn(async () => config);
     const set = vi.fn(async () => ({ success: true }));
     const getRuntimeInfo = vi.fn(async () => ({ configPath: '/tmp/config.json' }));
-    const getDaemonStatus = vi.fn(async () => ({ running: true, managed: true }));
+    const getDaemonStatus = vi.fn(async () => ({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'disconnected',
+          activeConnectionCount: 0,
+          heartbeat: emptyHeartbeat,
+        },
+      },
+    }));
     const getDaemonLogs = vi.fn(async (limit?: number) => ({ lines: [], limit: limit ?? 0 }));
     const controlDaemon = vi.fn(async (action: string) => ({ success: true, action }));
     const testNetwork = vi.fn(async (network: unknown) => ({ success: true, network }));
@@ -62,7 +85,21 @@ describe('configService', () => {
     expect(await configService.get()).toBe(config);
     expect(await configService.set(config)).toEqual({ success: true });
     expect(await configService.getRuntimeInfo()).toEqual({ configPath: '/tmp/config.json' });
-    expect(await configService.getDaemonStatus()).toEqual({ running: true, managed: true });
+    expect(await configService.getDaemonStatus()).toEqual({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'disconnected',
+          activeConnectionCount: 0,
+          heartbeat: emptyHeartbeat,
+        },
+      },
+    });
     expect(await configService.getDaemonLogs()).toEqual({ lines: [], limit: 120 });
     expect(await configService.getDaemonLogs(25)).toEqual({ lines: [], limit: 25 });
     expect(await configService.controlDaemon('restart')).toEqual({

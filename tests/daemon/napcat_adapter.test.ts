@@ -21,9 +21,13 @@ class FakeBridgeSocket {
   });
 
   emitMessage(data: unknown) {
-    const listener = this.listeners.get('message');
+    return this.emit('message', data);
+  }
+
+  emit(event: string, ...args: unknown[]) {
+    const listener = this.listeners.get(event);
     if (!listener) return undefined;
-    return listener(data);
+    return listener(...args);
   }
 }
 
@@ -123,6 +127,15 @@ const expectSocket = (socket: FakeBridgeSocket | null | undefined): FakeBridgeSo
   return socket;
 };
 
+const emptyHeartbeat = {
+  lastReceivedAt: null,
+  intervalMs: null,
+  ageMs: null,
+  online: null,
+  good: null,
+  stale: null,
+};
+
 describe('createNapCatReverseBridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,8 +149,95 @@ describe('createNapCatReverseBridge', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     process.env = { ...ORIGINAL_ENV };
+  });
+
+  it('treats reverse WebSocket transport as the primary runtime connection state and heartbeat as secondary health', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-22T00:00:00.000Z'));
+
+    getAppConfigMock.mockReturnValue(createConfig({ enabled: true }));
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    const bridge = createNapCatReverseBridge({
+      chatService: chatService as never,
+      clientId: 'client_napcat',
+    });
+
+    expect(bridge.getStatus()).toEqual({
+      state: 'disconnected',
+      activeConnectionCount: 0,
+      heartbeat: emptyHeartbeat,
+    });
+
+    const ws = new FakeBridgeSocket();
+    bridge.wss.emit('connection', ws as never, createRequest('/onebot/v11/ws') as never);
+
+    expect(bridge.getStatus()).toEqual({
+      state: 'connected',
+      activeConnectionCount: 1,
+      heartbeat: emptyHeartbeat,
+    });
+
+    ws.emitMessage(
+      JSON.stringify({
+        post_type: 'meta_event',
+        meta_event_type: 'heartbeat',
+        interval: 5000,
+        status: {
+          online: true,
+          good: true,
+        },
+      })
+    );
+
+    expect(bridge.getStatus()).toEqual({
+      state: 'connected',
+      activeConnectionCount: 1,
+      heartbeat: {
+        lastReceivedAt: '2026-04-22T00:00:00.000Z',
+        intervalMs: 5000,
+        ageMs: 0,
+        online: true,
+        good: true,
+        stale: false,
+      },
+    });
+
+    vi.setSystemTime(new Date('2026-04-22T00:00:11.000Z'));
+
+    expect(bridge.getStatus()).toEqual({
+      state: 'connected',
+      activeConnectionCount: 1,
+      heartbeat: {
+        lastReceivedAt: '2026-04-22T00:00:00.000Z',
+        intervalMs: 5000,
+        ageMs: 11000,
+        online: true,
+        good: true,
+        stale: true,
+      },
+    });
+  });
+
+  it('reports disabled bridge status even when no sockets are connected', () => {
+    getAppConfigMock.mockReturnValue(createConfig({ enabled: false }));
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    const bridge = createNapCatReverseBridge({
+      chatService: chatService as never,
+      clientId: 'client_napcat',
+    });
+
+    expect(bridge.getStatus()).toEqual({
+      state: 'disabled',
+      activeConnectionCount: 0,
+      heartbeat: emptyHeartbeat,
+    });
   });
 
   it('rejects upgrade requests when the bridge is disabled', () => {

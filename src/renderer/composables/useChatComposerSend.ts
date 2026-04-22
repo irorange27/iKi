@@ -1,5 +1,6 @@
 import { ref, watch, type Ref } from 'vue';
 
+import type { ComposerInvocationPartData } from '../../shared/chat/message_parts';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '../../shared/types/provider';
 import { getErrorMessage } from '../../shared/utils/errors';
@@ -24,6 +25,21 @@ export type ComposerProviderReadyResult =
       message: string;
     };
 
+export type ResolvedComposerSendRequest =
+  | {
+      kind: 'message';
+      content: string;
+      promptAppId?: string;
+      skillMode?: 'manual' | 'auto';
+      skillIds?: string[];
+      composerInvocations?: ComposerInvocationPartData;
+      onCommitted?: () => void;
+    }
+  | {
+      kind: 'skip';
+      feedback?: string;
+    };
+
 export const useChatComposerSend = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   message: Ref<string>;
@@ -37,6 +53,7 @@ export const useChatComposerSend = (deps: {
   prepareFailedMessage: string;
   stopFailedMessage: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
+  resolveSendRequest?: (draft: string) => Promise<ResolvedComposerSendRequest>;
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
   resolveSelectedMcpServerIds: () => Promise<string[]>;
   stopVoiceInput: () => void;
@@ -105,11 +122,38 @@ export const useChatComposerSend = (deps: {
       return;
     }
 
-    if (!deps.message.value.trim() || isPreparingSend.value || isLoading.value) {
+    const draftMessage = deps.message.value;
+    if (!draftMessage.trim() || isPreparingSend.value || isLoading.value) {
       return;
     }
 
     dismissComposerFeedback();
+
+    const resolvedSendRequest = deps.resolveSendRequest
+      ? await deps.resolveSendRequest(draftMessage)
+      : {
+          kind: 'message' as const,
+          content: draftMessage,
+        };
+
+    if (resolvedSendRequest.kind === 'skip') {
+      if (resolvedSendRequest.feedback) {
+        setComposerFeedback(resolvedSendRequest.feedback);
+      }
+      return;
+    }
+
+    const userMessage = resolvedSendRequest.content.trim();
+    if (!userMessage) {
+      return;
+    }
+
+    const effectiveSkillMode =
+      resolvedSendRequest.skillMode ?? (deps.isAutoSkillMode.value ? 'auto' : 'manual');
+    const effectiveSelectedSkillIds =
+      resolvedSendRequest.skillMode === 'manual' && Array.isArray(resolvedSendRequest.skillIds)
+        ? resolvedSendRequest.skillIds
+        : deps.selectedSkillIds.value;
 
     const providerReady = await deps.ensureProviderReady();
     if (providerReady.ok === false) {
@@ -121,8 +165,6 @@ export const useChatComposerSend = (deps: {
       model: providerReady.model,
       modelCapability: providerReady.modelCapability ?? null,
     };
-
-    const userMessage = deps.message.value.trim();
     const resolvedMcpServerIds = await deps.resolveSelectedMcpServerIds();
     deps.selectedMcpServerIds.value = resolvedMcpServerIds;
     isPreparingSend.value = true;
@@ -143,6 +185,8 @@ export const useChatComposerSend = (deps: {
           providerId: providerReady.provider.id,
           tools: deps.selectedTools.value,
           mcpServerIds: resolvedMcpServerIds,
+          promptAppId: resolvedSendRequest.promptAppId,
+          composerInvocations: resolvedSendRequest.composerInvocations,
         });
       }
     } catch (error) {
@@ -162,6 +206,7 @@ export const useChatComposerSend = (deps: {
     }
 
     deps.message.value = '';
+    resolvedSendRequest.onCommitted?.();
     isLoading.value = true;
     isStopping.value = false;
 
@@ -172,8 +217,8 @@ export const useChatComposerSend = (deps: {
         isAutoToolMode: deps.isAutoToolMode.value,
         selectedTools: deps.selectedTools.value,
         resolvedMcpServerIds,
-        isAutoSkillMode: deps.isAutoSkillMode.value,
-        selectedSkillIds: deps.selectedSkillIds.value,
+        isAutoSkillMode: effectiveSkillMode === 'auto',
+        selectedSkillIds: effectiveSelectedSkillIds,
       });
 
       if (!streamPayload) {

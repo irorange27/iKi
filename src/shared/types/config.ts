@@ -22,6 +22,28 @@ export interface ConfigRuntimeInfo {
   };
 }
 
+export type NapCatBridgeRuntimeState =
+  | 'disabled'
+  | 'disconnected'
+  | 'degraded'
+  | 'connected'
+  | 'unknown';
+
+export interface NapCatBridgeHeartbeatInfo {
+  lastReceivedAt: string | null;
+  intervalMs: number | null;
+  ageMs: number | null;
+  online: boolean | null;
+  good: boolean | null;
+  stale: boolean | null;
+}
+
+export interface NapCatBridgeStatusInfo {
+  state: NapCatBridgeRuntimeState;
+  activeConnectionCount: number | null;
+  heartbeat: NapCatBridgeHeartbeatInfo;
+}
+
 export interface DaemonStatusInfo {
   online: boolean;
   host: string;
@@ -29,6 +51,9 @@ export interface DaemonStatusInfo {
   status: string;
   source: 'health' | 'recorded' | 'default';
   uptimeSeconds: number | null;
+  bridges: {
+    napcat: NapCatBridgeStatusInfo;
+  };
   error?: string;
 }
 

@@ -141,6 +141,12 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.editingBanner.title': '正在编辑之前的消息。',
   'chat.editingBanner.body': '重新发送后，该线程中后续消息会被移除。',
   'chat.input.placeholder': '输入消息...',
+  'chat.input.placeholder.skillInvocation': ({ skill }) =>
+    `继续描述要让 ${asText(skill)} 做什么...`,
+  'chat.input.placeholder.promptInvocation': ({ name }) => `继续补充 ${asText(name)} 的请求内容...`,
+  'chat.input.placeholder.commandInvocation': ({ name }) =>
+    `继续补充 ${asText(name)} 的可选参数...`,
+  'chat.input.placeholder.skillsActive': '继续输入，消息会带着已选技能一起运行...',
   'chat.input.contextUsage': '上下文使用量',
   'chat.input.enableIncognito': '开启无痕模式',
   'chat.input.disableIncognito': '关闭无痕模式',
@@ -152,6 +158,24 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.stopGeneration': '停止生成',
   'chat.input.stopFailed': '停止生成失败，请重试。',
   'chat.input.prepareFailed': '准备消息失败，请重试。',
+  'chat.input.slashCommandsTitle': '斜杠指令',
+  'chat.input.slash.new.name': '新对话',
+  'chat.input.slash.new.description': '立即开始一个全新的聊天线程。',
+  'chat.input.slash.new.executed': '已开始新对话。',
+  'chat.input.slash.new.invalidArgs': '`/new` 后面不需要额外内容。',
+  'chat.input.slash.clear.name': '清空草稿',
+  'chat.input.slash.clear.description': '清空当前输入框草稿。',
+  'chat.input.slash.clear.executed': '已清空当前草稿。',
+  'chat.input.slash.clear.invalidArgs': '`/clear` 后面不需要额外内容。',
+  'chat.input.slash.incognito.name': '切换无痕',
+  'chat.input.slash.incognito.description': '开启、关闭，或切换当前无痕模式。',
+  'chat.input.slash.incognito.enabled': '已开启无痕模式。',
+  'chat.input.slash.incognito.disabled': '已关闭无痕模式。',
+  'chat.input.slash.incognito.invalidArgs':
+    '请使用 `/incognito`、`/incognito on` 或 `/incognito off`。',
+  'chat.input.slash.skillsSection': '以下是 skills',
+  'chat.input.slash.skill.needsRequest': ({ skill }) =>
+    `发送前先补充要让 ${asText(skill)} 处理的内容。`,
   'chat.speech.unavailable': '语音服务不可用',
   'chat.speech.noSpeechDetected': '没有检测到语音',
   'chat.speech.transcriptionFailed': '语音转写失败',
@@ -634,12 +658,18 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.napcat.allowedTools': '允许的工具（每行一个）',
   'settings.napcat.toolsPlaceholder': 'web\nfetch',
   'settings.napcat.toolsHelp': '留空则禁用 QQ 回复中的工具调用。',
-  'settings.napcat.connectionTitle': '连接摘要',
-  'settings.napcat.connectionDescription': 'NapCat 成功连接所需的信息。打开时每 5 秒自动刷新。',
+  'settings.napcat.connectionTitle': '运行时状态',
+  'settings.napcat.connectionDescription':
+    '把 daemon 健康状态、反向 WebSocket 传输层、heartbeat 活性分开展示。打开时每 5 秒自动刷新。',
   'settings.napcat.refreshStatus': '刷新状态',
   'settings.napcat.listening': '监听地址',
   'settings.napcat.endpoint': '端点',
   'settings.napcat.authentication': '鉴权',
+  'settings.napcat.transportLabel': '反向 WebSocket',
+  'settings.napcat.heartbeatLabel': 'Heartbeat',
+  'settings.napcat.activeConnections': '活动连接数',
+  'settings.napcat.lastHeartbeatLabel': '最近心跳',
+  'settings.napcat.connectionDiagnosisLabel': '诊断',
   'settings.napcat.authRequired': '需要 Bearer token',
   'settings.napcat.authNone': '不需要 token',
   'settings.napcat.providerSummary.auto': '自动选择第一个已启用的 provider 和模型',
@@ -656,10 +686,74 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.napcat.daemonCheckingDetail': '正在检查 daemon 健康状态...',
   'settings.napcat.daemonUnavailable': '无法获取 daemon 状态。',
   'settings.napcat.daemonUptime': ({ seconds }) => `运行时长 ${asText(seconds)} 秒`,
+  'settings.napcat.daemonOfflineDetail': ({ error }) => `Daemon 不可达：${asText(error)}`,
   'settings.napcat.daemonSource': ({ source }) => `当前使用 ${asText(source)} 地址信息。`,
   'settings.napcat.daemonSource.health': '健康检查',
   'settings.napcat.daemonSource.recorded': '记录值',
   'settings.napcat.daemonSource.default': '默认值',
+  'settings.napcat.transportChecking': '检查中',
+  'settings.napcat.transportBlockedByDaemon': '被 Daemon 阻断',
+  'settings.napcat.transportConnected': '已连接',
+  'settings.napcat.transportDisconnected': '等待 NapCat 连接',
+  'settings.napcat.transportDisabled': '已禁用',
+  'settings.napcat.transportUnavailable': '不可用',
+  'settings.napcat.transportCheckingDetail': '正在检查反向 WebSocket 传输层状态...',
+  'settings.napcat.transportBlockedByDaemonDetail':
+    '反向 WebSocket 当前无法连上，因为 daemon 离线或没有在配置端口监听。',
+  'settings.napcat.transportConnectedDetail': 'NapCat 反向 WebSocket 传输层已连接。',
+  'settings.napcat.transportDisconnectedDetail':
+    'Daemon 可访问，但 NapCat 还没有建立反向 WebSocket 连接。',
+  'settings.napcat.transportDisabledDetail':
+    '配置中已禁用 bridge，因此不会接受反向 WebSocket 连接。',
+  'settings.napcat.transportUnavailableDetail':
+    '在 daemon 恢复响应之前，无法获取传输层运行时状态。',
+  'settings.napcat.transportUnknownDetail':
+    'Daemon 已在线，但没有上报反向 WebSocket 传输层状态。',
+  'settings.napcat.heartbeatChecking': '检查中',
+  'settings.napcat.heartbeatBlockedByDaemon': '被 Daemon 阻断',
+  'settings.napcat.heartbeatHealthy': '健康',
+  'settings.napcat.heartbeatWaitingForTransport': '等待传输层连接',
+  'settings.napcat.heartbeatUnobserved': '尚未观测到',
+  'settings.napcat.heartbeatStale': '心跳陈旧',
+  'settings.napcat.heartbeatUnhealthy': '心跳报告异常',
+  'settings.napcat.heartbeatDisabled': '已禁用',
+  'settings.napcat.heartbeatUnavailable': '不可用',
+  'settings.napcat.heartbeatCheckingDetail': '正在检查 NapCat heartbeat 活性...',
+  'settings.napcat.heartbeatBlockedByDaemonDetail':
+    '由于 daemon 离线或不可达，当前无法判断 heartbeat 活性。',
+  'settings.napcat.heartbeatHealthyDetail':
+    '最近一次健康 heartbeat 已确认反向 WebSocket 会话仍然存活。',
+  'settings.napcat.heartbeatWaitingForTransportDetail':
+    '只有在 NapCat 建立反向 WebSocket 之后，才会出现 heartbeat 数据。',
+  'settings.napcat.heartbeatUnobservedDetail':
+    '反向 WebSocket 传输层已经连通，但暂时还没有观测到 heartbeat。这可能只是首个间隔未到，也可能是当前没有按预期发送 heartbeat。',
+  'settings.napcat.heartbeatStaleDetail': ({ age, interval }) =>
+    `最近一次 heartbeat 距今 ${asText(age)}，预期间隔 ${asText(interval)}。`,
+  'settings.napcat.heartbeatUnhealthyDetail':
+    'NapCat heartbeat 上报 bot 会话当前不健康。',
+  'settings.napcat.heartbeatDisabledDetail':
+    '配置中已禁用 bridge，因此不应期望 heartbeat 活性。',
+  'settings.napcat.heartbeatUnavailableDetail':
+    '在 daemon 恢复响应之前，无法获取 heartbeat 运行时状态。',
+  'settings.napcat.heartbeatUnknownDetail':
+    'Daemon 已在线，但没有上报 heartbeat 运行时状态。',
+  'settings.napcat.lastHeartbeatDisabled': 'Bridge 已禁用',
+  'settings.napcat.lastHeartbeatNever': '尚未收到',
+  'settings.napcat.lastHeartbeatValue': ({ age, interval }) =>
+    `${asText(age)} 前 / 间隔 ${asText(interval)}`,
+  'settings.napcat.connectionDiagnosis.checking': '正在检查运行时状态',
+  'settings.napcat.connectionDiagnosis.daemonOffline': 'Daemon 已停止或不可达',
+  'settings.napcat.connectionDiagnosis.connected': '反向 WebSocket 已连接，heartbeat 也正常',
+  'settings.napcat.connectionDiagnosis.waitingForTransport':
+    'Daemon 正常，正在等待 NapCat 建立反向 WebSocket',
+  'settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat':
+    '反向 WebSocket 已连接，但暂时还没观测到 heartbeat',
+  'settings.napcat.connectionDiagnosis.connectedHeartbeatStale':
+    '反向 WebSocket 已连接，但 heartbeat 已经陈旧',
+  'settings.napcat.connectionDiagnosis.connectedHeartbeatUnhealthy':
+    '反向 WebSocket 已连接，但 heartbeat 报告 NapCat 不健康',
+  'settings.napcat.connectionDiagnosis.bridgeDisabled': 'Bridge 已在配置中禁用',
+  'settings.napcat.connectionDiagnosis.bridgeUnknown': 'Daemon 已在线，但 bridge 运行时未上报',
   'settings.napcat.embeddedOnly': '这些控制项只管理桌面托管的内嵌 daemon。',
   'settings.napcat.runtimePathsTitle': '运行时路径',
   'settings.napcat.runtimePathsDescription': '桌面应用和 daemon 应读取同一个配置数据库',

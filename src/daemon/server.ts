@@ -22,6 +22,7 @@ import {
 } from './server_shared';
 import { configureDaemonWebSockets } from './server_ws';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../shared/constants/daemon';
+import type { DaemonStatusInfo } from '../shared/types/config';
 
 const nodeRequire = createRequire(__filename);
 
@@ -94,6 +95,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         userDataPath,
         bootstrapTokenRef,
         napcatClientId,
+        getNapCatBridgeStatus: napcatBridge.getStatus,
         chatService,
         mcpManager,
         sessions,
@@ -160,6 +162,17 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       port,
       host,
       bootstrapToken,
+      getRuntimeStatus: (): DaemonStatusInfo => ({
+        online: true,
+        host,
+        port: started.port,
+        status: 'ok',
+        source: 'health',
+        uptimeSeconds: process.uptime(),
+        bridges: {
+          napcat: napcatBridge.getStatus(),
+        },
+      }),
       shutdown,
       ready,
     };

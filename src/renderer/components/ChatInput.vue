@@ -5,12 +5,88 @@
       <ChatComposerShell
         :set-input-ref="setInputRef"
         v-model="message"
-        :placeholder="t('chat.input.placeholder')"
+        :placeholder="composerPlaceholder"
         :feedback="composerFeedback"
+        @keydown="handleComposerKeydown"
         @keydown-enter="handleEnter"
         @composition-start="handleCompositionStart"
         @composition-end="handleCompositionEnd"
       >
+        <template #input-context>
+          <div
+            v-if="inlineComposerTokens.length > 0"
+            class="composer-inline-tokens"
+            role="status"
+            aria-live="polite"
+          >
+            <button
+              v-for="token in inlineComposerTokens"
+              :key="token.id"
+              type="button"
+              class="composer-inline-token"
+              :class="token.toneClass"
+              :title="token.title"
+              @click="handleInlineTokenClick(token)"
+            >
+              <span v-if="token.prefix" class="composer-inline-token-prefix" aria-hidden="true">
+                {{ token.prefix }}
+              </span>
+              <span class="composer-inline-token-label">{{ token.label }}</span>
+              <span class="composer-inline-token-dismiss" aria-hidden="true">x</span>
+            </button>
+          </div>
+        </template>
+
+        <template #input-overlay>
+          <div
+            v-if="isSlashCommandMenuVisible"
+            class="slash-command-menu ui-scrollbar"
+            role="listbox"
+            :aria-label="t('chat.input.slashCommandsTitle')"
+          >
+            <template v-for="(command, index) in slashCommandSuggestions" :key="command.id">
+              <div
+                v-if="shouldShowSkillSectionLabel(index)"
+                class="slash-command-section-label ui-text-secondary"
+                aria-hidden="true"
+              >
+                <span>{{ t('chat.input.slash.skillsSection') }}</span>
+              </div>
+
+              <button
+                type="button"
+                class="slash-command-item"
+                :class="index === activeSlashCommandIndex ? 'is-active' : ''"
+                role="option"
+                :aria-selected="index === activeSlashCommandIndex"
+                @mousedown.prevent="applySlashCommandSuggestion(command)"
+              >
+                <span class="slash-command-shortcut ui-text-accent">/{{ command.shortcut }}</span>
+                <span class="slash-command-name ui-text-primary">{{ command.name }}</span>
+                <span
+                  v-if="
+                    command.kind === 'skill'
+                      ? command.path || command.description
+                      : command.description
+                  "
+                  class="slash-command-meta ui-text-secondary"
+                  :title="
+                    command.kind === 'skill'
+                      ? command.path || command.description
+                      : command.description
+                  "
+                >
+                  {{
+                    command.kind === 'skill'
+                      ? command.path || command.description
+                      : command.description
+                  }}
+                </span>
+              </button>
+            </template>
+          </div>
+        </template>
+
         <template #toolbar-left>
           <ChatComposerSelectors
             :selected-workspace-id="props.selectedWorkspaceId ?? null"
@@ -73,6 +149,10 @@ import { useChatComposerDraft } from '../composables/useChatComposerDraft';
 import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
 import { useChatComposerSend } from '../composables/useChatComposerSend';
 import { useChatProviderSelection } from '../composables/useChatProviderSelection';
+import {
+  useChatSlashCommands,
+  type ComposerSlashCommand,
+} from '../composables/useChatSlashCommands';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import { useI18n } from '../i18n';
@@ -83,6 +163,7 @@ const { t } = useI18n();
 const emit = defineEmits<{
   (event: 'incognito-changed', value: boolean): void;
   (event: 'model-selected', payload: { model: string; provider: Provider }): void;
+  (event: 'new-chat-requested'): void;
   (event: 'workspace-changed', value: string | null): void;
 }>();
 
@@ -99,6 +180,15 @@ const props = defineProps<{
 }>();
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
+type ComposerInlineToken = {
+  id: string;
+  prefix: string;
+  label: string;
+  title: string;
+  toneClass: string;
+  kind: 'active-invocation' | 'selected-skill';
+  skillId?: string;
+};
 
 const inputRef = ref<ComposerTextControl | null>(null);
 const setInputRef = (element: ComposerTextControl | null) => {
@@ -159,6 +249,27 @@ const { setDraftMessage, handleCompositionStart, handleCompositionEnd, handleEnt
   });
 
 const {
+  suggestions: slashCommandSuggestions,
+  activeSuggestionIndex: activeSlashCommandIndex,
+  isMenuVisible: isSlashCommandMenuVisible,
+  activeInvocation,
+  selectedSkills,
+  applySuggestion: applySlashCommandSuggestion,
+  clearActiveInvocation,
+  handleComposerKeydown: handleSlashCommandKeydown,
+  resolveSlashCommandSend,
+} = useChatSlashCommands({
+  electronAPI,
+  message,
+  inputRef,
+  currentIncognito: computed(() => Boolean(props.isIncognito)),
+  selectedSkillIds,
+  onRequestNewChat: () => emit('new-chat-requested'),
+  onRequestIncognitoChange: (nextValue: boolean) => emit('incognito-changed', nextValue),
+  t,
+});
+
+const {
   composerFeedback,
   isPreparingSend,
   isLoading,
@@ -179,6 +290,7 @@ const {
   prepareFailedMessage: t('chat.input.prepareFailed'),
   stopFailedMessage: t('chat.input.stopFailed'),
   prepareMessageSend: props.prepareMessageSend,
+  resolveSendRequest: resolveSlashCommandSend,
   ensureProviderReady,
   resolveSelectedMcpServerIds,
   stopVoiceInput,
@@ -187,6 +299,95 @@ sendMessageHandler = sendMessage;
 watchEffect(() => {
   isBusy.value = isPreparingSend.value || isLoading.value;
 });
+
+const getInvocationToneClass = (command: ComposerSlashCommand) => {
+  if (command.kind === 'skill') return 'composer-inline-token--skill';
+  if (command.kind === 'prompt-app') return 'composer-inline-token--prompt';
+  return 'composer-inline-token--command';
+};
+
+const getInvocationPrefix = (command: ComposerSlashCommand) => {
+  if (command.kind === 'skill') return '$';
+  if (command.kind === 'prompt-app') return '';
+  return '/';
+};
+
+const getInvocationLabel = (command: ComposerSlashCommand) => {
+  if (command.kind === 'builtin' || command.kind === 'prompt-app') {
+    return command.shortcut;
+  }
+
+  return command.name;
+};
+
+const selectedSkillTokens = computed<ComposerInlineToken[]>(() => {
+  if (activeInvocation.value?.kind === 'skill') {
+    return [];
+  }
+
+  return selectedSkills.value.map(skill => ({
+    id: `selected-skill:${skill.id}`,
+    prefix: '$',
+    label: skill.name,
+    title: skill.description || skill.path || skill.id,
+    toneClass: 'composer-inline-token--skill',
+    kind: 'selected-skill',
+    skillId: skill.id,
+  }));
+});
+
+const inlineComposerTokens = computed<ComposerInlineToken[]>(() => {
+  const tokens: ComposerInlineToken[] = [];
+
+  if (activeInvocation.value) {
+    tokens.push({
+      id: `active-invocation:${activeInvocation.value.id}`,
+      prefix: getInvocationPrefix(activeInvocation.value),
+      label: getInvocationLabel(activeInvocation.value),
+      title:
+        activeInvocation.value.kind === 'skill'
+          ? activeInvocation.value.description ||
+            activeInvocation.value.path ||
+            activeInvocation.value.name
+          : activeInvocation.value.description || activeInvocation.value.name,
+      toneClass: getInvocationToneClass(activeInvocation.value),
+      kind: 'active-invocation',
+    });
+  }
+
+  return [...tokens, ...selectedSkillTokens.value];
+});
+
+const composerPlaceholder = computed(() => {
+  if (activeInvocation.value?.kind === 'skill') {
+    return t('chat.input.placeholder.skillInvocation', { skill: activeInvocation.value.name });
+  }
+  if (activeInvocation.value?.kind === 'prompt-app') {
+    return t('chat.input.placeholder.promptInvocation', { name: activeInvocation.value.name });
+  }
+  if (activeInvocation.value?.kind === 'builtin') {
+    return t('chat.input.placeholder.commandInvocation', { name: activeInvocation.value.name });
+  }
+  if (selectedSkills.value.length > 0) {
+    return t('chat.input.placeholder.skillsActive');
+  }
+  return t('chat.input.placeholder');
+});
+
+const removeSelectedSkill = (skillId: string) => {
+  selectedSkillIds.value = selectedSkillIds.value.filter(id => id !== skillId);
+  skillMode.value = 'manual';
+};
+
+const handleInlineTokenClick = (token: ComposerInlineToken) => {
+  if (token.kind === 'active-invocation') {
+    clearActiveInvocation();
+  } else if (token.skillId) {
+    removeSelectedSkill(token.skillId);
+  }
+
+  inputRef.value?.focus();
+};
 
 const composerContextUsage = computed(() => {
   const latestUsage = props.latestTokenUsage ?? null;
@@ -235,6 +436,38 @@ const handleWorkspaceChanged = (workspaceId: string | null) => {
   emit('workspace-changed', workspaceId);
 };
 
+const handleComposerKeydown = (event: KeyboardEvent) => {
+  if (handleSlashCommandKeydown(event)) {
+    return;
+  }
+
+  if (event.defaultPrevented || event.key !== 'Backspace' || message.value.length > 0) {
+    return;
+  }
+
+  if (activeInvocation.value) {
+    event.preventDefault();
+    clearActiveInvocation();
+    return;
+  }
+
+  const lastSelectedSkill = selectedSkills.value.at(-1);
+  if (!lastSelectedSkill) {
+    return;
+  }
+
+  event.preventDefault();
+  removeSelectedSkill(lastSelectedSkill.id);
+};
+
+const shouldShowSkillSectionLabel = (index: number) => {
+  const command = slashCommandSuggestions.value[index];
+  if (command?.kind !== 'skill') return false;
+
+  const previousCommand = slashCommandSuggestions.value[index - 1];
+  return previousCommand?.kind !== 'skill';
+};
+
 const toggleIncognitoMode = () => {
   if (isBusy.value || isStopping.value) return;
   emit('incognito-changed', !props.isIncognito);
@@ -258,5 +491,201 @@ defineExpose({
 
 .chat-input-plan {
   margin-bottom: 10px;
+}
+
+.composer-inline-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-inline-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  min-width: 0;
+  max-width: min(100%, 280px);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 18%, var(--border-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 9%, var(--bg-secondary));
+  padding: 3px 8px 3px 7px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease;
+}
+
+.composer-inline-token:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 28%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-secondary));
+}
+
+.composer-inline-token:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+
+.composer-inline-token-prefix,
+.composer-inline-token-label {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    Courier New,
+    monospace;
+}
+
+.composer-inline-token-prefix {
+  flex: 0 0 auto;
+  opacity: 0.82;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.composer-inline-token-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-inline-token-dismiss {
+  flex: 0 0 auto;
+  opacity: 0.42;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  transition: opacity 0.18s ease;
+}
+
+.composer-inline-token:hover .composer-inline-token-dismiss,
+.composer-inline-token:focus-visible .composer-inline-token-dismiss {
+  opacity: 0.72;
+}
+
+.composer-inline-token--skill {
+  color: color-mix(in srgb, var(--accent-color) 86%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-color) 22%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-color) 11%, var(--bg-secondary));
+}
+
+.composer-inline-token--prompt {
+  color: color-mix(in srgb, var(--accent-color) 72%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-color) 18%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-color) 7%, var(--bg-secondary));
+}
+
+.composer-inline-token--command {
+  color: color-mix(in srgb, var(--warning-color) 82%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--warning-color) 24%, var(--border-color));
+  background: color-mix(in srgb, var(--warning-color) 10%, var(--bg-secondary));
+}
+
+.slash-command-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 18%, var(--border-color));
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-secondary) 94%, var(--bg-tertiary)),
+    color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary))
+  );
+  box-shadow:
+    var(--surface-shadow-lg),
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+}
+
+.slash-command-item {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.slash-command-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.slash-command-section-label::after {
+  content: '';
+  min-width: 0;
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+
+.slash-command-item:hover,
+.slash-command-item.is-active {
+  border-color: color-mix(in srgb, var(--accent-color) 26%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-secondary));
+}
+
+.slash-command-shortcut {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    Courier New,
+    monospace;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.slash-command-name {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.slash-command-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.25;
 }
 </style>

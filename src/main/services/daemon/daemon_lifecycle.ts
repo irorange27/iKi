@@ -3,7 +3,7 @@ import { app } from 'electron';
 
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../../../shared/constants/daemon';
 import { getAppConfig } from '../../../core/config';
-import type { AppConfig } from '../../../shared/types/config';
+import type { AppConfig, DaemonStatusInfo } from '../../../shared/types/config';
 import { createDaemonLogger } from '../../../core/daemon_logs';
 import { startDaemonServer } from '../../../daemon/server';
 
@@ -199,6 +199,9 @@ const startEmbeddedDaemon = (binding: { host: string; port: number }) => {
 };
 
 export const isDesktopDaemonEmbeddedRunning = (): boolean => Boolean(embeddedDaemon);
+
+export const getDesktopEmbeddedDaemonStatus = (): DaemonStatusInfo | null =>
+  embeddedDaemon ? embeddedDaemon.getRuntimeStatus() : null;
 
 export const startDesktopDaemon = async (options?: { ignoreAutostartEnv?: boolean }): Promise<void> => {
   if (process.argv.includes(DAEMON_MODE_ARG)) return;
