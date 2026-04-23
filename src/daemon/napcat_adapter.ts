@@ -7,6 +7,8 @@ import type { ChatTransportMessage } from '../main/services/chat/chat_types';
 import { getAppConfig } from '../core/config';
 import { createDaemonLogger, recordNapCatMessagePreview } from '../core/daemon_logs';
 import { getProviders } from '../core/db/providers';
+import { createComposerInvocationPart, type ComposerInvocationPartData } from '../shared/chat/message_parts';
+import { parseSlashCommandDraft } from '../shared/chat/slash_commands';
 import type { ChatThread } from '../shared/types/chat';
 import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '../shared/types/config';
 import { parseModelList } from '../shared/utils/provider_models';
@@ -14,6 +16,7 @@ import { isObjectRecord } from '../shared/utils/guards';
 import { renderMarkdownToPlainText } from '../shared/utils/plain_text_markdown';
 import type { ParsedUiMessage } from '../shared/chat/ui_message_codec';
 import { registerBridgeThreadSender } from './bridge_dispatch';
+import { resolveNapCatInboundSlashCommand } from './napcat_slash_commands';
 
 type ReverseBridgeSocket = {
   readyState: number;
@@ -92,7 +95,10 @@ type NapCatThreadTarget = {
 
 type StoredUiTextMessage = {
   role: 'system' | 'user' | 'assistant';
-  parts: Array<{ type: 'text'; text: string }>;
+  parts: Array<
+    | { type: 'text'; text: string }
+    | ReturnType<typeof createComposerInvocationPart>
+  >;
 };
 
 type PendingAction = {
@@ -450,6 +456,29 @@ const buildUserMessage = (text: string): StoredUiTextMessage => ({
   parts: [{ type: 'text', text }],
 });
 
+const buildUserMessageWithComposerInvocations = (
+  text: string,
+  composerInvocations?: ComposerInvocationPartData
+): StoredUiTextMessage => {
+  const tokens = composerInvocations?.tokens?.filter(
+    token =>
+      token &&
+      typeof token.id === 'string' &&
+      typeof token.label === 'string' &&
+      token.label.trim().length > 0
+  );
+
+  return {
+    role: 'user',
+    parts: [
+      ...(tokens && tokens.length > 0
+        ? [createComposerInvocationPart({ tokens })]
+        : []),
+      { type: 'text', text },
+    ],
+  };
+};
+
 const buildAssistantMessage = (text: string): StoredUiTextMessage => ({
   role: 'assistant',
   parts: [{ type: 'text', text }],
@@ -477,6 +506,55 @@ const buildThreadId = (event: NapCatMessageEvent): string => {
   const targetId =
     messageType === 'group' ? normalizeId(event.group_id) : normalizeId(event.user_id);
   return `napcat_${selfId}_${messageType}_${targetId || 'unknown'}`;
+};
+
+const buildNapCatThreadMetadata = (event: NapCatMessageEvent): string =>
+  JSON.stringify({
+    source: 'napcat',
+    message_type: event.message_type,
+    self_id: event.self_id,
+    group_id: event.group_id,
+    user_id: event.user_id,
+  });
+
+const buildNapCatThreadSeed = (params: {
+  event: NapCatMessageEvent;
+  threadId: string;
+  clientId: string;
+  existingThread?: ChatThread | null;
+  isIncognito?: boolean;
+}): {
+  id: string;
+  title: string;
+  metadata: string;
+  client_id: string;
+  is_incognito: number;
+  workspace_id?: string;
+} => {
+  const existingThread = params.existingThread;
+  const existingWorkspaceId =
+    typeof existingThread?.workspace_id === 'string' && existingThread.workspace_id.trim()
+      ? existingThread.workspace_id
+      : undefined;
+
+  return {
+    id: params.threadId,
+    title:
+      typeof existingThread?.title === 'string' && existingThread.title.trim()
+        ? existingThread.title
+        : buildThreadTitle(params.event),
+    metadata: buildNapCatThreadMetadata(params.event),
+    client_id: params.clientId,
+    is_incognito:
+      typeof params.isIncognito === 'boolean'
+        ? params.isIncognito
+          ? 1
+          : 0
+        : existingThread?.is_incognito
+          ? 1
+          : 0,
+    workspace_id: existingWorkspaceId,
+  };
 };
 
 const parseNapCatThreadTarget = (
@@ -536,12 +614,17 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
   const pendingActions = new Map<string, PendingAction>();
   const activeSockets: ReverseBridgeSocket[] = [];
   const heartbeatSnapshots = new Map<ReverseBridgeSocket, NapCatHeartbeatSnapshot>();
+  let lastConnectedAt: string | null = null;
+  let lastDisconnectedAt: string | null = null;
   let nextEcho = 1;
+
+  const countReadySockets = (): number =>
+    activeSockets.filter(socket => socket?.readyState === 1).length;
 
   const getStatus = (): NapCatBridgeStatusInfo => {
     const napcatConfig = getNapCatConfig();
+    const activeConnectionCount = countReadySockets();
     const readySockets = activeSockets.filter(socket => socket?.readyState === 1);
-    const activeConnectionCount = readySockets.length;
     const nowMs = Date.now();
     const activeHeartbeats = readySockets
       .map(socket => heartbeatSnapshots.get(socket) || null)
@@ -559,16 +642,17 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       return {
         state: 'disabled',
         activeConnectionCount,
+        lastConnectedAt,
+        lastDisconnectedAt,
         heartbeat,
       };
     }
 
     return {
-      state:
-        activeConnectionCount === 0
-          ? 'disconnected'
-          : 'connected',
+      state: activeConnectionCount === 0 ? 'disconnected' : 'connected',
       activeConnectionCount,
+      lastConnectedAt,
+      lastDisconnectedAt,
       heartbeat,
     };
   };
@@ -585,6 +669,25 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       ws.send(JSON.stringify({ action, params, echo }));
     });
 
+  const sendBridgeReply = async (
+    ws: ReverseBridgeSocket,
+    event: Pick<NapCatMessageEvent, 'message_type' | 'user_id' | 'group_id'>,
+    text: string
+  ) => {
+    if (event.message_type === 'private') {
+      await sendAction(ws, 'send_private_msg', {
+        user_id: event.user_id,
+        message: text,
+      });
+      return;
+    }
+
+    await sendAction(ws, 'send_group_msg', {
+      group_id: event.group_id,
+      message: text,
+    });
+  };
+
   const getActiveSocket = (): ReverseBridgeSocket | null => {
     for (let index = activeSockets.length - 1; index >= 0; index -= 1) {
       const socket = activeSockets[index];
@@ -594,11 +697,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
   };
 
   const removeActiveSocket = (ws: ReverseBridgeSocket) => {
+    const hadTrackedConnections = activeSockets.length > 0;
     const index = activeSockets.indexOf(ws);
     if (index >= 0) {
       activeSockets.splice(index, 1);
     }
     heartbeatSnapshots.delete(ws);
+    if (hadTrackedConnections && activeSockets.length === 0) {
+      lastDisconnectedAt = new Date().toISOString();
+    }
   };
 
   const sendThreadMessage = async (params: { thread: ChatThread; text: string }) => {
@@ -703,38 +810,138 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
     if (!replyEligible) return;
 
-    const modelConfig = resolveNapCatModel(napcatConfig);
-    if (!modelConfig) {
-      napcatLogger.event({
-        level: 'warn',
-        event: 'napcat.message.handle',
-        outcome: 'skipped',
-        message: 'No provider/model configured; ignoring inbound message.',
-      });
+    const threadId = buildThreadId(event);
+    const existingThread = options.chatService.getThread(threadId);
+    const slashResolution = parseSlashCommandDraft(text)
+      ? await resolveNapCatInboundSlashCommand({
+          draft: text,
+          locale: getAppConfig().general?.language,
+          currentIncognito: Boolean(existingThread?.is_incognito),
+        })
+      : {
+          kind: 'message' as const,
+          content: text,
+        };
+
+    if (slashResolution.kind === 'feedback') {
+      if (typeof slashResolution.nextIncognito === 'boolean') {
+        try {
+          if (existingThread) {
+            options.chatService.updateThread(threadId, {
+              is_incognito: slashResolution.nextIncognito ? 1 : 0,
+            });
+          } else {
+            options.chatService.createThread(
+              buildNapCatThreadSeed({
+                event,
+                threadId,
+                clientId: options.clientId,
+                existingThread,
+                isIncognito: slashResolution.nextIncognito,
+              })
+            );
+          }
+        } catch (error) {
+          napcatLogger.event({
+            level: 'warn',
+            event: 'napcat.thread.update',
+            outcome: 'failed',
+            error,
+            entity: {
+              thread_id: threadId,
+            },
+            data: {
+              is_incognito: slashResolution.nextIncognito,
+            },
+          });
+        }
+      }
+
+      const feedbackText = formatNapCatOutboundText(slashResolution.feedback);
+      try {
+        await sendBridgeReply(ws, event, feedbackText);
+      } catch (error) {
+        napcatLogger.event({
+          level: 'warn',
+          event: 'napcat.reply.send',
+          outcome: 'failed',
+          error,
+          data: {
+            message_type: event.message_type,
+            slash_feedback: true,
+          },
+        });
+      }
       return;
     }
 
-    const threadId = buildThreadId(event);
-    const existingThread = options.chatService.getThread(threadId);
-    if (!existingThread) {
-      options.chatService.createThread({
-        id: threadId,
-        title: buildThreadTitle(event),
-        metadata: JSON.stringify({
-          source: 'napcat',
-          message_type: event.message_type,
-          self_id: event.self_id,
-          group_id: event.group_id,
-          user_id: event.user_id,
-        }),
-        client_id: options.clientId,
-      });
+    if (slashResolution.kind === 'reset-thread') {
+      try {
+        if (existingThread) {
+          options.chatService.deleteThread(threadId);
+        }
+
+        options.chatService.createThread(
+          buildNapCatThreadSeed({
+            event,
+            threadId,
+            clientId: options.clientId,
+            existingThread,
+          })
+        );
+      } catch (error) {
+        napcatLogger.event({
+          level: 'warn',
+          event: 'napcat.thread.reset',
+          outcome: 'failed',
+          error,
+          entity: {
+            thread_id: threadId,
+          },
+        });
+      }
+
+      const feedbackText = formatNapCatOutboundText(slashResolution.feedback);
+      try {
+        await sendBridgeReply(ws, event, feedbackText);
+      } catch (error) {
+        napcatLogger.event({
+          level: 'warn',
+          event: 'napcat.reply.send',
+          outcome: 'failed',
+          error,
+          data: {
+            message_type: event.message_type,
+            slash_feedback: true,
+            slash_reset_thread: true,
+          },
+        });
+      }
+      return;
     }
+
+    if (!existingThread) {
+      options.chatService.createThread(
+        buildNapCatThreadSeed({
+          event,
+          threadId,
+          clientId: options.clientId,
+        })
+      );
+    }
+
+    const storedUserMessage =
+      slashResolution.promptAppId || slashResolution.skillIds?.length
+        ? buildUserMessageWithComposerInvocations(
+            slashResolution.content,
+            slashResolution.composerInvocations
+          )
+        : buildUserMessage(text);
 
     try {
       options.chatService.createMessage({
         thread_id: threadId,
-        message: buildUserMessage(text),
+        message: storedUserMessage,
         metadata: '{}',
       });
     } catch (error) {
@@ -748,6 +955,18 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
           role: 'user',
         },
       });
+    }
+
+    const modelConfig = resolveNapCatModel(napcatConfig);
+
+    if (!modelConfig) {
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.message.handle',
+        outcome: 'skipped',
+        message: 'No provider/model configured; ignoring inbound message.',
+      });
+      return;
     }
 
     const rows = options.chatService.listMessages(threadId);
@@ -764,6 +983,8 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       model: modelConfig.model,
       messages,
       tools: napcatTools,
+      ...(slashResolution.skillMode ? { skillMode: slashResolution.skillMode } : {}),
+      ...(slashResolution.skillIds?.length ? { skillIds: slashResolution.skillIds } : {}),
       threadId,
     });
 
@@ -813,31 +1034,8 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       });
     }
 
-    if (event.message_type === 'private') {
-      try {
-        await sendAction(ws, 'send_private_msg', {
-          user_id: event.user_id,
-          message: outboundText,
-        });
-      } catch (error) {
-        napcatLogger.event({
-          level: 'warn',
-          event: 'napcat.reply.send',
-          outcome: 'failed',
-          error,
-          data: {
-            message_type: 'private',
-          },
-        });
-      }
-      return;
-    }
-
     try {
-      await sendAction(ws, 'send_group_msg', {
-        group_id: event.group_id,
-        message: outboundText,
-      });
+      await sendBridgeReply(ws, event, outboundText);
     } catch (error) {
       napcatLogger.event({
         level: 'warn',
@@ -913,7 +1111,11 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
 
   wss.on('connection', (ws, req) => {
     const remote = getRemoteLabel(req);
+    const hadTrackedConnections = activeSockets.length > 0;
     activeSockets.push(ws);
+    if (!hadTrackedConnections) {
+      lastConnectedAt = new Date().toISOString();
+    }
     napcatLogger.event({
       level: 'info',
       event: 'napcat.ws.connection',

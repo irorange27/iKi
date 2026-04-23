@@ -56,6 +56,8 @@ describe('configService', () => {
         napcat: {
           state: 'disconnected',
           activeConnectionCount: 0,
+          lastConnectedAt: null,
+          lastDisconnectedAt: null,
           heartbeat: emptyHeartbeat,
         },
       },
@@ -96,6 +98,8 @@ describe('configService', () => {
         napcat: {
           state: 'disconnected',
           activeConnectionCount: 0,
+          lastConnectedAt: null,
+          lastDisconnectedAt: null,
           heartbeat: emptyHeartbeat,
         },
       },

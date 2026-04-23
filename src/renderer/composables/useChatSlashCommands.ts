@@ -9,10 +9,14 @@ import type {
 } from '../../shared/chat/message_parts';
 import {
   extractPromptAppSlashCommands,
+  extractSkillSlashCommands,
   filterPromptAppSlashCommands,
   normalizeSlashCommandShortcut,
   parseSlashCommandDraft,
+  parseIncognitoArgument,
   applyPromptAppSlashCommandTemplate,
+  toPromptAppComposerInvocationToken,
+  toSkillComposerInvocationToken,
   type PromptAppSlashCommand,
 } from '../../shared/chat/slash_commands';
 import type { ResolvedComposerSendRequest } from './useChatComposerSend';
@@ -55,65 +59,6 @@ const toPromptAppComposerCommands = (
     kind: 'prompt-app' as const,
   }));
 
-const toSkillSlashShortcut = (skill: SkillSummary): string | null => {
-  const nameShortcut = normalizeSlashCommandShortcut(skill.name);
-  if (nameShortcut) return nameShortcut;
-
-  const pathSegment = skill.id.split(':').at(-1) ?? skill.id;
-  const normalizedSegment = pathSegment
-    .split('/')
-    .filter(Boolean)
-    .at(-1)
-    ?.trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-_ ]+/g, '')
-    .replace(/\s+/g, '-');
-
-  return normalizeSlashCommandShortcut(normalizedSegment);
-};
-
-const toSkillComposerCommands = (
-  skills: readonly SkillSummary[]
-): Array<
-  ComposerSlashCommand & {
-    kind: 'skill';
-  }
-> => {
-  const commands: Array<
-    ComposerSlashCommand & {
-      kind: 'skill';
-    }
-  > = [];
-  const seenShortcuts = new Set<string>();
-
-  for (const skill of skills) {
-    if (!skill || typeof skill.id !== 'string' || typeof skill.name !== 'string') continue;
-    const shortcut = toSkillSlashShortcut(skill);
-    if (!shortcut || seenShortcuts.has(shortcut)) continue;
-
-    commands.push({
-      id: `skill:${skill.id}`,
-      kind: 'skill',
-      shortcut,
-      name: skill.name,
-      description: skill.description,
-      path: skill.path,
-      skillId: skill.id,
-    });
-    seenShortcuts.add(shortcut);
-  }
-
-  return commands;
-};
-
-const parseIncognitoArgument = (value: string): boolean | 'toggle' | null => {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized || normalized === 'toggle') return 'toggle';
-  if (['on', 'enable', 'enabled', 'true', '1'].includes(normalized)) return true;
-  if (['off', 'disable', 'disabled', 'false', '0'].includes(normalized)) return false;
-  return null;
-};
-
 const toComposerInvocationToken = (
   command: ComposerSlashCommand
 ): ComposerInvocationToken | null => {
@@ -128,22 +73,10 @@ const toComposerInvocationToken = (
   }
 
   if (command.kind === 'prompt-app') {
-    return {
-      id: command.id,
-      kind: 'prompt-app',
-      prefix: '',
-      label: command.shortcut,
-      title: command.description || command.name,
-    };
+    return toPromptAppComposerInvocationToken(command);
   }
 
-  return {
-    id: command.id,
-    kind: 'skill',
-    prefix: '$',
-    label: command.name,
-    title: command.description || command.path || command.name,
-  };
+  return toSkillComposerInvocationToken(command);
 };
 
 const toSelectedSkillComposerToken = (skill: SkillSummary): ComposerInvocationToken => ({
@@ -332,7 +265,12 @@ export const useChatSlashCommands = (deps: {
     await skillsLoadPromise;
   };
 
-  const skillCommands = computed(() => toSkillComposerCommands(availableSkills.value));
+  const skillCommands = computed(() =>
+    extractSkillSlashCommands(availableSkills.value).map(command => ({
+      ...command,
+      kind: 'skill' as const,
+    }))
+  );
   const promptAppCommands = computed(() => toPromptAppComposerCommands(enabledPromptApps.value));
   const slashCommands = computed<ComposerSlashCommand[]>(() => [
     ...builtInCommands.value,

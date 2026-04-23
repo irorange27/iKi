@@ -3,11 +3,15 @@ import { describe, expect, it } from 'vitest';
 import {
   applyPromptAppSlashCommandTemplate,
   applySlashCommandSelection,
+  extractSkillSlashCommands,
+  parseIncognitoArgument,
   extractPromptAppSlashCommands,
   parseSlashCommandDraft,
   resolvePromptAppSlashCommand,
+  resolveSkillSlashCommand,
 } from '../../../src/shared/chat/slash_commands';
 import type { PromptApp } from '../../../src/shared/types/chat';
+import type { SkillSummary } from '../../../src/shared/types/skill';
 
 const buildPromptApp = (
   overrides: Partial<PromptApp> & Pick<PromptApp, 'id' | 'name' | 'prompt_template'>
@@ -68,6 +72,51 @@ describe('slash_commands', () => {
     ]);
   });
 
+  it('extracts unique skill slash commands from skill summaries', () => {
+    const commands = extractSkillSlashCommands([
+      {
+        id: 'codex:frontend-dev',
+        name: 'frontend-dev',
+        description: 'Frontend work',
+        source: 'codex',
+        path: '/skills/frontend-dev/SKILL.md',
+      },
+      {
+        id: 'user:frontend-dev',
+        name: 'frontend-dev',
+        description: 'Duplicate shortcut',
+        source: 'user',
+        path: '/skills/user-frontend/SKILL.md',
+      },
+      {
+        id: 'codex:path/only',
+        name: '%%%invalid%%%',
+        description: 'Uses path fallback',
+        source: 'codex',
+        path: '/skills/path-only/SKILL.md',
+      },
+    ] satisfies SkillSummary[]);
+
+    expect(commands).toEqual([
+      {
+        id: 'skill:codex:frontend-dev',
+        name: 'frontend-dev',
+        description: 'Frontend work',
+        shortcut: 'frontend-dev',
+        path: '/skills/frontend-dev/SKILL.md',
+        skillId: 'codex:frontend-dev',
+      },
+      {
+        id: 'skill:codex:path/only',
+        name: '%%%invalid%%%',
+        description: 'Uses path fallback',
+        shortcut: '%%%invalid%%%',
+        path: '/skills/path-only/SKILL.md',
+        skillId: 'codex:path/only',
+      },
+    ]);
+  });
+
   it('parses leading slash-command drafts while ignoring path-like input', () => {
     expect(parseSlashCommandDraft('/summarize release notes')).toEqual({
       leadingWhitespace: '',
@@ -109,6 +158,33 @@ describe('slash_commands', () => {
     });
 
     expect(resolvePromptAppSlashCommand('/sum Incident report', commands)).toBeNull();
+  });
+
+  it('resolves exact skill slash commands into manual-skill requests', () => {
+    const commands = extractSkillSlashCommands([
+      {
+        id: 'codex:frontend-dev',
+        name: 'frontend-dev',
+        description: 'Frontend work',
+        source: 'codex',
+        path: '/skills/frontend-dev/SKILL.md',
+      },
+    ] satisfies SkillSummary[]);
+
+    expect(resolveSkillSlashCommand('/frontend-dev Polish the settings card', commands)).toEqual({
+      command: commands[0],
+      argumentText: 'Polish the settings card',
+    });
+
+    expect(resolveSkillSlashCommand('/front Polish the settings card', commands)).toBeNull();
+  });
+
+  it('parses incognito slash arguments consistently', () => {
+    expect(parseIncognitoArgument('')).toBe('toggle');
+    expect(parseIncognitoArgument('toggle')).toBe('toggle');
+    expect(parseIncognitoArgument('on')).toBe(true);
+    expect(parseIncognitoArgument('off')).toBe(false);
+    expect(parseIncognitoArgument('maybe')).toBeNull();
   });
 
   it('replaces the current slash token with the canonical command while preserving arguments', () => {

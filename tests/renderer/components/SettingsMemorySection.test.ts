@@ -13,7 +13,6 @@ import type {
   AffectStateEntry,
   LongMemoryEntry,
   LongMemorySearchResult,
-  ShortMemoryEntry,
 } from '../../../src/shared/types/memory';
 
 const setElectronApi = (api: unknown) => {
@@ -133,20 +132,6 @@ const buildProvider = (
   acp_model_mapping: overrides.acp_model_mapping,
 });
 
-const buildShortMemoryEntry = (
-  overrides: Partial<ShortMemoryEntry> & Pick<ShortMemoryEntry, 'id' | 'thread_id' | 'content'>
-): ShortMemoryEntry => ({
-  id: overrides.id,
-  thread_id: overrides.thread_id,
-  message_id: overrides.message_id ?? `msg_${overrides.id}`,
-  role: overrides.role ?? 'user',
-  content: overrides.content,
-  emotion: overrides.emotion ?? null,
-  importance: overrides.importance ?? 0.8,
-  created_at: overrides.created_at ?? '2026-03-21T00:00:00.000Z',
-  updated_at: overrides.updated_at ?? '2026-03-21T00:00:00.000Z',
-});
-
 const buildLongMemoryEntry = (
   overrides: Partial<LongMemoryEntry> & Pick<LongMemoryEntry, 'id' | 'thread_id' | 'summary'>
 ): LongMemoryEntry => ({
@@ -194,8 +179,6 @@ const mountSettingsMemorySection = async (options?: {
   active?: boolean;
   providers?: Provider[];
   threads?: ChatThread[];
-  shortEntries?: ShortMemoryEntry[];
-  allShortEntries?: ShortMemoryEntry[];
   longEntries?: LongMemoryEntry[];
   allLongEntries?: LongMemoryEntry[];
   searchResults?: LongMemorySearchResult[];
@@ -207,8 +190,8 @@ const mountSettingsMemorySection = async (options?: {
   setActivePinia(pinia);
 
   const threadsList = vi.fn(async () => options?.threads ?? []);
-  const shortList = vi.fn(async () => options?.shortEntries ?? []);
-  const shortListAll = vi.fn(async () => options?.allShortEntries ?? []);
+  const shortList = vi.fn(async () => []);
+  const shortListAll = vi.fn(async () => []);
   const longList = vi.fn(async () => options?.longEntries ?? []);
   const longListAll = vi.fn(async () => options?.allLongEntries ?? []);
   const longSearch = vi.fn(async () => options?.searchResults ?? []);
@@ -351,17 +334,10 @@ describe('SettingsMemorySection', () => {
     expect(wrapper.emitted('config-change')).toHaveLength(1);
   });
 
-  it('loads the first thread on activation and hydrates memory plus affect-state panels', async () => {
+  it('loads the first thread on activation and hydrates long-memory plus affect-state panels', async () => {
     const { wrapper, threadsList, shortList, longList, affectGet } =
       await mountSettingsMemorySection({
         threads: [buildThread({ id: 'thread_alpha', title: 'Alpha Thread' })],
-        shortEntries: [
-          buildShortMemoryEntry({
-            id: 'short_1',
-            thread_id: 'thread_alpha',
-            content: 'Remember the alpha workspace path.',
-          }),
-        ],
         longEntries: [
           buildLongMemoryEntry({
             id: 'long_1',
@@ -376,11 +352,10 @@ describe('SettingsMemorySection', () => {
       });
 
     expect(threadsList).toHaveBeenCalledTimes(1);
-    expect(shortList).toHaveBeenCalledWith('thread_alpha', 50);
+    expect(shortList).not.toHaveBeenCalled();
     expect(longList).toHaveBeenCalledWith('thread_alpha', 25);
     expect(affectGet).toHaveBeenCalledWith('thread_alpha');
     expect(wrapper.text()).toContain('Primary: focused');
-    expect(wrapper.text()).toContain('Remember the alpha workspace path.');
     expect(wrapper.text()).toContain('User prefers concise release notes.');
     expect(wrapper.find('.memory-editor .settings-select-trigger').attributes('disabled')).toBeDefined();
   });
@@ -391,13 +366,6 @@ describe('SettingsMemorySection', () => {
         threads: [
           buildThread({ id: 'thread_alpha', title: 'Alpha Thread' }),
           buildThread({ id: 'thread_planning', title: 'Planning Thread' }),
-        ],
-        allShortEntries: [
-          buildShortMemoryEntry({
-            id: 'short_all_1',
-            thread_id: 'thread_planning',
-            content: 'Planning short memory',
-          }),
         ],
         allLongEntries: [
           buildLongMemoryEntry({
@@ -425,7 +393,7 @@ describe('SettingsMemorySection', () => {
 
     await selectSettingsOption(wrapper.find('.memory-controls .input-label'), 'All threads');
 
-    expect(shortListAll).toHaveBeenCalledWith(50);
+    expect(shortListAll).not.toHaveBeenCalled();
     expect(longListAll).toHaveBeenCalledWith(25);
     expect(affectGet).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain('Select a thread to view affect state.');

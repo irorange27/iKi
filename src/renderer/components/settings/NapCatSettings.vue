@@ -177,6 +177,14 @@
           <span>{{ bridgeConnectionCount }}</span>
         </div>
         <div class="summary-row">
+          <span class="summary-label">{{ t('settings.napcat.lastConnectedLabel') }}</span>
+          <span>{{ lastConnectedSummary }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">{{ t('settings.napcat.lastDisconnectedLabel') }}</span>
+          <span>{{ lastDisconnectedSummary }}</span>
+        </div>
+        <div class="summary-row">
           <span class="summary-label">{{ t('settings.napcat.lastHeartbeatLabel') }}</span>
           <span>{{ lastHeartbeatSummary }}</span>
         </div>
@@ -326,6 +334,8 @@ const {
   heartbeatStatusChip,
   heartbeatStatusClass,
   heartbeatStatusDetail,
+  lastConnectedSummary,
+  lastDisconnectedSummary,
   lastHeartbeatSummary,
   loadDaemonLogs,
   loadDaemonStatus,

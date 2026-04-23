@@ -89,6 +89,8 @@ describe('NapCatSettings', () => {
         napcat: {
           state: 'disconnected',
           activeConnectionCount: 0,
+          lastConnectedAt: null,
+          lastDisconnectedAt: null,
           heartbeat: emptyHeartbeat,
         },
       },
@@ -125,6 +127,8 @@ describe('NapCatSettings', () => {
           napcat: {
             state: 'disconnected',
             activeConnectionCount: 0,
+            lastConnectedAt: null,
+            lastDisconnectedAt: null,
             heartbeat: emptyHeartbeat,
           },
         },
@@ -201,6 +205,10 @@ describe('NapCatSettings', () => {
     expect(card.text()).toContain('Waiting for transport');
     expect(card.text()).toContain('Active Connections');
     expect(card.text()).toContain('0');
+    expect(card.text()).toContain('Last Connected');
+    expect(card.text()).toContain('No successful session yet');
+    expect(card.text()).toContain('Last Disconnected');
+    expect(card.text()).toContain('No disconnect observed yet');
     expect(card.text()).toContain('Last Heartbeat');
     expect(card.text()).toContain('Not received yet');
     expect(card.text()).toContain('Diagnosis');
@@ -226,6 +234,8 @@ describe('NapCatSettings', () => {
         napcat: {
           state: 'unknown',
           activeConnectionCount: null,
+          lastConnectedAt: null,
+          lastDisconnectedAt: null,
           heartbeat: emptyHeartbeat,
         },
       },
@@ -320,6 +330,8 @@ describe('NapCatSettings', () => {
         napcat: {
           state: 'connected',
           activeConnectionCount: 1,
+          lastConnectedAt: '2026-04-22T00:00:00.000Z',
+          lastDisconnectedAt: '2026-04-21T23:59:00.000Z',
           heartbeat: {
             lastReceivedAt: '2026-04-22T00:00:00.000Z',
             intervalMs: 5000,
@@ -376,6 +388,8 @@ describe('NapCatSettings', () => {
         napcat: {
           state: 'connected',
           activeConnectionCount: 1,
+          lastConnectedAt: '2026-04-22T00:00:00.000Z',
+          lastDisconnectedAt: '2026-04-21T23:59:00.000Z',
           heartbeat: emptyHeartbeat,
         },
       },
@@ -412,6 +426,62 @@ describe('NapCatSettings', () => {
     );
     expect(card.text()).toContain(
       'Reverse WebSocket transport is already connected. No heartbeat has been observed yet'
+    );
+
+    wrapper.unmount();
+  });
+
+  it('shows recent connection history when NapCat is currently disconnected after previously connecting', async () => {
+    vi.setSystemTime(new Date('2026-04-22T00:10:00.000Z'));
+
+    getDaemonStatusMock.mockResolvedValueOnce({
+      online: true,
+      host: '127.0.0.1',
+      port: 6127,
+      status: 'ok',
+      source: 'health',
+      uptimeSeconds: 42,
+      bridges: {
+        napcat: {
+          state: 'disconnected',
+          activeConnectionCount: 0,
+          lastConnectedAt: '2026-04-22T00:00:00.000Z',
+          lastDisconnectedAt: '2026-04-22T00:05:00.000Z',
+          heartbeat: emptyHeartbeat,
+        },
+      },
+    });
+
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    const store = useConfigStore();
+    store.config = createDefaultAppConfig();
+    store.config.bridges.napcat.enabled = true;
+
+    const wrapper = mount(NapCatSettings, {
+      props: {
+        active: true,
+      },
+      global: {
+        plugins: [pinia],
+      },
+    });
+
+    await flushPromises();
+
+    const card = findCardByTitle(wrapper, 'Runtime Status');
+
+    expect(card.text()).toContain('Disconnected');
+    expect(card.text()).toContain('Last Connected');
+    expect(card.text()).toContain('10m ago');
+    expect(card.text()).toContain('Last Disconnected');
+    expect(card.text()).toContain('5.0m ago');
+    expect(card.text()).toContain(
+      'Reverse WebSocket is currently disconnected; the last session closed 5.0m ago'
+    );
+    expect(card.text()).toContain(
+      'NapCat reverse WebSocket is currently disconnected. The last session closed 5.0m ago.'
     );
 
     wrapper.unmount();

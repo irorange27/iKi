@@ -41,6 +41,8 @@ export interface NapCatBridgeHeartbeatInfo {
 export interface NapCatBridgeStatusInfo {
   state: NapCatBridgeRuntimeState;
   activeConnectionCount: number | null;
+  lastConnectedAt: string | null;
+  lastDisconnectedAt: string | null;
   heartbeat: NapCatBridgeHeartbeatInfo;
 }
 

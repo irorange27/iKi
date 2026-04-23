@@ -191,11 +191,17 @@ const emptyHeartbeat = {
   stale: null,
 };
 
+const emptyBridgeHistory = {
+  lastConnectedAt: null,
+  lastDisconnectedAt: null,
+};
+
 const installHealthResponse = (
   uptimeSeconds: number,
   bridge: Record<string, unknown> = {
     state: 'disconnected',
     activeConnectionCount: 0,
+    ...emptyBridgeHistory,
     heartbeat: emptyHeartbeat,
   }
 ) => {
@@ -275,6 +281,7 @@ describe('config IPC', () => {
         napcat: {
           state: 'disconnected',
           activeConnectionCount: 0,
+          ...emptyBridgeHistory,
           heartbeat: emptyHeartbeat,
         },
       },
@@ -293,6 +300,8 @@ describe('config IPC', () => {
         napcat: {
           state: 'connected',
           activeConnectionCount: 1,
+          lastConnectedAt: '2026-04-22T00:00:00.000Z',
+          lastDisconnectedAt: '2026-04-21T23:59:00.000Z',
           heartbeat: {
             lastReceivedAt: '2026-04-22T00:00:00.000Z',
             intervalMs: 5000,
@@ -322,6 +331,8 @@ describe('config IPC', () => {
         napcat: {
           state: 'connected',
           activeConnectionCount: 1,
+          lastConnectedAt: '2026-04-22T00:00:00.000Z',
+          lastDisconnectedAt: '2026-04-21T23:59:00.000Z',
           heartbeat: {
             lastReceivedAt: '2026-04-22T00:00:00.000Z',
             intervalMs: 5000,
@@ -354,6 +365,7 @@ describe('config IPC', () => {
         napcat: {
           state: 'unknown',
           activeConnectionCount: null,
+          ...emptyBridgeHistory,
           heartbeat: emptyHeartbeat,
         },
       },
@@ -390,6 +402,7 @@ describe('config IPC', () => {
         napcat: {
           state: 'degraded',
           activeConnectionCount: 1,
+          ...emptyBridgeHistory,
           heartbeat: {
             lastReceivedAt: '2026-04-22T00:00:00.000Z',
             intervalMs: 5000,
@@ -457,6 +470,7 @@ describe('config IPC', () => {
           napcat: {
             state: 'disconnected',
             activeConnectionCount: 0,
+            ...emptyBridgeHistory,
             heartbeat: emptyHeartbeat,
           },
         },

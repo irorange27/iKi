@@ -1,4 +1,6 @@
+import type { ComposerInvocationToken } from './message_parts';
 import type { PromptApp } from '../types/chat';
+import type { SkillSummary } from '../types/skill';
 
 export type PromptAppSlashCommand = {
   id: string;
@@ -6,6 +8,15 @@ export type PromptAppSlashCommand = {
   description?: string;
   shortcut: string;
   promptTemplate: string;
+};
+
+export type SkillSlashCommand = {
+  id: `skill:${string}`;
+  name: string;
+  description: string;
+  shortcut: string;
+  path?: string;
+  skillId: string;
 };
 
 export type ParsedSlashCommandDraft = {
@@ -23,6 +34,11 @@ export type ResolvedPromptAppSlashCommand = {
   argumentText: string;
 };
 
+export type ResolvedSkillSlashCommand = {
+  command: SkillSlashCommand;
+  argumentText: string;
+};
+
 const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*input\s*\}\}/gi;
 
 export const normalizeSlashCommandShortcut = (value: unknown): string | null => {
@@ -36,6 +52,14 @@ export const normalizeSlashCommandShortcut = (value: unknown): string | null => 
   }
 
   return withoutLeadingSlash.toLowerCase();
+};
+
+export const parseIncognitoArgument = (value: string): boolean | 'toggle' | null => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === 'toggle') return 'toggle';
+  if (['on', 'enable', 'enabled', 'true', '1'].includes(normalized)) return true;
+  if (['off', 'disable', 'disabled', 'false', '0'].includes(normalized)) return false;
+  return null;
 };
 
 export const extractPromptAppSlashCommands = (
@@ -66,6 +90,61 @@ export const extractPromptAppSlashCommands = (
 
   return commands;
 };
+
+export const extractSkillSlashCommands = (skills: readonly SkillSummary[]): SkillSlashCommand[] => {
+  const commands: SkillSlashCommand[] = [];
+  const seenShortcuts = new Set<string>();
+
+  for (const skill of skills) {
+    if (!skill || typeof skill.id !== 'string' || typeof skill.name !== 'string') continue;
+
+    const nameShortcut = normalizeSlashCommandShortcut(skill.name);
+    const pathSegment = skill.id.split(':').at(-1) ?? skill.id;
+    const normalizedSegment = pathSegment
+      .split('/')
+      .filter(Boolean)
+      .at(-1)
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-_ ]+/g, '')
+      .replace(/\s+/g, '-');
+    const shortcut = nameShortcut || normalizeSlashCommandShortcut(normalizedSegment);
+
+    if (!shortcut || seenShortcuts.has(shortcut)) continue;
+
+    commands.push({
+      id: `skill:${skill.id}`,
+      name: skill.name,
+      description: skill.description,
+      shortcut,
+      path: skill.path,
+      skillId: skill.id,
+    });
+    seenShortcuts.add(shortcut);
+  }
+
+  return commands;
+};
+
+export const toPromptAppComposerInvocationToken = (
+  command: PromptAppSlashCommand
+): ComposerInvocationToken => ({
+  id: command.id,
+  kind: 'prompt-app',
+  prefix: '',
+  label: command.shortcut,
+  title: command.description || command.name,
+});
+
+export const toSkillComposerInvocationToken = (
+  command: SkillSlashCommand
+): ComposerInvocationToken => ({
+  id: command.id,
+  kind: 'skill',
+  prefix: '$',
+  label: command.name,
+  title: command.description || command.path || command.name,
+});
 
 export const parseSlashCommandDraft = (draft: string): ParsedSlashCommandDraft | null => {
   if (typeof draft !== 'string') return null;
@@ -185,6 +264,22 @@ export const resolvePromptAppSlashCommand = (
   return {
     command,
     content: applyPromptAppSlashCommandTemplate(command.promptTemplate, parsed.argumentText),
+    argumentText: parsed.argumentText,
+  };
+};
+
+export const resolveSkillSlashCommand = (
+  draft: string,
+  commands: readonly SkillSlashCommand[]
+): ResolvedSkillSlashCommand | null => {
+  const parsed = parseSlashCommandDraft(draft);
+  if (!parsed || !parsed.query) return null;
+
+  const command = commands.find(candidate => candidate.shortcut === parsed.query);
+  if (!command) return null;
+
+  return {
+    command,
     argumentText: parsed.argumentText,
   };
 };

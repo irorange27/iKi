@@ -128,34 +128,6 @@
     <div class="memory-panels">
       <div class="memory-panel">
         <div class="memory-panel-header">
-          <span>{{ t('settings.memory.shortMemory') }}</span>
-          <span class="memory-count">{{ shortMemoryEntries.length }}</span>
-        </div>
-        <div v-if="memoryLoading" class="memory-empty">
-          {{ t('settings.memory.loadingShortMemory') }}
-        </div>
-        <div v-else-if="shortMemoryEntries.length === 0" class="memory-empty">
-          {{ t('settings.memory.noShortMemory') }}
-        </div>
-        <ul v-else class="memory-list">
-          <li v-for="entry in shortMemoryEntries" :key="entry.id" class="memory-item">
-            <div class="memory-item-meta">
-              <span class="memory-role">{{ formatRole(entry.role) }}</span>
-              <span class="memory-time">{{ formatTimestamp(entry.updated_at) }}</span>
-            </div>
-            <div class="memory-item-content">{{ entry.content }}</div>
-            <div v-if="isAllThreadsSelected" class="memory-item-sub">
-              {{ t('common.thread') }}: {{ getThreadLabel(entry.thread_id) }}
-            </div>
-            <div v-if="formatJson(entry.emotion)" class="memory-item-sub">
-              {{ t('settings.memory.emotion') }}: {{ formatJson(entry.emotion) }}
-            </div>
-          </li>
-        </ul>
-      </div>
-
-      <div class="memory-panel">
-        <div class="memory-panel-header">
           <span>{{ t('settings.memory.longMemory') }}</span>
           <span class="memory-count">{{ longMemoryEntries.length }}</span>
         </div>
@@ -307,7 +279,6 @@ const {
   formatJson,
   formatJsonList,
   formatMetricDecimal,
-  formatRole,
   formatTimestamp,
   getThreadLabel,
   hasMemoryQuery,
@@ -333,7 +304,6 @@ const {
   saveLongMemoryEdit,
   selectMemoryThread,
   selectedMemoryThreadId,
-  shortMemoryEntries,
   showCreateThreadHint,
   startEditLongMemory,
   updateNewLongMemoryThreadSelection,

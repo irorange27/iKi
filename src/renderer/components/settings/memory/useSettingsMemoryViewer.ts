@@ -8,7 +8,6 @@ import type {
   AffectStateEntry,
   LongMemoryEntry,
   LongMemorySearchResult,
-  ShortMemoryEntry,
 } from '../../../../shared/types/memory';
 import { getErrorMessage } from '../../../../shared/utils/errors';
 import { getElectronAPI } from '../../../services/electron_api';
@@ -29,7 +28,6 @@ export const useSettingsMemoryViewer = (active: Readonly<Ref<boolean>>) => {
 
   const memoryThreads = ref<ChatThread[]>([]);
   const selectedMemoryThreadId = ref('');
-  const shortMemoryEntries = ref<ShortMemoryEntry[]>([]);
   const longMemoryEntries = ref<LongMemoryEntry[]>([]);
   const memorySearchQuery = ref('');
   const memorySearchResults = ref<LongMemorySearchResult[]>([]);
@@ -97,15 +95,6 @@ export const useSettingsMemoryViewer = (active: Readonly<Ref<boolean>>) => {
     return threadLabelMap.value.get(threadId) || threadId;
   };
 
-  const formatRole = (role: string) => {
-    if (!role) return t('common.unknown');
-    if (role === 'user') return t('settings.memory.role.user');
-    if (role === 'assistant') return t('settings.memory.role.assistant');
-    if (role === 'system') return t('settings.memory.role.system');
-    if (role === 'tool') return t('settings.memory.role.tool');
-    return role;
-  };
-
   const formatMetricDecimal = (value: unknown, digits = 2): string => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return t('settings.memory.na');
     return value.toFixed(digits);
@@ -139,20 +128,14 @@ export const useSettingsMemoryViewer = (active: Readonly<Ref<boolean>>) => {
     affectStateError.value = '';
     try {
       const shouldFetchAffect = !isAllThreadsSelected.value;
-      const [shortEntries, longEntries, affectEntry] = isAllThreadsSelected.value
-        ? await Promise.all([
-            electronAPI.memory.short.listAll(50),
-            electronAPI.memory.long.listAll(25),
-            Promise.resolve(null),
-          ])
+      const [longEntries, affectEntry] = isAllThreadsSelected.value
+        ? await Promise.all([electronAPI.memory.long.listAll(25), Promise.resolve(null)])
         : await Promise.all([
-            electronAPI.memory.short.list(selectedMemoryThreadId.value, 50),
             electronAPI.memory.long.list(selectedMemoryThreadId.value, 25),
             shouldFetchAffect
               ? electronAPI.memory.affect.get(selectedMemoryThreadId.value)
               : Promise.resolve(null),
           ]);
-      shortMemoryEntries.value = Array.isArray(shortEntries) ? shortEntries : [];
       longMemoryEntries.value = Array.isArray(longEntries) ? longEntries : [];
       affectStateEntry.value = affectEntry || null;
       if (
@@ -365,7 +348,6 @@ export const useSettingsMemoryViewer = (active: Readonly<Ref<boolean>>) => {
     formatJson,
     formatJsonList,
     formatMetricDecimal,
-    formatRole,
     formatTimestamp,
     getThreadLabel,
     hasMemoryQuery,
@@ -391,7 +373,6 @@ export const useSettingsMemoryViewer = (active: Readonly<Ref<boolean>>) => {
     saveLongMemoryEdit,
     selectMemoryThread,
     selectedMemoryThreadId,
-    shortMemoryEntries,
     showCreateThreadHint,
     startEditLongMemory,
     updateNewLongMemoryThreadSelection,

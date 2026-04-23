@@ -266,6 +266,8 @@ const {
     getStatus: vi.fn(() => ({
       state: 'disconnected',
       activeConnectionCount: 0,
+      lastConnectedAt: null,
+      lastDisconnectedAt: null,
       heartbeat: {
         lastReceivedAt: null,
         intervalMs: null,

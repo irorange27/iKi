@@ -132,8 +132,16 @@ const buildFallbackNapCatHeartbeatStatus = (): NapCatBridgeHeartbeatInfo => ({
 const buildFallbackNapCatBridgeStatus = (config: AppConfig): NapCatBridgeStatusInfo => ({
   state: config.bridges?.napcat?.enabled ? 'unknown' : 'disabled',
   activeConnectionCount: null,
+  lastConnectedAt: null,
+  lastDisconnectedAt: null,
   heartbeat: buildFallbackNapCatHeartbeatStatus(),
 });
+
+const normalizeOptionalIsoTimestamp = (value: unknown, fallback: string | null): string | null => {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed || null;
+};
 
 const normalizeNapCatHeartbeatStatus = (
   value: unknown,
@@ -183,6 +191,14 @@ const normalizeNapCatBridgeStatus = (
     typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount >= 0
       ? Math.trunc(rawCount)
       : fallback.activeConnectionCount;
+  const lastConnectedAt = normalizeOptionalIsoTimestamp(
+    Reflect.get(value, 'lastConnectedAt'),
+    fallback.lastConnectedAt
+  );
+  const lastDisconnectedAt = normalizeOptionalIsoTimestamp(
+    Reflect.get(value, 'lastDisconnectedAt'),
+    fallback.lastDisconnectedAt
+  );
   const heartbeat = normalizeNapCatHeartbeatStatus(
     Reflect.get(value, 'heartbeat'),
     fallback.heartbeat
@@ -191,6 +207,8 @@ const normalizeNapCatBridgeStatus = (
   return {
     state,
     activeConnectionCount,
+    lastConnectedAt,
+    lastDisconnectedAt,
     heartbeat,
   };
 };

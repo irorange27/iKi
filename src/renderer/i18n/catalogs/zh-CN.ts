@@ -572,7 +572,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.memory.toolGuardValenceThreshold': '护栏效价阈值',
   'settings.memory.viewerTitle': '记忆查看器',
   'settings.memory.viewerDescription':
-    '按聊天线程或跨全部线程查看短期记忆、长期记忆，以及长期记忆搜索结果。',
+    '按聊天线程或跨全部线程查看长期记忆，以及长期记忆搜索结果。',
   'settings.memory.threadPlaceholder': '选择一个线程',
   'settings.memory.noThreadsAvailable': '没有可用线程。',
   'settings.memory.viewerThreadAria': '记忆查看线程',
@@ -597,9 +597,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.memory.addMemory': '添加记忆',
   'settings.memory.saving': '保存中...',
   'settings.memory.chooseThreadToCreate': '请选择一个线程以启用手动创建记忆。',
-  'settings.memory.shortMemory': '短期记忆',
-  'settings.memory.loadingShortMemory': '正在加载短期记忆...',
-  'settings.memory.noShortMemory': '没有短期记忆条目。',
   'settings.memory.longMemory': '长期记忆',
   'settings.memory.loadingLongMemory': '正在加载长期记忆...',
   'settings.memory.noLongMemory': '没有长期记忆条目。',
@@ -668,6 +665,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.napcat.transportLabel': '反向 WebSocket',
   'settings.napcat.heartbeatLabel': 'Heartbeat',
   'settings.napcat.activeConnections': '活动连接数',
+  'settings.napcat.lastConnectedLabel': '最近连接',
+  'settings.napcat.lastDisconnectedLabel': '最近断开',
   'settings.napcat.lastHeartbeatLabel': '最近心跳',
   'settings.napcat.connectionDiagnosisLabel': '诊断',
   'settings.napcat.authRequired': '需要 Bearer token',
@@ -694,7 +693,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.napcat.transportChecking': '检查中',
   'settings.napcat.transportBlockedByDaemon': '被 Daemon 阻断',
   'settings.napcat.transportConnected': '已连接',
-  'settings.napcat.transportDisconnected': '等待 NapCat 连接',
+  'settings.napcat.transportDisconnected': '已断开',
+  'settings.napcat.transportWaiting': '等待 NapCat 连接',
   'settings.napcat.transportDisabled': '已禁用',
   'settings.napcat.transportUnavailable': '不可用',
   'settings.napcat.transportCheckingDetail': '正在检查反向 WebSocket 传输层状态...',
@@ -703,6 +703,10 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.napcat.transportConnectedDetail': 'NapCat 反向 WebSocket 传输层已连接。',
   'settings.napcat.transportDisconnectedDetail':
     'Daemon 可访问，但 NapCat 还没有建立反向 WebSocket 连接。',
+  'settings.napcat.transportDisconnectedRecentlyDetail': ({ age }) =>
+    `NapCat 反向 WebSocket 当前已断开，最近一次会话关闭于 ${asText(age)} 前。`,
+  'settings.napcat.transportDisconnectedHistoricalDetail': ({ age }) =>
+    `NapCat 当前未连接，最近一次成功建立反向 WebSocket 是 ${asText(age)} 前。`,
   'settings.napcat.transportDisabledDetail':
     '配置中已禁用 bridge，因此不会接受反向 WebSocket 连接。',
   'settings.napcat.transportUnavailableDetail':
@@ -737,6 +741,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     '在 daemon 恢复响应之前，无法获取 heartbeat 运行时状态。',
   'settings.napcat.heartbeatUnknownDetail':
     'Daemon 已在线，但没有上报 heartbeat 运行时状态。',
+  'settings.napcat.lastConnectedNever': '还没有成功连接过',
+  'settings.napcat.lastDisconnectedNever': '还没有记录到断开',
+  'settings.napcat.lastConnectionValue': ({ age }) => `${asText(age)} 前`,
   'settings.napcat.lastHeartbeatDisabled': 'Bridge 已禁用',
   'settings.napcat.lastHeartbeatNever': '尚未收到',
   'settings.napcat.lastHeartbeatValue': ({ age, interval }) =>
@@ -744,8 +751,12 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.napcat.connectionDiagnosis.checking': '正在检查运行时状态',
   'settings.napcat.connectionDiagnosis.daemonOffline': 'Daemon 已停止或不可达',
   'settings.napcat.connectionDiagnosis.connected': '反向 WebSocket 已连接，heartbeat 也正常',
+  'settings.napcat.connectionDiagnosis.disconnected': ({ age }) =>
+    `反向 WebSocket 当前已断开，最近一次会话关闭于 ${asText(age)} 前`,
   'settings.napcat.connectionDiagnosis.waitingForTransport':
     'Daemon 正常，正在等待 NapCat 建立反向 WebSocket',
+  'settings.napcat.connectionDiagnosis.previouslyConnected': ({ age }) =>
+    `反向 WebSocket 当前未连接，但 NapCat 在 ${asText(age)} 前连通过`,
   'settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat':
     '反向 WebSocket 已连接，但暂时还没观测到 heartbeat',
   'settings.napcat.connectionDiagnosis.connectedHeartbeatStale':

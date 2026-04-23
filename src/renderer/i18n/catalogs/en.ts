@@ -608,7 +608,7 @@ export const en = defineCatalog({
   'settings.memory.toolGuardValenceThreshold': 'Guard Valence Threshold',
   'settings.memory.viewerTitle': 'Memory Viewer',
   'settings.memory.viewerDescription':
-    'View short-term and long-term memory entries by chat thread or across all threads, plus long-memory search results.',
+    'View long-term memory entries by chat thread or across all threads, plus long-memory search results.',
   'settings.memory.threadPlaceholder': 'Select a thread',
   'settings.memory.noThreadsAvailable': 'No threads available.',
   'settings.memory.viewerThreadAria': 'Memory viewer thread',
@@ -633,9 +633,6 @@ export const en = defineCatalog({
   'settings.memory.addMemory': 'Add Memory',
   'settings.memory.saving': 'Saving...',
   'settings.memory.chooseThreadToCreate': 'Choose a thread to enable manual memory creation.',
-  'settings.memory.shortMemory': 'Short Memory',
-  'settings.memory.loadingShortMemory': 'Loading short memory...',
-  'settings.memory.noShortMemory': 'No short-term memory entries.',
   'settings.memory.longMemory': 'Long Memory',
   'settings.memory.loadingLongMemory': 'Loading long memory...',
   'settings.memory.noLongMemory': 'No long-term memory entries.',
@@ -705,6 +702,8 @@ export const en = defineCatalog({
   'settings.napcat.transportLabel': 'Reverse WebSocket',
   'settings.napcat.heartbeatLabel': 'Heartbeat',
   'settings.napcat.activeConnections': 'Active Connections',
+  'settings.napcat.lastConnectedLabel': 'Last Connected',
+  'settings.napcat.lastDisconnectedLabel': 'Last Disconnected',
   'settings.napcat.lastHeartbeatLabel': 'Last Heartbeat',
   'settings.napcat.connectionDiagnosisLabel': 'Diagnosis',
   'settings.napcat.authRequired': 'Bearer token required',
@@ -731,7 +730,8 @@ export const en = defineCatalog({
   'settings.napcat.transportChecking': 'Checking',
   'settings.napcat.transportBlockedByDaemon': 'Blocked by Daemon',
   'settings.napcat.transportConnected': 'Connected',
-  'settings.napcat.transportDisconnected': 'Waiting for NapCat',
+  'settings.napcat.transportDisconnected': 'Disconnected',
+  'settings.napcat.transportWaiting': 'Waiting for NapCat',
   'settings.napcat.transportDisabled': 'Disabled',
   'settings.napcat.transportUnavailable': 'Unavailable',
   'settings.napcat.transportCheckingDetail': 'Checking reverse WebSocket transport...',
@@ -740,6 +740,10 @@ export const en = defineCatalog({
   'settings.napcat.transportConnectedDetail': 'NapCat reverse WebSocket transport is connected.',
   'settings.napcat.transportDisconnectedDetail':
     'Daemon is reachable, but NapCat has not opened a reverse WebSocket yet.',
+  'settings.napcat.transportDisconnectedRecentlyDetail': ({ age }) =>
+    `NapCat reverse WebSocket is currently disconnected. The last session closed ${asText(age)} ago.`,
+  'settings.napcat.transportDisconnectedHistoricalDetail': ({ age }) =>
+    `NapCat is currently disconnected. The last successful reverse WebSocket connection was ${asText(age)} ago.`,
   'settings.napcat.transportDisabledDetail':
     'Bridge is disabled in config, so reverse WebSocket connections are not accepted.',
   'settings.napcat.transportUnavailableDetail':
@@ -774,6 +778,9 @@ export const en = defineCatalog({
     'Heartbeat runtime is unavailable until the daemon responds.',
   'settings.napcat.heartbeatUnknownDetail':
     'Daemon is online, but it did not report heartbeat runtime.',
+  'settings.napcat.lastConnectedNever': 'No successful session yet',
+  'settings.napcat.lastDisconnectedNever': 'No disconnect observed yet',
+  'settings.napcat.lastConnectionValue': ({ age }) => `${asText(age)} ago`,
   'settings.napcat.lastHeartbeatDisabled': 'Bridge disabled',
   'settings.napcat.lastHeartbeatNever': 'Not received yet',
   'settings.napcat.lastHeartbeatValue': ({ age, interval }) =>
@@ -782,8 +789,12 @@ export const en = defineCatalog({
   'settings.napcat.connectionDiagnosis.daemonOffline': 'Daemon is down or unreachable',
   'settings.napcat.connectionDiagnosis.connected':
     'Reverse WebSocket is connected and heartbeat looks healthy',
+  'settings.napcat.connectionDiagnosis.disconnected': ({ age }) =>
+    `Reverse WebSocket is currently disconnected; the last session closed ${asText(age)} ago`,
   'settings.napcat.connectionDiagnosis.waitingForTransport':
     'Daemon is healthy; waiting for NapCat reverse WebSocket transport',
+  'settings.napcat.connectionDiagnosis.previouslyConnected': ({ age }) =>
+    `Reverse WebSocket is currently disconnected; NapCat last connected ${asText(age)} ago`,
   'settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat':
     'Reverse WebSocket is connected; heartbeat has not been observed yet',
   'settings.napcat.connectionDiagnosis.connectedHeartbeatStale':
