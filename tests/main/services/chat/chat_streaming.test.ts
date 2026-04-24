@@ -686,6 +686,95 @@ describe('createChatStreaming', () => {
     );
   });
 
+  it('send() returns the created run id when a typed wake run succeeds', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 0,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 700,
+      },
+    });
+
+    const { streaming } = createDeps();
+
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hello' }],
+      threadId: 'thread_awaiter_1',
+      runConfig: {
+        kind: 'awaiter-wake',
+        parentRunId: 'run_origin_1',
+        metadata: {
+          source: 'awaiter',
+          awaiterId: 'awaiter_1',
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      success: true,
+      text: 'assistant result',
+      runId: 'run_1',
+    });
+    expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'awaiter-wake',
+        parentRunId: 'run_origin_1',
+      })
+    );
+  });
+
+  it('send() preserves the created run id when a typed wake run fails after tracking starts', async () => {
+    assembleContextMock.mockResolvedValue({
+      messages: [{ role: 'user', content: 'hello' }],
+      usedSkills: [],
+      skillMode: 'manual',
+      report: {
+        totalEstimatedTokens: 0,
+        retainedRecentMessages: 1,
+        compactedMessages: 0,
+        blocks: [],
+      },
+      effectiveContextConfig: {
+        maxOutputTokens: 700,
+      },
+    });
+    generateChatWithUsageMock.mockRejectedValueOnce(new Error('LLM boom'));
+
+    const { streaming } = createDeps();
+
+    const result = await streaming.send({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hello' }],
+      threadId: 'thread_awaiter_failure',
+      runConfig: {
+        kind: 'awaiter-wake',
+        metadata: {
+          source: 'awaiter',
+          awaiterId: 'awaiter_1',
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'LLM boom',
+      runId: 'run_1',
+    });
+    expect(createAgentRunTrackerMock.mock.results[0]?.value.markFailed).toHaveBeenCalledWith({
+      message: 'LLM boom',
+    });
+  });
+
   it('send() routes through the runner when selected skills need on-demand loading', async () => {
     assembleContextMock.mockResolvedValue({
       messages: [{ role: 'user', content: 'draft it' }],

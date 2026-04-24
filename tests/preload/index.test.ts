@@ -170,6 +170,7 @@ describe('preload task IPC payload serialization', () => {
     const updateStatusChanged = vi.fn();
     const chatChunk = vi.fn();
     const taskPush = vi.fn();
+    const awaiterPush = vi.fn();
     const speechProgress = vi.fn();
     const companionUpdated = vi.fn();
 
@@ -234,6 +235,7 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.threads.get('thread_1');
     await exposedApi.chat.threads.getTodoPlan('thread_1');
     await exposedApi.chat.threads.create({ title: 'Thread' });
+    await exposedApi.chat.threads.clear('thread_1', { title: 'Cleared' });
     await exposedApi.chat.threads.update('thread_1', { title: 'Updated' });
     await exposedApi.chat.threads.delete('thread_1');
     await exposedApi.chat.messages.list('thread_1');
@@ -313,6 +315,8 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.tasks.runNow('task_1');
     exposedApi.tasks.onPush(taskPush);
     exposedApi.tasks.removeAllListeners();
+    exposedApi.awaiters.onPush(awaiterPush);
+    exposedApi.awaiters.removeAllListeners();
 
     await exposedApi.mcp.list();
     await exposedApi.mcp.add({ name: 'Docs', transport: 'stdio', command: 'node' });

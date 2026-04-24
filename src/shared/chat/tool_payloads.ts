@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   AgentToolInputSchemaUi,
   AgentToolOutputSchema,
+  DeleteAwaiterInputSchemaUi,
+  DeleteAwaiterOutputSchema,
   DeleteProactiveTaskInputSchemaUi,
   DeleteProactiveTaskOutputSchema,
   DeletePersonalSkillInputSchemaUi,
@@ -21,6 +23,8 @@ import {
   FetchToolOutputSchema,
   ListPersonalSkillsInputSchemaUi,
   ListPersonalSkillsOutputSchema,
+  ListAwaitersInputSchemaUi,
+  ListAwaitersOutputSchema,
   LoadSkillInputSchemaUi,
   LoadSkillOutputSchema,
   ListTodoListsInputSchemaUi,
@@ -29,6 +33,8 @@ import {
   ListDirOutputSchema,
   ReadPersonalSkillInputSchemaUi,
   ReadPersonalSkillOutputSchema,
+  ReadAwaiterInputSchemaUi,
+  ReadAwaiterOutputSchema,
   ReadProactiveTaskInputSchemaUi,
   ReadProactiveTaskOutputSchema,
   ReadTodoListInputSchemaUi,
@@ -39,6 +45,8 @@ import {
   ShellToolOutputSchema,
   WebToolInputSchemaUi,
   WebToolOutputSchema,
+  WriteAwaiterInputSchemaUi,
+  WriteAwaiterOutputSchema,
   WriteProactiveTaskInputSchemaUi,
   WriteProactiveTaskOutputSchema,
   WritePersonalSkillInputSchemaUi,
@@ -66,6 +74,10 @@ export type WritePersonalSkillToolInput = z.infer<typeof WritePersonalSkillInput
 export type DeletePersonalSkillToolInput = z.infer<typeof DeletePersonalSkillInputSchemaUi>;
 export type TodoToolInput = z.infer<typeof TodoToolInputSchemaUi>;
 export type AgentToolInput = z.infer<typeof AgentToolInputSchemaUi>;
+export type ListAwaitersToolInput = z.infer<typeof ListAwaitersInputSchemaUi>;
+export type ReadAwaiterToolInput = z.infer<typeof ReadAwaiterInputSchemaUi>;
+export type WriteAwaiterToolInput = z.infer<typeof WriteAwaiterInputSchemaUi>;
+export type DeleteAwaiterToolInput = z.infer<typeof DeleteAwaiterInputSchemaUi>;
 export type ListTodoListsToolInput = z.infer<typeof ListTodoListsInputSchemaUi>;
 export type ReadTodoListToolInput = z.infer<typeof ReadTodoListInputSchemaUi>;
 export type WriteTodoListToolInput = z.infer<typeof WriteTodoListInputSchemaUi>;
@@ -90,6 +102,10 @@ export type WritePersonalSkillToolOutput = z.infer<typeof WritePersonalSkillOutp
 export type DeletePersonalSkillToolOutput = z.infer<typeof DeletePersonalSkillOutputSchema>;
 export type TodoToolOutput = z.infer<typeof TodoToolOutputSchema>;
 export type AgentToolOutput = z.infer<typeof AgentToolOutputSchema>;
+export type ListAwaitersToolOutput = z.infer<typeof ListAwaitersOutputSchema>;
+export type ReadAwaiterToolOutput = z.infer<typeof ReadAwaiterOutputSchema>;
+export type WriteAwaiterToolOutput = z.infer<typeof WriteAwaiterOutputSchema>;
+export type DeleteAwaiterToolOutput = z.infer<typeof DeleteAwaiterOutputSchema>;
 export type ListTodoListsToolOutput = z.infer<typeof ListTodoListsOutputSchema>;
 export type ReadTodoListToolOutput = z.infer<typeof ReadTodoListOutputSchema>;
 export type WriteTodoListToolOutput = z.infer<typeof WriteTodoListOutputSchema>;
@@ -115,6 +131,10 @@ type ToolKind =
   | 'delete_personal_skill'
   | 'todo'
   | 'agent'
+  | 'list_awaiters'
+  | 'read_awaiter'
+  | 'write_awaiter'
+  | 'delete_awaiter'
   | 'list_todo_lists'
   | 'read_todo_list'
   | 'write_todo_list'
@@ -140,6 +160,10 @@ export type ParsedToolInput =
   | { kind: 'delete_personal_skill'; input: DeletePersonalSkillToolInput }
   | { kind: 'todo'; input: TodoToolInput }
   | { kind: 'agent'; input: AgentToolInput }
+  | { kind: 'list_awaiters'; input: ListAwaitersToolInput }
+  | { kind: 'read_awaiter'; input: ReadAwaiterToolInput }
+  | { kind: 'write_awaiter'; input: WriteAwaiterToolInput }
+  | { kind: 'delete_awaiter'; input: DeleteAwaiterToolInput }
   | { kind: 'list_todo_lists'; input: ListTodoListsToolInput }
   | { kind: 'read_todo_list'; input: ReadTodoListToolInput }
   | { kind: 'write_todo_list'; input: WriteTodoListToolInput }
@@ -166,6 +190,10 @@ export type ParsedToolOutput =
   | { kind: 'delete_personal_skill'; output: DeletePersonalSkillToolOutput }
   | { kind: 'todo'; output: TodoToolOutput }
   | { kind: 'agent'; output: AgentToolOutput }
+  | { kind: 'list_awaiters'; output: ListAwaitersToolOutput }
+  | { kind: 'read_awaiter'; output: ReadAwaiterToolOutput }
+  | { kind: 'write_awaiter'; output: WriteAwaiterToolOutput }
+  | { kind: 'delete_awaiter'; output: DeleteAwaiterToolOutput }
   | { kind: 'list_todo_lists'; output: ListTodoListsToolOutput }
   | { kind: 'read_todo_list'; output: ReadTodoListToolOutput }
   | { kind: 'write_todo_list'; output: WriteTodoListToolOutput }
@@ -204,6 +232,10 @@ const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny
   },
   todo: { input: TodoToolInputSchemaUi, output: TodoToolOutputSchema },
   agent: { input: AgentToolInputSchemaUi, output: AgentToolOutputSchema },
+  list_awaiters: { input: ListAwaitersInputSchemaUi, output: ListAwaitersOutputSchema },
+  read_awaiter: { input: ReadAwaiterInputSchemaUi, output: ReadAwaiterOutputSchema },
+  write_awaiter: { input: WriteAwaiterInputSchemaUi, output: WriteAwaiterOutputSchema },
+  delete_awaiter: { input: DeleteAwaiterInputSchemaUi, output: DeleteAwaiterOutputSchema },
   list_todo_lists: { input: ListTodoListsInputSchemaUi, output: ListTodoListsOutputSchema },
   read_todo_list: { input: ReadTodoListInputSchemaUi, output: ReadTodoListOutputSchema },
   write_todo_list: { input: WriteTodoListInputSchemaUi, output: WriteTodoListOutputSchema },

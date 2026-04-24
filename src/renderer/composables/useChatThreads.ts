@@ -136,6 +136,28 @@ export const useChatThreads = (deps: {
     }
   };
 
+  const buildClearedThreadInput = (thread: ChatThread): Partial<ChatThread> => ({
+    id: thread.id,
+    title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
+    model: typeof thread.model === 'string' && thread.model.trim() ? thread.model : undefined,
+    reasoning_effort:
+      typeof thread.reasoning_effort === 'string' && thread.reasoning_effort.trim()
+        ? thread.reasoning_effort
+        : undefined,
+    metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
+    client_id:
+      typeof thread.client_id === 'string' && thread.client_id.trim() ? thread.client_id : undefined,
+    tools: typeof thread.tools === 'string' && thread.tools.trim() ? thread.tools : undefined,
+    is_favorited: thread.is_favorited ? 1 : 0,
+    is_incognito: thread.is_incognito ? 1 : 0,
+    workspace_id: normalizeWorkspaceId(thread.workspace_id) ?? undefined,
+    enable_artifacts: thread.enable_artifacts ? 1 : 0,
+    artifact_workspace_id:
+      typeof thread.artifact_workspace_id === 'string' && thread.artifact_workspace_id.trim()
+        ? thread.artifact_workspace_id
+        : undefined,
+  });
+
   const updateThreadTitle = async (title: string) => {
     if (!currentThread.value) return;
     if (currentThread.value.title === title) return;
@@ -399,6 +421,50 @@ export const useChatThreads = (deps: {
     await createNewThread(currentModel.value);
   };
 
+  const clearCurrentThread = async () => {
+    const activeThread = currentThread.value;
+    if (!activeThread) return null;
+
+    try {
+      const recreatedThread = await deps.electronAPI.chat.threads.clear(
+        activeThread.id,
+        buildClearedThreadInput(activeThread)
+      );
+      if (!recreatedThread) {
+        throw new Error('Thread reset returned no recreated thread');
+      }
+
+      currentThread.value = recreatedThread;
+      currentModel.value =
+        typeof recreatedThread.model === 'string' ? recreatedThread.model : currentModel.value;
+      syncProviderState(recreatedThread);
+      syncIncognitoState(recreatedThread);
+      syncWorkspaceState(recreatedThread);
+      deps.messageStore.clear();
+      deps.persistence.resetPersistedMessageIds();
+      resetToolUiStateMap();
+      showWelcome.value = false;
+
+      await refreshThreads();
+      if (deps.sidebarRef.value?.setCurrentThread) {
+        deps.sidebarRef.value.setCurrentThread(recreatedThread.id);
+      }
+
+      return recreatedThread;
+    } catch (error) {
+      chatThreadsLogger.event({
+        level: 'error',
+        event: 'chat.thread.clear',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: activeThread.id,
+        },
+      });
+      return null;
+    }
+  };
+
   const handleModelSelected = (data: { model: string; provider: { id: string; type: string } }) => {
     currentModel.value = data.model;
     currentProviderId.value = data.provider.id;
@@ -540,8 +606,16 @@ export const useChatThreads = (deps: {
   };
 
   const handleTaskPush = async (payload: unknown) => {
+    await handleThreadResultPush(payload, 'task-result');
+  };
+
+  const handleAwaiterPush = async (payload: unknown) => {
+    await handleThreadResultPush(payload, 'awaiter-result');
+  };
+
+  const handleThreadResultPush = async (payload: unknown, expectedType: string) => {
     if (!isObjectRecord(payload)) return;
-    if (payload.type !== 'task-result') return;
+    if (payload.type !== expectedType) return;
     const threadId = typeof payload.threadId === 'string' ? payload.threadId : '';
     if (!threadId) return;
 
@@ -585,11 +659,13 @@ export const useChatThreads = (deps: {
     updateThreadTitle,
     updateThreadTitleById,
     handleNewChat,
+    clearCurrentThread,
     handleModelSelected,
     setIncognito,
     setWorkspace,
     ensureWorkspaceForCurrentThread,
     handleAssistantMessagePersisted,
     handleTaskPush,
+    handleAwaiterPush,
   };
 };

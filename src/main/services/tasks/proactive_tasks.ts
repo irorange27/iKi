@@ -273,8 +273,8 @@ export const runProactiveTask = async (
 
     const nextRunAt = computeNextRunAt(task, startedAt);
 
-    if (!result?.success) {
-      const errorText = result?.error || 'Unknown error';
+    if (result.success === false) {
+      const errorText = result.error || 'Unknown error';
       tasksDb.updateProactiveTask(taskId, {
         last_run_at: startedAt,
         next_run_at: nextRunAt,

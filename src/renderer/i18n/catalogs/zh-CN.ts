@@ -71,7 +71,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.welcome.primary.connectProvider': '连接第一个 Provider',
   'chat.welcome.primary.finishProvider': '完成 Provider 配置',
   'chat.welcome.primary.pickModel': '检查 Provider 模型',
-  'chat.welcome.primary.meetFirst': '先认识一下',
+  'chat.welcome.primary.meetFirst': '开始第一次对话',
   'chat.welcome.hint.loading': '正在检查你的本地 Provider 配置。',
   'chat.welcome.hint.connectProvider':
     '当前还没有可用 Provider。打开 Provider 设置，填入一个 API Key，并启用一个模型来源即可。',
@@ -80,7 +80,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.welcome.hint.addModel': 'Provider 已经准备好，但还需要至少一个模型，首次对话才能真正开始。',
   'chat.welcome.hint.modelReady':
     'Provider 已就绪。请在 Provider 设置里确认至少暴露一个模型给首次对话使用。',
-  'chat.welcome.hint.ready': '你可以先定称呼和说话方式，或先选一个起手式，再补上项目、任务或内容。',
+  'chat.welcome.hint.ready':
+    '现在就可以开始第一次对话。你可以先选一个起手式，或在输入框里输入 `/` 查看快捷命令，然后再补上项目、任务或内容。',
   'chat.welcome.contextSources.label': '适合先给的上下文',
   'chat.welcome.contextSources.identity.title': '称呼与风格',
   'chat.welcome.contextSources.identity.body': '先把怎么称呼彼此、说话更偏什么感觉定下来。',
@@ -111,7 +112,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.welcome.step.model.ready': ({ model }) => `已选中 ${asText(model)}。`,
   'chat.welcome.step.message.title': '开始第一轮对话',
   'chat.welcome.step.message.pending': '前两步完成后，再给 iKi 一点上下文。',
-  'chat.welcome.step.message.ready': '你可以先认识一下，或先选一个起手式，再把缺的上下文补进去。',
+  'chat.welcome.step.message.ready':
+    '现在就可以开始第一次对话，先选一个起手式，或在输入框里输入 `/` 查看快捷命令。',
   'chat.welcome.prompt.meet':
     '请先用自然、低压、偏温柔的中文和我建立我们的称呼与相处方式。先别急着做任务，先问我这几件事：我想怎么叫你、我希望你是什么样的存在、我偏好的说话风格、你该怎么称呼我、以及我要不要一个小 emoji 或符号。请像第一次见面一样聊天，不要像表单。',
   'chat.welcome.prompt.plan': '等我给你一个项目目录后，请告诉我最该先看的三个地方，以及原因。',
@@ -163,9 +165,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.slash.new.description': '立即开始一个全新的聊天线程。',
   'chat.input.slash.new.executed': '已开始新对话。',
   'chat.input.slash.new.invalidArgs': '`/new` 后面不需要额外内容。',
-  'chat.input.slash.clear.name': '清空草稿',
-  'chat.input.slash.clear.description': '清空当前输入框草稿。',
-  'chat.input.slash.clear.executed': '已清空当前草稿。',
+  'chat.input.slash.clear.name': '清空线程',
+  'chat.input.slash.clear.description': '清空当前线程上下文。',
+  'chat.input.slash.clear.executed': '已清空当前线程上下文。',
   'chat.input.slash.clear.invalidArgs': '`/clear` 后面不需要额外内容。',
   'chat.input.slash.incognito.name': '切换无痕',
   'chat.input.slash.incognito.description': '开启、关闭，或切换当前无痕模式。',

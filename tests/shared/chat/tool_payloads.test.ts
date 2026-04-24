@@ -104,6 +104,24 @@ describe('parseToolInput', () => {
     expect(parsed.input.schedule?.kind).toBe('daily');
     expect(parsed.input.tools).toEqual(['web', 'fetch']);
   });
+
+  it('parses awaiter write inputs from JSON', () => {
+    const parsed = parseToolInput(
+      'write_awaiter',
+      '{"action":"create","title":"Resume Draft","instruction":"Continue the draft tomorrow morning.","trigger":{"kind":"time_after","delayMinutes":45}}'
+    );
+
+    expect(parsed.kind).toBe('write_awaiter');
+    if (parsed.kind !== 'write_awaiter') {
+      throw new Error('Expected write_awaiter payload');
+    }
+    expect(parsed.input.title).toBe('Resume Draft');
+    expect(parsed.input.trigger?.kind).toBe('time_after');
+    if (parsed.input.trigger?.kind !== 'time_after') {
+      throw new Error('Expected time_after awaiter trigger');
+    }
+    expect(parsed.input.trigger.delayMinutes).toBe(45);
+  });
 });
 
 describe('parseToolOutput', () => {
@@ -210,5 +228,23 @@ describe('parseToolOutput', () => {
     }
     expect(parsed.output.task?.name).toBe('Daily Gold');
     expect(parsed.output.task?.tools).toEqual(['web', 'fetch']);
+  });
+
+  it('parses awaiter outputs from JSON', () => {
+    const parsed = parseToolOutput(
+      'read_awaiter',
+      '{"awaiter":{"id":"awaiter_1","title":"Resume Draft","status":"armed","trigger_kind":"time_at","trigger_spec":{"kind":"time_at","at":"2026-04-24T01:00:00.000Z"},"trigger_summary":"Wake at 2026-04-24T01:00:00.000Z","delivery_mode":"thread","notify":true,"provider_type":"openai","model":"gpt-5.4"}}'
+    );
+
+    expect(parsed.kind).toBe('read_awaiter');
+    if (parsed.kind !== 'read_awaiter') {
+      throw new Error('Expected read_awaiter payload');
+    }
+    expect(parsed.output.awaiter?.title).toBe('Resume Draft');
+    expect(parsed.output.awaiter?.trigger_kind).toBe('time_at');
+    expect(parsed.output.awaiter?.trigger_spec).toEqual({
+      kind: 'time_at',
+      at: '2026-04-24T01:00:00.000Z',
+    });
   });
 });

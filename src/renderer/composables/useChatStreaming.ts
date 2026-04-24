@@ -36,6 +36,7 @@ export const useChatStreaming = (deps: {
   selectedTools: Ref<string[]>;
   showWelcome: Ref<boolean>;
   createNewThread: (model?: string) => Promise<ChatThread | null>;
+  clearCurrentThread: () => Promise<ChatThread | null>;
   ensureWorkspaceForCurrentThread: () => Promise<ChatThread | null>;
   selectThread: (threadId: string) => Promise<void>;
   handleThreadDeleted: (threadId: string) => Promise<void>;
@@ -102,6 +103,13 @@ export const useChatStreaming = (deps: {
   const handleNewChat = async () => {
     await streamController.stopActiveStreamIfNeeded();
     await deps.handleNewChat();
+    resetEditing();
+    resetStreamState();
+  };
+
+  const handleClearCurrentThread = async () => {
+    await streamController.stopActiveStreamIfNeeded();
+    await deps.clearCurrentThread();
     resetEditing();
     resetStreamState();
   };
@@ -265,6 +273,7 @@ export const useChatStreaming = (deps: {
     selectThread,
     handleThreadDeleted,
     handleNewChat,
+    handleClearCurrentThread,
     resetEditing,
   };
 };

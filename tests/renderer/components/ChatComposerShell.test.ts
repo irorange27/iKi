@@ -44,7 +44,9 @@ describe('ChatComposerShell', () => {
     expect(wrapper.find('.chat-input-field').element.tagName).toBe('TEXTAREA');
     expect(wrapper.find('.composer-toolbar-slot-left').exists()).toBe(true);
     expect(wrapper.find('.composer-toolbar-slot-right').exists()).toBe(true);
-    expect(wrapper.find('.composer-feedback').text()).toBe('Provider verification failed.');
+    expect(wrapper.find('.composer-feedback-message').text()).toBe('Provider verification failed.');
+    expect(wrapper.find('.chat-input-container .composer-feedback').exists()).toBe(true);
+    expect(wrapper.find('.composer-feedback-dismiss').exists()).toBe(true);
   });
 
   it('re-emits input and composition events without owning draft state', async () => {
@@ -68,5 +70,15 @@ describe('ChatComposerShell', () => {
     const { wrapper } = mountComponent();
 
     expect(wrapper.find('.composer-feedback').exists()).toBe(false);
+  });
+
+  it('re-emits feedback dismissal so the owner can close the banner', async () => {
+    const { wrapper } = mountComponent({
+      feedback: 'Provider verification failed.',
+    });
+
+    await wrapper.find('.composer-feedback-dismiss').trigger('click');
+
+    expect(wrapper.emitted('dismissFeedback')).toEqual([[]]);
   });
 });

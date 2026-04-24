@@ -77,6 +77,7 @@ const createHarness = (options?: {
   const handleNewChat = vi.fn(async () => {
     currentThread.value = null;
   });
+  const clearCurrentThread = vi.fn(async () => currentThread.value);
   const onAssistantMessagePersisted = vi.fn(async () => undefined);
   const scrollToBottom = vi.fn();
   const ensureWorkspaceForCurrentThread = vi.fn(async () => currentThread.value);
@@ -104,6 +105,7 @@ const createHarness = (options?: {
     selectedTools,
     showWelcome,
     createNewThread,
+    clearCurrentThread,
     ensureWorkspaceForCurrentThread,
     selectThread,
     handleThreadDeleted,
@@ -122,6 +124,7 @@ const createHarness = (options?: {
     stopStream,
     updateThread,
     createNewThread,
+    clearCurrentThread,
     ensureWorkspaceForCurrentThread,
     selectThread,
     handleThreadDeleted,
@@ -157,6 +160,34 @@ describe('useChatStreaming', () => {
 
     expect(stopStream).toHaveBeenCalledTimes(1);
     expect(selectThread).toHaveBeenCalledWith('thread_2');
+    expect(state.editingUserMessageId.value).toBeNull();
+    expect(state.streamController.activeStreamThreadId.value).toBeNull();
+    expect(state.streamController.activeAssistantParentId.value).toBeNull();
+  });
+
+  it('stops the active stream before clearing the current thread and resets transient edit state', async () => {
+    const userMessage: UIMessage = {
+      id: 'user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Original draft' }],
+    };
+    const { state, stopStream, clearCurrentThread } = createHarness({
+      currentThread: createStoredThread({ id: 'thread_1' }),
+      initialMessages: [userMessage],
+    });
+
+    await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
+    state.streamController.beginTurn({
+      threadId: 'thread_1',
+      parentId: 'user_1',
+    });
+    await flushMicrotasks();
+
+    await state.handleClearCurrentThread();
+    await flushMicrotasks();
+
+    expect(stopStream).toHaveBeenCalledTimes(1);
+    expect(clearCurrentThread).toHaveBeenCalledTimes(1);
     expect(state.editingUserMessageId.value).toBeNull();
     expect(state.streamController.activeStreamThreadId.value).toBeNull();
     expect(state.streamController.activeAssistantParentId.value).toBeNull();

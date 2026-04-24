@@ -4,8 +4,13 @@ const {
   addChatThreadMock,
   addChatMessageMock,
   countChatMessagesByThreadMock,
+  deleteAwaitersByThreadMock,
+  deleteChatThreadMock,
+  getDbMock,
   getChatMessageMock,
   getChatThreadMock,
+  listProactiveTaskIdsByThreadMock,
+  updateProactiveTaskMock,
   updateChatThreadMock,
   touchChatThreadMock,
   onContinuityMessagePersistedMock,
@@ -14,8 +19,18 @@ const {
   addChatThreadMock: vi.fn(),
   addChatMessageMock: vi.fn(),
   countChatMessagesByThreadMock: vi.fn(),
+  deleteAwaitersByThreadMock: vi.fn(),
+  deleteChatThreadMock: vi.fn(),
+  getDbMock: vi.fn(() => ({
+    transaction:
+      <T extends unknown[], R>(fn: (...args: T) => R) =>
+      (...args: T) =>
+        fn(...args),
+  })),
   getChatMessageMock: vi.fn(),
   getChatThreadMock: vi.fn(),
+  listProactiveTaskIdsByThreadMock: vi.fn(),
+  updateProactiveTaskMock: vi.fn(),
   updateChatThreadMock: vi.fn(),
   touchChatThreadMock: vi.fn(),
   onContinuityMessagePersistedMock: vi.fn(),
@@ -30,9 +45,23 @@ vi.mock('../../../../src/core/db/chat_message', () => ({
 
 vi.mock('../../../../src/core/db/chat_thread', () => ({
   addChatThread: addChatThreadMock,
+  deleteChatThread: deleteChatThreadMock,
   getChatThread: getChatThreadMock,
   updateChatThread: updateChatThreadMock,
   touchChatThread: touchChatThreadMock,
+}));
+
+vi.mock('../../../../src/core/db/awaiters', () => ({
+  deleteAwaitersByThread: deleteAwaitersByThreadMock,
+}));
+
+vi.mock('../../../../src/core/db/tasks', () => ({
+  listProactiveTaskIdsByThread: listProactiveTaskIdsByThreadMock,
+  updateProactiveTask: updateProactiveTaskMock,
+}));
+
+vi.mock('../../../../src/core/db/database', () => ({
+  getDb: getDbMock,
 }));
 
 vi.mock('../../../../src/main/services/continuity/continuity_service', () => ({
@@ -66,6 +95,10 @@ describe('chat_persistence', () => {
       message: JSON.stringify({ role: 'user', content: 'hello' }),
     });
     countChatMessagesByThreadMock.mockReturnValue(0);
+    deleteAwaitersByThreadMock.mockReturnValue({ changes: 0 });
+    deleteChatThreadMock.mockReturnValue({ changes: 1 });
+    listProactiveTaskIdsByThreadMock.mockReturnValue([]);
+    updateProactiveTaskMock.mockReturnValue({ changes: 1 });
     updateChatThreadMock.mockReturnValue({ changes: 1 });
   });
 
@@ -165,5 +198,72 @@ describe('chat_persistence', () => {
       title: 'Renamed thread',
     });
     expect(result).toEqual({ changes: 1 });
+  });
+
+  it('clears a thread atomically while re-binding proactive tasks to the recreated thread id', async () => {
+    const { createChatPersistence } = await import(
+      '../../../../src/main/services/chat/chat_persistence'
+    );
+
+    getChatThreadMock
+      .mockReturnValueOnce({
+        id: 'thread_1',
+        title: 'Old title',
+        metadata: '{}',
+        is_generating: false,
+        is_favorited: 0,
+        is_incognito: 1,
+        workspace_id: 'workspace_alpha',
+        enable_artifacts: 0,
+      })
+      .mockReturnValueOnce({
+        id: 'thread_1',
+        title: 'New Chat',
+        metadata: '{}',
+        is_generating: false,
+        is_favorited: 0,
+        is_incognito: 1,
+        workspace_id: 'workspace_alpha',
+        enable_artifacts: 0,
+      });
+    listProactiveTaskIdsByThreadMock.mockReturnValue(['task_1', 'task_2']);
+
+    const persistence = createChatPersistence({
+      memory: {
+        onMessagePersisted: vi.fn(),
+      } as never,
+    });
+
+    const cleared = persistence.clearThread('thread_1', {
+      id: 'thread_1',
+      title: 'New Chat',
+      metadata: '{}',
+      is_incognito: 1,
+      workspace_id: 'workspace_alpha',
+    });
+
+    expect(deleteAwaitersByThreadMock).toHaveBeenCalledWith('thread_1');
+    expect(listProactiveTaskIdsByThreadMock).toHaveBeenCalledWith('thread_1');
+    expect(deleteChatThreadMock).toHaveBeenCalledWith('thread_1');
+    expect(addChatThreadMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'thread_1',
+        title: 'New Chat',
+        is_incognito: 1,
+        workspace_id: 'workspace_alpha',
+      })
+    );
+    expect(updateProactiveTaskMock).toHaveBeenNthCalledWith(1, 'task_1', {
+      thread_id: 'thread_1',
+    });
+    expect(updateProactiveTaskMock).toHaveBeenNthCalledWith(2, 'task_2', {
+      thread_id: 'thread_1',
+    });
+    expect(cleared).toEqual(
+      expect.objectContaining({
+        id: 'thread_1',
+        title: 'New Chat',
+      })
+    );
   });
 });

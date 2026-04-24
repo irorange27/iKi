@@ -26,11 +26,13 @@ describe('useChatViewLifecycle', () => {
     vi.restoreAllMocks();
   });
 
-  it('initializes config once, refreshes chat metadata, and forwards chat/task events', async () => {
+  it('initializes config once, refreshes chat metadata, and forwards chat/task/awaiter events', async () => {
     let uiChunkHandler: ((chunk: unknown) => void) | null = null;
     let taskPushHandler: ((payload: unknown) => void) | null = null;
+    let awaiterPushHandler: ((payload: unknown) => void) | null = null;
     const removeChatChunkListener = vi.fn();
     const removeTaskPushListener = vi.fn();
+    const removeAwaiterPushListener = vi.fn();
 
     const deps = {
       configStore: {
@@ -52,12 +54,19 @@ describe('useChatViewLifecycle', () => {
             return removeTaskPushListener;
           }),
         },
+        awaiters: {
+          onPush: vi.fn((handler: (payload: unknown) => void) => {
+            awaiterPushHandler = handler;
+            return removeAwaiterPushListener;
+          }),
+        },
       },
       streamController: {
         handleUiChunk: vi.fn(async () => undefined),
       },
       handleChatChunk: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
+      handleAwaiterPush: vi.fn(async () => undefined),
     };
 
     const wrapper = await mountHarness(deps as never);
@@ -67,9 +76,11 @@ describe('useChatViewLifecycle', () => {
     expect(deps.loadToolSources).toHaveBeenCalledTimes(1);
     expect(deps.electronAPI.chat.onUiChunk).toHaveBeenCalledTimes(1);
     expect(deps.electronAPI.tasks.onPush).toHaveBeenCalledTimes(1);
+    expect(deps.electronAPI.awaiters.onPush).toHaveBeenCalledTimes(1);
 
     uiChunkHandler?.({ type: 'text-delta', delta: 'hello' });
     taskPushHandler?.({ type: 'task-result', threadId: 'thread_1' });
+    awaiterPushHandler?.({ type: 'awaiter-result', threadId: 'thread_1' });
     await flushPromises();
 
     expect(deps.streamController.handleUiChunk).toHaveBeenCalledWith({
@@ -84,11 +95,16 @@ describe('useChatViewLifecycle', () => {
       type: 'task-result',
       threadId: 'thread_1',
     });
+    expect(deps.handleAwaiterPush).toHaveBeenCalledWith({
+      type: 'awaiter-result',
+      threadId: 'thread_1',
+    });
 
     wrapper.unmount();
 
     expect(removeChatChunkListener).toHaveBeenCalledTimes(1);
     expect(removeTaskPushListener).toHaveBeenCalledTimes(1);
+    expect(removeAwaiterPushListener).toHaveBeenCalledTimes(1);
   });
 
   it('skips config initialization when the store is already initialized', async () => {
@@ -106,12 +122,16 @@ describe('useChatViewLifecycle', () => {
         tasks: {
           onPush: vi.fn(() => () => undefined),
         },
+        awaiters: {
+          onPush: vi.fn(() => () => undefined),
+        },
       },
       streamController: {
         handleUiChunk: vi.fn(async () => undefined),
       },
       handleChatChunk: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
+      handleAwaiterPush: vi.fn(async () => undefined),
     };
 
     const wrapper = await mountHarness(deps as never);
@@ -140,12 +160,18 @@ describe('useChatViewLifecycle', () => {
             throw new Error('tasks bridge unavailable');
           }),
         },
+        awaiters: {
+          onPush: vi.fn(() => {
+            throw new Error('awaiters bridge unavailable');
+          }),
+        },
       },
       streamController: {
         handleUiChunk: vi.fn(async () => undefined),
       },
       handleChatChunk: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
+      handleAwaiterPush: vi.fn(async () => undefined),
     };
 
     const wrapper = await mountHarness(deps as never);
@@ -154,6 +180,7 @@ describe('useChatViewLifecycle', () => {
     expect(deps.loadToolSources).toHaveBeenCalledTimes(1);
     expect(deps.electronAPI.chat.onUiChunk).toHaveBeenCalledTimes(1);
     expect(deps.electronAPI.tasks.onPush).toHaveBeenCalledTimes(1);
+    expect(deps.electronAPI.awaiters.onPush).toHaveBeenCalledTimes(1);
 
     expect(() => wrapper.unmount()).not.toThrow();
   });

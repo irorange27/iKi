@@ -112,7 +112,7 @@ describe('WelcomeScreen', () => {
     expect(wrapper.text()).toContain('Current Task');
     expect(wrapper.text()).toContain('Pasted Text');
     expect(wrapper.findAll('.welcome-prompt-btn')).toHaveLength(4);
-    expect(wrapper.find('.welcome-primary-btn').text()).toContain('Get Acquainted First');
+    expect(wrapper.find('.welcome-primary-btn').text()).toContain('Start First Chat');
 
     await wrapper.find('.welcome-primary-btn').trigger('click');
 

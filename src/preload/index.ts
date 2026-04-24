@@ -112,6 +112,8 @@ const electronApi: ElectronApi = {
       get: (id: string) => ipcRenderer.invoke('chat:threads:get', id),
       getTodoPlan: (threadId: string) => ipcRenderer.invoke('chat:threads:todo:get', threadId),
       create: (thread: ChatThreadInput) => ipcRenderer.invoke('chat:threads:create', thread),
+      clear: (id: string, thread: ChatThreadInput) =>
+        ipcRenderer.invoke('chat:threads:clear', id, thread),
       update: (id: string, thread: ChatThreadInput) =>
         ipcRenderer.invoke('chat:threads:update', id, thread),
       delete: (id: string) => ipcRenderer.invoke('chat:threads:delete', id),
@@ -231,6 +233,12 @@ const electronApi: ElectronApi = {
     onPush: (callback: (payload: unknown) => void) => subscribe('tasks:push', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('tasks:push');
+    },
+  },
+  awaiters: {
+    onPush: (callback: (payload: unknown) => void) => subscribe('awaiters:push', callback),
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('awaiters:push');
     },
   },
   mcp: {

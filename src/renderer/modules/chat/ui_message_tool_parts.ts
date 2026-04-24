@@ -225,6 +225,10 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   delete_file: Trash2,
   agent: Bot,
   todo: ListTodo,
+  list_awaiters: Clock3,
+  read_awaiter: Clock3,
+  write_awaiter: Clock3,
+  delete_awaiter: Trash2,
   list_todo_lists: ListTodo,
   read_todo_list: ListTodo,
   write_todo_list: ListTodo,
@@ -324,6 +328,22 @@ export const getToolTitle = (part: unknown): string => {
     }
 
     if (
+      toolKey === 'read_awaiter' ||
+      toolKey === 'write_awaiter' ||
+      toolKey === 'delete_awaiter'
+    ) {
+      if (typeof input.title === 'string' && input.title.trim()) {
+        return normalizeSingleLineText(input.title);
+      }
+      if (typeof input.currentTitle === 'string' && input.currentTitle.trim()) {
+        return normalizeSingleLineText(input.currentTitle);
+      }
+      if (typeof input.id === 'string' && input.id.trim()) {
+        return normalizeSingleLineText(input.id);
+      }
+    }
+
+    if (
       toolKey === 'read_proactive_task' ||
       toolKey === 'write_proactive_task' ||
       toolKey === 'delete_proactive_task'
@@ -344,6 +364,13 @@ export const getToolTitle = (part: unknown): string => {
         return normalizeSingleLineText(input.query);
       }
       return 'Proactive tasks';
+    }
+
+    if (toolKey === 'list_awaiters') {
+      if (typeof input.query === 'string' && input.query.trim()) {
+        return normalizeSingleLineText(input.query);
+      }
+      return 'Awaiters';
     }
 
     if (toolKey === 'list_todo_lists') {

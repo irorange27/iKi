@@ -31,6 +31,10 @@ const TEST_TOOL_NAMES = [
   'manual_only',
   'agent',
   'todo',
+  'list_awaiters',
+  'read_awaiter',
+  'write_awaiter',
+  'delete_awaiter',
   'list_todo_lists',
   'read_todo_list',
   'write_todo_list',
@@ -205,6 +209,25 @@ describe('resolveToolNames', () => {
       'read_proactive_task',
       'write_proactive_task',
       'delete_proactive_task',
+    ]);
+  });
+
+  it('includes awaiter management tools in auto mode for continue-later turns', async () => {
+    registerTool({ name: 'list_awaiters', source: { kind: 'builtin' } });
+    registerTool({ name: 'read_awaiter', source: { kind: 'builtin' } });
+    registerTool({ name: 'write_awaiter', source: { kind: 'builtin' } });
+    registerTool({ name: 'delete_awaiter', source: { kind: 'builtin' } });
+
+    const result = await resolveToolNames({
+      inputMessages: [],
+    });
+
+    expect(result.mode).toBe('auto');
+    expect(result.resolvedTools).toEqual([
+      'list_awaiters',
+      'read_awaiter',
+      'write_awaiter',
+      'delete_awaiter',
     ]);
   });
 

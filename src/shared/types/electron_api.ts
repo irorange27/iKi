@@ -186,6 +186,7 @@ export interface ElectronApi {
       get: (id: string) => Promise<ChatThread | null>;
       getTodoPlan: (threadId: string) => Promise<TaskPlan | null>;
       create: (thread: ChatThreadInput) => Promise<ChatThread>;
+      clear: (id: string, thread: ChatThreadInput) => Promise<ChatThread | null>;
       update: (id: string, thread: ChatThreadInput) => Promise<unknown>;
       delete: (id: string) => Promise<unknown>;
     };
@@ -290,6 +291,10 @@ export interface ElectronApi {
     ) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
     delete: (id: string) => Promise<WindowActionResult>;
     runNow: (id: string) => Promise<WindowActionResult>;
+    onPush: (callback: (payload: unknown) => void) => () => void;
+    removeAllListeners: () => void;
+  };
+  awaiters: {
     onPush: (callback: (payload: unknown) => void) => () => void;
     removeAllListeners: () => void;
   };

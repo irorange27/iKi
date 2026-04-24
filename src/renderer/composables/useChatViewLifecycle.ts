@@ -12,13 +12,15 @@ export const useChatViewLifecycle = (deps: {
   configStore: ConfigInitializer;
   refreshThreads: () => Promise<void>;
   loadToolSources: () => Promise<void>;
-  electronAPI: Pick<ElectronApi, 'chat' | 'tasks'>;
+  electronAPI: Pick<ElectronApi, 'chat' | 'tasks' | 'awaiters'>;
   streamController: Pick<ChatUiStreamController, 'handleUiChunk'>;
   handleChatChunk?: (chunk: unknown) => Promise<void> | void;
   handleTaskPush: (payload: unknown) => Promise<void> | void;
+  handleAwaiterPush: (payload: unknown) => Promise<void> | void;
 }) => {
   let removeChatChunkListener: () => void = () => undefined;
   let removeTaskPushListener: () => void = () => undefined;
+  let removeAwaiterPushListener: () => void = () => undefined;
 
   onMounted(async () => {
     if (!deps.configStore.initialized) {
@@ -43,12 +45,27 @@ export const useChatViewLifecycle = (deps: {
     } catch {
       // Ignore missing tasks IPC in older builds.
     }
+
+    try {
+      removeAwaiterPushListener();
+      removeAwaiterPushListener =
+        deps.electronAPI.awaiters?.onPush?.((payload: unknown) => {
+          void deps.handleAwaiterPush(payload);
+        }) ?? (() => undefined);
+    } catch {
+      // Ignore missing awaiter IPC in older builds.
+    }
   });
 
   onUnmounted(() => {
     removeChatChunkListener();
     try {
       removeTaskPushListener();
+    } catch {
+      // ignore
+    }
+    try {
+      removeAwaiterPushListener();
     } catch {
       // ignore
     }

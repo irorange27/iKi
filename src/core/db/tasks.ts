@@ -29,6 +29,16 @@ export const getProactiveTask = (id: string): ProactiveTask | null => {
   return normalizeRow(row);
 };
 
+export const listProactiveTaskIdsByThread = (threadId: string): string[] => {
+  const rows = getDb()
+    .prepare('SELECT id FROM proactive_tasks WHERE thread_id = ? ORDER BY id ASC')
+    .all(threadId) as Array<{ id?: string | null }>;
+
+  return rows
+    .map(row => (typeof row.id === 'string' ? row.id.trim() : ''))
+    .filter(Boolean);
+};
+
 export const listDueProactiveTasks = (now: string): ProactiveTask[] => {
   const rows = getDb()
     .prepare(

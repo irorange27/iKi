@@ -71,7 +71,7 @@ export const en = defineCatalog({
   'chat.welcome.primary.connectProvider': 'Connect First Provider',
   'chat.welcome.primary.finishProvider': 'Finish Provider Setup',
   'chat.welcome.primary.pickModel': 'Review Provider Models',
-  'chat.welcome.primary.meetFirst': 'Get Acquainted First',
+  'chat.welcome.primary.meetFirst': 'Start First Chat',
   'chat.welcome.hint.loading': 'Checking your local provider setup now.',
   'chat.welcome.hint.connectProvider':
     'No provider is ready yet. Open Provider settings, add one API key, and enable one model source.',
@@ -82,7 +82,7 @@ export const en = defineCatalog({
   'chat.welcome.hint.modelReady':
     'A provider is ready. Use Provider settings to make sure at least one model is exposed for the first chat.',
   'chat.welcome.hint.ready':
-    'Start by setting names and tone, or use one of the starters below and fill in the missing context.',
+    'You can start the first chat now. Use one of the starters below, or type `/` in the composer to browse shortcuts before you add project context, a task, or pasted text.',
   'chat.welcome.contextSources.label': 'Good First Context',
   'chat.welcome.contextSources.identity.title': 'Names & Tone',
   'chat.welcome.contextSources.identity.body':
@@ -118,7 +118,7 @@ export const en = defineCatalog({
   'chat.welcome.step.message.title': 'Start the first chat',
   'chat.welcome.step.message.pending': 'Give iKi context after the first two steps.',
   'chat.welcome.step.message.ready':
-    'Start by getting acquainted, or pick one of the starters below and fill in the missing context.',
+    'You can start the first chat now, use one of the starters below, or type `/` in the composer to browse shortcuts.',
   'chat.welcome.prompt.meet':
     'Speak with me naturally and start in a warm, low-pressure way. First help us establish how we should address each other: ask what I want to call you, what kind of presence I want you to be, what tone I prefer, how you should address me, and whether I want a small emoji or symbol. Keep it conversational rather than form-like.',
   'chat.welcome.prompt.plan':
@@ -172,9 +172,9 @@ export const en = defineCatalog({
   'chat.input.slash.new.description': 'Start a fresh chat thread immediately.',
   'chat.input.slash.new.executed': 'Started a new chat.',
   'chat.input.slash.new.invalidArgs': '`/new` does not take extra text.',
-  'chat.input.slash.clear.name': 'Clear draft',
-  'chat.input.slash.clear.description': 'Clear the current composer draft.',
-  'chat.input.slash.clear.executed': 'Cleared the current draft.',
+  'chat.input.slash.clear.name': 'Clear thread',
+  'chat.input.slash.clear.description': 'Clear the current thread context.',
+  'chat.input.slash.clear.executed': 'Cleared the current thread context.',
   'chat.input.slash.clear.invalidArgs': '`/clear` does not take extra text.',
   'chat.input.slash.incognito.name': 'Toggle incognito',
   'chat.input.slash.incognito.description': 'Turn incognito mode on, off, or toggle it.',

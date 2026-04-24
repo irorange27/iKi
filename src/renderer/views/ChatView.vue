@@ -107,6 +107,7 @@
           @incognito-changed="handleIncognitoChanged"
           @model-selected="handleModelSelected"
           @new-chat-requested="handleNewChat"
+          @clear-thread-requested="handleClearCurrentThread"
           @workspace-changed="handleWorkspaceChanged"
         />
       </div>
@@ -303,6 +304,7 @@ const {
   selectThread: selectThreadBase,
   handleThreadDeleted: handleThreadDeletedBase,
   handleNewChat: handleNewChatBase,
+  clearCurrentThread: clearCurrentThreadBase,
   handleModelSelected,
   setIncognito,
   setWorkspace,
@@ -310,6 +312,7 @@ const {
   getCurrentThreadId,
   handleAssistantMessagePersisted,
   handleTaskPush,
+  handleAwaiterPush,
 } = useChatThreads({
   electronAPI,
   messageStore,
@@ -347,6 +350,7 @@ const streaming = useChatStreaming({
   selectedTools,
   showWelcome,
   createNewThread,
+  clearCurrentThread: clearCurrentThreadBase,
   ensureWorkspaceForCurrentThread,
   selectThread: selectThreadBase,
   handleThreadDeleted: handleThreadDeletedBase,
@@ -361,6 +365,7 @@ const prepareMessageSend = streaming.prepareMessageSend;
 const selectThread = streaming.selectThread;
 const handleThreadDeleted = streaming.handleThreadDeleted;
 const handleNewChat = streaming.handleNewChat;
+const handleClearCurrentThread = streaming.handleClearCurrentThread;
 
 const beginEditMessage = async (message: ChatUiMessage) => {
   const setDraft = async (text: string) => {
@@ -404,6 +409,7 @@ useChatViewLifecycle({
   streamController,
   handleChatChunk,
   handleTaskPush,
+  handleAwaiterPush,
 });
 </script>
 

@@ -8,6 +8,7 @@ export * from './schemas';
 export * from './task_plan_tools';
 export * from './todo_tools';
 export * from './proactive_task_tools';
+export * from './awaiter_tools';
 
 import { defaultToolRegistry } from './base';
 import { DelegatedAgentTool } from './agent_tools';
@@ -37,6 +38,12 @@ import {
   ReadProactiveTaskTool,
   WriteProactiveTaskTool,
 } from './proactive_task_tools';
+import {
+  DeleteAwaiterTool,
+  ListAwaitersTool,
+  ReadAwaiterTool,
+  WriteAwaiterTool,
+} from './awaiter_tools';
 import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
 
@@ -66,4 +73,8 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new ReadProactiveTaskTool());
   defaultToolRegistry.register(new WriteProactiveTaskTool());
   defaultToolRegistry.register(new DeleteProactiveTaskTool());
+  defaultToolRegistry.register(new ListAwaitersTool());
+  defaultToolRegistry.register(new ReadAwaiterTool());
+  defaultToolRegistry.register(new WriteAwaiterTool());
+  defaultToolRegistry.register(new DeleteAwaiterTool());
 }

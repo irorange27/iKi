@@ -7,6 +7,7 @@
         v-model="message"
         :placeholder="composerPlaceholder"
         :feedback="composerFeedback"
+        @dismiss-feedback="dismissComposerFeedback"
         @keydown="handleComposerKeydown"
         @keydown-enter="handleEnter"
         @composition-start="handleCompositionStart"
@@ -164,6 +165,7 @@ const emit = defineEmits<{
   (event: 'incognito-changed', value: boolean): void;
   (event: 'model-selected', payload: { model: string; provider: Provider }): void;
   (event: 'new-chat-requested'): void;
+  (event: 'clear-thread-requested'): void;
   (event: 'workspace-changed', value: string | null): void;
 }>();
 
@@ -265,6 +267,7 @@ const {
   currentIncognito: computed(() => Boolean(props.isIncognito)),
   selectedSkillIds,
   onRequestNewChat: () => emit('new-chat-requested'),
+  onRequestClearThread: () => emit('clear-thread-requested'),
   onRequestIncognitoChange: (nextValue: boolean) => emit('incognito-changed', nextValue),
   t,
 });
@@ -291,6 +294,7 @@ const {
   stopFailedMessage: t('chat.input.stopFailed'),
   prepareMessageSend: props.prepareMessageSend,
   resolveSendRequest: resolveSlashCommandSend,
+  canResolveEmptyDraft: () => activeInvocation.value !== null,
   ensureProviderReady,
   resolveSelectedMcpServerIds,
   stopVoiceInput,

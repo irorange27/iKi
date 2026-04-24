@@ -790,6 +790,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     const napcatConfig = getNapCatConfig();
     if (!napcatConfig.enabled) return;
     const napcatTools = filterNapCatTools(napcatConfig.tools);
+    const modelConfig = resolveNapCatModel(napcatConfig);
 
     const { text, mentionedSelf } = parseMessageText(event.message, event.raw_message, selfId);
     if (!text) return;
@@ -817,6 +818,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
           draft: text,
           locale: getAppConfig().general?.language,
           currentIncognito: Boolean(existingThread?.is_incognito),
+          bridgeReady: Boolean(modelConfig),
         })
       : {
           kind: 'message' as const,
@@ -878,17 +880,25 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
     if (slashResolution.kind === 'reset-thread') {
       try {
         if (existingThread) {
-          options.chatService.deleteThread(threadId);
-        }
-
-        options.chatService.createThread(
-          buildNapCatThreadSeed({
-            event,
+          options.chatService.clearThread(
             threadId,
-            clientId: options.clientId,
-            existingThread,
-          })
-        );
+            buildNapCatThreadSeed({
+              event,
+              threadId,
+              clientId: options.clientId,
+              existingThread,
+            })
+          );
+        } else {
+          options.chatService.createThread(
+            buildNapCatThreadSeed({
+              event,
+              threadId,
+              clientId: options.clientId,
+              existingThread,
+            })
+          );
+        }
       } catch (error) {
         napcatLogger.event({
           level: 'warn',
@@ -936,7 +946,7 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
             slashResolution.content,
             slashResolution.composerInvocations
           )
-        : buildUserMessage(text);
+        : buildUserMessage(slashResolution.content);
 
     try {
       options.chatService.createMessage({
@@ -956,8 +966,6 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
         },
       });
     }
-
-    const modelConfig = resolveNapCatModel(napcatConfig);
 
     if (!modelConfig) {
       napcatLogger.event({
@@ -988,12 +996,25 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       threadId,
     });
 
-    if (!result.success || !result.text) {
+    if (result.success === false) {
       napcatLogger.event({
         level: 'warn',
         event: 'napcat.reply.generate',
         outcome: 'failed',
         error: result.error,
+        entity: {
+          thread_id: threadId,
+        },
+      });
+      return;
+    }
+
+    if (!result.text) {
+      napcatLogger.event({
+        level: 'warn',
+        event: 'napcat.reply.generate',
+        outcome: 'failed',
+        message: 'Generated reply was empty.',
         entity: {
           thread_id: threadId,
         },

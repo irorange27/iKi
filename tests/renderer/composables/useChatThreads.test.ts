@@ -42,18 +42,53 @@ const createHarness = (
 
   const createThread = vi.fn(async (input: Partial<ChatThread>) => {
     const thread = createStoredThread({
-      id: `thread_${threadsById.size + 1}`,
+      id:
+        typeof input.id === 'string' && input.id.trim().length > 0
+          ? input.id
+          : `thread_${threadsById.size + 1}`,
       title: typeof input.title === 'string' ? input.title : 'New Chat',
       model: typeof input.model === 'string' ? input.model : undefined,
       metadata: typeof input.metadata === 'string' ? input.metadata : '{}',
+      client_id: typeof input.client_id === 'string' ? input.client_id : undefined,
+      tools: typeof input.tools === 'string' ? input.tools : undefined,
       is_incognito:
         typeof input.is_incognito === 'number' ? input.is_incognito : input.is_incognito ? 1 : 0,
+      is_favorited:
+        typeof input.is_favorited === 'number'
+          ? input.is_favorited
+          : input.is_favorited
+            ? 1
+            : 0,
       workspace_id:
         typeof input.workspace_id === 'string' && input.workspace_id.trim().length > 0
           ? input.workspace_id
           : undefined,
+      enable_artifacts:
+        typeof input.enable_artifacts === 'number'
+          ? input.enable_artifacts
+          : input.enable_artifacts
+            ? 1
+            : 0,
+      artifact_workspace_id:
+        typeof input.artifact_workspace_id === 'string' ? input.artifact_workspace_id : undefined,
+      reasoning_effort:
+        typeof input.reasoning_effort === 'string' ? input.reasoning_effort : undefined,
     });
     threadsById.set(thread.id, thread);
+    return thread;
+  });
+
+  const deleteThread = vi.fn(async (id: string) => {
+    threadsById.delete(id);
+    return { changes: 1 };
+  });
+
+  const clearThread = vi.fn(async (id: string, input: Partial<ChatThread>) => {
+    threadsById.delete(id);
+    const thread = await createThread({
+      ...input,
+      id,
+    });
     return thread;
   });
 
@@ -80,14 +115,23 @@ const createHarness = (
   const listMessages = vi.fn(async () => []);
   const refreshSidebar = vi.fn(async () => undefined);
   const setCurrentThread = vi.fn();
+  const messageStore = {
+    append: vi.fn(),
+    clear: vi.fn(),
+    hasId: vi.fn(() => false),
+    setAll: vi.fn(),
+  };
+  const scrollToBottom = vi.fn();
 
   const state = useChatThreads({
     electronAPI: {
       chat: {
         threads: {
           create: createThread,
+          clear: clearThread,
           update: updateThread,
           get: getThread,
+          delete: deleteThread,
         },
         messages: {
           list: listMessages,
@@ -98,10 +142,7 @@ const createHarness = (
       },
       tasks: {},
     } as never,
-    messageStore: {
-      clear: vi.fn(),
-      setAll: vi.fn(),
-    } as never,
+    messageStore: messageStore as never,
     persistence: {
       resetPersistedMessageIds: vi.fn(),
     } as never,
@@ -109,7 +150,7 @@ const createHarness = (
       refresh: refreshSidebar,
       setCurrentThread,
     }),
-    scrollToBottom: vi.fn(),
+    scrollToBottom,
     preferredDraftModel,
     preferredDraftProviderId,
     persistDraftModelSelection,
@@ -118,9 +159,13 @@ const createHarness = (
   return {
     state,
     createThread,
+    clearThread,
+    deleteThread,
     updateThread,
     getThread,
     listMessages,
+    messageStore,
+    scrollToBottom,
     refreshSidebar,
     setCurrentThread,
     generateTitle,
@@ -216,6 +261,54 @@ describe('useChatThreads', () => {
     expect(state.isIncognito.value).toBe(false);
   });
 
+  it('clears the current thread in place by recreating the same thread id with reset context', async () => {
+    const existingThread = createStoredThread({
+      id: 'thread_clear_me',
+      title: 'Old title',
+      model: 'deepseek-chat',
+      metadata: '{"llm":{"providerId":"deepseek"}}',
+      client_id: 'client_desktop',
+      tools: '["web"]',
+      is_favorited: 1,
+      is_incognito: 1,
+      workspace_id: 'workspace_alpha',
+      prompt_app_id: 'prompt_summarize',
+      skill_ids: '["codex:frontend-dev"]',
+    });
+    const { state, clearThread, refreshSidebar, setCurrentThread } = createHarness([
+      existingThread,
+    ]);
+
+    await state.selectThread(existingThread.id);
+    const clearedThread = await state.clearCurrentThread();
+
+    expect(clearThread).toHaveBeenCalledWith(
+      'thread_clear_me',
+      expect.objectContaining({
+        id: 'thread_clear_me',
+        title: 'New Chat',
+        model: 'deepseek-chat',
+        metadata: '{"llm":{"providerId":"deepseek"}}',
+        client_id: 'client_desktop',
+        tools: '["web"]',
+        is_favorited: 1,
+        is_incognito: 1,
+        workspace_id: 'workspace_alpha',
+      })
+    );
+    expect(clearedThread?.id).toBe('thread_clear_me');
+    expect(clearedThread?.title).toBe('New Chat');
+    expect(clearedThread?.prompt_app_id).toBeUndefined();
+    expect(clearedThread?.skill_ids).toBeUndefined();
+    expect(state.currentThread.value?.id).toBe('thread_clear_me');
+    expect(state.currentThread.value?.title).toBe('New Chat');
+    expect(state.currentModel.value).toBe('deepseek-chat');
+    expect(state.isIncognito.value).toBe(true);
+    expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
+    expect(refreshSidebar).toHaveBeenCalled();
+    expect(setCurrentThread).toHaveBeenLastCalledWith('thread_clear_me');
+  });
+
   it('syncs the active composer model from the selected thread', async () => {
     const deepseekThread = createStoredThread({
       id: 'thread_deepseek',
@@ -234,6 +327,33 @@ describe('useChatThreads', () => {
 
     await state.selectThread(openaiThread.id);
     expect(state.currentModel.value).toBe('gpt-4o');
+  });
+
+  it('appends awaiter push results into the active thread without a reload when a message payload is present', async () => {
+    const thread = createStoredThread({
+      id: 'thread_awaiter_push',
+      title: 'Awaiter thread',
+    });
+    const { state, messageStore, scrollToBottom } = createHarness([thread]);
+
+    await state.selectThread(thread.id);
+    await state.handleAwaiterPush({
+      type: 'awaiter-result',
+      threadId: thread.id,
+      message: {
+        id: 'msg_awaiter_1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Later continuation complete.' }],
+      },
+    });
+
+    expect(messageStore.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'msg_awaiter_1',
+        role: 'assistant',
+      })
+    );
+    expect(scrollToBottom).toHaveBeenCalled();
   });
 
   it('hydrates and restores the draft composer selection from persisted preferences', async () => {

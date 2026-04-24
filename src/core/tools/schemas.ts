@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEFAULT_PROACTIVE_TASK_LIST_LIMIT, SAFE_PROACTIVE_TASK_TOOLS } from '../../shared/types/tasks';
+import { DEFAULT_AWAITER_LIST_LIMIT } from '../../shared/types/awaiters';
 import { MAX_EXECUTION_TASK_PLAN_ITEMS } from '../../shared/types/task_plan';
 
 // Renderer tool-payload parsing imports this module via shared/chat/tool_payloads.
@@ -117,6 +118,11 @@ const proactiveTaskLookupInputFields = {
   name: z.string().describe('Exact proactive task name'),
 };
 
+const awaiterLookupInputFields = {
+  id: z.string().describe('Awaiter id'),
+  title: z.string().describe('Exact awaiter title'),
+};
+
 const todoListItemInputSchema = z.object({
   content: z.string().min(1).describe('Todo item text'),
   notes: z.string().describe('Optional notes for the todo item').optional(),
@@ -178,6 +184,25 @@ const proactiveTaskScheduleInputSchema = z.discriminatedUnion('kind', [
       .regex(/^([01]?\d|2[0-3]):([0-5]\d)$/, 'Expected HH:MM in 24-hour time')
       .describe('Local wall-clock time in HH:MM 24-hour format'),
     ...proactiveTaskScheduleBaseFields,
+  }),
+]);
+
+const awaiterTriggerInputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('time_at'),
+    at: z
+      .string()
+      .trim()
+      .min(1)
+      .describe('Future wake time as an ISO 8601 timestamp'),
+  }),
+  z.object({
+    kind: z.literal('time_after'),
+    delayMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .describe('Wake after N minutes from now'),
   }),
 ]);
 
@@ -663,6 +688,177 @@ export const DeleteProactiveTaskInputSchemaUi = z
   })
   .passthrough();
 
+export const ListAwaitersInputSchema = z.object({
+  query: z.string().trim().describe('Optional search text for matching awaiters').optional(),
+  limit: z
+    .number()
+    .int()
+    .describe('Maximum number of awaiters to return')
+    .optional()
+    .default(DEFAULT_AWAITER_LIST_LIMIT),
+  description: toolCallDescriptionField,
+});
+
+export const ListAwaitersInputSchemaUi = z
+  .object({
+    query: z.string().optional(),
+    limit: z.number().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const ReadAwaiterInputSchema = z
+  .object({
+    id: awaiterLookupInputFields.id.optional(),
+    title: awaiterLookupInputFields.title.optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
+    if (!hasId && !hasTitle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or title is required',
+      });
+    }
+  });
+
+export const ReadAwaiterInputSchemaUi = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const WriteAwaiterInputSchema = z
+  .object({
+    action: z.enum(['create', 'update']).describe('Create a new awaiter or update an existing one'),
+    id: awaiterLookupInputFields.id.optional(),
+    currentTitle: awaiterLookupInputFields.title
+      .describe('Exact existing awaiter title when updating by title')
+      .optional(),
+    title: awaiterLookupInputFields.title.describe('Display title for the awaiter').optional(),
+    instruction: z
+      .string()
+      .trim()
+      .describe('Instruction the future wake should execute when it fires')
+      .optional(),
+    trigger: awaiterTriggerInputSchema
+      .describe('One-shot wake trigger. Phase 1 supports only time-based triggers.')
+      .optional(),
+    notify: z
+      .boolean()
+      .describe('Whether the desktop app should show a completion/failure notification')
+      .optional(),
+    threadId: z
+      .string()
+      .trim()
+      .describe('Optional thread id override; defaults to the current thread')
+      .optional(),
+    providerType: z
+      .string()
+      .trim()
+      .describe('Optional provider type override; defaults to the current chat model')
+      .optional(),
+    providerId: z
+      .string()
+      .trim()
+      .describe('Optional provider id override; defaults to the current chat provider instance')
+      .optional(),
+    model: z
+      .string()
+      .trim()
+      .describe('Optional model override; defaults to the current chat model')
+      .optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasCurrentTitle =
+      typeof value.currentTitle === 'string' && value.currentTitle.trim().length > 0;
+    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
+    const hasInstruction =
+      typeof value.instruction === 'string' && value.instruction.trim().length > 0;
+
+    if (value.action === 'create') {
+      if (!hasTitle) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['title'],
+          message: 'title is required when action=create',
+        });
+      }
+      if (!hasInstruction) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['instruction'],
+          message: 'instruction is required when action=create',
+        });
+      }
+      if (!value.trigger) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['trigger'],
+          message: 'trigger is required when action=create',
+        });
+      }
+    }
+
+    if (value.action === 'update' && !hasId && !hasCurrentTitle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or currentTitle is required when action=update',
+      });
+    }
+  });
+
+export const WriteAwaiterInputSchemaUi = z
+  .object({
+    action: z.enum(['create', 'update']).optional(),
+    id: z.string().optional(),
+    currentTitle: z.string().optional(),
+    title: z.string().optional(),
+    instruction: z.string().optional(),
+    trigger: awaiterTriggerInputSchema.optional(),
+    notify: z.boolean().optional(),
+    threadId: z.string().optional(),
+    providerType: z.string().optional(),
+    providerId: z.string().optional(),
+    model: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
+export const DeleteAwaiterInputSchema = z
+  .object({
+    id: awaiterLookupInputFields.id.optional(),
+    title: awaiterLookupInputFields.title.optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
+    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
+    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
+    if (!hasId && !hasTitle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['id'],
+        message: 'Either id or title is required',
+      });
+    }
+  });
+
+export const DeleteAwaiterInputSchemaUi = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    description: toolCallDescriptionField,
+  })
+  .passthrough();
+
 export const DeleteFileInputSchemaUi = z
   .object({
     path: deleteFileInputFields.path.optional(),
@@ -1077,5 +1273,69 @@ export const DeleteProactiveTaskOutputSchema = z
     deleted: z.boolean().optional(),
     taskId: z.string().nullable().optional(),
     taskName: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const AwaiterTriggerOutputSchema = z
+  .object({
+    kind: z.enum(['time_at', 'time_after']).optional(),
+    at: z.string().optional(),
+    delay_minutes: z.number().optional(),
+  })
+  .passthrough();
+
+const AwaiterRecordOutputSchema = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    instruction: z.string().optional(),
+    status: z
+      .enum(['armed', 'waking', 'completed', 'cancelled', 'failed', 'expired'])
+      .optional(),
+    thread_id: z.string().optional(),
+    origin_run_id: z.string().nullable().optional(),
+    origin_checkpoint_id: z.string().nullable().optional(),
+    trigger_kind: z.enum(['time_at', 'time_after']).optional(),
+    trigger_spec: AwaiterTriggerOutputSchema.nullable().optional(),
+    trigger_summary: z.string().optional(),
+    delivery_mode: z.enum(['thread']).optional(),
+    notify: z.boolean().optional(),
+    provider_type: z.string().optional(),
+    provider_id: z.string().nullable().optional(),
+    model: z.string().optional(),
+    next_wake_at: z.string().nullable().optional(),
+    last_wake_at: z.string().nullable().optional(),
+    last_error: z.string().nullable().optional(),
+    expires_at: z.string().nullable().optional(),
+    created_at: z.string().optional(),
+    updated_at: z.string().optional(),
+  })
+  .passthrough();
+
+export const ListAwaitersOutputSchema = z
+  .object({
+    awaiters: z.array(AwaiterRecordOutputSchema).optional(),
+    resultCount: z.number().optional(),
+  })
+  .passthrough();
+
+export const ReadAwaiterOutputSchema = z
+  .object({
+    awaiter: AwaiterRecordOutputSchema.nullable().optional(),
+  })
+  .passthrough();
+
+export const WriteAwaiterOutputSchema = z
+  .object({
+    action: z.enum(['created', 'updated']).optional(),
+    awaiter: AwaiterRecordOutputSchema.optional(),
+  })
+  .passthrough();
+
+export const DeleteAwaiterOutputSchema = z
+  .object({
+    deleted: z.boolean().optional(),
+    awaiterId: z.string().nullable().optional(),
+    awaiterTitle: z.string().nullable().optional(),
   })
   .passthrough();

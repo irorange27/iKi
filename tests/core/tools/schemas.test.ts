@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AgentToolInputSchema,
+  DeleteAwaiterInputSchema,
   DeletePersonalSkillInputSchema,
   DeleteProactiveTaskInputSchema,
   TodoToolInputSchema,
@@ -12,15 +13,18 @@ import {
   EditFileInputSchema,
   FetchToolInputSchema,
   ListPersonalSkillsInputSchema,
+  ListAwaitersInputSchema,
   ListProactiveTasksInputSchema,
   ListTodoListsInputSchema,
   ListDirInputSchema,
   ReadPersonalSkillInputSchema,
+  ReadAwaiterInputSchema,
   ReadProactiveTaskInputSchema,
   ReadTodoListInputSchema,
   ReadFileInputSchema,
   ShellToolInputSchema,
   WebToolInputSchema,
+  WriteAwaiterInputSchema,
   WriteProactiveTaskInputSchema,
   WritePersonalSkillInputSchema,
   WriteTodoListInputSchema,
@@ -125,6 +129,40 @@ describe('tool input schemas', () => {
         description: 'Remove a stale personal skill the user no longer wants.',
       }).description
     ).toBe('Remove a stale personal skill the user no longer wants.');
+
+    expect(
+      ListAwaitersInputSchema.parse({
+        query: 'draft',
+        description: 'Find the deferred continuation for this draft.',
+      }).description
+    ).toBe('Find the deferred continuation for this draft.');
+
+    expect(
+      ReadAwaiterInputSchema.parse({
+        title: 'Resume Draft',
+        description: 'Inspect the current awaiter before rescheduling it.',
+      }).description
+    ).toBe('Inspect the current awaiter before rescheduling it.');
+
+    expect(
+      WriteAwaiterInputSchema.parse({
+        action: 'create',
+        title: 'Resume Draft',
+        instruction: 'Continue the draft tomorrow morning.',
+        trigger: {
+          kind: 'time_after',
+          delayMinutes: 45,
+        },
+        description: 'Create a one-shot continue-later wake.',
+      }).description
+    ).toBe('Create a one-shot continue-later wake.');
+
+    expect(
+      DeleteAwaiterInputSchema.parse({
+        title: 'Resume Draft',
+        description: 'Remove the deferred continuation if it is no longer needed.',
+      }).description
+    ).toBe('Remove the deferred continuation if it is no longer needed.');
 
     expect(
       TodoToolInputSchema.parse({

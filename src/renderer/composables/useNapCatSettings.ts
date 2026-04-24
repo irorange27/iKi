@@ -297,7 +297,7 @@ export const useNapCatSettings = (params: {
         heartbeat?.good !== false,
       warning:
         hasActiveNapCatTransport.value &&
-        (!!heartbeat?.lastReceivedAt
+        (heartbeat?.lastReceivedAt
           ? heartbeat?.stale === true || heartbeat?.online === false || heartbeat?.good === false
           : false),
       idle: state === 'disabled' || state === 'unknown',

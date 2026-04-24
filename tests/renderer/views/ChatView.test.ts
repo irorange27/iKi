@@ -22,6 +22,7 @@ const {
   selectThreadMock,
   handleThreadDeletedMock,
   handleNewChatMock,
+  handleClearCurrentThreadMock,
   beginEditMessageMock,
   cancelEditingMock,
   setIncognitoMock,
@@ -83,6 +84,7 @@ const {
   const selectThreadMock = vi.fn(async () => undefined);
   const handleThreadDeletedMock = vi.fn(async () => undefined);
   const handleNewChatMock = vi.fn(async () => undefined);
+  const handleClearCurrentThreadMock = vi.fn(async () => undefined);
   const beginEditMessageMock = vi.fn(async () => undefined);
   const cancelEditingMock = vi.fn(async () => undefined);
   const setIncognitoMock = vi.fn(async () => undefined);
@@ -136,6 +138,7 @@ const {
     selectThreadMock,
     handleThreadDeletedMock,
     handleNewChatMock,
+    handleClearCurrentThreadMock,
     beginEditMessageMock,
     cancelEditingMock,
     setIncognitoMock,
@@ -250,7 +253,13 @@ const ChatInputStub = defineComponent({
     todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
   },
-  emits: ['incognito-changed', 'model-selected', 'new-chat-requested', 'workspace-changed'],
+  emits: [
+    'incognito-changed',
+    'model-selected',
+    'new-chat-requested',
+    'clear-thread-requested',
+    'workspace-changed',
+  ],
   setup(_, { expose }) {
     expose({
       setDraftMessage: setDraftMessageMock,
@@ -319,6 +328,7 @@ describe('ChatView', () => {
     selectThreadMock.mockReset();
     handleThreadDeletedMock.mockReset();
     handleNewChatMock.mockReset();
+    handleClearCurrentThreadMock.mockReset();
     beginEditMessageMock.mockReset();
     cancelEditingMock.mockReset();
     configStoreState.initialize.mockReset();
@@ -348,6 +358,7 @@ describe('ChatView', () => {
       showWelcome: showWelcomeRef,
       refreshThreads: refreshThreadsMock,
       createNewThread: createNewThreadMock,
+      clearCurrentThread: vi.fn(async () => undefined),
       selectThread: vi.fn(async () => undefined),
       handleThreadDeleted: vi.fn(async () => undefined),
       handleNewChat: vi.fn(async () => undefined),
@@ -358,6 +369,7 @@ describe('ChatView', () => {
       getCurrentThreadId: () => currentThreadRef.value?.id ?? null,
       handleAssistantMessagePersisted: vi.fn(async () => undefined),
       handleTaskPush: vi.fn(async () => undefined),
+      handleAwaiterPush: vi.fn(async () => undefined),
     }));
 
     useChatStreamingMock.mockImplementation(() => ({
@@ -371,6 +383,7 @@ describe('ChatView', () => {
       selectThread: selectThreadMock,
       handleThreadDeleted: handleThreadDeletedMock,
       handleNewChat: handleNewChatMock,
+      handleClearCurrentThread: handleClearCurrentThreadMock,
     }));
 
     useToolMetadataMock.mockImplementation(() => ({
@@ -589,6 +602,15 @@ describe('ChatView', () => {
       focus: true,
       select: true,
     });
+  });
+
+  it('routes clear-thread requests from the composer through the streaming reset path', async () => {
+    const wrapper = await mountChatView();
+
+    wrapper.findComponent(ChatInputStub).vm.$emit('clear-thread-requested');
+    await flushPromises();
+
+    expect(handleClearCurrentThreadMock).toHaveBeenCalledTimes(1);
   });
 
   it('hides the top message count during the empty welcome state', async () => {

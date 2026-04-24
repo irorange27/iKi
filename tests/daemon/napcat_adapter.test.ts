@@ -102,6 +102,7 @@ const createConfig = (napcatOverrides: Partial<ReturnType<typeof createDefaultAp
 const createChatServiceMock = () => ({
   getThread: vi.fn(),
   createThread: vi.fn(),
+  clearThread: vi.fn(),
   updateThread: vi.fn(),
   deleteThread: vi.fn(),
   createMessage: vi.fn(),
@@ -627,6 +628,128 @@ describe('createNapCatReverseBridge', () => {
     await inbound;
   });
 
+  it('replies to /start with setup guidance when the bridge has no usable provider/model path', async () => {
+    getAppConfigMock.mockReturnValue(
+      createConfig({
+        enabled: true,
+        providerType: '',
+        model: '',
+      })
+    );
+    getProvidersMock.mockReturnValue([
+      createProvider({
+        id: 'provider_without_models',
+        name: 'OpenAI',
+        type: 'openai',
+        models: '[]',
+      }),
+    ] as never);
+
+    const chatService = createChatServiceMock();
+    chatService.getThread.mockReturnValue(null);
+    chatService.listMessages.mockReturnValue([]);
+
+    const { ws } = connectBridge(chatService);
+    const socket = expectSocket(ws);
+    const inbound = socket.emitMessage(
+      JSON.stringify({
+        post_type: 'message',
+        message_type: 'private',
+        self_id: '10001',
+        user_id: '20002',
+        message_id: 'm_start_setup',
+        message: '/start',
+      })
+    ) as Promise<void>;
+
+    await Promise.resolve();
+
+    expect(chatService.createThread).not.toHaveBeenCalled();
+    expect(chatService.createMessage).not.toHaveBeenCalled();
+    expect(chatService.send).not.toHaveBeenCalled();
+
+    const outbound = JSON.parse(socket.sent[0]);
+    expect(outbound).toMatchObject({
+      action: 'send_private_msg',
+      params: {
+        user_id: '20002',
+        message:
+          'iKi is not ready on this bridge yet. In the desktop app, enable one working provider and make sure at least one model is available, then send /start again or just send a normal message.',
+      },
+    });
+
+    await (socket.emitMessage(JSON.stringify({ status: 'ok', retcode: 0, echo: outbound.echo })) as
+      Promise<void>);
+    await inbound;
+  });
+
+  it('treats /start with arguments as a normal first request once the bridge is ready', async () => {
+    getAppConfigMock.mockReturnValue(
+      createConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+      })
+    );
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    chatService.getThread.mockReturnValue({
+      id: 'napcat_10001_private_20002',
+      title: 'QQ User 20002',
+      metadata: '{}',
+      is_incognito: 0,
+    } as never);
+    chatService.listMessages.mockReturnValue([
+      {
+        id: 'msg_user_start',
+        message: JSON.stringify({
+          role: 'user',
+          parts: [{ type: 'text', text: 'Help me plan the release checklist' }],
+        }),
+      },
+    ]);
+    chatService.send.mockResolvedValue({ success: true, text: 'release plan ready' });
+
+    const { ws } = connectBridge(chatService);
+    const socket = expectSocket(ws);
+    const inbound = socket.emitMessage(
+      JSON.stringify({
+        post_type: 'message',
+        message_type: 'private',
+        self_id: '10001',
+        user_id: '20002',
+        message_id: 'm_start_task',
+        message: '/start Help me plan the release checklist',
+      })
+    ) as Promise<void>;
+
+    await flushBridgeAsync();
+
+    expect(chatService.createMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        thread_id: 'napcat_10001_private_20002',
+        message: {
+          role: 'user',
+          parts: [{ type: 'text', text: 'Help me plan the release checklist' }],
+        },
+      })
+    );
+    expect(chatService.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'napcat_10001_private_20002',
+        providerType: 'openai',
+        model: 'gpt-4.1-mini',
+      })
+    );
+
+    const outbound = JSON.parse(socket.sent[0]);
+    await (socket.emitMessage(JSON.stringify({ status: 'ok', retcode: 0, echo: outbound.echo })) as
+      Promise<void>);
+    await inbound;
+  });
+
   it('routes skill slash commands through manual skill selection before sending', async () => {
     listSkillsMock.mockResolvedValue([
       {
@@ -837,8 +960,7 @@ describe('createNapCatReverseBridge', () => {
 
     await Promise.resolve();
 
-    expect(chatService.deleteThread).toHaveBeenCalledWith('napcat_10001_private_20002');
-    expect(chatService.createThread).toHaveBeenCalledWith({
+    expect(chatService.clearThread).toHaveBeenCalledWith('napcat_10001_private_20002', {
       id: 'napcat_10001_private_20002',
       title: 'Release Ops',
       metadata: JSON.stringify({
@@ -852,6 +974,7 @@ describe('createNapCatReverseBridge', () => {
       is_incognito: 1,
       workspace_id: 'workspace_release',
     });
+    expect(chatService.createThread).not.toHaveBeenCalled();
     expect(chatService.createMessage).not.toHaveBeenCalled();
     expect(chatService.send).not.toHaveBeenCalled();
 

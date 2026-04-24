@@ -25,6 +25,18 @@ import { companionService } from '../companion/companion_service';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
+export type ChatSendResult =
+  | {
+      success: true;
+      text: string;
+      runId?: string;
+    }
+  | {
+      success: false;
+      error: string;
+      runId?: string;
+    };
+
 export const createChatStreaming = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
   memory: ChatMemory;
@@ -78,7 +90,7 @@ export const createChatStreaming = (deps: {
     return { success: true };
   };
 
-  const send = async (options: ChatTurnOptions) => {
+  const send = async (options: ChatTurnOptions): Promise<ChatSendResult> => {
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
@@ -91,6 +103,8 @@ export const createChatStreaming = (deps: {
       runTracker = createAgentRunTracker({
         kind: options.runConfig?.kind ?? 'chat-turn',
         threadId: options.threadId,
+        parentRunId: options.runConfig?.parentRunId,
+        rootRunId: options.runConfig?.rootRunId,
         providerType: options.providerType,
         providerId: options.providerId,
         model: options.model,
@@ -188,7 +202,11 @@ export const createChatStreaming = (deps: {
           usage: result.usage ? { ...result.usage } : undefined,
           finishReason: 'completed',
         });
-        return { success: true, text: result.response };
+        return {
+          success: true,
+          text: result.response,
+          ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
+        };
       }
 
       const llmResult = await llmFactory.generateChatWithUsage({
@@ -216,13 +234,21 @@ export const createChatStreaming = (deps: {
         usage: llmResult.usage ? { ...llmResult.usage } : undefined,
         finishReason: 'completed',
       });
-      return { success: true, text: llmResult.text };
+      return {
+        success: true,
+        text: llmResult.text,
+        ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
+      };
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (runTracker && runTracker.getRun().status === 'running') {
         runTracker.markFailed({ message });
       }
-      return { success: false, error: message };
+      return {
+        success: false,
+        error: message,
+        ...(options.runConfig?.kind && runTracker ? { runId: runTracker.id } : {}),
+      };
     }
   };
 
@@ -280,6 +306,8 @@ export const createChatStreaming = (deps: {
       runTracker = createAgentRunTracker({
         kind: options.runConfig?.kind ?? 'chat-turn',
         threadId: options.threadId,
+        parentRunId: options.runConfig?.parentRunId,
+        rootRunId: options.runConfig?.rootRunId,
         providerType: options.providerType,
         providerId: options.providerId,
         model: options.model,

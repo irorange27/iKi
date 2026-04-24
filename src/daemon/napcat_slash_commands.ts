@@ -13,6 +13,8 @@ import {
 import { normalizeAppLocale, type SupportedLocale } from '../shared/i18n/locale';
 
 type NapCatSlashFeedbackKey =
+  | 'startReady'
+  | 'startNeedsSetup'
   | 'desktopOnlyNew'
   | 'clearInvalidArgs'
   | 'threadCleared'
@@ -25,6 +27,10 @@ type NapCatSlashLocaleMessages = Record<NapCatSlashFeedbackKey, string>;
 
 const NAPCAT_SLASH_MESSAGES: Record<SupportedLocale, NapCatSlashLocaleMessages> = {
   en: {
+    startReady:
+      'iKi is ready here. Send a normal message, use `/start <request>` for a clear first task, or try a skill shortcut like `/frontend-dev ...`.',
+    startNeedsSetup:
+      'iKi is not ready on this bridge yet. In the desktop app, enable one working provider and make sure at least one model is available, then send `/start` again or just send a normal message.',
     desktopOnlyNew: '`/new` is only available in the desktop composer.',
     clearInvalidArgs: '`/clear` does not take extra text.',
     threadCleared: 'Context cleared. You can start a fresh task now.',
@@ -34,6 +40,10 @@ const NAPCAT_SLASH_MESSAGES: Record<SupportedLocale, NapCatSlashLocaleMessages> 
     skillNeedsRequest: 'Add a request for {skill} before sending.',
   },
   'zh-CN': {
+    startReady:
+      'iKi 在这里已经就绪。直接发普通消息即可；也可以用 `/start <内容>` 给出明确的第一项任务，或试试像 `/frontend-dev ...` 这样的 skill 快捷入口。',
+    startNeedsSetup:
+      '这个桥接还没准备好。请先在桌面端启用一个可用 Provider，并确认至少有一个模型可用，然后再发送 `/start`，或直接发普通消息。',
     desktopOnlyNew: '`/new` 目前只支持桌面端输入框。',
     clearInvalidArgs: '`/clear` 后面不需要额外内容。',
     threadCleared: '已清空上下文，现在可以直接开始新任务。',
@@ -83,12 +93,35 @@ export const resolveNapCatInboundSlashCommand = async (params: {
   draft: string;
   locale: string | null | undefined;
   currentIncognito: boolean;
+  bridgeReady: boolean;
 }): Promise<NapCatResolvedInboundMessage> => {
   const parsed = parseSlashCommandDraft(params.draft);
   if (!parsed || !parsed.query) {
     return {
       kind: 'message',
       content: params.draft,
+    };
+  }
+
+  if (parsed.query === 'start') {
+    const normalizedArgumentText = parsed.argumentText.trim();
+    if (!params.bridgeReady) {
+      return {
+        kind: 'feedback',
+        feedback: translateNapCatSlash(params.locale, 'startNeedsSetup'),
+      };
+    }
+
+    if (!normalizedArgumentText) {
+      return {
+        kind: 'feedback',
+        feedback: translateNapCatSlash(params.locale, 'startReady'),
+      };
+    }
+
+    return {
+      kind: 'message',
+      content: normalizedArgumentText,
     };
   }
 

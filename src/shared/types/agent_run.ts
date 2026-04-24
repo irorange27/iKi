@@ -2,6 +2,7 @@ export type AgentRunKind =
   | 'chat-turn'
   | 'approval-resume'
   | 'proactive-task'
+  | 'awaiter-wake'
   | 'delegated-agent';
 
 export type AgentRunStatus =

@@ -26,6 +26,25 @@
         <slot name="input-overlay" />
       </div>
 
+      <div
+        v-if="props.feedback"
+        class="composer-feedback border-t border-color"
+        role="alert"
+        aria-live="assertive"
+      >
+        <p class="composer-feedback-message">
+          {{ props.feedback }}
+        </p>
+        <button
+          type="button"
+          class="composer-feedback-dismiss"
+          :aria-label="t('common.close')"
+          @click="emit('dismissFeedback')"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+
       <div class="composer-toolbar border-t border-color">
         <div class="composer-toolbar-slot composer-toolbar-slot-left">
           <slot name="toolbar-left" />
@@ -35,14 +54,12 @@
         </div>
       </div>
     </div>
-    <p v-if="props.feedback" class="composer-feedback" role="alert" aria-live="assertive">
-      {{ props.feedback }}
-    </p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue';
+import { useI18n } from '../i18n';
 
 type ComposerTextControl = HTMLTextAreaElement;
 
@@ -59,7 +76,10 @@ const emit = defineEmits<{
   (event: 'keydownEnter', value: KeyboardEvent): void;
   (event: 'compositionStart', value: CompositionEvent): void;
   (event: 'compositionEnd', value: CompositionEvent): void;
+  (event: 'dismissFeedback'): void;
 }>();
+
+const { t } = useI18n();
 
 const inputRef = ref<ComposerTextControl | null>(null);
 const MIN_INPUT_HEIGHT_PX = 48;
@@ -139,14 +159,51 @@ onMounted(() => {
 }
 
 .composer-feedback {
-  margin-top: 10px;
-  border: 1px solid color-mix(in srgb, var(--danger-color) 34%, var(--border-color));
-  border-radius: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   padding: 10px 12px;
-  background: color-mix(in srgb, var(--danger-color) 9%, var(--bg-secondary));
+  background: color-mix(in srgb, var(--danger-color) 7%, var(--chat-composer-background));
   color: var(--danger-color);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.composer-feedback-message {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.composer-feedback-dismiss {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.72;
+  transition:
+    background-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.composer-feedback-dismiss:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+}
+
+.composer-feedback-dismiss:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--danger-color) 45%, transparent);
+  outline-offset: 2px;
+  opacity: 1;
 }
 
 .chat-input-field {

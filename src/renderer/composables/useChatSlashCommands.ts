@@ -11,7 +11,6 @@ import {
   extractPromptAppSlashCommands,
   extractSkillSlashCommands,
   filterPromptAppSlashCommands,
-  normalizeSlashCommandShortcut,
   parseSlashCommandDraft,
   parseIncognitoArgument,
   applyPromptAppSlashCommandTemplate,
@@ -122,6 +121,7 @@ export const useChatSlashCommands = (deps: {
   currentIncognito: Ref<boolean>;
   selectedSkillIds: Ref<string[]>;
   onRequestNewChat: () => void;
+  onRequestClearThread: () => void;
   onRequestIncognitoChange: (nextValue: boolean) => void;
   t: (key: string, params?: Record<string, unknown>) => string;
 }) => {
@@ -430,6 +430,7 @@ export const useChatSlashCommands = (deps: {
         };
       }
       deps.message.value = '';
+      deps.onRequestClearThread();
       return {
         kind: 'skip',
         feedback: deps.t('chat.input.slash.clear.executed'),

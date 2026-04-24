@@ -47,6 +47,8 @@ export type ChatTurnOptions = {
   experimentalContext?: ChatExperimentalContext;
   runConfig?: {
     kind?: AgentRunKind;
+    parentRunId?: string;
+    rootRunId?: string;
     metadata?: Record<string, unknown>;
   };
 };

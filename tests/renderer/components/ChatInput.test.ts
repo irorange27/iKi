@@ -736,7 +736,88 @@ describe('ChatInput', () => {
     expect(wrapper.emitted('new-chat-requested')).toEqual([[]]);
     expect(prepareMessageSend).not.toHaveBeenCalled();
     expect(stream).not.toHaveBeenCalled();
-    expect(wrapper.find('.composer-feedback').text()).toContain('Started a new chat');
+    expect(wrapper.find('.composer-feedback-message').text()).toContain('Started a new chat');
+  });
+
+  it('executes the built-in clear slash command as a fresh-task reset without streaming', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+      providers: [provider],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/clear');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('clear-thread-requested')).toEqual([[]]);
+    expect(prepareMessageSend).not.toHaveBeenCalled();
+    expect(stream).not.toHaveBeenCalled();
+    expect(wrapper.find('.composer-feedback-message').text()).toContain(
+      'Cleared the current thread context'
+    );
+    expect(wrapper.find('.chat-input-container .composer-feedback').exists()).toBe(true);
+  });
+
+  it('executes a selected built-in clear invocation even when the draft is empty', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+      providers: [provider],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/clear');
+    await flushPromises();
+
+    await wrapper.find('.chat-input-field').trigger('keydown.enter', { key: 'Enter' });
+    await flushPromises();
+
+    expect(wrapper.find('.composer-inline-token--command').text()).toContain('/clear');
+    expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
+
+    await wrapper.find('.chat-input-field').trigger('keydown.enter', { key: 'Enter' });
+    await flushPromises();
+
+    expect(wrapper.emitted('clear-thread-requested')).toEqual([[]]);
+    expect(prepareMessageSend).not.toHaveBeenCalled();
+    expect(stream).not.toHaveBeenCalled();
+    expect(wrapper.find('.composer-feedback-message').text()).toContain(
+      'Cleared the current thread context'
+    );
+  });
+
+  it('lets the user dismiss composer feedback inline', async () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      models: '["gpt-4.1"]',
+    });
+
+    const { wrapper } = await mountChatInput({
+      providers: [provider],
+    });
+
+    await wrapper.find('.chat-input-field').setValue('/clear');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.chat-input-container .composer-feedback').exists()).toBe(true);
+
+    await wrapper.find('.composer-feedback-dismiss').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.composer-feedback').exists()).toBe(false);
   });
 
   it('executes the built-in incognito slash command locally without streaming', async () => {
@@ -761,7 +842,9 @@ describe('ChatInput', () => {
     expect(wrapper.emitted('incognito-changed')).toEqual([[true]]);
     expect(prepareMessageSend).not.toHaveBeenCalled();
     expect(stream).not.toHaveBeenCalled();
-    expect(wrapper.find('.composer-feedback').text()).toContain('Incognito mode is now enabled');
+    expect(wrapper.find('.composer-feedback-message').text()).toContain(
+      'Incognito mode is now enabled'
+    );
   });
 
   it('shows selected prompt shortcuts as plain labels inside the composer token', async () => {
@@ -1285,7 +1368,7 @@ describe('ChatInput', () => {
         error: configuredError,
       })
     );
-    expect(wrapper.find('.composer-feedback').text()).toBe(
+    expect(wrapper.find('.composer-feedback-message').text()).toBe(
       'Failed to verify the OpenAI provider configuration. Please try again.'
     );
     expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe(

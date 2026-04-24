@@ -1,6 +1,9 @@
 import * as chatMessageDb from '../../../core/db/chat_message';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import * as threadTodoDb from '../../../core/db/thread_todos';
+import * as awaitersDb from '../../../core/db/awaiters';
+import * as tasksDb from '../../../core/db/tasks';
+import { getDb } from '../../../core/db/database';
 import { createLogger } from '../../../core/logger';
 import type { ChatMessage, ChatThread } from '../../../shared/types/chat';
 import { isObjectRecord } from '../../../shared/utils/guards';
@@ -19,6 +22,64 @@ const normalizedString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const normalizeFlag = (value: unknown): number => {
+  if (typeof value === 'number') return value ? 1 : 0;
+  return value ? 1 : 0;
+};
+
+const normalizeThreadInput = (
+  input: unknown,
+  overrides?: { id?: string; title?: string }
+): Required<
+  Pick<
+    ChatThread,
+    | 'id'
+    | 'title'
+    | 'metadata'
+    | 'is_generating'
+    | 'is_favorited'
+    | 'is_incognito'
+    | 'enable_artifacts'
+  >
+> &
+  Pick<
+    ChatThread,
+    | 'model'
+    | 'reasoning_effort'
+    | 'client_id'
+    | 'prompt_app_id'
+    | 'tools'
+    | 'workspace_id'
+    | 'artifact_workspace_id'
+    | 'skill_ids'
+  > => {
+  const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
+
+  return {
+    id:
+      overrides?.id ||
+      (typeof thread.id === 'string' && thread.id.trim()
+        ? thread.id.trim()
+        : createPrefixedId('thread')),
+    title:
+      overrides?.title ||
+      (typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat'),
+    model: normalizedString(thread.model) ?? undefined,
+    reasoning_effort: normalizedString(thread.reasoning_effort) || 'medium',
+    metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
+    is_generating: false,
+    client_id: normalizedString(thread.client_id) ?? undefined,
+    prompt_app_id: normalizedString(thread.prompt_app_id) ?? undefined,
+    tools: normalizedString(thread.tools) ?? undefined,
+    is_favorited: normalizeFlag(thread.is_favorited),
+    is_incognito: normalizeFlag(thread.is_incognito),
+    workspace_id: normalizedString(thread.workspace_id) ?? undefined,
+    enable_artifacts: normalizeFlag(thread.enable_artifacts),
+    artifact_workspace_id: normalizedString(thread.artifact_workspace_id) ?? undefined,
+    skill_ids: normalizedString(thread.skill_ids) ?? undefined,
+  };
+};
+
 export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => {
@@ -27,39 +88,30 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
   };
   const getThreadTodoPlan = (threadId: string) => threadTodoDb.getThreadTodoPlan(threadId);
   const createThread = (input: unknown) => {
-    const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
-    const threadId =
-      typeof thread.id === 'string' && thread.id.trim()
-        ? thread.id.trim()
-        : createPrefixedId('thread');
-    const title =
-      typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat';
+    const normalizedThread = normalizeThreadInput(input);
+    chatThreadDb.addChatThread(normalizedThread);
+    ensureThreadWorkspaceSelection(normalizedThread.id);
+    return chatThreadDb.getChatThread(normalizedThread.id);
+  };
+  const clearThread = (id: string, input: unknown) => {
+    const existingThread = chatThreadDb.getChatThread(id);
+    if (!existingThread) return null;
 
-    const normalizeFlag = (value: unknown): number => {
-      if (typeof value === 'number') return value ? 1 : 0;
-      return value ? 1 : 0;
-    };
-
-    chatThreadDb.addChatThread({
-      id: threadId,
-      title,
-      model: normalizedString(thread.model),
-      reasoning_effort: normalizedString(thread.reasoning_effort) || 'medium',
-      metadata:
-        typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
-      is_generating: false,
-      client_id: normalizedString(thread.client_id),
-      prompt_app_id: normalizedString(thread.prompt_app_id),
-      tools: normalizedString(thread.tools),
-      is_favorited: normalizeFlag(thread.is_favorited),
-      is_incognito: normalizeFlag(thread.is_incognito),
-      workspace_id: normalizedString(thread.workspace_id),
-      enable_artifacts: normalizeFlag(thread.enable_artifacts),
-      artifact_workspace_id: normalizedString(thread.artifact_workspace_id),
-      skill_ids: normalizedString(thread.skill_ids),
+    const normalizedThread = normalizeThreadInput(input, { id });
+    const clear = getDb().transaction(() => {
+      const proactiveTaskIds = tasksDb.listProactiveTaskIdsByThread(id);
+      awaitersDb.deleteAwaitersByThread(id);
+      chatThreadDb.deleteChatThread(id);
+      chatThreadDb.addChatThread(normalizedThread);
+      for (const taskId of proactiveTaskIds) {
+        tasksDb.updateProactiveTask(taskId, { thread_id: id });
+      }
+      return chatThreadDb.getChatThread(id);
     });
-    ensureThreadWorkspaceSelection(threadId);
-    return chatThreadDb.getChatThread(threadId);
+
+    const clearedThread = clear();
+    ensureThreadWorkspaceSelection(id);
+    return clearedThread;
   };
   const updateThread = (id: string, input: unknown) => {
     const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
@@ -268,6 +320,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     getThread,
     getThreadTodoPlan,
     createThread,
+    clearThread,
     updateThread,
     deleteThread,
     // Messages

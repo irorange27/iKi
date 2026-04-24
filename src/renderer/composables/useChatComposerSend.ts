@@ -54,6 +54,7 @@ export const useChatComposerSend = (deps: {
   stopFailedMessage: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
   resolveSendRequest?: (draft: string) => Promise<ResolvedComposerSendRequest>;
+  canResolveEmptyDraft?: () => boolean;
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
   resolveSelectedMcpServerIds: () => Promise<string[]>;
   stopVoiceInput: () => void;
@@ -123,7 +124,9 @@ export const useChatComposerSend = (deps: {
     }
 
     const draftMessage = deps.message.value;
-    if (!draftMessage.trim() || isPreparingSend.value || isLoading.value) {
+    const hasDraftContent = draftMessage.trim().length > 0;
+    const canResolveEmptyDraft = deps.canResolveEmptyDraft?.() ?? false;
+    if ((!hasDraftContent && !canResolveEmptyDraft) || isPreparingSend.value || isLoading.value) {
       return;
     }
 
