@@ -175,6 +175,8 @@ const electronApi: ElectronApi = {
       ipcRenderer.invoke('workspaces:update', id, workspace),
     delete: (id: string) => ipcRenderer.invoke('workspaces:delete', id),
     toggleVisibility: (id: string) => ipcRenderer.invoke('workspaces:toggleVisibility', id),
+    initAgentInstructions: (threadId: string) =>
+      ipcRenderer.invoke('workspaces:init-agent-instructions', threadId),
   },
   promptApps: {
     list: () => ipcRenderer.invoke('promptApps:list'),

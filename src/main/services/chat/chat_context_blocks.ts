@@ -1,4 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import type { AffectState } from '../../../core/emotion/affect_state';
+import { getThreadWorkspaceSelection } from '../../../core/workspaces/thread_workspace';
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
 import { resolveSkillsSystemPrompt } from './chat_skills';
@@ -23,15 +27,48 @@ import {
 } from './chat_context_helpers';
 import type { ChatInputMessage } from './chat_types';
 
+const AGENT_INSTRUCTIONS_FILENAME = 'IKI.md';
+
+const stripHtmlComments = (value: string): string => value.replace(/<!--[\s\S]*?-->/g, '');
+
+const hasMeaningfulContent = (value: string): boolean => {
+  const stripped = stripHtmlComments(value).trim();
+  return stripped.length > 0;
+};
+
+export const readAgentInstructions = (threadId?: string): string => {
+  if (!threadId) return '';
+
+  const selection = getThreadWorkspaceSelection(threadId);
+  const workspacePath = selection?.workspace?.path;
+  if (!workspacePath) return '';
+
+  try {
+    const filePath = path.join(workspacePath, AGENT_INSTRUCTIONS_FILENAME);
+    if (!fs.existsSync(filePath)) return '';
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const cleaned = stripHtmlComments(raw).trim();
+    if (!hasMeaningfulContent(cleaned)) return '';
+    return [
+      `Project agent instructions (from ${AGENT_INSTRUCTIONS_FILENAME}):`,
+      cleaned,
+    ].join('\n');
+  } catch {
+    return '';
+  }
+};
+
 export const buildIdentityContext = (
   workspaceSystemMessage: ((threadId?: string) => string) | undefined,
   threadId: string | undefined,
   contextConfig: ContextConfig,
-  modelCapability?: ModelCapability | null
+  modelCapability?: ModelCapability | null,
+  agentInstructions?: string
 ): IdentityContext => {
   const combinedMessage = [
     getAssistantProfileContextMessage().trim(),
     workspaceSystemMessage?.(threadId)?.trim() ?? '',
+    agentInstructions?.trim() ?? '',
   ]
     .filter(Boolean)
     .join('\n\n');

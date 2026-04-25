@@ -242,6 +242,11 @@ export interface ElectronApi {
     update: (id: string, workspace: WorkspaceInput) => Promise<unknown>;
     delete: (id: string) => Promise<unknown>;
     toggleVisibility: (id: string) => Promise<unknown>;
+    initAgentInstructions: (threadId: string) => Promise<{
+      ok: boolean;
+      path?: string;
+      error?: string;
+    }>;
   };
   promptApps: {
     list: () => Promise<PromptApp[]>;

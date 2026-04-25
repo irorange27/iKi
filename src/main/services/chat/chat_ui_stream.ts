@@ -286,14 +286,14 @@ export const createUiChunkEmitter = (
       if (terminated) return;
       ensureStarted();
       closeText();
-      emitChunk({ type: 'finish' });
+      emitChunk({ type: 'finish', messageId } as any);
       terminated = true;
     },
     abort: () => {
       if (terminated) return;
       ensureStarted();
       closeText();
-      emitChunk({ type: 'abort' });
+      emitChunk({ type: 'abort', messageId } as any);
       terminated = true;
     },
     error: errorText => {

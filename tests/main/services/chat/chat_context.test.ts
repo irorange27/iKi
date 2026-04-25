@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   getAppConfigMock,
@@ -11,6 +14,7 @@ const {
   resolveSkillsSystemPromptMock,
   getAssistantProfileContextMessageMock,
   retrieveRelevantContinuityMock,
+  getThreadWorkspaceSelectionMock,
 } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
   getChatMessagesMock: vi.fn(),
@@ -22,10 +26,15 @@ const {
   resolveSkillsSystemPromptMock: vi.fn(),
   getAssistantProfileContextMessageMock: vi.fn(),
   retrieveRelevantContinuityMock: vi.fn(),
+  getThreadWorkspaceSelectionMock: vi.fn(() => null),
 }));
 
 vi.mock('../../../../src/core/config', () => ({
   getAppConfig: getAppConfigMock,
+}));
+
+vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
+  getThreadWorkspaceSelection: getThreadWorkspaceSelectionMock,
 }));
 
 vi.mock('../../../../src/core/db/chat_message', () => ({
@@ -1245,4 +1254,87 @@ describe('chat_context assembler', () => {
     );
   });
 
+  it('loads IKI.md agent instructions from the workspace root into the identity block', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iki-ikitest-'));
+    try {
+      const ikiContent = [
+        '# IKI',
+        '',
+        'Always ask before writing to any file. Prefer read-only operations during exploration.',
+      ].join('\n');
+      fs.writeFileSync(path.join(tmpDir, 'IKI.md'), ikiContent);
+
+      getThreadWorkspaceSelectionMock.mockReturnValue({
+        threadId: 'thread_iki_md',
+        workspaceId: 'ws_iki_md',
+        workspace: {
+          id: 'ws_iki_md',
+          path: tmpDir,
+          name: 'Test',
+          is_temporary: 1,
+          show_in_list: 0,
+        },
+      } as never);
+
+      const { assembler } = createAssembler();
+      const result = await assembler.assemble({
+        threadId: 'thread_iki_md',
+        messages: [{ role: 'user', content: 'What are the instructions?' }],
+      });
+
+      const identityMessage = result.messages.find(
+        message =>
+          message.role === 'system' &&
+          typeof message.content === 'string' &&
+          message.content.includes('IKI.md')
+      );
+      expect(identityMessage).toBeTruthy();
+      expect(String(identityMessage!.content)).toContain(
+        'Always ask before writing to any file'
+      );
+      expect(findBlock(result, 'identity')).toEqual(
+        expect.objectContaining({
+          kind: 'identity',
+          status: 'included',
+        })
+      );
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('gracefully handles missing IKI.md without altering the identity block', async () => {
+    getThreadWorkspaceSelectionMock.mockReturnValue({
+      threadId: 'thread_no_iki',
+      workspaceId: 'ws_no_iki',
+      workspace: {
+        id: 'ws_no_iki',
+        path: '/tmp/nonexistent-iki-test',
+        name: 'Test',
+        is_temporary: 1,
+        show_in_list: 0,
+      },
+    } as never);
+
+    getAssistantProfileContextMessageMock.mockReturnValue(
+      'Identity profile for iKi:\n- Core role: grounded personal AI companion.'
+    );
+
+    const { assembler } = createAssembler();
+    const result = await assembler.assemble({
+      threadId: 'thread_no_iki',
+      messages: [{ role: 'user', content: 'Who are you?' }],
+    });
+
+    expect(result.messages[0]).toEqual({
+      role: 'system',
+      content: 'Identity profile for iKi:\n- Core role: grounded personal AI companion.',
+    });
+    expect(
+      result.messages.some(
+        message =>
+          typeof message.content === 'string' && message.content.includes('IKI.md')
+      )
+    ).toBe(false);
+  });
 });

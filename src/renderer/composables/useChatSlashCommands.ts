@@ -23,7 +23,7 @@ import { createLogger } from '../logger';
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
 
-type BuiltInSlashCommandId = 'new' | 'clear' | 'incognito';
+type BuiltInSlashCommandId = 'new' | 'clear' | 'incognito' | 'init';
 
 type BuiltInSlashCommand = {
   id: `builtin:${BuiltInSlashCommandId}`;
@@ -115,9 +115,10 @@ const toComposerInvocationPartData = (
 };
 
 export const useChatSlashCommands = (deps: {
-  electronAPI: Pick<ElectronApi, 'promptApps' | 'skills'>;
+  electronAPI: Pick<ElectronApi, 'promptApps' | 'skills' | 'workspaces'>;
   message: Ref<string>;
   inputRef: Ref<ComposerTextControl | null>;
+  threadId: Ref<string | undefined>;
   currentIncognito: Ref<boolean>;
   selectedSkillIds: Ref<string[]>;
   onRequestNewChat: () => void;
@@ -158,6 +159,13 @@ export const useChatSlashCommands = (deps: {
       shortcut: 'incognito',
       name: deps.t('chat.input.slash.incognito.name'),
       description: deps.t('chat.input.slash.incognito.description'),
+    },
+    {
+      id: 'builtin:init',
+      kind: 'builtin',
+      shortcut: 'init',
+      name: deps.t('chat.input.slash.init.name'),
+      description: deps.t('chat.input.slash.init.description'),
     },
   ]);
 
@@ -460,6 +468,32 @@ export const useChatSlashCommands = (deps: {
               : deps.currentIncognito.value
                 ? deps.t('chat.input.slash.incognito.disabled')
                 : deps.t('chat.input.slash.incognito.enabled'),
+      };
+    }
+
+    if (command.shortcut === 'init') {
+      const threadId = deps.threadId.value;
+      if (!threadId) {
+        return {
+          kind: 'skip',
+          feedback: deps.t('chat.input.slash.init.noWorkspace'),
+        };
+      }
+
+      const result = await deps.electronAPI.workspaces.initAgentInstructions(threadId);
+      if (!result.ok) {
+        const isExists = result.error?.includes('already exists');
+        return {
+          kind: 'skip',
+          feedback: isExists
+            ? deps.t('chat.input.slash.init.exists')
+            : deps.t('chat.input.slash.init.failed', { error: result.error ?? 'Unknown error' }),
+        };
+      }
+
+      return {
+        kind: 'skip',
+        feedback: deps.t('chat.input.slash.init.created', { path: result.path ?? threadId }),
       };
     }
 

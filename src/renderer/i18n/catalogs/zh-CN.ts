@@ -175,6 +175,12 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.slash.incognito.disabled': '已关闭无痕模式。',
   'chat.input.slash.incognito.invalidArgs':
     '请使用 `/incognito`、`/incognito on` 或 `/incognito off`。',
+  'chat.input.slash.init.name': '初始化 IKI.md',
+  'chat.input.slash.init.description': '在当前工作区创建项目 agent 指令文件（IKI.md）。',
+  'chat.input.slash.init.created': ({ path }) => `已在 ${path} 创建 IKI.md。编辑该文件可指导 iKi 在该项目中的行为。`,
+  'chat.input.slash.init.exists': 'IKI.md 已存在。',
+  'chat.input.slash.init.noWorkspace': '请先选择工作区再使用 /init。',
+  'chat.input.slash.init.failed': ({ error }) => `创建 IKI.md 失败：${error}`,
   'chat.input.slash.skillsSection': '以下是 skills',
   'chat.input.slash.skill.needsRequest': ({ skill }) =>
     `发送前先补充要让 ${asText(skill)} 处理的内容。`,

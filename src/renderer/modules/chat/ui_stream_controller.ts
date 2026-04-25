@@ -304,6 +304,15 @@ export const createChatUiStreamController = (deps: {
     }
 
     if (chunk.type === 'finish' || chunk.type === 'abort') {
+      // Ignore stale finalization from a superseded stream
+      const chunkMessageId = (chunk as { messageId?: string }).messageId;
+      if (
+        chunkMessageId &&
+        activeAssistantMessageId.value &&
+        chunkMessageId !== activeAssistantMessageId.value
+      ) {
+        return;
+      }
       await dispatch({ type: 'finalize_response', fullText: streamingAssistantText.value });
       return;
     }

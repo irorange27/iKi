@@ -25,6 +25,57 @@ export const DEFAULT_AGENT_MAX_ITERATIONS = 8;
 export const MAX_AGENT_MAX_ITERATIONS = 12;
 export const MAX_AGENT_TOOL_SELECTION = 12;
 
+// ---------------------------------------------------------------------------
+// Helpers to reduce repetition in Ui variants and shared refinements
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip a .default() wrapper if present.
+ * Zod's own `.optional()` on a ZodDefault wraps the default — the Ui variant
+ * should not retain the default, because it is used for loose renderer-side
+ * parsing where missing fields should remain undefined.
+ */
+function stripDefault(field: z.ZodTypeAny) {
+  if (field instanceof z.ZodDefault) {
+    return field.removeDefault();
+  }
+  return field;
+}
+
+/**
+ * Build a "UI" variant of a ZodObject shape.
+ *
+ * Every field becomes optional (defaults are stripped first) and the object
+ * gets `.passthrough()` so unknown renderer fields don't cause parse failures.
+ */
+function uiSchema<T extends Record<string, z.ZodTypeAny>>(shape: T) {
+  const ui: Record<string, z.ZodTypeAny> = {};
+  for (const key of Object.keys(shape)) {
+    const field = shape[key];
+    ui[key] = (field instanceof z.ZodDefault ? field.removeDefault() : field) as z.ZodTypeAny;
+    ui[key] = (ui[key] as z.ZodTypeAny).optional();
+  }
+  return z.object(ui).passthrough();
+}
+
+/**
+ * SuperRefine callback that requires *at least one* of two named string fields
+ * to be present and non-empty.
+ */
+function requireEitherField(a: string, b: string, message?: string) {
+  return (value: Record<string, unknown>, ctx: z.RefinementCtx): void => {
+    const hasA = typeof value[a] === 'string' && (value[a] as string).trim().length > 0;
+    const hasB = typeof value[b] === 'string' && (value[b] as string).trim().length > 0;
+    if (!hasA && !hasB) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [a],
+        message: message ?? `Either ${a} or ${b} is required`,
+      });
+    }
+  };
+}
+
 const toolCallDescriptionField = z
   .string()
   .trim()
@@ -213,109 +264,71 @@ const agentUsedToolOutputSchema = z
   })
   .passthrough();
 
-export const WebToolInputSchema = z.object({
+const webToolInputShape = {
   query: webInputFields.query,
   limit: webInputFields.limit.optional().default(DEFAULT_SEARCH_RESULT_LIMIT),
   description: toolCallDescriptionField,
-});
+};
 
-export const WebToolInputSchemaUi = z
-  .object({
-    query: webInputFields.query.optional(),
-    limit: webInputFields.limit.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const WebToolInputSchema = z.object(webToolInputShape);
+export const WebToolInputSchemaUi = uiSchema(webToolInputShape);
 
-export const FetchToolInputSchema = z.object({
+const fetchToolInputShape = {
   url: fetchInputFields.url,
   maxChars: fetchInputFields.maxChars.optional().default(DEFAULT_FETCH_MAX_CHARS),
   description: toolCallDescriptionField,
-});
+};
 
-export const FetchToolInputSchemaUi = z
-  .object({
-    url: fetchInputFields.url.optional(),
-    maxChars: fetchInputFields.maxChars.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const FetchToolInputSchema = z.object(fetchToolInputShape);
+export const FetchToolInputSchemaUi = uiSchema(fetchToolInputShape);
 
-export const ShellToolInputSchema = z.object({
+const shellToolInputShape = {
   command: shellInputFields.command,
   cwd: shellInputFields.cwd.optional(),
   timeout: shellInputFields.timeout.optional().default(DEFAULT_SHELL_TIMEOUT_MS),
   description: toolCallDescriptionField,
-});
+};
 
-export const ShellToolInputSchemaUi = z
-  .object({
-    command: shellInputFields.command.optional(),
-    cwd: shellInputFields.cwd.optional(),
-    timeout: shellInputFields.timeout.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ShellToolInputSchema = z.object(shellToolInputShape);
+export const ShellToolInputSchemaUi = uiSchema(shellToolInputShape);
 
-export const ReadFileInputSchema = z.object({
+const readFileInputShape = {
   path: readFileInputFields.path,
   encoding: readFileInputFields.encoding.optional().default(DEFAULT_FILE_ENCODING),
   description: toolCallDescriptionField,
-});
+};
 
-export const ReadFileInputSchemaUi = z
-  .object({
-    path: readFileInputFields.path.optional(),
-    encoding: readFileInputFields.encoding.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ReadFileInputSchema = z.object(readFileInputShape);
+export const ReadFileInputSchemaUi = uiSchema(readFileInputShape);
 
-export const WriteFileInputSchema = z.object({
+const writeFileInputShape = {
   path: writeFileInputFields.path,
   content: writeFileInputFields.content,
   encoding: writeFileInputFields.encoding.optional().default(DEFAULT_FILE_ENCODING),
   description: toolCallDescriptionField,
-});
+};
 
-export const EditFileInputSchema = z.object({
+export const WriteFileInputSchema = z.object(writeFileInputShape);
+export const WriteFileInputSchemaUi = uiSchema(writeFileInputShape);
+
+const editFileInputShape = {
   path: editFileInputFields.path,
   edits: editFileInputFields.edits,
   encoding: editFileInputFields.encoding.optional().default(DEFAULT_FILE_ENCODING),
   description: toolCallDescriptionField,
-});
+};
 
-export const WriteFileInputSchemaUi = z
-  .object({
-    path: writeFileInputFields.path.optional(),
-    content: writeFileInputFields.content.optional(),
-    encoding: writeFileInputFields.encoding.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const EditFileInputSchema = z.object(editFileInputShape);
+export const EditFileInputSchemaUi = uiSchema(editFileInputShape);
 
-export const EditFileInputSchemaUi = z
-  .object({
-    path: editFileInputFields.path.optional(),
-    edits: z.array(editFileOperationInputSchema).optional(),
-    encoding: editFileInputFields.encoding.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
-
-export const ListDirInputSchema = z.object({
+const listDirInputShape = {
   path: listDirInputFields.path,
   recursive: listDirInputFields.recursive.optional().default(false),
   description: toolCallDescriptionField,
-});
+};
 
-export const ListDirInputSchemaUi = z
-  .object({
-    path: listDirInputFields.path.optional(),
-    recursive: listDirInputFields.recursive.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ListDirInputSchema = z.object(listDirInputShape);
+export const ListDirInputSchemaUi = uiSchema(listDirInputShape);
 
 export const DeleteFileInputSchema = z.object({
   path: deleteFileInputFields.path,
@@ -327,7 +340,7 @@ export const LoadSkillInputSchema = z.object({
   description: toolCallDescriptionField,
 });
 
-export const ListPersonalSkillsInputSchema = z.object({
+const listPersonalSkillsInputShape = {
   query: z.string().trim().describe('Optional search text for matching personal skills').optional(),
   limit: z
     .number()
@@ -336,9 +349,12 @@ export const ListPersonalSkillsInputSchema = z.object({
     .optional()
     .default(DEFAULT_PERSONAL_SKILL_LIST_LIMIT),
   description: toolCallDescriptionField,
-});
+};
 
-export const ReadPersonalSkillInputSchema = z.object({
+export const ListPersonalSkillsInputSchema = z.object(listPersonalSkillsInputShape);
+export const ListPersonalSkillsInputSchemaUi = uiSchema(listPersonalSkillsInputShape);
+
+const readPersonalSkillInputShape = {
   id: personalSkillIdInputFields.id,
   maxChars: z
     .number()
@@ -347,9 +363,12 @@ export const ReadPersonalSkillInputSchema = z.object({
     .optional()
     .default(DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS),
   description: toolCallDescriptionField,
-});
+};
 
-export const WritePersonalSkillInputSchema = z.object({
+export const ReadPersonalSkillInputSchema = z.object(readPersonalSkillInputShape);
+export const ReadPersonalSkillInputSchemaUi = uiSchema(readPersonalSkillInputShape);
+
+const writePersonalSkillInputShape = {
   id: personalSkillIdInputFields.id,
   skillName: z
     .string()
@@ -367,14 +386,17 @@ export const WritePersonalSkillInputSchema = z.object({
     .min(1)
     .describe('Markdown instructions body to store below the generated frontmatter'),
   description: toolCallDescriptionField,
-});
+};
+
+export const WritePersonalSkillInputSchema = z.object(writePersonalSkillInputShape);
+export const WritePersonalSkillInputSchemaUi = uiSchema(writePersonalSkillInputShape);
 
 export const DeletePersonalSkillInputSchema = z.object({
   id: personalSkillIdInputFields.id,
   description: toolCallDescriptionField,
 });
 
-export const ListTodoListsInputSchema = z.object({
+const listTodoListsInputShape = {
   query: z.string().trim().describe('Optional search text for matching todo lists').optional(),
   limit: z
     .number()
@@ -383,103 +405,39 @@ export const ListTodoListsInputSchema = z.object({
     .optional()
     .default(DEFAULT_TODO_LIST_LIMIT),
   description: toolCallDescriptionField,
-});
+};
 
-export const ListTodoListsInputSchemaUi = z
-  .object({
-    query: z.string().optional(),
-    limit: z.number().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ListTodoListsInputSchema = z.object(listTodoListsInputShape);
+export const ListTodoListsInputSchemaUi = uiSchema(listTodoListsInputShape);
 
-export const ReadTodoListInputSchema = z
-  .object({
-    id: todoListLookupInputFields.id.optional(),
-    title: todoListLookupInputFields.title.optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
-    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
-    if (!hasId && !hasTitle) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['id'],
-        message: 'Either id or title is required',
-      });
-    }
-  });
+const todoListLookupShape = {
+  id: todoListLookupInputFields.id.optional(),
+  title: todoListLookupInputFields.title.optional(),
+  description: toolCallDescriptionField,
+};
 
-export const ReadTodoListInputSchemaUi = z
-  .object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ReadTodoListInputSchema = z.object(todoListLookupShape).superRefine(requireEitherField('id', 'title'));
+export const ReadTodoListInputSchemaUi = uiSchema(todoListLookupShape);
 
-export const WriteTodoListInputSchema = z
-  .object({
-    id: todoListLookupInputFields.id.optional(),
-    title: todoListLookupInputFields.title.optional(),
-    summary: z.string().describe('Optional short summary of the todo list').optional(),
-    items: z
-      .array(todoListItemInputSchema)
-      .describe('Todo items to store in order')
-      .optional()
-      .default([]),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
-    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
-    if (!hasId && !hasTitle) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['title'],
-        message: 'Either id or title is required',
-      });
-    }
-  });
+const writeTodoListInputShape = {
+  id: todoListLookupInputFields.id.optional(),
+  title: todoListLookupInputFields.title.optional(),
+  summary: z.string().describe('Optional short summary of the todo list').optional(),
+  items: z
+    .array(todoListItemInputSchema)
+    .describe('Todo items to store in order')
+    .optional()
+    .default([]),
+  description: toolCallDescriptionField,
+};
 
-export const WriteTodoListInputSchemaUi = z
-  .object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-    summary: z.string().optional(),
-    items: z.array(todoListItemInputSchema).optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const WriteTodoListInputSchema = z.object(writeTodoListInputShape).superRefine(requireEitherField('id', 'title'));
+export const WriteTodoListInputSchemaUi = uiSchema(writeTodoListInputShape);
 
-export const DeleteTodoListInputSchema = z
-  .object({
-    id: todoListLookupInputFields.id.optional(),
-    title: todoListLookupInputFields.title.optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
-    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
-    if (!hasId && !hasTitle) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['id'],
-        message: 'Either id or title is required',
-      });
-    }
-  });
+export const DeleteTodoListInputSchema = z.object(todoListLookupShape).superRefine(requireEitherField('id', 'title'));
+export const DeleteTodoListInputSchemaUi = uiSchema(todoListLookupShape);
 
-export const DeleteTodoListInputSchemaUi = z
-  .object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
-
-export const ListProactiveTasksInputSchema = z.object({
+const listProactiveTasksInputShape = {
   query: z.string().trim().describe('Optional search text for matching proactive tasks').optional(),
   limit: z
     .number()
@@ -488,102 +446,80 @@ export const ListProactiveTasksInputSchema = z.object({
     .optional()
     .default(DEFAULT_PROACTIVE_TASK_LIST_LIMIT),
   description: toolCallDescriptionField,
-});
+};
 
-export const ListProactiveTasksInputSchemaUi = z
-  .object({
-    query: z.string().optional(),
-    limit: z.number().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ListProactiveTasksInputSchema = z.object(listProactiveTasksInputShape);
+export const ListProactiveTasksInputSchemaUi = uiSchema(listProactiveTasksInputShape);
 
-export const ReadProactiveTaskInputSchema = z
-  .object({
-    id: proactiveTaskLookupInputFields.id.optional(),
-    name: proactiveTaskLookupInputFields.name.optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
-    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasName = typeof value.name === 'string' && value.name.trim().length > 0;
-    if (!hasId && !hasName) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['id'],
-        message: 'Either id or name is required',
-      });
-    }
-  });
+const proactiveTaskLookupShape = {
+  id: proactiveTaskLookupInputFields.id.optional(),
+  name: proactiveTaskLookupInputFields.name.optional(),
+  description: toolCallDescriptionField,
+};
 
-export const ReadProactiveTaskInputSchemaUi = z
-  .object({
-    id: z.string().optional(),
-    name: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ReadProactiveTaskInputSchema = z.object(proactiveTaskLookupShape).superRefine(requireEitherField('id', 'name'));
+export const ReadProactiveTaskInputSchemaUi = uiSchema(proactiveTaskLookupShape);
 
-export const WriteProactiveTaskInputSchema = z
-  .object({
-    action: z
-      .enum(['create', 'update'])
-      .describe('Create a new proactive task or update an existing one'),
-    id: proactiveTaskLookupInputFields.id.optional(),
-    currentName: proactiveTaskLookupInputFields.name
-      .describe('Exact existing task name when updating by name')
-      .optional(),
-    name: proactiveTaskLookupInputFields.name
-      .describe('Display name for the task')
-      .optional(),
-    prompt: z
-      .string()
-      .trim()
-      .describe('Instruction the scheduled task should execute on each run')
-      .optional(),
-    schedule: proactiveTaskScheduleInputSchema.describe(
-      'Recurring schedule. Use daily/weekly presets instead of raw cron when possible.'
-    ).optional(),
-    enabled: z.boolean().describe('Whether the task should be enabled after this write').optional(),
-    notify: z
-      .boolean()
-      .describe('Whether the desktop app should show completion/failure notifications')
-      .optional(),
-    delivery: z
-      .enum(['current_thread', 'dedicated_thread', 'specific_thread'])
-      .describe('Where scheduled messages should be posted')
-      .optional(),
-    threadId: z
-      .string()
-      .trim()
-      .describe('Explicit thread id when delivery is specific_thread')
-      .optional(),
-    providerType: z
-      .string()
-      .trim()
-      .describe('Optional provider type override; defaults to the current chat model')
-      .optional(),
-    providerId: z
-      .string()
-      .trim()
-      .describe('Optional provider id override; defaults to the current chat provider instance')
-      .optional(),
-    model: z
-      .string()
-      .trim()
-      .describe('Optional model override; defaults to the current chat model')
-      .optional(),
-    toolMode: z
-      .enum(['auto', 'manual', 'disabled'])
-      .describe('How the scheduled task may use safe tools when it runs')
-      .optional(),
-    tools: z
-      .array(proactiveTaskSafeToolSchema)
-      .describe('Safe tool allowlist when toolMode is manual')
-      .optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
+const writeProactiveTaskInputShape = {
+  action: z
+    .enum(['create', 'update'])
+    .describe('Create a new proactive task or update an existing one'),
+  id: proactiveTaskLookupInputFields.id.optional(),
+  currentName: proactiveTaskLookupInputFields.name
+    .describe('Exact existing task name when updating by name')
+    .optional(),
+  name: proactiveTaskLookupInputFields.name
+    .describe('Display name for the task')
+    .optional(),
+  prompt: z
+    .string()
+    .trim()
+    .describe('Instruction the scheduled task should execute on each run')
+    .optional(),
+  schedule: proactiveTaskScheduleInputSchema.describe(
+    'Recurring schedule. Use daily/weekly presets instead of raw cron when possible.'
+  ).optional(),
+  enabled: z.boolean().describe('Whether the task should be enabled after this write').optional(),
+  notify: z
+    .boolean()
+    .describe('Whether the desktop app should show completion/failure notifications')
+    .optional(),
+  delivery: z
+    .enum(['current_thread', 'dedicated_thread', 'specific_thread'])
+    .describe('Where scheduled messages should be posted')
+    .optional(),
+  threadId: z
+    .string()
+    .trim()
+    .describe('Explicit thread id when delivery is specific_thread')
+    .optional(),
+  providerType: z
+    .string()
+    .trim()
+    .describe('Optional provider type override; defaults to the current chat model')
+    .optional(),
+  providerId: z
+    .string()
+    .trim()
+    .describe('Optional provider id override; defaults to the current chat provider instance')
+    .optional(),
+  model: z
+    .string()
+    .trim()
+    .describe('Optional model override; defaults to the current chat model')
+    .optional(),
+  toolMode: z
+    .enum(['auto', 'manual', 'disabled'])
+    .describe('How the scheduled task may use safe tools when it runs')
+    .optional(),
+  tools: z
+    .array(proactiveTaskSafeToolSchema)
+    .describe('Safe tool allowlist when toolMode is manual')
+    .optional(),
+  description: toolCallDescriptionField,
+};
+
+export const WriteProactiveTaskInputSchema = z.object(writeProactiveTaskInputShape).superRefine((value, ctx) => {
     const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
     const hasCurrentName = typeof value.currentName === 'string' && value.currentName.trim().length > 0;
     const hasName = typeof value.name === 'string' && value.name.trim().length > 0;
@@ -641,54 +577,12 @@ export const WriteProactiveTaskInputSchema = z
     }
   });
 
-export const WriteProactiveTaskInputSchemaUi = z
-  .object({
-    action: z.enum(['create', 'update']).optional(),
-    id: z.string().optional(),
-    currentName: z.string().optional(),
-    name: z.string().optional(),
-    prompt: z.string().optional(),
-    schedule: proactiveTaskScheduleInputSchema.optional(),
-    enabled: z.boolean().optional(),
-    notify: z.boolean().optional(),
-    delivery: z.enum(['current_thread', 'dedicated_thread', 'specific_thread']).optional(),
-    threadId: z.string().optional(),
-    providerType: z.string().optional(),
-    providerId: z.string().optional(),
-    model: z.string().optional(),
-    toolMode: z.enum(['auto', 'manual', 'disabled']).optional(),
-    tools: z.array(proactiveTaskSafeToolSchema).optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const WriteProactiveTaskInputSchemaUi = uiSchema(writeProactiveTaskInputShape);
 
-export const DeleteProactiveTaskInputSchema = z
-  .object({
-    id: proactiveTaskLookupInputFields.id.optional(),
-    name: proactiveTaskLookupInputFields.name.optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
-    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasName = typeof value.name === 'string' && value.name.trim().length > 0;
-    if (!hasId && !hasName) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['id'],
-        message: 'Either id or name is required',
-      });
-    }
-  });
+export const DeleteProactiveTaskInputSchema = z.object(proactiveTaskLookupShape).superRefine(requireEitherField('id', 'name'));
+export const DeleteProactiveTaskInputSchemaUi = uiSchema(proactiveTaskLookupShape);
 
-export const DeleteProactiveTaskInputSchemaUi = z
-  .object({
-    id: z.string().optional(),
-    name: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
-
-export const ListAwaitersInputSchema = z.object({
+const listAwaitersInputShape = {
   query: z.string().trim().describe('Optional search text for matching awaiters').optional(),
   limit: z
     .number()
@@ -697,85 +591,63 @@ export const ListAwaitersInputSchema = z.object({
     .optional()
     .default(DEFAULT_AWAITER_LIST_LIMIT),
   description: toolCallDescriptionField,
-});
+};
 
-export const ListAwaitersInputSchemaUi = z
-  .object({
-    query: z.string().optional(),
-    limit: z.number().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ListAwaitersInputSchema = z.object(listAwaitersInputShape);
+export const ListAwaitersInputSchemaUi = uiSchema(listAwaitersInputShape);
 
-export const ReadAwaiterInputSchema = z
-  .object({
-    id: awaiterLookupInputFields.id.optional(),
-    title: awaiterLookupInputFields.title.optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
-    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
-    if (!hasId && !hasTitle) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['id'],
-        message: 'Either id or title is required',
-      });
-    }
-  });
+const awaiterLookupShape = {
+  id: awaiterLookupInputFields.id.optional(),
+  title: awaiterLookupInputFields.title.optional(),
+  description: toolCallDescriptionField,
+};
 
-export const ReadAwaiterInputSchemaUi = z
-  .object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const ReadAwaiterInputSchema = z.object(awaiterLookupShape).superRefine(requireEitherField('id', 'title'));
+export const ReadAwaiterInputSchemaUi = uiSchema(awaiterLookupShape);
 
-export const WriteAwaiterInputSchema = z
-  .object({
-    action: z.enum(['create', 'update']).describe('Create a new awaiter or update an existing one'),
-    id: awaiterLookupInputFields.id.optional(),
-    currentTitle: awaiterLookupInputFields.title
-      .describe('Exact existing awaiter title when updating by title')
-      .optional(),
-    title: awaiterLookupInputFields.title.describe('Display title for the awaiter').optional(),
-    instruction: z
-      .string()
-      .trim()
-      .describe('Instruction the future wake should execute when it fires')
-      .optional(),
-    trigger: awaiterTriggerInputSchema
-      .describe('One-shot wake trigger. Phase 1 supports only time-based triggers.')
-      .optional(),
-    notify: z
-      .boolean()
-      .describe('Whether the desktop app should show a completion/failure notification')
-      .optional(),
-    threadId: z
-      .string()
-      .trim()
-      .describe('Optional thread id override; defaults to the current thread')
-      .optional(),
-    providerType: z
-      .string()
-      .trim()
-      .describe('Optional provider type override; defaults to the current chat model')
-      .optional(),
-    providerId: z
-      .string()
-      .trim()
-      .describe('Optional provider id override; defaults to the current chat provider instance')
-      .optional(),
-    model: z
-      .string()
-      .trim()
-      .describe('Optional model override; defaults to the current chat model')
-      .optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
+const writeAwaiterInputShape = {
+  action: z.enum(['create', 'update']).describe('Create a new awaiter or update an existing one'),
+  id: awaiterLookupInputFields.id.optional(),
+  currentTitle: awaiterLookupInputFields.title
+    .describe('Exact existing awaiter title when updating by title')
+    .optional(),
+  title: awaiterLookupInputFields.title.describe('Display title for the awaiter').optional(),
+  instruction: z
+    .string()
+    .trim()
+    .describe('Instruction the future wake should execute when it fires')
+    .optional(),
+  trigger: awaiterTriggerInputSchema
+    .describe('One-shot wake trigger. Phase 1 supports only time-based triggers.')
+    .optional(),
+  notify: z
+    .boolean()
+    .describe('Whether the desktop app should show a completion/failure notification')
+    .optional(),
+  threadId: z
+    .string()
+    .trim()
+    .describe('Optional thread id override; defaults to the current thread')
+    .optional(),
+  providerType: z
+    .string()
+    .trim()
+    .describe('Optional provider type override; defaults to the current chat model')
+    .optional(),
+  providerId: z
+    .string()
+    .trim()
+    .describe('Optional provider id override; defaults to the current chat provider instance')
+    .optional(),
+  model: z
+    .string()
+    .trim()
+    .describe('Optional model override; defaults to the current chat model')
+    .optional(),
+  description: toolCallDescriptionField,
+};
+
+export const WriteAwaiterInputSchema = z.object(writeAwaiterInputShape).superRefine((value, ctx) => {
     const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
     const hasCurrentTitle =
       typeof value.currentTitle === 'string' && value.currentTitle.trim().length > 0;
@@ -816,97 +688,33 @@ export const WriteAwaiterInputSchema = z
     }
   });
 
-export const WriteAwaiterInputSchemaUi = z
-  .object({
-    action: z.enum(['create', 'update']).optional(),
-    id: z.string().optional(),
-    currentTitle: z.string().optional(),
-    title: z.string().optional(),
-    instruction: z.string().optional(),
-    trigger: awaiterTriggerInputSchema.optional(),
-    notify: z.boolean().optional(),
-    threadId: z.string().optional(),
-    providerType: z.string().optional(),
-    providerId: z.string().optional(),
-    model: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const WriteAwaiterInputSchemaUi = uiSchema(writeAwaiterInputShape);
 
-export const DeleteAwaiterInputSchema = z
-  .object({
-    id: awaiterLookupInputFields.id.optional(),
-    title: awaiterLookupInputFields.title.optional(),
-    description: toolCallDescriptionField,
-  })
-  .superRefine((value, ctx) => {
-    const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasTitle = typeof value.title === 'string' && value.title.trim().length > 0;
-    if (!hasId && !hasTitle) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['id'],
-        message: 'Either id or title is required',
-      });
-    }
-  });
+export const DeleteAwaiterInputSchema = z.object(awaiterLookupShape).superRefine(requireEitherField('id', 'title'));
+export const DeleteAwaiterInputSchemaUi = uiSchema(awaiterLookupShape);
 
-export const DeleteAwaiterInputSchemaUi = z
-  .object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+const deleteFileInputShape = {
+  path: deleteFileInputFields.path,
+  description: toolCallDescriptionField,
+};
 
-export const DeleteFileInputSchemaUi = z
-  .object({
-    path: deleteFileInputFields.path.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const DeleteFileInputSchemaUi = uiSchema(deleteFileInputShape);
 
-export const LoadSkillInputSchemaUi = z
-  .object({
-    id: loadSkillInputFields.id.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+const loadSkillInputShape = {
+  id: loadSkillInputFields.id,
+  description: toolCallDescriptionField,
+};
 
-export const ListPersonalSkillsInputSchemaUi = z
-  .object({
-    query: z.string().optional(),
-    limit: z.number().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const LoadSkillInputSchemaUi = uiSchema(loadSkillInputShape);
 
-export const ReadPersonalSkillInputSchemaUi = z
-  .object({
-    id: personalSkillIdInputFields.id.optional(),
-    maxChars: z.number().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+const deletePersonalSkillInputShape = {
+  id: personalSkillIdInputFields.id,
+  description: toolCallDescriptionField,
+};
 
-export const WritePersonalSkillInputSchemaUi = z
-  .object({
-    id: personalSkillIdInputFields.id.optional(),
-    skillName: z.string().optional(),
-    skillDescription: z.string().optional(),
-    instructions: z.string().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const DeletePersonalSkillInputSchemaUi = uiSchema(deletePersonalSkillInputShape);
 
-export const DeletePersonalSkillInputSchemaUi = z
-  .object({
-    id: personalSkillIdInputFields.id.optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
-
-export const TodoToolInputSchema = z.object({
+const todoToolInputShape = {
   items: z
     .array(todoPlanItemInputSchema)
     .max(MAX_EXECUTION_TASK_PLAN_ITEMS)
@@ -916,16 +724,12 @@ export const TodoToolInputSchema = z.object({
     .optional()
     .default([]),
   description: toolCallDescriptionField,
-});
+};
 
-export const TodoToolInputSchemaUi = z
-  .object({
-    items: z.array(todoPlanItemInputSchema).optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const TodoToolInputSchema = z.object(todoToolInputShape);
+export const TodoToolInputSchemaUi = uiSchema(todoToolInputShape);
 
-export const AgentToolInputSchema = z.object({
+const agentToolInputShape = {
   task: z
     .string()
     .trim()
@@ -965,18 +769,10 @@ export const AgentToolInputSchema = z.object({
     .optional()
     .default(DEFAULT_AGENT_MAX_ITERATIONS),
   description: toolCallDescriptionField,
-});
+};
 
-export const AgentToolInputSchemaUi = z
-  .object({
-    task: z.string().optional(),
-    context: z.string().optional(),
-    expectedOutput: z.string().optional(),
-    tools: z.array(z.string()).optional(),
-    maxIterations: z.number().optional(),
-    description: toolCallDescriptionField,
-  })
-  .passthrough();
+export const AgentToolInputSchema = z.object(agentToolInputShape);
+export const AgentToolInputSchemaUi = uiSchema(agentToolInputShape);
 
 const TodoPlanItemOutputSchema = z
   .object({

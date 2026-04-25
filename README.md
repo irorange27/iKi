@@ -1,202 +1,69 @@
 # iKi
 
-## Introduction
+A local desktop AI companion — a persistent agent that lives on your desktop, orchestrates multiple AI providers, understands context and affect, and adapts its interaction style based on your readiness.
 
-A local agent pet for AI provider orchestration.
+## Quick Start
 
-## Features
+```bash
+git clone https://github.com/irorange27/iKi.git
+cd iKi
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run app:dev
+```
 
-- Orchestrates multiple AI providers.
-- Ships first-class built-in provider entries for OpenAI, Anthropic, DeepSeek, Moonshot AI
-  (Kimi), MiniMax, Ollama, and ACP agents, while still allowing custom OpenAI-compatible and
-  Anthropic-compatible endpoints.
+Requires **Node.js 20.x** with Corepack enabled.
 
-- ACP-backed agents can now run through the same local chat/tool loop as the built-in HTTP
-  providers, which lets iKi drive Codex-style ACP adapters without bypassing the existing tool
-  approval and workspace-boundary model.
+On first launch, follow the welcome flow: connect a provider (OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, or ACP), make sure it exposes at least one model, then send your first message.
 
-- Acts as a local agent for streamlined AI interactions.
+To use an ACP-backed agent such as Codex CLI, add the `Codex CLI` provider in Settings → Providers, configure the command and authentication, fetch its models, and select it in chat like any other provider.
 
-- Supports composer slash commands: type `/` in the composer to discover compact built-in commands
-  and skill-driven entries such as `/frontend-dev`; selected skills and commands collapse into
-  inline composer tokens instead of staying as plain text, while optional prompt-app shortcuts can
-  still appear when that subsystem is in use.
+## Capabilities
 
-- Self-optimizing workflow (auto tool routing and auto-pinned skills).
+### Multi-Provider Agent
+Orchestrates OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, and ACP-backed agents (including Codex CLI) through a unified chat/tool loop — all running locally on your desktop.
 
-- Structured context assembly with rolling thread summaries, bounded memory / skill context, and
-  visible context reports per assistant turn.
+### Affect-Aware Interaction
+First-class affect signals shape reply strategy, tool routing, and autonomy guardrails with explicit UI transparency. The system knows when to clarify, when to co-plan, and when to execute — not just tone adjustment.
 
-- A typed continuity layer for confirmed owner facts, preferences, boundaries, workflow rules, and
-  reference notes, with explicit-message capture and evidence tracking instead of relying only on
-  freeform archive memory or speculative future abstractions.
+### Structured Context
+Rolling thread summaries keep long conversations coherent. A typed continuity layer captures confirmed facts, preferences, and boundaries with evidence tracking. Model-aware context budgeting prevents overstuffing smaller models.
 
-- Model-aware context budgeting that can use `models.dev` metadata (model list + context window)
-  to avoid overstuffing smaller models while keeping larger-model defaults stable.
+### Built-in Tool System
+27 tools across file read/write/edit, shell commands, web search, personal skills, todo/planning checklists, proactive reminders, and sub-agent delegation — all with configurable approval gates and workspace boundaries.
 
-- First-class affect signals that can shape reply strategy, skill/tool routing, and tool-autonomy
-  guardrails with explicit UI transparency.
+### Desktop & Daemon Modes
+Full desktop GUI with a chat window and a compact companion overlay that provides phase-aware visual feedback. A headless daemon mode exposes the same agent surface via HTTP/WebSocket for external clients (e.g., QQ bot bridging).
 
-- Persistent ToDoList tools so iKi can create, read, and maintain local structured checklists
-  instead of scattering todos across chat text or ad hoc files.
+## Development
 
-- A thread-scoped `todo` planning tool that keeps multi-step agent work visible with
-  `pending` / `in_progress` / `completed` states and reminder-backed progress updates inside the
-  main chat tool loop.
+```bash
+pnpm run app:dev          # Start desktop app in dev mode
+pnpm run app:preview      # Launch latest packaged app from out/
+pnpm run app:build        # Create distributable artifacts
+pnpm run -s ci:quality    # Full quality gate (lint + tsc + vue-tsc + tests)
 
-- A first-class delegated `agent` tool so iKi can hand a bounded subtask to a fresh subagent
-  scratchpad without widening beyond the current turn's approval-free tool boundary; intended for
-  focused investigation/review/synthesis side work rather than approval-gated file or shell steps.
+pnpm test                 # Run all tests
+pnpm run test:renderer    # Renderer-only tests
+pnpm run commit           # Interactive semantic commit
+```
 
-- First-class personal-skill management tools so iKi can list, inspect, create, update, and
-  delete user-managed `SKILL.md` files under the Personal skills root without needing workspace
-  hacks; destructive skill changes remain explicitly approval-gated.
-
-- First-class proactive-task management tools so iKi can create, inspect, update, and delete
-  recurring reminders/watchers directly from chat, with new chat-created tasks defaulting to the
-  current thread and current provider/model identity instead of requiring a manual trip through
-  Settings.
-
-- A user-editable local `brain/` markdown folder under the app user-data directory
-  (`iki.md`, `owner.md`) so assistant baseline notes stay local and
-  inspectable; those files complement, but do not replace, the typed continuity model.
-
-- Threads now auto-provision a hidden temporary workspace under the app user-data directory, so
-  local file tools have a safe per-thread scratch area by default while still allowing edits under
-  the app-managed `brain/` continuity folder.
-
-- A precise built-in `edit` tool can patch existing files through exact-match replacements, which
-  lets iKi update code and docs safely without having to rewrite an entire file for every change.
-
-## Getting Started
-
-1. Install Node.js 20.x and enable Corepack so the pinned `pnpm@10.33.0` version can be used.
-
-2. Clone the repository:
-
-   ```bash
-   git clone https://github.com/irorange27/iKi.git
-   ```
-
-3. Navigate to the project directory:
-
-   ```bash
-   cd iKi
-   ```
-
-4. Enable Corepack:
-
-   ```bash
-   corepack enable
-   ```
-
-5. Install dependencies:
-
-   ```bash
-   pnpm install --frozen-lockfile
-   ```
-
-6. Start the desktop app in development mode:
-
-   ```bash
-   pnpm run app:dev
-   ```
-
-7. Launch iKi and follow the first-run welcome flow to wake it up: connect one provider, make sure
-   it exposes at least one model (for example OpenAI, Anthropic, DeepSeek, or MiniMax), then send
-   your first chat message. You can still open `Settings` directly at any time if you prefer the
-   full control surface.
-
-8. To use an ACP-backed agent such as Codex, add the built-in `Codex CLI` provider in
-   `Settings -> Providers`, set the command plus shell-style arguments (or a JSON string array),
-   optionally choose an authentication method, optionally point `API Provider` at an existing
-   provider for credential reuse, select any MCP servers that session should connect to, fetch the
-   ACP-exposed models, and then select that provider in chat like any other model source. `Codex CLI`
-   does not require manual base-URL setup in the provider form.
-
-## Useful Commands
-
-- `pnpm run app:dev`: start the desktop app through Electron Forge's Vite flow.
-- `pnpm run app:preview`: launch the latest local packaged app from `out/` for manual eyeballing.
-- `pnpm run app:build`: create distributable artifacts via Electron Forge makers.
-- `pnpm run changelog:preview`: print the current script-generated release notes draft.
-- `pnpm run changelog:sync`: write or refresh `changelogs/v<package-version>.md`.
-- `pnpm run changelog:check`: verify a checked-in changelog snapshot still matches the generator.
-- `pnpm run -s ci:quality`: run the repository quality gate locally.
-
-Packaging may download platform-specific Electron artifacts the first time it
-runs, so `app:build` and `pnpm run package` expect normal network access. `app:preview` expects an
-existing packaged output under `out/`.
-
-## Development Notes
-
-- DevTools no longer auto-open by default in development.
-- To opt in to auto-open DevTools (for main/settings windows), run with
-  `IKI_AUTO_OPEN_DEVTOOLS=true`.
-- The desktop-managed daemon binds to `127.0.0.1` by default. Only switch to
-  `0.0.0.0` when you intentionally need LAN or Docker access.
-- The daemon bootstrap registration token (`daemon.token`) is rotated after each
-  successful client registration; treat it as a one-time local setup credential.
-- Downloaded `whisper-node` models are stored under iKi's user-data directory,
-  not inside the packaged app bundle.
-- `pnpm` installs are guarded by an explicit reviewed build-script allowlist in
-  `pnpm-workspace.yaml`; when a new dependency introduces an install script, it
-  should be reviewed and added intentionally instead of allowing all scripts by default.
+- DevTools auto-open: set `IKI_AUTO_OPEN_DEVTOOLS=true`
+- Daemon binds to `127.0.0.1` by default
+- `pnpm` installs are guarded by a reviewed build-script allowlist in `pnpm-workspace.yaml`
+- Whisper models are stored under iKi's user-data directory, not in the app bundle
 
 ## Commit Governance
 
-- Interactive semantic commit: `pnpm run commit`
-- Commit message lint (recent history): `pnpm run commit:check`
-- Local hooks are managed by Husky and installed through `pnpm install` (`prepare`)
+- Conventional Commits required. Interactive helper: `pnpm run commit`
 - PR title must follow semantic format (CI enforced)
-- Architecture-impacting code changes should include docs/design/postmortem updates when needed;
-  release notes come from commit history and should not require hand-maintained per-PR changelog edits
-- CI quality gate runs `pnpm run -s ci:quality` (`eslint --ext .ts,.tsx,.vue .` + `tsc` +
-  `vue-tsc --noEmit` + tests with coverage)
-- Coverage thresholds are enforced in `vitest.config.mts` as a baseline regression floor; the
-  current repository-wide floor is `lines 60 / functions 59 / branches 46 / statements 59`, and it
-  should continue to ratchet upward over time
-- TypeScript discipline is tightened incrementally rather than via a one-shot `strict` flip:
-  the repository now enforces `allowJs: false`, `useUnknownInCatchVariables`,
-  `noImplicitOverride`, `noFallthroughCasesInSwitch`, and
-  `forceConsistentCasingInFileNames`
-- Coverage now counts Vue single-file components (`src/**/*.vue`) in addition to `ts/tsx`, so
-  renderer interaction logic is part of the same regression floor as the rest of the codebase
-- Renderer component tests now run in Vitest with Vue SFC transform and `happy-dom`
-- Quick renderer-only regression pass: `pnpm run -s test:renderer`
+- CI quality gate runs ESLint + `tsc` + `vue-tsc --noEmit` + tests with coverage
+- Coverage thresholds (vitest.config.mts): lines 60 / functions 59 / branches 46 / statements 59
+- TypeScript strictness is tightened incrementally: `useUnknownInCatchVariables`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `forceConsistentCasingInFileNames`
 
 ## Release Flow
 
-- Conventional Commits remain required for history hygiene, but release intent is manual
-- Release notes are generated by `scripts/scaffold-changelog.cjs`; there is no `release-please`
-  or machine-generated root `CHANGELOG.md` flow
-- `pnpm run changelog:preview -- --version vX.Y.Z` prints an AstrBot-style grouped draft
-  (`新功能 / 修复 / 优化 / 杂项`) from Conventional Commit history
-- `pnpm run changelog:sync -- --version vX.Y.Z` materializes the generated snapshot under
-  `changelogs/` when we want an in-repo copy; files in `changelogs/` should be regenerated, not
-  hand-edited
-- `pnpm run changelog:check -- --version vX.Y.Z` verifies a checked-in snapshot still matches the
-  generator
-- Local release verification path: run `pnpm run app:build` before a version cut; `app:preview`
-  remains available for a manual visual pass
-- CI/CD release builds are tag-driven: push `vX.Y.Z` after `package.json` is in sync with the
-  version you intend to release
-- `release-build` first runs the full repository gate (`pnpm run -s ci:quality`) on Ubuntu, then
-  packages only the official macOS release artifacts on `macos-15`
-- Current official user-facing installer outputs are macOS `.dmg` plus `.zip`
-- Manual `workflow_dispatch` release-build runs are macOS-only as well, which keeps GitHub Actions
-  minutes focused on the one platform we currently ship
-- Tag builds automatically create or update a draft GitHub Release whose body is generated
-  directly by the changelog scaffold script from Conventional Commit history; assets include a
-  `SHA256SUMS.txt` manifest
-- After a successful tag publish, intermediate workflow artifacts are deleted so GitHub Actions
-  storage is not consumed by release staging leftovers
-- Packaged macOS builds use Electron's native `autoUpdater` via `update.electronjs.org`, so the
-  desktop client only sees releases after the GitHub draft release has been explicitly published;
-  draft assets remain invisible to auto-update checks
-- macOS keeps both `.dmg` and `.zip`: the DMG is for human download/install, while the ZIP remains
-  part of the updater contract
-- macOS production auto-update still depends on shipping signed builds; unsigned local previews can
-  exercise the UI wiring but are not a substitute for a signed release verification pass
-- `workflow_dispatch` remains available for CI build-only verification of any branch, tag, or SHA
-  without publishing a release
+- Release notes generated from Conventional Commit history via `scripts/scaffold-changelog.cjs`
+- Tag-driven CI/CD: push `vX.Y.Z` triggers `release-build` on GitHub Actions
+- macOS outputs: `.dmg` + `.zip` (signed for production auto-update via `update.electronjs.org`)
+- Tag builds create a draft GitHub Release with auto-generated body and `SHA256SUMS.txt`

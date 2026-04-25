@@ -43,6 +43,7 @@ const {
 vi.mock('ai', () => ({
   generateText: generateTextMock,
   jsonSchema: jsonSchemaMock,
+  smoothStream: vi.fn(),
   stepCountIs: stepCountIsMock,
   streamText: streamTextMock,
   tool: toolMock,

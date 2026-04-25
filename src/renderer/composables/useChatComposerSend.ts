@@ -103,6 +103,12 @@ export const useChatComposerSend = (deps: {
         );
         isLoading.value = false;
         isStopping.value = false;
+      } else {
+        // Allow user to send a new/steering message immediately after stop.
+        // The old stream will unwind in the background; any late UI chunks
+        // from it are superseded by the new stream when the user sends.
+        isLoading.value = false;
+        isStopping.value = false;
       }
     } catch (error) {
       chatComposerSendLogger.event({

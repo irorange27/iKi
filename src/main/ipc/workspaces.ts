@@ -3,7 +3,25 @@ import path from 'node:path';
 import { dialog, ipcMain } from 'electron';
 
 import * as workspaceDb from '../../core/db/workspaces';
+import { getThreadWorkspaceSelection } from '../../core/workspaces/thread_workspace';
 import { createPrefixedId } from '../../shared/utils/id';
+
+const AGENT_INSTRUCTIONS_FILE = 'IKI.md';
+
+const AGENT_INSTRUCTIONS_TEMPLATE = [
+  '# IKI',
+  '',
+  '<!-- Standing instructions for iKi. Edit this file to guide how iKi should behave in this project. -->',
+  '',
+  '## Behavior',
+  '',
+  '- (Add your guidelines here. Keep them concise and actionable.)',
+  '',
+  '## Boundaries',
+  '',
+  '- (Add boundaries or rules iKi should follow.)',
+  '',
+].join('\n');
 
 let workspacesIpcRegistered = false;
 
@@ -80,4 +98,31 @@ export const registerWorkspacesIpc = (): void => {
   ipcMain.handle('workspaces:toggleVisibility', (_event, id) =>
     workspaceDb.toggleWorkspaceVisibility(id)
   );
+
+  ipcMain.handle('workspaces:init-agent-instructions', async (_event, threadId: string) => {
+    try {
+      const selection = getThreadWorkspaceSelection(threadId);
+      const workspacePath = selection?.workspace?.path;
+      if (!workspacePath) {
+        return { ok: false, error: 'No active workspace for this thread. Select a workspace first.' };
+      }
+
+      const filePath = path.join(workspacePath, AGENT_INSTRUCTIONS_FILE);
+
+      try {
+        await fs.access(filePath);
+        return { ok: false, error: `${AGENT_INSTRUCTIONS_FILE} already exists. Edit it directly to customize instructions.` };
+      } catch {
+        // File doesn't exist — proceed to create
+      }
+
+      await fs.writeFile(filePath, AGENT_INSTRUCTIONS_TEMPLATE, 'utf8');
+      return { ok: true, path: filePath };
+    } catch (error) {
+      return {
+        ok: false,
+        error: `Failed to create ${AGENT_INSTRUCTIONS_FILE}: ${(error as Error).message}`,
+      };
+    }
+  });
 };

@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai';
+import { generateText, smoothStream, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai';
 
 import { createLogger } from '../../logger';
 import {
@@ -206,6 +206,20 @@ export class SimpleConversationRunner implements ConversationRunner {
         maxOutputTokens: this.config.maxTokens,
         stopWhen: stepCountIs(this.config.enableTools ? this.config.maxIterations : 1),
         abortSignal: request.abortSignal,
+        experimental_transform: smoothStream(),
+        onAbort: () => {
+          simpleConversationLogger.event({
+            level: 'info',
+            event: 'conversation.stream.abort',
+            outcome: 'cancelled',
+            data: {
+              provider: this.config.providerType,
+              model: this.config.model,
+              tool_count: tools ? Object.keys(tools).length : 0,
+              message_count: messages.length,
+            },
+          });
+        },
       });
 
       let finalResponse = '';

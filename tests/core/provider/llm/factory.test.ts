@@ -46,6 +46,7 @@ const {
 
 vi.mock('ai', () => ({
   generateText: generateTextMock,
+  smoothStream: vi.fn(),
   streamText: streamTextMock,
 }));
 

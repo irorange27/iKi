@@ -1,4 +1,4 @@
-import { generateText, streamText, type LanguageModel, type ModelMessage } from 'ai';
+import { generateText, smoothStream, streamText, type LanguageModel, type ModelMessage } from 'ai';
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -481,6 +481,7 @@ export const streamChatWithUsage = async (
       ...(typeof options.maxOutputTokens === 'number'
         ? { maxOutputTokens: options.maxOutputTokens }
         : {}),
+      experimental_transform: smoothStream(),
       abortSignal,
     });
 

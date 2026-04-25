@@ -8,6 +8,7 @@ import {
   buildMemoryContext,
   buildQueryFromMessages,
   buildSkillContext,
+  readAgentInstructions,
   resolveAffectMessage,
 } from './chat_context_blocks';
 import {
@@ -66,7 +67,8 @@ export const createChatContextAssembler = (deps: {
           deps.workspaceSystemMessage,
           params.threadId,
           contextConfig,
-          params.modelCapability
+          params.modelCapability,
+          readAgentInstructions(params.threadId)
         );
     blocks.push(identityContext.block);
 

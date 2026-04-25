@@ -264,6 +264,7 @@ const {
   electronAPI,
   message,
   inputRef,
+  threadId: computed(() => props.threadId),
   currentIncognito: computed(() => Boolean(props.isIncognito)),
   selectedSkillIds,
   onRequestNewChat: () => emit('new-chat-requested'),

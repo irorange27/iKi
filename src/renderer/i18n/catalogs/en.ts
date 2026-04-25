@@ -182,6 +182,12 @@ export const en = defineCatalog({
   'chat.input.slash.incognito.disabled': 'Incognito mode is now disabled.',
   'chat.input.slash.incognito.invalidArgs':
     'Use `/incognito`, `/incognito on`, or `/incognito off`.',
+  'chat.input.slash.init.name': 'Init IKI.md',
+  'chat.input.slash.init.description': 'Create project agent instructions (IKI.md) in the current workspace.',
+  'chat.input.slash.init.created': ({ path }) => `Created ${path}. Edit it to guide iKi in this project.`,
+  'chat.input.slash.init.exists': 'IKI.md already exists.',
+  'chat.input.slash.init.noWorkspace': 'Select a workspace first before using /init.',
+  'chat.input.slash.init.failed': ({ error }) => `Failed to create IKI.md: ${error}`,
   'chat.input.slash.skillsSection': 'Skills',
   'chat.input.slash.skill.needsRequest': ({ skill }) =>
     `Add a request for ${asText(skill)} before sending.`,
