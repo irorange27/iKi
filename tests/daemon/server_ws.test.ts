@@ -81,6 +81,11 @@ class FakeDaemonSocket {
     const listener = this.listeners.get('close');
     return listener ? listener() : undefined;
   }
+
+  emitError(error?: Error) {
+    const listener = this.listeners.get('error');
+    return listener ? listener(error ?? new Error('test error')) : undefined;
+  }
 }
 
 const createEmitter = () => {
@@ -276,6 +281,20 @@ describe('configureDaemonWebSockets', () => {
     });
 
     harness.ws.emitClose();
+
+    expect(harness.sessions.has(1)).toBe(false);
+    expect(harness.wsSessions.has(harness.ws as never)).toBe(false);
+  });
+
+  it('cleans up session on WebSocket error (prevents crash + session leak)', () => {
+    const harness = createHarness({
+      scopes: ['chat:write'],
+    });
+
+    expect(harness.sessions.has(1)).toBe(true);
+    expect(harness.wsSessions.get(harness.ws as never)?.id).toBe(1);
+
+    harness.ws.emitError(new Error('socket hang up'));
 
     expect(harness.sessions.has(1)).toBe(false);
     expect(harness.wsSessions.has(harness.ws as never)).toBe(false);
@@ -578,5 +597,23 @@ describe('configureDaemonWebSockets', () => {
       channel: 'daemon',
       payload: { type: 'error', error: 'Invalid message payload' },
     });
+  });
+
+  it('skips sending payloads when the socket is not OPEN', async () => {
+    const harness = createHarness({
+      scopes: ['chat:write'],
+    });
+
+    // Record how many sends happened so far (the 'ready' message)
+    const sentBefore = harness.ws.sent.length;
+
+    // Set the socket to CLOSED state
+    harness.ws.readyState = 3;
+
+    // Try to send a message — the error response should be swallowed
+    await harness.ws.emitMessage('{not-valid-json');
+
+    // No additional send should have occurred
+    expect(harness.ws.sent.length).toBe(sentBefore);
   });
 });

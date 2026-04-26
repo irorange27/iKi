@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import { PromptApp } from '../../shared/types/chat';
+import { buildSetClause } from './utils';
 
 type PromptAppRow = PromptApp & {
   enabled?: number;
@@ -93,12 +94,15 @@ export const addPromptApp = (
   return stmt.run(data);
 };
 
+const PROMPT_APP_COLUMNS = new Set([
+  'name', 'description', 'icon', 'prompt_template', 'placeholders', 'model',
+  'enabled', 'sort_order', 'tools', 'reasoning_effort', 'expects_image_result',
+  'is_incognito', 'shortcut', 'window_width', 'window_height', 'font_size',
+]);
+
 export const updatePromptApp = (id: string, app: Partial<PromptApp>) => {
   const now = new Date().toISOString();
-  const fields = Object.keys(app)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(app as Record<string, unknown>, PROMPT_APP_COLUMNS);
 
   if (!fields) return null;
 

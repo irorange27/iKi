@@ -17,7 +17,6 @@
     :height="computedSize"
     :class="['lobe-icon', `lobe-icon-${name}`, className]"
     :style="iconStyle"
-    @load="handleLoad"
   />
   <div v-else :class="['lobe-icon-placeholder', className]" :style="placeholderStyle">
     {{ fallbackText }}
@@ -144,6 +143,7 @@ const loadSvgContent = async () => {
     if (response.ok) {
       const svgText = await response.text();
       svgContent.value = svgText;
+      emit('load');
     } else {
       throw new Error(`Failed to load SVG: ${response.status}`);
     }

@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import type { Awaiter, AwaiterWakeEvent } from '../../shared/types/awaiters';
 import { toIsoNow } from '../../shared/utils/text';
+import { buildSetClause } from './utils';
 
 type AwaiterRow = Omit<Awaiter, 'notify'> & {
   notify: number | boolean;
@@ -128,12 +129,16 @@ export const addAwaiter = (
     });
 };
 
+const AWAITER_COLUMNS = new Set([
+  'title', 'instruction', 'status', 'thread_id', 'origin_run_id',
+  'origin_checkpoint_id', 'trigger_kind', 'trigger_spec_json', 'delivery_mode',
+  'notify', 'provider_type', 'provider_id', 'model', 'resume_context_json',
+  'next_wake_at', 'last_wake_at', 'last_error', 'expires_at',
+]);
+
 export const updateAwaiter = (id: string, updates: Partial<Awaiter>) => {
   const now = toIsoNow();
-  const fields = Object.keys(updates)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(updates as Record<string, unknown>, AWAITER_COLUMNS);
 
   if (!fields) return null;
 
@@ -164,10 +169,7 @@ export const updateAwaiterIfStatus = (
   updates: Partial<Awaiter>
 ) => {
   const now = toIsoNow();
-  const fields = Object.keys(updates)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(updates as Record<string, unknown>, AWAITER_COLUMNS);
 
   if (!fields) return null;
 

@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import { Provider } from '../../shared/types/provider';
+import { buildSetClause } from './utils';
 
 type ProviderRow = Provider & { enabled: number | boolean; is_response_api?: number | boolean };
 
@@ -82,12 +83,15 @@ export const addProvider = (
   return stmt.run(data);
 };
 
+const PROVIDER_COLUMNS = new Set([
+  'name', 'type', 'api_key', 'models', 'model_options', 'base_url', 'enabled',
+  'available_models', 'api_version', 'is_response_api', 'acp_command', 'acp_args',
+  'acp_mcp_server_ids', 'acp_auth_method_id', 'acp_api_provider_id', 'acp_model_mapping',
+]);
+
 export const updateProvider = (id: string, provider: Partial<Provider>) => {
   const now = new Date().toISOString();
-  const fields = Object.keys(provider)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(provider as Record<string, unknown>, PROVIDER_COLUMNS);
 
   if (!fields) return null;
 

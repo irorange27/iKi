@@ -225,7 +225,16 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   const setTimeoutFn = deps.setTimeoutFn ?? setTimeout;
   const clearTimeoutFn = deps.clearTimeoutFn ?? clearTimeout;
 
-  const thinkingKeys = new Set<string>();
+  const THINKING_KEY_TTL_MS = 300_000;
+  const thinkingKeys = new Map<string, number>();
+  const clearExpiredThinkingKeys = () => {
+    const nowMs = now().getTime();
+    for (const [key, timestamp] of thinkingKeys) {
+      if (nowMs - timestamp >= THINKING_KEY_TTL_MS) {
+        thinkingKeys.delete(key);
+      }
+    }
+  };
   let timedPolicyState: TimedPolicyState | null = null;
   let timedNudgeState: TimedNudgeState | null = null;
   let policyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -279,6 +288,7 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
 
   const deriveSnapshot = (): CompanionSnapshot => {
     clearExpiredState();
+    clearExpiredThinkingKeys();
 
     const updatedAt = now().toISOString();
     const config = getConfig();
@@ -413,7 +423,7 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
     beginThinking: (key: string): CompanionSnapshot => {
       const trimmedKey = key.trim();
       if (!trimmedKey) return publish();
-      thinkingKeys.add(trimmedKey);
+      thinkingKeys.set(trimmedKey, now().getTime());
       return publish();
     },
     endThinking: (key: string): CompanionSnapshot => {

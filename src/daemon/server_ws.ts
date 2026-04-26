@@ -33,7 +33,10 @@ type ConfigureDaemonWebSocketsDeps = {
   logger: DaemonServerLogger;
 };
 
+const SOCKET_OPEN = 1;
+
 const sendDaemonPayload = (ws: DaemonSocket, payload: Record<string, unknown>) => {
+  if (ws.readyState !== SOCKET_OPEN) return;
   ws.send(
     JSON.stringify({
       channel: 'daemon',
@@ -102,6 +105,11 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
         deps.wsSessions.set(ws, session);
 
         ws.on('close', () => {
+          deps.sessions.delete(id);
+          deps.wsSessions.delete(ws);
+        });
+
+        ws.on('error', () => {
           deps.sessions.delete(id);
           deps.wsSessions.delete(ws);
         });

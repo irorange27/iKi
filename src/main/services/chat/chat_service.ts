@@ -31,6 +31,7 @@ export const createChatService = () => {
     approvals: {
       ensurePendingApprovalSession: approvals.ensurePendingApprovalSession,
       registerApprovalBatch: approvals.registerApprovalBatch,
+      cleanupPendingSessionsForWebContents: approvals.cleanupPendingSessionsForWebContents,
     },
   });
 

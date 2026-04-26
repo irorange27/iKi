@@ -117,13 +117,21 @@ const editFileOperationInputSchema = z.object({
   oldText: z
     .string()
     .min(1)
-    .describe('Exact existing text to replace. Must match the file content exactly.'),
+    .describe('Text to replace. Include 1-3 lines of surrounding context to make the match unambiguous.'),
   newText: z.string().describe('Replacement text. Use an empty string to delete the matched text.'),
   replaceAll: z
     .boolean()
     .optional()
     .default(false)
-    .describe('Replace every exact match instead of requiring a single unambiguous match'),
+    .describe('Replace every match instead of requiring a single unambiguous match'),
+  contextBefore: z
+    .string()
+    .optional()
+    .describe('A few lines of text immediately before the target. Anchors the search when similar text appears in multiple places.'),
+  contextAfter: z
+    .string()
+    .optional()
+    .describe('A few lines of text immediately after the target. Anchors the search when similar text appears in multiple places.'),
 });
 
 const editFileInputFields = {
@@ -878,6 +886,17 @@ export const EditFileOutputSchema = z
     changed: z.boolean().optional(),
     appliedEditCount: z.number().optional(),
     totalReplacements: z.number().optional(),
+    diff: z.string().optional(),
+    error: z.boolean().optional(),
+    message: z.string().optional(),
+    recovery: z
+      .object({
+        suggestion: z.string().optional(),
+        fileSnippet: z.string().optional(),
+        retryHint: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 

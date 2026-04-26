@@ -58,7 +58,11 @@ export const registerTasksIpc = (): void => {
   });
 
   ipcMain.handle('tasks:run-now', async (_event, id: string) => {
-    const result = await runProactiveTask(id, { reason: 'manual' });
-    return toIpcSerializable(result);
+    try {
+      const result = await runProactiveTask(id, { reason: 'manual' });
+      return toIpcSerializable(result);
+    } catch (error) {
+      return toIpcSerializable({ success: false, error: getErrorMessage(error) });
+    }
   });
 };

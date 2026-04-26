@@ -9,6 +9,8 @@ import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_ty
 
 const chatToolLoopLogger = createLogger({ module: 'chat_tool_loop' });
 
+const MAX_TOOL_LOOP_ITERATIONS = 10_000;
+
 export type RegisterApprovalBatch = (
   approvalRequests: ToolApprovalRequest[],
   session: {
@@ -34,6 +36,7 @@ export type ToolLoopStreamParams = {
     TokenUsagePartData,
     'maxInputTokens' | 'maxOutputTokens' | 'model' | 'providerType' | 'providerId'
   >;
+  maxStreamIterations?: number;
 };
 
 export type ToolLoopStreamResult = {
@@ -70,10 +73,34 @@ const streamToolLoop = async (
   let fullResponse = '';
   let cancelled = false;
   let next: IteratorResult<string, AgentResult> | null = null;
+  let loopIterations = 0;
 
   try {
     next = await generator.next();
     while (!next.done) {
+      loopIterations += 1;
+      const limit = params.maxStreamIterations ?? MAX_TOOL_LOOP_ITERATIONS;
+      if (loopIterations > limit) {
+        chatToolLoopLogger.event({
+          level: 'error',
+          event: 'chat.tool_stream.loop_limit',
+          outcome: 'failed',
+          message: `Tool loop exceeded hard iteration limit of ${limit}.`,
+        });
+        cancelled = true;
+        try {
+          await generator.return(undefined);
+        } catch (returnError) {
+          chatToolLoopLogger.event({
+            level: 'warn',
+            event: 'chat.tool_stream.close',
+            outcome: 'degraded',
+            error: returnError,
+            message: 'Failed to close tool stream after hitting iteration limit.',
+          });
+        }
+        break;
+      }
       if (params.shouldCancel?.()) {
         cancelled = true;
         try {

@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import { ChatMessage } from '../../shared/types/chat';
+import { buildSetClause } from './utils';
 
 export const getChatMessages = (threadId: string): ChatMessage[] => {
   const rows = getDb()
@@ -86,12 +87,13 @@ export const addChatMessage = (
   return stmt.run(data);
 };
 
+const CHAT_MESSAGE_COLUMNS = new Set([
+  'thread_id', 'parent_id', 'slot_id', 'depth', 'message', 'timestamp', 'metadata',
+]);
+
 export const updateChatMessage = (id: string, message: Partial<ChatMessage>) => {
   const now = new Date().toISOString();
-  const fields = Object.keys(message)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(message as Record<string, unknown>, CHAT_MESSAGE_COLUMNS);
 
   if (!fields) return null;
 

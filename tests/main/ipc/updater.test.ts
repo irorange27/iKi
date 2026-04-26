@@ -33,7 +33,7 @@ const { ipcHandlers, getAppUpdateStatusMock, checkForAppUpdatesMock, installDown
       error: null,
       unsupportedReason: null,
     })),
-    installDownloadedAppUpdateMock: vi.fn(),
+    installDownloadedAppUpdateMock: vi.fn(() => Promise.resolve({ success: true })),
   }));
 
 vi.mock('electron', () => ({
@@ -90,8 +90,9 @@ describe('updater IPC', () => {
     const handler = ipcHandlers.get('updates:install');
     if (!handler) throw new Error('updates:install handler not registered');
 
-    await handler(null);
+    const result = await handler(null);
 
     expect(installDownloadedAppUpdateMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ success: true });
   });
 });

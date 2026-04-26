@@ -201,10 +201,13 @@ const createDeps = () => {
     waitForEmotionAnalysis: vi.fn(async () => undefined),
   };
 
+  const cleanupPendingSessionsForWebContents = vi.fn();
+
   return {
     activeStreams,
     ensurePendingApprovalSession,
     registerApprovalBatch,
+    cleanupPendingSessionsForWebContents,
     recordUsageEvent,
     memory,
     streaming: createChatStreaming({
@@ -214,6 +217,7 @@ const createDeps = () => {
       approvals: {
         ensurePendingApprovalSession,
         registerApprovalBatch,
+        cleanupPendingSessionsForWebContents,
       },
     }),
   };
@@ -1705,5 +1709,160 @@ describe('createChatStreaming', () => {
         realtimeAffectMessage: 'Realtime affect context.',
       })
     );
+  });
+
+  it('stopStream() cancels an active stream and marks it user-stopped', async () => {
+    // Use a deferred promise to keep the tool loop running
+    let resolveStream: (value: unknown) => void;
+    const streamPromise = new Promise(resolve => {
+      resolveStream = resolve;
+    });
+    toolLoopStreamMock.mockReturnValueOnce(streamPromise);
+
+    const { streaming, activeStreams } = createDeps();
+    const webContents = { id: 20, send: vi.fn() };
+
+    // Start stream (will hang on tool loop)
+    const streamResultPromise = streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'long running' }],
+      tools: ['web'],
+      threadId: 'thread_stop',
+    });
+
+    // Wait for the stream to be set in activeStreams
+    await vi.waitFor(() => {
+      expect(activeStreams.size).toBe(1);
+    });
+
+    // Stop the stream
+    const stopResult = streaming.stopStream(20);
+    expect(stopResult).toEqual({ success: true });
+
+    // Verify the stream state is marked as cancelled and stopped by user
+    const streamState = activeStreams.get(20);
+    expect(streamState?.cancelled).toBe(true);
+    expect(streamState?.stoppedByUser).toBe(true);
+
+    // Resolve the hanging stream so it can clean up
+    resolveStream!({ cancelled: true });
+    await streamResultPromise;
+
+    // Stream should have been cleaned up from activeStreams
+    expect(activeStreams.size).toBe(0);
+  });
+
+  it('stopStream() returns error when no active stream exists for the sender', () => {
+    const { streaming } = createDeps();
+
+    const result = streaming.stopStream(99);
+    expect(result).toEqual({ success: false, error: 'No active stream' });
+  });
+
+  it('supersedes an existing stream when a new stream is started for the same senderId', async () => {
+    const { streaming, activeStreams } = createDeps();
+    const webContents = { id: 21, send: vi.fn() };
+
+    // Start first stream
+    const stream1Promise = streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'first' }],
+      threadId: 'thread_supersede_1',
+    });
+
+    // Wait for first stream to register in activeStreams
+    await vi.waitFor(() => {
+      expect(activeStreams.size).toBe(1);
+    });
+
+    const firstStreamState = activeStreams.get(21);
+
+    // Start second stream for same senderId (supersedes first)
+    const stream2Promise = streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'second' }],
+      threadId: 'thread_supersede_2',
+    });
+
+    // First stream should have been cancelled
+    expect(firstStreamState?.cancelled).toBe(true);
+
+    // Wait for both to complete
+    await Promise.all([stream1Promise, stream2Promise]);
+
+    // Only the last stream should have cleaned up; map should be empty
+    expect(activeStreams.size).toBe(0);
+  });
+
+  it('preserves a newer stream in activeStreams when a superseded stream finally block runs', async () => {
+    // Use deferred promises to control timing precisely
+    let resolveFirst: (value: unknown) => void;
+    const firstToolLoopPromise = new Promise(resolve => {
+      resolveFirst = resolve;
+    });
+
+    let resolveSecond: (value: unknown) => void;
+    const secondToolLoopPromise = new Promise(resolve => {
+      resolveSecond = resolve;
+    });
+
+    toolLoopStreamMock
+      .mockReturnValueOnce(firstToolLoopPromise)
+      .mockReturnValueOnce(secondToolLoopPromise);
+
+    const { streaming, activeStreams } = createDeps();
+    const webContents = { id: 22, send: vi.fn() };
+
+    // Start first stream — it sets streamState1, then awaits tool loop (hangs)
+    const stream1Promise = streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'first' }],
+      tools: ['web'],
+      threadId: 'thread_cas_1',
+    });
+
+    // Wait for first stream to be registered
+    await vi.waitFor(() => {
+      expect(activeStreams.get(22)).toBeTruthy();
+    });
+
+    const streamState1 = activeStreams.get(22);
+
+    // Start second stream — it aborts streamState1, sets streamState2, then awaits (hangs)
+    const stream2Promise = streaming.stream(webContents, {
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'second' }],
+      tools: ['web'],
+      threadId: 'thread_cas_2',
+    });
+
+    // Wait for second stream to register (replacing first)
+    await vi.waitFor(() => {
+      const current = activeStreams.get(22);
+      expect(current).toBeTruthy();
+      expect(current).not.toBe(streamState1);
+    });
+
+    const streamState2 = activeStreams.get(22);
+
+    // Resolve the first stream's tool loop — it should go to finally,
+    // but CAS check must NOT delete streamState2
+    resolveFirst!({ cancelled: true });
+    await stream1Promise;
+
+    // streamState2 must still be in the map (first stream's finally didn't delete it)
+    expect(activeStreams.get(22)).toBe(streamState2);
+
+    // Resolve the second stream
+    resolveSecond!({ awaitingApproval: false });
+    await stream2Promise;
+
+    // Now the map should be empty
+    expect(activeStreams.size).toBe(0);
   });
 });

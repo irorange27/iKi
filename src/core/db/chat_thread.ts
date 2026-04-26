@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import { ChatThread } from '../../shared/types/chat';
+import { buildSetClause } from './utils';
 
 type ChatThreadRow = ChatThread & {
   is_generating: number | boolean;
@@ -100,12 +101,15 @@ export const addChatThread = (
   return stmt.run(data);
 };
 
+const CHAT_THREAD_COLUMNS = new Set([
+  'title', 'model', 'is_generating', 'reasoning_effort', 'metadata',
+  'client_id', 'prompt_app_id', 'tools', 'is_favorited', 'is_incognito',
+  'workspace_id', 'enable_artifacts', 'artifact_workspace_id', 'skill_ids',
+]);
+
 export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
   const now = new Date().toISOString();
-  const fields = Object.keys(thread)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(thread as Record<string, unknown>, CHAT_THREAD_COLUMNS);
 
   if (!fields) return null;
 

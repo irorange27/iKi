@@ -70,6 +70,7 @@ export const createChatStreaming = (deps: {
       }
     ) => unknown;
     registerApprovalBatch: RegisterApprovalBatch;
+    cleanupPendingSessionsForWebContents: (senderId: number) => void;
   };
 }) => {
   const toolLoopRunner = createToolLoopRunner({
@@ -482,6 +483,7 @@ export const createChatStreaming = (deps: {
       return { success: false, error: message };
     } finally {
       companionService.endThinking(companionThinkingKey);
+      deps.approvals.cleanupPendingSessionsForWebContents(senderId);
       if (deps.activeStreams.get(senderId) === streamState) {
         deps.activeStreams.delete(senderId);
       }

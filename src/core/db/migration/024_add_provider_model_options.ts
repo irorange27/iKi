@@ -16,4 +16,7 @@ export const migration: Migration = {
       ADD COLUMN model_options TEXT NOT NULL DEFAULT '{}'
     `);
   },
+  down: () => {
+    // SQLite does not support DROP COLUMN; keep model_options if it exists.
+  },
 };

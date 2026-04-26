@@ -113,11 +113,19 @@ export const useConfigStore = defineStore('config', {
       };
     },
 
-    resetConfig() {
-      // 重新读取系统配置（获取当前最新系统设置）
-      configService.get().then((sysConfig: AppConfig) => {
+    async resetConfig() {
+      try {
+        const sysConfig = await configService.get();
         this.config = mergeConfigWithDefaults(sysConfig);
-      });
+      } catch (error: unknown) {
+        configStoreLogger.event({
+          level: 'error',
+          event: 'config.reset',
+          outcome: 'failed',
+          error,
+          message: 'Failed to reset config from system.',
+        });
+      }
     },
 
     resetSection(section: keyof AppConfig) {

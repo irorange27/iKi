@@ -46,4 +46,7 @@ export const migration: Migration = {
     const canonicalizedRows = collectCanonicalizedRows(rows);
     updateCanonicalizedRows(canonicalizedRows);
   },
+  down: () => {
+    // Data canonicalization is lossy — original message JSON cannot be reconstructed.
+  },
 };

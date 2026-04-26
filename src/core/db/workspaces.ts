@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import { Workspace } from '../../shared/types/chat';
+import { buildSetClause } from './utils';
 
 type WorkspaceRow = Workspace & { is_temporary?: number; show_in_list?: number };
 
@@ -74,12 +75,13 @@ export const addWorkspace = (
   return stmt.run(data);
 };
 
+const WORKSPACE_COLUMNS = new Set([
+  'path', 'name', 'is_temporary', 'show_in_list',
+]);
+
 export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
   const now = new Date().toISOString();
-  const fields = Object.keys(workspace)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(workspace as Record<string, unknown>, WORKSPACE_COLUMNS);
 
   if (!fields) return null;
 

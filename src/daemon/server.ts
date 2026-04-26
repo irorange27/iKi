@@ -129,31 +129,37 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       process.off('SIGTERM', shutdown);
       napcatBridge.dispose();
 
-      try {
-        server.close();
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException)?.code !== 'ERR_SERVER_NOT_RUNNING') {
+      void (async () => {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            server.close((err?: Error) => (err ? reject(err) : resolve()));
+          });
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException)?.code !== 'ERR_SERVER_NOT_RUNNING') {
+            serverLogger.event({
+              level: 'warn',
+              event: 'daemon.server.shutdown',
+              outcome: 'degraded',
+              error,
+              message: 'Failed to close HTTP server cleanly.',
+            });
+          }
+        }
+
+        try {
+          await new Promise<void>((resolve, reject) => {
+            wss.close((err?: Error) => (err ? reject(err) : resolve()));
+          });
+        } catch (error) {
           serverLogger.event({
             level: 'warn',
             event: 'daemon.server.shutdown',
             outcome: 'degraded',
             error,
-            message: 'Failed to close HTTP server cleanly.',
+            message: 'Failed to close WebSocket server cleanly.',
           });
         }
-      }
-
-      try {
-        wss.close();
-      } catch (error) {
-        serverLogger.event({
-          level: 'warn',
-          event: 'daemon.server.shutdown',
-          outcome: 'degraded',
-          error,
-          message: 'Failed to close WebSocket server cleanly.',
-        });
-      }
+      })();
     };
 
     const started = {

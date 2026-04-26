@@ -210,4 +210,35 @@ describe('tool loop runner', () => {
       abortSignal: undefined,
     });
   });
+
+  it('enforces a backup iteration limit to prevent infinite loops', async () => {
+    const registerApprovalBatch = vi.fn();
+    const runner = createToolLoopRunner({ registerApprovalBatch });
+
+    // Create a generator that yields many more items than the test limit
+    const manyChunks = Array.from({ length: 20 }, (_, i) => `chunk_${i}`);
+    const agentResult: AgentResult = { response: 'done', iterations: 1 };
+    const conversationHarness = createConversationHarness(
+      createAsyncGenerator(manyChunks, agentResult)
+    );
+    const uiChunkEmitter = createUiChunkEmitter();
+    const webContents = { id: 5, send: vi.fn() };
+
+    const result = await runner.stream({
+      harness: conversationHarness,
+      webContents,
+      history: [{ role: 'system', content: 'history' }],
+      prompt: 'go',
+      uiChunkEmitter,
+      maxStreamIterations: 5,
+    });
+
+    // Should be capped at 5 chunks, not all 20
+    expect(result.cancelled).toBe(true);
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenCalledTimes(5);
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(1, 'chunk_0');
+    expect(uiChunkEmitter.emitTextDelta).toHaveBeenNthCalledWith(5, 'chunk_4');
+    expect(uiChunkEmitter.abort).toHaveBeenCalledTimes(1);
+    expect(registerApprovalBatch).not.toHaveBeenCalled();
+  });
 });

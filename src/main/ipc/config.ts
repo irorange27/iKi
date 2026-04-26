@@ -492,10 +492,6 @@ export const registerConfigIpc = (): void => {
     applyAppUpdateConfig(normalized);
     applyCompanionConfigSideEffects(normalized);
 
-    for (const win of getAllBrowserWindows()) {
-      win.webContents.send('config:updated', normalized);
-    }
-
     const shouldAwaitMcp = Boolean(prevConfig.mcp?.enabled) && !normalized.mcp.enabled;
     const mcpUpdate = handleMcpConfigUpdate(prevConfig, normalized).catch(error => {
       configLogger.warn('Failed to apply MCP config update', error);
@@ -508,6 +504,15 @@ export const registerConfigIpc = (): void => {
       await mcpUpdate;
       await daemonUpdate;
     }
+
+    for (const win of getAllBrowserWindows()) {
+      try {
+        win.webContents.send('config:updated', normalized);
+      } catch {
+        // window may have been destroyed since enumeration
+      }
+    }
+
     return true;
   });
 };

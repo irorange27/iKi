@@ -85,4 +85,25 @@ describe('updateProactiveTask', () => {
     expect(params.id).toBe('task_3');
     expect(typeof params.updated_at).toBe('string');
   });
+
+  it('drops unknown column names to prevent SQL injection via dynamic keys', () => {
+    const { prepareMock } = setupDb();
+
+    updateProactiveTask('task_4', {
+      name: 'safe update',
+      'enabled; DROP TABLE proactive_tasks;--': 1,
+      'malicious_column': 'value',
+    });
+
+    // Unknown keys should be dropped; only known columns should be in the SET clause.
+    const sql = prepareMock.mock.calls[0]?.[0] as string | undefined;
+    expect(sql).toBeDefined();
+
+    // Known key 'name' should be present.
+    expect(sql).toContain('name = @name');
+
+    // Malicious keys should NOT be present in the SQL string.
+    expect(sql).not.toContain('DROP TABLE');
+    expect(sql).not.toContain('malicious_column');
+  });
 });

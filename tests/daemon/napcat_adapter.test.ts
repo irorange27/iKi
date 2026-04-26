@@ -1361,4 +1361,27 @@ describe('createNapCatReverseBridge', () => {
       'NapCat action send_private_msg failed (status=failed, retcode=100)'
     );
   });
+
+  it('logs a warning when receiving malformed JSON instead of silently dropping it', () => {
+    getAppConfigMock.mockReturnValue(createConfig({ enabled: true }));
+    getProvidersMock.mockReturnValue([createProvider()] as never);
+
+    const chatService = createChatServiceMock();
+    chatService.send.mockResolvedValue({ success: true, text: 'ok' });
+
+    const { ws } = connectBridge(chatService);
+    const socket = expectSocket(ws);
+
+    // Send malformed JSON
+    socket.emitMessage('{not-valid');
+
+    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'napcat.ws.message',
+        outcome: 'failed',
+        message: 'Received malformed JSON from NapCat WebSocket.',
+      })
+    );
+  });
 });

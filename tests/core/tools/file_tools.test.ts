@@ -177,13 +177,14 @@ describe('file tools workspace boundaries', () => {
       totalReplacements: number;
     };
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       path: filePath,
       success: true,
       changed: true,
       appliedEditCount: 1,
       totalReplacements: 1,
     });
+    expect(typeof (result as Record<string, unknown>).diff).toBe('string');
     expect(await fs.readFile(filePath, 'utf8')).toBe('hello edited workspace\nsecond line\n');
   });
 
@@ -200,14 +201,16 @@ describe('file tools workspace boundaries', () => {
 
     const tool = new EditFileTool();
 
-    await expect(
-      runInWorkspaceContext('thread_1', async () =>
-        tool.execute({
-          path: 'repeated.txt',
-          edits: [{ oldText: 'alpha', newText: 'gamma' }],
-        })
-      )
-    ).rejects.toThrow(/matched 2 locations/i);
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      tool.execute({
+        path: 'repeated.txt',
+        edits: [{ oldText: 'alpha', newText: 'gamma' }],
+      })
+    )) as { success: boolean; error: boolean; message: string };
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(true);
+    expect(result.message).toMatch(/matched 2 locations/i);
   });
 
   it('supports replaceAll edits when the caller explicitly requests them', async () => {

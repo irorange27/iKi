@@ -1178,6 +1178,15 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       try {
         payload = JSON.parse(String(data)) as Record<string, unknown>;
       } catch {
+        napcatLogger.event({
+          level: 'warn',
+          event: 'napcat.ws.message',
+          outcome: 'failed',
+          message: 'Received malformed JSON from NapCat WebSocket.',
+          data: {
+            raw: String(data).slice(0, 200),
+          },
+        });
         return;
       }
 

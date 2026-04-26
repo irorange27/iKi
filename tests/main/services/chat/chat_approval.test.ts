@@ -498,4 +498,53 @@ describe('createChatApproval', () => {
       })
     );
   });
+
+  it('cleans up pending approval sessions for a given webContents senderId', async () => {
+    const approvals = createChatApproval({
+      activeStreams: new Map(),
+      memory: {
+        injectMemoryIntoMessages: vi.fn(messages => messages),
+      } as never,
+      usage: {
+        recordUsageEvent: vi.fn(),
+      },
+    });
+
+    const harness = {} as never;
+    const webContents1 = { id: 1, send: vi.fn() };
+    const webContents2 = { id: 2, send: vi.fn() };
+
+    // Register approval sessions for two different webContents
+    approvals.ensurePendingApprovalSession('approval_a1', {
+      harness,
+      webContents: webContents1,
+    });
+    approvals.ensurePendingApprovalSession('approval_a2', {
+      harness,
+      webContents: webContents1,
+    });
+    approvals.ensurePendingApprovalSession('approval_b1', {
+      harness,
+      webContents: webContents2,
+    });
+
+    // DB has no records for these approvals
+    getChatToolApprovalMock.mockReturnValue(null);
+
+    // Clean up sessions for senderId=1
+    approvals.cleanupPendingSessionsForWebContents(1);
+
+    // Approvals for senderId=1 should be gone
+    const result1 = await approvals.approveTool(webContents1, 'approval_a1', true);
+    expect(result1.success).toBe(false);
+    expect(result1.error).toBe('Approval request not found or already processed.');
+
+    const result2 = await approvals.approveTool(webContents1, 'approval_a2', true);
+    expect(result2.success).toBe(false);
+    expect(result2.error).toBe('Approval request not found or already processed.');
+
+    // Approval for senderId=2 should still be accessible (not cleaned up)
+    const result3 = await approvals.approveTool(webContents2, 'approval_b1', true);
+    expect(result3.error).not.toBe('Approval request not found or already processed.');
+  });
 });

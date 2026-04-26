@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import type { McpServer, McpServerInput, McpServerUpdate } from '../../shared/types/mcp';
 import { toIsoNow } from '../../shared/utils/text';
+import { buildSetClause } from './utils';
 
 type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'headers' | 'env'> & {
   enabled: number | boolean;
@@ -143,12 +144,15 @@ export const addMcpServer = (input: McpServerInput & { id: string }) => {
   return stmt.run(data);
 };
 
+const MCP_SERVER_COLUMNS = new Set([
+  'name', 'transport', 'command', 'args', 'cwd', 'env', 'base_url',
+  'headers', 'auth_ref', 'enabled', 'tool_allowlist', 'approval_mode',
+  'last_connected_at', 'last_error',
+]);
+
 export const updateMcpServer = (id: string, updates: McpServerUpdate) => {
   const now = toIsoNow();
-  const fields = Object.keys(updates)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(updates as Record<string, unknown>, MCP_SERVER_COLUMNS);
 
   if (!fields) return null;
 

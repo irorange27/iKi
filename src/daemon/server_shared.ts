@@ -28,7 +28,7 @@ export type DaemonSocketServer = {
     listener: (ws: DaemonSocket, req: http.IncomingMessage) => void
   ) => void;
   emit: (event: 'connection', ws: DaemonSocket, req: http.IncomingMessage) => boolean;
-  close: () => void;
+  close: (callback?: (err?: Error) => void) => void;
 };
 
 export type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
@@ -68,18 +68,23 @@ export const parseJsonBody = (req: http.IncomingMessage): Promise<JsonValue> =>
   new Promise((resolve, reject) => {
     let body = '';
     let bytes = 0;
+    let settled = false;
 
     req.on('data', chunk => {
-      bytes += chunk.length;
-      if (bytes > MAX_BODY_BYTES) {
+      if (settled) return;
+      if (bytes + chunk.length > MAX_BODY_BYTES) {
+        settled = true;
         reject(new Error('Request body too large'));
         req.destroy();
         return;
       }
+      bytes += chunk.length;
       body += chunk.toString('utf8');
     });
 
     req.on('end', () => {
+      if (settled) return;
+      settled = true;
       if (!body.trim()) {
         resolve({});
         return;
@@ -91,7 +96,11 @@ export const parseJsonBody = (req: http.IncomingMessage): Promise<JsonValue> =>
       }
     });
 
-    req.on('error', reject);
+    req.on('error', err => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
   });
 
 export const writeJson = (res: http.ServerResponse, status: number, payload: JsonValue) => {

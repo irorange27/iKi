@@ -43,13 +43,10 @@ export const getDefaultAgentConfig = (): AgentConfig =>
   });
 
 const getAgentConfigBase = (overrideConfig?: PartialAgentConfig): PartialAgentConfig => {
-  if (overrideConfig) {
-    return getDefaultAgentConfig();
-  }
-
   try {
     const appConfig = getAppConfig();
-    return appConfig?.agent || getDefaultAgentConfig();
+    const base = appConfig?.agent || getDefaultAgentConfig();
+    return overrideConfig ? { ...base, ...overrideConfig } : base;
   } catch (error) {
     agentRuntimeLogger.event({
       level: 'error',
@@ -57,7 +54,9 @@ const getAgentConfigBase = (overrideConfig?: PartialAgentConfig): PartialAgentCo
       outcome: 'failed',
       error,
     });
-    return getDefaultAgentConfig();
+    return overrideConfig
+      ? { ...getDefaultAgentConfig(), ...overrideConfig }
+      : getDefaultAgentConfig();
   }
 };
 
@@ -65,10 +64,7 @@ export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfi
   const baseConfig = getAgentConfigBase(overrideConfig);
 
   try {
-    return AgentConfigSchema.parse({
-      ...baseConfig,
-      ...overrideConfig,
-    });
+    return AgentConfigSchema.parse(baseConfig);
   } catch (error) {
     agentRuntimeLogger.event({
       level: 'error',
@@ -82,7 +78,7 @@ export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfi
     try {
       return AgentConfigSchema.parse({
         ...getDefaultAgentConfig(),
-        ...overrideConfig,
+        ...(overrideConfig ?? {}),
       });
     } catch (parseError) {
       agentRuntimeLogger.event({
@@ -228,8 +224,14 @@ export const buildPromptContext = (
   config: Pick<AgentConfig, 'providerType' | 'providerId' | 'systemPrompt'>,
   history: ModelMessage[]
 ): { systemPrompt: string; messages: ModelMessage[] } => {
+  const MAX_MESSAGES = 80;
+  const KEEP_RECENT = 40;
+  const KEEP_PREFIX = 5;
+
   const conversationMessages = history.filter(message => message.role !== 'system');
   const sanitizedConversation = sanitizeModelConversationMessages(conversationMessages);
+  const sanitized = sanitizedConversation.messages;
+
   const systemParts: string[] = [getFullSystemPrompt(config.providerType, config.providerId)];
 
   if (config.systemPrompt.trim()) {
@@ -244,6 +246,33 @@ export const buildPromptContext = (
     }
   }
 
+  // Compaction: when conversation exceeds threshold, keep recent messages + prefix,
+  // drop middle, and insert a compaction note so the model knows context was truncated.
+  let compactedHistory: ModelMessage[] = sanitized;
+  if (sanitized.length > MAX_MESSAGES) {
+    const prefix = sanitized.slice(0, KEEP_PREFIX);
+    const recent = sanitized.slice(-KEEP_RECENT);
+    const droppedCount = sanitized.length - KEEP_PREFIX - KEEP_RECENT;
+    compactedHistory = [...prefix, ...recent];
+
+    systemParts.push(
+      `[History compacted: ${droppedCount} older messages were dropped to stay within context limits. ` +
+      `The first ${KEEP_PREFIX} messages and most recent ${KEEP_RECENT} messages are preserved. ` +
+      `If the missing context matters, ask the user or re-read relevant files.]`
+    );
+
+    agentRuntimeLogger.event({
+      level: 'info',
+      event: 'agent.history.compacted',
+      outcome: 'degraded',
+      data: {
+        original_message_count: sanitized.length,
+        compacted_message_count: compactedHistory.length,
+        dropped_message_count: droppedCount,
+      },
+    });
+  }
+
   if (sanitizedConversation.droppedMessages > 0) {
     agentRuntimeLogger.event({
       level: 'warn',
@@ -252,14 +281,14 @@ export const buildPromptContext = (
       data: {
         dropped_message_count: sanitizedConversation.droppedMessages,
         message_count_before: conversationMessages.length,
-        message_count_after: sanitizedConversation.messages.length,
+        message_count_after: sanitized.length,
       },
     });
   }
 
   return {
     systemPrompt: systemParts.join('\n\n'),
-    messages: sanitizedConversation.messages,
+    messages: compactedHistory,
   };
 };
 

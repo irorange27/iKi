@@ -645,13 +645,22 @@ export const createChatApproval = (deps: {
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {
+      cleanupPendingSessionsForWebContents(resumedSenderId);
       if (deps.activeStreams.get(resumedSenderId) === streamState) {
         deps.activeStreams.delete(resumedSenderId);
       }
     }
   };
 
-  return { approveTool, ensurePendingApprovalSession, registerApprovalBatch };
+  const cleanupPendingSessionsForWebContents = (senderId: number) => {
+    for (const [key, session] of pendingApprovalSessions) {
+      if (session.webContents.id === senderId) {
+        pendingApprovalSessions.delete(key);
+      }
+    }
+  };
+
+  return { approveTool, ensurePendingApprovalSession, registerApprovalBatch, cleanupPendingSessionsForWebContents };
 };
 
 export type ChatApproval = ReturnType<typeof createChatApproval>;

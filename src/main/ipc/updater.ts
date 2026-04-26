@@ -15,6 +15,6 @@ export const registerUpdaterIpc = (): void => {
   ipcMain.handle('updates:get-status', () => getAppUpdateStatus());
   ipcMain.handle('updates:check', () => checkForAppUpdates());
   ipcMain.handle('updates:install', () => {
-    installDownloadedAppUpdate();
+    return installDownloadedAppUpdate();
   });
 };

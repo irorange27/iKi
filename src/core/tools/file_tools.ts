@@ -73,6 +73,128 @@ const replaceFirstOccurrence = (content: string, search: string, replacement: st
   return content.slice(0, matchIndex) + replacement + content.slice(matchIndex + search.length);
 };
 
+const normalizeLine = (line: string): string => line.replace(/[\t ]+$/, '').replace(/^[\t ]+/, '');
+
+const fuzzyLineMatch = (contentLines: string[], searchLines: string[], startFrom: number): number => {
+  const maxStart = contentLines.length - searchLines.length;
+  for (let i = startFrom; i <= maxStart; i++) {
+    let allMatch = true;
+    for (let j = 0; j < searchLines.length; j++) {
+      if (normalizeLine(contentLines[i + j]) !== normalizeLine(searchLines[j])) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) return i;
+  }
+  return -1;
+};
+
+const findInContent = (
+  content: string,
+  oldText: string,
+  contextBefore?: string,
+  contextAfter?: string
+): { index: number; matchType: 'exact' | 'fuzzy' | 'context' } | { index: -1; error: { message: string; fileSnippet: string; retryHint: string } } => {
+  // Step 1: exact match
+  const exactPos = content.indexOf(oldText);
+  if (exactPos >= 0) {
+    const count = countOccurrences(content, oldText);
+    if (count === 1) {
+      return { index: exactPos, matchType: 'exact' };
+    }
+
+    // Multiple exact matches — try contextBefore to disambiguate
+    if (contextBefore) {
+      const ctxPos = findInContent(content, contextBefore);
+      if (ctxPos.index >= 0) {
+        const searchStart = ctxPos.index + contextBefore.length;
+        const afterCtx = content.substring(searchStart);
+        const relPos = afterCtx.indexOf(oldText);
+        if (relPos >= 0) {
+          return { index: searchStart + relPos, matchType: 'context' };
+        }
+      }
+    }
+
+    // Return first exact match; handler decides based on replaceAll / occurrences
+    return { index: exactPos, matchType: 'exact' };
+  }
+
+  // Step 2: fuzzy match over whole file (only when no exact match exists)
+  const contentLines = content.split('\n');
+  const searchLines = oldText.split('\n');
+  const fuzzyPos = fuzzyLineMatch(contentLines, searchLines, 0);
+  if (fuzzyPos >= 0) {
+    const charPos = contentLines.slice(0, fuzzyPos).join('\n').length + (fuzzyPos > 0 ? 1 : 0);
+    return { index: charPos, matchType: 'fuzzy' };
+  }
+
+  // Step 3: failure — return structured error
+  const oldFirstLine = oldText.split('\n')[0].substring(0, 80);
+  const snippetStart = Math.max(0, exactPos > 0 ? exactPos - 200 : 0);
+  const snippetEnd = Math.min(content.length, snippetStart + 600);
+
+  return {
+    index: -1,
+    error: {
+      message: `Could not find "${oldFirstLine}..." in the file.`,
+      fileSnippet: content.substring(snippetStart, snippetEnd),
+      retryHint: 'Re-read the file and copy the exact text to replace, including 1-3 lines of surrounding context as contextBefore/contextAfter anchors.',
+    },
+  };
+};
+
+const generateUnifiedDiff = (
+  fileName: string,
+  original: string,
+  updated: string
+): string => {
+  const origLines = original.split('\n');
+  const newLines = updated.split('\n');
+  const parts: string[] = [];
+
+  parts.push(`--- a/${fileName}`);
+  parts.push(`+++ b/${fileName}`);
+
+  // Find first and last changed blocks
+  let firstChange = -1;
+  let lastChange = -1;
+  const maxLen = Math.max(origLines.length, newLines.length);
+  for (let i = 0; i < maxLen; i++) {
+    const origLine = i < origLines.length ? origLines[i] : undefined;
+    const newLine = i < newLines.length ? newLines[i] : undefined;
+    if (origLine !== newLine) {
+      if (firstChange < 0) firstChange = i;
+      lastChange = i;
+    }
+  }
+
+  if (firstChange < 0) return '';
+
+  // Include 2 lines of context
+  const ctxStart = Math.max(0, firstChange - 2);
+  const ctxEnd = Math.min(maxLen, lastChange + 3);
+  const origChunkLen = Math.min(origLines.length, ctxEnd) - ctxStart;
+  const newChunkLen = Math.min(newLines.length, ctxEnd) - ctxStart;
+
+  parts.push(`@@ -${ctxStart + 1},${Math.max(origChunkLen, 0)} +${ctxStart + 1},${Math.max(newChunkLen, 0)} @@`);
+
+  for (let i = ctxStart; i < ctxEnd; i++) {
+    const origLine = i < origLines.length ? origLines[i] : undefined;
+    const newLine = i < newLines.length ? newLines[i] : undefined;
+
+    if (origLine === newLine) {
+      if (origLine !== undefined) parts.push(` ${origLine}`);
+    } else {
+      if (origLine !== undefined) parts.push(`-${origLine}`);
+      if (newLine !== undefined) parts.push(`+${newLine}`);
+    }
+  }
+
+  return parts.join('\n');
+};
+
 export class ReadFileTool extends BaseTool {
   override name = 'read_file';
   override type = 'function';
@@ -113,14 +235,14 @@ export class WriteFileTool extends BaseTool {
 }
 
 /**
- * Tool for applying exact-text edits to an existing file
+ * Tool for applying text edits to an existing file with fuzzy matching and diff output
  */
 export class EditFileTool extends BaseTool {
   override name = 'edit';
   override type = 'function';
   override autoAllowed = true;
   override description =
-    'Edit an existing file by applying exact text replacements without rewriting the whole file.';
+    'Edit an existing file by applying text replacements. Include 1-3 lines of surrounding context in oldText to make matches unambiguous. Use contextBefore/contextAfter anchors when the same text appears in multiple places.';
   override needsApproval = true;
   override paramSchema = EditFileInputSchema;
 
@@ -134,7 +256,16 @@ export class EditFileTool extends BaseTool {
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new Error(`File "${args.path}" does not exist. Use write_file to create it first.`);
+        return {
+          path: absolutePath,
+          success: false,
+          changed: false,
+          error: true,
+          message: `File "${args.path}" does not exist.`,
+          recovery: {
+            suggestion: 'Create the file first with write_file.',
+          },
+        };
       }
       throw error;
     }
@@ -143,28 +274,58 @@ export class EditFileTool extends BaseTool {
     let totalReplacements = 0;
 
     for (const [index, edit] of args.edits.entries()) {
-      const occurrences = countOccurrences(updatedContent, edit.oldText);
+      const result = findInContent(
+        updatedContent,
+        edit.oldText,
+        edit.contextBefore,
+        edit.contextAfter
+      );
 
-      if (occurrences === 0) {
-        throw new Error(
-          `Edit ${index + 1} could not find the target text in "${args.path}". Read the file again and retry with an exact match.`
-        );
+      if (result.index < 0 && 'error' in result) {
+        return {
+          path: absolutePath,
+          success: false,
+          changed: false,
+          error: true,
+          message: `Edit ${index + 1}: ${result.error.message}`,
+          recovery: {
+            suggestion: `The file may have changed or whitespace differs.`,
+            fileSnippet: result.error.fileSnippet,
+            retryHint: result.error.retryHint,
+          },
+        };
       }
 
-      if (!edit.replaceAll && occurrences !== 1) {
-        throw new Error(
-          `Edit ${index + 1} matched ${occurrences} locations in "${args.path}". Provide a more specific oldText or set replaceAll to true.`
-        );
+      if (result.index >= 0 && 'matchType' in result) {
+        const occurrences = countOccurrences(updatedContent, edit.oldText);
+
+        if (!edit.replaceAll && occurrences > 1 && result.matchType === 'exact') {
+          return {
+            path: absolutePath,
+            success: false,
+            changed: false,
+            error: true,
+            message: `Edit ${index + 1} matched ${occurrences} locations. Provide more context in oldText or use contextBefore/contextAfter to disambiguate.`,
+            recovery: {
+              retryHint:
+                'Re-read the file and include 1-3 lines of unique surrounding context in oldText. Or set replaceAll: true if all matches should be replaced.',
+            },
+          };
+        }
+
+        updatedContent = edit.replaceAll
+          ? updatedContent.split(edit.oldText).join(edit.newText)
+          : replaceFirstOccurrence(updatedContent, edit.oldText, edit.newText);
+
+        totalReplacements += edit.replaceAll ? occurrences : 1;
       }
-
-      updatedContent = edit.replaceAll
-        ? updatedContent.split(edit.oldText).join(edit.newText)
-        : replaceFirstOccurrence(updatedContent, edit.oldText, edit.newText);
-
-      totalReplacements += edit.replaceAll ? occurrences : 1;
     }
 
     const changed = updatedContent !== originalContent;
+    const diff = changed
+      ? generateUnifiedDiff(args.path, originalContent, updatedContent)
+      : '';
+
     if (changed) {
       await fs.writeFile(absolutePath, updatedContent, {
         encoding: args.encoding as BufferEncoding,
@@ -177,6 +338,7 @@ export class EditFileTool extends BaseTool {
       changed,
       appliedEditCount: args.edits.length,
       totalReplacements,
+      ...(diff ? { diff } : {}),
     };
   }
 }

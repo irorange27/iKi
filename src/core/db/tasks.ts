@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { inferProactiveTaskToolMode, type ProactiveTask } from '../../shared/types/tasks';
 import { toIsoNow } from '../../shared/utils/text';
+import { buildSetClause } from './utils';
 
 type ProactiveTaskRow = Omit<ProactiveTask, 'enabled' | 'notify'> & {
   enabled: number | boolean;
@@ -147,12 +148,16 @@ export const addProactiveTask = (
   return stmt.run(data);
 };
 
+const PROACTIVE_TASK_COLUMNS = new Set([
+  'name', 'prompt', 'schedule_type', 'interval_minutes', 'cron_expression',
+  'schedule_timezone', 'enabled', 'provider_type', 'provider_id', 'model',
+  'tool_mode', 'tools', 'thread_id', 'notify', 'last_run_at', 'next_run_at',
+  'last_status', 'last_output', 'last_error',
+]);
+
 export const updateProactiveTask = (id: string, updates: Partial<ProactiveTask>) => {
   const now = toIsoNow();
-  const fields = Object.keys(updates)
-    .filter(key => key !== 'id' && key !== 'created_at' && key !== 'updated_at')
-    .map(key => `${key} = @${key}`)
-    .join(', ');
+  const fields = buildSetClause(updates as Record<string, unknown>, PROACTIVE_TASK_COLUMNS);
 
   if (!fields) return null;
 

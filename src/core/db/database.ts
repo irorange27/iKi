@@ -73,6 +73,19 @@ export const getDb = (): Database.Database => {
   return db;
 };
 
+export const closeDatabase = () => {
+  if (!db) return;
+  try {
+    db.close();
+  } catch (error) {
+    databaseLogger.warn('Failed to close database', error);
+  } finally {
+    db = null;
+    initialized = false;
+    initializing = false;
+  }
+};
+
 export const getConfig = (key: string): unknown => {
   const row = getDb().prepare('SELECT value FROM config WHERE key = ?').get(key) as
     | { value: string }

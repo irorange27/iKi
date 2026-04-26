@@ -175,6 +175,46 @@ describe('server_shared', () => {
     expect(req.destroy).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects bodies that exceed the limit across multiple chunks (pre-check boundary)', async () => {
+    const req = createBodyRequest();
+    const body = parseJsonBody(req as never);
+
+    // Fill exactly to the limit
+    req.emit('data', Buffer.alloc(2 * 1024 * 1024));
+    // One more byte should trigger rejection
+    req.emit('data', Buffer.alloc(1));
+
+    await expect(body).rejects.toThrow('Request body too large');
+    expect(req.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores subsequent data and end events after the body has been rejected', async () => {
+    const req = createBodyRequest();
+    const body = parseJsonBody(req as never);
+
+    // Send an oversized chunk to trigger rejection + destroy
+    req.emit('data', Buffer.alloc(2 * 1024 * 1024 + 1));
+    // These should be no-ops — the promise is already settled
+    req.emit('data', Buffer.from('more data'));
+    req.emit('end');
+
+    await expect(body).rejects.toThrow('Request body too large');
+    // destroy should only be called once
+    expect(req.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores data events that arrive after an error event settled the promise', async () => {
+    const req = createBodyRequest();
+    const body = parseJsonBody(req as never);
+
+    req.emit('error', new Error('connection reset'));
+    // These should be no-ops
+    req.emit('data', Buffer.from('late data'));
+    req.emit('end');
+
+    await expect(body).rejects.toThrow('connection reset');
+  });
+
   it('authenticates HTTP requests with bearer or fallback token headers', () => {
     seedClient({
       id: 'client_http',

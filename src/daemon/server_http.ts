@@ -34,6 +34,7 @@ import {
   parseMcpServerUpdatePayload,
   parseMemorySearchPayload,
 } from './server_schemas';
+import { createRateLimiter } from './rate_limiter';
 import {
   authenticateRequest,
   getThreadOrError,
@@ -72,8 +73,28 @@ const readParsedBody = async <T>(
 };
 
 export const createDaemonRequestHandler =
-  (deps: CreateDaemonRequestHandlerDeps): http.RequestListener =>
-  async (req, res) => {
+  (deps: CreateDaemonRequestHandlerDeps): http.RequestListener => {
+    const chatSendLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
+    const writeLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 60 });
+
+    const checkRateLimit = (
+      clientId: string,
+      limiter: ReturnType<typeof createRateLimiter>,
+      res: http.ServerResponse
+    ): boolean => {
+      const result = limiter.check(clientId);
+      if (!result.allowed) {
+        res.setHeader('Retry-After', Math.ceil((result.retryAfterMs ?? 1000) / 1000));
+        writeJson(res, 429, {
+          success: false,
+          error: 'Too many requests',
+        });
+        return false;
+      }
+      return true;
+    };
+
+    return async (req, res) => {
     withCors(res);
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -261,6 +282,7 @@ export const createDaemonRequestHandler =
           writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
           return;
         }
+        if (!checkRateLimit(clientId, chatSendLimiter, res)) return;
         const body = await readParsedBody<ChatSendPayload>(
           req,
           res,
@@ -570,3 +592,4 @@ export const createDaemonRequestHandler =
       writeJson(res, 500, { success: false, error: 'Internal server error' });
     }
   };
+};

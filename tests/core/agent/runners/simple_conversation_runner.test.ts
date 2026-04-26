@@ -220,7 +220,7 @@ describe('SimpleConversationRunner', () => {
         },
       })
     );
-    expect(getAppConfigMock).not.toHaveBeenCalled();
+    expect(getAppConfigMock).toHaveBeenCalled();
     expect(loggerSpanFailMock).not.toHaveBeenCalled();
     expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
   });
@@ -488,7 +488,7 @@ describe('SimpleConversationRunner', () => {
         stopWhen: { type: 'step-count', count: 2 },
       })
     );
-    expect(getAppConfigMock).not.toHaveBeenCalled();
+    expect(getAppConfigMock).toHaveBeenCalled();
     expect(loggerSpanFailMock).not.toHaveBeenCalled();
     expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
   });

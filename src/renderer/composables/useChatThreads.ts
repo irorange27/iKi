@@ -328,6 +328,10 @@ export const useChatThreads = (deps: {
   const loadThreadMessages = async (threadId: string) => {
     try {
       const dbMessages = await deps.electronAPI.chat.messages.list(threadId);
+
+      // Discard if the active thread changed while loading
+      if (currentThread.value?.id !== threadId) return;
+
       const rows = Array.isArray(dbMessages)
         ? dbMessages.filter(
             (message): message is ChatMessage =>
@@ -466,6 +470,9 @@ export const useChatThreads = (deps: {
   };
 
   const handleModelSelected = (data: { model: string; provider: { id: string; type: string } }) => {
+    const previousModel = currentModel.value;
+    const previousProviderId = currentProviderId.value;
+
     currentModel.value = data.model;
     currentProviderId.value = data.provider.id;
     void persistDraftComposerSelection({
@@ -476,6 +483,8 @@ export const useChatThreads = (deps: {
     if (currentThread.value) {
       const metadata = parseJsonRecord(currentThread.value.metadata);
       const llm = isObjectRecord(metadata.llm) ? metadata.llm : {};
+      const previousMetadata = currentThread.value.metadata;
+      const previousThreadModel = currentThread.value.model;
       const updatedMetadata = {
         ...metadata,
         llm: {
@@ -488,8 +497,7 @@ export const useChatThreads = (deps: {
       };
       const nextMetadata = JSON.stringify(updatedMetadata);
       const threadId = currentThread.value.id;
-      currentThread.value.metadata = nextMetadata;
-      currentThread.value.model = data.model;
+      currentThread.value = { ...currentThread.value, metadata: nextMetadata, model: data.model };
       void deps.electronAPI.chat.threads
         .update(threadId, {
           model: data.model,
@@ -505,6 +513,16 @@ export const useChatThreads = (deps: {
               thread_id: threadId,
             },
           });
+          // Rollback optimistic mutations on IPC failure, only if no newer selection has been made
+          if (currentModel.value === data.model) {
+            currentModel.value = previousModel;
+            currentProviderId.value = previousProviderId;
+          }
+          if (currentThread.value?.id === threadId) {
+            if (currentThread.value.model === data.model) {
+              currentThread.value = { ...currentThread.value, metadata: previousMetadata, model: previousThreadModel };
+            }
+          }
         });
     }
   };
@@ -516,7 +534,7 @@ export const useChatThreads = (deps: {
 
     isIncognito.value = normalizedValue;
     if (activeThread) {
-      activeThread.is_incognito = normalizedValue ? 1 : 0;
+      currentThread.value = { ...activeThread, is_incognito: normalizedValue ? 1 : 0 };
     }
 
     if (!activeThread) return;
@@ -537,7 +555,7 @@ export const useChatThreads = (deps: {
       });
       isIncognito.value = previousValue;
       if (currentThread.value?.id === activeThread.id) {
-        currentThread.value.is_incognito = previousValue ? 1 : 0;
+        currentThread.value = { ...currentThread.value, is_incognito: previousValue ? 1 : 0 };
       }
     }
   };
@@ -549,7 +567,7 @@ export const useChatThreads = (deps: {
 
     selectedWorkspaceId.value = normalizedValue;
     if (activeThread) {
-      activeThread.workspace_id = normalizedValue ?? undefined;
+      currentThread.value = { ...activeThread, workspace_id: normalizedValue ?? undefined };
     }
 
     if (!activeThread) return;
@@ -571,7 +589,7 @@ export const useChatThreads = (deps: {
       });
       selectedWorkspaceId.value = previousValue;
       if (currentThread.value?.id === activeThread.id) {
-        currentThread.value.workspace_id = previousValue ?? undefined;
+        currentThread.value = { ...currentThread.value, workspace_id: previousValue ?? undefined };
       }
     }
   };

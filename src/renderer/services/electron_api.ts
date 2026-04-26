@@ -14,7 +14,13 @@ export const getOptionalElectronAPI = (): ElectronApi | null => {
   return window.electronAPI ?? null;
 };
 
-export const getElectronAPI = (): ElectronApi => getOptionalElectronAPI() as ElectronApi;
+export const getElectronAPI = (): ElectronApi => {
+  const api = getOptionalElectronAPI();
+  if (!api) {
+    throw new Error('electronAPI is not available in this context');
+  }
+  return api;
+};
 
 export const getElectronApiMethod = <K extends MethodKeys<ElectronApi>>(
   key: K

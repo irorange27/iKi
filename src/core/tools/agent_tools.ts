@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '../agent/types';
 import { createAgentRunTracker } from '../agent/run_tracker';
@@ -21,7 +24,7 @@ const AGENT_TOOL_NAME = 'agent';
 const DEFAULT_AGENT_MAX_TOKENS = 2000;
 const MAX_TOOL_NAMES_IN_ERROR = 10;
 
-const SUBAGENT_SYSTEM_PROMPT =
+const SUBAGENT_SYSTEM_PROMPT_BASE =
   'You are a delegated subagent working for the parent iKi agent.\n' +
   'Rules:\n' +
   '- Solve only the delegated subtask, not the whole user request.\n' +
@@ -29,7 +32,8 @@ const SUBAGENT_SYSTEM_PROMPT =
   '- Do not ask for, rely on, or attempt approval-gated/destructive tools here.\n' +
   '- Do not delegate again; recursive agent spawning is disabled.\n' +
   '- Keep reasoning private and return a concise, high-signal result for the parent agent.\n' +
-  '- If you cannot complete the delegated subtask with the provided context and tools, say exactly what is missing.\n';
+  '- If you cannot complete the delegated subtask with the provided context and tools, say exactly what is missing.\n' +
+  '- A scratchpad directory is available for writing intermediate findings. Write structured results there so the parent agent can inspect them directly instead of relying on your summary. Include file paths in your final response.\n';
 
 const normalizeToolNames = (input: unknown): string[] => {
   if (!Array.isArray(input)) return [];
@@ -55,7 +59,8 @@ const formatToolNameList = (toolNames: string[]): string =>
 
 const buildDelegationPrompt = (
   args: z.infer<typeof AgentToolInputSchema>,
-  toolNames: string[]
+  toolNames: string[],
+  scratchpadPath: string
 ): string => {
   const sections = [
     '<delegated_subtask>',
@@ -77,8 +82,10 @@ const buildDelegationPrompt = (
     sections.push('</expected_output>');
   }
 
+  sections.push(`<scratchpad>${scratchpadPath}</scratchpad>`);
+
   sections.push(
-    `<delegation_contract tools="${toolNames.join(', ')}" max_iterations="${args.maxIterations ?? DEFAULT_AGENT_MAX_ITERATIONS}">Return only the subtask result for the parent agent. Be concrete and complete.</delegation_contract>`
+    `<delegation_contract tools="${toolNames.join(', ')}" max_iterations="${args.maxIterations ?? DEFAULT_AGENT_MAX_ITERATIONS}">Return only the subtask result for the parent agent. Write intermediate findings to the scratchpad directory so the parent can inspect them. Be concrete and complete.</delegation_contract>`
   );
 
   return sections.join('\n');
@@ -201,7 +208,14 @@ export class DelegatedAgentTool extends BaseTool {
     const conversationModel = resolveConversationModel();
     const delegatedTools = resolveDelegableTools(args.tools);
     const delegatedToolNames = delegatedTools.map(tool => tool.name);
-    const prompt = buildDelegationPrompt(args, delegatedToolNames);
+
+    // Create scratchpad directory for intermediate subagent findings
+    const scratchpadBase = path.join(os.tmpdir(), 'iki-scratch');
+    const scratchpadPath = path.join(scratchpadBase, `agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    await fs.mkdir(scratchpadPath, { recursive: true });
+
+    const systemPrompt = `${SUBAGENT_SYSTEM_PROMPT_BASE}\nScratchpad directory: ${scratchpadPath}`;
+    const prompt = buildDelegationPrompt(args, delegatedToolNames, scratchpadPath);
 
     const runner = createSimpleConversationRunner({
       enabled: true,
@@ -210,7 +224,7 @@ export class DelegatedAgentTool extends BaseTool {
         ? { providerId: conversationModel.providerId.trim() }
         : {}),
       model: conversationModel.model,
-      systemPrompt: SUBAGENT_SYSTEM_PROMPT,
+      systemPrompt,
       maxTokens:
         typeof conversationModel.maxTokens === 'number' &&
         Number.isFinite(conversationModel.maxTokens) &&
@@ -236,7 +250,7 @@ export class DelegatedAgentTool extends BaseTool {
       providerType: conversationModel.providerType,
       providerId: conversationModel.providerId,
       model: conversationModel.model,
-      systemPrompt: SUBAGENT_SYSTEM_PROMPT,
+      systemPrompt,
       enabledTools: delegatedToolNames,
       availableSkillIds: runtimeContext.availableSkillIds ?? [],
       input: {
@@ -245,6 +259,7 @@ export class DelegatedAgentTool extends BaseTool {
           source: 'delegated-agent',
           requestedToolNames: delegatedToolNames,
           maxIterations: Math.max(1, Math.trunc(args.maxIterations || DEFAULT_AGENT_MAX_ITERATIONS)),
+          scratchpadPath,
         },
       },
       working: {
@@ -261,6 +276,7 @@ export class DelegatedAgentTool extends BaseTool {
       input: {
         toolName: AGENT_TOOL_NAME,
         delegatedTools: delegatedToolNames,
+        scratchpadPath,
       },
       output: {
         childRunId: runTracker.id,
@@ -316,6 +332,28 @@ export class DelegatedAgentTool extends BaseTool {
       finishReason: 'completed',
     });
 
+    // Scan scratchpad for intermediate findings
+    let scratchpadFiles: Array<{ name: string; size: number }> = [];
+    try {
+      const entries = await fs.readdir(scratchpadPath, { withFileTypes: true });
+      scratchpadFiles = entries
+        .filter(e => e.isFile())
+        .map(e => ({ name: e.name, size: 0 }));
+      // Get actual sizes for the first 20 files to avoid slowdown
+      for (const file of scratchpadFiles.slice(0, 20)) {
+        try {
+          const stat = await fs.stat(path.join(scratchpadPath, file.name));
+          file.size = stat.size;
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // scratchpad may not exist or be empty
+    }
+
+    const hasScratchpad = scratchpadFiles.length > 0;
+
     return {
       response: result.response,
       iterations: result.iterations,
@@ -328,6 +366,14 @@ export class DelegatedAgentTool extends BaseTool {
           : {}),
         model: conversationModel.model,
       },
+      ...(hasScratchpad
+        ? {
+            scratchpad: {
+              path: scratchpadPath,
+              files: scratchpadFiles,
+            },
+          }
+        : {}),
     };
   }
 }

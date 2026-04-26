@@ -306,9 +306,49 @@ describe('ai_sdk_runtime', () => {
     ]);
   });
 
-  it('uses explicit runtime overrides without touching app config', () => {
+  it('merges runtime overrides on top of the app config base without losing pre-configured settings', () => {
+    getAppConfigMock.mockReturnValue({
+      agent: {
+        enabled: true,
+        providerType: 'deepseek',
+        model: 'deepseek-chat',
+        systemPrompt: 'stored prompt',
+        temperature: 0.3,
+        maxTokens: 512,
+        maxIterations: 4,
+        enableTools: true,
+        enableMemory: true,
+      },
+    });
+
+    expect(
+      loadAgentConfig({
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'runtime prompt',
+        enableTools: false,
+      })
+    ).toEqual({
+      enabled: true,
+      providerType: 'openai',
+      providerId: '',
+      model: 'gpt-4o-mini',
+      systemPrompt: 'runtime prompt',
+      temperature: 0.3,
+      maxTokens: 512,
+      maxIterations: 4,
+      enableTools: false,
+      enableMemory: true,
+    });
+
+    expect(getAppConfigMock).toHaveBeenCalled();
+  });
+
+  it('falls back to defaults when app config fails and override is provided', () => {
+    const error = new Error('db unavailable');
     getAppConfigMock.mockImplementation(() => {
-      throw new Error('app config should not be loaded');
+      throw error;
     });
 
     expect(
@@ -328,9 +368,6 @@ describe('ai_sdk_runtime', () => {
       systemPrompt: 'runtime prompt',
       enableTools: false,
     });
-
-    expect(getAppConfigMock).not.toHaveBeenCalled();
-    expect(loggerEventMock).not.toHaveBeenCalled();
   });
 
   it('loads app config only when no explicit runtime override is provided', () => {

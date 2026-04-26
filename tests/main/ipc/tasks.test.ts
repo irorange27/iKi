@@ -306,6 +306,17 @@ describe('tasks IPC', () => {
     expect(result).toEqual({ success: true });
   });
 
+  it('wraps task run errors instead of letting them propagate to IPC', async () => {
+    const handler = ipcHandlers.get('tasks:run-now');
+    if (!handler) throw new Error('tasks:run-now handler not registered');
+
+    runProactiveTaskMock.mockRejectedValueOnce(new Error('provider offline'));
+
+    const result = await handler(null, 'task_3');
+
+    expect(result).toEqual({ success: false, error: 'provider offline' });
+  });
+
   it('removes tasks through the delete handler', async () => {
     const handler = ipcHandlers.get('tasks:delete');
     if (!handler) throw new Error('tasks:delete handler not registered');

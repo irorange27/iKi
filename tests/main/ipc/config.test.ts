@@ -10,6 +10,7 @@ type HttpResponseMock = {
 
 const {
   ipcHandlers,
+  getAllWindowsMock,
   getPathMock,
   readFileSyncMock,
   httpGetMock,
@@ -80,6 +81,7 @@ const {
     ],
     candidate,
   })),
+  getAllWindowsMock: vi.fn(() => []),
 }));
 
 vi.mock('electron', () => ({
@@ -87,7 +89,7 @@ vi.mock('electron', () => ({
     getPath: getPathMock,
   },
   BrowserWindow: {
-    getAllWindows: vi.fn(() => []),
+    getAllWindows: getAllWindowsMock,
   },
   ipcMain: {
     handle: vi.fn((channel: string, handler: IpcHandler) => {
@@ -533,5 +535,45 @@ describe('config IPC', () => {
     await handler(null, nextConfig);
 
     expect(applyAppUpdateConfigMock).toHaveBeenCalledWith(nextConfig);
+  });
+
+  it('broadcasts config:updated to all windows after side effects and tolerates destroyed webContents', async () => {
+    const handler = ipcHandlers.get('config:set');
+    if (!handler) throw new Error('config:set handler not registered');
+
+    const send1 = vi.fn();
+    const send2 = vi.fn();
+    const send3 = vi.fn();
+
+    // send2 simulates a destroyed webContents where .send() throws
+    send2.mockImplementation(() => {
+      throw new Error('Object has been destroyed');
+    });
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: { send: send1 } },
+      { webContents: { send: send2 } },
+      { webContents: { send: send3 } },
+    ]);
+
+    const nextConfig = {
+      general: { autoUpdate: false },
+      daemon: { host: '127.0.0.1', port: 6127 },
+      mcp: {
+        enabled: false,
+        connectOnStartup: false,
+        allowRemoteServers: false,
+        defaultApprovalMode: 'safe-only',
+        requestTimeoutMs: 20000,
+        maxConcurrentRequests: 4,
+      },
+    };
+
+    const result = await handler(null, nextConfig);
+
+    expect(result).toBe(true);
+    expect(send1).toHaveBeenCalledWith('config:updated', nextConfig);
+    expect(send2).toHaveBeenCalledWith('config:updated', nextConfig);
+    expect(send3).toHaveBeenCalledWith('config:updated', nextConfig);
   });
 });

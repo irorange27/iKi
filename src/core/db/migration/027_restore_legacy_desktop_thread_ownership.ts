@@ -29,4 +29,7 @@ export const migration: Migration = {
     if (!firstUserClient) return;
     restoreLegacyDesktopThreadOwnership(firstUserClient.id, firstUserClient.created_at);
   },
+  down: () => {
+    // Ownership reassignment is lossy — the original client_id values cannot be reconstructed.
+  },
 };

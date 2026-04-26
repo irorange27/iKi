@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { getAppConfig } from '../config';
 import { createLogger } from '../logger';
+import { buildSetClause } from './utils';
 import {
   createHashMemoryEmbeddingRuntime,
   createPreferredMemoryEmbeddingRuntime,
@@ -568,6 +569,10 @@ export const listLongMemoryAcrossThreads = (
 export const updateLongMemory = async (id: string, updates: Partial<LongMemoryEntry>) => {
   if (!id) return null;
   const now = toIsoNow();
+  const ALLOWED_MEMORY_LONG_COLUMNS = new Set([
+    'thread_id', 'summary', 'embedding', 'source_message_ids', 'emotion',
+    'tags', 'metadata',
+  ]);
   const fieldNames = new Set(
     Object.keys(updates)
     .filter(key => key !== 'id' && key !== 'created_at')
@@ -577,6 +582,7 @@ export const updateLongMemory = async (id: string, updates: Partial<LongMemoryEn
     fieldNames.add('metadata');
   }
   const fields = Array.from(fieldNames)
+    .filter(key => ALLOWED_MEMORY_LONG_COLUMNS.has(key))
     .map(key => `${key} = @${key}`)
     .join(', ');
 

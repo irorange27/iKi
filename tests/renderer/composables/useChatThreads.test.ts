@@ -511,4 +511,150 @@ describe('useChatThreads', () => {
     expect(generateTitle).toHaveBeenCalledWith('User: 请告诉我现在几点');
     expect(updateThread).toHaveBeenCalledWith(thread.id, { title: 'Generated title' });
   });
+
+  it('discards stale message-load results when a newer thread selection has started', async () => {
+    // Thread A: slow message load. Thread B: instant message load.
+    const threadA = createStoredThread({ id: 'thread_A', title: 'Thread A', model: 'gpt-4o' });
+    const threadB = createStoredThread({ id: 'thread_B', title: 'Thread B', model: 'deepseek-chat' });
+
+    const aMessages: ChatMessage[] = [
+      {
+        id: 'msg_a1',
+        thread_id: 'thread_A',
+        role: 'user',
+        message: JSON.stringify({ parts: [{ type: 'text', text: 'Hello from A' }] }),
+        created_at: '2026-03-21T00:00:00.000Z',
+      },
+    ];
+    const bMessages: ChatMessage[] = [
+      {
+        id: 'msg_b1',
+        thread_id: 'thread_B',
+        role: 'user',
+        message: JSON.stringify({ parts: [{ type: 'text', text: 'Hello from B' }] }),
+        created_at: '2026-03-21T00:00:00.000Z',
+      },
+    ];
+
+    // Thread A's message list is deferred so we can control ordering
+    let resolveAList: (value: ChatMessage[]) => void;
+    const aListPromise = new Promise<ChatMessage[]>(resolve => {
+      resolveAList = resolve;
+    });
+
+    const listMessages = vi.fn(async (threadId: string) => {
+      if (threadId === 'thread_A') return aListPromise;
+      return [...bMessages];
+    });
+
+    const threadsById = new Map([threadA, threadB].map(t => [t.id, t]));
+    const getThread = vi.fn(async (id: string) => threadsById.get(id) ?? null);
+    const updateThread = vi.fn(async () => ({ changes: 1 }));
+
+    const messageStore = {
+      append: vi.fn(),
+      clear: vi.fn(),
+      hasId: vi.fn(() => false),
+      setAll: vi.fn(),
+    };
+
+    const sidebarRef = { refresh: vi.fn(), setCurrentThread: vi.fn() };
+
+    const state = useChatThreads({
+      electronAPI: {
+        chat: {
+          threads: { create: vi.fn(), clear: vi.fn(), update: updateThread, get: getThread, delete: vi.fn() },
+          messages: { list: listMessages },
+        },
+        toolModel: { generateTitle: vi.fn() },
+        tasks: {},
+      } as never,
+      messageStore: messageStore as never,
+      persistence: { resetPersistedMessageIds: vi.fn() } as never,
+      sidebarRef: ref(sidebarRef),
+      scrollToBottom: vi.fn(),
+      preferredDraftModel: ref(''),
+      preferredDraftProviderId: ref(null),
+    });
+
+    // Start selecting thread A — its message load will block
+    const aSelectPromise = state.selectThread('thread_A');
+
+    // While A is loading, immediately select thread B (completes synchronously)
+    await state.selectThread('thread_B');
+
+    expect(state.currentThread.value?.id).toBe('thread_B');
+    expect(state.currentModel.value).toBe('deepseek-chat');
+
+    // Now resolve A's stale message load
+    resolveAList!(aMessages);
+    await aSelectPromise;
+
+    // After stale resolution, thread B must still be the active thread
+    expect(state.currentThread.value?.id).toBe('thread_B');
+    expect(state.currentModel.value).toBe('deepseek-chat');
+
+    // The final setAll call must carry thread B's messages, not A's
+    const setAllCalls = messageStore.setAll.mock.calls;
+    expect(setAllCalls.length).toBeGreaterThanOrEqual(1);
+    const lastSetAllArg = setAllCalls[setAllCalls.length - 1][0] as Array<{ id?: string }>;
+    const lastIds = lastSetAllArg.map(m => m.id).join(',');
+    expect(lastIds).toBe('msg_b1');
+  });
+
+  it('rolls back optimistic thread metadata when the IPC update of a model selection fails', async () => {
+    const originalMetadata = JSON.stringify({ llm: { providerId: 'openai', model: 'gpt-4o' } });
+    const thread = createStoredThread({
+      id: 'thread_rollback',
+      title: 'Rollback thread',
+      model: 'gpt-4o',
+      metadata: originalMetadata,
+    });
+
+    const updateError = new Error('IPC disconnected');
+    const updateThread = vi.fn(async () => {
+      throw updateError;
+    });
+
+    const threadsById = new Map([[thread.id, thread]]);
+    const getThread = vi.fn(async (id: string) => threadsById.get(id) ?? null);
+
+    const state = useChatThreads({
+      electronAPI: {
+        chat: {
+          threads: { create: vi.fn(), clear: vi.fn(), update: updateThread, get: getThread, delete: vi.fn() },
+          messages: { list: vi.fn(async () => []) },
+        },
+        toolModel: { generateTitle: vi.fn() },
+        tasks: {},
+      } as never,
+      messageStore: { append: vi.fn(), clear: vi.fn(), hasId: vi.fn(() => false), setAll: vi.fn() } as never,
+      persistence: { resetPersistedMessageIds: vi.fn() } as never,
+      sidebarRef: ref({ refresh: vi.fn(), setCurrentThread: vi.fn() }),
+      scrollToBottom: vi.fn(),
+      preferredDraftModel: ref(''),
+      preferredDraftProviderId: ref(null),
+    });
+
+    await state.selectThread('thread_rollback');
+    expect(state.currentThread.value?.model).toBe('gpt-4o');
+
+    // Change model — IPC will fail
+    state.handleModelSelected({ model: 'deepseek-chat', provider: { id: 'deepseek', type: 'deepseek' } });
+
+    // Optimistic update has been applied
+    expect(state.currentModel.value).toBe('deepseek-chat');
+    expect(state.currentProviderId.value).toBe('deepseek');
+
+    // Wait for the failed IPC to settle
+    await vi.waitFor(() => expect(updateThread).toHaveBeenCalled(), { timeout: 1000 });
+
+    // After IPC failure, the composer state should be rolled back
+    // NOTE: With the current bug, these will still be 'deepseek-chat' / 'deepseek'
+    // The fix should restore them to 'gpt-4o' / 'openai'
+    expect(state.currentModel.value).toBe('gpt-4o');
+    expect(state.currentProviderId.value).toBe('openai');
+    expect(state.currentThread.value?.model).toBe('gpt-4o');
+    expect(state.currentThread.value?.metadata).toBe(originalMetadata);
+  });
 });
