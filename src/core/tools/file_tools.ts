@@ -204,6 +204,8 @@ export class ReadFileTool extends BaseTool {
 
   override paramSchema = ReadFileInputSchema;
 
+  override cache = { ttlMs: 30_000 };
+
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveReadableWorkspacePath(args.path);
 
@@ -353,6 +355,8 @@ export class ListDirTool extends BaseTool {
   override description = 'List the contents of a directory on the local filesystem.';
   override needsApproval = false;
   override paramSchema = ListDirInputSchema;
+
+  override cache = { ttlMs: 30_000 };
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveReadableWorkspacePath(args.path);

@@ -1,4 +1,9 @@
-import { createSimpleConversationRunner, type ConversationRunner } from '../../../core/agent';
+import {
+  composePrepareSteps,
+  createPlanThenExecutePrepareStep,
+  createSimpleConversationRunner,
+  type ConversationRunner,
+} from '../../../core/agent';
 import { resolveChatToolMaxIterations } from './chat_constants';
 import { createTodoPrepareStep } from './chat_todo_planning';
 
@@ -27,7 +32,11 @@ export const createChatConversationRunner = (
     enableTools: params.enableTools,
     ...(params.enableTools
       ? {
-          prepareStep: createTodoPrepareStep(params.enabledTools ?? []),
+          prepareStep: composePrepareSteps(
+            createPlanThenExecutePrepareStep(params.enabledTools ?? []),
+            createTodoPrepareStep(params.enabledTools ?? [])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ) as any,
         }
       : {}),
     ...(typeof params.maxTokens === 'number' ? { maxTokens: params.maxTokens } : {}),

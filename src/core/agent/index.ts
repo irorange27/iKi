@@ -44,5 +44,9 @@ export type { AgentRunTracker } from './run_tracker';
 
 export { getConversationRunnerConfig } from './config';
 
+// Export plan module
+export type { Plan, PlanStep } from './plan';
+export { createPlanThenExecutePrepareStep, composePrepareSteps } from './plan';
+
 // Export tools
 export * from '../tools';

@@ -23,7 +23,7 @@ import { createLogger } from '../logger';
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
 
-type BuiltInSlashCommandId = 'new' | 'clear' | 'incognito' | 'init';
+type BuiltInSlashCommandId = 'new' | 'clear' | 'incognito' | 'init' | 'help';
 
 type BuiltInSlashCommand = {
   id: `builtin:${BuiltInSlashCommandId}`;
@@ -166,6 +166,13 @@ export const useChatSlashCommands = (deps: {
       shortcut: 'init',
       name: deps.t('chat.input.slash.init.name'),
       description: deps.t('chat.input.slash.init.description'),
+    },
+    {
+      id: 'builtin:help',
+      kind: 'builtin',
+      shortcut: 'help',
+      name: deps.t('chat.input.slash.help.name'),
+      description: deps.t('chat.input.slash.help.description'),
     },
   ]);
 
@@ -471,6 +478,13 @@ export const useChatSlashCommands = (deps: {
       };
     }
 
+    if (command.shortcut === 'help') {
+      return {
+        kind: 'skip',
+        feedback: deps.t('chat.input.slash.help.executed'),
+      };
+    }
+
     if (command.shortcut === 'init') {
       const threadId = deps.threadId.value;
       if (!threadId) {
@@ -545,15 +559,6 @@ export const useChatSlashCommands = (deps: {
   });
 
   const resolveSlashCommandSend = async (draft: string): Promise<ResolvedComposerSendRequest> => {
-    await loadSkills({
-      force:
-        !hasLoadedSkills.value || Date.now() - lastLoadedSkillsAt.value >= SKILLS_REFRESH_TTL_MS,
-    });
-    await loadEnabledPromptApps({
-      force:
-        !hasLoadedPromptApps.value || Date.now() - lastLoadedAt.value >= PROMPT_APP_REFRESH_TTL_MS,
-    });
-
     const invocation = activeInvocation.value;
     if (invocation) {
       if (invocation.kind === 'builtin') {
@@ -576,6 +581,15 @@ export const useChatSlashCommands = (deps: {
 
       return await executePromptAppInvocation(invocation, draft);
     }
+
+    await loadSkills({
+      force:
+        !hasLoadedSkills.value || Date.now() - lastLoadedSkillsAt.value >= SKILLS_REFRESH_TTL_MS,
+    });
+    await loadEnabledPromptApps({
+      force:
+        !hasLoadedPromptApps.value || Date.now() - lastLoadedAt.value >= PROMPT_APP_REFRESH_TTL_MS,
+    });
 
     const parsed = parseSlashCommandDraft(draft);
     if (!parsed || !parsed.query) {

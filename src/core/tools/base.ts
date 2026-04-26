@@ -2,7 +2,14 @@ import { z } from 'zod';
 import { jsonSchema, tool, type Tool } from 'ai';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 import type { AgentTool, ToolApprovalMode } from '../agent/types';
+import { createLogger } from '../logger';
 import { zodSchemaToJsonSchema } from './json_schema';
+import type { ToolRetryConfig } from './retry';
+import { withRetry } from './retry';
+import type { ToolCacheConfig } from './cache';
+import { buildCacheKey, ToolResultCache } from './cache';
+
+const toolLogger = createLogger({ module: 'base_tool' });
 
 type ApprovalPolicy = boolean | ToolNeedsApprovalFunction<unknown>;
 
@@ -20,6 +27,14 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   autoAllowed = true;
   outputSchema?: Record<string, unknown>;
 
+  /** Retry configuration. If undefined, no retry is applied. */
+  retry?: ToolRetryConfig;
+
+  /** Cache configuration. If undefined, no caching is applied. */
+  cache?: ToolCacheConfig;
+
+  private _cacheInstance?: ToolResultCache;
+
   /**
    * Raw handler implementation
    */
@@ -33,11 +48,73 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   }
 
   /**
-   * Execute the tool with validation
+   * Execute the tool with validation, caching, and retry.
    */
   async execute(args: unknown): Promise<unknown> {
     const validatedArgs = this.paramSchema.parse(args);
-    return await this.handler(validatedArgs);
+
+    // --- Cache check ---
+    if (this.cache) {
+      if (!this._cacheInstance) {
+        this._cacheInstance = new ToolResultCache(this.cache);
+      }
+      const cacheKey = buildCacheKey(this.name, validatedArgs);
+
+      const cached = this._cacheInstance.get(cacheKey);
+      if (cached !== undefined) {
+        toolLogger.event({
+          level: 'debug',
+          event: 'tool.cache',
+          outcome: 'hit',
+          entity: { tool_name: this.name },
+        });
+        return cached;
+      }
+
+      // In-flight deduplication
+      const inFlight = this._cacheInstance.getInFlight(cacheKey);
+      if (inFlight) {
+        toolLogger.event({
+          level: 'debug',
+          event: 'tool.cache',
+          outcome: 'dedup',
+          entity: { tool_name: this.name },
+        });
+        return inFlight;
+      }
+    }
+
+    // --- Build wrapped handler with retry ---
+    const executeHandler = this.retry
+      ? withRetry(
+          async (validatedArgs: z.infer<P>) => await this.handler(validatedArgs),
+          this.retry
+        )
+      : async (validatedArgs: z.infer<P>) => await this.handler(validatedArgs);
+
+    const promise = executeHandler(validatedArgs);
+
+    // --- Cache store (only on success) ---
+    if (this.cache && this._cacheInstance) {
+      const cacheKey = buildCacheKey(this.name, validatedArgs);
+      this._cacheInstance.setInFlight(cacheKey, promise);
+
+      try {
+        const result = await promise;
+        this._cacheInstance.set(cacheKey, result);
+        toolLogger.event({
+          level: 'debug',
+          event: 'tool.cache',
+          outcome: 'miss',
+          entity: { tool_name: this.name },
+        });
+        return result;
+      } finally {
+        this._cacheInstance.deleteInFlight(cacheKey);
+      }
+    }
+
+    return promise;
   }
 
   /**
@@ -50,7 +127,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       ...(this.outputSchema ? { outputSchema: jsonSchema(this.outputSchema as object) } : {}),
       needsApproval: this.needsApproval ?? false,
       ...(this.approvalMode ? { approvalMode: this.approvalMode } : {}),
-      execute: async (args: z.infer<P>) => await this.handler(args),
+      execute: async (args: z.infer<P>) => await this.execute(args),
     };
 
     return tool(definition);

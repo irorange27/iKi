@@ -7,8 +7,6 @@ import {
   parseIncognitoArgument,
   extractPromptAppSlashCommands,
   parseSlashCommandDraft,
-  resolvePromptAppSlashCommand,
-  resolveSkillSlashCommand,
 } from '../../../src/shared/chat/slash_commands';
 import type { PromptApp } from '../../../src/shared/types/chat';
 import type { SkillSummary } from '../../../src/shared/types/skill';
@@ -125,10 +123,18 @@ describe('slash_commands', () => {
       argumentSeparator: ' release notes',
       argumentText: 'release notes',
       hasArgumentSeparator: true,
+      subcommand: 'release',
     });
 
     expect(parseSlashCommandDraft('/Users/nina/project')).toBeNull();
     expect(parseSlashCommandDraft('Need /summarize help')).toBeNull();
+  });
+
+  it('extracts subcommand from slash command arguments', () => {
+    expect(parseSlashCommandDraft('/incognito on')!.subcommand).toBe('on');
+    expect(parseSlashCommandDraft('/incognito off')!.subcommand).toBe('off');
+    expect(parseSlashCommandDraft('/summarize')!.subcommand).toBeNull();
+    expect(parseSlashCommandDraft('/new ')!.subcommand).toBeNull();
   });
 
   it('applies prompt templates with and without an explicit {{input}} placeholder', () => {
@@ -139,44 +145,6 @@ describe('slash_commands', () => {
     expect(applyPromptAppSlashCommandTemplate('Translate to Chinese', 'Hello world')).toBe(
       'Translate to Chinese\n\nHello world'
     );
-  });
-
-  it('resolves exact slash commands into prompt-app content', () => {
-    const commands = extractPromptAppSlashCommands([
-      buildPromptApp({
-        id: 'prompt_1',
-        name: 'Summarize',
-        shortcut: 'summarize',
-        prompt_template: 'Summarize carefully:\n{{ input }}',
-      }),
-    ]);
-
-    expect(resolvePromptAppSlashCommand('/summarize Incident report', commands)).toEqual({
-      command: commands[0],
-      content: 'Summarize carefully:\nIncident report',
-      argumentText: 'Incident report',
-    });
-
-    expect(resolvePromptAppSlashCommand('/sum Incident report', commands)).toBeNull();
-  });
-
-  it('resolves exact skill slash commands into manual-skill requests', () => {
-    const commands = extractSkillSlashCommands([
-      {
-        id: 'codex:frontend-dev',
-        name: 'frontend-dev',
-        description: 'Frontend work',
-        source: 'codex',
-        path: '/skills/frontend-dev/SKILL.md',
-      },
-    ] satisfies SkillSummary[]);
-
-    expect(resolveSkillSlashCommand('/frontend-dev Polish the settings card', commands)).toEqual({
-      command: commands[0],
-      argumentText: 'Polish the settings card',
-    });
-
-    expect(resolveSkillSlashCommand('/front Polish the settings card', commands)).toBeNull();
   });
 
   it('parses incognito slash arguments consistently', () => {

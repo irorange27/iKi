@@ -25,7 +25,6 @@ type ConsoleFormatterOptions = {
 
 type ConsoleLogSegments = {
   timestampLabel: string;
-  processLabel: string;
   levelLabel: string;
   scopeLabel: string;
   bodyLabel: string;
@@ -34,11 +33,27 @@ type ConsoleLogSegments = {
 
 const ANSI_RESET = '\u001B[0m';
 const ANSI_TIMESTAMP = '\u001B[36m';
+const ANSI_DIM = '\u001B[2m';
+const ANSI_BOLD = '\u001B[1m';
+const ANSI_GREEN = '\u001B[32m';
 const ANSI_LEVEL: Record<StructuredLogLevel, string> = {
   debug: '\u001B[90m',
   info: '\u001B[34m',
   warn: '\u001B[33m',
   error: '\u001B[31m',
+};
+
+const ANSI_OUTCOME: Record<string, string> = {
+  succeeded: '\u001B[32m',
+  started: '\u001B[33m',
+  failed: '\u001B[31m',
+};
+
+const LEVEL_LABEL: Record<StructuredLogLevel, string> = {
+  debug: 'DEBUG',
+  info: 'INFO',
+  warn: 'WARN',
+  error: 'ERROR',
 };
 
 const isStructuredLogLevel = (value: unknown): value is StructuredLogLevel =>
@@ -82,7 +97,16 @@ const formatConsoleTime = (ts: string | undefined, timeZone?: string): string =>
 const colorizeSegment = (value: string, color: string, enabled: boolean): string =>
   enabled ? `${color}${value}${ANSI_RESET}` : value;
 
-const buildBodyLabel = (entry: StructuredConsoleFormatterInput): string => {
+const formatDuration = (ms: number): string => {
+  if (ms < 1000) return `+${ms}ms`;
+  if (ms < 60_000) return `+${(ms / 1000).toFixed(1)}s`;
+  return `+${(ms / 60_000).toFixed(1)}m`;
+};
+
+const buildBodyLabel = (
+  entry: StructuredConsoleFormatterInput,
+  colorize: boolean
+): string => {
   const event = typeof entry.event === 'string' && entry.event.trim() ? entry.event.trim() : '';
   const outcome =
     typeof entry.outcome === 'string' && entry.outcome.trim() ? entry.outcome.trim() : '';
@@ -90,23 +114,52 @@ const buildBodyLabel = (entry: StructuredConsoleFormatterInput): string => {
     typeof entry.message === 'string' && entry.message.trim() ? entry.message.trim() : '';
   const fallbackMessage = [event, outcome].filter(Boolean).join(' ');
 
-  return [event, outcome, message && message !== fallbackMessage ? message : '']
-    .filter(Boolean)
-    .join(' ');
+  const eventLabel = colorize ? `${ANSI_BOLD}${event}${ANSI_RESET}` : event;
+  const outcomeColor = ANSI_OUTCOME[outcome];
+  const outcomeLabel =
+    colorize && outcomeColor ? `${outcomeColor}${outcome}${ANSI_RESET}` : outcome;
+  const messageLabel =
+    message && message !== fallbackMessage ? message : '';
+
+  return [eventLabel, outcomeLabel, messageLabel].filter(Boolean).join('  ');
 };
 
 const buildExtrasLabel = (entry: StructuredConsoleFormatterInput): string => {
-  const extras = {
-    ...(typeof entry.trace_id === 'string' ? { trace_id: entry.trace_id } : {}),
-    ...(typeof entry.request_id === 'string' ? { request_id: entry.request_id } : {}),
-    ...(typeof entry.session_id === 'string' ? { session_id: entry.session_id } : {}),
-    ...(typeof entry.duration_ms === 'number' ? { duration_ms: entry.duration_ms } : {}),
-    ...(entry.entity ? { entity: entry.entity } : {}),
-    ...(entry.data ? { data: entry.data } : {}),
-    ...(entry.error ? { error: entry.error } : {}),
-  };
+  const parts: string[] = [];
 
-  return Object.keys(extras).length > 0 ? JSON.stringify(extras) : '';
+  if (typeof entry.duration_ms === 'number') {
+    parts.push(formatDuration(entry.duration_ms));
+  }
+
+  if (typeof entry.trace_id === 'string') {
+    parts.push(`tid=${entry.trace_id.slice(0, 8)}`);
+  }
+
+  if (typeof entry.request_id === 'string') {
+    parts.push(`rid=${entry.request_id.slice(0, 8)}`);
+  }
+
+  if (typeof entry.session_id === 'string') {
+    parts.push(`sid=${entry.session_id.slice(0, 8)}`);
+  }
+
+  // Flatten top-level scalar values from the data bag
+  if (entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data)) {
+    for (const [key, value] of Object.entries(entry.data)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        parts.push(`${key}=${String(value)}`);
+      }
+    }
+  }
+
+  if (entry.error) {
+    const err = entry.error as { name?: string; message?: string };
+    const name = err.name || 'Error';
+    const msg = err.message || '';
+    parts.push(`error=${name}${msg ? `: ${msg}` : ''}`);
+  }
+
+  return parts.join('  ');
 };
 
 export const createStructuredConsoleSegments = (
@@ -119,16 +172,17 @@ export const createStructuredConsoleSegments = (
   const moduleLabel =
     typeof entry.module === 'string' && entry.module.trim() ? entry.module.trim() : 'app';
   const level = isStructuredLogLevel(entry.level) ? entry.level : 'info';
-  const timestampLabel = `[${formatConsoleTime(entry.ts, options?.timeZone)}]`;
-  const scopeLabel = `[${processLabel}/${moduleLabel}]`;
 
   return {
-    timestampLabel: colorizeSegment(timestampLabel, ANSI_TIMESTAMP, colorize),
-    processLabel: `[${processLabel}]`,
-    levelLabel: colorizeSegment(`[${level}]`, ANSI_LEVEL[level], colorize),
-    scopeLabel,
-    bodyLabel: buildBodyLabel(entry),
-    extrasLabel: buildExtrasLabel(entry),
+    timestampLabel: colorizeSegment(
+      `[${formatConsoleTime(entry.ts, options?.timeZone)}]`,
+      ANSI_TIMESTAMP,
+      colorize
+    ),
+    levelLabel: colorizeSegment(`[${LEVEL_LABEL[level]}]`, ANSI_LEVEL[level], colorize),
+    scopeLabel: colorizeSegment(`[${processLabel}/${moduleLabel}]`, ANSI_GREEN, colorize),
+    bodyLabel: buildBodyLabel(entry, colorize),
+    extrasLabel: colorizeSegment(buildExtrasLabel(entry), ANSI_DIM, colorize),
   };
 };
 
@@ -139,7 +193,6 @@ export const formatStructuredConsoleLine = (
   const segments = createStructuredConsoleSegments(entry, options);
   return [
     segments.timestampLabel,
-    segments.processLabel,
     segments.levelLabel,
     segments.scopeLabel,
     segments.bodyLabel,

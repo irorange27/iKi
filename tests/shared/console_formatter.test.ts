@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { formatStructuredConsoleLine } from '../../src/shared/logging/console_formatter';
 
 describe('structured console formatter', () => {
-  it('formats the console line with time, process, level, scope, and extras', () => {
+  it('formats a console line with time, level, scope, body, and compact extras', () => {
     const line = formatStructuredConsoleLine(
       {
         ts: '2026-03-22T07:42:08.142Z',
@@ -23,11 +23,11 @@ describe('structured console formatter', () => {
     );
 
     expect(line).toBe(
-      '[15:42:08.142] [main] [info] [main/settings_window] window.closed Settings window closed {"data":{"window_kind":"settings"}}'
+      '[15:42:08.142] [INFO] [main/settings_window] window.closed  Settings window closed window_kind=settings'
     );
   });
 
-  it('does not duplicate event and outcome when the message is the fallback text', () => {
+  it('does not duplicate event and outcome when the message matches the fallback', () => {
     const line = formatStructuredConsoleLine(
       {
         ts: '2026-03-22T07:42:08.142Z',
@@ -44,10 +44,10 @@ describe('structured console formatter', () => {
       }
     );
 
-    expect(line).toBe('[15:42:08.142] [main] [info] [main/chat_streaming] chat.stream started');
+    expect(line).toBe('[15:42:08.142] [INFO] [main/chat_streaming] chat.stream  started');
   });
 
-  it('colorizes the timestamp and level labels when ANSI colors are enabled', () => {
+  it('colorizes timestamp, level, scope, event, and outcome with distinct ANSI colors', () => {
     const line = formatStructuredConsoleLine(
       {
         ts: '2026-03-22T07:42:08.142Z',
@@ -55,6 +55,7 @@ describe('structured console formatter', () => {
         process: 'main',
         module: 'settings_window',
         event: 'window.closed',
+        outcome: 'started',
         message: 'Settings window closed',
       },
       {
@@ -63,10 +64,65 @@ describe('structured console formatter', () => {
       }
     );
 
+    // timestamp: cyan
     expect(line).toContain('\u001B[36m[15:42:08.142]\u001B[0m');
-    expect(line).toContain('\u001B[33m[warn]\u001B[0m');
-    expect(line).toContain('[main]');
-    expect(line).toContain('[main/settings_window]');
-    expect(line).toContain('window.closed Settings window closed');
+    // level: yellow
+    expect(line).toContain('\u001B[33m[WARN]\u001B[0m');
+    // scope: green
+    expect(line).toContain('\u001B[32m[main/settings_window]\u001B[0m');
+    // event: bold
+    expect(line).toContain('\u001B[1mwindow.closed\u001B[0m');
+    // outcome: yellow (started)
+    expect(line).toContain('\u001B[33mstarted\u001B[0m');
+    // message: default (no color)
+    expect(line).toContain('Settings window closed');
+  });
+
+  it('shows duration in human-readable form and shortens trace/request/session ids', () => {
+    const line = formatStructuredConsoleLine(
+      {
+        ts: '2026-03-22T07:42:08.142Z',
+        level: 'info',
+        process: 'main',
+        module: 'chat_streaming',
+        event: 'chat.stream',
+        outcome: 'succeeded',
+        message: 'Stream completed',
+        trace_id: 'abcdef1234567890abcdef1234567890',
+        request_id: 'req_1234567890abcdef',
+        session_id: 'ses_abcdef1234567890',
+        duration_ms: 1234,
+      },
+      {
+        colorize: false,
+        timeZone: 'Asia/Shanghai',
+      }
+    );
+
+    expect(line).toBe(
+      '[15:42:08.142] [INFO] [main/chat_streaming] chat.stream  succeeded  Stream completed +1.2s  tid=abcdef12  rid=req_1234  sid=ses_abcd'
+    );
+  });
+
+  it('renders error as a compact name: message pair without stack trace', () => {
+    const line = formatStructuredConsoleLine(
+      {
+        ts: '2026-03-22T07:42:08.142Z',
+        level: 'error',
+        process: 'main',
+        module: 'database',
+        event: 'query',
+        outcome: 'failed',
+        error: { name: 'SqliteError', message: 'no such table: threads' },
+      },
+      {
+        colorize: false,
+        timeZone: 'Asia/Shanghai',
+      }
+    );
+
+    expect(line).toBe(
+      '[15:42:08.142] [ERROR] [main/database] query  failed error=SqliteError: no such table: threads'
+    );
   });
 });

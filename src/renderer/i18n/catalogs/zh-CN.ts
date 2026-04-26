@@ -175,6 +175,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.slash.incognito.disabled': '已关闭无痕模式。',
   'chat.input.slash.incognito.invalidArgs':
     '请使用 `/incognito`、`/incognito on` 或 `/incognito off`。',
+  'chat.input.slash.help.name': '帮助',
+  'chat.input.slash.help.description': '显示可用的斜杠指令。',
+  'chat.input.slash.help.executed': '输入 / 可浏览指令。内置指令：/new、/clear、/incognito、/init、/help。',
   'chat.input.slash.init.name': '初始化 IKI.md',
   'chat.input.slash.init.description': '在当前工作区创建项目 agent 指令文件（IKI.md）。',
   'chat.input.slash.init.created': ({ path }) => `已在 ${path} 创建 IKI.md。编辑该文件可指导 iKi 在该项目中的行为。`,

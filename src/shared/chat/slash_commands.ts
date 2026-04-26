@@ -26,17 +26,7 @@ export type ParsedSlashCommandDraft = {
   argumentSeparator: string;
   argumentText: string;
   hasArgumentSeparator: boolean;
-};
-
-export type ResolvedPromptAppSlashCommand = {
-  command: PromptAppSlashCommand;
-  content: string;
-  argumentText: string;
-};
-
-export type ResolvedSkillSlashCommand = {
-  command: SkillSlashCommand;
-  argumentText: string;
+  subcommand: string | null;
 };
 
 const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*input\s*\}\}/gi;
@@ -106,7 +96,7 @@ export const extractSkillSlashCommands = (skills: readonly SkillSummary[]): Skil
       .at(-1)
       ?.trim()
       .toLowerCase()
-      .replace(/[^a-z0-9-_ ]+/g, '')
+      .replace(/[^\p{L}0-9-_ ]+/gu, '')
       .replace(/\s+/g, '-');
     const shortcut = nameShortcut || normalizeSlashCommandShortcut(normalizedSegment);
 
@@ -162,6 +152,7 @@ export const parseSlashCommandDraft = (draft: string): ParsedSlashCommandDraft |
       argumentSeparator: '',
       argumentText: '',
       hasArgumentSeparator: false,
+      subcommand: null,
     };
   }
 
@@ -177,6 +168,7 @@ export const parseSlashCommandDraft = (draft: string): ParsedSlashCommandDraft |
       argumentSeparator: '',
       argumentText: '',
       hasArgumentSeparator: false,
+      subcommand: null,
     };
   }
 
@@ -188,6 +180,7 @@ export const parseSlashCommandDraft = (draft: string): ParsedSlashCommandDraft |
       argumentSeparator: afterSlash,
       argumentText: '',
       hasArgumentSeparator: true,
+      subcommand: null,
     };
   }
 
@@ -196,14 +189,18 @@ export const parseSlashCommandDraft = (draft: string): ParsedSlashCommandDraft |
   if (!query) return null;
 
   const argumentSeparator = afterSlash.slice(separatorIndex);
+  const argumentText = argumentSeparator.replace(/^\s+/, '');
+  const subcommandMatch = argumentText.match(/^(\S+)/);
+  const subcommand = subcommandMatch ? subcommandMatch[1].toLowerCase() : null;
 
   return {
     leadingWhitespace,
     rawToken,
     query,
     argumentSeparator,
-    argumentText: argumentSeparator.replace(/^\s+/, ''),
+    argumentText,
     hasArgumentSeparator: argumentSeparator.length > 0,
+    subcommand,
   };
 };
 
@@ -249,39 +246,6 @@ export const applyPromptAppSlashCommandTemplate = (
   }
 
   return `${normalizedTemplate}\n\n${normalizedArguments}`.trim();
-};
-
-export const resolvePromptAppSlashCommand = (
-  draft: string,
-  commands: readonly PromptAppSlashCommand[]
-): ResolvedPromptAppSlashCommand | null => {
-  const parsed = parseSlashCommandDraft(draft);
-  if (!parsed || !parsed.query) return null;
-
-  const command = commands.find(candidate => candidate.shortcut === parsed.query);
-  if (!command) return null;
-
-  return {
-    command,
-    content: applyPromptAppSlashCommandTemplate(command.promptTemplate, parsed.argumentText),
-    argumentText: parsed.argumentText,
-  };
-};
-
-export const resolveSkillSlashCommand = (
-  draft: string,
-  commands: readonly SkillSlashCommand[]
-): ResolvedSkillSlashCommand | null => {
-  const parsed = parseSlashCommandDraft(draft);
-  if (!parsed || !parsed.query) return null;
-
-  const command = commands.find(candidate => candidate.shortcut === parsed.query);
-  if (!command) return null;
-
-  return {
-    command,
-    argumentText: parsed.argumentText,
-  };
 };
 
 export const applySlashCommandSelection = (

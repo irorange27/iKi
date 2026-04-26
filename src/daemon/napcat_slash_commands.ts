@@ -21,7 +21,12 @@ type NapCatSlashFeedbackKey =
   | 'incognitoEnabled'
   | 'incognitoDisabled'
   | 'incognitoInvalidArgs'
-  | 'skillNeedsRequest';
+  | 'skillNeedsRequest'
+  | 'helpHeader'
+  | 'helpBuiltins'
+  | 'helpSkills'
+  | 'helpPromptApps'
+  | 'helpNoAdditional';
 
 type NapCatSlashLocaleMessages = Record<NapCatSlashFeedbackKey, string>;
 
@@ -38,6 +43,11 @@ const NAPCAT_SLASH_MESSAGES: Record<SupportedLocale, NapCatSlashLocaleMessages> 
     incognitoDisabled: 'Incognito mode is now disabled.',
     incognitoInvalidArgs: 'Use `/incognito`, `/incognito on`, or `/incognito off`.',
     skillNeedsRequest: 'Add a request for {skill} before sending.',
+    helpHeader: 'Available commands:',
+    helpBuiltins: 'Built-in: /start, /clear, /incognito, /help',
+    helpSkills: 'Skills: {skills}',
+    helpPromptApps: 'Prompt apps: {apps}',
+    helpNoAdditional: 'No additional commands installed.',
   },
   'zh-CN': {
     startReady:
@@ -51,6 +61,11 @@ const NAPCAT_SLASH_MESSAGES: Record<SupportedLocale, NapCatSlashLocaleMessages> 
     incognitoDisabled: '已关闭无痕模式。',
     incognitoInvalidArgs: '请使用 `/incognito`、`/incognito on` 或 `/incognito off`。',
     skillNeedsRequest: '发送前先补充要让 {skill} 处理的内容。',
+    helpHeader: '可用指令：',
+    helpBuiltins: '内置：/start、/clear、/incognito、/help',
+    helpSkills: 'Skills：{skills}',
+    helpPromptApps: '快捷指令：{apps}',
+    helpNoAdditional: '没有额外的可用指令。',
   },
 };
 
@@ -165,6 +180,33 @@ export const resolveNapCatInboundSlashCommand = async (params: {
         nextValue ? 'incognitoEnabled' : 'incognitoDisabled'
       ),
       nextIncognito: nextValue,
+    };
+  }
+
+  if (parsed.query === 'help') {
+    const promptApps = extractPromptAppSlashCommands(promptAppDb.getEnabledPromptApps());
+    const skills = extractSkillSlashCommands(await listSkills());
+
+    const lines: string[] = [translateNapCatSlash(params.locale, 'helpHeader')];
+    lines.push(translateNapCatSlash(params.locale, 'helpBuiltins'));
+
+    const skillShortcuts = skills.map(s => `/${s.shortcut}`).join(', ');
+    if (skillShortcuts) {
+      lines.push(translateNapCatSlash(params.locale, 'helpSkills', { skills: skillShortcuts }));
+    }
+
+    const appShortcuts = promptApps.map(a => `/${a.shortcut}`).join(', ');
+    if (appShortcuts) {
+      lines.push(translateNapCatSlash(params.locale, 'helpPromptApps', { apps: appShortcuts }));
+    }
+
+    if (!skillShortcuts && !appShortcuts) {
+      lines.push(translateNapCatSlash(params.locale, 'helpNoAdditional'));
+    }
+
+    return {
+      kind: 'feedback',
+      feedback: lines.join('\n'),
     };
   }
 

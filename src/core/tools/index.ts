@@ -9,6 +9,7 @@ export * from './task_plan_tools';
 export * from './todo_tools';
 export * from './proactive_task_tools';
 export * from './awaiter_tools';
+export * from './plan_tools';
 
 import { defaultToolRegistry } from './base';
 import { DelegatedAgentTool } from './agent_tools';
@@ -44,6 +45,7 @@ import {
   ReadAwaiterTool,
   WriteAwaiterTool,
 } from './awaiter_tools';
+import { PlanTool } from './plan_tools';
 import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
 
@@ -64,6 +66,7 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new ReadPersonalSkillTool());
   defaultToolRegistry.register(new WritePersonalSkillTool());
   defaultToolRegistry.register(new DeletePersonalSkillTool());
+  defaultToolRegistry.register(new PlanTool());
   defaultToolRegistry.register(new TodoTool());
   defaultToolRegistry.register(new ListTodoListsTool());
   defaultToolRegistry.register(new ReadTodoListTool());

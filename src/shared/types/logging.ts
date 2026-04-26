@@ -9,7 +9,11 @@ export type StructuredLogOutcome =
   | 'skipped'
   | 'cancelled'
   | 'degraded'
-  | 'denied';
+  | 'denied'
+  | 'hit'
+  | 'miss'
+  | 'dedup'
+  | 'attempt';
 
 export interface StructuredLogError {
   name?: string;

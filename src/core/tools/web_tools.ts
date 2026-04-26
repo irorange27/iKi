@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from './base';
 import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '../network/http';
+import { RetryableError } from '../../shared/utils/errors';
 import { getAppConfig } from '../config';
 import type { WebSearchEngine } from '../../shared/types/config';
 import {
@@ -406,6 +407,8 @@ export class WebSearchTool extends BaseTool {
 
   override paramSchema = WebToolInputSchema;
 
+  override retry = { maxRetries: 2 };
+
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const limit = Math.min(
       MAX_SEARCH_RESULT_LIMIT,
@@ -580,6 +583,8 @@ export class FetchTool extends BaseTool {
     'Fetch a specific webpage or text URL and return clean extracted text with status and metadata. Use this after `web` when you need facts from the page itself, not just result titles.';
 
   override paramSchema = FetchToolInputSchema;
+
+  override retry = { maxRetries: 1 };
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const parsedUrl = ensureHttpUrl(args.url);

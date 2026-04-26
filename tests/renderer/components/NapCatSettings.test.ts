@@ -166,7 +166,7 @@ describe('NapCatSettings', () => {
     expect(getDaemonLogsMock).toHaveBeenCalledWith(120);
     expect(card.text()).toContain('QQ Messages');
     expect(card.text()).toContain('hello from qq');
-    expect(card.text()).toContain('[daemon] [info] [daemon/napcat]');
+    expect(card.text()).toContain('[daemon/napcat]');
     expect(card.text()).toContain('napcat.message.received');
     expect(card.text()).toContain('20002');
     expect(card.text()).toContain('30003');

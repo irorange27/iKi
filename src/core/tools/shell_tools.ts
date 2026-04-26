@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { BaseTool } from './base';
 import { ShellToolInputSchema } from './schemas';
+import { RetryableError } from '../../shared/utils/errors';
 import { resolveShellWorkingDirectory } from './workspace_paths';
 
 const MAX_SHELL_TIMEOUT_MS = 600_000;
@@ -83,6 +84,8 @@ export class ShellExecutionTool extends BaseTool {
 
   override paramSchema = ShellToolInputSchema;
 
+  override retry = { maxRetries: 1 };
+
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const cwd = await resolveShellWorkingDirectory(args.cwd);
     const requestedTimeout = typeof args.timeout === 'number' && args.timeout > 0 ? args.timeout : 30000;
@@ -102,13 +105,14 @@ export class ShellExecutionTool extends BaseTool {
     if (exitCode !== 0 || timedOut || killed) {
       result.isError = true;
       if (timedOut) {
-        result.message = `Command timed out after ${requestedTimeout}ms (capped). Partial output shown above.`;
-        result.recovery = {
-          hint: 'Increase the timeout or split the work into smaller commands.',
-        };
+        throw new RetryableError(
+          `Command timed out after ${requestedTimeout}ms (capped).\nPartial stdout:\n${stdout.slice(0, 1000)}\nPartial stderr:\n${stderr.slice(0, 1000)}`
+        );
       }
       if (killed) {
-        result.message = 'Command was force-killed after timeout.';
+        throw new RetryableError(
+          `Command was force-killed after timeout.\nPartial stdout:\n${stdout.slice(0, 1000)}\nPartial stderr:\n${stderr.slice(0, 1000)}`
+        );
       }
     }
 
