@@ -10,6 +10,12 @@ export interface ToolRetryConfig {
   backoffMs?: number;
   /** Custom predicate to decide if an error should be retried. Falls back to isRetryableError. */
   retryableError?: (error: unknown) => boolean;
+  /**
+   * If provided, called when all retries are exhausted.
+   * The return value replaces the error, allowing graceful degradation
+   * (e.g., returning partial output on timeout).
+   */
+  fallback?: (lastError: unknown) => unknown | Promise<unknown>;
 }
 
 const MAX_BACKOFF_MS = 2000;
@@ -44,6 +50,19 @@ export function withRetry<P extends unknown[], R>(
           : isRetryableError(error);
 
         if (attempt >= maxRetries || !shouldRetry) {
+          if (config.fallback) {
+            retryLogger.event({
+              level: 'warn',
+              event: 'tool.retry',
+              outcome: 'degraded',
+              data: {
+                attempts: attempt + 1,
+                maxRetries,
+                errorMessage: error instanceof Error ? error.message : String(error),
+              },
+            });
+            return (await config.fallback(error)) as R;
+          }
           throw error;
         }
 

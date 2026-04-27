@@ -98,7 +98,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
   };
 
   const applySpeechText = async (text: string) => {
-    const trimmed = text.trim();
+    const trimmed = text.trim().replace(/\s+/g, ' ');
     if (!trimmed) return;
     const input = inputRef.value;
     if (!input) {

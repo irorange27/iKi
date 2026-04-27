@@ -2,6 +2,7 @@ import { z } from 'zod';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { BaseTool } from './base';
+import { invalidateCaches } from './cache';
 import {
   DeleteFileInputSchema,
   EditFileInputSchema,
@@ -104,17 +105,50 @@ const findInContent = (
       return { index: exactPos, matchType: 'exact' };
     }
 
-    // Multiple exact matches — try contextBefore to disambiguate
-    if (contextBefore) {
-      const ctxPos = findInContent(content, contextBefore);
-      if (ctxPos.index >= 0) {
-        const searchStart = ctxPos.index + contextBefore.length;
-        const afterCtx = content.substring(searchStart);
-        const relPos = afterCtx.indexOf(oldText);
-        if (relPos >= 0) {
-          return { index: searchStart + relPos, matchType: 'context' };
+    // Multiple exact matches — try context anchors to disambiguate
+    if (contextBefore || contextAfter) {
+      // Walk through each exact occurrence and test context anchors
+      let searchFrom = 0;
+      while (searchFrom <= content.length) {
+        const candidatePos = content.indexOf(oldText, searchFrom);
+        if (candidatePos === -1) break;
+
+        const beforeOk = !contextBefore
+          ? true
+          : (() => {
+              const beforeStart = Math.max(0, candidatePos - contextBefore.length - 50);
+              const beforeRegion = content.substring(beforeStart, candidatePos);
+              return beforeRegion.includes(contextBefore);
+            })();
+
+        const afterOk = !contextAfter
+          ? true
+          : (() => {
+              const afterStart = candidatePos + oldText.length;
+              const afterRegion = content.substring(afterStart, afterStart + contextAfter.length + 50);
+              return afterRegion.includes(contextAfter);
+            })();
+
+        if (beforeOk && afterOk) {
+          return { index: candidatePos, matchType: 'context' };
         }
+
+        searchFrom = candidatePos + oldText.length;
       }
+
+      // Context anchors were provided but no occurrence satisfied them
+      const missingAnchors = [contextBefore && 'contextBefore', contextAfter && 'contextAfter']
+        .filter(Boolean)
+        .join(' and ');
+      const oldFirstLine = oldText.split('\n')[0].substring(0, 80);
+      return {
+        index: -1,
+        error: {
+          message: `Could not find a match for "${oldFirstLine}..." with the provided ${missingAnchors} anchors.`,
+          fileSnippet: content.substring(0, 600),
+          retryHint: 'Re-read the file and verify the contextBefore/contextAfter text matches exactly. Each anchor must appear within 50 characters of the target text.',
+        },
+      };
     }
 
     // Return first exact match; handler decides based on replaceAll / occurrences
@@ -232,6 +266,7 @@ export class WriteFileTool extends BaseTool {
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
 
     await fs.writeFile(absolutePath, args.content, { encoding: args.encoding as BufferEncoding });
+    invalidateCaches(name => name === 'read_file' || name === 'list_dir');
     return { path: absolutePath, success: true };
   }
 }
@@ -332,6 +367,7 @@ export class EditFileTool extends BaseTool {
       await fs.writeFile(absolutePath, updatedContent, {
         encoding: args.encoding as BufferEncoding,
       });
+      invalidateCaches(name => name === 'read_file' || name === 'list_dir');
     }
 
     return {
@@ -379,6 +415,7 @@ export class DeleteFileTool extends BaseTool {
     const absolutePath = await resolveDeleteWorkspacePath(args.path);
 
     await fs.unlink(absolutePath);
+    invalidateCaches(name => name === 'read_file' || name === 'list_dir');
     return { path: absolutePath, deleted: true };
   }
 }

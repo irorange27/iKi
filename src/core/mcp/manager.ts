@@ -275,6 +275,7 @@ export class McpManager extends EventEmitter {
         autoAllowed: true,
         displayName,
         source: { kind: 'mcp', id: server.id, name: server.name },
+        retry: { maxRetries: 1 },
         handler: async (args: Record<string, unknown>) => {
           return await this.callTool(server.id, tool.name, args);
         },

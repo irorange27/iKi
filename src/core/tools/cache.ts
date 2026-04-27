@@ -27,6 +27,33 @@ export interface ToolCacheConfig {
 
 const DEFAULT_MAX_SIZE = 500;
 
+// Global registry of tool cache instances for cross-tool invalidation
+const toolCaches = new Map<string, ToolResultCache>();
+
+/** Register a tool's cache so mutating tools can invalidate it. */
+export function registerToolCache(toolName: string, cache: ToolResultCache): void {
+  toolCaches.set(toolName, cache);
+}
+
+/**
+ * Clear caches for tools matching the predicate.
+ * Used by mutating tools to invalidate stale read-caches after writes.
+ */
+export function invalidateCaches(predicate: (toolName: string) => boolean): void {
+  for (const [name, cache] of toolCaches) {
+    if (predicate(name)) {
+      cache.clear();
+      cacheLogger.event({
+        level: 'debug',
+        event: 'tool.cache',
+        outcome: 'cancelled',
+        entity: { tool_name: name },
+        message: 'invalidated',
+      });
+    }
+  }
+}
+
 /**
  * Per-tool-instance result cache with TTL expiration, LRU eviction, and
  * in-flight request deduplication.

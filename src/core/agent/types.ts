@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
+import type { ToolRetryConfig } from '../tools/retry';
+import type { ToolCacheConfig } from '../tools/cache';
 
 /**
  * Agent framework type definitions using Zod schemas
@@ -53,6 +55,10 @@ export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> &
   approvalMode?: ToolApprovalMode;
   handler: (args: unknown) => Promise<unknown>;
   paramSchema?: z.ZodTypeAny;
+  /** Retry configuration. Applied in buildAiToolSet for non-BaseTool tools. */
+  retry?: ToolRetryConfig;
+  /** Cache configuration. Applied in buildAiToolSet for non-BaseTool tools. */
+  cache?: ToolCacheConfig;
 };
 
 // Tool Call Result Schema

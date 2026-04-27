@@ -445,14 +445,14 @@ export class WebSearchTool extends BaseTool {
       );
 
       if (!response.ok) {
-        throw new Error(`Google search failed with status ${response.status}`);
+        throw new RetryableError(`Google search failed with status ${response.status}`);
       }
 
       const html = await response.text();
       const results = parseGoogleResults(html, limit);
       const failure = getGoogleSearchFailure(html, results);
       if (failure) {
-        throw new Error(failure);
+        throw new RetryableError(failure);
       }
 
       return results;
@@ -474,13 +474,13 @@ export class WebSearchTool extends BaseTool {
       );
 
       if (!response.ok) {
-        throw new Error(`DuckDuckGo search failed with status ${response.status}`);
+        throw new RetryableError(`DuckDuckGo search failed with status ${response.status}`);
       }
 
       const html = await response.text();
       const results = parseDuckDuckGoResults(html, limit);
       if (results.length === 0) {
-        throw new Error('DuckDuckGo search returned no parseable results');
+        throw new RetryableError('DuckDuckGo search returned no parseable results');
       }
 
       return results;
@@ -506,13 +506,13 @@ export class WebSearchTool extends BaseTool {
       );
 
       if (!response.ok) {
-        throw new Error(`Bing RSS search failed with status ${response.status}`);
+        throw new RetryableError(`Bing RSS search failed with status ${response.status}`);
       }
 
       const xml = await response.text();
       const results = parseBingRssResults(xml, limit);
       if (results.length === 0) {
-        throw new Error('Bing RSS search returned no parseable results');
+        throw new RetryableError('Bing RSS search returned no parseable results');
       }
       return results;
     };
@@ -560,7 +560,7 @@ export class WebSearchTool extends BaseTool {
     if (results.length === 0) {
       const hint =
         'Hint: increase Settings > Network > Timeout, or enable Proxy if your network blocks certain sites.';
-      throw new Error(`Web search failed (tried: ${sourcesTried.join(', ')}). ${warnings.join('; ')}. ${hint}`);
+      throw new RetryableError(`Web search failed (tried: ${sourcesTried.join(', ')}). ${warnings.join('; ')}. ${hint}`);
     }
 
     return {

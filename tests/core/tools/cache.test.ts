@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { ToolResultCache, buildCacheKey } from '../../../src/core/tools/cache';
+import {
+  ToolResultCache,
+  buildCacheKey,
+  registerToolCache,
+  invalidateCaches,
+} from '../../../src/core/tools/cache';
 
 describe('ToolResultCache', () => {
   afterEach(() => {
@@ -135,6 +140,50 @@ describe('ToolResultCache', () => {
     expect(cache.size).toBe(2);
     cache.delete('a');
     expect(cache.size).toBe(1);
+  });
+});
+
+describe('invalidateCaches', () => {
+  it('clears registered caches matching the predicate', () => {
+    const cacheA = new ToolResultCache({ ttlMs: 60_000 });
+    const cacheB = new ToolResultCache({ ttlMs: 60_000 });
+    registerToolCache('read_file', cacheA);
+    registerToolCache('list_dir', cacheB);
+
+    cacheA.set('k1', 'v1');
+    cacheB.set('k2', 'v2');
+
+    invalidateCaches(name => name === 'read_file');
+
+    expect(cacheA.size).toBe(0);
+    expect(cacheB.size).toBe(1); // untouched
+    expect(cacheB.get('k2')).toBe('v2');
+  });
+
+  it('clears multiple matching caches', () => {
+    const cacheA = new ToolResultCache({ ttlMs: 60_000 });
+    const cacheB = new ToolResultCache({ ttlMs: 60_000 });
+    registerToolCache('read_file', cacheA);
+    registerToolCache('list_dir', cacheB);
+
+    cacheA.set('k1', 'v1');
+    cacheB.set('k2', 'v2');
+
+    invalidateCaches(name => name === 'read_file' || name === 'list_dir');
+
+    expect(cacheA.size).toBe(0);
+    expect(cacheB.size).toBe(0);
+  });
+
+  it('leaves non-matching caches untouched', () => {
+    const cache = new ToolResultCache({ ttlMs: 60_000 });
+    registerToolCache('web', cache);
+    cache.set('k', 'v');
+
+    invalidateCaches(name => name === 'read_file');
+
+    expect(cache.size).toBe(1);
+    expect(cache.get('k')).toBe('v');
   });
 });
 

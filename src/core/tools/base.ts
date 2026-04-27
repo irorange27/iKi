@@ -7,7 +7,7 @@ import { zodSchemaToJsonSchema } from './json_schema';
 import type { ToolRetryConfig } from './retry';
 import { withRetry } from './retry';
 import type { ToolCacheConfig } from './cache';
-import { buildCacheKey, ToolResultCache } from './cache';
+import { buildCacheKey, registerToolCache, ToolResultCache } from './cache';
 
 const toolLogger = createLogger({ module: 'base_tool' });
 
@@ -57,6 +57,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
     if (this.cache) {
       if (!this._cacheInstance) {
         this._cacheInstance = new ToolResultCache(this.cache);
+        registerToolCache(this.name, this._cacheInstance);
       }
       const cacheKey = buildCacheKey(this.name, validatedArgs);
 
@@ -94,6 +95,22 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
 
     const promise = executeHandler(validatedArgs);
 
+    // --- Track execution with span ---
+    const toolSpan = toolLogger.span({
+      level: 'debug',
+      event: 'tool.execute',
+      data: { tool_name: this.name },
+    });
+
+    const onResolve = (result: unknown) => {
+      toolSpan.succeed({ data: { tool_name: this.name } });
+      return result;
+    };
+    const onReject = (error: unknown) => {
+      toolSpan.fail(error, { data: { tool_name: this.name } });
+      throw error;
+    };
+
     // --- Cache store (only on success) ---
     if (this.cache && this._cacheInstance) {
       const cacheKey = buildCacheKey(this.name, validatedArgs);
@@ -108,13 +125,15 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
           outcome: 'miss',
           entity: { tool_name: this.name },
         });
-        return result;
+        return onResolve(result);
+      } catch (error) {
+        onReject(error);
       } finally {
         this._cacheInstance.deleteInFlight(cacheKey);
       }
     }
 
-    return promise;
+    return promise.then(onResolve, onReject);
   }
 
   /**
@@ -251,6 +270,8 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   autoAllowed?: boolean;
   displayName?: string;
   source?: AgentTool['source'];
+  retry?: ToolRetryConfig;
+  cache?: ToolCacheConfig;
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
   const parameters =
@@ -264,6 +285,8 @@ export function createTool<P extends z.ZodTypeAny>(options: {
     paramSchema: options.paramSchema,
     displayName: options.displayName ?? options.name,
     source: options.source ?? { kind: 'builtin' },
+    ...(options.retry ? { retry: options.retry } : {}),
+    ...(options.cache ? { cache: options.cache } : {}),
   };
 }
 

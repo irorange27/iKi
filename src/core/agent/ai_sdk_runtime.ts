@@ -11,6 +11,7 @@ import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
 import { getAppConfig } from '../config';
 import { createLogger } from '../logger';
+import { withRetry } from '../tools/retry';
 import { getFullSystemPrompt } from '../provider/llm/factory';
 import { ACP_PROVIDER_TYPE } from '../../shared/constants/acp';
 import { unwrapAcpDynamicToolCall } from '../../shared/utils/acp';
@@ -158,7 +159,9 @@ export const buildAiToolSet = (
             ? { outputSchema: jsonSchema(agentTool.outputSchema as object) }
             : {}),
           needsApproval: agentTool.needsApproval,
-          execute: async input => await agentTool.handler(input),
+          execute: agentTool.retry
+            ? withRetry(async (input: unknown) => await agentTool.handler(input), agentTool.retry)
+            : async (input: unknown) => await agentTool.handler(input),
         };
         const toolDef = tool(definition);
 

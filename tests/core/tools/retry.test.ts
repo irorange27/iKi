@@ -131,6 +131,44 @@ describe('withRetry', () => {
 
     expect(wrapped).toBe(handler);
   });
+
+  it('calls fallback when all retries are exhausted', async () => {
+    vi.useRealTimers();
+    const handler = vi.fn().mockRejectedValue(new RetryableError('transient'));
+    const fallback = vi.fn().mockReturnValue({ degraded: true, partial: 'data' });
+    const wrapped = withRetry(handler, {
+      maxRetries: 1,
+      backoffMs: 1,
+      fallback,
+    });
+
+    const result = await wrapped();
+    expect(result).toEqual({ degraded: true, partial: 'data' });
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(fallback).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+  });
+
+  it('does not call fallback when handler recovers', async () => {
+    vi.useRealTimers();
+    let calls = 0;
+    const handler = vi.fn().mockImplementation(async () => {
+      calls++;
+      if (calls < 2) throw new RetryableError('transient');
+      return 'recovered';
+    });
+    const fallback = vi.fn();
+    const wrapped = withRetry(handler, {
+      maxRetries: 2,
+      backoffMs: 1,
+      fallback,
+    });
+
+    const result = await wrapped();
+    expect(result).toBe('recovered');
+    expect(fallback).not.toHaveBeenCalled();
+    vi.useFakeTimers();
+  });
 });
 
 describe('isRetryableError', () => {
