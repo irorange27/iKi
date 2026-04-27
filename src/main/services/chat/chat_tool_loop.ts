@@ -21,6 +21,17 @@ export type RegisterApprovalBatch = (
   }
 ) => void;
 
+export type ToolLoopAutonomousOptions = {
+  maxIterations: number;
+  continuePrompt?: string;
+};
+
+export type ToolLoopRetryOptions = {
+  maxAttempts: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+};
+
 export type ToolLoopStreamParams = {
   harness: ConversationHarness;
   webContents: ChatWebContents;
@@ -37,6 +48,9 @@ export type ToolLoopStreamParams = {
     'maxInputTokens' | 'maxOutputTokens' | 'model' | 'providerType' | 'providerId'
   >;
   maxStreamIterations?: number;
+  autonomous?: ToolLoopAutonomousOptions;
+  retry?: ToolLoopRetryOptions;
+  steerQueue?: string[];
 };
 
 export type ToolLoopStreamResult = {
@@ -44,6 +58,11 @@ export type ToolLoopStreamResult = {
   cancelled?: boolean;
   response?: string;
   usage?: AgentResult['usage'];
+  handoff?: {
+    summary: string;
+    nextSteps: string;
+    reason: string;
+  };
 };
 
 export type ToolLoopRunner = {
@@ -60,162 +79,369 @@ export const createToolLoopRunner = (deps: {
     }),
 });
 
-const streamToolLoop = async (
-  params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch }
-) => {
-  const generator = params.harness.stream({
-    history: params.history,
-    prompt: params.prompt,
-    approvalResponses: params.approvalResponses,
-    onStreamPart: params.onToolEvent,
-    abortSignal: params.abortSignal,
-  });
-  let fullResponse = '';
-  let cancelled = false;
-  let next: IteratorResult<string, AgentResult> | null = null;
-  let loopIterations = 0;
+const TERMINAL_TOOL_NAMES = new Set(['finish', 'handoff']);
 
-  try {
-    next = await generator.next();
-    while (!next.done) {
-      loopIterations += 1;
-      const limit = params.maxStreamIterations ?? MAX_TOOL_LOOP_ITERATIONS;
-      if (loopIterations > limit) {
-        chatToolLoopLogger.event({
-          level: 'error',
-          event: 'chat.tool_stream.loop_limit',
-          outcome: 'failed',
-          message: `Tool loop exceeded hard iteration limit of ${limit}.`,
-        });
-        cancelled = true;
-        try {
-          await generator.return(undefined);
-        } catch (returnError) {
-          chatToolLoopLogger.event({
-            level: 'warn',
-            event: 'chat.tool_stream.close',
-            outcome: 'degraded',
-            error: returnError,
-            message: 'Failed to close tool stream after hitting iteration limit.',
-          });
-        }
-        break;
-      }
-      if (params.shouldCancel?.()) {
-        cancelled = true;
-        try {
-          await generator.return(undefined);
-        } catch (error) {
-          chatToolLoopLogger.event({
-            level: 'warn',
-            event: 'chat.tool_stream.close',
-            outcome: 'degraded',
-            error,
-            message: 'Failed to close cancelled tool stream.',
-          });
-        }
-        break;
-      }
+export const isRetryableError = (error: unknown): boolean => {
+  if (error instanceof Error && error.name === 'AbortError') return false;
+  const message = typeof error === 'object' && error !== null && 'message' in error
+    ? String((error as Record<string, unknown>).message).toLowerCase()
+    : '';
+  if (
+    message.includes('rate limit') ||
+    message.includes('too many requests') ||
+    message.includes('429') ||
+    message.includes('503') ||
+    message.includes('502') ||
+    message.includes('504') ||
+    message.includes('timeout') ||
+    message.includes('econnrefused') ||
+    message.includes('econnreset') ||
+    message.includes('etimedout') ||
+    message.includes('network') ||
+    message.includes('fetch failed') ||
+    message.includes('internal server error') ||
+    message.includes('overloaded')
+  ) {
+    return true;
+  }
+  return false;
+};
 
-      const chunk = next.value;
-      if (typeof chunk === 'string' && chunk) {
-        fullResponse += chunk;
-        params.uiChunkEmitter?.emitTextDelta(chunk);
+const SLEEP = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+const runSingleHarnessStream = async (
+  params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch },
+  overrides: {
+    history?: ModelMessage[];
+    prompt: string;
+    approvalResponses?: ToolApprovalResponse[];
+  }
+): Promise<{
+  cancelled: boolean;
+  fullResponse: string;
+  agentResult: AgentResult | null;
+  terminalToolName: string | null;
+}> => {
+  const maxAttempts = params.retry?.maxAttempts ?? 0;
+  const baseDelayMs = params.retry?.baseDelayMs ?? 1000;
+  const maxDelayMs = params.retry?.maxDelayMs ?? 30000;
+
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+    let terminalToolName: string | null = null;
+
+    const wrappedOnToolEvent = (event: ToolStreamEvent) => {
+      if (event.type === 'tool-call') {
+        const toolName =
+          typeof event.toolName === 'string'
+            ? event.toolName
+            : event.toolCall && typeof event.toolCall === 'object'
+              ? (event.toolCall as Record<string, unknown>).toolName
+              : undefined;
+        if (typeof toolName === 'string' && TERMINAL_TOOL_NAMES.has(toolName)) {
+          terminalToolName = toolName;
+        }
       }
-      next = await generator.next();
-    }
-  } catch (error) {
-    if (params.shouldCancel?.() || (error instanceof Error && error.name === 'AbortError')) {
-      cancelled = true;
+      params.onToolEvent?.(event);
+    };
+
+    try {
+      const generator = params.harness.stream({
+        history: overrides.history,
+        prompt: overrides.prompt,
+        approvalResponses: overrides.approvalResponses,
+        onStreamPart: wrappedOnToolEvent,
+        abortSignal: params.abortSignal,
+      });
+
+      let fullResponse = '';
+      let cancelled = false;
+      let next: IteratorResult<string, AgentResult> | null = null;
+      let loopIterations = 0;
+
       try {
-        await generator.return(undefined);
-      } catch (returnError) {
-        chatToolLoopLogger.event({
-          level: 'warn',
-          event: 'chat.tool_stream.close',
-          outcome: 'degraded',
-          error: returnError,
-          message: 'Failed to close aborted tool stream.',
-        });
+        next = await generator.next();
+        while (!next.done) {
+          loopIterations += 1;
+          const limit = params.maxStreamIterations ?? MAX_TOOL_LOOP_ITERATIONS;
+          if (loopIterations > limit) {
+            chatToolLoopLogger.event({
+              level: 'error',
+              event: 'chat.tool_stream.loop_limit',
+              outcome: 'failed',
+              message: `Tool loop exceeded hard iteration limit of ${limit}.`,
+            });
+            cancelled = true;
+            try {
+              await generator.return(undefined);
+            } catch (returnError) {
+              chatToolLoopLogger.event({
+                level: 'warn',
+                event: 'chat.tool_stream.close',
+                outcome: 'degraded',
+                error: returnError,
+                message: 'Failed to close tool stream after hitting iteration limit.',
+              });
+            }
+            break;
+          }
+          if (params.shouldCancel?.()) {
+            cancelled = true;
+            try {
+              await generator.return(undefined);
+            } catch (error) {
+              chatToolLoopLogger.event({
+                level: 'warn',
+                event: 'chat.tool_stream.close',
+                outcome: 'degraded',
+                error,
+                message: 'Failed to close cancelled tool stream.',
+              });
+            }
+            break;
+          }
+
+          const chunk = next.value;
+          if (typeof chunk === 'string' && chunk) {
+            fullResponse += chunk;
+            params.uiChunkEmitter?.emitTextDelta(chunk);
+          }
+          next = await generator.next();
+        }
+      } catch (error) {
+        if (params.shouldCancel?.() || (error instanceof Error && error.name === 'AbortError')) {
+          cancelled = true;
+          try {
+            await generator.return(undefined);
+          } catch (returnError) {
+            chatToolLoopLogger.event({
+              level: 'warn',
+              event: 'chat.tool_stream.close',
+              outcome: 'degraded',
+              error: returnError,
+              message: 'Failed to close aborted tool stream.',
+            });
+          }
+        } else {
+          throw error;
+        }
       }
-    } else {
-      params.uiChunkEmitter?.error(getErrorMessage(error));
-      throw error;
+
+      return {
+        cancelled,
+        fullResponse,
+        agentResult: cancelled || !next ? null : ((next.value ?? null) as AgentResult | null),
+        terminalToolName,
+      };
+    } catch (error) {
+      if (attempt >= maxAttempts || !isRetryableError(error)) {
+        params.uiChunkEmitter?.error(getErrorMessage(error));
+        throw error;
+      }
+
+      const delay = Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
+      chatToolLoopLogger.event({
+        level: 'warn',
+        event: 'chat.tool_stream.retry',
+        outcome: 'started',
+        message: `Harness stream failed, retrying (attempt ${attempt + 1}/${maxAttempts + 1}) after ${delay}ms`,
+        error,
+      });
+      await SLEEP(delay);
     }
   }
 
-  if (cancelled || !next) {
+  // Should never reach here, but satisfy TypeScript
+  throw new Error('Unreachable: retry loop exhausted');
+};
+
+const emitTokenUsage = (
+  uiChunkEmitter: UiChunkEmitter | undefined,
+  usage: AgentResult['usage'] | undefined,
+  tokenUsageContext: ToolLoopStreamParams['tokenUsageContext']
+) => {
+  if (!usage || !uiChunkEmitter) return;
+  uiChunkEmitter.emitTokenUsage({
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    reasoningTokens: usage.reasoningTokens,
+    estimatedCostUsd: usage.estimatedCostUsd,
+    ...(typeof tokenUsageContext?.maxInputTokens === 'number'
+      ? { maxInputTokens: tokenUsageContext.maxInputTokens }
+      : {}),
+    ...(typeof tokenUsageContext?.maxOutputTokens === 'number'
+      ? { maxOutputTokens: tokenUsageContext.maxOutputTokens }
+      : {}),
+    ...(typeof tokenUsageContext?.model === 'string'
+      ? { model: tokenUsageContext.model }
+      : {}),
+    ...(typeof tokenUsageContext?.providerType === 'string'
+      ? { providerType: tokenUsageContext.providerType }
+      : {}),
+    ...(typeof tokenUsageContext?.providerId === 'string'
+      ? { providerId: tokenUsageContext.providerId }
+      : {}),
+  });
+};
+
+const streamToolLoop = async (
+  params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch }
+) => {
+  const autonomousMode =
+    params.autonomous && params.autonomous.maxIterations > 1;
+  const maxAutonomousIterations = params.autonomous?.maxIterations ?? 1;
+  const continuePrompt = params.autonomous?.continuePrompt ?? 'Continue with the next step.';
+
+  let autonomousIteration = 0;
+  let currentHistory = params.history;
+  let currentPrompt = params.prompt;
+  let currentApprovalResponses = params.approvalResponses;
+  let allStreamedText = '';
+  let allText = '';
+  let cumulativeUsage: AgentResult['usage'] | undefined;
+  let lastAgentResult: AgentResult | null = null;
+  let lastTerminalToolName: string | null = null;
+  let wasCancelled = false;
+
+  while (autonomousIteration < maxAutonomousIterations) {
+    if (params.steerQueue && params.steerQueue.length > 0) {
+      const steerMessages: string[] = [];
+      while (params.steerQueue.length > 0) {
+        const msg = params.steerQueue.shift();
+        if (msg !== undefined) steerMessages.push(msg);
+      }
+      if (steerMessages.length > 0) {
+        const steerPrompt = steerMessages.length === 1
+          ? steerMessages[0]
+          : steerMessages.join('\n\n---\n\n');
+        currentHistory = [
+          ...(params.harness.getHistory?.() ?? currentHistory ?? []),
+          { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
+        ];
+        currentPrompt = 'Acknowledged. Continuing with the updated direction.';
+        chatToolLoopLogger.event({
+          level: 'info',
+          event: 'chat.tool_stream.steer',
+          outcome: 'succeeded',
+          message: `Applied ${steerMessages.length} steering message(s) at autonomous iteration ${autonomousIteration + 1}.`,
+        });
+      }
+    }
+
+    const { cancelled, fullResponse, agentResult, terminalToolName } = await runSingleHarnessStream(
+      params,
+      {
+        history: currentHistory,
+        prompt: currentPrompt,
+        approvalResponses: currentApprovalResponses,
+      }
+    );
+
+    if (cancelled) {
+      wasCancelled = true;
+      break;
+    }
+
+    lastAgentResult = agentResult;
+
+    if (agentResult?.usage) {
+      emitTokenUsage(params.uiChunkEmitter, agentResult.usage, params.tokenUsageContext);
+      if (cumulativeUsage) {
+        cumulativeUsage = {
+          inputTokens: (cumulativeUsage.inputTokens ?? 0) + (agentResult.usage.inputTokens ?? 0),
+          outputTokens: (cumulativeUsage.outputTokens ?? 0) + (agentResult.usage.outputTokens ?? 0),
+          totalTokens: (cumulativeUsage.totalTokens ?? 0) + (agentResult.usage.totalTokens ?? 0),
+          cacheReadTokens: (cumulativeUsage.cacheReadTokens ?? 0) + (agentResult.usage.cacheReadTokens ?? 0),
+          cacheWriteTokens: (cumulativeUsage.cacheWriteTokens ?? 0) + (agentResult.usage.cacheWriteTokens ?? 0),
+          reasoningTokens: (cumulativeUsage.reasoningTokens ?? 0) + (agentResult.usage.reasoningTokens ?? 0),
+          estimatedCostUsd: (cumulativeUsage.estimatedCostUsd ?? 0) + (agentResult.usage.estimatedCostUsd ?? 0),
+        };
+      } else {
+        cumulativeUsage = { ...agentResult.usage };
+      }
+    }
+
+    allStreamedText += fullResponse;
+    if (agentResult?.response && agentResult.response.trim()) {
+      allText += (allText ? '\n\n' : '') + agentResult.response.trim();
+    }
+
+    if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
+      params.registerApprovalBatch(agentResult.toolApprovalRequests, {
+        harness: params.harness,
+        webContents: params.webContents,
+        history: params.harness.getHistory?.() ?? currentHistory,
+        ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
+      });
+      return { awaitingApproval: true, usage: cumulativeUsage };
+    }
+
+    if (terminalToolName) {
+      lastTerminalToolName = terminalToolName;
+      chatToolLoopLogger.event({
+        level: 'debug',
+        event: terminalToolName === 'handoff'
+          ? 'chat.tool_stream.handoff'
+          : 'chat.tool_stream.autonomous_finish',
+        outcome: 'succeeded',
+        message: `Autonomous run terminated by agent (${terminalToolName}) after ${autonomousIteration + 1} iteration(s).`,
+      });
+      break;
+    }
+
+    autonomousIteration++;
+    if (autonomousIteration >= maxAutonomousIterations) break;
+
+    currentHistory = params.harness.getHistory?.() ?? currentHistory;
+    currentPrompt = continuePrompt;
+    currentApprovalResponses = undefined;
+  }
+
+  if (wasCancelled) {
     params.uiChunkEmitter?.abort();
     return { awaitingApproval: false, cancelled: true };
   }
 
-  const agentResult = (next.value ?? null) as AgentResult | null;
-  const emitTokenUsage = (usage: AgentResult['usage'] | undefined) => {
-    if (!usage) return;
-    params.uiChunkEmitter?.emitTokenUsage({
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens,
-      cacheReadTokens: usage.cacheReadTokens,
-      cacheWriteTokens: usage.cacheWriteTokens,
-      reasoningTokens: usage.reasoningTokens,
-      estimatedCostUsd: usage.estimatedCostUsd,
-      ...(typeof params.tokenUsageContext?.maxInputTokens === 'number'
-        ? { maxInputTokens: params.tokenUsageContext.maxInputTokens }
-        : {}),
-      ...(typeof params.tokenUsageContext?.maxOutputTokens === 'number'
-        ? { maxOutputTokens: params.tokenUsageContext.maxOutputTokens }
-        : {}),
-      ...(typeof params.tokenUsageContext?.model === 'string'
-        ? { model: params.tokenUsageContext.model }
-        : {}),
-      ...(typeof params.tokenUsageContext?.providerType === 'string'
-        ? { providerType: params.tokenUsageContext.providerType }
-        : {}),
-      ...(typeof params.tokenUsageContext?.providerId === 'string'
-        ? { providerId: params.tokenUsageContext.providerId }
-        : {}),
-    });
-  };
-  let finalText = fullResponse;
-  if (agentResult?.response && agentResult.response.trim()) {
-    finalText = agentResult.response;
-  }
+  let finalText = allText || lastAgentResult?.response || '';
 
-  if (agentResult?.toolApprovalRequests && agentResult.toolApprovalRequests.length > 0) {
-    emitTokenUsage(agentResult.usage);
-    params.registerApprovalBatch(agentResult.toolApprovalRequests, {
-      harness: params.harness,
-      webContents: params.webContents,
-      history: params.harness.getHistory?.() ?? params.history,
-      ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
-    });
-    return { awaitingApproval: true, usage: agentResult.usage };
-  }
-
-  if (!finalText.trim() && fullResponse.trim()) {
-    finalText = fullResponse;
+  if (!finalText.trim() && allStreamedText.trim()) {
+    finalText = allStreamedText;
   }
 
   if (finalText.trim()) {
     let missingText = '';
-    if (!fullResponse) {
+    if (!allStreamedText) {
       missingText = finalText;
-    } else if (finalText.startsWith(fullResponse)) {
-      missingText = finalText.slice(fullResponse.length);
+    } else if (finalText.startsWith(allStreamedText)) {
+      missingText = finalText.slice(allStreamedText.length);
     }
 
     if (missingText) {
-      fullResponse += missingText;
       params.uiChunkEmitter?.emitTextDelta(missingText);
     }
   }
 
-  emitTokenUsage(agentResult?.usage);
+  let handoff: ToolLoopStreamResult['handoff'] | undefined;
+  if (lastTerminalToolName === 'handoff' && lastAgentResult?.toolCalls) {
+    const handoffCall = lastAgentResult.toolCalls.find(
+      (tc: { toolName: string; args?: Record<string, unknown> }) => tc.toolName === 'handoff'
+    );
+    if (handoffCall?.args) {
+      handoff = {
+        summary: typeof handoffCall.args.summary === 'string' ? handoffCall.args.summary : '',
+        nextSteps: typeof handoffCall.args.next_steps === 'string' ? handoffCall.args.next_steps : '',
+        reason: typeof handoffCall.args.reason === 'string' ? handoffCall.args.reason : 'other',
+      };
+    }
+  }
+
   params.uiChunkEmitter?.finish();
   return {
     awaitingApproval: false,
     ...(finalText.trim() ? { response: finalText } : {}),
-    usage: agentResult?.usage,
+    usage: cumulativeUsage,
+    ...(handoff ? { handoff } : {}),
   };
 };

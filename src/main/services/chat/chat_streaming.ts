@@ -10,6 +10,7 @@ import {
 } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
+import * as agentRunDb from '../../../core/db/agent_runs';
 import { createAgentRunTracker } from './chat_run_tracking';
 import {
   createApprovalRecoveryContext,
@@ -79,6 +80,8 @@ export const createChatStreaming = (deps: {
   const turnPreparer = createChatTurnPreparer({ memory: deps.memory });
   const streamingModels = createChatStreamingModels();
 
+  const steerQueues = new Map<number, string[]>();
+
   const stopStream = (senderId: number) => {
     const streamState = deps.activeStreams.get(senderId);
     if (!streamState) {
@@ -88,6 +91,16 @@ export const createChatStreaming = (deps: {
     streamState.cancelled = true;
     streamState.stoppedByUser = true;
     streamState.abortController.abort('user-stop-request');
+    steerQueues.delete(senderId);
+    return { success: true };
+  };
+
+  const steerStream = (senderId: number, message: string): { success: boolean; error?: string } => {
+    const steerQueue = steerQueues.get(senderId);
+    if (!steerQueue) {
+      return { success: false, error: 'No active autonomous stream to steer' };
+    }
+    steerQueue.push(message);
     return { success: true };
   };
 
@@ -269,6 +282,8 @@ export const createChatStreaming = (deps: {
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
     const uiChunkEmitter = createUiChunkEmitter(webContents);
     deps.activeStreams.set(senderId, streamState);
+    const steerQueue: string[] = [];
+    steerQueues.set(senderId, steerQueue);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
@@ -282,6 +297,10 @@ export const createChatStreaming = (deps: {
         },
       });
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
+      const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
+      const guardedTools = autonomousMode
+        ? [...new Set([...preparedTurn.guardedTools, 'finish'])]
+        : preparedTurn.guardedTools;
 
       if (preparedTurn.usedSkills.length > 0) {
         uiChunkEmitter.emitSkillUsage({
@@ -304,6 +323,36 @@ export const createChatStreaming = (deps: {
       const systemPrompt = preparedTurn.enableTools
         ? TOOL_AGENT_SYSTEM_PROMPT
         : NO_TOOLS_SYSTEM_PROMPT;
+
+      let streamHistory = preparedTurn.history;
+      let streamPrompt = preparedTurn.prompt;
+
+      if (options.runConfig?.kind === 'handoff-resume' && options.runConfig?.parentRunId) {
+        const checkpoint = agentRunDb.getLatestAgentRunCheckpoint(options.runConfig.parentRunId);
+        if (checkpoint?.snapshot?.working?.modelMessages) {
+          const checkpointMessages = checkpoint.snapshot.working.modelMessages as import('ai').ModelMessage[];
+          if (checkpointMessages.length > 0) {
+            streamHistory = [
+              {
+                role: 'system' as const,
+                content: `[HANDOFF CONTEXT] You are resuming work from a previous agent run. The conversation history below is from that run. Continue the work based on what was done before.`,
+              },
+              ...checkpointMessages,
+              ...(preparedTurn.history.length > 0
+                ? [
+                    {
+                      role: 'system' as const,
+                      content: `[CURRENT THREAD] The following messages are from the current conversation thread:`,
+                    } as import('ai').ModelMessage,
+                    ...preparedTurn.history,
+                  ]
+                : []),
+            ];
+            streamPrompt = preparedTurn.prompt || 'Continue the work from where the previous agent left off.';
+          }
+        }
+      }
+
       runTracker = createAgentRunTracker({
         kind: options.runConfig?.kind ?? 'chat-turn',
         threadId: options.threadId,
@@ -313,7 +362,7 @@ export const createChatStreaming = (deps: {
         providerId: options.providerId,
         model: options.model,
         systemPrompt,
-        enabledTools: preparedTurn.guardedTools,
+        enabledTools: guardedTools,
         availableSkillIds: preparedTurn.selectedSkillIds,
         input: {
           ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
@@ -329,7 +378,7 @@ export const createChatStreaming = (deps: {
           },
         },
         working: {
-          modelMessages: preparedTurn.history,
+          modelMessages: streamHistory,
           accumulatedText: '',
           pendingApprovalIds: [],
           lastStepIndex: 0,
@@ -347,8 +396,9 @@ export const createChatStreaming = (deps: {
             maxInputTokens: preparedTurn.maxInputTokens,
             maxOutputTokens: preparedTurn.maxOutputTokens,
             maxIterations,
-            enabledTools: preparedTurn.guardedTools,
+            enabledTools: guardedTools,
             availableSkillIds: preparedTurn.selectedSkillIds,
+            ...(autonomousMode ? { autonomous: options.autonomous } : {}),
           })
         : undefined;
 
@@ -359,7 +409,7 @@ export const createChatStreaming = (deps: {
         model: options.model,
         systemPrompt,
         enableTools: preparedTurn.enableTools,
-        enabledTools: preparedTurn.guardedTools,
+        enabledTools: guardedTools,
         availableSkillIds: preparedTurn.selectedSkillIds,
         guardActive: preparedTurn.guardActive,
         maxIterations,
@@ -379,9 +429,16 @@ export const createChatStreaming = (deps: {
           await toolLoopRunner.stream({
             harness,
             webContents,
-            history: preparedTurn.history,
-            prompt: preparedTurn.prompt,
+            history: streamHistory,
+            prompt: streamPrompt,
             approvalContext,
+            autonomous: autonomousMode
+              ? { maxIterations: options.autonomous!.maxIterations, continuePrompt: options.autonomous!.continuePrompt }
+              : undefined,
+            retry: autonomousMode
+              ? { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
+              : { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
+            steerQueue: autonomousMode ? steerQueue : undefined,
             shouldCancel: () => streamState.cancelled,
             onToolEvent: eventPart => {
               runTracker?.recordToolEvent(eventPart);
@@ -440,6 +497,15 @@ export const createChatStreaming = (deps: {
           ...(streamResult.response ? { text: streamResult.response } : {}),
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
         });
+      } else if (streamResult.handoff) {
+        const handoffResponse =
+          (streamResult.response ? streamResult.response + '\n\n' : '') +
+          `[Handoff] ${streamResult.handoff.summary}\n\nNext steps: ${streamResult.handoff.nextSteps}`;
+        runTracker.markCompleted({
+          text: handoffResponse.trim() || undefined,
+          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
+          finishReason: 'handoff',
+        });
       } else {
         runTracker.markCompleted({
           ...(streamResult.response ? { text: streamResult.response } : {}),
@@ -484,6 +550,7 @@ export const createChatStreaming = (deps: {
     } finally {
       companionService.endThinking(companionThinkingKey);
       deps.approvals.cleanupPendingSessionsForWebContents(senderId);
+      steerQueues.delete(senderId);
       if (deps.activeStreams.get(senderId) === streamState) {
         deps.activeStreams.delete(senderId);
       }
@@ -496,6 +563,7 @@ export const createChatStreaming = (deps: {
     send,
     stream,
     stopStream,
+    steerStream,
   };
 };
 

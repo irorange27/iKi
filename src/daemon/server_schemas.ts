@@ -4,6 +4,7 @@ import { getDefaultAllowedTools } from './tool_access';
 import type { ChatInvocationOptions } from '../shared/types/electron_api';
 import type { McpServerInput } from '../shared/types/mcp';
 import type { ChatExperimentalContext } from '../shared/chat/intervention_policy';
+import type { AgentRunKind } from '../shared/types/agent_run';
 
 const DEFAULT_SCOPES = [
   'chat:read',
@@ -125,6 +126,19 @@ const ChatSendPayloadSchema = z
     skillMode: z.enum(['manual', 'auto']).optional(),
     maxIterations: z.number().int().positive().max(100).optional(),
     experimental_context: ExperimentalContextSchema.optional(),
+    autonomous: z
+      .object({
+        maxIterations: z.number().int().positive().max(100),
+        continuePrompt: z.string().optional(),
+      })
+      .optional(),
+    run_config: z
+      .object({
+        kind: z.string().optional(),
+        parent_run_id: z.string().optional(),
+        root_run_id: z.string().optional(),
+      })
+      .optional(),
   })
   .passthrough()
   .transform(value => ({
@@ -138,6 +152,12 @@ const ChatSendPayloadSchema = z
     skillMode: value.skillMode as ChatInvocationOptions['skillMode'],
     maxIterations: value.maxIterations,
     experimentalContext: value.experimental_context,
+    autonomous: value.autonomous as
+      | { maxIterations: number; continuePrompt?: string }
+      | undefined,
+    runConfig: value.run_config as
+      | { kind?: AgentRunKind; parentRunId?: string; rootRunId?: string }
+      | undefined,
   }));
 
 const ChatMessageCreatePayloadSchema = z
@@ -209,10 +229,18 @@ const WebSocketStopMessageSchema = z
   })
   .passthrough();
 
+const WebSocketSteerMessageSchema = z
+  .object({
+    type: z.literal('steer'),
+    message: NonEmptyTrimmedStringSchema,
+  })
+  .passthrough();
+
 const DaemonWebSocketMessageSchema = z.discriminatedUnion('type', [
   WebSocketStartMessageSchema,
   WebSocketApproveToolMessageSchema,
   WebSocketStopMessageSchema,
+  WebSocketSteerMessageSchema,
 ]);
 
 export type ClientRegistrationPayload = z.infer<typeof ClientRegistrationPayloadSchema>;

@@ -556,6 +556,10 @@ export const createChatApproval = (deps: {
             prompt: '',
             approvalResponses: Array.from(session.collectedApprovalResponses.values()),
             approvalContext: nextApprovalContext,
+            autonomous: session.recoveryContext?.autonomous,
+            retry: session.recoveryContext?.autonomous
+              ? { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
+              : { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
             shouldCancel: () => streamState.cancelled,
             onToolEvent: eventPart => {
               resumeRunTracker?.recordToolEvent(eventPart);

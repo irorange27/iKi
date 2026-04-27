@@ -52,7 +52,7 @@ const sendDaemonError = (ws: DaemonSocket, error: string) => {
 const logWsFailure = (deps: ConfigureDaemonWebSocketsDeps, session: WsSession, input: {
   error: unknown;
   message: string;
-  messageType: 'start' | 'approve-tool' | 'stop';
+  messageType: 'start' | 'approve-tool' | 'stop' | 'steer';
   requestId?: unknown;
 }) => {
   logDaemonHandlerFailure({
@@ -180,6 +180,8 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             threadId,
             maxIterations: payload.maxIterations,
             experimentalContext: payload.experimentalContext,
+            autonomous: payload.autonomous,
+            runConfig: payload.runConfig,
           });
 
           sendDaemonPayload(ws, {
@@ -223,6 +225,26 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             messageType: 'approve-tool',
           });
           sendDaemonError(ws, 'Failed to approve tool request');
+        }
+        return;
+      }
+
+      if (parsed.type === 'steer') {
+        if (!hasScope(session.client, 'chat:write')) {
+          sendDaemonError(ws, 'Missing chat:write scope');
+          return;
+        }
+
+        try {
+          const result = deps.chatService.steerStream(session.webContents.id, parsed.message);
+          sendDaemonPayload(ws, { type: 'steer-result', ...result });
+        } catch (error) {
+          logWsFailure(deps, session, {
+            error,
+            message: 'Daemon WebSocket steer request failed unexpectedly.',
+            messageType: 'steer',
+          });
+          sendDaemonError(ws, 'Failed to steer stream');
         }
         return;
       }

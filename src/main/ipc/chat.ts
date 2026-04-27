@@ -59,6 +59,10 @@ export const registerChatIpc = (): void => {
     return chatService.stopStream(event.sender.id);
   });
 
+  ipcMain.handle('chat:steer-stream', (event, message: string) => {
+    return chatService.steerStream(event.sender.id, message);
+  });
+
   ipcMain.handle('chat:send', async (_, options) => {
     return await chatService.send(options);
   });

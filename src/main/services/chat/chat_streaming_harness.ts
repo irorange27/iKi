@@ -114,6 +114,10 @@ export const createApprovalRecoveryContext = (params: {
   maxIterations: number;
   enabledTools: string[];
   availableSkillIds: string[];
+  autonomous?: {
+    maxIterations: number;
+    continuePrompt?: string;
+  };
 }): ApprovalRecoveryContext | undefined => {
   const threadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
   const sessionId = params.sessionId.trim();
@@ -141,6 +145,7 @@ export const createApprovalRecoveryContext = (params: {
     maxIterations: params.maxIterations,
     enabledTools: [...params.enabledTools],
     availableSkillIds: [...params.availableSkillIds],
+    ...(params.autonomous ? { autonomous: { ...params.autonomous } } : {}),
   };
 };
 

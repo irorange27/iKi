@@ -10,6 +10,8 @@ export * from './todo_tools';
 export * from './proactive_task_tools';
 export * from './awaiter_tools';
 export * from './plan_tools';
+export * from './finish_tool';
+export * from './handoff_tool';
 
 import { defaultToolRegistry } from './base';
 import { DelegatedAgentTool } from './agent_tools';
@@ -48,6 +50,8 @@ import {
 import { PlanTool } from './plan_tools';
 import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
+import { FinishTool } from './finish_tool';
+import { HandoffTool } from './handoff_tool';
 
 /**
  * Register all standard system tools to the default global registry
@@ -80,4 +84,6 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new ReadAwaiterTool());
   defaultToolRegistry.register(new WriteAwaiterTool());
   defaultToolRegistry.register(new DeleteAwaiterTool());
+  defaultToolRegistry.register(new FinishTool());
+  defaultToolRegistry.register(new HandoffTool());
 }

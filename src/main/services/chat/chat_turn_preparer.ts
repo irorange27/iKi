@@ -51,6 +51,10 @@ export type ChatTurnOptions = {
     rootRunId?: string;
     metadata?: Record<string, unknown>;
   };
+  autonomous?: {
+    maxIterations: number;
+    continuePrompt?: string;
+  };
 };
 
 export type PreparedChatTurn = {

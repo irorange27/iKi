@@ -206,7 +206,7 @@ describe('tool loop runner', () => {
       history: [{ role: 'system', content: 'history' }],
       prompt: 'hi',
       approvalResponses: undefined,
-      onStreamPart: undefined,
+      onStreamPart: expect.any(Function),
       abortSignal: undefined,
     });
   });

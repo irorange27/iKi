@@ -3,7 +3,8 @@ export type AgentRunKind =
   | 'approval-resume'
   | 'proactive-task'
   | 'awaiter-wake'
-  | 'delegated-agent';
+  | 'delegated-agent'
+  | 'handoff-resume';
 
 export type AgentRunStatus =
   | 'queued'

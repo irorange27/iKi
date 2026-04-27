@@ -12,4 +12,8 @@ export type ApprovalRecoveryContext = {
   maxIterations?: number;
   enabledTools: string[];
   availableSkillIds?: string[];
+  autonomous?: {
+    maxIterations: number;
+    continuePrompt?: string;
+  };
 };
