@@ -287,6 +287,17 @@ export const createAppUpdateService = (deps: AppUpdateServiceDeps) => {
     if (!mainWindow) return;
 
     try {
+      const detailParts: string[] = [];
+      if (status.releaseName) {
+        detailParts.push(status.releaseName);
+      }
+      if (status.releaseNotes) {
+        detailParts.push('');
+        detailParts.push(status.releaseNotes);
+      }
+      detailParts.push('');
+      detailParts.push('Restart now to finish installing the update, or install it on the next launch.');
+
       const result = await deps.dialog.showMessageBox(mainWindow, {
         type: 'info',
         buttons: ['Restart Now', 'Later'],
@@ -294,7 +305,7 @@ export const createAppUpdateService = (deps: AppUpdateServiceDeps) => {
         cancelId: 1,
         title: 'Update Ready',
         message: 'A new version of iKi has been downloaded.',
-        detail: 'Restart now to finish installing the update, or install it on the next launch.',
+        detail: detailParts.join('\n'),
       });
       if (result.response === 0) {
         deps.autoUpdater.quitAndInstall();
