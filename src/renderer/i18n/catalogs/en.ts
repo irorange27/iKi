@@ -149,6 +149,13 @@ export const en = defineCatalog({
   'chat.more.label': 'More',
   'chat.editingBanner.title': 'Editing a previous message.',
   'chat.editingBanner.body': 'Resending will remove later messages in this thread.',
+  'chat.runs.title': 'Agent Runs',
+  'chat.runs.loading': 'Loading runs...',
+  'chat.runs.empty': 'No runs yet',
+  'chat.runs.cancel': 'Cancel',
+  'chat.runs.resume': 'Resume',
+  'chat.runs.retry': 'Retry',
+  'chat.runs.toggle': 'Toggle run panel',
   'chat.input.placeholder': 'Type a message...',
   'chat.input.placeholder.skillInvocation': ({ skill }) =>
     `Describe what to do with ${asText(skill)}...`,

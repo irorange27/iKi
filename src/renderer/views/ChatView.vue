@@ -126,7 +126,7 @@
     <RunPanel
       :visible="showRunPanel"
       :thread-id="currentThread?.id ?? null"
-      :electron-api="electronAPI"
+      :electronAPI="electronAPI"
       @close="showRunPanel = false"
     />
   </div>

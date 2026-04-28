@@ -77,7 +77,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  load: [event: Event];
+  load: [event?: Event];
   error: [event: Event | string];
 }>();
 

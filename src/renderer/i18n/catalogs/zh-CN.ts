@@ -142,6 +142,13 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.more.label': '更多',
   'chat.editingBanner.title': '正在编辑之前的消息。',
   'chat.editingBanner.body': '重新发送后，该线程中后续消息会被移除。',
+  'chat.runs.title': 'Agent 运行',
+  'chat.runs.loading': '加载中...',
+  'chat.runs.empty': '暂无运行记录',
+  'chat.runs.cancel': '取消',
+  'chat.runs.resume': '恢复',
+  'chat.runs.retry': '重试',
+  'chat.runs.toggle': '切换运行面板',
   'chat.input.placeholder': '输入消息...',
   'chat.input.placeholder.skillInvocation': ({ skill }) =>
     `继续描述要让 ${asText(skill)} 做什么...`,
