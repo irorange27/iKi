@@ -123,7 +123,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build distributables
-        run: pnpm run -s app:build
+        # Only ZIP is needed for auto-update via update.electronjs.org.
+        # DMG is built locally via "pnpm run app:build" when needed.
+        run: pnpm exec electron-forge make --targets @electron-forge/maker-zip
         env:
           CI: "1"
 
