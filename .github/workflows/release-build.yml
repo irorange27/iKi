@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 env:
-  NODE_VERSION: "22"
+  NODE_VERSION: "24"
 
 concurrency:
   group: release-build-${{ github.workflow }}-${{ github.event.inputs.ref || github.ref }}
@@ -115,9 +115,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Rebuild native modules for Electron
-        run: pnpm exec electron-rebuild
 
       - name: Build distributables
         run: pnpm exec electron-forge make --targets @electron-forge/maker-zip
