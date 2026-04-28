@@ -120,6 +120,7 @@
     "cron-parser": "^5.5.0",
     "electron-squirrel-startup": "^1.0.1",
     "ffmpeg-static": "^5.2.0",
+    "gpt-tokenizer": "^3.4.0",
     "highlight.js": "^11.11.1",
     "pinia": "^3.0.4",
     "tailwind-merge": "^3.4.0",
