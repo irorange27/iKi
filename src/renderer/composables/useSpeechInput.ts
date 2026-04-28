@@ -260,6 +260,9 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       reader.onerror = () => {
         reject(reader.error || new Error('Failed to read audio data'));
       };
+      reader.onabort = () => {
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
       reader.readAsDataURL(blob);
     });
 

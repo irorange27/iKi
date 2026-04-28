@@ -138,10 +138,14 @@ export const useProvidersSettingsEditor = (params: {
           : editingProvider.value.is_response_api === true,
     };
 
-    if (params.providers.value.some(provider => provider.id === editingProvider.value?.id)) {
-      await electronAPI.providers.update(editingProvider.value.id, providerData);
-    } else {
-      await electronAPI.providers.add(providerData);
+    try {
+      if (params.providers.value.some(provider => provider.id === editingProvider.value?.id)) {
+        await electronAPI.providers.update(editingProvider.value.id, providerData);
+      } else {
+        await electronAPI.providers.add(providerData);
+      }
+    } catch {
+      return;
     }
 
     showProviderEditor.value = false;

@@ -5,6 +5,14 @@ import type { BuiltInProvider } from '../../shared/types/settings';
 import { parseModelList, parseProviderModelOptionsMap } from '../../shared/utils/provider_models';
 import { isCanonicalBuiltInProvider } from '../modules/providers/provider_icons';
 
+const safeClone = <T>(value: T): T => {
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value));
+  }
+};
+
 export type ProviderRecord = Provider & {
   icon?: string | null;
 };
@@ -127,7 +135,7 @@ export const useProviderDrafts = (params: {
       acp_api_provider_id: snapshot.acp_api_provider_id,
       enabled: snapshot.enabled,
       showApiKey: false,
-      model_options: structuredClone(snapshot.modelOptions),
+      model_options: safeClone(snapshot.modelOptions),
     };
     selectedModels.value[providerId] = [...snapshot.models];
 

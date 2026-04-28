@@ -517,6 +517,10 @@ export const useChatThreads = (deps: {
           if (currentModel.value === data.model) {
             currentModel.value = previousModel;
             currentProviderId.value = previousProviderId;
+            void persistDraftComposerSelection({
+              model: previousModel,
+              providerId: previousProviderId,
+            });
           }
           if (currentThread.value?.id === threadId) {
             if (currentThread.value.model === data.model) {

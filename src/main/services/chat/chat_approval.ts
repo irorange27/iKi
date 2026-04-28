@@ -25,6 +25,8 @@ import { createUiChunkEmitter, parseStoredUiMessageRow, toModelInputMessages } f
 import { createChatConversationRunner } from './chat_conversation_runner';
 import { createToolLoopRunner } from './chat_tool_loop';
 
+const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
+
 type PendingApprovalSession = {
   sessionId?: string;
   harness: ConversationHarness;
@@ -33,6 +35,7 @@ type PendingApprovalSession = {
   history?: ModelMessage[];
   pendingApprovalIds: Set<string>;
   collectedApprovalResponses: Map<string, ToolApprovalResponse>;
+  timeouts: Map<string, ReturnType<typeof setTimeout>>;
 };
 
 const parseStringArray = (value: string | null | undefined): string[] => {
@@ -76,12 +79,35 @@ export const createChatApproval = (deps: {
   };
 }) => {
   const pendingApprovalSessions = new Map<string, PendingApprovalSession>();
+
   const shouldAutoApproveToolRequests = () => {
     try {
       return getAppConfig()?.general?.autoApproveToolRequests === true;
     } catch {
       return false;
     }
+  };
+
+  const clearApprovalTimeouts = (session: PendingApprovalSession) => {
+    if (!session.timeouts) return;
+    for (const timeoutId of session.timeouts.values()) {
+      clearTimeout(timeoutId);
+    }
+    session.timeouts.clear();
+  };
+
+  const scheduleApprovalTimeout = (approvalId: string, session: PendingApprovalSession) => {
+    if (!session.timeouts || session.timeouts.has(approvalId)) return;
+    const timeoutId = setTimeout(() => {
+      session.collectedApprovalResponses.set(approvalId, {
+        type: 'tool-approval-response' as const,
+        approvalId,
+        approved: false,
+        reason: 'Approval timed out after 30 minutes',
+      });
+      session.timeouts.delete(approvalId);
+    }, APPROVAL_TIMEOUT_MS);
+    session.timeouts.set(approvalId, timeoutId);
   };
 
   const ensurePendingApprovalSession = (
@@ -102,6 +128,7 @@ export const createChatApproval = (deps: {
         existing.sessionId = session.recoveryContext.sessionId;
       }
       existing.pendingApprovalIds.add(approvalId);
+      scheduleApprovalTimeout(approvalId, existing);
       return existing;
     }
 
@@ -113,8 +140,10 @@ export const createChatApproval = (deps: {
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set([approvalId]),
       collectedApprovalResponses: new Map(),
+      timeouts: new Map(),
     };
     pendingApprovalSessions.set(approvalId, created);
+    scheduleApprovalTimeout(approvalId, created);
     return created;
   };
 
@@ -175,10 +204,12 @@ export const createChatApproval = (deps: {
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set(approvalIds),
       collectedApprovalResponses: new Map(),
+      timeouts: new Map(),
     };
 
     for (const approvalId of approvalIds) {
       pendingApprovalSessions.set(approvalId, pendingSession);
+      scheduleApprovalTimeout(approvalId, pendingSession);
     }
   };
 
@@ -407,10 +438,12 @@ export const createChatApproval = (deps: {
       },
       pendingApprovalIds,
       collectedApprovalResponses,
+      timeouts: new Map(),
     };
 
     for (const id of pendingApprovalIds) {
       pendingApprovalSessions.set(id, session);
+      scheduleApprovalTimeout(id, session);
     }
 
     return session;
@@ -472,6 +505,7 @@ export const createChatApproval = (deps: {
       };
     }
 
+    clearApprovalTimeouts(session);
     for (const pendingId of session.pendingApprovalIds) {
       pendingApprovalSessions.delete(pendingId);
     }
@@ -659,6 +693,7 @@ export const createChatApproval = (deps: {
   const cleanupPendingSessionsForWebContents = (senderId: number) => {
     for (const [key, session] of pendingApprovalSessions) {
       if (session.webContents.id === senderId) {
+        clearApprovalTimeouts(session);
         pendingApprovalSessions.delete(key);
       }
     }

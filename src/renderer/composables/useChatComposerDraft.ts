@@ -35,7 +35,7 @@ export const useChatComposerDraft = (deps: {
     justEndedComposition.value = true;
     window.setTimeout(() => {
       justEndedComposition.value = false;
-    }, 0);
+    }, 50);
   };
 
   const handleEnter = (event: KeyboardEvent) => {
@@ -47,9 +47,13 @@ export const useChatComposerDraft = (deps: {
       event.isComposing ||
       event.keyCode === 229 ||
       event.which === 229 ||
-      isComposing.value ||
-      justEndedComposition.value
+      isComposing.value
     ) {
+      return;
+    }
+
+    if (justEndedComposition.value) {
+      justEndedComposition.value = false;
       return;
     }
 

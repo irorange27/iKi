@@ -648,11 +648,7 @@ export const useNapCatSettings = (params: {
 
   const updateDaemonPort = (value: string) => {
     const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) {
-      config.value.daemon.port = DEFAULT_DAEMON_PORT;
-      params.onConfigChange();
-      return;
-    }
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) return;
     config.value.daemon.port = Math.trunc(parsed);
     params.onConfigChange();
   };

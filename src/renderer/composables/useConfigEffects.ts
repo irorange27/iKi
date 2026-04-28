@@ -69,7 +69,7 @@ export const useConfigEffects = () => {
   const apply = () => applyCssVariables(store.config);
 
   const stopWatch = watch(
-    () => [store.config.ui, store.config.general, store.config.themes],
+    () => ({ ui: store.config.ui, general: store.config.general, themes: store.config.themes }),
     () => apply(),
     { deep: true, immediate: true }
   );

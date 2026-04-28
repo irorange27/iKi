@@ -386,6 +386,88 @@ export const createDaemonRequestHandler =
         return;
       }
 
+      if (req.method === 'GET' && pathName === '/v1/chat/runs') {
+        if (!hasScope(client, 'chat:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+          return;
+        }
+        const statusParam = url.searchParams.get('status') || '';
+        const statuses = statusParam
+          ? statusParam.split(',').map(s => s.trim()).filter(Boolean)
+          : [];
+        const limit = Number(url.searchParams.get('limit') || '');
+        const runs = deps.chatService.listRunsByStatus(
+          statuses.length > 0 ? (statuses as import('../shared/types/agent_run').AgentRunStatus[]) : ['queued', 'running', 'blocked', 'completed', 'failed', 'cancelled'],
+          {
+            clientId: client.id,
+            ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
+          }
+        );
+        writeJson(res, 200, { success: true, runs: runs.map(run => ({ ...run })) });
+        return;
+      }
+
+      const runActionMatch = pathName.match(/^\/v1\/chat\/runs\/([^/]+)\/(cancel|retry|resume)$/);
+      if (req.method === 'POST' && runActionMatch) {
+        const runId = runActionMatch[1];
+        const action = runActionMatch[2];
+
+        if (action === 'cancel') {
+          if (!hasScope(client, 'chat:write')) {
+            writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+            return;
+          }
+          const result = deps.chatService.cancelRun(runId);
+          writeJson(res, 200, result);
+          return;
+        }
+
+        if (action === 'retry') {
+          if (!hasScope(client, 'chat:write')) {
+            writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+            return;
+          }
+          const connectionId =
+            typeof req.headers['x-iki-connection'] === 'string'
+              ? Number(req.headers['x-iki-connection'])
+              : null;
+          if (connectionId && !Number.isNaN(connectionId)) {
+            const session = deps.sessions.get(connectionId);
+            if (session && session.client.id === client.id) {
+              const result = await deps.chatService.retryAndExecute(session.webContents, runId);
+              writeJson(res, 200, result);
+              return;
+            }
+          }
+          const result = deps.chatService.retryRun(runId);
+          writeJson(res, 200, result);
+          return;
+        }
+
+        if (action === 'resume') {
+          if (!hasScope(client, 'chat:write')) {
+            writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
+            return;
+          }
+          const connectionId =
+            typeof req.headers['x-iki-connection'] === 'string'
+              ? Number(req.headers['x-iki-connection'])
+              : null;
+          if (!connectionId || Number.isNaN(connectionId)) {
+            writeJson(res, 400, { success: false, error: 'Missing X-Iki-Connection header' });
+            return;
+          }
+          const session = deps.sessions.get(connectionId);
+          if (!session || session.client.id !== client.id) {
+            writeJson(res, 400, { success: false, error: 'Invalid connection_id' });
+            return;
+          }
+          const result = await deps.chatService.resumeRun(session.webContents, runId);
+          writeJson(res, 200, result);
+          return;
+        }
+      }
+
       if (req.method === 'GET' && pathName === '/v1/memory/short') {
         if (!hasScope(client, 'memory:read')) {
           writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });

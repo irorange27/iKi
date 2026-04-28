@@ -39,6 +39,8 @@ export type ToolLoopStreamParams = {
   prompt: string;
   approvalResponses?: ToolApprovalResponse[];
   shouldCancel?: () => boolean;
+  isSteered?: () => boolean;
+  clearSteered?: () => void;
   onToolEvent?: (event: ToolStreamEvent) => void;
   abortSignal?: AbortSignal;
   uiChunkEmitter?: UiChunkEmitter;
@@ -56,6 +58,8 @@ export type ToolLoopStreamParams = {
 export type ToolLoopStreamResult = {
   awaitingApproval: boolean;
   cancelled?: boolean;
+  finished?: boolean;
+  partialFailure?: boolean;
   response?: string;
   usage?: AgentResult['usage'];
   handoff?: {
@@ -118,6 +122,7 @@ const runSingleHarnessStream = async (
   }
 ): Promise<{
   cancelled: boolean;
+  steered: boolean;
   fullResponse: string;
   agentResult: AgentResult | null;
   terminalToolName: string | null;
@@ -128,6 +133,7 @@ const runSingleHarnessStream = async (
 
   for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     let terminalToolName: string | null = null;
+    let steered = false;
 
     const wrappedOnToolEvent = (event: ToolStreamEvent) => {
       if (event.type === 'tool-call') {
@@ -185,7 +191,11 @@ const runSingleHarnessStream = async (
             break;
           }
           if (params.shouldCancel?.()) {
-            cancelled = true;
+            if (params.isSteered?.()) {
+              steered = true;
+            } else {
+              cancelled = true;
+            }
             try {
               await generator.return(undefined);
             } catch (error) {
@@ -194,7 +204,7 @@ const runSingleHarnessStream = async (
                 event: 'chat.tool_stream.close',
                 outcome: 'degraded',
                 error,
-                message: 'Failed to close cancelled tool stream.',
+                message: 'Failed to close interrupted tool stream.',
               });
             }
             break;
@@ -209,7 +219,11 @@ const runSingleHarnessStream = async (
         }
       } catch (error) {
         if (params.shouldCancel?.() || (error instanceof Error && error.name === 'AbortError')) {
-          cancelled = true;
+          if (params.isSteered?.()) {
+            steered = true;
+          } else {
+            cancelled = true;
+          }
           try {
             await generator.return(undefined);
           } catch (returnError) {
@@ -228,8 +242,9 @@ const runSingleHarnessStream = async (
 
       return {
         cancelled,
+        steered,
         fullResponse,
-        agentResult: cancelled || !next ? null : ((next.value ?? null) as AgentResult | null),
+        agentResult: cancelled || steered || !next ? null : ((next.value ?? null) as AgentResult | null),
         terminalToolName,
       };
     } catch (error) {
@@ -328,16 +343,56 @@ const streamToolLoop = async (
           message: `Applied ${steerMessages.length} steering message(s) at autonomous iteration ${autonomousIteration + 1}.`,
         });
       }
+      params.clearSteered?.();
     }
 
-    const { cancelled, fullResponse, agentResult, terminalToolName } = await runSingleHarnessStream(
-      params,
-      {
-        history: currentHistory,
-        prompt: currentPrompt,
-        approvalResponses: currentApprovalResponses,
+    let cancelled = false;
+    let steered = false;
+    let fullResponse = '';
+    let agentResult: AgentResult | null = null;
+    let terminalToolName: string | null = null;
+
+    try {
+      const streamOutput = await runSingleHarnessStream(
+        params,
+        {
+          history: currentHistory,
+          prompt: currentPrompt,
+          approvalResponses: currentApprovalResponses,
+        }
+      );
+      cancelled = streamOutput.cancelled;
+      steered = streamOutput.steered;
+      fullResponse = streamOutput.fullResponse;
+      agentResult = streamOutput.agentResult;
+      terminalToolName = streamOutput.terminalToolName;
+    } catch (error) {
+      chatToolLoopLogger.event({
+        level: 'error',
+        event: 'chat.tool_stream.iteration_error',
+        outcome: 'failed',
+        message: `Autonomous iteration ${autonomousIteration + 1} failed: ${getErrorMessage(error)}`,
+        error,
+      });
+      if (allText || allStreamedText) {
+        const partialText = allText || allStreamedText || '(partial output unavailable)';
+        params.uiChunkEmitter?.emitTextDelta(
+          `\n\n[Autonomous iteration ${autonomousIteration + 1} failed: ${getErrorMessage(error)}]\n\nPartial results saved from ${autonomousIteration} completed iteration(s).`
+        );
+        params.uiChunkEmitter?.finish();
+        return {
+          awaitingApproval: false,
+          partialFailure: true,
+          response: partialText,
+          usage: cumulativeUsage,
+        };
       }
-    );
+      throw error;
+    }
+
+    if (steered) {
+      continue;
+    }
 
     if (cancelled) {
       wasCancelled = true;
@@ -443,5 +498,6 @@ const streamToolLoop = async (
     ...(finalText.trim() ? { response: finalText } : {}),
     usage: cumulativeUsage,
     ...(handoff ? { handoff } : {}),
+    ...(lastTerminalToolName ? { finished: true } : {}),
   };
 };

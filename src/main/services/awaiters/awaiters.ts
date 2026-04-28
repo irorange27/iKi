@@ -1,5 +1,6 @@
 import { Notification, app } from 'electron';
 
+import * as agentRunDb from '../../../core/db/agent_runs';
 import * as awaitersDb from '../../../core/db/awaiters';
 import * as chatThreadDb from '../../../core/db/chat_thread';
 import { createLogger } from '../../../core/logger';
@@ -235,22 +236,47 @@ export const runAwaiterWake = async (awaiterId: string) => {
   });
 
   try {
+    const messages: import('ai').ModelMessage[] = [
+      { role: 'system', content: AWAITER_WAKE_SYSTEM_PROMPT },
+    ];
+
+    if (awaiter.origin_run_id) {
+      const checkpoint = agentRunDb.getLatestAgentRunCheckpoint(awaiter.origin_run_id);
+      if (
+        checkpoint?.snapshot?.working?.modelMessages &&
+        Array.isArray(checkpoint.snapshot.working.modelMessages) &&
+        checkpoint.snapshot.working.modelMessages.length > 0
+      ) {
+        const checkpointMessages = checkpoint.snapshot.working.modelMessages as import('ai').ModelMessage[];
+        messages.push({
+          role: 'system',
+          content: '[RESUMED CONTEXT] Continuing from a deferred continuation created during a previous agent run. The conversation history from that run is provided below.',
+        });
+        messages.push(...checkpointMessages);
+        messages.push({
+          role: 'system',
+          content: '[CONTINUATION] The following is the scheduled wake instruction:',
+        });
+      }
+    }
+
+    messages.push({
+      role: 'user',
+      content: buildAwaiterWakePrompt(awaiter, { startedAt }),
+    });
+
     const result = await chatService.send({
       providerType: awaiter.provider_type,
       providerId: awaiter.provider_id ?? undefined,
       model: awaiter.model,
-      messages: [
-        { role: 'system', content: AWAITER_WAKE_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: buildAwaiterWakePrompt(awaiter, { startedAt }),
-        },
-      ],
-      tools: [],
+      messages,
       threadId: awaiter.thread_id,
       runConfig: {
         kind: 'awaiter-wake',
         parentRunId: awaiter.origin_run_id ?? undefined,
+        rootRunId: awaiter.origin_run_id
+          ? (agentRunDb.getAgentRun(awaiter.origin_run_id)?.rootRunId ?? undefined)
+          : undefined,
         metadata: {
           source: 'awaiter',
           awaiterId: awaiter.id,

@@ -33,7 +33,8 @@ export type AgentRunCheckpointReason =
   | 'child-run-spawned'
   | 'run-completed'
   | 'run-cancelled'
-  | 'run-failed';
+  | 'run-failed'
+  | 'periodic';
 
 export type AgentRunInput = {
   prompt?: string;

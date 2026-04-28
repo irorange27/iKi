@@ -19,12 +19,16 @@ import {
 } from './chat_streaming_harness';
 import { createChatStreamingModels } from './chat_streaming_models';
 import { createChatTurnPreparer, type ChatTurnOptions } from './chat_turn_preparer';
-import type { ActiveStreamState, ChatWebContents } from './chat_types';
+import type { ActiveStreamState, ChatWebContents, RunStatusEvent } from './chat_types';
 import { createUiChunkEmitter, toLlmChatMessages } from './chat_ui';
 import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_loop';
 import { companionService } from '../companion/companion_service';
+import { createRateLimiter } from '../../../daemon/rate_limiter';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
+
+const THREAD_RATE_LIMIT_WINDOW_MS = 10_000;
+const THREAD_RATE_LIMIT_MAX_REQUESTS = 5;
 
 export type ChatSendResult =
   | {
@@ -80,7 +84,49 @@ export const createChatStreaming = (deps: {
   const turnPreparer = createChatTurnPreparer({ memory: deps.memory });
   const streamingModels = createChatStreamingModels();
 
+  const threadStreams = new Map<string, Set<number>>();
   const steerQueues = new Map<number, string[]>();
+  const threadRunLimiter = createRateLimiter({
+    windowMs: THREAD_RATE_LIMIT_WINDOW_MS,
+    maxRequests: THREAD_RATE_LIMIT_MAX_REQUESTS,
+  });
+
+  const checkThreadRunRate = (threadId: string): { allowed: boolean; retryAfterMs?: number } => {
+    if (!threadId) return { allowed: true };
+    return threadRunLimiter.check(threadId);
+  };
+
+  const cancelThreadStreams = (threadId: string, exceptSenderId?: number) => {
+    const senderIds = threadStreams.get(threadId);
+    if (!senderIds || senderIds.size === 0) return;
+    for (const senderId of senderIds) {
+      if (senderId === exceptSenderId) continue;
+      const streamState = deps.activeStreams.get(senderId);
+      if (streamState && !streamState.cancelled) {
+        streamState.cancelled = true;
+        streamState.stoppedByUser = true;
+        streamState.abortController.abort('superseded-by-same-thread');
+      }
+    }
+  };
+
+  const trackThreadStream = (threadId: string, senderId: number) => {
+    const senderIds = threadStreams.get(threadId);
+    if (senderIds) {
+      senderIds.add(senderId);
+    } else {
+      threadStreams.set(threadId, new Set([senderId]));
+    }
+  };
+
+  const untrackThreadStream = (threadId: string, senderId: number) => {
+    const senderIds = threadStreams.get(threadId);
+    if (!senderIds) return;
+    senderIds.delete(senderId);
+    if (senderIds.size === 0) {
+      threadStreams.delete(threadId);
+    }
+  };
 
   const stopStream = (senderId: number) => {
     const streamState = deps.activeStreams.get(senderId);
@@ -101,6 +147,11 @@ export const createChatStreaming = (deps: {
       return { success: false, error: 'No active autonomous stream to steer' };
     }
     steerQueue.push(message);
+    const streamState = deps.activeStreams.get(senderId);
+    if (streamState && !streamState.cancelled) {
+      streamState.steered = true;
+      streamState.abortController.abort('steer');
+    }
     return { success: true };
   };
 
@@ -108,6 +159,16 @@ export const createChatStreaming = (deps: {
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
+      if (options.threadId) {
+        const rateCheck = checkThreadRunRate(options.threadId);
+        if (!rateCheck.allowed) {
+          return {
+            success: false,
+            error: `Too many requests on this thread. Retry in ${Math.ceil((rateCheck.retryAfterMs ?? 1000) / 1000)}s.`,
+          };
+        }
+      }
+
       const preparedTurn = await turnPreparer.prepareChatTurn(options);
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
       const systemPrompt = preparedTurn.enableTools
@@ -274,17 +335,43 @@ export const createChatStreaming = (deps: {
       existingStream.abortController.abort('superseded-by-new-request');
     }
 
+    const uiChunkEmitter = createUiChunkEmitter(webContents);
+
+    if (options.threadId) {
+      const rateCheck = checkThreadRunRate(options.threadId);
+      if (!rateCheck.allowed) {
+        const delaySec = Math.ceil((rateCheck.retryAfterMs ?? 1000) / 1000);
+        uiChunkEmitter.error(`Too many requests on this thread. Retry in ${delaySec}s.`);
+        return { success: false, error: `Too many requests on this thread. Retry in ${delaySec}s.` };
+      }
+    }
+
+    if (options.threadId) {
+      cancelThreadStreams(options.threadId, senderId);
+      trackThreadStream(options.threadId, senderId);
+    }
+
     const streamState: ActiveStreamState = {
       cancelled: false,
       stoppedByUser: false,
       abortController: new AbortController(),
     };
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
-    const uiChunkEmitter = createUiChunkEmitter(webContents);
     deps.activeStreams.set(senderId, streamState);
     const steerQueue: string[] = [];
     steerQueues.set(senderId, steerQueue);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
+
+    const notifyRunStatus = () => {
+      const run = runTracker?.getRun();
+      if (!run) return;
+      webContents.send('chat:run-status', {
+        runId: run.id,
+        status: run.status,
+        threadId: run.threadId,
+        timestamp: run.updatedAt,
+      } satisfies RunStatusEvent);
+    };
 
     try {
       const preparedTurn = await turnPreparer.prepareChatTurn({
@@ -332,10 +419,52 @@ export const createChatStreaming = (deps: {
         if (checkpoint?.snapshot?.working?.modelMessages) {
           const checkpointMessages = checkpoint.snapshot.working.modelMessages as import('ai').ModelMessage[];
           if (checkpointMessages.length > 0) {
+            let handoffSummary = '';
+            let handoffNextSteps = '';
+            let handoffReason = '';
+
+            for (let i = checkpointMessages.length - 1; i >= 0; i--) {
+              const msg = checkpointMessages[i] as Record<string, unknown>;
+              if (msg.role !== 'assistant') continue;
+              const content = msg.content;
+              if (!Array.isArray(content)) continue;
+              for (const part of content) {
+                if (
+                  typeof part === 'object' &&
+                  part !== null &&
+                  (part as Record<string, unknown>).type === 'tool-call' &&
+                  (part as Record<string, unknown>).toolName === 'handoff'
+                ) {
+                  const args = (part as Record<string, unknown>).args as Record<string, unknown> | undefined;
+                  if (args) {
+                    handoffSummary = typeof args.summary === 'string' ? args.summary : '';
+                    handoffNextSteps = typeof args.next_steps === 'string' ? args.next_steps : '';
+                    handoffReason = typeof args.reason === 'string' ? args.reason : '';
+                  }
+                  break;
+                }
+              }
+              if (handoffSummary || handoffNextSteps) break;
+            }
+
+            const handoffContextParts: string[] = [
+              'You are resuming work from a previous agent run.',
+            ];
+            if (handoffSummary) {
+              handoffContextParts.push(`\nSummary of previous work:\n${handoffSummary}`);
+            }
+            if (handoffNextSteps) {
+              handoffContextParts.push(`\nNext steps to complete:\n${handoffNextSteps}`);
+            }
+            if (handoffReason) {
+              handoffContextParts.push(`\nReason for handoff: ${handoffReason}`);
+            }
+            handoffContextParts.push('\nThe conversation history from the previous run is below. Continue the work based on what was done before.');
+
             streamHistory = [
               {
                 role: 'system' as const,
-                content: `[HANDOFF CONTEXT] You are resuming work from a previous agent run. The conversation history below is from that run. Continue the work based on what was done before.`,
+                content: `[HANDOFF CONTEXT] ${handoffContextParts.join('')}`,
               },
               ...checkpointMessages,
               ...(preparedTurn.history.length > 0
@@ -384,6 +513,8 @@ export const createChatStreaming = (deps: {
           lastStepIndex: 0,
         },
       });
+      streamState.runId = runTracker.id;
+
       const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
             threadId: options.threadId,
@@ -423,57 +554,97 @@ export const createChatStreaming = (deps: {
       }
 
       companionService.beginThinking(companionThinkingKey);
-      const streamResult = await runWithToolRuntimeContext(
-        { runId: runTracker.id, runTracker },
-        async () =>
-          await toolLoopRunner.stream({
-            harness,
-            webContents,
-            history: streamHistory,
-            prompt: streamPrompt,
-            approvalContext,
-            autonomous: autonomousMode
-              ? { maxIterations: options.autonomous!.maxIterations, continuePrompt: options.autonomous!.continuePrompt }
-              : undefined,
-            retry: autonomousMode
-              ? { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
-              : { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
-            steerQueue: autonomousMode ? steerQueue : undefined,
-            shouldCancel: () => streamState.cancelled,
-            onToolEvent: eventPart => {
-              runTracker?.recordToolEvent(eventPart);
-              if (
-                eventPart.type === 'tool-approval-request' &&
-                typeof eventPart.approvalId === 'string' &&
-                eventPart.approvalId.length > 0
-              ) {
-                deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
-                  harness,
-                  webContents,
-                  history: preparedTurn.history,
-                  recoveryContext: approvalContext,
-                });
-              }
-              uiChunkEmitter.emitToolEvent(eventPart);
-            },
-            abortSignal: streamState.abortController.signal,
-            uiChunkEmitter,
-            tokenUsageContext: {
-              ...(typeof preparedTurn.maxInputTokens === 'number'
-                ? { maxInputTokens: preparedTurn.maxInputTokens }
-                : {}),
-              ...(typeof preparedTurn.maxOutputTokens === 'number'
-                ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-                : {}),
-              model: options.model,
-              providerType: options.providerType,
-              ...(typeof options.providerId === 'string' && options.providerId.trim()
-                ? { providerId: options.providerId.trim() }
-                : {}),
-            },
-          })
-      );
-      runTracker.syncModelMessages(harness.getHistory?.() ?? preparedTurn.history);
+
+      const MAX_OUTER_AUTONOMOUS_BATCHES = 50;
+      let outerBatch = 0;
+      let streamResult: Awaited<ReturnType<typeof toolLoopRunner.stream>> | undefined;
+      let accumulatedResponse = '';
+
+      while (true) {
+        const isFirstBatch = outerBatch === 0;
+
+        streamResult = await runWithToolRuntimeContext(
+          { runId: runTracker.id, runTracker },
+          async () =>
+            await toolLoopRunner.stream({
+              harness,
+              webContents,
+              history: streamHistory,
+              prompt: streamPrompt,
+              approvalContext,
+              autonomous: autonomousMode
+                ? { maxIterations: options.autonomous!.maxIterations, continuePrompt: options.autonomous!.continuePrompt }
+                : undefined,
+              retry: autonomousMode
+                ? { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
+                : { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
+              steerQueue: autonomousMode ? steerQueue : undefined,
+              shouldCancel: () => streamState.cancelled || (streamState.steered ?? false),
+              isSteered: () => (streamState.steered ?? false) && !streamState.cancelled,
+              clearSteered: () => { streamState.steered = false; },
+              onToolEvent: eventPart => {
+                runTracker?.recordToolEvent(eventPart);
+                if (
+                  eventPart.type === 'tool-approval-request' &&
+                  typeof eventPart.approvalId === 'string' &&
+                  eventPart.approvalId.length > 0
+                ) {
+                  deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
+                    harness,
+                    webContents,
+                    history: preparedTurn.history,
+                    recoveryContext: approvalContext,
+                  });
+                }
+                uiChunkEmitter.emitToolEvent(eventPart);
+              },
+              abortSignal: streamState.abortController.signal,
+              uiChunkEmitter,
+              tokenUsageContext: {
+                ...(typeof preparedTurn.maxInputTokens === 'number'
+                  ? { maxInputTokens: preparedTurn.maxInputTokens }
+                  : {}),
+                ...(typeof preparedTurn.maxOutputTokens === 'number'
+                  ? { maxOutputTokens: preparedTurn.maxOutputTokens }
+                  : {}),
+                model: options.model,
+                providerType: options.providerType,
+                ...(typeof options.providerId === 'string' && options.providerId.trim()
+                  ? { providerId: options.providerId.trim() }
+                  : {}),
+              },
+            })
+        );
+
+        if (streamResult.response) {
+          accumulatedResponse = accumulatedResponse
+            ? accumulatedResponse + '\n\n' + streamResult.response
+            : streamResult.response;
+        }
+
+        runTracker.syncModelMessages(harness.getHistory?.() ?? streamHistory);
+
+        if (streamResult.cancelled) break;
+        if (streamResult.awaitingApproval) break;
+        if (streamResult.partialFailure) break;
+        if (streamResult.handoff || streamResult.finished) break;
+        if (!autonomousMode) break;
+
+        outerBatch++;
+        if (outerBatch >= MAX_OUTER_AUTONOMOUS_BATCHES) break;
+
+        if (outerBatch % 5 === 0) {
+          runTracker.createCheckpoint('periodic');
+        }
+
+        streamHistory = harness.getHistory?.() ?? streamHistory;
+        streamPrompt = options.autonomous!.continuePrompt || 'Continue with the next step.';
+      }
+
+      if (!streamResult) {
+        throw new Error('Unreachable: stream loop produced no result');
+      }
+
       if (!streamResult.cancelled) {
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
@@ -485,38 +656,52 @@ export const createChatStreaming = (deps: {
           metadata: {
             awaitingApproval: streamResult.awaitingApproval,
             contextTokens: preparedTurn.report.totalEstimatedTokens,
+            ...(outerBatch > 0 ? { autonomousBatches: outerBatch + 1 } : {}),
           },
         });
       }
+
+      const finalResponse = accumulatedResponse || streamResult.response;
+
       if (streamResult.cancelled) {
         runTracker.markCancelled({
-          ...(streamResult.response ? { text: streamResult.response } : {}),
+          ...(finalResponse ? { text: finalResponse } : {}),
         });
+        notifyRunStatus();
+      } else if (streamResult.partialFailure) {
+        runTracker.markFailed({
+          message: 'Autonomous iteration failed; partial progress saved.',
+          retryable: true,
+        });
+        notifyRunStatus();
       } else if (streamResult.awaitingApproval) {
         runTracker.markBlocked({
-          ...(streamResult.response ? { text: streamResult.response } : {}),
+          ...(finalResponse ? { text: finalResponse } : {}),
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
         });
+        notifyRunStatus();
       } else if (streamResult.handoff) {
         const handoffResponse =
-          (streamResult.response ? streamResult.response + '\n\n' : '') +
+          (finalResponse ? finalResponse + '\n\n' : '') +
           `[Handoff] ${streamResult.handoff.summary}\n\nNext steps: ${streamResult.handoff.nextSteps}`;
         runTracker.markCompleted({
           text: handoffResponse.trim() || undefined,
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
           finishReason: 'handoff',
         });
+        notifyRunStatus();
       } else {
         runTracker.markCompleted({
-          ...(streamResult.response ? { text: streamResult.response } : {}),
+          ...(finalResponse ? { text: finalResponse } : {}),
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          finishReason: 'completed',
+          finishReason: streamResult.finished ? 'completed' : 'completed',
         });
+        notifyRunStatus();
       }
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
-        ...(streamResult.response ? { text: streamResult.response } : {}),
+        ...(finalResponse ? { text: finalResponse } : {}),
         stopped: streamState.stoppedByUser,
       };
     } catch (error: unknown) {
@@ -524,6 +709,7 @@ export const createChatStreaming = (deps: {
         uiChunkEmitter.abort();
         if (runTracker && runTracker.getRun().status === 'running') {
           runTracker.markCancelled();
+          notifyRunStatus();
         }
         return { success: true, stopped: streamState.stoppedByUser };
       }
@@ -544,6 +730,7 @@ export const createChatStreaming = (deps: {
       });
       if (runTracker && runTracker.getRun().status === 'running') {
         runTracker.markFailed({ message });
+        notifyRunStatus();
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
@@ -551,6 +738,9 @@ export const createChatStreaming = (deps: {
       companionService.endThinking(companionThinkingKey);
       deps.approvals.cleanupPendingSessionsForWebContents(senderId);
       steerQueues.delete(senderId);
+      if (options.threadId) {
+        untrackThreadStream(options.threadId, senderId);
+      }
       if (deps.activeStreams.get(senderId) === streamState) {
         deps.activeStreams.delete(senderId);
       }

@@ -30,7 +30,7 @@ export const useThreadToolSelection = (deps: {
     if (normalizedToolNames.size === 0) return [];
 
     try {
-      const tools = await deps.electronAPI.tools.list();
+      const tools = await deps.electronAPI.tools?.list();
       if (!Array.isArray(tools)) return [];
 
       const resolvedServerIds = new Set<string>();

@@ -37,6 +37,23 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:runs:tree:get', (_, rootRunId: string) =>
     toIpcSerializable(chatService.getRunTree(rootRunId))
   );
+  ipcMain.handle('chat:runs:list-by-status', (_, statuses: string[], opts?: { clientId?: string; limit?: number }) =>
+    toIpcSerializable(chatService.listRunsByStatus(statuses as import('../../shared/types/agent_run').AgentRunStatus[], opts))
+  );
+  ipcMain.handle('chat:runs:cancel', (_, runId: string) =>
+    chatService.cancelRun(runId)
+  );
+  ipcMain.handle('chat:runs:retry', (_, runId: string) =>
+    chatService.retryRun(runId)
+  );
+  ipcMain.handle('chat:runs:retry-and-execute', async (event, runId: string) => {
+    const webContents = toChatWebContents(event.sender);
+    return await chatService.retryAndExecute(webContents, runId);
+  });
+  ipcMain.handle('chat:runs:resume', async (event, runId: string) => {
+    const webContents = toChatWebContents(event.sender);
+    return await chatService.resumeRun(webContents, runId);
+  });
 
   // Chat/LLM Integration
   ipcMain.handle(

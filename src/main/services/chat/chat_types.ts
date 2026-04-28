@@ -24,9 +24,18 @@ export type ActiveStreamState = {
   cancelled: boolean;
   stoppedByUser: boolean;
   abortController: AbortController;
+  runId?: string;
+  steered?: boolean;
 };
 
 export type ToolStreamEvent = ConversationRunnerStreamEvent;
+
+export type RunStatusEvent = {
+  runId: string;
+  status: import('../../../shared/types/agent_run').AgentRunStatus;
+  threadId?: string | null;
+  timestamp: string;
+};
 
 export type UiChunkEmitter = {
   messageId: string;

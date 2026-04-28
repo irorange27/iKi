@@ -165,6 +165,9 @@ const resolveDelegableTools = (requestedTools: string[] | undefined): AgentTool[
   );
 };
 
+const SCRATCHPAD_MAX_FILES = 20;
+const SCRATCHPAD_MAX_CONTENT_BYTES = 8192;
+
 const summarizeUsedTools = (
   toolCalls: AgentResult['toolCalls']
 ): Array<{ name: string; callCount: number }> => {
@@ -333,19 +336,30 @@ export class DelegatedAgentTool extends BaseTool {
     });
 
     // Scan scratchpad for intermediate findings
-    let scratchpadFiles: Array<{ name: string; size: number }> = [];
+    let scratchpadFiles: Array<{ name: string; size: number; content?: string }> = [];
     try {
       const entries = await fs.readdir(scratchpadPath, { withFileTypes: true });
       scratchpadFiles = entries
         .filter(e => e.isFile())
+        .slice(0, SCRATCHPAD_MAX_FILES)
         .map(e => ({ name: e.name, size: 0 }));
-      // Get actual sizes for the first 20 files to avoid slowdown
-      for (const file of scratchpadFiles.slice(0, 20)) {
+
+      for (const file of scratchpadFiles) {
+        const filePath = path.join(scratchpadPath, file.name);
         try {
-          const stat = await fs.stat(path.join(scratchpadPath, file.name));
+          const stat = await fs.stat(filePath);
           file.size = stat.size;
         } catch {
-          // ignore
+          // ignore stat failure
+        }
+        try {
+          const content = await fs.readFile(filePath, 'utf-8');
+          file.content =
+            content.length > SCRATCHPAD_MAX_CONTENT_BYTES
+              ? content.slice(0, SCRATCHPAD_MAX_CONTENT_BYTES) + '\n... [truncated]'
+              : content;
+        } catch {
+          // binary or unreadable — skip content
         }
       }
     } catch {
@@ -370,7 +384,11 @@ export class DelegatedAgentTool extends BaseTool {
         ? {
             scratchpad: {
               path: scratchpadPath,
-              files: scratchpadFiles,
+              files: scratchpadFiles.map(f => ({
+                name: f.name,
+                size: f.size,
+                ...(f.content !== undefined ? { content: f.content } : {}),
+              })),
             },
           }
         : {}),

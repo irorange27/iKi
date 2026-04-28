@@ -97,6 +97,7 @@ export type AgentRunTracker = {
   id: string;
   getRun: () => AgentRun;
   syncModelMessages: (messages: unknown[]) => AgentRun;
+  createCheckpoint: (reason: AgentRunCheckpointReason) => void;
   recordToolEvent: (event: ConversationRunnerStreamEvent) => void;
   recordChildRun: (params: {
     childRunId: string;
@@ -204,6 +205,9 @@ export const createAgentRunTracker = (
         },
       });
       return currentRun;
+    },
+    createCheckpoint: reason => {
+      createCheckpoint(reason);
     },
     recordToolEvent: event => {
       if (!event || typeof event !== 'object' || typeof event.type !== 'string') return;

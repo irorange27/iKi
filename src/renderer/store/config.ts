@@ -51,11 +51,10 @@ export const useConfigStore = defineStore('config', {
       await configService.set(rawConfig);
     },
 
-    // ✅ 更新UI设置并自动保存
     updateUi<K extends keyof AppConfig['ui']>(key: K, value: AppConfig['ui'][K]) {
       this.config.ui[key] = value;
-      // 可选：自动保存
-      // this.saveConfig();
+      // NOTE: persistence is handled by useAppConfig composable's debouncedSave().
+      // Callers that bypass the composable must trigger save themselves.
     },
     updateGeneral<K extends keyof AppConfig['general']>(key: K, value: AppConfig['general'][K]) {
       this.config.general[key] = value;
@@ -128,13 +127,13 @@ export const useConfigStore = defineStore('config', {
       }
     },
 
-    resetSection(section: keyof AppConfig) {
+    async resetSection(section: keyof AppConfig) {
       const defaultSection = createDefaultAppConfig()[section];
       this.config = {
         ...this.config,
         [section]: defaultSection,
       } as AppConfig;
-      this.saveConfig();
+      await this.saveConfig();
     },
   },
 });

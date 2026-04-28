@@ -288,6 +288,39 @@ export const listAgentRunsByRootRunId = (rootRunId: string): AgentRun[] => {
   return rows.map(mapAgentRunRow);
 };
 
+export const listAgentRunsByStatus = (
+  statuses: AgentRun['status'][],
+  opts?: { clientId?: string; limit?: number }
+): AgentRun[] => {
+  const normalizedStatuses = statuses
+    .map(status => normalizeWhitespace(status))
+    .filter(Boolean);
+  if (normalizedStatuses.length === 0) return [];
+
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = {};
+
+  normalizedStatuses.forEach((status, index) => {
+    conditions.push(`status = @status_${index}`);
+    params[`status_${index}`] = status;
+  });
+
+  if (opts?.clientId) {
+    conditions.push('thread_id IN (SELECT id FROM chat_threads WHERE client_id = @client_id)');
+    params.client_id = normalizeWhitespace(opts.clientId);
+  }
+
+  const limitClause =
+    typeof opts?.limit === 'number' && opts.limit > 0 ? ` LIMIT ${Math.trunc(opts.limit)}` : '';
+
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM agent_runs WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC${limitClause}`
+    )
+    .all(params) as AgentRunRow[];
+  return rows.map(mapAgentRunRow);
+};
+
 export const listAgentRunsByParentRunId = (parentRunId: string): AgentRun[] => {
   const normalizedParentRunId = normalizeWhitespace(parentRunId);
   if (!normalizedParentRunId) return [];
@@ -551,6 +584,102 @@ export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
     latestCheckpoint: getLatestAgentRunCheckpoint(normalizedRunId),
     children: listAgentRunsByParentRunId(normalizedRunId),
   };
+};
+
+export type RunRecoveryResult = {
+  failedRuns: number;
+  blockedRuns: number;
+  totalRuns: number;
+};
+
+export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
+  const stuckStatuses: AgentRun['status'][] = ['running', 'blocked'];
+  const statusPlaceholders = stuckStatuses.map(() => '?').join(', ');
+
+  const rows = getDb()
+    .prepare(
+      `SELECT id, status FROM agent_runs WHERE status IN (${statusPlaceholders})`
+    )
+    .all(...stuckStatuses) as { id: string; status: string }[];
+
+  let failedRuns = 0;
+  let blockedRuns = 0;
+
+  for (const row of rows) {
+    const normalizedStatus = normalizeWhitespace(row.status);
+    if (normalizedStatus === 'running') {
+      getDb()
+        .prepare(
+          `UPDATE agent_runs SET status = 'failed', error_json = @error_json, updated_at = @updated_at WHERE id = @id`
+        )
+        .run({
+          id: row.id,
+          error_json: JSON.stringify({
+            message: 'Run interrupted by process restart',
+            code: 'PROCESS_RESTART',
+            retryable: true,
+          }),
+          updated_at: toIsoNow(),
+        });
+      failedRuns += 1;
+    } else if (normalizedStatus === 'blocked') {
+      getDb()
+        .prepare(
+          `UPDATE agent_runs SET status = 'failed', error_json = @error_json, updated_at = @updated_at WHERE id = @id`
+        )
+        .run({
+          id: row.id,
+          error_json: JSON.stringify({
+            message: 'Run blocked at restart — approval session lost',
+            code: 'APPROVAL_SESSION_LOST',
+            retryable: true,
+          }),
+          updated_at: toIsoNow(),
+        });
+      blockedRuns += 1;
+    }
+  }
+
+  return {
+    failedRuns,
+    blockedRuns,
+    totalRuns: rows.length,
+  };
+};
+
+export const cleanupOldAgentRuns = (maxAgeDays: number): { deletedRuns: number } => {
+  const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+  const terminalStatuses: AgentRun['status'][] = ['completed', 'failed', 'cancelled'];
+  const statusPlaceholders = terminalStatuses.map(() => '?').join(', ');
+
+  const db = getDb();
+
+  const rows = db
+    .prepare(
+      `SELECT id FROM agent_runs WHERE status IN (${statusPlaceholders}) AND updated_at < ?`
+    )
+    .all(...terminalStatuses, cutoffDate) as { id: string }[];
+
+  if (rows.length === 0) return { deletedRuns: 0 };
+
+  const runIds = rows.map(r => r.id);
+  const idPlaceholders = runIds.map(() => '?').join(', ');
+
+  db.prepare(
+    `DELETE FROM agent_run_steps WHERE run_id IN (${idPlaceholders})`
+  ).run(...runIds);
+
+  db.prepare(
+    `DELETE FROM agent_run_checkpoints WHERE run_id IN (${idPlaceholders})`
+  ).run(...runIds);
+
+  const result = db
+    .prepare(
+      `DELETE FROM agent_runs WHERE id IN (${idPlaceholders})`
+    )
+    .run(...runIds);
+
+  return { deletedRuns: result.changes };
 };
 
 export const getAgentRunTree = (rootRunId: string): AgentRunTree => {
