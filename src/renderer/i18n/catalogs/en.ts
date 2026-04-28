@@ -1197,6 +1197,8 @@ export const en = defineCatalog({
   'settings.providers.acp.authMethodPlaceholder': 'Optional authentication method id',
   'settings.providers.acp.authMethodHelp':
     'Optional ACP authentication method id to use when Codex CLI advertises multiple login flows.',
+  'settings.providers.acp.authMethodAuto': 'Auto (no preference)',
+  'settings.providers.acp.discoverAuthMethods': 'Discover',
   'settings.providers.acp.mcpServers': 'MCP Servers',
   'settings.providers.acp.mcpServersHelp':
     'Choose which configured MCP servers this Codex CLI session should connect to.',

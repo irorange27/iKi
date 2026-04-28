@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue';
 
 import { useI18n } from '../i18n';
+import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
 import type { ProviderRecord } from './useProviderDrafts';
 import type {
@@ -8,6 +9,8 @@ import type {
   EditableProviderApiFormat,
   ProviderSelectOption,
 } from '../components/settings/providers/provider_settings_shared';
+
+const providersSettingsEditorLogger = createLogger({ module: 'providers_settings_editor' });
 
 export const useProvidersSettingsEditor = (params: {
   providers: Ref<ProviderRecord[]>;
@@ -144,7 +147,13 @@ export const useProvidersSettingsEditor = (params: {
       } else {
         await electronAPI.providers.add(providerData);
       }
-    } catch {
+    } catch (error) {
+      providersSettingsEditorLogger.event({
+        level: 'error',
+        event: 'providers.save',
+        outcome: 'failed',
+        error,
+      });
       return;
     }
 

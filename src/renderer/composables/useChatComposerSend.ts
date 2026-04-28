@@ -50,6 +50,8 @@ export const useChatComposerSend = (deps: {
   selectedSkillIds: Ref<string[]>;
   isAutoToolMode: Ref<boolean>;
   isAutoSkillMode: Ref<boolean>;
+  isAutonomousMode: Ref<boolean>;
+  autonomousMaxIterations: Ref<number>;
   prepareFailedMessage: string;
   stopFailedMessage: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
@@ -214,6 +216,7 @@ export const useChatComposerSend = (deps: {
       return;
     }
 
+    const previousMessage = deps.message.value;
     deps.message.value = '';
     resolvedSendRequest.onCommitted?.();
     isLoading.value = true;
@@ -228,6 +231,9 @@ export const useChatComposerSend = (deps: {
         resolvedMcpServerIds,
         isAutoSkillMode: effectiveSkillMode === 'auto',
         selectedSkillIds: effectiveSelectedSkillIds,
+        ...(deps.isAutonomousMode.value
+          ? { autonomous: { maxIterations: deps.autonomousMaxIterations.value } }
+          : {}),
       });
 
       if (!streamPayload) {
@@ -237,6 +243,7 @@ export const useChatComposerSend = (deps: {
           outcome: 'skipped',
           message: 'No valid messages to send.',
         });
+        deps.message.value = previousMessage;
         setComposerFeedback(deps.prepareFailedMessage);
         isLoading.value = false;
         return;
@@ -256,6 +263,7 @@ export const useChatComposerSend = (deps: {
         outcome: 'failed',
         error,
       });
+      deps.message.value = previousMessage;
       isLoading.value = false;
       isStopping.value = false;
       const message = getErrorMessage(error);

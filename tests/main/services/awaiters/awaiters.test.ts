@@ -35,6 +35,11 @@ vi.mock('../../../../src/daemon/bridge_dispatch', () => ({
   deliverBridgeThreadMessage: vi.fn(),
 }));
 
+vi.mock('../../../../src/core/db/agent_runs', () => ({
+  getAgentRun: vi.fn(() => null),
+  getLatestAgentRunCheckpoint: vi.fn(() => null),
+}));
+
 vi.mock('../../../../src/main/services/chat/chat_service', () => ({
   chatService: {
     getThread: vi.fn(),
@@ -161,7 +166,6 @@ describe('runAwaiterWake', () => {
       expect.objectContaining({
         providerId: 'provider_primary',
         threadId: 'thread_1',
-        tools: [],
         runConfig: {
           kind: 'awaiter-wake',
           parentRunId: 'run_origin',

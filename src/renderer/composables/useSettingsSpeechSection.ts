@@ -308,7 +308,7 @@ export const useSettingsSpeechSection = (params: {
   };
 
   const formatBytes = (value?: number): string => {
-    if (!value || value <= 0) return '';
+    if (typeof value !== 'number' || value <= 0) return '';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let size = value;
     let unitIndex = 0;

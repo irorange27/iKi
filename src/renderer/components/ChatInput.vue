@@ -1,5 +1,10 @@
 <template>
   <div class="chat-input-outer">
+    <ChatSteerBar
+      :visible="isLoading && isAutonomousMode"
+      :disabled="isStopping"
+      @steer="handleSteer"
+    />
     <div class="mx-auto max-w-4xl">
       <ChatTodoPlan v-if="props.todoPlan" class="chat-input-plan" :plan="props.todoPlan" />
       <ChatComposerShell
@@ -97,6 +102,8 @@
             v-model:selected-tools="selectedTools"
             v-model:selected-mcp-server-ids="selectedMcpServerIds"
             v-model:tool-mode="toolMode"
+            v-model:autonomous-active="isAutonomousMode"
+            v-model:autonomous-max-iterations="autonomousMaxIterations"
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
             :selected-model="selectedModel"
@@ -119,6 +126,9 @@
             :waveform-bars="waveformBars"
             :speech-status-label="speechStatusLabel"
             :speech-status-tone-class="speechStatusToneClass"
+            :run-active="runStatusState.isActive.value"
+            :run-status="runStatusState.currentStatus.value"
+            :autonomous-active="isAutonomousMode"
             @toggle-incognito="toggleIncognitoMode"
             @toggle-voice-input="toggleVoiceInput"
             @send-message="sendMessage"
@@ -146,6 +156,7 @@ import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatComposerSelectors from './ChatComposerSelectors.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
+import ChatSteerBar from './ChatSteerBar.vue';
 import { useChatComposerDraft } from '../composables/useChatComposerDraft';
 import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
 import { useChatComposerSend } from '../composables/useChatComposerSend';
@@ -156,6 +167,7 @@ import {
 } from '../composables/useChatSlashCommands';
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
+import { useRunStatus } from '../composables/useRunStatus';
 import { useI18n } from '../i18n';
 import { getElectronAPI } from '../services/electron_api';
 
@@ -201,6 +213,10 @@ const isBusy = ref(false);
 const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
+const isAutonomousMode = ref(false);
+const autonomousMaxIterations = ref(10);
+
+const runStatusState = useRunStatus({ electronAPI });
 
 const {
   selectedProvider,
@@ -291,6 +307,8 @@ const {
   selectedSkillIds,
   isAutoToolMode,
   isAutoSkillMode,
+  isAutonomousMode,
+  autonomousMaxIterations,
   prepareFailedMessage: t('chat.input.prepareFailed'),
   stopFailedMessage: t('chat.input.stopFailed'),
   prepareMessageSend: props.prepareMessageSend,
@@ -471,6 +489,14 @@ const shouldShowSkillSectionLabel = (index: number) => {
 
   const previousCommand = slashCommandSuggestions.value[index - 1];
   return previousCommand?.kind !== 'skill';
+};
+
+const handleSteer = async (message: string) => {
+  try {
+    await electronAPI.chat.steerStream(message);
+  } catch {
+    // steer failed silently — the stream may have already ended
+  }
 };
 
 const toggleIncognitoMode = () => {

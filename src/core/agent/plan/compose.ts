@@ -6,7 +6,7 @@ const composeLogger = createLogger({ module: 'prepare_step_compose' });
 // PromiseLike and generic ToolSets, making it impossible to type precisely here
 // without coupling to the SDK.  We use the broadest callable type and handle
 // the final type assertion at the call site in chat_conversation_runner.
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPrepareStep = (...args: any[]) => any;
 
 export const composePrepareSteps = (

@@ -1,6 +1,7 @@
-import { computed, onMounted, onUnmounted, ref, toRaw, watch, type Ref } from 'vue';
+import { computed, onUnmounted, ref, toRaw, watch, type Ref } from 'vue';
 
 import { useI18n } from '../i18n';
+import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
 import type { ChatThread } from '../../shared/types/chat';
 import type {
@@ -59,6 +60,8 @@ const createDefaultTaskForm = (): TaskForm => ({
 
 const isTaskPushPayload = (payload: unknown): payload is { type?: string } =>
   typeof payload === 'object' && payload !== null && 'type' in payload;
+
+const tasksSectionLogger = createLogger({ module: 'settings_tasks' });
 
 export const useSettingsTasksSection = (params: {
   active: Readonly<Ref<boolean>>;
@@ -147,7 +150,13 @@ export const useSettingsTasksSection = (params: {
     try {
       const threads = await electronAPI.chat.threads.list();
       taskThreads.value = Array.isArray(threads) ? threads : [];
-    } catch {
+    } catch (error) {
+      tasksSectionLogger.event({
+        level: 'warn',
+        event: 'settings.tasks.threads_load',
+        outcome: 'failed',
+        error,
+      });
       taskThreads.value = [];
     }
   };
@@ -441,19 +450,16 @@ export const useSettingsTasksSection = (params: {
     { immediate: true }
   );
 
-  onMounted(() => {
-    try {
-      removeTaskPushListener();
-      removeTaskPushListener =
-        electronAPI.tasks.onPush((payload: unknown) => {
-          if (isTaskPushPayload(payload) && payload.type === 'task-result') {
-            void loadProactiveTasks();
-          }
-        }) ?? (() => undefined);
-    } catch {
-      // Ignore missing tasks IPC when running older builds.
-    }
-  });
+  try {
+    removeTaskPushListener =
+      electronAPI.tasks.onPush((payload: unknown) => {
+        if (isTaskPushPayload(payload) && payload.type === 'task-result') {
+          void loadProactiveTasks();
+        }
+      }) ?? (() => undefined);
+  } catch {
+    // Ignore missing tasks IPC when running older builds.
+  }
 
   onUnmounted(() => {
     try {

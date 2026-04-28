@@ -26,7 +26,8 @@ const validateNoCircularDeps = (steps: PlanStepInput[]): void => {
     for (const dep of step.dependsOn) {
       const depIndex = idToIndex.get(dep);
       if (depIndex === undefined) continue; // validated separately
-      if (depIndex >= idToIndex.get(step.id)!) {
+      const stepIndex = idToIndex.get(step.id);
+      if (stepIndex !== undefined && depIndex >= stepIndex) {
         throw new Error(
           `Circular or out-of-order dependency: "${step.id}" depends on "${dep}" but "${dep}" appears at or after "${step.id}" in the step list`
         );

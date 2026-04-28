@@ -129,13 +129,48 @@
                   <span class="provider-field-title">{{
                     t('settings.providers.acp.authMethodId')
                   }}</span>
-                  <input
-                    type="text"
-                    v-model="selectedProviderDraft.acp_auth_method_id"
-                    :placeholder="t('settings.providers.acp.authMethodPlaceholder')"
-                  />
+                  <div class="provider-acp-auth-row">
+                    <select
+                      v-if="acpAuthMethods.length > 0"
+                      class="settings-select"
+                      :value="selectedProviderDraft.acp_auth_method_id"
+                      @change="emit('update-acp-auth-method-id', ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="">
+                        {{ t('settings.providers.acp.authMethodAuto') }}
+                      </option>
+                      <option
+                        v-for="method in acpAuthMethods"
+                        :key="method.id"
+                        :value="method.id"
+                      >
+                        {{ method.name }} ({{ method.type }})
+                      </option>
+                    </select>
+                    <input
+                      v-else
+                      type="text"
+                      v-model="selectedProviderDraft.acp_auth_method_id"
+                      :placeholder="t('settings.providers.acp.authMethodPlaceholder')"
+                    />
+                    <button
+                      type="button"
+                      class="secondary-btn provider-acp-auth-fetch-btn"
+                      :disabled="isFetchingAcpAuthMethods"
+                      @click="emit('fetch-acp-auth-methods')"
+                    >
+                      {{ isFetchingAcpAuthMethods ? t('common.loading') : t('settings.providers.acp.discoverAuthMethods') }}
+                    </button>
+                  </div>
                 </label>
-                <p class="provider-field-help">
+                <p v-if="acpAuthMethods.length > 0 && selectedProviderDraft.acp_auth_method_id" class="provider-field-help">
+                  <template v-for="method in acpAuthMethods" :key="method.id">
+                    <span v-if="method.id === selectedProviderDraft.acp_auth_method_id && method.description">
+                      {{ method.description }}
+                    </span>
+                  </template>
+                </p>
+                <p v-else class="provider-field-help">
                   {{ t('settings.providers.acp.authMethodHelp') }}
                 </p>
               </div>
@@ -264,6 +299,8 @@ defineProps<{
   acpMcpServerEntries: AcpMcpServerEntry[];
   mcpServersLoading: boolean;
   mcpServersError: string;
+  acpAuthMethods: Array<{ id: string; name: string; description?: string | null; type: string }>;
+  isFetchingAcpAuthMethods: boolean;
   modelsPanelOpen: boolean;
   isFetchingModels: boolean;
   availableModelsList: string[];
@@ -279,8 +316,10 @@ const emit = defineEmits<{
   (event: 'toggle-api-key-visibility'): void;
   (event: 'update-acp-api-provider-id', providerId: string): void;
   (event: 'toggle-acp-mcp-server', payload: { serverId: string; checked: boolean }): void;
+  (event: 'update-acp-auth-method-id', methodId: string): void;
   (event: 'toggle-models-panel'): void;
   (event: 'fetch-models'): void;
+  (event: 'fetch-acp-auth-methods'): void;
   (event: 'toggle-model', modelId: string): void;
   (event: 'edit-model-options', modelId: string): void;
   (event: 'add-model', payload: { modelId: string; displayName: string }): void;
@@ -293,3 +332,23 @@ const { t } = useI18n();
 </script>
 
 <style scoped src="../settings_shared.css"></style>
+<style scoped>
+.provider-acp-auth-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.provider-acp-auth-row select {
+  flex: 1;
+}
+
+.provider-acp-auth-row input {
+  flex: 1;
+}
+
+.provider-acp-auth-fetch-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+</style>

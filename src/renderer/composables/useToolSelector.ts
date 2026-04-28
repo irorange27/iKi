@@ -308,6 +308,7 @@ export const useToolSelector = (params: {
       return;
     }
 
+    if (mcpServersLoading.value) return;
     mcpServersLoading.value = true;
     try {
       const servers = await listMcpServers();

@@ -546,6 +546,54 @@ export const fetchAcpModels = async (
   }
 };
 
+export type AcpAuthMethod = {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: 'env_var' | 'terminal' | 'agent';
+  link?: string | null;
+  vars?: Array<{ name: string; description?: string | null; secret?: boolean }>;
+};
+
+export const fetchAcpAuthMethods = async (
+  config: AcpProviderConfig,
+  threadId?: string
+): Promise<AcpAuthMethod[]> => {
+  const provider = buildAcpProvider(config, threadId);
+
+  try {
+    provider.languageModel();
+    await provider.initSession();
+
+    const model = (provider as unknown as Record<string, unknown>).model as Record<string, unknown> | undefined;
+    const authMethodIds: string[] = Array.isArray(model?.availableAuthMethodIds)
+      ? (model.availableAuthMethodIds as string[])
+      : [];
+
+    if (authMethodIds.length === 0) return [];
+
+    return authMethodIds.map(id => ({
+      id,
+      name: id,
+      type: 'agent' as const,
+    }));
+  } catch (error) {
+    acpProviderLogger.event({
+      level: 'warn',
+      event: 'acp.auth_methods.fetch',
+      outcome: 'failed',
+      error,
+    });
+    return [];
+  } finally {
+    try {
+      provider.cleanup();
+    } catch {
+      // cleanup is best-effort
+    }
+  }
+};
+
 export const disposeAcpLanguageModel = (model: LanguageModel): void => {
   const maybeAcpModel = model as LanguageModel & {
     provider?: string;

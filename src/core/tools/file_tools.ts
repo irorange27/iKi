@@ -96,13 +96,13 @@ const findInContent = (
   oldText: string,
   contextBefore?: string,
   contextAfter?: string
-): { index: number; matchType: 'exact' | 'fuzzy' | 'context' } | { index: -1; error: { message: string; fileSnippet: string; retryHint: string } } => {
+): { index: number; matchType: 'exact' | 'fuzzy' | 'context'; matchedText: string } | { index: -1; error: { message: string; fileSnippet: string; retryHint: string } } => {
   // Step 1: exact match
   const exactPos = content.indexOf(oldText);
   if (exactPos >= 0) {
     const count = countOccurrences(content, oldText);
     if (count === 1) {
-      return { index: exactPos, matchType: 'exact' };
+      return { index: exactPos, matchType: 'exact', matchedText: oldText };
     }
 
     // Multiple exact matches — try context anchors to disambiguate
@@ -130,7 +130,7 @@ const findInContent = (
             })();
 
         if (beforeOk && afterOk) {
-          return { index: candidatePos, matchType: 'context' };
+          return { index: candidatePos, matchType: 'context', matchedText: oldText };
         }
 
         searchFrom = candidatePos + oldText.length;
@@ -152,7 +152,7 @@ const findInContent = (
     }
 
     // Return first exact match; handler decides based on replaceAll / occurrences
-    return { index: exactPos, matchType: 'exact' };
+    return { index: exactPos, matchType: 'exact', matchedText: oldText };
   }
 
   // Step 2: fuzzy match over whole file (only when no exact match exists)
@@ -160,8 +160,10 @@ const findInContent = (
   const searchLines = oldText.split('\n');
   const fuzzyPos = fuzzyLineMatch(contentLines, searchLines, 0);
   if (fuzzyPos >= 0) {
-    const charPos = contentLines.slice(0, fuzzyPos).join('\n').length + (fuzzyPos > 0 ? 1 : 0);
-    return { index: charPos, matchType: 'fuzzy' };
+    // Extract the actual matched text with original whitespace so replacement is reliable
+    const matchedText = contentLines.slice(fuzzyPos, fuzzyPos + searchLines.length).join('\n');
+    const charPos = content.indexOf(matchedText);
+    return { index: Math.max(0, charPos), matchType: 'fuzzy', matchedText };
   }
 
   // Step 3: failure — return structured error
@@ -334,7 +336,8 @@ export class EditFileTool extends BaseTool {
       }
 
       if (result.index >= 0 && 'matchType' in result) {
-        const occurrences = countOccurrences(updatedContent, edit.oldText);
+        const searchText = result.matchedText;
+        const occurrences = countOccurrences(updatedContent, searchText);
 
         if (!edit.replaceAll && occurrences > 1 && result.matchType === 'exact') {
           return {
@@ -351,8 +354,8 @@ export class EditFileTool extends BaseTool {
         }
 
         updatedContent = edit.replaceAll
-          ? updatedContent.split(edit.oldText).join(edit.newText)
-          : replaceFirstOccurrence(updatedContent, edit.oldText, edit.newText);
+          ? updatedContent.split(searchText).join(edit.newText)
+          : replaceFirstOccurrence(updatedContent, searchText, edit.newText);
 
         totalReplacements += edit.replaceAll ? occurrences : 1;
       }

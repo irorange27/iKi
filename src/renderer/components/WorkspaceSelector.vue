@@ -35,7 +35,7 @@
         {{ selectedWorkspace?.path }}
       </div>
       <div v-if="workspaceTipMetaLines.length > 0" class="workspace-selector-tip-meta ui-text-muted">
-        <div v-for="line in workspaceTipMetaLines" :key="line">
+        <div v-for="(line, idx) in workspaceTipMetaLines" :key="idx">
           {{ line }}
         </div>
       </div>

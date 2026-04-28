@@ -102,6 +102,7 @@ export const AgentResultSchema = z.object({
   usage: AgentUsageSchema.optional(),
   iterations: z.number().int().nonnegative(),
   requiresApproval: z.boolean().optional(),
+  contextWarning: z.boolean().optional(),
 });
 
 export type AgentResult = z.infer<typeof AgentResultSchema>;

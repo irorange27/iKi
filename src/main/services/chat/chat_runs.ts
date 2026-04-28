@@ -1,7 +1,6 @@
 import * as agentRunDb from '../../../core/db/agent_runs';
-import type { AgentRun, AgentRunStatus } from '../../../shared/types/agent_run';
+import type { AgentRunStatus } from '../../../shared/types/agent_run';
 import { createPrefixedId } from '../../../shared/utils/id';
-import { toIsoNow } from '../../../shared/utils/text';
 
 type ChatRunsDeps = {
   activeStreams: Map<number, import('./chat_types').ActiveStreamState>;
@@ -52,8 +51,6 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
     }
 
     const newRunId = createPrefixedId('run');
-    const now = toIsoNow();
-
     agentRunDb.createAgentRun({
       id: newRunId,
       kind: 'chat-turn',

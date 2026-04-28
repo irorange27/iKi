@@ -286,6 +286,7 @@ export const createUiChunkEmitter = (
       if (terminated) return;
       ensureStarted();
       closeText();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       emitChunk({ type: 'finish', messageId } as any);
       terminated = true;
     },
@@ -293,6 +294,7 @@ export const createUiChunkEmitter = (
       if (terminated) return;
       ensureStarted();
       closeText();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       emitChunk({ type: 'abort', messageId } as any);
       terminated = true;
     },

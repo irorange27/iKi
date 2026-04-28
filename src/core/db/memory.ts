@@ -1,7 +1,6 @@
 import { getDb } from './database';
 import { getAppConfig } from '../config';
 import { createLogger } from '../logger';
-import { buildSetClause } from './utils';
 import {
   createHashMemoryEmbeddingRuntime,
   createPreferredMemoryEmbeddingRuntime,

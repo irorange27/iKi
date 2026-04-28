@@ -74,8 +74,7 @@ export const buildIdentityContext = (
     .join('\n\n');
   const identityClip = clipTextToTokenBudget(
     combinedMessage,
-    contextConfig.maxIdentityTokens,
-    modelCapability
+    contextConfig.maxIdentityTokens
   );
 
   return {
@@ -83,7 +82,7 @@ export const buildIdentityContext = (
     block: {
       kind: 'identity',
       status: identityClip.text ? (identityClip.truncated ? 'truncated' : 'included') : 'dropped',
-      estimatedTokens: estimateTextTokens(identityClip.text, modelCapability),
+      estimatedTokens: estimateTextTokens(identityClip.text),
       charCount: identityClip.text.length,
       ...(identityClip.text
         ? identityClip.truncated
@@ -180,7 +179,7 @@ export const buildMemoryContext = async (params: {
 
   while (
     memoryResults.length > 1 &&
-    estimateTextTokens(memorySystemMessage, params.modelCapability) >
+    estimateTextTokens(memorySystemMessage) >
       params.contextConfig.maxMemoryTokens
   ) {
     if (archiveMemoryResults.length > 0) {
@@ -201,8 +200,7 @@ export const buildMemoryContext = async (params: {
 
   const memoryClip = clipTextToTokenBudget(
     memorySystemMessage,
-    params.contextConfig.maxMemoryTokens,
-    params.modelCapability
+    params.contextConfig.maxMemoryTokens
   );
   params.onMemoryRetrieved?.({
     query: continuityPayload?.query || archiveMemoryPayload?.query || params.query,
@@ -219,7 +217,7 @@ export const buildMemoryContext = async (params: {
           ? 'truncated'
           : 'included'
         : 'dropped',
-      estimatedTokens: estimateTextTokens(memoryClip.text, params.modelCapability),
+      estimatedTokens: estimateTextTokens(memoryClip.text),
       charCount: memoryClip.text.length,
       ...(memoryClip.text
         ? memoryClip.truncated
@@ -260,7 +258,7 @@ export const buildAffectBlock = (
 ): ContextReportBlock => ({
   kind: 'affect',
   status: affectMessage ? 'included' : 'dropped',
-  estimatedTokens: estimateTextTokens(affectMessage, modelCapability),
+  estimatedTokens: estimateTextTokens(affectMessage),
   charCount: affectMessage.length,
   ...(affectMessage ? {} : { reason: droppedReason || 'no affect context available' }),
 });
@@ -283,8 +281,7 @@ export const buildSkillContext = async (params: {
   });
   const skillClip = clipTextToTokenBudget(
     skillsSystemPrompt,
-    params.contextConfig.maxSkillTokens,
-    params.modelCapability
+    params.contextConfig.maxSkillTokens
   );
 
   return {
@@ -294,7 +291,7 @@ export const buildSkillContext = async (params: {
     block: {
       kind: 'skills',
       status: skillClip.text ? (skillClip.truncated ? 'truncated' : 'included') : 'dropped',
-      estimatedTokens: estimateTextTokens(skillClip.text, params.modelCapability),
+      estimatedTokens: estimateTextTokens(skillClip.text),
       charCount: skillClip.text.length,
       ...(skillClip.text
         ? skillClip.truncated

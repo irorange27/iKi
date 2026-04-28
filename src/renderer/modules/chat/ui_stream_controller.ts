@@ -222,20 +222,28 @@ export const createChatUiStreamController = (deps: {
     }
   };
 
-  const dispatch = async (action: StreamAction) => {
-    const state = getStateFromRefs();
-    const context = {
-      messages: deps.messageStore.messages,
-      createMessageId: deps.createMessageId,
-      currentThreadId: deps.getCurrentThreadId(),
-      nowMs: Date.now(),
-      toolUiStateMap: getToolUiStateMap(),
-    };
+  let dispatchQueue: Promise<void> = Promise.resolve();
 
-    const result = reduceStream(state, context, action);
-    commitStateToRefs(result.state);
-    applyMessageOps(result.messageOps);
-    await runEffects(result.effects);
+  const dispatch = (action: StreamAction): Promise<void> => {
+    const task = dispatchQueue.then(async () => {
+      const state = getStateFromRefs();
+      const context = {
+        messages: deps.messageStore.messages,
+        createMessageId: deps.createMessageId,
+        currentThreadId: deps.getCurrentThreadId(),
+        nowMs: Date.now(),
+        toolUiStateMap: getToolUiStateMap(),
+      };
+
+      const result = reduceStream(state, context, action);
+      commitStateToRefs(result.state);
+      applyMessageOps(result.messageOps);
+      await runEffects(result.effects);
+    });
+    dispatchQueue = task.catch(() => {
+      // Intentional: suppress unhandled rejection for fire-and-forget dispatch
+    });
+    return task;
   };
 
   const resetTransientState = async () => {
@@ -265,10 +273,17 @@ export const createChatUiStreamController = (deps: {
   };
 
   const beginTurn = (params: { threadId: string; parentId: string }) => {
-    void dispatch({
+    dispatch({
       type: 'begin_turn',
       threadId: params.threadId,
       parentId: params.parentId,
+    }).catch((error: unknown) => {
+      streamControllerLogger.event({
+        level: 'warn',
+        event: 'chat.stream.begin_turn',
+        outcome: 'failed',
+        error,
+      });
     });
   };
 
@@ -338,7 +353,14 @@ export const createChatUiStreamController = (deps: {
 
     if (isToolChunk(chunk)) {
       await dispatch({ type: 'tool_chunk', chunk });
+      return;
     }
+
+    streamControllerLogger.event({
+      level: 'warn',
+      event: 'chat.stream.unknown_chunk',
+      message: `Unrecognized chunk type: ${String(chunk.type)}`,
+    });
   };
 
   const approvals = createToolApprovalService({
@@ -356,8 +378,10 @@ export const createChatUiStreamController = (deps: {
 
     // After a reload, transient streaming state is empty, so UI chunks from a resumed approval would be ignored.
     // Re-bind the stream to the current thread + assistant message so resume works reliably.
+    // Only rebind when recovering from a reload (activeStreamThreadId is null); keep existing binding
+    // during normal operation to avoid silently dropping chunks after thread switches.
     const currentThreadId = deps.getCurrentThreadId();
-    if (currentThreadId) {
+    if (!activeStreamThreadId.value && currentThreadId) {
       activeStreamThreadId.value = currentThreadId;
     }
     if (message?.id) {

@@ -36,7 +36,7 @@ import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
 import type { ChatExperimentalContext } from '../chat/intervention_policy';
-import type { AgentRun, AgentRunTrace, AgentRunTree } from './agent_run';
+import type { AgentRun, AgentRunStatus, AgentRunTrace, AgentRunTree } from './agent_run';
 import type { CompanionSnapshot } from './companion';
 
 export type ProviderInput = Partial<Provider> &
@@ -82,12 +82,32 @@ export type ChatInvocationOptions = {
   skillMode?: 'manual' | 'auto';
   threadId?: string;
   maxIterations?: number;
+  autonomous?: {
+    maxIterations: number;
+    continuePrompt?: string;
+  };
   experimentalContext?: ChatExperimentalContext;
 };
 
 export type ChatInvocationResult = {
   success?: boolean;
   error?: string;
+};
+
+export type RunStatusEvent = {
+  runId: string;
+  status: AgentRunStatus;
+  threadId?: string | null;
+  timestamp: string;
+};
+
+export type AcpAuthMethod = {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: 'env_var' | 'terminal' | 'agent';
+  link?: string | null;
+  vars?: Array<{ name: string; description?: string | null; secret?: boolean }>;
 };
 
 export type ToolModelConfig = {
@@ -174,12 +194,19 @@ export interface ElectronApi {
       providerId?: string,
       providerOverride?: ProviderModelDiscoveryOverride | null
     ) => Promise<ProviderModelDescriptor[]>;
+    getAcpAuthMethods: (
+      providerType: string,
+      providerId?: string,
+      providerOverride?: ProviderModelDiscoveryOverride | null
+    ) => Promise<AcpAuthMethod[]>;
     isProviderConfigured: (providerType: string, providerId?: string) => Promise<boolean>;
     send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stopStream: () => Promise<ChatInvocationResult>;
+    steerStream: (message: string) => Promise<ChatInvocationResult>;
     onUiChunk: (callback: (chunk: unknown) => void) => () => void;
     approveTool: (approvalId: string, approved: boolean) => Promise<ChatInvocationResult>;
+    onRunStatus: (callback: (event: RunStatusEvent) => void) => () => void;
     removeAllListeners: () => void;
     threads: {
       list: () => Promise<ChatThread[]>;
@@ -201,6 +228,11 @@ export interface ElectronApi {
       list: (threadId: string) => Promise<AgentRun[]>;
       getTrace: (runId: string) => Promise<AgentRunTrace | null>;
       getTree: (rootRunId: string) => Promise<AgentRunTree>;
+      cancel: (runId: string) => Promise<{ success: boolean; error?: string }>;
+      retry: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
+      retryAndExecute: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
+      resume: (runId: string) => Promise<{ success: boolean; error?: string }>;
+      listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) => Promise<AgentRun[]>;
     };
     usage: {
       summary: (period?: ChatUsagePeriod) => Promise<ChatUsageSummary>;

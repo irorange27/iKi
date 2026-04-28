@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isRetryableError } from '../../../../src/main/services/chat/chat_tool_loop';
+import { isRetryableError } from '../../../../src/shared/utils/errors';
 
 describe('isRetryableError', () => {
   // Rate limit errors

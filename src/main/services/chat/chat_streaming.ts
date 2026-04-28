@@ -515,7 +515,7 @@ export const createChatStreaming = (deps: {
       });
       streamState.runId = runTracker.id;
 
-      const approvalContext = preparedTurn.enableTools
+      let approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
             threadId: options.threadId,
             sessionId: uiChunkEmitter.messageId,
@@ -533,7 +533,7 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      const harness = createChatHarness({
+      let harness = createChatHarness({
         threadId: options.threadId,
         providerType: options.providerType,
         providerId: options.providerId,
@@ -556,13 +556,14 @@ export const createChatStreaming = (deps: {
       companionService.beginThinking(companionThinkingKey);
 
       const MAX_OUTER_AUTONOMOUS_BATCHES = 50;
+      const MAX_HANDOFF_CHAIN = 5;
       let outerBatch = 0;
+      let handoffChain = 0;
       let streamResult: Awaited<ReturnType<typeof toolLoopRunner.stream>> | undefined;
       let accumulatedResponse = '';
 
+      // eslint-disable-next-line no-constant-condition
       while (true) {
-        const isFirstBatch = outerBatch === 0;
-
         streamResult = await runWithToolRuntimeContext(
           { runId: runTracker.id, runTracker },
           async () =>
@@ -573,7 +574,7 @@ export const createChatStreaming = (deps: {
               prompt: streamPrompt,
               approvalContext,
               autonomous: autonomousMode
-                ? { maxIterations: options.autonomous!.maxIterations, continuePrompt: options.autonomous!.continuePrompt }
+                ? { maxIterations: options.autonomous?.maxIterations ?? 1, continuePrompt: options.autonomous?.continuePrompt ?? 'Continue with the next step.' }
                 : undefined,
               retry: autonomousMode
                 ? { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
@@ -627,7 +628,114 @@ export const createChatStreaming = (deps: {
         if (streamResult.cancelled) break;
         if (streamResult.awaitingApproval) break;
         if (streamResult.partialFailure) break;
-        if (streamResult.handoff || streamResult.finished) break;
+        if (streamResult.finished) break;
+
+        if (streamResult.handoff) {
+          const handoffText =
+            (streamResult.response ? streamResult.response + '\n\n' : '') +
+            `[Handoff #${handoffChain + 1}] ${streamResult.handoff.summary}`;
+          accumulatedResponse = accumulatedResponse
+            ? accumulatedResponse + '\n\n---\n\n' + handoffText
+            : handoffText;
+
+          runTracker.markCompleted({
+            text: handoffText.trim() || undefined,
+            usage: streamResult.usage ? { ...streamResult.usage } : undefined,
+            finishReason: 'handoff',
+          });
+          notifyRunStatus();
+
+          handoffChain++;
+          if (handoffChain >= MAX_HANDOFF_CHAIN || !autonomousMode) break;
+
+          const parentRunId = runTracker.id;
+          const rootRunId = runTracker.getRun().rootRunId;
+
+          runTracker = createAgentRunTracker({
+            kind: 'handoff-resume',
+            threadId: options.threadId,
+            parentRunId,
+            rootRunId,
+            providerType: options.providerType,
+            providerId: options.providerId,
+            model: options.model,
+            systemPrompt,
+            enabledTools: guardedTools,
+            availableSkillIds: preparedTurn.selectedSkillIds,
+            input: {
+              prompt: streamResult.handoff.nextSteps || streamResult.handoff.summary,
+              messages: [],
+              metadata: {
+                source: 'handoff',
+                parentRunId,
+                summary: streamResult.handoff.summary,
+                nextSteps: streamResult.handoff.nextSteps,
+                reason: streamResult.handoff.reason,
+                handoffChain,
+              },
+            },
+            working: {
+              modelMessages: [],
+              accumulatedText: '',
+              pendingApprovalIds: [],
+              lastStepIndex: 0,
+            },
+          });
+          streamState.runId = runTracker.id;
+
+          harness = createChatHarness({
+            threadId: options.threadId,
+            providerType: options.providerType,
+            providerId: options.providerId,
+            model: options.model,
+            systemPrompt,
+            enableTools: preparedTurn.enableTools,
+            enabledTools: guardedTools,
+            availableSkillIds: preparedTurn.selectedSkillIds,
+            guardActive: preparedTurn.guardActive,
+            maxIterations,
+            ...(typeof preparedTurn.maxOutputTokens === 'number'
+              ? { maxOutputTokens: preparedTurn.maxOutputTokens }
+              : {}),
+          });
+
+          approvalContext = preparedTurn.enableTools
+            ? createApprovalRecoveryContext({
+                threadId: options.threadId,
+                sessionId: uiChunkEmitter.messageId,
+                runId: runTracker.id,
+                providerType: options.providerType,
+                providerId: options.providerId,
+                model: options.model,
+                systemPrompt,
+                maxInputTokens: preparedTurn.maxInputTokens,
+                maxOutputTokens: preparedTurn.maxOutputTokens,
+                maxIterations,
+                enabledTools: guardedTools,
+                availableSkillIds: preparedTurn.selectedSkillIds,
+                ...(autonomousMode ? { autonomous: options.autonomous } : {}),
+              })
+            : undefined;
+
+          streamHistory = [
+            {
+              role: 'system',
+              content: [
+                '[HANDOFF CONTEXT] You are a fresh agent instance continuing work handed off from a previous agent.',
+                '',
+                `Summary of completed work:\n${streamResult.handoff.summary}`,
+                '',
+                `Next steps to complete:\n${streamResult.handoff.nextSteps}`,
+                '',
+                `Reason for handoff: ${streamResult.handoff.reason}`,
+                '',
+                'You have a clean context window. Start working on the next steps immediately.',
+              ].join('\n'),
+            },
+          ];
+          streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
+          continue;
+        }
         if (!autonomousMode) break;
 
         outerBatch++;
@@ -638,7 +746,7 @@ export const createChatStreaming = (deps: {
         }
 
         streamHistory = harness.getHistory?.() ?? streamHistory;
-        streamPrompt = options.autonomous!.continuePrompt || 'Continue with the next step.';
+        streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
       }
 
       if (!streamResult) {
@@ -749,6 +857,7 @@ export const createChatStreaming = (deps: {
 
   return {
     getModels: streamingModels.getModels,
+    getAcpAuthMethods: streamingModels.getAcpAuthMethods,
     isProviderConfigured: streamingModels.isProviderConfigured,
     send,
     stream,

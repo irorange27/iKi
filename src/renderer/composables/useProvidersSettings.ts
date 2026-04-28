@@ -48,6 +48,8 @@ export const useProvidersSettings = () => {
   const providerSearchQuery = ref('');
   const selectedProviderId = ref<string | null>(null);
   const isFetchingModels = ref(false);
+  const isFetchingAcpAuthMethods = ref(false);
+  const acpAuthMethods = ref<Array<{ id: string; name: string; description?: string | null; type: string; link?: string | null; vars?: Array<{ name: string; description?: string | null; secret?: boolean }> }>>([]);
   const modelsPanelOpen = ref(false);
 
   const {
@@ -152,7 +154,14 @@ export const useProvidersSettings = () => {
         providerOverride
       );
       if (fetched && fetched.length > 0) {
-        setFetchedModels(fetched.map(model => model.id));
+        const modelIds = fetched.map(model => model.id);
+        setFetchedModels(modelIds);
+        const config = selectedProviderConfig.value;
+        if (config) {
+          await electronAPI.providers.update(config.id, {
+            available_models: JSON.stringify(modelIds),
+          });
+        }
       }
     } catch (error) {
       providersSettingsLogger.event({
@@ -166,6 +175,35 @@ export const useProvidersSettings = () => {
       });
     } finally {
       isFetchingModels.value = false;
+    }
+  };
+
+  const fetchAcpAuthMethods = async () => {
+    if (!selectedProviderId.value) return;
+
+    isFetchingAcpAuthMethods.value = true;
+    try {
+      const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
+      const providerOverride = buildSelectedAcpModelDiscoveryOverride();
+      const methods = await electronAPI.chat.getAcpAuthMethods(
+        providerLookupKey,
+        selectedProviderConfig.value?.id,
+        providerOverride
+      );
+      acpAuthMethods.value = methods ?? [];
+    } catch (error) {
+      providersSettingsLogger.event({
+        level: 'error',
+        event: 'providers.acp.auth_methods.fetch',
+        outcome: 'failed',
+        error,
+        entity: {
+          provider_id: selectedProviderId.value,
+        },
+      });
+      acpAuthMethods.value = [];
+    } finally {
+      isFetchingAcpAuthMethods.value = false;
     }
   };
 
@@ -341,6 +379,11 @@ export const useProvidersSettings = () => {
   const updateSelectedAcpApiProviderId = (providerId: string) => {
     if (!selectedProviderDraft.value) return;
     selectedProviderDraft.value.acp_api_provider_id = providerId;
+  };
+
+  const updateSelectedAcpAuthMethodId = (methodId: string) => {
+    if (!selectedProviderDraft.value) return;
+    selectedProviderDraft.value.acp_auth_method_id = methodId;
   };
 
   const toggleSelectedAcpMcpServer = (serverId: string, checked: boolean) => {
@@ -527,6 +570,7 @@ export const useProvidersSettings = () => {
   });
 
   return {
+    acpAuthMethods,
     acpCredentialProviderOptions,
     acpMcpServerEntries,
     addCustomProvider,
@@ -534,10 +578,12 @@ export const useProvidersSettings = () => {
     availableModelsList,
     canSaveSelectedProvider,
     closeModelOptionsEditor,
+    fetchAcpAuthMethods,
     editingProvider,
     editingProviderApiFormat,
     fetchLatestModels,
     hasDynamicModels,
+    isFetchingAcpAuthMethods,
     isFetchingModels,
     isProviderConfigured,
     isSelectedAcpProvider,
@@ -574,5 +620,6 @@ export const useProvidersSettings = () => {
     updateEditingProviderApiFormatSelection,
     updateEditingProviderTypeSelection,
     updateSelectedAcpApiProviderId,
+    updateSelectedAcpAuthMethodId,
   };
 };

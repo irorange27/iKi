@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { describe, expect, it } from 'vitest';
 
 import { createPlanThenExecutePrepareStep } from '../../../../src/core/agent/plan/plan_prepare_step';

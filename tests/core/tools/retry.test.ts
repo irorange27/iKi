@@ -200,10 +200,10 @@ describe('isRetryableError', () => {
     expect(isRetryableError(err)).toBe(true);
   });
 
-  it('detects AbortError as retryable', () => {
+  it('rejects AbortError as intentional cancellation', () => {
     const err = new Error('aborted');
     err.name = 'AbortError';
-    expect(isRetryableError(err)).toBe(true);
+    expect(isRetryableError(err)).toBe(false);
   });
 
   it('detects rate limit message as retryable', () => {

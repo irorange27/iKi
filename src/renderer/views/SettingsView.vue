@@ -295,8 +295,8 @@ const autoSave = () => {
   }, 300);
 };
 
-const resetSection = (section: keyof AppConfig) => {
-  configStore.resetSection(section);
+const resetSection = async (section: keyof AppConfig) => {
+  await configStore.resetSection(section);
   saved.value = true;
 };
 
@@ -308,13 +308,14 @@ const resetColorSchemeSection = () => {
   autoSave();
 };
 
-const resetBridgeSection = () => {
-  configStore.resetSection('bridges');
-  configStore.resetSection('daemon');
+const resetBridgeSection = async () => {
+  await configStore.resetSection('bridges');
+  await configStore.resetSection('daemon');
   saved.value = true;
 };
 
 const saveAndClose = async () => {
+  clearTimeout(saveTimer);
   await configStore.saveConfig();
   saved.value = true;
   emit('close');

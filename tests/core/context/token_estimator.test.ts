@@ -7,10 +7,10 @@ import {
 } from '../../../src/core/context/token_estimator';
 
 describe('token_estimator', () => {
-  it('compresses latin and punctuation runs more than CJK characters', () => {
-    expect(estimateTextTokens('abcdefgh')).toBe(2);
-    expect(estimateTextTokens('...')).toBe(1);
-    expect(estimateTextTokens('你好你好你好你好')).toBe(8);
+  it('counts tokens with BPE tokenizer (gpt-tokenizer)', () => {
+    expect(estimateTextTokens('abcdefgh')).toBe(1);
+    expect(estimateTextTokens('hello world')).toBe(2);
+    expect(estimateTextTokens('你好你好你好你好')).toBe(4);
   });
 
   it('adds message overhead on top of estimated content tokens', () => {
@@ -19,17 +19,24 @@ describe('token_estimator', () => {
         role: 'user',
         content: 'abcdefgh',
       })
-    ).toBe(6);
+    ).toBe(5);
   });
 
-  it('clips text against the requested token budget using the shared estimator', () => {
-    expect(clipTextToTokenBudget('abcdefghijklmnopqrstuvwx', 5)).toEqual({
-      text: 'abcdefghijklmnop...',
+  it('clips text against the requested token budget', () => {
+    expect(clipTextToTokenBudget('hello world this is a test of clipping', 4)).toEqual({
+      text: 'hello world this...',
       truncated: true,
     });
   });
 
-  it('returns an empty clipped payload when the budget cannot fit even the truncation suffix', () => {
+  it('does not truncate when text fits within token budget', () => {
+    expect(clipTextToTokenBudget('hello world', 3)).toEqual({
+      text: 'hello world',
+      truncated: false,
+    });
+  });
+
+  it('returns an empty clipped payload when the budget cannot fit anything', () => {
     expect(clipTextToTokenBudget('abcdef', 0)).toEqual({
       text: '',
       truncated: true,

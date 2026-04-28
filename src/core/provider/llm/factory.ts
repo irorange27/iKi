@@ -29,9 +29,13 @@ import type { TokenUsageMetrics } from '../../../shared/types/chat_usage';
 import {
   createAcpLanguageModel,
   disposeAcpLanguageModel,
+  fetchAcpAuthMethods as fetchAcpAuthMethodsFromSession,
   fetchAcpModels as fetchAcpModelsFromSession,
   isAcpProviderType,
+  type AcpAuthMethod,
 } from './acp';
+
+export type { AcpAuthMethod };
 import { normalizeLanguageModelUsage } from './usage';
 
 const factoryLogger = createLogger({ module: 'llm_factory' });
@@ -585,6 +589,33 @@ export const fetchAcpModels = async (
   }
 
   return await fetchAcpModelsFromSession({
+    id: config.id,
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    acpCommand: config.acpCommand,
+    acpArgs: config.acpArgs,
+    acpMcpServerIds: config.acpMcpServerIds,
+    acpAuthMethodId: config.acpAuthMethodId,
+    acpApiProviderId: config.acpApiProviderId,
+    acpModelMapping: config.acpModelMapping,
+  });
+};
+
+export const fetchAcpAuthMethods = async (
+  providerType: string,
+  providerId?: string | null,
+  providerOverride?: ProviderModelDiscoveryOverride | null
+) => {
+  const config = buildProviderConfigForDiscovery({
+    providerType,
+    providerId,
+    providerOverride,
+  });
+  if (!isAcpProviderType(config.type)) {
+    return [];
+  }
+
+  return await fetchAcpAuthMethodsFromSession({
     id: config.id,
     apiKey: config.apiKey,
     baseURL: config.baseURL,

@@ -641,13 +641,12 @@ export const useChatThreads = (deps: {
     const threadId = typeof payload.threadId === 'string' ? payload.threadId : '';
     if (!threadId) return;
 
-    void refreshThreads();
-
     if (currentThread.value?.id !== threadId) return;
 
     const message = (payload as { message?: unknown }).message;
     if (!isObjectRecord(message) || !Array.isArray((message as { parts?: unknown }).parts)) {
       await loadThreadMessages(threadId);
+      void refreshThreads();
       return;
     }
 
@@ -658,11 +657,13 @@ export const useChatThreads = (deps: {
     const [normalizedMessage] = toUiMessages([message]);
     if (!normalizedMessage) {
       await loadThreadMessages(threadId);
+      void refreshThreads();
       return;
     }
 
     deps.messageStore.append(normalizedMessage);
     deps.scrollToBottom();
+    void refreshThreads();
   };
 
   return {

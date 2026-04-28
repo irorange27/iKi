@@ -136,6 +136,19 @@
     >
       {{ props.speechStatusLabel }}
     </span>
+    <span
+      v-if="props.autonomousActive || props.runActive"
+      class="run-indicator"
+      :class="props.runActive ? 'run-active' : 'run-idle'"
+      :title="
+        props.runActive
+          ? `Agent run ${props.runStatus ?? 'active'}`
+          : 'Autonomous mode enabled'
+      "
+    >
+      <span v-if="props.runActive" class="run-dot" />
+      {{ props.runActive ? (props.runStatus === 'blocked' ? 'Awaiting' : 'Working') : 'Auto' }}
+    </span>
     <button
       class="composer-icon-btn send-btn h-8 w-8 rounded-lg flex items-center justify-center"
       :class="[
@@ -189,6 +202,9 @@ const props = defineProps<{
   waveformBars: number[];
   speechStatusLabel: string;
   speechStatusToneClass: string;
+  runActive: boolean;
+  runStatus: string | null;
+  autonomousActive: boolean;
 }>();
 
 defineEmits<{
@@ -335,6 +351,44 @@ button {
   50% {
     opacity: 1;
   }
+}
+
+.run-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  user-select: none;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.run-indicator.run-active {
+  color: var(--accent-color);
+  background: rgba(var(--accent-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+}
+
+.run-indicator.run-idle {
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-color);
+}
+
+.run-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: runPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes runPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 button:disabled {

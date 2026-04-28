@@ -18,6 +18,7 @@ export const createChatComposerStreamPayload = (params: {
   resolvedMcpServerIds: string[];
   isAutoSkillMode: boolean;
   selectedSkillIds: string[];
+  autonomous?: { maxIterations: number; continuePrompt?: string };
 }): ChatInvocationOptions | null => {
   const transportMessages = clonePlainData(params.preparedMessageSend.messagesSnapshot);
 
@@ -45,5 +46,6 @@ export const createChatComposerStreamPayload = (params: {
     skillMode: params.isAutoSkillMode ? 'auto' : 'manual',
     skillIds: params.isAutoSkillMode ? undefined : clonePlainData(params.selectedSkillIds),
     threadId: params.preparedMessageSend.threadId,
+    ...(params.autonomous ? { autonomous: params.autonomous } : {}),
   };
 };

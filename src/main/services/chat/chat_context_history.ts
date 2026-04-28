@@ -280,10 +280,10 @@ export const buildThreadSummaryContext = (
   threadSummary: ThreadSummaryState | null,
   compactedMessages: number,
   contextConfig: ContextConfig,
-  modelCapability?: ModelCapability | null
+  _modelCapability?: ModelCapability | null
 ): SummaryContext => {
   const summaryClip = threadSummary?.summary
-    ? clipTextToTokenBudget(threadSummary.summary, contextConfig.maxSummaryTokens, modelCapability)
+    ? clipTextToTokenBudget(threadSummary.summary, contextConfig.maxSummaryTokens)
     : { text: '', truncated: false };
 
   if (threadSummary?.summary) {
@@ -292,7 +292,7 @@ export const buildThreadSummaryContext = (
       block: {
         kind: 'thread-summary',
         status: summaryClip.truncated ? 'truncated' : 'included',
-        estimatedTokens: estimateTextTokens(summaryClip.text, modelCapability),
+        estimatedTokens: estimateTextTokens(summaryClip.text),
         charCount: summaryClip.text.length,
         ...(summaryClip.truncated ? { reason: 'thread summary clipped to context budget' } : {}),
         sourceCount: threadSummary.sourceMessageCount,

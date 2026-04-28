@@ -2,10 +2,36 @@ import { onMounted, onUnmounted } from 'vue';
 
 import type { ChatUiStreamController } from '../modules/chat/ui_stream_controller';
 import type { ElectronApi } from '../../shared/types/electron_api';
+import { createLogger } from '../logger';
 
 type ConfigInitializer = {
   initialized: boolean;
   initialize: () => Promise<void>;
+};
+
+const chatViewLifecycleLogger = createLogger({ module: 'chat_view_lifecycle' });
+
+const runSafe = (fn: () => unknown) => {
+  try {
+    const result = fn();
+    if (result instanceof Promise) {
+      result.catch((error: unknown) => {
+        chatViewLifecycleLogger.event({
+          level: 'warn',
+          event: 'chat.lifecycle.callback_error',
+          outcome: 'failed',
+          error,
+        });
+      });
+    }
+  } catch (error) {
+    chatViewLifecycleLogger.event({
+      level: 'warn',
+      event: 'chat.lifecycle.callback_error',
+      outcome: 'failed',
+      error,
+    });
+  }
 };
 
 export const useChatViewLifecycle = (deps: {
@@ -32,15 +58,15 @@ export const useChatViewLifecycle = (deps: {
 
     removeChatChunkListener();
     removeChatChunkListener = deps.electronAPI.chat.onUiChunk((chunk: unknown) => {
-      void deps.streamController.handleUiChunk(chunk);
-      void deps.handleChatChunk?.(chunk);
+      runSafe(() => deps.streamController.handleUiChunk(chunk));
+      runSafe(() => deps.handleChatChunk?.(chunk));
     });
 
     try {
       removeTaskPushListener();
       removeTaskPushListener =
         deps.electronAPI.tasks?.onPush?.((payload: unknown) => {
-          void deps.handleTaskPush(payload);
+          runSafe(() => deps.handleTaskPush(payload));
         }) ?? (() => undefined);
     } catch {
       // Ignore missing tasks IPC in older builds.
@@ -50,7 +76,7 @@ export const useChatViewLifecycle = (deps: {
       removeAwaiterPushListener();
       removeAwaiterPushListener =
         deps.electronAPI.awaiters?.onPush?.((payload: unknown) => {
-          void deps.handleAwaiterPush(payload);
+          runSafe(() => deps.handleAwaiterPush(payload));
         }) ?? (() => undefined);
     } catch {
       // Ignore missing awaiter IPC in older builds.

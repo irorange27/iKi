@@ -21,6 +21,17 @@
           <span v-if="currentThreadOrigin?.isExternal" class="thread-origin-chip">
             {{ currentThreadOrigin.channelLabel || currentThreadOrigin.sourceLabel || 'External' }}
           </span>
+          <button
+            class="run-panel-toggle-btn"
+            :class="{ active: showRunPanel }"
+            type="button"
+            :title="t('chat.runs.toggle')"
+            @click="showRunPanel = !showRunPanel"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -112,6 +123,12 @@
         />
       </div>
     </div>
+    <RunPanel
+      :visible="showRunPanel"
+      :thread-id="currentThread?.id ?? null"
+      :electron-api="electronAPI"
+      @close="showRunPanel = false"
+    />
   </div>
 </template>
 
@@ -122,6 +139,7 @@ import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
+import RunPanel from '../components/RunPanel.vue';
 import { FolderOpen, X } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 import { getTokenUsageSummary } from '../modules/chat/ui_message_references';
@@ -190,6 +208,7 @@ const chatMessages = computed<ChatUiMessage[]>(() => chat.messages);
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
+const showRunPanel = ref(false);
 const dismissedOnboardingStageKey = ref<string | null>(null);
 const persistence = createUiMessagePersistence({ electronAPI });
 const messageStore = createChatMessageStore(chat);
@@ -595,5 +614,31 @@ useChatViewLifecycle({
   .messages-container {
     max-width: 100%;
   }
+}
+
+.run-panel-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.run-panel-toggle-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.run-panel-toggle-btn.active {
+  color: var(--accent-color);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 </style>

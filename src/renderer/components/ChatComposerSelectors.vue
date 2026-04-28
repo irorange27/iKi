@@ -19,6 +19,12 @@
       @update:mcp-server-ids="emit('update:selectedMcpServerIds', $event)"
       @update:mode="emit('update:toolMode', $event)"
     />
+    <AutonomousSelector
+      :active="props.autonomousActive"
+      :max-iterations="props.autonomousMaxIterations"
+      @update:active="emit('update:autonomousActive', $event)"
+      @update:max-iterations="emit('update:autonomousMaxIterations', $event)"
+    />
     <ChatModelSelector
       :available-providers="props.availableProviders"
       :selected-provider="props.selectedProvider"
@@ -30,6 +36,7 @@
 
 <script setup lang="ts">
 import type { Provider } from '../../shared/types/provider';
+import AutonomousSelector from './AutonomousSelector.vue';
 import ChatModelSelector from './ChatModelSelector.vue';
 import SkillSelector from './SkillSelector.vue';
 import ToolSelector from './ToolSelector.vue';
@@ -43,6 +50,8 @@ const props = defineProps<{
   selectedTools: string[];
   selectedMcpServerIds: string[];
   toolMode: 'manual' | 'auto';
+  autonomousActive: boolean;
+  autonomousMaxIterations: number;
   availableProviders: Provider[];
   selectedProvider: Provider | null;
   selectedModel: string;
@@ -55,6 +64,8 @@ const emit = defineEmits<{
   (event: 'update:selectedTools', value: string[]): void;
   (event: 'update:selectedMcpServerIds', value: string[]): void;
   (event: 'update:toolMode', value: 'manual' | 'auto'): void;
+  (event: 'update:autonomousActive', value: boolean): void;
+  (event: 'update:autonomousMaxIterations', value: number): void;
   (event: 'selectProviderModel', payload: { provider: Provider; model: string }): void;
 }>();
 </script>

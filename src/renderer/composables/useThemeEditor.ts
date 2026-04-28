@@ -95,7 +95,10 @@ export const useThemeEditor = ({
     editor.type = config.value.general.theme === 'light' ? 'light' : 'dark';
     editor.label = '';
     editor.quickStartId = quickStarts[0]?.id ?? null;
-    applyQuickStart(editor.quickStartId ?? quickStarts[0]?.id ?? '');
+    const resolvedQuickStartId = editor.quickStartId ?? quickStarts[0]?.id;
+    if (resolvedQuickStartId) {
+      applyQuickStart(resolvedQuickStartId);
+    }
     editor.error = '';
   };
 
@@ -253,7 +256,9 @@ export const useThemeEditor = ({
   const deleteCustomTheme = (presetId: string) => {
     if (!resolveDeleteConfirmation()) return;
 
-    delete config.value.themes.base46Presets[presetId];
+    const nextPresets = { ...config.value.themes.base46Presets };
+    delete nextPresets[presetId];
+    config.value.themes.base46Presets = nextPresets;
     if (config.value.general.themePresetId === presetId) {
       config.value.general.themePresetId = DEFAULT_THEME_PRESET_ID;
     }

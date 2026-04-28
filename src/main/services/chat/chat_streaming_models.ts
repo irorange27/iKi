@@ -138,6 +138,23 @@ export const createChatStreamingModels = () => {
     }
   };
 
+  const getAcpAuthMethods = async (
+    providerType: string,
+    providerId?: string,
+    providerOverride?: ProviderModelDiscoveryOverride | null
+  ) => {
+    try {
+      return await llmFactory.fetchAcpAuthMethods(
+        providerType,
+        providerId,
+        providerOverride ?? undefined
+      );
+    } catch (error: unknown) {
+      chatStreamingLogger.error('Failed to get ACP auth methods', error);
+      return [];
+    }
+  };
+
   const isProviderConfigured = (providerType: string, providerId?: string) => {
     try {
       const config = llmFactory.getProviderConfig(providerType, providerId);
@@ -150,7 +167,7 @@ export const createChatStreamingModels = () => {
     }
   };
 
-  return { getModels, isProviderConfigured };
+  return { getModels, getAcpAuthMethods, isProviderConfigured };
 };
 
 export type ChatStreamingModels = ReturnType<typeof createChatStreamingModels>;

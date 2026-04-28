@@ -1148,6 +1148,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.acp.authMethodPlaceholder': '可选的 authentication method id',
   'settings.providers.acp.authMethodHelp':
     '可选。当 Codex CLI 暴露多个登录方式时，可在这里指定默认使用的 ACP authentication method id。',
+  'settings.providers.acp.authMethodAuto': '自动（无偏好）',
+  'settings.providers.acp.discoverAuthMethods': '发现',
   'settings.providers.acp.mcpServers': 'MCP Servers',
   'settings.providers.acp.mcpServersHelp': '选择这个 Codex CLI 会话应连接哪些已配置的 MCP 服务器。',
   'settings.providers.acp.mcpServersEmpty': '还没有配置 MCP 服务器。请先到 Settings -> MCP 添加。',

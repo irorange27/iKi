@@ -95,17 +95,26 @@ const electronApi: ElectronApi = {
       providerId?: string,
       providerOverride?: ProviderModelDiscoveryOverride | null
     ) => ipcRenderer.invoke('chat:getModels', providerType, providerId, providerOverride ?? null),
+    getAcpAuthMethods: (
+      providerType: string,
+      providerId?: string,
+      providerOverride?: ProviderModelDiscoveryOverride | null
+    ) => ipcRenderer.invoke('chat:acp:auth-methods', providerType, providerId, providerOverride ?? null),
     isProviderConfigured: (providerType: string, providerId?: string) =>
       ipcRenderer.invoke('chat:isProviderConfigured', providerType, providerId),
     send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),
     stream: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
+    steerStream: (message: string) => ipcRenderer.invoke('chat:steer-stream', message),
     onUiChunk: (callback: (chunk: unknown) => void) => subscribe('chat:ui-chunk', callback),
     approveTool: (approvalId: string, approved: boolean) => {
       return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);
     },
+    onRunStatus: (callback: (event: import('../shared/types/electron_api').RunStatusEvent) => void) =>
+      subscribe('chat:run-status', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('chat:ui-chunk');
+      ipcRenderer.removeAllListeners('chat:run-status');
     },
     threads: {
       list: () => ipcRenderer.invoke('chat:threads:list'),
@@ -133,6 +142,12 @@ const electronApi: ElectronApi = {
         ipcRenderer.invoke('chat:runs:trace:get', runId),
       getTree: (rootRunId: string): Promise<AgentRunTree> =>
         ipcRenderer.invoke('chat:runs:tree:get', rootRunId),
+      cancel: (runId: string) => ipcRenderer.invoke('chat:runs:cancel', runId),
+      retry: (runId: string) => ipcRenderer.invoke('chat:runs:retry', runId),
+      retryAndExecute: (runId: string) => ipcRenderer.invoke('chat:runs:retry-and-execute', runId),
+      resume: (runId: string) => ipcRenderer.invoke('chat:runs:resume', runId),
+      listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) =>
+        ipcRenderer.invoke('chat:runs:list-by-status', statuses, opts),
     },
     usage: {
       summary: (period: ChatUsagePeriod = '30d'): Promise<ChatUsageSummary> =>

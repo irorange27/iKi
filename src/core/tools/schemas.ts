@@ -29,18 +29,6 @@ export const MAX_AGENT_TOOL_SELECTION = 12;
 // Helpers to reduce repetition in Ui variants and shared refinements
 // ---------------------------------------------------------------------------
 
-/**
- * Strip a .default() wrapper if present.
- * Zod's own `.optional()` on a ZodDefault wraps the default — the Ui variant
- * should not retain the default, because it is used for loose renderer-side
- * parsing where missing fields should remain undefined.
- */
-function stripDefault(field: z.ZodTypeAny) {
-  if (field instanceof z.ZodDefault) {
-    return field.removeDefault();
-  }
-  return field;
-}
 
 /**
  * Build a "UI" variant of a ZodObject shape.

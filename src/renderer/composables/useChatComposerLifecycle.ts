@@ -20,13 +20,20 @@ export const useChatComposerLifecycle = (deps: {
   loadSpeechStatus: () => Promise<void>;
 }) => {
   let removeProviderUpdateListener: () => void = () => undefined;
+  let syncInProgress = false;
 
   watch(
     () => [deps.threadId.value, deps.isBusy.value] as const,
     async ([threadId, busy], [previousThreadId, previousBusy]) => {
       if (busy) return;
       if (threadId === previousThreadId && previousBusy === busy) return;
-      await deps.syncToolSelectionFromThread(threadId);
+      if (syncInProgress) return;
+      syncInProgress = true;
+      try {
+        await deps.syncToolSelectionFromThread(threadId);
+      } finally {
+        syncInProgress = false;
+      }
     }
   );
 

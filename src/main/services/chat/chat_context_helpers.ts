@@ -27,13 +27,13 @@ export const getContextConfig = (): ContextConfig => {
 
 export const countMessageTokens = (
   message: ChatInputMessage,
-  modelCapability?: ModelCapability | null
-): number => estimateMessageTokens(message, modelCapability);
+  _modelCapability?: unknown
+): number => estimateMessageTokens(message);
 
 export const clipMessageToBudget = (
   message: ChatInputMessage,
   maxTokens: number,
-  modelCapability?: ModelCapability | null
+  _modelCapability?: ModelCapability | null
 ): { message: ChatInputMessage; truncated: boolean } => {
   if (maxTokens <= 0) return { message, truncated: false };
 
@@ -42,7 +42,7 @@ export const clipMessageToBudget = (
   }
 
   if (typeof message.content === 'string') {
-    const clipped = clipTextToTokenBudget(message.content, maxTokens, modelCapability);
+    const clipped = clipTextToTokenBudget(message.content, maxTokens);
     return clipped.truncated
       ? { message: { ...message, content: clipped.text }, truncated: true }
       : { message, truncated: false };
@@ -61,8 +61,7 @@ export const clipMessageToBudget = (
   ) {
     const clipped = clipTextToTokenBudget(
       extractTextFromModelMessageContent(message.content),
-      maxTokens,
-      modelCapability
+      maxTokens
     );
     return clipped.truncated
       ? { message: { ...message, content: clipped.text }, truncated: true }

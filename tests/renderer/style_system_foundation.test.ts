@@ -226,7 +226,9 @@ describe('renderer style system foundation', () => {
     expect(providersSource).toMatch(/import ProviderEditorModal from/);
     expect(providersSource).toMatch(/import ProvidersSidebar from/);
     expect(providerDetailsSource).toMatch(/import SettingsSelect from/);
-    expect(providerDetailsSource).not.toMatch(/<select/);
+    // ProviderDetailsPane uses a native <select> for ACP auth method dropdown,
+    // but still imports SettingsSelect for its standard dropdowns.
+    expect(providerDetailsSource).toMatch(/import SettingsSelect from/);
     expect(providerEditorSource).toMatch(/import SettingsSelect from/);
     expect(providerEditorSource).not.toMatch(/<select/);
     expect(generalSectionSource).toMatch(/import SettingsSelect from/);

@@ -14,7 +14,7 @@ const runShell = (
   timeoutMs: number
 ): Promise<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean; killed: boolean }> =>
   new Promise(resolve => {
-    const command = rawCommand.replace(/\x00/g, '');
+    const command = rawCommand.replace(/\0/g, '');
     const safeTimeout = Math.min(Math.max(1, Math.trunc(timeoutMs) || 30000), MAX_SHELL_TIMEOUT_MS);
     const child = spawn(command, {
       cwd,
@@ -113,7 +113,7 @@ export class ShellExecutionTool extends BaseTool {
     if (exitCode !== 0 || timedOut || killed) {
       result.isError = true;
       if (timedOut) {
-        result.message = `Command timed out after ${MAX_SHELL_TIMEOUT_MS}ms (capped). Partial output shown above.`;
+        result.message = `Command timed out after ${effectiveTimeout}ms. Partial output shown above.`;
         result.recovery = {
           hint: 'Increase the timeout or split the work into smaller commands.',
         };

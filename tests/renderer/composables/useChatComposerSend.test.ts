@@ -113,6 +113,8 @@ const createHarness = (options?: {
     selectedSkillIds,
     isAutoToolMode,
     isAutoSkillMode,
+    isAutonomousMode: ref(false),
+    autonomousMaxIterations: ref(10),
     prepareFailedMessage: 'Prepare failed',
     stopFailedMessage: 'Stop failed',
     prepareMessageSend,

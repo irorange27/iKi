@@ -99,6 +99,7 @@ export const createChatApproval = (deps: {
   const scheduleApprovalTimeout = (approvalId: string, session: PendingApprovalSession) => {
     if (!session.timeouts || session.timeouts.has(approvalId)) return;
     const timeoutId = setTimeout(() => {
+      if (session.collectedApprovalResponses.has(approvalId)) return;
       session.collectedApprovalResponses.set(approvalId, {
         type: 'tool-approval-response' as const,
         approvalId,

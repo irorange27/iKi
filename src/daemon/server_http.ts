@@ -75,7 +75,6 @@ const readParsedBody = async <T>(
 export const createDaemonRequestHandler =
   (deps: CreateDaemonRequestHandlerDeps): http.RequestListener => {
     const chatSendLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
-    const writeLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 60 });
 
     const checkRateLimit = (
       clientId: string,

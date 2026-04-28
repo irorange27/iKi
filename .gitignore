@@ -9,6 +9,8 @@ research/
 
 .agents/
 
+.pnpm-store/
+
 .vscode/
 .VSCodeCounter/
 

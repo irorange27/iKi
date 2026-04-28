@@ -72,6 +72,18 @@ export const registerChatIpc = (): void => {
     return chatService.isProviderConfigured(providerType, providerId);
   });
 
+  ipcMain.handle(
+    'chat:acp:auth-methods',
+    async (
+      _,
+      providerType: string,
+      providerId?: string,
+      providerOverride?: Record<string, unknown> | null
+    ) => {
+      return await chatService.getAcpAuthMethods(providerType, providerId, providerOverride ?? null);
+    }
+  );
+
   ipcMain.handle('chat:stop-stream', event => {
     return chatService.stopStream(event.sender.id);
   });

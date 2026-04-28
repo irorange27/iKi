@@ -3,7 +3,7 @@ import type { ModelMessage, ToolApprovalResponse } from 'ai';
 import type { AgentResult, ConversationHarness, ToolApprovalRequest } from '../../../core/agent';
 import type { TokenUsagePartData } from '../../../shared/chat/message_parts';
 import { createLogger } from '../../../core/logger';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, isRetryableError, RefusalError } from '../../utils/errors';
 import type { ApprovalRecoveryContext } from './chat_approval_types';
 import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_types';
 
@@ -84,32 +84,6 @@ export const createToolLoopRunner = (deps: {
 });
 
 const TERMINAL_TOOL_NAMES = new Set(['finish', 'handoff']);
-
-export const isRetryableError = (error: unknown): boolean => {
-  if (error instanceof Error && error.name === 'AbortError') return false;
-  const message = typeof error === 'object' && error !== null && 'message' in error
-    ? String((error as Record<string, unknown>).message).toLowerCase()
-    : '';
-  if (
-    message.includes('rate limit') ||
-    message.includes('too many requests') ||
-    message.includes('429') ||
-    message.includes('503') ||
-    message.includes('502') ||
-    message.includes('504') ||
-    message.includes('timeout') ||
-    message.includes('econnrefused') ||
-    message.includes('econnreset') ||
-    message.includes('etimedout') ||
-    message.includes('network') ||
-    message.includes('fetch failed') ||
-    message.includes('internal server error') ||
-    message.includes('overloaded')
-  ) {
-    return true;
-  }
-  return false;
-};
 
 const SLEEP = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
@@ -254,6 +228,16 @@ const runSingleHarnessStream = async (
       }
 
       const delay = Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
+
+      let recoveryNote: string;
+      if (error instanceof RefusalError) {
+        recoveryNote = 'Your last response was blocked by content policies. Please rephrase your approach to comply with content policies while still being helpful, or find an alternative way to assist.';
+      } else {
+        recoveryNote = `Your last attempt encountered an error: ${getErrorMessage(error)}. Please try a different approach or simplify your response to avoid this issue.`;
+      }
+
+      overrides.prompt = `${recoveryNote}\n\n---\nContinue with the original task:\n${overrides.prompt}`;
+
       chatToolLoopLogger.event({
         level: 'warn',
         event: 'chat.tool_stream.retry',
@@ -267,6 +251,41 @@ const runSingleHarnessStream = async (
 
   // Should never reach here, but satisfy TypeScript
   throw new Error('Unreachable: retry loop exhausted');
+};
+
+/**
+ * Compact history to reduce token usage during long autonomous runs.
+ * Drops the oldest ~50% of non-tool messages, keeping tool-call/tool-result pairs intact
+ * and preserving the most recent messages.
+ */
+const compactHistoryForAutonomous = (history?: ModelMessage[]): ModelMessage[] => {
+  if (!history || history.length <= 6) return history ?? [];
+
+  const keepCount = Math.max(4, Math.floor(history.length / 2));
+  const startIndex = history.length - keepCount;
+
+  // Walk back to include the tool-call preceding the first kept tool-result
+  let adjustedStart = startIndex;
+  while (adjustedStart > 0) {
+    const msg = history[adjustedStart];
+    if (
+      msg &&
+      msg.role === 'tool' &&
+      Array.isArray(msg.content) &&
+      msg.content.some(
+        part => typeof part === 'object' && part !== null && (part as Record<string, unknown>).type === 'tool-result'
+      )
+    ) {
+      // Include the preceding assistant message with the tool-call
+      const prev = history[adjustedStart - 1];
+      if (prev && prev.role === 'assistant') {
+        adjustedStart -= 1;
+      }
+    }
+    break;
+  }
+
+  return history.slice(Math.max(0, adjustedStart));
 };
 
 const emitTokenUsage = (
@@ -304,8 +323,6 @@ const emitTokenUsage = (
 const streamToolLoop = async (
   params: ToolLoopStreamParams & { registerApprovalBatch: RegisterApprovalBatch }
 ) => {
-  const autonomousMode =
-    params.autonomous && params.autonomous.maxIterations > 1;
   const maxAutonomousIterations = params.autonomous?.maxIterations ?? 1;
   const continuePrompt = params.autonomous?.continuePrompt ?? 'Continue with the next step.';
 
@@ -431,6 +448,24 @@ const streamToolLoop = async (
         ...(params.approvalContext ? { recoveryContext: params.approvalContext } : {}),
       });
       return { awaitingApproval: true, usage: cumulativeUsage };
+    }
+
+    // Context monitoring: check if approaching the model's input limit
+    const maxInputTokens = params.tokenUsageContext?.maxInputTokens;
+    if (
+      maxInputTokens &&
+      cumulativeUsage &&
+      (cumulativeUsage.inputTokens ?? 0) > maxInputTokens * 0.75 &&
+      autonomousIteration + 1 < maxAutonomousIterations
+    ) {
+      const prevHistory = currentHistory;
+      currentHistory = compactHistoryForAutonomous(currentHistory);
+      chatToolLoopLogger.event({
+        level: 'warn',
+        event: 'chat.tool_stream.context_compact',
+        outcome: 'started',
+        message: `Compacted history from ${prevHistory?.length ?? 0} to ${currentHistory?.length ?? 0} messages (${cumulativeUsage.inputTokens} input tokens vs ${maxInputTokens} limit).`,
+      });
     }
 
     if (terminalToolName) {

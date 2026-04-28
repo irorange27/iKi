@@ -10,7 +10,7 @@ export const useAppLocale = () => {
   watch(
     () => config.value.general.language,
     value => {
-      const locale = setLocale(value);
+      const locale = setLocale(value === 'zh-CN' ? value : 'en');
       document.documentElement.lang = locale;
     },
     { immediate: true }

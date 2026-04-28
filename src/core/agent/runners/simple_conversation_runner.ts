@@ -1,6 +1,7 @@
 import { generateText, smoothStream, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai';
 
 import { createLogger } from '../../logger';
+import { RefusalError } from '../../../shared/utils/errors';
 import {
   createModel,
   disposeLanguageModel,
@@ -248,10 +249,31 @@ export class SimpleConversationRunner implements ConversationRunner {
       const responseObj = await result.response;
       const contentParts = await result.content;
       const totalUsage = normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage));
+      const finishReason: string | undefined = await Promise.resolve(result.finishReason).catch((): undefined => undefined);
+
+      // Detect model refusals
+      if (finishReason === 'content-filter') {
+        throw new RefusalError(
+          'Model response was blocked by content filter',
+          finishReason,
+          finalResponse || undefined
+        );
+      }
+
+      if (finishReason === 'error') {
+        throw new RefusalError(
+          `Model produced an error response${finalResponse ? `: ${finalResponse.slice(0, 200)}` : ''}`,
+          finishReason,
+          finalResponse || undefined
+        );
+      }
 
       this.persistHistory(history, responseObj.messages);
 
       const approvalRequests = collectApprovalRequests(contentParts);
+      const hadToolCalls = (await result.steps).some(
+        step => (step.toolCalls?.length ?? 0) > 0
+      );
       if (approvalRequests.length > 0) {
         return {
           response: finalResponse,
@@ -271,6 +293,15 @@ export class SimpleConversationRunner implements ConversationRunner {
         } catch {
           finalResponse = '';
         }
+      }
+
+      // Detect soft refusals: empty or short refusal-like response with no tool calls
+      if (!hadToolCalls && !finalResponse.trim()) {
+        throw new RefusalError(
+          'Model returned an empty response with no tool calls',
+          finishReason,
+          undefined
+        );
       }
 
       return {

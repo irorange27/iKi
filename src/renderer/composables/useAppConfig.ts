@@ -27,8 +27,8 @@ export const useAppConfig = () => {
   };
 
   // 组件挂载时自动初始化
-  onMounted(() => {
-    initialize();
+  onMounted(async () => {
+    await initialize();
   });
 
   // ==================== 计算属性（只读） ====================
@@ -139,7 +139,7 @@ export const useAppConfig = () => {
     value: AppConfig['security'][K]
   ) => {
     if (!config.value) return;
-    config.value.security[key] = value;
+    store.updateSecurity(key, value);
     debouncedSave();
   };
 
@@ -151,7 +151,7 @@ export const useAppConfig = () => {
     value: AppConfig['advanced'][K]
   ) => {
     if (!config.value) return;
-    config.value.advanced[key] = value;
+    store.updateAdvanced(key, value);
     debouncedSave();
   };
 
@@ -236,8 +236,8 @@ export const useAppConfig = () => {
    * @example resetSection('ui')  // 仅重置 UI 设置
    * @example resetSection('network')  // 重置网络设置
    */
-  const resetSection = (section: keyof AppConfig) => {
-    store.resetSection(section);
+  const resetSection = async (section: keyof AppConfig) => {
+    await store.resetSection(section);
   };
 
   // ==================== 返回值 ====================

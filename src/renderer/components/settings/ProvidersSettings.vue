@@ -36,6 +36,8 @@
         :acp-mcp-server-entries="acpMcpServerEntries"
         :mcp-servers-loading="mcpServersLoading"
         :mcp-servers-error="mcpServersError"
+        :acp-auth-methods="acpAuthMethods"
+        :is-fetching-acp-auth-methods="isFetchingAcpAuthMethods"
         :models-panel-open="modelsPanelOpen"
         :is-fetching-models="isFetchingModels"
         :available-models-list="availableModelsList"
@@ -47,9 +49,11 @@
         @toggle-enabled="setSelectedProviderEnabled"
         @toggle-api-key-visibility="toggleSelectedProviderApiKeyVisibility"
         @update-acp-api-provider-id="updateSelectedAcpApiProviderId"
+        @update-acp-auth-method-id="updateSelectedAcpAuthMethodId"
         @toggle-acp-mcp-server="toggleSelectedAcpMcpServer($event.serverId, $event.checked)"
         @toggle-models-panel="toggleModelsPanel"
         @fetch-models="fetchLatestModels"
+        @fetch-acp-auth-methods="fetchAcpAuthMethods"
         @toggle-model="toggleModel"
         @edit-model-options="openModelOptionsEditor"
         @add-model="addModel"
@@ -89,6 +93,7 @@ import ProvidersSidebar from './providers/ProvidersSidebar.vue';
 import { useProvidersSettings } from '../../composables/useProvidersSettings';
 
 const {
+  acpAuthMethods,
   acpCredentialProviderOptions,
   acpMcpServerEntries,
   addCustomProvider,
@@ -98,8 +103,10 @@ const {
   closeModelOptionsEditor,
   editingProvider,
   editingProviderApiFormat,
+  fetchAcpAuthMethods,
   fetchLatestModels,
   hasDynamicModels,
+  isFetchingAcpAuthMethods,
   isFetchingModels,
   isProviderConfigured,
   isSelectedAcpProvider,
@@ -136,6 +143,7 @@ const {
   updateEditingProviderApiFormatSelection,
   updateEditingProviderTypeSelection,
   updateSelectedAcpApiProviderId,
+  updateSelectedAcpAuthMethodId,
 } = useProvidersSettings();
 </script>
 

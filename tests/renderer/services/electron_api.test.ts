@@ -3,11 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getElectronAPI,
   getElectronApiMethod,
-  getElectronApiSlice,
-  getElectronApiSliceMethod,
   getOptionalElectronAPI,
   requireElectronApiSlice,
-  requireElectronApiSliceMethod,
 } from '../../../src/renderer/services/electron_api';
 
 const mockWindow = (api: unknown) => {
@@ -63,7 +60,7 @@ describe('electron_api service', () => {
     it('returns the method when available', () => {
       const list = vi.fn();
       mockWindow({ providers: { list } });
-      const method = getElectronApiMethod('providers' as never);
+      getElectronApiMethod('providers' as never);
       // 'providers' is a slice, not a method — it should return null
       // Instead test with a known function-shaped key
     });
