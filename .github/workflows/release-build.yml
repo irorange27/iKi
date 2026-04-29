@@ -117,7 +117,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build distributables
-        run: pnpm exec electron-forge make --targets @electron-forge/maker-zip
+        run: pnpm exec electron-forge make --targets @electron-forge/maker-zip,@electron-forge/maker-dmg
         env:
           CI: "1"
 
