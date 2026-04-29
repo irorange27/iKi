@@ -116,6 +116,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Rebuild native modules for Electron
+        run: pnpm exec electron-rebuild
+
       - name: Build distributables
         run: pnpm exec electron-forge make --targets @electron-forge/maker-zip,@electron-forge/maker-dmg
         env:
