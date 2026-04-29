@@ -144,7 +144,7 @@ jobs:
 
           echo "path=$release_notes_path" >> "$GITHUB_OUTPUT"
 
-      - name: Create draft release
+      - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.verify.outputs.release_tag }}
@@ -154,5 +154,13 @@ jobs:
           files: |
             out/make/**/*
           fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure release notes reflect latest changelog
+        shell: bash
+        run: |
+          gh release edit "${{ needs.verify.outputs.release_tag }}" \
+            --notes-file "${{ steps.notes.outputs.path }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
