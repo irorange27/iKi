@@ -13,6 +13,7 @@ const config: ForgeConfig = {
     // small set of runtime externals, so those files must travel with the app.
     asar: createRuntimeAsarConfig(__dirname),
     ignore: createVitePackagingIgnore(__dirname),
+    icon: 'assets/icon/iki-icon',
   },
   rebuildConfig: {},
   makers: [

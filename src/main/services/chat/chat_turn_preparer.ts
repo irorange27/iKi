@@ -5,6 +5,7 @@ import { type AffectState, rehydrateAffectState } from '../../../core/emotion/af
 import {
   buildInterventionPolicySystemMessage,
   deriveInterventionPolicy,
+  filterToolsByInterventionState,
 } from '../../../core/emotion/intervention_policy';
 import { shouldGuardTools } from '../../../core/emotion/affect_policy';
 import * as llmFactory from '../../../core/provider/llm/factory';
@@ -127,8 +128,19 @@ const toAffectSignal = (
 const applyToolGuard = (
   tools: string[],
   mode: 'manual' | 'auto',
-  guardActive: boolean
+  guardActive: boolean,
+  interventionPolicy?: InterventionPolicySignal
 ): string[] => {
+  // Intervention-state-based hard blocking: remove tools whose risk category
+  // is blocked under the current intervention state (stabilize / clarify / co_plan).
+  if (interventionPolicy) {
+    tools = filterToolsByInterventionState(
+      tools,
+      interventionPolicy.interventionState,
+      interventionPolicy.applied === true
+    );
+  }
+
   const emotionConfig = getEmotionConfig();
   if (!guardActive || !emotionConfig?.toolGuard) return tools;
   if (mode === 'auto' && emotionConfig.toolGuard.disableAutoTools) {
@@ -303,9 +315,14 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
     });
     const skillRequiredTools = collectRequiredBuiltinSkillTools(usedSkills);
     const mergedResolvedTools = mergeToolNames(resolvedTools, skillRequiredTools);
-    const guardedTools = applyToolGuard(mergedResolvedTools, mode, guardActive).filter(
+    const guardedTools = applyToolGuard(mergedResolvedTools, mode, guardActive, interventionPolicy).filter(
       toolName => Boolean(options.threadId) || toolName !== TODO_PLANNING_TOOL_NAME
     );
+
+    // Shell is always available; execution still requires per-command user approval.
+    if (!guardedTools.includes('shell')) {
+      guardedTools.push('shell');
+    }
 
     persistThreadRuntimeHints({
       threadId: options.threadId ?? '',

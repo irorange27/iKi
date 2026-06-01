@@ -206,10 +206,16 @@ export const useChatStreaming = (deps: {
         } else {
           const updatedUserMessage: ChatUiMessage = {
             ...currentUserMessage,
-            parts: upsertComposerInvocationIntoMessageParts(
-              upsertTextIntoMessageParts(currentUserMessage.parts, content),
-              composerInvocations
-            ),
+            parts: [
+              ...(payload.files ?? []),
+              ...upsertComposerInvocationIntoMessageParts(
+                upsertTextIntoMessageParts(currentUserMessage.parts, content),
+                composerInvocations
+              ),
+            ],
+            metadata: payload.audioEmotion
+              ? Object.assign({}, currentUserMessage.metadata ?? {}, { audioEmotion: payload.audioEmotion })
+              : currentUserMessage.metadata,
           };
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
@@ -241,10 +247,16 @@ export const useChatStreaming = (deps: {
     const userMessage: ChatUiMessage = {
       id: deps.createMessageId(),
       role: 'user',
-      parts: upsertComposerInvocationIntoMessageParts(
-        [{ type: 'text', text: content, state: 'done' }],
-        composerInvocations
-      ),
+      parts: [
+        ...(payload.files ?? []),
+        ...upsertComposerInvocationIntoMessageParts(
+          [{ type: 'text', text: content, state: 'done' }],
+          composerInvocations
+        ),
+      ],
+      ...(payload.audioEmotion
+        ? { metadata: { audioEmotion: payload.audioEmotion } }
+        : {}),
     };
 
     deps.messageStore.append(userMessage);

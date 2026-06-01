@@ -106,3 +106,9 @@ typings/
 
 # Electron-Forge
 out/
+
+# Claude Code
+.claude/
+
+# Character config
+七海千秋.char

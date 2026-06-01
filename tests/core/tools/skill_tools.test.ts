@@ -83,14 +83,14 @@ Step 2: Plan.
     expect((result as { content: string }).content).not.toContain('description: Planning support');
   });
 
-  it('rejects requests for skills that were not selected for the current turn', async () => {
+  it('rejects requests for skills that do not exist on disk', async () => {
     const tool = new LoadSkillTool();
 
     await expect(
       runWithToolRuntimeContext({ availableSkillIds: ['user:planner'] }, async () =>
-        tool.execute({ id: 'user:writer' })
+        tool.execute({ id: 'user:nonexistent' })
       )
-    ).rejects.toThrow(/not enabled for this turn/i);
+    ).rejects.toThrow(/not found/i);
   });
 
   it('publishes concrete input and output JSON schemas for the AI tool boundary', () => {

@@ -23,6 +23,7 @@ export const useProvidersSettingsEditor = (params: {
   const showProviderEditor = ref(false);
 
   const providerTypeOptions = computed<ProviderSelectOption[]>(() => [
+    { value: 'deepseek', label: t('settings.providers.type.deepseek') },
     { value: 'openai-compatible', label: t('settings.providers.type.openaiCompatible') },
     { value: 'anthropic-compatible', label: t('settings.providers.type.anthropicCompatible') },
     { value: 'google', label: t('settings.providers.type.googleGemini') },

@@ -1,4 +1,5 @@
 import { convertToModelMessages, validateUIMessages } from 'ai';
+import type { FileUIPart } from 'ai';
 
 import { extractTextFromModelMessageContent } from '../../../core/agent/model_messages';
 import type {
@@ -38,6 +39,21 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             if (isChatUiMetadataPart(partRecord)) {
               return null;
             }
+            if (
+              partType === 'file' &&
+              typeof partRecord.url === 'string' &&
+              typeof partRecord.mediaType === 'string'
+            ) {
+              const filePart: FileUIPart = {
+                type: 'file',
+                url: partRecord.url,
+                mediaType: partRecord.mediaType,
+                ...(typeof partRecord.filename === 'string' && partRecord.filename.length > 0
+                  ? { filename: partRecord.filename }
+                  : {}),
+              };
+              return filePart;
+            }
             if (partType === 'text' && typeof partRecord.text === 'string') {
               const textPart: TextPart = {
                 type: 'text',
@@ -50,7 +66,7 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             }
             return null;
           })
-          .filter((part): part is TextPart | DynamicToolPart => part !== null)
+          .filter((part): part is TextPart | DynamicToolPart | FileUIPart => part !== null)
       : [];
 
     if (parts.length === 0) {

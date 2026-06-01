@@ -41,9 +41,8 @@ const getThreadWorkspaceName = (threadId: string, title: unknown): string => {
 
 const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
   const thread = chatThreadDb.getChatThread(threadId);
-  if (!thread) return null;
 
-  const configuredWorkspaceId = normalizeWorkspaceId(thread.workspace_id);
+  const configuredWorkspaceId = normalizeWorkspaceId(thread?.workspace_id);
   if (configuredWorkspaceId) {
     const existingWorkspace = workspaceDb.getWorkspace(configuredWorkspaceId);
     if (existingWorkspace) return existingWorkspace;
@@ -55,11 +54,11 @@ const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
   const existingByPath = workspaceDb.getWorkspaceByPath(workspacePath);
   if (existingByPath) {
     workspaceDb.updateWorkspace(existingByPath.id, {
-      name: getThreadWorkspaceName(threadId, thread.title),
+      name: getThreadWorkspaceName(threadId, thread?.title),
       is_temporary: 1,
       show_in_list: 0,
     });
-    if (configuredWorkspaceId !== existingByPath.id) {
+    if (thread && configuredWorkspaceId !== existingByPath.id) {
       chatThreadDb.updateChatThread(threadId, { workspace_id: existingByPath.id });
     }
     return workspaceDb.getWorkspace(existingByPath.id);
@@ -69,11 +68,13 @@ const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
   workspaceDb.addWorkspace({
     id: workspaceId,
     path: workspacePath,
-    name: getThreadWorkspaceName(threadId, thread.title),
+    name: getThreadWorkspaceName(threadId, thread?.title),
     is_temporary: 1,
     show_in_list: 0,
   });
-  chatThreadDb.updateChatThread(threadId, { workspace_id: workspaceId });
+  if (thread) {
+    chatThreadDb.updateChatThread(threadId, { workspace_id: workspaceId });
+  }
   return workspaceDb.getWorkspace(workspaceId);
 };
 

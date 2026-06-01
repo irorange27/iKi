@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveInterventionPolicy } from '../../../src/core/emotion/intervention_policy';
+import {
+  deriveInterventionPolicy,
+  filterToolsByInterventionState,
+} from '../../../src/core/emotion/intervention_policy';
 
 const makeBoundaryMessages = (userText: string) => [
   {
@@ -113,5 +116,68 @@ describe('deriveInterventionPolicy', () => {
         affectUsed: false,
       })
     );
+  });
+});
+
+describe('filterToolsByInterventionState', () => {
+  const sampleTools = [
+    'read_file', 'write_file', 'edit', 'delete_file', 'list_dir',
+    'shell', 'web', 'fetch', 'agent',
+    'finish', 'handoff', 'plan', 'todo', 'load_skill',
+    'write_todo_list', 'read_todo_list',
+    'write_proactive_task',
+    'some_mcp_tool',
+  ];
+
+  it('returns all tools when policy is not applied', () => {
+    const result = filterToolsByInterventionState(sampleTools, 'stabilize', false);
+    expect(result).toEqual(sampleTools);
+  });
+
+  it('returns all tools for autonomous_execute when policy is applied', () => {
+    const result = filterToolsByInterventionState(sampleTools, 'autonomous_execute', true);
+    expect(result).toEqual(sampleTools);
+  });
+
+  it('returns all tools for guided_execute when policy is applied', () => {
+    const result = filterToolsByInterventionState(sampleTools, 'guided_execute', true);
+    expect(result).toEqual(sampleTools);
+  });
+
+  it('blocks shell, write, and agent tools in stabilize', () => {
+    const result = filterToolsByInterventionState(sampleTools, 'stabilize', true);
+    expect(result).not.toContain('shell');
+    expect(result).not.toContain('write_file');
+    expect(result).not.toContain('edit');
+    expect(result).not.toContain('delete_file');
+    expect(result).not.toContain('agent');
+    expect(result).not.toContain('write_todo_list');
+    expect(result).not.toContain('write_proactive_task');
+    expect(result).toContain('read_file');
+    expect(result).toContain('list_dir');
+    expect(result).toContain('web');
+    expect(result).toContain('fetch');
+    expect(result).toContain('read_todo_list');
+    expect(result).toContain('finish');
+    expect(result).toContain('handoff');
+    expect(result).toContain('plan');
+    expect(result).toContain('some_mcp_tool');
+  });
+
+  it('blocks shell and write tools in clarify, but allows agent', () => {
+    const result = filterToolsByInterventionState(sampleTools, 'clarify', true);
+    expect(result).not.toContain('shell');
+    expect(result).not.toContain('write_file');
+    expect(result).toContain('agent');
+    expect(result).toContain('read_file');
+    expect(result).toContain('web');
+  });
+
+  it('blocks shell and write tools in co_plan, but allows agent', () => {
+    const result = filterToolsByInterventionState(sampleTools, 'co_plan', true);
+    expect(result).not.toContain('shell');
+    expect(result).not.toContain('write_file');
+    expect(result).toContain('agent');
+    expect(result).toContain('read_file');
   });
 });

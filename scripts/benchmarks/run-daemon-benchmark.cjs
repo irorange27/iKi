@@ -1009,12 +1009,24 @@ const parseList = value =>
         .filter(Boolean)
     : [];
 
+const GENERIC_BENCHMARK_TOOLS = [
+  'read_file',
+  'write_file',
+  'edit',
+  'list_dir',
+  'shell',
+  'web',
+  'fetch',
+];
+
 const getDefaultToolsForBenchmark = benchmark => {
   switch (benchmark.trim().toLowerCase()) {
     case 'browsecomp':
       return ['web', 'fetch'];
     case 'gaia':
       return ['web', 'fetch'];
+    case 'generic':
+      return GENERIC_BENCHMARK_TOOLS;
     default:
       return [];
   }

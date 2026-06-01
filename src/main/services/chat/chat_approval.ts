@@ -1,35 +1,32 @@
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import {
-  createConversationHarness,
-  type AgentTool,
-  type ConversationHarness,
+  type AgentStep,
+  type AgentResult,
 } from '../../../core/agent';
+import {
+  appendApprovalResponsesToHistory,
+  cloneModelMessages,
+} from '../../../core/agent/ai_sdk_runtime';
 import type { AgentRun } from '../../../shared/types/agent_run';
-import { getAppConfig } from '../../../core/config';
 import * as agentRunDb from '../../../core/db/agent_runs';
 import * as chatToolApprovalDb from '../../../core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../core/db/chat_message';
-import { defaultToolRegistry } from '../../../core/tools';
-import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
-import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
 import type { ChatToolApprovalDecision } from '../../../shared/types/chat_tool_approval';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatMemory } from './chat_memory';
-import type { ApprovalRecoveryContext } from './chat_approval_types';
+import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './chat_approval_types';
 import { resolveChatToolMaxIterations } from './chat_constants';
 import { createAgentRunTracker } from './chat_run_tracking';
-import type { ActiveStreamState, ChatWebContents } from './chat_types';
+import type { ActiveStreamState, ChatWebContents, ToolStreamEvent } from './chat_types';
 import { createUiChunkEmitter, parseStoredUiMessageRow, toModelInputMessages } from './chat_ui';
-import { createChatConversationRunner } from './chat_conversation_runner';
-import { createToolLoopRunner } from './chat_tool_loop';
+import { createChatAgentRunner } from './chat_agent_runner';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
 type PendingApprovalSession = {
   sessionId?: string;
-  harness: ConversationHarness;
   webContents: ChatWebContents;
   recoveryContext?: ApprovalRecoveryContext;
   history?: ModelMessage[];
@@ -80,14 +77,6 @@ export const createChatApproval = (deps: {
 }) => {
   const pendingApprovalSessions = new Map<string, PendingApprovalSession>();
 
-  const shouldAutoApproveToolRequests = () => {
-    try {
-      return getAppConfig()?.general?.autoApproveToolRequests === true;
-    } catch {
-      return false;
-    }
-  };
-
   const clearApprovalTimeouts = (session: PendingApprovalSession) => {
     if (!session.timeouts) return;
     for (const timeoutId of session.timeouts.values()) {
@@ -114,7 +103,6 @@ export const createChatApproval = (deps: {
   const ensurePendingApprovalSession = (
     approvalId: string,
     session: {
-      harness: ConversationHarness;
       webContents: ChatWebContents;
       history?: ModelMessage[];
       recoveryContext?: ApprovalRecoveryContext;
@@ -135,7 +123,6 @@ export const createChatApproval = (deps: {
 
     const created: PendingApprovalSession = {
       sessionId: session.recoveryContext?.sessionId,
-      harness: session.harness,
       webContents: session.webContents,
       history: session.history,
       recoveryContext: session.recoveryContext,
@@ -155,7 +142,6 @@ export const createChatApproval = (deps: {
       toolCall?: { toolName: string; args: Record<string, unknown> };
     }>,
     session: {
-      harness: ConversationHarness;
       webContents: ChatWebContents;
       history?: ModelMessage[];
       recoveryContext?: ApprovalRecoveryContext;
@@ -197,9 +183,32 @@ export const createChatApproval = (deps: {
       );
     }
 
+    let existingSession: PendingApprovalSession | undefined;
+    for (const approvalId of approvalIds) {
+      const candidate = pendingApprovalSessions.get(approvalId);
+      if (candidate) {
+        existingSession = candidate;
+        break;
+      }
+    }
+
+    if (existingSession) {
+      existingSession.webContents = session.webContents;
+      existingSession.history = session.history ?? existingSession.history;
+      existingSession.recoveryContext = session.recoveryContext ?? existingSession.recoveryContext;
+      if (session.recoveryContext?.sessionId) {
+        existingSession.sessionId = session.recoveryContext.sessionId;
+      }
+      for (const approvalId of approvalIds) {
+        existingSession.pendingApprovalIds.add(approvalId);
+        pendingApprovalSessions.set(approvalId, existingSession);
+        scheduleApprovalTimeout(approvalId, existingSession);
+      }
+      return;
+    }
+
     const pendingSession: PendingApprovalSession = {
       sessionId: session.recoveryContext?.sessionId,
-      harness: session.harness,
       webContents: session.webContents,
       history: session.history,
       recoveryContext: session.recoveryContext,
@@ -212,82 +221,6 @@ export const createChatApproval = (deps: {
       pendingApprovalSessions.set(approvalId, pendingSession);
       scheduleApprovalTimeout(approvalId, pendingSession);
     }
-  };
-
-  const toolLoopRunner = createToolLoopRunner({ registerApprovalBatch });
-
-  const buildRuntimeTools = (params: {
-    toolNames: string[];
-    availableSkillIds: string[];
-  }): AgentTool[] => {
-    const registeredTools: AgentTool[] = [];
-
-    if (params.availableSkillIds.length > 0) {
-      registeredTools.push(new LoadSkillTool().toAgentTool());
-    }
-
-    for (const name of params.toolNames) {
-      const tool = defaultToolRegistry.get(name);
-      if (!tool) continue;
-      registeredTools.push(
-        applyToolApprovalPolicy(tool, {
-          autoApproveToolRequests: shouldAutoApproveToolRequests(),
-        })
-      );
-    }
-
-    return registeredTools;
-  };
-
-  const createApprovalHarness = (params: {
-    threadId: string;
-    providerType: string;
-    providerId?: string;
-    model: string;
-    systemPrompt: string;
-    toolNames: string[];
-    availableSkillIds: string[];
-    maxIterations: number;
-    maxOutputTokens?: number;
-  }): ConversationHarness => {
-    const runner = createChatConversationRunner({
-      providerType: params.providerType,
-      ...(typeof params.providerId === 'string' && params.providerId.trim()
-        ? { providerId: params.providerId.trim() }
-        : {}),
-      model: params.model,
-      systemPrompt: params.systemPrompt,
-      enableTools: true,
-      maxIterations: params.maxIterations,
-      ...(typeof params.maxOutputTokens === 'number'
-        ? { maxTokens: params.maxOutputTokens }
-        : {}),
-    });
-
-    const harness = createConversationHarness({
-      runner,
-      toolRuntimeContext: {
-        threadId: params.threadId,
-        availableSkillIds: params.availableSkillIds,
-        conversationModel: {
-          providerType: params.providerType,
-          ...(typeof params.providerId === 'string' && params.providerId.trim()
-            ? { providerId: params.providerId.trim() }
-            : {}),
-          model: params.model,
-          ...(typeof params.maxOutputTokens === 'number'
-            ? { maxTokens: params.maxOutputTokens }
-            : {}),
-        },
-        delegationDepth: 0,
-      },
-    });
-
-    for (const tool of buildRuntimeTools(params)) {
-      harness.registerTool(tool);
-    }
-
-    return harness;
   };
 
   const tryRecoverApprovalSession = async (
@@ -374,24 +307,6 @@ export const createChatApproval = (deps: {
       getRunMaxIterations(runSnapshot) ?? approvalSession.max_iterations ?? undefined
     );
 
-    const harness = createApprovalHarness({
-      threadId,
-      providerType: runSnapshot?.providerType ?? approvalSession.provider_type,
-      ...((runSnapshot?.providerId ?? approvalSession.provider_id) &&
-      typeof (runSnapshot?.providerId ?? approvalSession.provider_id) === 'string' &&
-      (runSnapshot?.providerId ?? approvalSession.provider_id)?.trim()
-        ? { providerId: (runSnapshot?.providerId ?? approvalSession.provider_id)?.trim() }
-        : {}),
-      model: runSnapshot?.model ?? approvalSession.model,
-      systemPrompt: runSnapshot?.systemPrompt ?? approvalSession.system_prompt,
-      toolNames: resolvedToolNames,
-      availableSkillIds,
-      maxIterations,
-      ...(typeof approvalSession.max_output_tokens === 'number'
-        ? { maxOutputTokens: approvalSession.max_output_tokens }
-        : {}),
-    });
-
     const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
     const collectedApprovalResponses = new Map<string, ToolApprovalResponse>();
     for (const record of activeApprovals) {
@@ -411,7 +326,6 @@ export const createChatApproval = (deps: {
 
     const session: PendingApprovalSession = {
       sessionId: approvalSession.session_id,
-      harness,
       webContents,
       history: inputMessages,
       recoveryContext: {
@@ -576,62 +490,177 @@ export const createChatApproval = (deps: {
         }
       : undefined;
     deps.activeStreams.set(resumedSenderId, streamState);
+    let resolvedHistory: ModelMessage[] | undefined = session.history;
+    let isAwaitingApproval = false;
 
     try {
       const streamResult = await runWithToolRuntimeContext(
         {
           runId: resumeRunTracker?.id ?? nextApprovalContext?.runId,
           ...(resumeRunTracker ? { runTracker: resumeRunTracker } : {}),
+          threadId: nextApprovalContext?.threadId ?? session.recoveryContext?.threadId,
         },
-        async () =>
-          await toolLoopRunner.stream({
-            harness: session.harness,
-            webContents: session.webContents,
-            history: session.history,
+        async () => {
+          // Create a fresh runner from the recovery context
+          const ctx = nextApprovalContext ?? session.recoveryContext;
+          const runnerCfg = {
+            threadId: ctx?.threadId,
+            providerType: ctx?.providerType ?? '',
+            providerId: ctx?.providerId,
+            model: ctx?.model ?? '',
+            systemPrompt: ctx?.systemPrompt ?? '',
+            enableTools: true,
+            enabledTools: ctx?.enabledTools ?? [],
+            availableSkillIds: ctx?.availableSkillIds ?? [],
+            guardActive: false,
+            maxIterations: ctx?.maxIterations ?? 10,
+            ...(typeof ctx?.maxOutputTokens === 'number'
+              ? { maxOutputTokens: ctx.maxOutputTokens }
+              : {}),
+          };
+          const approvalRunnerData = createChatAgentRunner(runnerCfg);
+          const approvalRunner = approvalRunnerData.runner;
+          const approvalTools = approvalRunnerData.tools;
+
+          // Build history with collected approval responses
+          const responses = Array.from(session.collectedApprovalResponses.values());
+          let streamHistory = cloneModelMessages(session.history ?? []);
+          if (responses.length > 0) {
+            streamHistory = appendApprovalResponsesToHistory(
+              streamHistory,
+              responses.map(r => ({
+                type: 'tool-approval-response' as const,
+                approvalId: r.approvalId,
+                approved: r.approved,
+                ...(r.reason ? { reason: r.reason } : {}),
+              }))
+            );
+          }
+
+          const agentGen = approvalRunner.run({
+            config: { enabled: true },
             prompt: '',
-            approvalResponses: Array.from(session.collectedApprovalResponses.values()),
-            approvalContext: nextApprovalContext,
-            autonomous: session.recoveryContext?.autonomous,
-            retry: session.recoveryContext?.autonomous
-              ? { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
-              : { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
-            shouldCancel: () => streamState.cancelled,
-            onToolEvent: eventPart => {
-              resumeRunTracker?.recordToolEvent(eventPart);
-              if (
-                eventPart.type === 'tool-approval-request' &&
-                typeof eventPart.approvalId === 'string' &&
-                eventPart.approvalId.length > 0
-              ) {
-                ensurePendingApprovalSession(eventPart.approvalId, {
-                  harness: session.harness,
-                  webContents: session.webContents,
-                  history: session.harness.getHistory?.() ?? session.history,
-                  recoveryContext: nextApprovalContext,
-                });
-              }
-              uiChunkEmitter.emitToolEvent(eventPart);
-            },
+            history: streamHistory,
+            tools: approvalTools,
+            providerType: runnerCfg.providerType,
+            providerId: runnerCfg.providerId,
+            model: runnerCfg.model,
+            systemPrompt: runnerCfg.systemPrompt,
+            maxIterations: runnerCfg.maxIterations,
+            ...(runnerCfg.maxOutputTokens ? { maxTokens: runnerCfg.maxOutputTokens } : {}),
             abortSignal: streamState.abortController.signal,
-            uiChunkEmitter,
-            tokenUsageContext: {
-              ...(typeof nextApprovalContext?.maxInputTokens === 'number'
-                ? { maxInputTokens: nextApprovalContext.maxInputTokens }
+          });
+
+          let awaitingApproval = false;
+          let cancelled = false;
+          let responseText = '';
+
+          let next = await agentGen.next();
+          while (!next.done) {
+            if (streamState.cancelled) {
+              cancelled = true;
+              try { await agentGen.return(undefined); } catch { /* ignore */ }
+              break;
+            }
+
+            const step = next.value as AgentStep | undefined;
+            if (step) {
+              if (step.type === 'text-delta') {
+                responseText += step.text;
+                uiChunkEmitter.emitTextDelta(step.text);
+              } else if (step.type === 'tool-call-start') {
+                const event: ToolStreamEvent = {
+                  type: 'tool-call',
+                  toolCallId: step.toolCallId,
+                  toolName: step.toolName,
+                  input: step.input,
+                };
+                resumeRunTracker?.recordToolEvent(event);
+                uiChunkEmitter.emitToolEvent(event);
+              } else if (step.type === 'tool-call-end') {
+                const event: ToolStreamEvent = { type: 'tool-input-end', toolCallId: step.toolCallId };
+                resumeRunTracker?.recordToolEvent(event);
+                uiChunkEmitter.emitToolEvent(event);
+              } else if (step.type === 'tool-result') {
+                const event: ToolStreamEvent = {
+                  type: 'tool-result',
+                  toolCallId: step.toolCallId,
+                  output: step.output,
+                };
+                resumeRunTracker?.recordToolEvent(event);
+                uiChunkEmitter.emitToolEvent(event);
+              } else if (step.type === 'tool-error') {
+                const event: ToolStreamEvent = {
+                  type: 'tool-error',
+                  toolCallId: step.toolCallId,
+                  error: step.error,
+                };
+                resumeRunTracker?.recordToolEvent(event);
+                uiChunkEmitter.emitToolEvent(event);
+              } else if (step.type === 'approval-request') {
+                awaitingApproval = true;
+                for (const req of step.requests) {
+                  if (req.approvalId) {
+                    ensurePendingApprovalSession(req.approvalId, {
+                      webContents: session.webContents,
+                      history: approvalRunner.getHistory?.() ?? streamHistory,
+                      recoveryContext: nextApprovalContext,
+                    });
+                  }
+                }
+                for (const req of step.requests) {
+                  if (req.approvalId) {
+                    uiChunkEmitter.emitToolEvent({
+                      type: 'tool-approval-request',
+                      approvalId: req.approvalId,
+                      toolCallId: req.toolCallId || '',
+                      ...(req.toolCall
+                        ? {
+                            toolCall: {
+                              toolName: req.toolCall.toolName,
+                              toolCallId: req.toolCallId || '',
+                              args: req.toolCall.args ?? {},
+                            },
+                          }
+                        : {}),
+                    });
+                  }
+                }
+              }
+            }
+
+            next = await agentGen.next();
+          }
+
+          const agentResult: AgentResult | undefined = next.done ? (next.value as AgentResult | undefined) : undefined;
+
+          const result: ToolLoopStreamResult = {
+            awaitingApproval:
+              awaitingApproval || (agentResult?.requiresApproval ?? false),
+            cancelled,
+            ...(agentResult?.response
+              ? { response: agentResult.response }
+              : responseText
+                ? { response: responseText }
                 : {}),
-              ...(typeof nextApprovalContext?.maxOutputTokens === 'number'
-                ? { maxOutputTokens: nextApprovalContext.maxOutputTokens }
-                : {}),
-              ...(nextApprovalContext?.model ? { model: nextApprovalContext.model } : {}),
-              ...(nextApprovalContext?.providerType
-                ? { providerType: nextApprovalContext.providerType }
-                : {}),
-              ...(nextApprovalContext?.providerId
-                ? { providerId: nextApprovalContext.providerId }
-                : {}),
-            },
-          })
+            usage: agentResult?.usage,
+          };
+
+          // Track history for subsequent getHistory() calls
+          resolvedHistory =
+            approvalRunner.getHistory?.() ?? streamHistory;
+
+          return result;
+        }
       );
-      resumeRunTracker?.syncModelMessages(session.harness.getHistory?.() ?? session.history ?? []);
+      isAwaitingApproval = streamResult.awaitingApproval;
+      if (streamResult.cancelled) {
+        uiChunkEmitter.abort();
+      } else if (!isAwaitingApproval) {
+        uiChunkEmitter.finish();
+      }
+
+      resumeRunTracker?.syncModelMessages(resolvedHistory ?? session.history ?? []);
       if (!streamResult.cancelled && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.threadId,
@@ -684,7 +713,9 @@ export const createChatApproval = (deps: {
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {
-      cleanupPendingSessionsForWebContents(resumedSenderId);
+      if (!isAwaitingApproval) {
+        cleanupPendingSessionsForWebContents(resumedSenderId);
+      }
       if (deps.activeStreams.get(resumedSenderId) === streamState) {
         deps.activeStreams.delete(resumedSenderId);
       }

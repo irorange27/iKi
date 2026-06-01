@@ -22,7 +22,27 @@ export type {
   ConversationRunnerStreamOptions,
 } from './runners/conversation_runner';
 
-export type { ConversationHarness } from './harnesses/conversation_harness';
+// New AgentRunner v2 types (additive, coexists with legacy ConversationRunner)
+export type {
+  AgentStep,
+  TextDeltaStep,
+  ToolCallStartStep,
+  ToolCallEndStep,
+  ToolResultStep,
+  ToolErrorStep,
+  ApprovalRequestStep,
+  ApprovalCollectedStep,
+  HandoffStep,
+  FinishStep,
+  ErrorStep,
+  AgentApprovalResponse,
+} from './agent_step';
+
+export type {
+  AgentRunner,
+  AgentRunnerRequest,
+  AgentRunnerFactory,
+} from './runners/agent_runner';
 
 // Export current public schemas
 export {
@@ -38,7 +58,9 @@ export {
   createSimpleConversationRunner,
 } from './runners/simple_conversation_runner';
 
-export { createConversationHarness } from './harnesses/conversation_harness';
+export { SimpleAgentRunner, createSimpleAgentRunner } from './runners/simple_agent_runner';
+export { ClaudeCodeRunner, createClaudeCodeRunner } from './runners/claude_code_runner';
+
 export { createAgentRunTracker } from './run_tracker';
 export type { AgentRunTracker } from './run_tracker';
 

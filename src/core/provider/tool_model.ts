@@ -108,8 +108,22 @@ const findConfiguredToolModel = (
   return resolveExplicitToolModel(enabledProviders, config ?? {});
 };
 
-// Tool-model selection is explicit. The only fallback retained here is legacy model-only
-// compatibility for previously saved configs that did not persist providerId yet.
+// Resolves the first available model from enabled providers as a fallback for
+// lightweight tasks (title generation, etc.) when no explicit tool model is configured.
+const resolveFallbackToolModel = (providers: ReturnType<typeof getProviders>): ToolModelConfig | null => {
+  for (const provider of providers) {
+    if (!provider.enabled) continue;
+    const models = resolveProviderModels(provider);
+    if (!models || models.length === 0) continue;
+    return {
+      providerId: provider.id,
+      providerType: provider.type,
+      model: models[0],
+    };
+  }
+  return null;
+};
+
 export const getToolModel = (): ToolModelConfig | null => {
   try {
     const config = getAppConfig();
@@ -120,7 +134,7 @@ export const getToolModel = (): ToolModelConfig | null => {
       return configuredToolModel;
     }
 
-    return null;
+    return resolveFallbackToolModel(providers);
   } catch (error) {
     toolModelLogger.error('Failed to get tool model', error);
     return null;

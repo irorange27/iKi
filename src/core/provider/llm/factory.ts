@@ -1,5 +1,5 @@
 import { generateText, smoothStream, streamText, type LanguageModel, type ModelMessage } from 'ai';
-import type { SharedV3ProviderOptions } from '@ai-sdk/provider';
+import type { JSONValue, SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
@@ -69,18 +69,10 @@ export interface ChatGenerationResult {
   usage: TokenUsageMetrics;
 }
 
-export type StreamChatResult = ChatGenerationResult;
-
-export type ChatTextMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-};
-
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
-  if (typeof value === 'string') return true;
   if (!isObjectRecord(value)) return false;
 
   return (
@@ -91,13 +83,6 @@ const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
     typeof value.doStream === 'function' &&
     'supportedUrls' in value
   );
-};
-
-const toModelMessages = (messages: ChatTextMessage[]): ModelMessage[] => {
-  return messages.map(message => ({
-    role: message.role,
-    content: message.content,
-  }));
 };
 
 export const getProviderConfig = (providerType: string, providerId?: string | null): ProviderConfig => {
@@ -296,13 +281,20 @@ export const getModelCallSettings = (
 ): { providerOptions?: SharedV3ProviderOptions } => {
   const modelOptions = getStoredProviderModelOptions(providerType, modelId, providerId);
   const providerOptions = modelOptions?.providerOptions;
-  if (!providerOptions || Object.keys(providerOptions).length === 0) {
+
+  const merged: Record<string, JSONValue> = { ...(providerOptions ?? {}) };
+
+  if (modelOptions?.supportsReasoning != null && !merged.thinking) {
+    merged.thinking = { type: modelOptions.supportsReasoning ? 'enabled' : 'disabled' };
+  }
+
+  if (Object.keys(merged).length === 0) {
     return {};
   }
 
   return {
     providerOptions: {
-      [providerType]: providerOptions,
+      [providerType]: merged,
     },
   };
 };
@@ -325,6 +317,27 @@ export const getModelGenerationSettings = (params: {
         temperature: params.temperature,
       }
     : callSettings;
+};
+
+const createInstrumentedFetch = (): typeof globalThis.fetch => {
+  return async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const method = init?.method ?? 'GET';
+
+    if (method === 'POST' && url.includes('/chat/completions')) {
+      const bodyText = init?.body as string;
+      try {
+        const body = JSON.parse(bodyText);
+        if (!body.thinking) {
+          body.thinking = { type: 'disabled' };
+        }
+        return globalThis.fetch(input, { ...init, body: JSON.stringify(body) });
+      } catch {
+        // If we can't parse the body, pass through unchanged
+      }
+    }
+    return globalThis.fetch(input, init);
+  };
 };
 
 export const createModel = (
@@ -418,6 +431,7 @@ export const createModel = (
     name: providerType,
     apiKey: config.apiKey,
     baseURL: config.baseURL,
+    fetch: createInstrumentedFetch(),
   });
   if (typeof storedModelOptions?.supportsStructuredOutputs === 'boolean') {
     return client.languageModel(modelId, {
@@ -437,103 +451,11 @@ export const getFullSystemPrompt = (providerType: string, providerId?: string | 
   const personaPrompt = getPersonaPrompt();
   return personaPrompt;
 };
-
-export const streamChat = async (
-  options: {
-    providerType: string;
-    providerId?: string;
-    modelId: string;
-    messages: ChatTextMessage[];
-    extraSystemPrompt?: string;
-    maxOutputTokens?: number;
-  },
-  onChunk: (chunk: string) => void,
-  shouldCancel?: () => boolean,
-  abortSignal?: AbortSignal
-) => {
-  const result = await streamChatWithUsage(options, onChunk, shouldCancel, abortSignal);
-  return result.text;
-};
-
-export const streamChatWithUsage = async (
-  options: {
-    providerType: string;
-    providerId?: string;
-    modelId: string;
-    messages: ChatTextMessage[];
-    extraSystemPrompt?: string;
-    maxOutputTokens?: number;
-  },
-  onChunk: (chunk: string) => void,
-  shouldCancel?: () => boolean,
-  abortSignal?: AbortSignal
-) => {
-  const model = createModel(options.providerType, options.modelId, options.providerId);
-  const systemPrompt = [
-    getFullSystemPrompt(options.providerType, options.providerId),
-    options.extraSystemPrompt,
-  ]
-    .filter(value => typeof value === 'string' && value.trim().length > 0)
-    .join('\n\n');
-
-  try {
-    const result = streamText({
-      model,
-      system: systemPrompt,
-      messages: toModelMessages(options.messages),
-      ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
-      ...(typeof options.maxOutputTokens === 'number'
-        ? { maxOutputTokens: options.maxOutputTokens }
-        : {}),
-      experimental_transform: smoothStream(),
-      abortSignal,
-    });
-
-    let fullText = '';
-    for await (const part of result.fullStream) {
-      if (shouldCancel?.()) {
-        break;
-      }
-      if (part.type !== 'text-delta' || !part.text) {
-        continue;
-      }
-      fullText += part.text;
-      onChunk(part.text);
-    }
-
-    if (!fullText) {
-      const streamedText = await Promise.resolve(result.text);
-      if (streamedText) {
-        fullText = streamedText;
-      }
-    }
-
-    return {
-      text: fullText,
-      usage: normalizeLanguageModelUsage(await Promise.resolve(result.totalUsage ?? result.usage)),
-    };
-  } finally {
-    disposeLanguageModel(model);
-  }
-};
-
-export const generateChat = async (options: {
+export const generateChatWithModelMessages = async (options: {
   providerType: string;
   providerId?: string;
   modelId: string;
-  messages: ChatTextMessage[];
-  extraSystemPrompt?: string;
-  maxOutputTokens?: number;
-}) => {
-  const result = await generateChatWithUsage(options);
-  return result.text;
-};
-
-export const generateChatWithUsage = async (options: {
-  providerType: string;
-  providerId?: string;
-  modelId: string;
-  messages: ChatTextMessage[];
+  messages: ModelMessage[];
   extraSystemPrompt?: string;
   maxOutputTokens?: number;
 }): Promise<ChatGenerationResult> => {
@@ -549,17 +471,36 @@ export const generateChatWithUsage = async (options: {
     const result = await generateText({
       model,
       system: systemPrompt,
-      messages: toModelMessages(options.messages),
+      messages: injectReasoningContentIntoMessages(options.messages),
       ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
       ...(typeof options.maxOutputTokens === 'number'
         ? { maxOutputTokens: options.maxOutputTokens }
         : {}),
     });
 
+    if (!result.text) {
+      factoryLogger.event({
+        level: 'warn',
+        event: 'llm.generate.empty',
+        outcome: 'degraded',
+        message: `Generation produced no text for provider "${options.providerType}" model "${options.modelId}".`,
+        data: { providerType: options.providerType, modelId: options.modelId },
+      });
+    }
     return {
       text: result.text,
       usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
     };
+  } catch (error) {
+    factoryLogger.event({
+      level: 'error',
+      event: 'llm.generate.failed',
+      outcome: 'failed',
+      message: `Generation failed for provider "${options.providerType}" model "${options.modelId}".`,
+      error,
+      data: { providerType: options.providerType, modelId: options.modelId },
+    });
+    throw error;
   } finally {
     disposeLanguageModel(model);
   }
@@ -727,6 +668,34 @@ export const resolveModelCapability = async (
   const baseCapability = await fetchModelCapabilityFromDev(providerType, trimmedModelId);
 
   return mergeModelCapability(baseCapability, providerType, trimmedModelId, modelOptions);
+};
+
+/**
+ * Inject reasoning_content from reasoning content parts into each assistant
+ * message's providerOptions, so that @ai-sdk/openai-compatible (and similar
+ * providers) include it in the API request body. Needed for providers like MIMO
+ * that require reasoning_content be passed back across all turns.
+ */
+export const injectReasoningContentIntoMessages = (
+  messages: ModelMessage[],
+): ModelMessage[] => {
+  return messages.map(msg => {
+    if (msg.role !== 'assistant') return msg;
+    if (!Array.isArray(msg.content)) return msg;
+    const reasoningParts = msg.content.filter(p => p.type === 'reasoning');
+    if (reasoningParts.length === 0) return msg;
+    const reasoningContent = reasoningParts.map(p => p.text).join('');
+    return {
+      ...msg,
+      providerOptions: {
+        ...msg.providerOptions,
+        openaiCompatible: {
+          ...(msg.providerOptions?.openaiCompatible ?? {}),
+          reasoning_content: reasoningContent,
+        },
+      },
+    };
+  });
 };
 
 export const resetModelsDevCatalogCacheForTests = () => {

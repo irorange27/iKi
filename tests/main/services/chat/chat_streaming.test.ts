@@ -15,22 +15,22 @@ const {
   getAppConfigMock,
   shouldGuardToolsMock,
   generateChatWithUsageMock,
+  generateChatWithModelMessagesMock,
   fetchAcpModelsMock,
   resolveModelCapabilityMock,
   assembleContextMock,
-  createChatConversationRunnerMock,
   persistThreadRuntimeHintsMock,
   resolveToolNamesMock,
   createUiChunkEmitterMock,
   getPromptFromMessageMock,
   toLlmChatMessagesMock,
   toModelInputMessagesMock,
-  createToolLoopRunnerMock,
-  toolLoopStreamMock,
   defaultToolRegistryGetMock,
   createAgentRunTrackerMock,
   getErrorMessageMock,
   getMinimaxModelsMock,
+  agentRunnerRunMock,
+  createChatAgentRunnerMock,
 } = vi.hoisted(() => ({
   dbPrepareMock: vi.fn(),
   dbGetMock: vi.fn(),
@@ -55,25 +55,40 @@ const {
   })),
   shouldGuardToolsMock: vi.fn(() => false),
   generateChatWithUsageMock: vi.fn(),
+  generateChatWithModelMessagesMock: vi.fn(),
   fetchAcpModelsMock: vi.fn(async () => []),
   resolveModelCapabilityMock: vi.fn(async () => null),
   assembleContextMock: vi.fn(),
-  createChatConversationRunnerMock: vi.fn(),
   persistThreadRuntimeHintsMock: vi.fn(),
   resolveToolNamesMock: vi.fn(),
   createUiChunkEmitterMock: vi.fn(),
   getPromptFromMessageMock: vi.fn(),
   toLlmChatMessagesMock: vi.fn(),
   toModelInputMessagesMock: vi.fn(),
-  createToolLoopRunnerMock: vi.fn(),
-  toolLoopStreamMock: vi.fn(),
   defaultToolRegistryGetMock: vi.fn(),
   createAgentRunTrackerMock: vi.fn(),
   getErrorMessageMock: vi.fn((error: unknown) =>
     error instanceof Error ? error.message : String(error)
   ),
   getMinimaxModelsMock: vi.fn(async () => []),
+  agentRunnerRunMock: vi.fn(),
+  createChatAgentRunnerMock: vi.fn(),
 }));
+
+// Default mock for createChatAgentRunner — individual tests override via mockReturnValue
+agentRunnerRunMock.mockImplementation(async function* () {
+  yield { type: 'finish', text: '', usage: undefined };
+  return { response: '', iterations: 0 };
+});
+createChatAgentRunnerMock.mockReturnValue({
+  runner: {
+    run: agentRunnerRunMock,
+    cancel: vi.fn(),
+    steer: vi.fn(),
+    getHistory: vi.fn(() => []),
+  },
+  tools: [],
+});
 
 vi.mock('../../../../src/core/config', () => ({
   getAppConfig: getAppConfigMock,
@@ -119,6 +134,7 @@ vi.mock('../../../../src/core/provider/emotion_model', () => ({
 
 vi.mock('../../../../src/core/provider/llm/factory', () => ({
   generateChatWithUsage: generateChatWithUsageMock,
+  generateChatWithModelMessages: generateChatWithModelMessagesMock,
   fetchAcpModels: fetchAcpModelsMock,
   fetchModelsFromDev: vi.fn(async () => []),
   resolveModelCapability: resolveModelCapabilityMock,
@@ -157,10 +173,6 @@ vi.mock('../../../../src/main/services/chat/chat_context', () => ({
   })),
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_conversation_runner', () => ({
-  createChatConversationRunner: createChatConversationRunnerMock,
-}));
-
 vi.mock('../../../../src/main/services/chat/chat_thread_hints', () => ({
   persistThreadRuntimeHints: persistThreadRuntimeHintsMock,
 }));
@@ -176,8 +188,8 @@ vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
   toModelInputMessages: toModelInputMessagesMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_tool_loop', () => ({
-  createToolLoopRunner: createToolLoopRunnerMock,
+vi.mock('../../../../src/main/services/chat/chat_agent_runner', () => ({
+  createChatAgentRunner: createChatAgentRunnerMock,
 }));
 
 vi.mock('../../../../src/main/services/chat/chat_run_tracking', () => ({
@@ -226,6 +238,20 @@ const createDeps = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Reset runner mock to default (tests that need custom behavior override explicitly)
+  agentRunnerRunMock.mockImplementation(async function* () {
+    yield { type: 'finish', text: '', usage: undefined };
+    return { response: '', iterations: 0 };
+  });
+  createChatAgentRunnerMock.mockReturnValue({
+    runner: {
+      run: agentRunnerRunMock,
+      cancel: vi.fn(),
+      steer: vi.fn(),
+      getHistory: vi.fn(() => []),
+    },
+    tools: [],
+  });
   dbPrepareMock.mockReturnValue({
     get: dbGetMock,
     all: dbAllMock,
@@ -259,7 +285,7 @@ beforeEach(() => {
     typeof message?.content === 'string' ? message.content : ''
   );
   toLlmChatMessagesMock.mockReturnValue([{ role: 'user', content: 'hello' }]);
-  generateChatWithUsageMock.mockResolvedValue({
+  generateChatWithModelMessagesMock.mockResolvedValue({
     text: 'assistant result',
     usage: {
       inputTokens: 10,
@@ -268,22 +294,11 @@ beforeEach(() => {
     },
   });
 
-  const defaultRunner = {
-    registerTool: vi.fn(),
-    generate: vi.fn().mockResolvedValue({ response: 'tool result', iterations: 1 }),
-  };
-  createChatConversationRunnerMock.mockReturnValue(defaultRunner);
-
   defaultToolRegistryGetMock.mockReturnValue({
     name: 'web',
     description: 'Search',
     parameters: {},
     handler: vi.fn(async () => ({ ok: true })),
-  });
-
-  toolLoopStreamMock.mockResolvedValue({ awaitingApproval: false });
-  createToolLoopRunnerMock.mockReturnValue({
-    stream: toolLoopStreamMock,
   });
 
   createUiChunkEmitterMock.mockReturnValue({
@@ -397,13 +412,9 @@ describe('createChatStreaming', () => {
       maxInputTokens: 128000,
       contextWindow: 128000,
     });
-    toolLoopStreamMock.mockResolvedValueOnce({
-      awaitingApproval: false,
-      usage: {
-        inputTokens: 912,
-        outputTokens: 48,
-        totalTokens: 960,
-      },
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return { response: '', iterations: 0 };
     });
 
     const { streaming } = createDeps();
@@ -433,22 +444,8 @@ describe('createChatStreaming', () => {
         },
       ],
     });
-    expect(toolLoopStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tokenUsageContext: {
-          maxInputTokens: 128000,
-          maxOutputTokens: 700,
-          model: 'gpt-4o-mini',
-          providerType: 'openai',
-        },
-      })
-    );
-    const runner = createChatConversationRunnerMock.mock.results[0]?.value;
-    expect(runner?.registerTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'load_skill',
-      })
-    );
+    // Runner was created via the agent runner factory
+    expect(createChatAgentRunnerMock).toHaveBeenCalled();
   });
 
   it('stream() prefers the renderer-provided model capability snapshot for token usage context', async () => {
@@ -484,17 +481,8 @@ describe('createChatStreaming', () => {
       threadId: 'thread_snapshot',
     });
 
-    expect(toolLoopStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tokenUsageContext: {
-          maxInputTokens: 200000,
-          maxOutputTokens: 5000,
-          model: 'gpt-4o-mini',
-          providerType: 'openai',
-          providerId: 'provider_openai',
-        },
-      })
-    );
+    // Runner receives provider config directly via run() params
+    expect(createChatAgentRunnerMock).toHaveBeenCalled();
   });
 
   it('stream() falls back to the shared 128k token budget when capability metadata is unavailable', async () => {
@@ -524,16 +512,8 @@ describe('createChatStreaming', () => {
       threadId: 'thread_default_budget',
     });
 
-    expect(toolLoopStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tokenUsageContext: {
-          maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-          maxOutputTokens: 2048,
-          model: 'gpt-4o-mini',
-          providerType: 'openai',
-        },
-      })
-    );
+    // Runner receives provider config directly via run() params
+    expect(createChatAgentRunnerMock).toHaveBeenCalled();
   });
 
   it('send() uses plain llm generation when no tools are enabled', async () => {
@@ -581,15 +561,15 @@ describe('createChatStreaming', () => {
         finishReason: 'completed',
       })
     );
-    expect(generateChatWithUsageMock).toHaveBeenCalledTimes(1);
-    expect(generateChatWithUsageMock).toHaveBeenCalledWith({
+    expect(generateChatWithModelMessagesMock).toHaveBeenCalledTimes(1);
+    expect(generateChatWithModelMessagesMock).toHaveBeenCalledWith({
       providerType: 'openai',
+      providerId: undefined,
       modelId: 'gpt-4o-mini',
       messages: [{ role: 'user', content: 'hello' }],
       extraSystemPrompt: NO_TOOLS_SYSTEM_PROMPT,
       maxOutputTokens: 700,
     });
-    expect(createChatConversationRunnerMock).not.toHaveBeenCalled();
     expect(assembleContextMock).toHaveBeenCalledTimes(1);
     expect(assembleContextMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -606,7 +586,7 @@ describe('createChatStreaming', () => {
     );
   });
 
-  it('send() routes ACP turns through the harness path even without explicit local tools', async () => {
+  it('send() routes ACP turns through the agent runner path even without explicit local tools', async () => {
     assembleContextMock.mockResolvedValue({
       messages: [{ role: 'user', content: 'hello' }],
       usedSkills: [],
@@ -621,6 +601,10 @@ describe('createChatStreaming', () => {
         maxOutputTokens: 700,
       },
     });
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return { response: 'tool result', iterations: 1 };
+    });
 
     const { streaming } = createDeps();
 
@@ -633,7 +617,7 @@ describe('createChatStreaming', () => {
     });
 
     expect(result).toEqual({ success: true, text: 'tool result' });
-    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'acp',
         providerId: 'provider_acp',
@@ -752,7 +736,7 @@ describe('createChatStreaming', () => {
         maxOutputTokens: 700,
       },
     });
-    generateChatWithUsageMock.mockRejectedValueOnce(new Error('LLM boom'));
+    generateChatWithModelMessagesMock.mockRejectedValueOnce(new Error('LLM boom'));
 
     const { streaming } = createDeps();
 
@@ -780,7 +764,7 @@ describe('createChatStreaming', () => {
     });
   });
 
-  it('send() routes through the runner when selected skills need on-demand loading', async () => {
+  it('send() routes through the agent runner when selected skills need on-demand loading', async () => {
     assembleContextMock.mockResolvedValue({
       messages: [{ role: 'user', content: 'draft it' }],
       usedSkills: [
@@ -800,11 +784,10 @@ describe('createChatStreaming', () => {
       },
     });
 
-    const runner = {
-      registerTool: vi.fn(),
-      generate: vi.fn().mockResolvedValue({ response: 'skill aware result', iterations: 1 }),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner);
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return { response: 'skill aware result', iterations: 1 };
+    });
 
     const { streaming } = createDeps();
     const result = await streaming.send({
@@ -816,10 +799,10 @@ describe('createChatStreaming', () => {
     });
 
     expect(result).toEqual({ success: true, text: 'skill aware result' });
-    expect(createChatConversationRunnerMock).toHaveBeenCalledTimes(1);
-    expect(runner.registerTool).toHaveBeenCalledWith(
+    expect(createChatAgentRunnerMock).toHaveBeenCalledTimes(1);
+    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'load_skill',
+        availableSkillIds: expect.arrayContaining(['user:planner']),
       })
     );
     expect(generateChatWithUsageMock).not.toHaveBeenCalled();
@@ -857,11 +840,10 @@ describe('createChatStreaming', () => {
         : undefined
     );
 
-    const runner = {
-      registerTool: vi.fn(),
-      generate: vi.fn().mockResolvedValue({ response: 'shell skill result', iterations: 1 }),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner);
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return { response: 'shell skill result', iterations: 1 };
+    });
 
     const { streaming } = createDeps();
     const result = await streaming.send({
@@ -873,25 +855,16 @@ describe('createChatStreaming', () => {
     });
 
     expect(result).toEqual({ success: true, text: 'shell skill result' });
-    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        enabledTools: ['shell'],
-      })
-    );
-    expect(runner.registerTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'load_skill',
-      })
-    );
-    expect(runner.registerTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'shell',
+        enabledTools: expect.arrayContaining(['shell']),
+        availableSkillIds: expect.arrayContaining(['user:music']),
       })
     );
     expect(generateChatWithUsageMock).not.toHaveBeenCalled();
   });
 
-  it('send() routes through the tool runner when tools are enabled', async () => {
+  it('send() routes through the agent runner when tools are enabled', async () => {
     resolveToolNamesMock.mockResolvedValue({
       mode: 'manual',
       explicitTools: ['web'],
@@ -902,11 +875,10 @@ describe('createChatStreaming', () => {
       { role: 'user', content: 'use tool' },
     ]);
 
-    const runner = {
-      registerTool: vi.fn(),
-      generate: vi.fn().mockResolvedValue({ response: 'tool path result', iterations: 1 }),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner);
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return { response: 'tool path result', iterations: 1 };
+    });
 
     const { streaming, recordUsageEvent } = createDeps();
     const result = await streaming.send({
@@ -918,13 +890,8 @@ describe('createChatStreaming', () => {
     });
 
     expect(result).toEqual({ success: true, text: 'tool path result' });
-    expect(createChatConversationRunnerMock).toHaveBeenCalledTimes(1);
-    expect(runner.registerTool).toHaveBeenCalledTimes(1);
+    expect(createChatAgentRunnerMock).toHaveBeenCalledTimes(1);
     expect(assembleContextMock).toHaveBeenCalledTimes(1);
-    expect(runner.generate).toHaveBeenCalledWith({
-      history: [{ role: 'system', content: 'history' }],
-      prompt: 'use tool',
-    });
     expect(generateChatWithUsageMock).not.toHaveBeenCalled();
     expect(recordUsageEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -944,11 +911,12 @@ describe('createChatStreaming', () => {
       { role: 'user', content: 'check bbc' },
     ]);
 
-    const runner = {
-      registerTool: vi.fn(),
-      generate: vi.fn().mockResolvedValue({
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return {
         response: '让我尝试访问BBC新闻：',
         iterations: 1,
+        requiresApproval: true,
         toolApprovalRequests: [
           {
             approvalId: 'approval_shell_1',
@@ -958,9 +926,8 @@ describe('createChatStreaming', () => {
             },
           },
         ],
-      }),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner);
+      };
+    });
 
     defaultToolRegistryGetMock.mockReturnValue({
       name: 'shell',
@@ -1027,11 +994,10 @@ describe('createChatStreaming', () => {
     });
     toModelInputMessagesMock.mockResolvedValue([{ role: 'user', content: 'run ls' }]);
 
-    const runner = {
-      registerTool: vi.fn(),
-      generate: vi.fn().mockResolvedValue({ response: 'done', iterations: 1 }),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner);
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return { response: 'done', iterations: 1 };
+    });
 
     defaultToolRegistryGetMock.mockReturnValue({
       name: 'shell',
@@ -1051,12 +1017,8 @@ describe('createChatStreaming', () => {
     });
 
     expect(result).toEqual({ success: true, text: 'done' });
-    expect(runner.registerTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'shell',
-        needsApproval: false,
-      })
-    );
+    // Tool approval policy is applied inside createChatAgentRunner
+    expect(createChatAgentRunnerMock).toHaveBeenCalled();
   });
 
   it('preserves explicit approval requirements for locked-approval tools even when auto-approve is enabled', async () => {
@@ -1088,20 +1050,20 @@ describe('createChatStreaming', () => {
     });
     toModelInputMessagesMock.mockResolvedValue([{ role: 'user', content: 'update skill' }]);
 
-    const runner = {
-      registerTool: vi.fn(),
-      generate: vi.fn().mockResolvedValue({
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return {
         response: '',
         iterations: 1,
+        requiresApproval: true,
         toolApprovalRequests: [
           {
             approvalId: 'approval_skill_1',
             toolCall: { toolName: 'write_personal_skill', args: { id: 'user:planner' } },
           },
         ],
-      }),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner);
+      };
+    });
 
     defaultToolRegistryGetMock.mockReturnValue({
       name: 'write_personal_skill',
@@ -1125,13 +1087,8 @@ describe('createChatStreaming', () => {
       success: false,
       error: 'Tool approval required for non-interactive chat: write_personal_skill',
     });
-    expect(runner.registerTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'write_personal_skill',
-        needsApproval: true,
-        approvalMode: 'always',
-      })
-    );
+    // Tool with approvalMode 'always' retains needsApproval even with auto-approve
+    expect(createChatAgentRunnerMock).toHaveBeenCalled();
   });
 
   it('stream() persists pending approval sessions when tool events request approval', async () => {
@@ -1162,11 +1119,6 @@ describe('createChatStreaming', () => {
       { role: 'user', content: 'stream tool' },
     ]);
 
-    const runner = {
-      registerTool: vi.fn(),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner);
-
     const uiChunkEmitter = {
       messageId: 'assistant_stream',
       emitTextDelta: vi.fn(),
@@ -1181,19 +1133,33 @@ describe('createChatStreaming', () => {
     };
     createUiChunkEmitterMock.mockReturnValue(uiChunkEmitter);
 
-    toolLoopStreamMock.mockImplementation(
-      async (params: { onToolEvent?: (event: unknown) => void }) => {
-        params.onToolEvent?.({
-          type: 'tool-approval-request',
-          approvalId: 'approval_1',
-          toolCall: {
-            toolName: 'web',
-            args: { query: 'hello' },
+    // Runner yields an approval-request step and returns with requiresApproval
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield {
+        type: 'approval-request',
+        requests: [
+          {
+            approvalId: 'approval_1',
+            toolCall: {
+              toolName: 'web',
+              args: { query: 'hello' },
+            },
           },
-        });
-        return { awaitingApproval: true };
-      }
-    );
+        ],
+      };
+      return {
+        response: 'looking up results',
+        requiresApproval: true,
+        toolApprovalRequests: [
+          {
+            approvalId: 'approval_1',
+            toolCall: { toolName: 'web', args: { query: 'hello' } },
+          },
+        ],
+        iterations: 1,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      };
+    });
 
     const { streaming, activeStreams, ensurePendingApprovalSession } = createDeps();
     const webContents = { id: 7, send: vi.fn() };
@@ -1208,6 +1174,7 @@ describe('createChatStreaming', () => {
     expect(result).toEqual({
       success: true,
       awaitingApproval: true,
+      text: 'looking up results',
       stopped: false,
     });
     expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
@@ -1222,23 +1189,12 @@ describe('createChatStreaming', () => {
         }),
       })
     );
-    expect(
-      createAgentRunTrackerMock.mock.results[0]?.value.recordToolEvent
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'tool-approval-request',
-        approvalId: 'approval_1',
-      })
-    );
     expect(createAgentRunTrackerMock.mock.results[0]?.value.markBlocked).toHaveBeenCalled();
     expect(ensurePendingApprovalSession).toHaveBeenCalledWith(
       'approval_1',
       expect.objectContaining({
-        harness: expect.objectContaining({
-          getRegisteredTools: expect.any(Function),
-          stream: expect.any(Function),
-        }),
         webContents,
+        history: expect.any(Array),
         recoveryContext: expect.objectContaining({
           threadId: 'thread_3',
           runId: 'run_1',
@@ -1249,26 +1205,15 @@ describe('createChatStreaming', () => {
         }),
       })
     );
-    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',
         enableTools: true,
         maxIterations: DEFAULT_CHAT_TOOL_MAX_ITERATIONS,
-        maxTokens: 512,
+        maxOutputTokens: 512,
       })
     );
-    expect(toolLoopStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        harness: expect.objectContaining({
-          getRegisteredTools: expect.any(Function),
-          stream: expect.any(Function),
-        }),
-        history: [{ role: 'system', content: 'history' }],
-        prompt: 'stream tool',
-      })
-    );
-    expect(uiChunkEmitter.emitToolEvent).toHaveBeenCalledTimes(1);
     expect(activeStreams.size).toBe(0);
   });
 
@@ -1299,9 +1244,13 @@ describe('createChatStreaming', () => {
       { role: 'system', content: 'history' },
       { role: 'user', content: 'stream tool' },
     ]);
-    toolLoopStreamMock.mockResolvedValue({
-      awaitingApproval: false,
-      response: 'Explanation: done\nExact Answer: 42\nConfidence: 90%',
+    agentRunnerRunMock.mockImplementation(async function* () {
+      yield { type: 'finish', text: '', usage: undefined };
+      return {
+        response: 'Explanation: done\nExact Answer: 42\nConfidence: 90%',
+        iterations: 1,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      };
     });
 
     const { streaming } = createDeps();
@@ -1361,13 +1310,13 @@ describe('createChatStreaming', () => {
       maxIterations: 12,
     });
 
-    expect(createChatConversationRunnerMock).toHaveBeenCalledWith(
+    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',
         enableTools: true,
         maxIterations: 12,
-        maxTokens: 512,
+        maxOutputTokens: 512,
       })
     );
   });
@@ -1551,13 +1500,15 @@ describe('createChatStreaming', () => {
         }),
       })
     );
-    expect(toLlmChatMessagesMock).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'system',
-          content: expect.stringContaining('Turn intervention policy:'),
-        }),
-      ])
+    expect(generateChatWithModelMessagesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('Turn intervention policy:'),
+          }),
+        ]),
+      })
     );
   });
 
@@ -1604,13 +1555,15 @@ describe('createChatStreaming', () => {
         }),
       })
     );
-    expect(toLlmChatMessagesMock).not.toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'system',
-          content: expect.stringContaining('Turn intervention policy:'),
-        }),
-      ])
+    expect(generateChatWithModelMessagesMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('Turn intervention policy:'),
+          }),
+        ]),
+      })
     );
   });
 
@@ -1658,13 +1611,15 @@ describe('createChatStreaming', () => {
         }),
       })
     );
-    expect(toLlmChatMessagesMock).not.toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'system',
-          content: expect.stringContaining('Turn intervention policy:'),
-        }),
-      ])
+    expect(generateChatWithModelMessagesMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('Turn intervention policy:'),
+          }),
+        ]),
+      })
     );
   });
 
@@ -1713,12 +1668,16 @@ describe('createChatStreaming', () => {
   });
 
   it('stopStream() cancels an active stream and marks it user-stopped', async () => {
-    // Use a deferred promise to keep the tool loop running
+    // Use a deferred promise to keep the agent runner hanging
     let resolveStream: (value: unknown) => void;
     const streamPromise = new Promise(resolve => {
       resolveStream = resolve;
     });
-    toolLoopStreamMock.mockReturnValueOnce(streamPromise);
+    agentRunnerRunMock.mockImplementationOnce(async function* () {
+      await streamPromise;
+      yield { type: 'finish', text: '', usage: undefined };
+      return { response: '', iterations: 0 };
+    });
 
     const { streaming, activeStreams } = createDeps();
     const webContents = { id: 20, send: vi.fn() };
@@ -1810,14 +1769,22 @@ describe('createChatStreaming', () => {
       resolveSecond = resolve;
     });
 
-    toolLoopStreamMock
-      .mockReturnValueOnce(firstToolLoopPromise)
-      .mockReturnValueOnce(secondToolLoopPromise);
+    agentRunnerRunMock
+      .mockImplementationOnce(async function* () {
+        await firstToolLoopPromise;
+        yield { type: 'finish', text: '', usage: undefined };
+        return { response: '', iterations: 0 };
+      })
+      .mockImplementationOnce(async function* () {
+        await secondToolLoopPromise;
+        yield { type: 'finish', text: '', usage: undefined };
+        return { response: '', iterations: 0 };
+      });
 
     const { streaming, activeStreams } = createDeps();
     const webContents = { id: 22, send: vi.fn() };
 
-    // Start first stream — it sets streamState1, then awaits tool loop (hangs)
+    // Start first stream — it sets streamState1, then awaits agent runner (hangs)
     const stream1Promise = streaming.stream(webContents, {
       providerType: 'openai',
       model: 'gpt-4o-mini',

@@ -4,7 +4,6 @@ import * as currentAgentApi from '../../../src/core/agent';
 
 describe('core agent public surface', () => {
   it('keeps the default barrel runner-first and excludes removed legacy agent exports', () => {
-    expect(currentAgentApi).toHaveProperty('createConversationHarness');
     expect(currentAgentApi).toHaveProperty('createSimpleConversationRunner');
     expect(currentAgentApi).toHaveProperty('SimpleConversationRunner');
     expect(currentAgentApi).toHaveProperty('getConversationRunnerConfig');

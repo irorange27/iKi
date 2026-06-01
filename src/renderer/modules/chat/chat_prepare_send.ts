@@ -1,4 +1,6 @@
+import type { FileUIPart } from 'ai';
 import type { ChatUiMessage, ComposerInvocationPartData } from '../../../shared/chat/message_parts';
+import type { AudioEmotionResult } from '../../../shared/types/speech';
 
 export type PrepareMessageSendPayload = {
   content: string;
@@ -8,6 +10,8 @@ export type PrepareMessageSendPayload = {
   mcpServerIds?: string[];
   promptAppId?: string;
   composerInvocations?: ComposerInvocationPartData;
+  files?: FileUIPart[];
+  audioEmotion?: AudioEmotionResult;
 };
 
 export type PreparedMessageSend = {

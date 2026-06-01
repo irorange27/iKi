@@ -283,3 +283,81 @@ export const buildInterventionPolicySystemMessage = (
     '- autonomous_execute: directly produce the requested artifact when scope and authorization are clear.',
   ].join('\n');
 };
+
+// ── Hard tool blocking by intervention state ──
+
+type ToolRiskCategory = 'readonly' | 'write' | 'shell' | 'agent';
+
+const ALWAYS_ALLOWED_TOOLS = new Set([
+  'handoff',
+  'plan',
+  'todo',
+  'load_skill',
+]);
+
+const TOOL_RISK_CATEGORY: Record<string, ToolRiskCategory> = {
+  // file tools
+  read_file: 'readonly',
+  list_dir: 'readonly',
+  write_file: 'write',
+  edit: 'write',
+  delete_file: 'write',
+  // web tools
+  web: 'readonly',
+  fetch: 'readonly',
+  // shell
+  shell: 'shell',
+  // agent delegation
+  agent: 'agent',
+  // skill tools
+  list_personal_skills: 'readonly',
+  read_personal_skill: 'readonly',
+  write_personal_skill: 'write',
+  delete_personal_skill: 'write',
+  // todo tools
+  list_todo_lists: 'readonly',
+  read_todo_list: 'readonly',
+  write_todo_list: 'write',
+  delete_todo_list: 'write',
+  // awaiter tools
+  list_awaiters: 'readonly',
+  read_awaiter: 'readonly',
+  write_awaiter: 'write',
+  delete_awaiter: 'write',
+  // proactive task tools
+  list_proactive_tasks: 'readonly',
+  read_proactive_task: 'readonly',
+  write_proactive_task: 'write',
+  delete_proactive_task: 'write',
+};
+
+const BLOCKED_CATEGORIES_BY_STATE: Record<InterventionState, Set<ToolRiskCategory>> = {
+  stabilize: new Set(['shell', 'write', 'agent']),
+  clarify: new Set(['shell', 'write']),
+  co_plan: new Set(['shell', 'write']),
+  guided_execute: new Set([]),
+  autonomous_execute: new Set([]),
+};
+
+/**
+ * Remove tools whose risk category is blocked under the current intervention state.
+ * Only applies when the policy is explicitly active (explicit_policy condition).
+ * Unknown tools and administrative tools (finish, handoff, etc.) always pass through.
+ */
+export const filterToolsByInterventionState = (
+  toolNames: string[],
+  state: InterventionState,
+  policyApplied: boolean
+): string[] => {
+  if (!policyApplied) return toolNames;
+
+  const blocked = BLOCKED_CATEGORIES_BY_STATE[state];
+  if (!blocked || blocked.size === 0) return toolNames;
+
+  return toolNames.filter(name => {
+    if (ALWAYS_ALLOWED_TOOLS.has(name)) return true;
+    const category = TOOL_RISK_CATEGORY[name];
+    if (!category) return true; // unknown / MCP tools pass through (conservative: they have their own approval)
+    return !blocked.has(category);
+  });
+};

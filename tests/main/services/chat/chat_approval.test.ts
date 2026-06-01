@@ -45,12 +45,8 @@ vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
   toModelInputMessages: vi.fn(async messages => messages),
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_conversation_runner', () => ({
-  createChatConversationRunner: vi.fn(),
-}));
-
-vi.mock('../../../../src/main/services/chat/chat_tool_loop', () => ({
-  createToolLoopRunner: vi.fn(),
+vi.mock('../../../../src/main/services/chat/chat_agent_runner', () => ({
+  createChatAgentRunner: vi.fn(),
 }));
 
 vi.mock('../../../../src/main/services/chat/chat_run_tracking', () => ({
@@ -62,12 +58,10 @@ import * as chatToolApprovalDb from '../../../../src/core/db/chat_tool_approval'
 import * as chatMessageDb from '../../../../src/core/db/chat_message';
 import { defaultToolRegistry } from '../../../../src/core/tools';
 import { createChatApproval } from '../../../../src/main/services/chat/chat_approval';
-import { createChatConversationRunner } from '../../../../src/main/services/chat/chat_conversation_runner';
 import { createAgentRunTracker } from '../../../../src/main/services/chat/chat_run_tracking';
-import { createToolLoopRunner } from '../../../../src/main/services/chat/chat_tool_loop';
+import { createChatAgentRunner } from '../../../../src/main/services/chat/chat_agent_runner';
 
-const createToolLoopRunnerMock = vi.mocked(createToolLoopRunner);
-const createChatConversationRunnerMock = vi.mocked(createChatConversationRunner);
+const createChatAgentRunnerMock = vi.mocked(createChatAgentRunner);
 const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);
 const getAgentRunMock = vi.mocked(agentRunDb.getAgentRun);
 const getLatestAgentRunCheckpointMock = vi.mocked(agentRunDb.getLatestAgentRunCheckpoint);
@@ -89,8 +83,17 @@ const consumeChatToolApprovalSessionMock = vi.mocked(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  createToolLoopRunnerMock.mockReturnValue({
-    stream: vi.fn().mockResolvedValue({ awaitingApproval: false }),
+  createChatAgentRunnerMock.mockReturnValue({
+    runner: {
+      run: vi.fn().mockImplementation(async function* () {
+        yield { type: 'finish' as const, text: '', usage: undefined };
+        return { response: '', iterations: 0 };
+      }),
+      cancel: vi.fn(),
+      steer: vi.fn(),
+      getHistory: vi.fn(() => undefined),
+    },
+    tools: [],
   });
   getAgentRunMock.mockReturnValue(null);
   getLatestAgentRunCheckpointMock.mockReturnValue(null);
@@ -196,15 +199,6 @@ describe('createChatApproval', () => {
   });
 
   it('recovers approval sessions from runtime checkpoints and resumes the tool loop', async () => {
-    const resumedStream = vi.fn().mockResolvedValue({ awaitingApproval: false });
-    createToolLoopRunnerMock.mockReturnValue({
-      stream: resumedStream,
-    });
-
-    const runner = {
-      registerTool: vi.fn(),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner as never);
     defaultToolRegistryGetMock.mockReturnValue({
       name: 'web',
       description: 'Search',
@@ -310,16 +304,6 @@ describe('createChatApproval', () => {
 
     const result = await approvals.approveTool({ id: 9, send: vi.fn() }, 'approval_1', true);
 
-    expect(createChatConversationRunnerMock).toHaveBeenCalledWith({
-      providerType: 'openai',
-      providerId: 'primary-openai',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'system prompt',
-      enableTools: true,
-      maxIterations: 12,
-      maxTokens: 640,
-    });
-    expect(runner.registerTool).toHaveBeenCalledTimes(1);
     expect(answerChatToolApprovalMock).toHaveBeenCalledWith(
       'approval_1',
       'approved',
@@ -335,44 +319,27 @@ describe('createChatApproval', () => {
         parentRunId: 'run_blocked_1',
       })
     );
-    expect(resumedStream).toHaveBeenCalledWith(
+    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        harness: expect.objectContaining({
-          getRegisteredTools: expect.any(Function),
-          getHistory: expect.any(Function),
-          stream: expect.any(Function),
-        }),
-        prompt: '',
-        history: [
-          expect.objectContaining({
-            role: 'user',
-            content: 'hello',
-          }),
-        ],
-        approvalResponses: [
-          expect.objectContaining({
-            approvalId: 'approval_1',
-            approved: true,
-          }),
-        ],
-        approvalContext: expect.objectContaining({
-          sessionId: 'assistant_resume',
-          assistantMessageId: 'assistant_resume',
-          threadId: 'thread_1',
-          runId: 'run_resume_1',
-          providerType: 'openai',
-          providerId: 'primary-openai',
-          model: 'gpt-4o-mini',
-          maxInputTokens: 128000,
-          maxOutputTokens: 640,
-          maxIterations: 12,
-          enabledTools: ['web'],
-          availableSkillIds: [],
-        }),
+        providerType: 'openai',
+        providerId: 'primary-openai',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'system prompt',
+        enableTools: true,
+        enabledTools: ['web'],
+        availableSkillIds: [],
+        maxIterations: 12,
+        maxOutputTokens: 640,
       })
     );
+    // Session history with approval response fed to the runner
     expect(createAgentRunTrackerMock.mock.results[0]?.value.syncModelMessages).toHaveBeenCalledWith(
-      [{ role: 'user', content: 'hello' }]
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: 'hello',
+        }),
+      ])
     );
     expect(createAgentRunTrackerMock.mock.results[0]?.value.markCompleted).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -387,15 +354,6 @@ describe('createChatApproval', () => {
   });
 
   it('re-registers load_skill when a recovered approval session carries selected skills', async () => {
-    const resumedStream = vi.fn().mockResolvedValue({ awaitingApproval: false });
-    createToolLoopRunnerMock.mockReturnValue({
-      stream: resumedStream,
-    });
-
-    const runner = {
-      registerTool: vi.fn(),
-    };
-    createChatConversationRunnerMock.mockReturnValue(runner as never);
     defaultToolRegistryGetMock.mockReturnValue({
       name: 'web',
       description: 'Search',
@@ -477,24 +435,14 @@ describe('createChatApproval', () => {
     await approvals.approveTool({ id: 11, send: vi.fn() }, 'approval_2', true);
 
     expect(getChatMessagesMock).toHaveBeenCalledWith('thread_skill_1');
-    expect(runner.registerTool).toHaveBeenNthCalledWith(
-      1,
+    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'load_skill',
-      })
-    );
-    expect(runner.registerTool).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        name: 'web',
-      })
-    );
-    expect(resumedStream).toHaveBeenCalledWith(
-      expect.objectContaining({
-        approvalContext: expect.objectContaining({
-          runId: 'run_resume_1',
-          availableSkillIds: ['user:planner'],
-        }),
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'system prompt',
+        enableTools: true,
+        enabledTools: ['web'],
+        availableSkillIds: ['user:planner'],
       })
     );
   });

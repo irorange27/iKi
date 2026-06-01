@@ -295,6 +295,9 @@ const buildAcpEnv = (config: AcpProviderConfig): Record<string, string> => {
   const baseURL = normalizeString(config.baseURL) || normalizeString(referencedProvider?.base_url);
 
   const env: Record<string, string> = {};
+  // NOTE: ACP providers currently assume an OpenAI-compatible API.
+  // Non-OpenAI ACP bridges (Anthropic, etc.) will need additional env-var
+  // mappings keyed by the referenced provider type.
   if (apiKey) {
     env.OPENAI_API_KEY = apiKey;
     env.CODEX_API_KEY = apiKey;
@@ -501,7 +504,6 @@ export const fetchAcpModels = async (
   const provider = buildAcpProvider(config, threadId);
 
   try {
-    provider.languageModel();
     const session = await provider.initSession();
     const modelState = session.models as AcpModelState;
     const descriptors = new Map<string, ProviderModelDescriptor>();
@@ -562,7 +564,6 @@ export const fetchAcpAuthMethods = async (
   const provider = buildAcpProvider(config, threadId);
 
   try {
-    provider.languageModel();
     await provider.initSession();
 
     const model = (provider as unknown as Record<string, unknown>).model as Record<string, unknown> | undefined;

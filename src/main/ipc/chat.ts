@@ -106,6 +106,26 @@ export const registerChatIpc = (): void => {
     return await chatService.approveTool(webContents, approvalId, approved);
   });
 
+  // Agent Evaluation
+  ipcMain.handle('chat:eval:export-trace', async (_, runId: string) => {
+    return chatService.eval.exportTrace(runId);
+  });
+  ipcMain.handle('chat:eval:add-label', (_, input) => {
+    return chatService.eval.addLabel(input);
+  });
+  ipcMain.handle('chat:eval:list-labels', (_, runId: string) => {
+    return chatService.eval.listLabels(runId);
+  });
+  ipcMain.handle('chat:eval:delete-label', (_, labelId: string) => {
+    return chatService.eval.deleteLabel(labelId);
+  });
+  ipcMain.handle('chat:eval:compare-runs', (_, baselineRunId: string, testRunId: string) => {
+    return chatService.eval.compareRuns(baselineRunId, testRunId);
+  });
+  ipcMain.handle('chat:eval:assess-regression', (_, baselineRunId: string, testRunId: string) => {
+    return chatService.eval.assessRegression(baselineRunId, testRunId);
+  });
+
   ipcMain.handle('chat:usage:summary', (_, period) => {
     return chatService.getUsageSummary(period);
   });

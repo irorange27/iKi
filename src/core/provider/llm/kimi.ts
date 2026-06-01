@@ -1,9 +1,6 @@
 import {
   getProviderConfig,
   fetchModelsFromDev,
-  generateChat,
-  streamChat,
-  type ChatTextMessage,
 } from './factory';
 
 export const getKimiConfig = () => getProviderConfig('kimi');
@@ -31,21 +28,7 @@ export const getKimiModels = async () => {
   }
 };
 
-export const generateKimiChat = async (modelId: string, messages: ChatTextMessage[]) => {
-  return generateChat({ providerType: 'kimi', modelId, messages });
-};
-
-export const streamKimiText = async (
-  modelId: string,
-  messages: ChatTextMessage[],
-  onChunk: (chunk: string) => void
-) => {
-  return streamChat({ providerType: 'kimi', modelId, messages }, onChunk);
-};
-
 export default {
   getKimiConfig,
-  generateKimiChat,
-  streamKimiText,
   getKimiModels,
 };

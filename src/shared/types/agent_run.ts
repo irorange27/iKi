@@ -115,3 +115,51 @@ export interface AgentRunTree {
   rootRunId: string;
   traces: AgentRunTrace[];
 }
+
+export type AgentEvalLabelType = 'correct' | 'incorrect' | 'partial' | 'note';
+
+export interface AgentEvalLabel {
+  id: string;
+  runId: string;
+  stepId?: string | null;
+  label: AgentEvalLabelType;
+  note?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StepComparison {
+  stepIndex: number;
+  type: AgentRunStepType;
+  baselineStep?: AgentRunStep | null;
+  comparisonStep?: AgentRunStep | null;
+  match: boolean;
+  labels: AgentEvalLabel[];
+}
+
+export interface AgentEvalComparison {
+  runA: AgentRunTrace;
+  runB: AgentRunTrace;
+  stepComparison: StepComparison[];
+  totalStepsA: number;
+  totalStepsB: number;
+  sharedToolCalls: number;
+}
+
+export interface EvalExportPayload {
+  exportedAt: string;
+  version: string;
+  trace: AgentRunTrace;
+  labels: AgentEvalLabel[];
+}
+
+export interface RegressionAssessment {
+  baselineRunId: string;
+  testRunId: string;
+  status: 'pass' | 'fail' | 'pending';
+  totalSteps: number;
+  incorrectSteps: number;
+  partialSteps: number;
+  correctSteps: number;
+  labelCount: number;
+}

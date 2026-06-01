@@ -136,7 +136,7 @@ describe('tool model provider', () => {
     });
   });
 
-  it('returns null when no explicit tool model is configured', () => {
+  it('returns fallback model when no explicit tool model is configured', () => {
     getAppConfigMock.mockReturnValue(createDefaultAppConfig());
     getProvidersMock.mockReturnValue([
       buildProvider({
@@ -147,7 +147,11 @@ describe('tool model provider', () => {
       }),
     ]);
 
-    expect(getToolModel()).toBeNull();
+    const toolModel = getToolModel();
+    expect(toolModel).not.toBeNull();
+    expect(toolModel?.providerId).toBe('provider-openai');
+    expect(toolModel?.providerType).toBe('openai');
+    expect(toolModel?.model).toBe('gpt-4o-mini');
   });
 
   it('runs latency tests through the direct model call path instead of chat orchestration', async () => {

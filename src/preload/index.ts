@@ -148,6 +148,16 @@ const electronApi: ElectronApi = {
       resume: (runId: string) => ipcRenderer.invoke('chat:runs:resume', runId),
       listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) =>
         ipcRenderer.invoke('chat:runs:list-by-status', statuses, opts),
+      eval: {
+        exportTrace: (runId: string) => ipcRenderer.invoke('chat:eval:export-trace', runId),
+        addLabel: (input) => ipcRenderer.invoke('chat:eval:add-label', input),
+        listLabels: (runId: string) => ipcRenderer.invoke('chat:eval:list-labels', runId),
+        deleteLabel: (labelId: string) => ipcRenderer.invoke('chat:eval:delete-label', labelId),
+        compareRuns: (baselineRunId: string, testRunId: string) =>
+          ipcRenderer.invoke('chat:eval:compare-runs', baselineRunId, testRunId),
+        assessRegression: (baselineRunId: string, testRunId: string) =>
+          ipcRenderer.invoke('chat:eval:assess-regression', baselineRunId, testRunId),
+      },
     },
     usage: {
       summary: (period: ChatUsagePeriod = '30d'): Promise<ChatUsageSummary> =>

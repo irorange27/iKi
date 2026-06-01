@@ -1,4 +1,4 @@
-import { BrowserWindow, app, screen } from 'electron';
+import { BrowserWindow, Menu, app, screen } from 'electron';
 import path from 'node:path';
 
 import { getAppConfig, setAppConfig } from '../../core/config';
@@ -9,9 +9,11 @@ import { loadRendererEntry } from './renderer';
 
 const companionLogger = createLogger({ module: 'companion_window' });
 
-const COMPANION_WIDTH = 236;
-const COMPANION_HEIGHT = 170;
+const COMPANION_WIDTH = 280;
+const COMPANION_HEIGHT = 420;
 const COMPANION_MARGIN = 28;
+const MIN_COMPANION_WIDTH = 200;
+const MIN_COMPANION_HEIGHT = 280;
 const MIN_VISIBLE_PIXELS = 56;
 
 let companionWindowRef: BrowserWindow | null = null;
@@ -126,14 +128,12 @@ export const createCompanionWindow = (config: AppConfig = getAppConfig()): Brows
     height: COMPANION_HEIGHT,
     x: bounds.x,
     y: bounds.y,
-    minWidth: COMPANION_WIDTH,
-    minHeight: COMPANION_HEIGHT,
-    maxWidth: COMPANION_WIDTH,
-    maxHeight: COMPANION_HEIGHT,
+    minWidth: MIN_COMPANION_WIDTH,
+    minHeight: MIN_COMPANION_HEIGHT,
     frame: false,
     transparent: true,
     hasShadow: false,
-    resizable: false,
+    resizable: true,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -171,6 +171,12 @@ export const createCompanionWindow = (config: AppConfig = getAppConfig()): Brows
     } else {
       companionWindow.show();
     }
+  });
+
+  companionWindow.webContents.on('context-menu', () => {
+    Menu.buildFromTemplate([
+      { label: 'Quit iKi', click: () => app.quit() },
+    ]).popup({ window: companionWindow });
   });
 
   companionLogger.event({

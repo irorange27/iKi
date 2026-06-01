@@ -2,6 +2,7 @@ import { cleanupOldAgentRuns, recoverStuckRunsOnStartup } from '../../../core/db
 import { createLogger } from '../../../core/logger';
 import { startProactiveTaskScheduler, stopProactiveTaskScheduler } from '../tasks/proactive_tasks';
 import { startAwaiterScheduler, stopAwaiterScheduler } from '../awaiters/awaiters';
+import { startClipboardMonitor, stopClipboardMonitor } from '../context/clipboard_monitor';
 
 const runtimeLogger = createLogger({ module: 'background_runtime' });
 
@@ -65,6 +66,7 @@ export const startBackgroundRuntime = () => {
 
   startProactiveTaskScheduler();
   startAwaiterScheduler();
+  startClipboardMonitor();
 
   runTtlCleanup();
   cleanupInterval = setInterval(runTtlCleanup, RUN_TTL_CLEANUP_INTERVAL_MS);
@@ -75,6 +77,7 @@ export const stopBackgroundRuntime = () => {
   started = false;
   stopProactiveTaskScheduler();
   stopAwaiterScheduler();
+  stopClipboardMonitor();
   if (cleanupInterval !== undefined) {
     clearInterval(cleanupInterval);
     cleanupInterval = undefined;

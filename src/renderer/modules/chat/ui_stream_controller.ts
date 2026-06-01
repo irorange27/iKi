@@ -88,6 +88,7 @@ export const createChatUiStreamController = (deps: {
   const activeStreamThreadId = ref<string | null>(initialState.activeStreamThreadId);
   const streamingAssistantText = ref(initialState.streamingAssistantText);
   const streamRenderTick = ref(initialState.streamRenderTick);
+  const mainMessageId = ref<string | null>(null);
 
   const getAssistantMessageById = (id: string | null): ChatUiMessage | undefined =>
     deps.messageStore.getById(id);
@@ -247,6 +248,7 @@ export const createChatUiStreamController = (deps: {
   };
 
   const resetTransientState = async () => {
+    mainMessageId.value = null;
     await dispatch({ type: 'reset' });
   };
 
@@ -273,6 +275,7 @@ export const createChatUiStreamController = (deps: {
   };
 
   const beginTurn = (params: { threadId: string; parentId: string }) => {
+    mainMessageId.value = null;
     dispatch({
       type: 'begin_turn',
       threadId: params.threadId,
@@ -311,6 +314,18 @@ export const createChatUiStreamController = (deps: {
       return;
     }
 
+    if (chunk.type === 'start') {
+      const startMessageId = (chunk as { messageId?: string }).messageId;
+      if (typeof startMessageId === 'string') {
+        mainMessageId.value = startMessageId;
+      }
+      return;
+    }
+
+    if (chunk.type === 'text-start' || chunk.type === 'text-end') {
+      return;
+    }
+
     if (chunk.type === 'text-delta') {
       const delta = typeof chunk.delta === 'string' ? chunk.delta : '';
       if (!delta) return;
@@ -323,8 +338,8 @@ export const createChatUiStreamController = (deps: {
       const chunkMessageId = (chunk as { messageId?: string }).messageId;
       if (
         chunkMessageId &&
-        activeAssistantMessageId.value &&
-        chunkMessageId !== activeAssistantMessageId.value
+        mainMessageId.value &&
+        chunkMessageId !== mainMessageId.value
       ) {
         return;
       }
@@ -423,7 +438,8 @@ export const createChatUiStreamController = (deps: {
             nowMs,
           };
 
-      const patch = approvals.applyApprovalEvent(message, event);
+      const latestMessage = deps.messageStore.getById(message.id) || message;
+      const patch = approvals.applyApprovalEvent(latestMessage, event);
       if (patch.didChange) {
         deps.messageStore.upsert(patch.message);
 

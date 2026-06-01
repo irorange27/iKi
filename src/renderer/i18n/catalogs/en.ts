@@ -52,87 +52,10 @@ export const en = defineCatalog({
   'language.chineseSimplified': '简体中文',
   'chat.newChat': 'New Chat',
   'chat.messagesCount': ({ count }) => `${asCount(count)} messages`,
-  'chat.welcome.kicker': 'Local Desktop Pet',
   'chat.welcome.settings': 'Settings',
-  'chat.welcome.status.checking': 'Checking',
-  'chat.welcome.status.sleeping': 'Sleeping',
-  'chat.welcome.status.warming': 'Warming',
-  'chat.welcome.status.awake': 'Awake',
-  'chat.welcome.headline.setup':
-    'Wake iKi with one provider, one model, and one real piece of context.',
-  'chat.welcome.headline.awake':
-    'iKi is awake. Give it a project, a task, or pasted text so it can take the first real step.',
-  'chat.welcome.body.setup':
-    'Start with the smallest possible setup. Connect one provider, expose one model, then give iKi a project folder, the thing you are trying to do, or text you want it to work through.',
-  'chat.welcome.body.finishProvider':
-    'You already have a provider in motion. Finish its credentials or enable a working one. Once it is ready, give iKi one concrete source of context and let it start.',
-  'chat.welcome.body.awake':
-    'Your first provider and model are ready. You can start by setting names and tone, or give iKi one concrete source to work from: a project folder, your current task, or pasted text.',
-  'chat.welcome.primary.connectProvider': 'Connect First Provider',
-  'chat.welcome.primary.finishProvider': 'Finish Provider Setup',
-  'chat.welcome.primary.pickModel': 'Review Provider Models',
-  'chat.welcome.primary.meetFirst': 'Start First Chat',
-  'chat.welcome.hint.loading': 'Checking your local provider setup now.',
-  'chat.welcome.hint.connectProvider':
-    'No provider is ready yet. Open Provider settings, add one API key, and enable one model source.',
-  'chat.welcome.hint.finishProvider':
-    'At least one provider is enabled but not ready. Finish its credentials to wake iKi.',
-  'chat.welcome.hint.addModel':
-    'Your provider is awake, but it still needs at least one model before the first chat can start.',
-  'chat.welcome.hint.modelReady':
-    'A provider is ready. Use Provider settings to make sure at least one model is exposed for the first chat.',
-  'chat.welcome.hint.ready':
-    'You can start the first chat now. Use one of the starters below, or type `/` in the composer to browse shortcuts before you add project context, a task, or pasted text.',
-  'chat.welcome.contextSources.label': 'Good First Context',
-  'chat.welcome.contextSources.identity.title': 'Names & Tone',
-  'chat.welcome.contextSources.identity.body':
-    'Set how you want to address each other before jumping into work.',
-  'chat.welcome.contextSources.project.title': 'Project Folder',
-  'chat.welcome.contextSources.project.body':
-    'Choose a workspace, then ask iKi what to inspect first.',
-  'chat.welcome.contextSources.task.title': 'Current Task',
-  'chat.welcome.contextSources.task.body':
-    'Describe what you are trying to do, and let iKi shape the next steps.',
-  'chat.welcome.contextSources.text.title': 'Pasted Text',
-  'chat.welcome.contextSources.text.body':
-    'Drop in notes, logs, or drafts; iKi can summarize and organize them.',
-  'chat.welcome.milestone.label': 'Success',
-  'chat.welcome.milestone.provider.title': 'First provider connected',
-  'chat.welcome.milestone.provider.body': ({ provider }) =>
-    `${asText(provider)} is ready. Next: expose one model so the first chat can start cleanly.`,
-  'chat.welcome.milestone.model.title': 'First model ready',
-  'chat.welcome.milestone.model.body': ({ provider, model }) =>
-    `${asText(provider)} · ${asText(model)} is ready. Next: give iKi a project, a goal, or pasted text and send the first request.`,
-  'chat.welcome.contextLabel': 'Ready Now',
-  'chat.welcome.progressLabel': 'Awakening Path',
-  'chat.welcome.step.provider.title': 'Connect one provider',
-  'chat.welcome.step.provider.checking': 'Checking your local providers…',
-  'chat.welcome.step.provider.pending': 'Add one provider and API key in Provider settings.',
-  'chat.welcome.step.provider.finish': 'Finish one enabled provider with valid credentials.',
-  'chat.welcome.step.provider.ready': ({ provider }) => `${asText(provider)} is ready.`,
-  'chat.welcome.step.model.title': 'Pick one model',
-  'chat.welcome.step.model.pending': 'Choose a provider first.',
-  'chat.welcome.step.model.add': 'Add at least one model in Provider settings.',
-  'chat.welcome.step.model.choose': 'Review the provider and make sure a first model is available.',
-  'chat.welcome.step.model.ready': ({ model }) => `${asText(model)} is selected.`,
-  'chat.welcome.step.message.title': 'Start the first chat',
-  'chat.welcome.step.message.pending': 'Give iKi context after the first two steps.',
-  'chat.welcome.step.message.ready':
-    'You can start the first chat now, use one of the starters below, or type `/` in the composer to browse shortcuts.',
-  'chat.welcome.prompt.meet':
-    'Speak with me naturally and start in a warm, low-pressure way. First help us establish how we should address each other: ask what I want to call you, what kind of presence I want you to be, what tone I prefer, how you should address me, and whether I want a small emoji or symbol. Keep it conversational rather than form-like.',
-  'chat.welcome.prompt.plan':
-    'Once I give you a project folder, tell me the three places I should inspect first and why.',
-  'chat.welcome.prompt.learn':
-    'I am going to paste some text. Summarize it, then turn it into follow-up actions.',
-  'chat.welcome.prompt.blank': 'Start with a blank draft',
-  'chat.onboarding.banner.label': 'First-run feedback',
-  'chat.onboarding.banner.sent.title': 'First message sent',
-  'chat.onboarding.banner.sent.body':
-    'iKi is working on your opening message now. If the reply needs grounding, add a project folder, describe the task, or paste the material you want it to process.',
-  'chat.onboarding.banner.started.title': 'First conversation started',
-  'chat.onboarding.banner.started.body':
-    'The first conversation is underway. Next: keep grounding iKi with project context, task intent, and source text so it can act more precisely.',
+  'chat.welcome.prompt.blank': 'Blank start',
+  'chat.welcome.prompt.project': 'Look at my project',
+  'chat.welcome.prompt.paste': 'Help me organize some text',
   'chat.sidebar.toggle': 'Toggle sidebar',
   'chat.sidebar.search': 'Search',
   'chat.sidebar.newChat': 'New chat',
@@ -156,6 +79,19 @@ export const en = defineCatalog({
   'chat.runs.resume': 'Resume',
   'chat.runs.retry': 'Retry',
   'chat.runs.toggle': 'Toggle run panel',
+  'chat.eval.export': 'Export',
+  'chat.eval.compare': 'Compare',
+  'chat.eval.selectBaseline': 'Set as Baseline',
+  'chat.eval.label.correct': 'Correct',
+  'chat.eval.label.incorrect': 'Incorrect',
+  'chat.eval.label.partial': 'Partial',
+  'chat.eval.label.note': 'Note',
+  'chat.eval.regression.pass': 'Pass',
+  'chat.eval.regression.fail': 'Fail',
+  'chat.eval.regression.pending': 'Pending',
+  'chat.eval.compare.same': 'Same',
+  'chat.eval.compare.different': 'Different',
+  'chat.eval.compare.missing': 'Missing',
   'chat.input.placeholder': 'Type a message...',
   'chat.input.placeholder.skillInvocation': ({ skill }) =>
     `Describe what to do with ${asText(skill)}...`,
@@ -174,6 +110,7 @@ export const en = defineCatalog({
   'chat.input.stopGeneration': 'Stop generation',
   'chat.input.stopFailed': 'Failed to stop generation. Please try again.',
   'chat.input.prepareFailed': 'Failed to prepare the message. Please try again.',
+  'chat.input.visionWarning': 'This model does not support image input — images will be ignored when you send.',
   'chat.input.slashCommandsTitle': 'Slash commands',
   'chat.input.slash.new.name': 'New chat',
   'chat.input.slash.new.description': 'Start a fresh chat thread immediately.',
@@ -1178,6 +1115,7 @@ export const en = defineCatalog({
   'settings.providers.modal.models': 'Models (comma separated)',
   'settings.providers.modal.modelsPlaceholder': 'model-1, model-2',
   'settings.providers.modal.save': 'Save Provider',
+  'settings.providers.type.deepseek': 'DeepSeek',
   'settings.providers.type.openaiCompatible': 'OpenAI Compatible',
   'settings.providers.type.anthropicCompatible': 'Anthropic Compatible',
   'settings.providers.type.googleGemini': 'Google Gemini',

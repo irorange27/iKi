@@ -25,6 +25,14 @@
       <div v-else-if="isTextPart(part)" class="message-text markdown-content">
         <VueMarkdown :source="getTextPartContent(part)" :plugins="markdownPlugins" />
       </div>
+      <div v-else-if="isFilePart(part) && isFileAnImage(part)" class="message-file">
+        <img
+          :src="part.url"
+          :alt="part.filename || 'Attached image'"
+          class="message-file-image"
+          @click="viewerSrc = part.url"
+        />
+      </div>
       <ChatToolPart
         v-else
         :approval-processing="approvalProcessing(part)"
@@ -34,10 +42,16 @@
         @approve-tool="emit('approve-tool', $event)"
       />
     </div>
+    <ImageViewerOverlay
+      :visible="viewerSrc.length > 0"
+      :src="viewerSrc"
+      @close="viewerSrc = ''"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import VueMarkdown from 'vue-markdown-render';
 
 import {
@@ -50,6 +64,7 @@ import {
 import { isObjectRecord } from '../../../shared/utils/guards';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
 import ChatToolPart from './ChatToolPart.vue';
+import ImageViewerOverlay from '../ImageViewerOverlay.vue';
 
 const markdownPlugins = [markdownCodeBlockPlugin];
 
@@ -72,6 +87,8 @@ const emit = defineEmits<{
     }
   ): void;
 }>();
+
+const viewerSrc = ref('');
 
 const getRenderableParts = (parts: ChatUiMessage['parts']): ChatUiMessage['parts'] =>
   parts.filter(part => isComposerInvocationPart(part) || !isDataPart(part));
@@ -99,6 +116,15 @@ const isStreamingTextPart = (part: unknown): boolean => {
   if (props.message.id !== props.activeAssistantMessageId) return false;
   return isObjectRecord(part) && part.state === 'streaming';
 };
+
+const isFilePart = (part: unknown): part is { type: 'file'; url: string; mediaType: string; filename?: string } =>
+  isObjectRecord(part) &&
+  part.type === 'file' &&
+  typeof part.url === 'string' &&
+  typeof part.mediaType === 'string';
+
+const isFileAnImage = (part: { type: 'file'; url: string; mediaType: string; filename?: string }): boolean =>
+  part.mediaType.startsWith('image/');
 
 const getComposerInvocationTokens = (part: unknown) =>
   getComposerInvocationPartData(part)?.tokens ?? [];
@@ -449,10 +475,25 @@ const getComposerInvocationToneClass = (kind?: string) => {
   padding: 0 !important;
 }
 
+.message-file-image {
+  max-width: 320px;
+  max-height: 320px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  object-fit: contain;
+  display: block;
+  cursor: pointer;
+}
+
 @media (max-width: 768px) {
   .message-text {
     font-size: calc(var(--font-size) - 1px);
     line-height: 1.68;
+  }
+
+  .message-file-image {
+    max-width: 240px;
+    max-height: 240px;
   }
 }
 </style>

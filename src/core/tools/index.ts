@@ -10,7 +10,6 @@ export * from './todo_tools';
 export * from './proactive_task_tools';
 export * from './awaiter_tools';
 export * from './plan_tools';
-export * from './finish_tool';
 export * from './handoff_tool';
 
 import { defaultToolRegistry } from './base';
@@ -26,6 +25,7 @@ import { ShellExecutionTool } from './shell_tools';
 import {
   DeletePersonalSkillTool,
   ListPersonalSkillsTool,
+  LoadSkillTool,
   ReadPersonalSkillTool,
   WritePersonalSkillTool,
 } from './skill_tools';
@@ -50,7 +50,6 @@ import {
 import { PlanTool } from './plan_tools';
 import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
-import { FinishTool } from './finish_tool';
 import { HandoffTool } from './handoff_tool';
 
 /**
@@ -68,6 +67,7 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new FetchTool());
   defaultToolRegistry.register(new ListPersonalSkillsTool());
   defaultToolRegistry.register(new ReadPersonalSkillTool());
+  defaultToolRegistry.register(new LoadSkillTool());
   defaultToolRegistry.register(new WritePersonalSkillTool());
   defaultToolRegistry.register(new DeletePersonalSkillTool());
   defaultToolRegistry.register(new PlanTool());
@@ -84,6 +84,5 @@ export function registerStandardTools() {
   defaultToolRegistry.register(new ReadAwaiterTool());
   defaultToolRegistry.register(new WriteAwaiterTool());
   defaultToolRegistry.register(new DeleteAwaiterTool());
-  defaultToolRegistry.register(new FinishTool());
   defaultToolRegistry.register(new HandoffTool());
 }

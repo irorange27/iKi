@@ -37,6 +37,8 @@ import { migration as migration035AddAgentRunTables } from './035_add_agent_run_
 import { migration as migration036AddChatToolApprovalRunId } from './036_add_chat_tool_approval_run_id';
 import { migration as migration037AddProactiveTaskProviderId } from './037_add_proactive_task_provider_id';
 import { migration as migration038AddAwaitersTables } from './038_add_awaiters_tables';
+import { migration as migration039AddAgentEvalLabelsTable } from './039_add_agent_eval_labels_table';
+import { migration as migration040AddClipboardSnapshotsTable } from './040_add_clipboard_snapshots_table';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -78,6 +80,8 @@ export const registeredMigrations = [
   migration036AddChatToolApprovalRunId,
   migration037AddProactiveTaskProviderId,
   migration038AddAwaitersTables,
+  migration039AddAgentEvalLabelsTable,
+  migration040AddClipboardSnapshotsTable,
   // Add more migrations here as needed
 ];
 

@@ -1,9 +1,6 @@
 import {
   getProviderConfig,
   fetchModelsFromDev,
-  generateChat,
-  streamChat,
-  type ChatTextMessage,
 } from './factory';
 
 export const getOpenAIConfig = () => getProviderConfig('openai');
@@ -31,21 +28,7 @@ export const getOpenAIModels = async () => {
   }
 };
 
-export const generateOpenAIChat = async (modelId: string, messages: ChatTextMessage[]) => {
-  return generateChat({ providerType: 'openai', modelId, messages });
-};
-
-export const streamOpenAIText = async (
-  modelId: string,
-  messages: ChatTextMessage[],
-  onChunk: (chunk: string) => void
-) => {
-  return streamChat({ providerType: 'openai', modelId, messages }, onChunk);
-};
-
 export default {
   getOpenAIConfig,
-  generateOpenAIChat,
-  streamOpenAIText,
   getOpenAIModels,
 };

@@ -15,7 +15,11 @@ const getNestedToolEventField = (
   event: ToolStreamEvent,
   field: 'toolCallId' | 'toolName'
 ): unknown => {
-  if (field in event) return event[field];
+  if (field in event) {
+    const value = event[field];
+    if (typeof value === 'string' && value.length > 0) return value;
+    // Empty or non-string value shadows nested toolCall — fall through.
+  }
   const nestedToolCall = event.toolCall;
   if (!isObjectRecord(nestedToolCall)) return undefined;
   return nestedToolCall[field];
@@ -140,6 +144,10 @@ const toUiChunkFromToolEvent = (event: ToolStreamEvent): ChatUiMessageChunk | nu
     };
   }
   if (event.type === 'tool-approval-request') {
+    const approvalInput = isObjectRecord(event.toolCall)
+      ? (isObjectRecord(event.toolCall.args) ? event.toolCall.args : event.toolCall.input)
+      : undefined;
+
     return {
       type: 'tool-approval-request',
       approvalId:
@@ -147,6 +155,8 @@ const toUiChunkFromToolEvent = (event: ToolStreamEvent): ChatUiMessageChunk | nu
           ? event.approvalId
           : createRuntimeId('approval'),
       toolCallId,
+      ...(toolName !== 'tool' ? { toolName } : {}),
+      ...(approvalInput !== undefined ? { input: approvalInput } : {}),
     };
   }
 

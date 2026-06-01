@@ -1,9 +1,14 @@
 <template>
   <div>
-    <div class="relative rounded-[22px] border chat-input-container">
+    <div
+      class="relative rounded-[22px] border chat-input-container"
+      @dragover.prevent="emit('dragover', $event)"
+      @drop.prevent="handleDrop"
+    >
       <div class="composer-input-region">
         <div class="composer-input-stack">
           <slot name="input-context" />
+          <slot name="image-previews" />
           <textarea
             rows="1"
             spellcheck="true"
@@ -21,6 +26,7 @@
             @keydown.enter="emit('keydownEnter', $event)"
             @compositionstart="emit('compositionStart', $event)"
             @compositionend="emit('compositionEnd', $event)"
+            @paste="handlePaste"
           />
         </div>
         <slot name="input-overlay" />
@@ -77,6 +83,9 @@ const emit = defineEmits<{
   (event: 'compositionStart', value: CompositionEvent): void;
   (event: 'compositionEnd', value: CompositionEvent): void;
   (event: 'dismissFeedback'): void;
+  (event: 'dragover', value: DragEvent): void;
+  (event: 'pasteImage', value: { mediaType: string; url: string; filename?: string }): void;
+  (event: 'dropImages', value: { mediaType: string; url: string; filename?: string }[]): void;
 }>();
 
 const { t } = useI18n();
@@ -113,6 +122,61 @@ const emitModelValue = (event: Event) => {
   const target = event.target;
   emit('update:modelValue', target instanceof HTMLTextAreaElement ? target.value : '');
   queueResize();
+};
+
+const handlePaste = (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items;
+  if (!items) return;
+
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i];
+    if (item && item.type.startsWith('image/')) {
+      event.preventDefault();
+      const file = item.getAsFile();
+      if (!file) continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          emit('pasteImage', {
+            mediaType: file.type,
+            url: reader.result,
+            filename: file.name || undefined,
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+};
+
+const handleDrop = (event: DragEvent) => {
+  const files = event.dataTransfer?.files;
+  if (!files || files.length === 0) return;
+
+  const imagePayloads: { mediaType: string; url: string; filename?: string }[] = [];
+  let pending = 0;
+
+  for (let i = 0; i < files.length; i += 1) {
+    const file = files[i];
+    if (file && file.type.startsWith('image/')) {
+      pending += 1;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          imagePayloads.push({
+            mediaType: file.type,
+            url: reader.result,
+            filename: file.name || undefined,
+          });
+        }
+        pending -= 1;
+        if (pending === 0 && imagePayloads.length > 0) {
+          emit('dropImages', imagePayloads);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  }
 };
 
 watch(

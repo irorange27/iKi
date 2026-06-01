@@ -1,4 +1,4 @@
-import type { ConversationHarness } from '../../../core/agent';
+import type { AgentStep, ToolApprovalRequest } from '../../../core/agent';
 import { createLogger } from '../../../core/logger';
 import * as llmFactory from '../../../core/provider/llm/factory';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
@@ -9,19 +9,19 @@ import {
   resolveChatToolMaxIterations,
 } from './chat_constants';
 import type { ChatMemory } from './chat_memory';
-import type { ApprovalRecoveryContext } from './chat_approval_types';
-import * as agentRunDb from '../../../core/db/agent_runs';
-import { createAgentRunTracker } from './chat_run_tracking';
+import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './chat_approval_types';
 import {
   createApprovalRecoveryContext,
-  createChatHarness,
   describeApprovalRequiredTools,
-} from './chat_streaming_harness';
+} from './chat_approval_types';
+import * as agentRunDb from '../../../core/db/agent_runs';
+import { createAgentRunTracker } from './chat_run_tracking';
+import { createChatAgentRunner } from './chat_agent_runner';
 import { createChatStreamingModels } from './chat_streaming_models';
 import { createChatTurnPreparer, type ChatTurnOptions } from './chat_turn_preparer';
-import type { ActiveStreamState, ChatWebContents, RunStatusEvent } from './chat_types';
-import { createUiChunkEmitter, toLlmChatMessages } from './chat_ui';
-import { createToolLoopRunner, type RegisterApprovalBatch } from './chat_tool_loop';
+import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEvent } from './chat_types';
+import type { ConversationPreview } from '../../../shared/types/companion';
+import { createUiChunkEmitter } from './chat_ui';
 import { companionService } from '../companion/companion_service';
 import { createRateLimiter } from '../../../daemon/rate_limiter';
 
@@ -45,6 +45,7 @@ export type ChatSendResult =
 export const createChatStreaming = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
   memory: ChatMemory;
+  getThreadTitle?: (threadId: string) => string | undefined;
   usage: {
     recordUsageEvent: (params: {
       threadId?: string;
@@ -68,7 +69,6 @@ export const createChatStreaming = (deps: {
     ensurePendingApprovalSession: (
       approvalId: string,
       session: {
-        harness: ConversationHarness;
         webContents: ChatWebContents;
         history?: import('ai').ModelMessage[];
         recoveryContext?: ApprovalRecoveryContext;
@@ -78,9 +78,6 @@ export const createChatStreaming = (deps: {
     cleanupPendingSessionsForWebContents: (senderId: number) => void;
   };
 }) => {
-  const toolLoopRunner = createToolLoopRunner({
-    registerApprovalBatch: deps.approvals.registerApprovalBatch,
-  });
   const turnPreparer = createChatTurnPreparer({ memory: deps.memory });
   const streamingModels = createChatStreamingModels();
 
@@ -207,7 +204,7 @@ export const createChatStreaming = (deps: {
       });
 
       if (preparedTurn.enableTools) {
-        const harness = createChatHarness({
+        const { runner, tools: runnerTools } = createChatAgentRunner({
           threadId: options.threadId,
           providerType: options.providerType,
           providerId: options.providerId,
@@ -228,15 +225,37 @@ export const createChatStreaming = (deps: {
         }
 
         const result = await runWithToolRuntimeContext(
-          { runId: runTracker.id, runTracker },
-          async () =>
-            await harness.generate({
-              history: preparedTurn.history,
+          { runId: runTracker.id, runTracker, threadId: options.threadId },
+          async () => {
+            const agentGen = runner.run({
+              config: { enabled: true, enableTools: true },
               prompt: preparedTurn.prompt,
-            })
+              history: preparedTurn.history,
+              tools: runnerTools,
+              providerType: options.providerType,
+              providerId: options.providerId,
+              model: options.model,
+              systemPrompt,
+              maxIterations,
+              ...(typeof preparedTurn.maxOutputTokens === 'number'
+                ? { maxTokens: preparedTurn.maxOutputTokens }
+                : {}),
+            });
+
+            let next = await agentGen.next();
+            while (!next.done) {
+              next = await agentGen.next();
+            }
+            return next.value as import('../../../core/agent').AgentResult | undefined;
+          }
         );
+
+        if (!result) {
+          throw new Error('Agent run produced no result');
+        }
+
         runTracker.recordToolCalls(result.toolCalls);
-        runTracker.syncModelMessages(harness.getHistory?.() ?? preparedTurn.history);
+        runTracker.syncModelMessages(runner.getHistory?.() ?? preparedTurn.history);
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -284,11 +303,11 @@ export const createChatStreaming = (deps: {
         };
       }
 
-      const llmResult = await llmFactory.generateChatWithUsage({
+      const llmResult = await llmFactory.generateChatWithModelMessages({
         providerType: options.providerType,
         providerId: options.providerId,
         modelId: options.model,
-        messages: toLlmChatMessages(preparedTurn.finalMessages),
+        messages: preparedTurn.finalMessages,
         extraSystemPrompt: NO_TOOLS_SYSTEM_PROMPT,
         ...(typeof preparedTurn.maxOutputTokens === 'number'
           ? { maxOutputTokens: preparedTurn.maxOutputTokens }
@@ -361,6 +380,7 @@ export const createChatStreaming = (deps: {
     const steerQueue: string[] = [];
     steerQueues.set(senderId, steerQueue);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
+    let turnHadToolCalls = false;
 
     const notifyRunStatus = () => {
       const run = runTracker?.getRun();
@@ -372,6 +392,9 @@ export const createChatStreaming = (deps: {
         timestamp: run.updatedAt,
       } satisfies RunStatusEvent);
     };
+
+    let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let isAwaitingApproval = false;
 
     try {
       const preparedTurn = await turnPreparer.prepareChatTurn({
@@ -385,9 +408,7 @@ export const createChatStreaming = (deps: {
       });
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
       const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
-      const guardedTools = autonomousMode
-        ? [...new Set([...preparedTurn.guardedTools, 'finish'])]
-        : preparedTurn.guardedTools;
+      const guardedTools = preparedTurn.guardedTools;
 
       if (preparedTurn.usedSkills.length > 0) {
         uiChunkEmitter.emitSkillUsage({
@@ -406,6 +427,16 @@ export const createChatStreaming = (deps: {
       }
 
       companionService.setChatPolicy(preparedTurn.interventionPolicy);
+      const affectState = preparedTurn.affectSignal?.state;
+      if (affectState && affectState.valence !== undefined && affectState.arousal !== undefined) {
+        companionService.setAffect({
+          label: affectState.label,
+          valence: affectState.valence,
+          arousal: affectState.arousal,
+        });
+      } else {
+        companionService.setAffect(null);
+      }
 
       const systemPrompt = preparedTurn.enableTools
         ? TOOL_AGENT_SYSTEM_PROMPT
@@ -533,7 +564,7 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      let harness = createChatHarness({
+      let agentRunnerData = createChatAgentRunner({
         threadId: options.threadId,
         providerType: options.providerType,
         providerId: options.providerId,
@@ -548,6 +579,8 @@ export const createChatStreaming = (deps: {
           ? { maxOutputTokens: preparedTurn.maxOutputTokens }
           : {}),
       });
+      let runner = agentRunnerData.runner;
+      const runnerTools = agentRunnerData.tools;
 
       if (!preparedTurn.prompt.trim()) {
         throw new Error('No user prompt provided for streaming');
@@ -559,63 +592,251 @@ export const createChatStreaming = (deps: {
       const MAX_HANDOFF_CHAIN = 5;
       let outerBatch = 0;
       let handoffChain = 0;
-      let streamResult: Awaited<ReturnType<typeof toolLoopRunner.stream>> | undefined;
+      type StreamResult = {
+        awaitingApproval: boolean;
+        cancelled?: boolean;
+        finished?: boolean;
+        partialFailure?: boolean;
+        response?: string;
+        usage?: import('../../../core/agent').AgentResult['usage'];
+        handoff?: { summary: string; nextSteps: string; reason: string };
+      };
+      let streamResult: StreamResult | undefined;
       let accumulatedResponse = '';
+      let previewText = '';
+      let lastPreviewText = '';
+
+      const sendConversationPreview = (kind: ConversationPreview['kind'], text: string, toolName?: string) => {
+        if (!options.threadId) return;
+        companionService.setConversationPreview({
+          threadId: options.threadId,
+          kind,
+          text: text.slice(-200),
+          ...(toolName ? { toolName } : {}),
+        });
+      };
+
+      const debouncedTextPreview = (text: string) => {
+        lastPreviewText = text;
+        if (previewDebounceTimer) return;
+        previewDebounceTimer = setTimeout(() => {
+          previewDebounceTimer = null;
+          sendConversationPreview('responding', lastPreviewText);
+        }, 300);
+      };
+
+      sendConversationPreview('thinking', '');
+
+      /** Convert AgentStep to ToolStreamEvent for runTracker + UI emitter. */
+      const forwardAgentStep = (step: AgentStep) => {
+        // Emit text deltas via the dedicated ui chunk emitter path
+        if (step.type === 'text-delta') {
+          uiChunkEmitter.emitTextDelta(step.text);
+          previewText = previewText + step.text;
+          debouncedTextPreview(previewText);
+          return;
+        }
+
+        // Convert AgentStep → ToolStreamEvent-like shape for runTracker and UI
+        let event: ToolStreamEvent | null = null;
+
+        if (step.type === 'tool-call-start') {
+          turnHadToolCalls = true;
+          sendConversationPreview('tool', previewText || ' ', step.toolName);
+          event = {
+            type: 'tool-call',
+            toolCallId: step.toolCallId,
+            toolName: step.toolName,
+            input: step.input,
+          };
+        } else if (step.type === 'tool-call-end') {
+          event = { type: 'tool-input-end', toolCallId: step.toolCallId };
+        } else if (step.type === 'tool-result') {
+          event = {
+            type: 'tool-result',
+            toolCallId: step.toolCallId,
+            output: step.output,
+          };
+        } else if (step.type === 'tool-error') {
+          event = {
+            type: 'tool-error',
+            toolCallId: step.toolCallId,
+            error: step.error,
+          };
+        } else if (step.type === 'approval-request') {
+          for (const req of step.requests) {
+            if (req.approvalId) {
+              deps.approvals.ensurePendingApprovalSession(req.approvalId, {
+                webContents,
+                history: runner.getHistory?.() ?? streamHistory,
+                recoveryContext: approvalContext,
+              });
+            }
+          }
+          for (const req of step.requests) {
+            if (req.approvalId) {
+              uiChunkEmitter.emitToolEvent({
+                type: 'tool-approval-request',
+                approvalId: req.approvalId,
+                toolCallId: req.toolCallId || '',
+                ...(req.toolCall
+                  ? {
+                      toolCall: {
+                        toolName: req.toolCall.toolName,
+                        toolCallId: req.toolCallId || '',
+                        args: req.toolCall.args ?? {},
+                      },
+                    }
+                  : {}),
+              });
+            }
+          }
+          return;
+        } else if (step.type === 'handoff') {
+          event = {
+            type: 'tool-call',
+            toolCallId: `handoff-${outerBatch}`,
+            toolName: 'handoff',
+            input: {
+              summary: step.summary,
+              nextSteps: step.nextSteps,
+              reason: step.reason,
+            },
+          };
+        }
+
+        if (event) {
+          runTracker?.recordToolEvent(event);
+          uiChunkEmitter.emitToolEvent(event);
+        }
+      };
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        streamResult = await runWithToolRuntimeContext(
-          { runId: runTracker.id, runTracker },
-          async () =>
-            await toolLoopRunner.stream({
-              harness,
-              webContents,
-              history: streamHistory,
-              prompt: streamPrompt,
-              approvalContext,
-              autonomous: autonomousMode
-                ? { maxIterations: options.autonomous?.maxIterations ?? 1, continuePrompt: options.autonomous?.continuePrompt ?? 'Continue with the next step.' }
-                : undefined,
-              retry: autonomousMode
-                ? { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 30000 }
-                : { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
-              steerQueue: autonomousMode ? steerQueue : undefined,
-              shouldCancel: () => streamState.cancelled || (streamState.steered ?? false),
-              isSteered: () => (streamState.steered ?? false) && !streamState.cancelled,
-              clearSteered: () => { streamState.steered = false; },
-              onToolEvent: eventPart => {
-                runTracker?.recordToolEvent(eventPart);
-                if (
-                  eventPart.type === 'tool-approval-request' &&
-                  typeof eventPart.approvalId === 'string' &&
-                  eventPart.approvalId.length > 0
-                ) {
-                  deps.approvals.ensurePendingApprovalSession(eventPart.approvalId, {
-                    harness,
-                    webContents,
-                    history: preparedTurn.history,
-                    recoveryContext: approvalContext,
-                  });
+        // Run agent via runner — manual iteration to capture both steps and result
+        const agentGen = runner.run({
+          config: { enabled: true, enableTools: true },
+          prompt: streamPrompt,
+          history: streamHistory,
+          tools: runnerTools,
+          providerType: options.providerType,
+          providerId: options.providerId,
+          model: options.model,
+          systemPrompt,
+          maxIterations,
+          ...(typeof preparedTurn.maxOutputTokens === 'number'
+            ? { maxTokens: preparedTurn.maxOutputTokens }
+            : {}),
+          abortSignal: streamState.abortController.signal,
+        });
+
+        let agentResult: import('../../../core/agent').AgentResult | undefined;
+        let cancelled = false;
+        let steered = false;
+        let awaitingApproval = false;
+
+        try {
+          agentResult = await runWithToolRuntimeContext(
+            { runId: runTracker.id, runTracker, threadId: options.threadId },
+            async () => {
+              let next = await agentGen.next();
+
+              while (!next.done) {
+                const step = next.value as AgentStep | undefined;
+                if (step) {
+                  forwardAgentStep(step);
                 }
-                uiChunkEmitter.emitToolEvent(eventPart);
-              },
-              abortSignal: streamState.abortController.signal,
-              uiChunkEmitter,
-              tokenUsageContext: {
-                ...(typeof preparedTurn.maxInputTokens === 'number'
-                  ? { maxInputTokens: preparedTurn.maxInputTokens }
-                  : {}),
-                ...(typeof preparedTurn.maxOutputTokens === 'number'
-                  ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-                  : {}),
-                model: options.model,
-                providerType: options.providerType,
-                ...(typeof options.providerId === 'string' && options.providerId.trim()
-                  ? { providerId: options.providerId.trim() }
-                  : {}),
-              },
-            })
+
+                // Check cancel/steer between steps
+                if (streamState.cancelled || (streamState.steered ?? false)) {
+                  if ((streamState.steered ?? false) && !streamState.cancelled) {
+                    steered = true;
+                  } else {
+                    cancelled = true;
+                  }
+                  try { await agentGen.return(undefined); } catch { /* ignore */ }
+                  break;
+                }
+
+                next = await agentGen.next();
+              }
+
+              if (next.done && !cancelled && !steered) {
+                return next.value as import('../../../core/agent').AgentResult | undefined;
+              }
+              return undefined;
+            }
+          );
+        } catch (error) {
+          if (
+            streamState.cancelled ||
+            (error instanceof Error && error.name === 'AbortError')
+          ) {
+            cancelled = true;
+            try { await agentGen.return(undefined); } catch { /* ignore */ }
+          } else {
+            throw error;
+          }
+        }
+
+        if (steered) {
+          streamState.steered = false;
+          continue;
+        }
+
+        if (cancelled) {
+          streamResult = { awaitingApproval: false, cancelled: true };
+          break;
+        }
+
+        // Check for approval requests in result
+        if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
+          deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
+            webContents,
+            history: runner.getHistory?.() ?? streamHistory,
+            ...(approvalContext ? { recoveryContext: approvalContext } : {}),
+          });
+          streamResult = {
+            awaitingApproval: true,
+            response: agentResult.response,
+            usage: agentResult.usage,
+          };
+          isAwaitingApproval = true;
+          break;
+        }
+
+        // Build stream result from agent result
+        const handoff = agentResult?.toolCalls?.find(
+          tc => tc.toolName === 'handoff'
         );
+        const terminalToolName = handoff ? 'handoff' : undefined;
+
+        streamResult = {
+          awaitingApproval: false,
+          ...(agentResult?.response?.trim()
+            ? { response: agentResult.response }
+            : {}),
+          usage: agentResult?.usage,
+          ...(terminalToolName === 'handoff' && handoff
+            ? {
+                handoff: {
+                  summary:
+                    typeof (handoff.args as Record<string, unknown>)?.summary === 'string'
+                      ? (handoff.args as Record<string, unknown>).summary as string
+                      : '',
+                  nextSteps:
+                    typeof (handoff.args as Record<string, unknown>)?.next_steps === 'string'
+                      ? (handoff.args as Record<string, unknown>).next_steps as string
+                      : '',
+                  reason:
+                    typeof (handoff.args as Record<string, unknown>)?.reason === 'string'
+                      ? (handoff.args as Record<string, unknown>).reason as string
+                      : 'other',
+                },
+              }
+            : {}),
+          ...(terminalToolName ? { finished: true } : {}),
+        };
 
         if (streamResult.response) {
           accumulatedResponse = accumulatedResponse
@@ -623,7 +844,12 @@ export const createChatStreaming = (deps: {
             : streamResult.response;
         }
 
-        runTracker.syncModelMessages(harness.getHistory?.() ?? streamHistory);
+        if (accumulatedResponse) {
+          sendConversationPreview('responding', accumulatedResponse);
+        }
+        previewText = '';
+
+        runTracker.syncModelMessages(runner.getHistory?.() ?? streamHistory);
 
         if (streamResult.cancelled) break;
         if (streamResult.awaitingApproval) break;
@@ -683,7 +909,7 @@ export const createChatStreaming = (deps: {
           });
           streamState.runId = runTracker.id;
 
-          harness = createChatHarness({
+          agentRunnerData = createChatAgentRunner({
             threadId: options.threadId,
             providerType: options.providerType,
             providerId: options.providerId,
@@ -698,6 +924,7 @@ export const createChatStreaming = (deps: {
               ? { maxOutputTokens: preparedTurn.maxOutputTokens }
               : {}),
           });
+          runner = agentRunnerData.runner;
 
           approvalContext = preparedTurn.enableTools
             ? createApprovalRecoveryContext({
@@ -745,7 +972,7 @@ export const createChatStreaming = (deps: {
           runTracker.createCheckpoint('periodic');
         }
 
-        streamHistory = harness.getHistory?.() ?? streamHistory;
+        streamHistory = runner.getHistory?.() ?? streamHistory;
         streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
       }
 
@@ -806,6 +1033,9 @@ export const createChatStreaming = (deps: {
         });
         notifyRunStatus();
       }
+      if (!streamResult.awaitingApproval) {
+        uiChunkEmitter.finish();
+      }
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
@@ -843,8 +1073,20 @@ export const createChatStreaming = (deps: {
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {
+      if (previewDebounceTimer) {
+        clearTimeout(previewDebounceTimer);
+        previewDebounceTimer = null;
+      }
+      companionService.clearConversationPreview();
       companionService.endThinking(companionThinkingKey);
-      deps.approvals.cleanupPendingSessionsForWebContents(senderId);
+      if (turnHadToolCalls && !streamState.cancelled) {
+        const threadLabel =
+          options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
+        companionService.notifyReplyComplete(threadLabel);
+      }
+      if (!isAwaitingApproval) {
+        deps.approvals.cleanupPendingSessionsForWebContents(senderId);
+      }
       steerQueues.delete(senderId);
       if (options.threadId) {
         untrackThreadStream(options.threadId, senderId);

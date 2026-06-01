@@ -17,6 +17,8 @@
         @keydown-enter="handleEnter"
         @composition-start="handleCompositionStart"
         @composition-end="handleCompositionEnd"
+        @paste-image="handlePasteImage"
+        @drop-images="handleDropImages"
       >
         <template #input-context>
           <div
@@ -135,13 +137,47 @@
             @stop-streaming="stopStreaming"
           />
         </template>
+
+        <template #image-previews>
+          <div v-if="attachedImages.length > 0" class="image-preview-strip" aria-label="Attached images">
+            <div
+              v-for="(file, index) in attachedImages"
+              :key="index"
+              class="image-preview-chip"
+              @click="viewerSrc = file.url"
+            >
+              <img
+                :src="file.url"
+                :alt="file.filename || 'Attached image'"
+                class="image-preview-thumb"
+              />
+              <button
+                type="button"
+                class="image-preview-dismiss"
+                :aria-label="t('common.remove')"
+                @click.stop="removeAttachedImage(index)"
+              >
+                <span aria-hidden="true">x</span>
+              </button>
+            </div>
+          </div>
+          <div v-if="showVisionWarning" class="vision-warning" role="alert">
+            {{ t('chat.input.visionWarning') }}
+          </div>
+        </template>
       </ChatComposerShell>
     </div>
+    <ImageViewerOverlay
+      :visible="viewerSrc.length > 0"
+      :src="viewerSrc"
+      @close="viewerSrc = ''"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, toRef, watchEffect } from 'vue';
+import type { FileUIPart } from 'ai';
 import type { Provider } from '../../shared/types/provider';
 import type { TaskPlan } from '../../shared/types/task_plan';
 import {
@@ -157,6 +193,7 @@ import ChatComposerActions from './ChatComposerActions.vue';
 import ChatComposerSelectors from './ChatComposerSelectors.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
 import ChatSteerBar from './ChatSteerBar.vue';
+import ImageViewerOverlay from './ImageViewerOverlay.vue';
 import { useChatComposerDraft } from '../composables/useChatComposerDraft';
 import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
 import { useChatComposerSend } from '../composables/useChatComposerSend';
@@ -209,6 +246,16 @@ const setInputRef = (element: ComposerTextControl | null) => {
   inputRef.value = element;
 };
 const message = ref('');
+const attachedImages = ref<FileUIPart[]>([]);
+const viewerSrc = ref('');
+
+const modelSupportsVision = computed(
+  () => selectedModelCapability.value?.supportsVision === true
+);
+
+const showVisionWarning = computed(
+  () => attachedImages.value.length > 0 && !modelSupportsVision.value
+);
 const isBusy = ref(false);
 const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
@@ -251,6 +298,7 @@ const {
   speechEngineAvailable,
   showWaveform,
   waveformBars,
+  audioEmotion,
   loadSpeechStatus,
   toggleVoiceInput,
   stopVoiceInput,
@@ -289,6 +337,29 @@ const {
   t,
 });
 
+const handlePasteImage = (payload: { mediaType: string; url: string; filename?: string }) => {
+  attachedImages.value = [
+    ...attachedImages.value,
+    { type: 'file' as const, mediaType: payload.mediaType, url: payload.url, filename: payload.filename },
+  ];
+};
+
+const handleDropImages = (payloads: { mediaType: string; url: string; filename?: string }[]) => {
+  attachedImages.value = [
+    ...attachedImages.value,
+    ...payloads.map(p => ({
+      type: 'file' as const,
+      mediaType: p.mediaType,
+      url: p.url,
+      filename: p.filename,
+    })),
+  ];
+};
+
+const removeAttachedImage = (index: number) => {
+  attachedImages.value = attachedImages.value.filter((_, i) => i !== index);
+};
+
 const {
   composerFeedback,
   isPreparingSend,
@@ -317,6 +388,8 @@ const {
   ensureProviderReady,
   resolveSelectedMcpServerIds,
   stopVoiceInput,
+  attachedImages,
+  audioEmotion,
 });
 sendMessageHandler = sendMessage;
 watchEffect(() => {
@@ -718,5 +791,64 @@ defineExpose({
   white-space: nowrap;
   font-size: 11px;
   line-height: 1.25;
+}
+
+.image-preview-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 0 4px;
+}
+
+.image-preview-chip {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.image-preview-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.image-preview-dismiss {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.image-preview-chip:hover .image-preview-dismiss {
+  opacity: 1;
+}
+
+.vision-warning {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning-color) 22%, transparent);
+  color: color-mix(in srgb, var(--warning-color) 90%, var(--text-primary));
+  font-size: 12px;
+  line-height: 1.45;
 }
 </style>

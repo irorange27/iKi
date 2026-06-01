@@ -4,6 +4,7 @@ import { createChatApproval } from './chat_approval';
 import { createChatMemory } from './chat_memory';
 import { createChatPersistence } from './chat_persistence';
 import { createChatRuns } from './chat_runs';
+import { createChatEval } from './chat_eval';
 import { createChatStreaming } from './chat_streaming';
 import { createChatUsage } from './chat_usage';
 
@@ -23,9 +24,11 @@ export const createChatService = () => {
   });
   const persistence = createChatPersistence({ memory });
   const runs = createChatRuns({ activeStreams });
+  const eval_ = createChatEval();
   const streaming = createChatStreaming({
     activeStreams,
     memory,
+    getThreadTitle: (id: string) => persistence.getThread(id)?.title,
     usage: {
       recordUsageEvent: usage.recordUsageEvent,
     },
@@ -147,6 +150,7 @@ export const createChatService = () => {
     ...persistence,
     ...runs,
     ...streaming,
+    eval: eval_,
     getUsageSummary: usage.getUsageSummary,
     approveTool: approvals.approveTool,
     resumeRun,

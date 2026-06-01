@@ -1,6 +1,8 @@
 import { ref, watch, type Ref } from 'vue';
+import type { FileUIPart } from 'ai';
 
 import type { ComposerInvocationPartData } from '../../shared/chat/message_parts';
+import type { AudioEmotionResult } from '../../shared/types/speech';
 import type { ElectronApi } from '../../shared/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '../../shared/types/provider';
 import { getErrorMessage } from '../../shared/utils/errors';
@@ -60,6 +62,8 @@ export const useChatComposerSend = (deps: {
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
   resolveSelectedMcpServerIds: () => Promise<string[]>;
   stopVoiceInput: () => void;
+  attachedImages?: Ref<FileUIPart[]>;
+  audioEmotion?: Ref<AudioEmotionResult | null>;
 }) => {
   const composerFeedback = ref('');
   const isPreparingSend = ref(false);
@@ -198,6 +202,10 @@ export const useChatComposerSend = (deps: {
           mcpServerIds: resolvedMcpServerIds,
           promptAppId: resolvedSendRequest.promptAppId,
           composerInvocations: resolvedSendRequest.composerInvocations,
+          files: deps.attachedImages?.value?.length
+            ? [...deps.attachedImages.value]
+            : undefined,
+          audioEmotion: deps.audioEmotion?.value ?? undefined,
         });
       }
     } catch (error) {
@@ -218,6 +226,8 @@ export const useChatComposerSend = (deps: {
 
     const previousMessage = deps.message.value;
     deps.message.value = '';
+    deps.attachedImages?.value && (deps.attachedImages.value = []);
+    deps.audioEmotion?.value && (deps.audioEmotion.value = null);
     resolvedSendRequest.onCommitted?.();
     isLoading.value = true;
     isStopping.value = false;

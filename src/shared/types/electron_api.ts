@@ -36,7 +36,7 @@ import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
 import type { ChatExperimentalContext } from '../chat/intervention_policy';
-import type { AgentRun, AgentRunStatus, AgentRunTrace, AgentRunTree } from './agent_run';
+import type { AgentRun, AgentEvalComparison, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, RegressionAssessment } from './agent_run';
 import type { CompanionSnapshot } from './companion';
 
 export type ProviderInput = Partial<Provider> &
@@ -233,6 +233,14 @@ export interface ElectronApi {
       retryAndExecute: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
       resume: (runId: string) => Promise<{ success: boolean; error?: string }>;
       listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) => Promise<AgentRun[]>;
+      eval: {
+        exportTrace: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+        addLabel: (input: { runId: string; stepId?: string | null; label: string; note?: string | null }) => Promise<AgentEvalLabel>;
+        listLabels: (runId: string) => Promise<AgentEvalLabel[]>;
+        deleteLabel: (labelId: string) => Promise<{ success: boolean }>;
+        compareRuns: (baselineRunId: string, testRunId: string) => Promise<AgentEvalComparison | null>;
+        assessRegression: (baselineRunId: string, testRunId: string) => Promise<RegressionAssessment | null>;
+      };
     };
     usage: {
       summary: (period?: ChatUsagePeriod) => Promise<ChatUsageSummary>;

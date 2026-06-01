@@ -5,6 +5,7 @@ const MCP_SERVER_PREFIX = 'mcp:server:';
 const FALLBACK_DEFAULT_BUILTIN_TOOL_NAMES = [
   'web',
   'fetch',
+  'load_skill',
   'list_dir',
   'read_file',
   'edit',
@@ -51,6 +52,7 @@ const getBuiltinToolOrder = (toolName: string): number => {
   const explicitOrder: Record<string, number> = {
     web: 0,
     fetch: 1,
+    load_skill: 5,
     list_dir: 10,
     read_file: 11,
     edit: 12,

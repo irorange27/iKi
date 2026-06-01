@@ -1,9 +1,6 @@
 import {
   getProviderConfig,
   fetchModelsFromDev,
-  generateChat,
-  streamChat,
-  type ChatTextMessage,
 } from './factory';
 
 export const getMinimaxConfig = () => getProviderConfig('minimax');
@@ -30,21 +27,7 @@ export const getMinimaxModels = async () => {
   }
 };
 
-export const generateMinimaxChat = async (modelId: string, messages: ChatTextMessage[]) => {
-  return generateChat({ providerType: 'minimax', modelId, messages });
-};
-
-export const streamMinimaxText = async (
-  modelId: string,
-  messages: ChatTextMessage[],
-  onChunk: (chunk: string) => void
-) => {
-  return streamChat({ providerType: 'minimax', modelId, messages }, onChunk);
-};
-
 export default {
   getMinimaxConfig,
-  generateMinimaxChat,
-  streamMinimaxText,
   getMinimaxModels,
 };

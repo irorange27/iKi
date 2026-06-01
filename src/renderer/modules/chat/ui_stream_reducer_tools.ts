@@ -144,6 +144,7 @@ const buildToolUiStatePatch = (
   }
 
   if (chunk.type === 'tool-input-available') {
+    ensureStartedAt();
     clearInputText();
     return patch;
   }
@@ -191,8 +192,13 @@ const reduceApprovalRequestChunk = (
   const existingPart = existingMessage?.parts.find(
     part => getToolCallIdFromPart(part) === chunk.toolCallId
   );
-  const existingToolName = getToolName(existingPart);
-  const existingInput = getToolInput(existingPart) ?? {};
+  const chunkRecord = chunk as Record<string, unknown>;
+  const existingToolName =
+    getToolName(existingPart) ||
+    (typeof chunkRecord.toolName === 'string' ? (chunkRecord.toolName as string) : undefined);
+  const existingInput =
+    getToolInput(existingPart) ??
+    (isObjectRecord(chunkRecord.input) ? chunkRecord.input : {});
 
   const effects: StreamEffect[] = [
     {

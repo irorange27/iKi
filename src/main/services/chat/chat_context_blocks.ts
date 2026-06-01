@@ -6,6 +6,7 @@ import { getThreadWorkspaceSelection } from '../../../core/workspaces/thread_wor
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
 import { resolveSkillsSystemPrompt } from './chat_skills';
+import { getClipboardContextMessage } from '../context/clipboard_monitor';
 import { getPromptFromMessage } from './chat_ui';
 import {
   getAssistantProfileContextMessage,
@@ -14,6 +15,7 @@ import {
 import type { ChatMemory } from './chat_memory';
 import type {
   AssembleChatContextParams,
+  ClipboardContext,
   ContextConfig,
   ContextReportBlock,
   IdentityContext,
@@ -306,6 +308,69 @@ export const buildSkillContext = async (params: {
 export const buildQueryFromMessages = (messages: ChatInputMessage[]): string => {
   const lastMessage = messages[messages.length - 1];
   return getPromptFromMessage(lastMessage);
+};
+
+export const buildClipboardContext = (
+  contextConfig: ContextConfig,
+  modelCapability?: { maxInputTokens?: number } | null,
+  maxEntries = 8
+): ClipboardContext => {
+  if (!contextConfig.enabled) {
+    return {
+      systemMessage: '',
+      block: {
+        kind: 'clipboard',
+        status: 'dropped',
+        estimatedTokens: 0,
+        charCount: 0,
+        reason: 'context assembly disabled',
+      },
+    };
+  }
+
+  try {
+    const message = getClipboardContextMessage(maxEntries);
+
+    if (!message) {
+      return {
+        systemMessage: '',
+        block: {
+          kind: 'clipboard',
+          status: 'dropped',
+          estimatedTokens: 0,
+          charCount: 0,
+          reason: 'no recent clipboard entries',
+        },
+      };
+    }
+
+    const tokens = estimateTextTokens(message);
+    const maxTokens = modelCapability?.maxInputTokens ?? 128_000;
+    const budget = Math.floor(maxTokens * 0.02); // 2% budget for clipboard context
+    const clipped = clipTextToTokenBudget(message, budget);
+    const systemMessage = clipped.text;
+
+    return {
+      systemMessage,
+      block: {
+        kind: 'clipboard',
+        status: clipped.truncated ? 'truncated' : 'included',
+        estimatedTokens: estimateTextTokens(systemMessage),
+        charCount: systemMessage.length,
+      },
+    };
+  } catch {
+    return {
+      systemMessage: '',
+      block: {
+        kind: 'clipboard',
+        status: 'dropped',
+        estimatedTokens: 0,
+        charCount: 0,
+        reason: 'clipboard monitor not available',
+      },
+    };
+  }
 };
 
 export { buildDroppedBlock };

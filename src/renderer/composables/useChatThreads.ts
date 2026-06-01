@@ -31,6 +31,7 @@ type DraftComposerSelection = {
 
 const TITLE_REGEN_INTERVAL = 2;
 const chatThreadsLogger = createLogger({ module: 'chat_threads' });
+  const TITLE_FORCE_REGEN_LIMIT = 5;
 const DEFAULT_THREAD_TITLES = new Set([
   translateWithLocale('en', 'chat.thread.newTitle'),
   translateWithLocale('zh-CN', 'chat.thread.newTitle'),
@@ -74,7 +75,12 @@ export const useChatThreads = (deps: {
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
   const selectedTools = ref<string[]>([]);
-  const showWelcome = ref(true);
+  const WELCOME_SEEN_KEY = 'iki-welcome-seen';
+  const showWelcome = ref(!localStorage.getItem(WELCOME_SEEN_KEY));
+  const dismissWelcome = () => {
+    showWelcome.value = false;
+    localStorage.setItem(WELCOME_SEEN_KEY, '1');
+  };
 
   const getCurrentThreadId = () => currentThread.value?.id || null;
 
@@ -206,34 +212,33 @@ export const useChatThreads = (deps: {
   };
 
   const getConversationContentForTitle = (messages: ChatUiMessage[]): string => {
-    const userLines: string[] = [];
-    const fallbackLines: string[] = [];
+    const lines: string[] = [];
 
     for (const message of messages) {
       const text = extractTextFromMessage(message).trim();
       if (!text) continue;
 
       if (message.role === 'user') {
-        userLines.push(`User: ${text}`);
-        continue;
+        lines.push(`User: ${text}`);
+      } else if (message.role === 'assistant') {
+        const truncated = text.length > 300 ? text.slice(0, 297) + '...' : text;
+        lines.push(`Assistant: ${truncated}`);
       }
-
-      const role = message.role === 'system' ? 'System' : 'Assistant';
-      fallbackLines.push(`${role}: ${text}`);
     }
 
-    return (userLines.length > 0 ? userLines : fallbackLines).join('\n');
+    return lines.join('\n');
   };
 
   const getFallbackThreadTitle = (messages: ChatUiMessage[]): string | null => {
-    const latestUserText = [...messages]
+    const userTexts = [...messages]
       .reverse()
       .filter(message => message.role === 'user')
       .map(message => extractTextFromMessage(message).trim())
-      .find(text => text.length > 0);
-    const fallbackText = latestUserText || extractTextFromMessage(messages[0]).trim();
-    if (!fallbackText) return null;
-    return fallbackText.slice(0, 50) + (fallbackText.length > 50 ? '...' : '');
+      .filter(text => text.length > 0);
+    // Prefer a substantive message (over 10 chars) for better fallback titles.
+    const bestText = userTexts.find(text => text.length > 10) ?? userTexts[0];
+    if (!bestText) return null;
+    return bestText.slice(0, 50) + (bestText.length > 50 ? '...' : '');
   };
 
   const shouldRegenerateThreadTitle = (
@@ -243,7 +248,10 @@ export const useChatThreads = (deps: {
     const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
     if (assistantMessageCount === 0) return false;
     if (DEFAULT_THREAD_TITLES.has(currentTitle)) return true;
-    return assistantMessageCount % TITLE_REGEN_INTERVAL === 0;
+    // Regenerate on every turn for the first N assistant messages so the title
+    // converges quickly; afterward fall back to periodic updates.
+    if (assistantMessageCount <= TITLE_FORCE_REGEN_LIMIT) return true;
+    return assistantMessageCount % Math.max(TITLE_REGEN_INTERVAL, 2) === 0;
   };
 
   const generateThreadTitle = async (messages: ChatUiMessage[]): Promise<string | null> => {
@@ -674,6 +682,7 @@ export const useChatThreads = (deps: {
     selectedWorkspaceId,
     selectedTools,
     showWelcome,
+    dismissWelcome,
     getCurrentThreadId,
     refreshThreads,
     createNewThread,

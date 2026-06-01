@@ -12,7 +12,8 @@ export type ContextBlockKind =
   | 'thread-summary'
   | 'memory'
   | 'affect'
-  | 'skills';
+  | 'skills'
+  | 'clipboard';
 
 export type ContextBlockStatus = 'included' | 'truncated' | 'dropped';
 
@@ -98,5 +99,10 @@ export type SkillContext = {
   systemMessage: string;
   usedSkills: SkillSummary[];
   skillMode: 'manual' | 'auto';
+  block: ContextReportBlock;
+};
+
+export type ClipboardContext = {
+  systemMessage: string;
   block: ContextReportBlock;
 };

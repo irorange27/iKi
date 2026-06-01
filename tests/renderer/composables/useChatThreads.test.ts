@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
@@ -509,7 +510,7 @@ describe('useChatThreads', () => {
       ],
     });
 
-    expect(generateTitle).toHaveBeenCalledWith('User: 请告诉我现在几点');
+    expect(generateTitle).toHaveBeenCalledWith('User: 请告诉我现在几点\nAssistant: 我先调用系统时间工具。');
     expect(updateThread).toHaveBeenCalledWith(thread.id, { title: 'Generated title' });
   });
 

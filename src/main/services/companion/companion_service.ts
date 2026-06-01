@@ -3,10 +3,12 @@ import { getAppConfig } from '../../../core/config';
 import { createLogger } from '../../../core/logger';
 import { parseModelList } from '../../../shared/utils/provider_models';
 import type {
+  CompanionAffectHint,
   CompanionDormantReason,
   CompanionNudgeKind,
   CompanionPhase,
   CompanionSnapshot,
+  ConversationPreview,
 } from '../../../shared/types/companion';
 import type { AppConfig } from '../../../shared/types/config';
 import type { Provider } from '../../../shared/types/provider';
@@ -91,6 +93,8 @@ const COMPANION_COPY = {
       errorLabel: 'Nudge',
       errorHeadline: 'Needs a look',
       taskFallback: 'Scheduled task',
+      replyLabel: 'Reply ready',
+      replyDetail: 'The reply is complete.',
     },
   },
   'zh-CN': {
@@ -137,6 +141,8 @@ const COMPANION_COPY = {
       errorLabel: '提醒',
       errorHeadline: '需要看一眼',
       taskFallback: '定时任务',
+      replyLabel: '回复完成',
+      replyDetail: 'AI 已完成回复。',
     },
   },
 } as const;
@@ -150,6 +156,7 @@ const createSnapshot = (
     updatedAt: string;
     dormantReason?: CompanionDormantReason;
     nudgeKind?: CompanionNudgeKind;
+    affect?: CompanionAffectHint;
   }
 ): CompanionSnapshot => ({
   phase,
@@ -159,6 +166,7 @@ const createSnapshot = (
   updatedAt: params.updatedAt,
   ...(params.dormantReason ? { dormantReason: params.dormantReason } : {}),
   ...(params.nudgeKind ? { nudgeKind: params.nudgeKind } : {}),
+  ...(params.affect ? { affect: params.affect } : {}),
 });
 
 const isEnabledProvider = (provider: Provider): boolean => provider.enabled === true;
@@ -194,8 +202,21 @@ const buildNudgeSnapshot = (
     kind: CompanionNudgeKind;
     taskName: string;
   }
-): CompanionSnapshot =>
-  createSnapshot('nudge', {
+): CompanionSnapshot => {
+  if (params.kind === 'reply-complete') {
+    const clipped = clipTaskName(params.taskName, '');
+    const detail = clipped
+      ? `${params.copy.nudge.replyDetail} — ${clipped}`
+      : params.copy.nudge.replyDetail;
+    return createSnapshot('nudge', {
+      label: params.copy.nudge.replyLabel,
+      headline: params.copy.nudge.replyLabel,
+      detail,
+      updatedAt,
+      nudgeKind: 'reply-complete',
+    });
+  }
+  return createSnapshot('nudge', {
     label:
       params.kind === 'task-error' ? params.copy.nudge.errorLabel : params.copy.nudge.successLabel,
     headline:
@@ -206,6 +227,7 @@ const buildNudgeSnapshot = (
     updatedAt,
     nudgeKind: params.kind,
   });
+};
 
 const isExpired = (expiresAt: number, nowMs: number): boolean => nowMs >= expiresAt;
 
@@ -215,7 +237,14 @@ const snapshotsEqual = (left: CompanionSnapshot, right: CompanionSnapshot): bool
   left.headline === right.headline &&
   left.detail === right.detail &&
   left.dormantReason === right.dormantReason &&
-  left.nudgeKind === right.nudgeKind;
+  left.nudgeKind === right.nudgeKind &&
+  left.preview?.kind === right.preview?.kind &&
+  left.preview?.text === right.preview?.text &&
+  left.preview?.toolName === right.preview?.toolName &&
+  left.preview?.threadId === right.preview?.threadId &&
+  left.affect?.label === right.affect?.label &&
+  left.affect?.valence === right.affect?.valence &&
+  left.affect?.arousal === right.affect?.arousal;
 
 export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   const getConfig = deps.getConfig ?? getAppConfig;
@@ -245,6 +274,8 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
     detail: COMPANION_COPY.en.idle.detail,
     updatedAt: now().toISOString(),
   });
+  let currentPreview: ConversationPreview | null = null;
+  let currentAffect: CompanionAffectHint | null = null;
 
   const clearExpiredState = () => {
     const nowMs = now().getTime();
@@ -368,6 +399,7 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
       headline: copy.idle.headline,
       detail: copy.idle.detail,
       updatedAt,
+      ...(currentAffect ? { affect: currentAffect } : {}),
     });
   };
 
@@ -401,6 +433,9 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   return {
     getSnapshot: (): CompanionSnapshot => publish(),
     refreshAvailability: (): CompanionSnapshot => publish(),
+    setAffect: (affect: CompanionAffectHint | null): void => {
+      currentAffect = affect;
+    },
     setChatPolicy: (policy: InterventionPolicySignal | null): CompanionSnapshot => {
       if (!policy) {
         timedPolicyState = null;
@@ -440,6 +475,29 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
       };
       scheduleNudgeExpiry();
       return publish();
+    },
+    notifyReplyComplete: (threadLabel?: string): CompanionSnapshot => {
+      const label = threadLabel?.trim() || '';
+      timedNudgeState = {
+        kind: 'reply-complete',
+        taskName: label,
+        expiresAt: now().getTime() + NUDGE_TTL_MS,
+      };
+      scheduleNudgeExpiry();
+      return publish();
+    },
+    setConversationPreview: (preview: ConversationPreview): void => {
+      currentPreview = preview;
+      currentSnapshot = { ...currentSnapshot, preview };
+      broadcast(currentSnapshot);
+    },
+    clearConversationPreview: (): void => {
+      if (!currentPreview) return;
+      currentPreview = null;
+      const { preview, ...withoutPreview } = currentSnapshot;
+      void preview;
+      currentSnapshot = withoutPreview as CompanionSnapshot;
+      broadcast(currentSnapshot);
     },
   };
 };

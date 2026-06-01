@@ -16,6 +16,8 @@ import {
   type EmotionResult,
 } from '../../../core/provider/emotion_model';
 import { planMemoryRetrieval } from '../../../core/provider/memory_retrieval';
+import { isAffectLabel } from '../../../shared/emotion/affect';
+import type { AudioEmotionResult } from '../../../shared/types/speech';
 import { parseJsonStringArray } from '../../../shared/utils/json';
 import { getErrorMessage } from '../../utils/errors';
 import type { ChatInputMessage } from './chat_types';
@@ -427,7 +429,12 @@ export const createChatMemory = () => {
     const promise = (async () => {
       try {
         const cachedEmotion = consumeRealtimeEmotion(params.threadId, content);
-        const emotion = cachedEmotion ?? (await analyzeRealtimeEmotion(params.threadId, content));
+        const textEmotion = cachedEmotion ?? (await analyzeRealtimeEmotion(params.threadId, content));
+
+        const audioEmotion = extractAudioEmotionFromMessageJson(params.messageJson);
+        const emotion = audioEmotion
+          ? mergeAudioEmotionWithTextEmotion(audioEmotion, textEmotion)
+          : textEmotion;
         if (!emotion) return;
 
         emotionDb.addEmotionEvent({
@@ -672,6 +679,69 @@ export const createChatMemory = () => {
         },
       });
     }
+  };
+
+  const extractAudioEmotionFromMessageJson = (
+    messageJson: string
+  ): AudioEmotionResult | null => {
+    try {
+      const parsed = JSON.parse(messageJson) as {
+        metadata?: { audioEmotion?: unknown };
+      };
+      const audioEmotion = parsed?.metadata?.audioEmotion;
+      if (!audioEmotion || typeof audioEmotion !== 'object') return null;
+      const ae = audioEmotion as Record<string, unknown>;
+      if (
+        typeof ae.label !== 'string' ||
+        !isAffectLabel(ae.label) ||
+        typeof ae.confidence !== 'number'
+      ) {
+        return null;
+      }
+      return audioEmotion as AudioEmotionResult;
+    } catch {
+      return null;
+    }
+  };
+
+  const mergeAudioEmotionWithTextEmotion = (
+    audio: AudioEmotionResult,
+    text: EmotionResult | null
+  ): EmotionResult | null => {
+    if (!text) {
+      return {
+        label: audio.label,
+        confidence: audio.confidence * 0.9,
+        ...(typeof audio.valence === 'number' ? { valence: audio.valence } : {}),
+        ...(typeof audio.arousal === 'number' ? { arousal: audio.arousal } : {}),
+        ...(audio.emotions ? { emotions: audio.emotions } : {}),
+        source: 'tool-model',
+        providerType: audio.providerType,
+        model: audio.model,
+        inputChars: 0,
+        truncated: false,
+      };
+    }
+
+    const audioWeight = Math.min(0.7, audio.confidence);
+    const textWeight = 1 - audioWeight;
+
+    if (audio.confidence >= 0.7 && audio.label === text.label) {
+      return {
+        ...text,
+        confidence: Math.min(1, text.confidence + 0.1),
+        valence:
+          typeof audio.valence === 'number'
+            ? audio.valence * audioWeight + (text.valence ?? audio.valence) * textWeight
+            : text.valence,
+        arousal:
+          typeof audio.arousal === 'number'
+            ? audio.arousal * audioWeight + (text.arousal ?? audio.arousal) * textWeight
+            : text.arousal,
+      };
+    }
+
+    return text;
   };
 
   const getAffectState = (threadId: string) => computeAffectStateForThread(threadId);

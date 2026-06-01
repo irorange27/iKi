@@ -2,6 +2,7 @@ import { deriveModelAwareContextConfig } from './chat_context_budget';
 import type { ChatMemory } from './chat_memory';
 import {
   buildAffectBlock,
+  buildClipboardContext,
   buildDroppedBlock,
   buildDroppedMemoryContext,
   buildIdentityContext,
@@ -123,7 +124,18 @@ export const createChatContextAssembler = (deps: {
       )
     );
 
-    const baseWithAffect = insertSystemMessages(baseMessages, [affectContext.message]);
+    const clipboardContext = benchmarkCleanContext
+      ? {
+          systemMessage: '',
+          block: buildDroppedBlock('clipboard', 'disabled for benchmark clean mode'),
+        }
+      : buildClipboardContext(contextConfig, params.modelCapability);
+    blocks.push(clipboardContext.block);
+
+    const baseWithAffect = insertSystemMessages(baseMessages, [
+      affectContext.message,
+      clipboardContext.systemMessage,
+    ]);
     const skillContext: SkillContext = benchmarkCleanContext
       ? {
           systemMessage: '',
