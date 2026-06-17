@@ -1,9 +1,9 @@
 import type http from 'node:http';
 import { createRequire } from 'node:module';
 
-import type { ChatService } from '../main/services/chat/chat_service';
-import { parseStoredUiMessageRow } from '../main/services/chat/chat_ui';
-import type { ChatTransportMessage } from '../main/services/chat/chat_types';
+import type { ChatService } from '../main/services/chat/service';
+import { parseStoredUiMessageRow } from '../shared/chat/ui_message_codec';
+import type { ChatTransportMessage } from '../main/services/chat/types';
 import { getAppConfig } from '../core/config';
 import { createDaemonLogger, recordNapCatMessagePreview } from '../core/daemon_logs';
 import { getProviders } from '../core/db/providers';

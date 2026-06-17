@@ -10,7 +10,7 @@ import { toIsoNow } from '../../../shared/utils/text';
 import { deliverBridgeThreadMessage } from '../../../daemon/bridge_dispatch';
 import { getErrorMessage } from '../../utils/errors';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
-import { chatService } from '../chat/chat_service';
+import { chatService } from '../chat/service';
 
 const SCHEDULER_TICK_MS = 30_000;
 const awaiterLogger = createLogger({ module: 'awaiters' });

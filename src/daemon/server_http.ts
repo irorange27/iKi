@@ -3,8 +3,8 @@ import http from 'node:http';
 import * as memoryDb from '../core/db/memory';
 import { createAppClient } from '../core/db/app_clients';
 import type { McpManager } from '../core/mcp';
-import type { ChatTransportMessage } from '../main/services/chat/chat_types';
-import type { ChatService } from '../main/services/chat/chat_service';
+import type { ChatTransportMessage } from '../main/services/chat/types';
+import type { ChatService } from '../main/services/chat/service';
 import type { NapCatBridgeStatusInfo } from '../shared/types/config';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {

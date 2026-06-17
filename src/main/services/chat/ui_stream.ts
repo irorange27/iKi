@@ -8,8 +8,8 @@ import type {
 import type { AffectSignal } from '../../../shared/emotion/affect';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
-import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './chat_types';
-import { createRuntimeId } from './chat_ui_tool_parts';
+import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './types';
+import { createPrefixedId } from '../../../shared/utils/id';
 
 const getNestedToolEventField = (
   event: ToolStreamEvent,
@@ -34,7 +34,7 @@ const getToolCallIdFromEvent = (event: ToolStreamEvent): string => {
         : '';
 
   if (candidate.length > 0) return candidate;
-  return createRuntimeId('tool_call');
+  return createPrefixedId('tool_call');
 };
 
 const getToolNameFromEvent = (event: ToolStreamEvent): string =>
@@ -153,7 +153,7 @@ const toUiChunkFromToolEvent = (event: ToolStreamEvent): ChatUiMessageChunk | nu
       approvalId:
         typeof event.approvalId === 'string' && event.approvalId.length > 0
           ? event.approvalId
-          : createRuntimeId('approval'),
+          : createPrefixedId('approval'),
       toolCallId,
       ...(toolName !== 'tool' ? { toolName } : {}),
       ...(approvalInput !== undefined ? { input: approvalInput } : {}),
@@ -165,7 +165,7 @@ const toUiChunkFromToolEvent = (event: ToolStreamEvent): ChatUiMessageChunk | nu
 
 export const createUiChunkEmitter = (
   webContents: ChatWebContents,
-  messageId: string = createRuntimeId('assistant')
+  messageId: string = createPrefixedId('assistant')
 ): UiChunkEmitter => {
   let started = false;
   let textStarted = false;

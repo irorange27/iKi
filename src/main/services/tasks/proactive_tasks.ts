@@ -13,7 +13,7 @@ import {
 } from '../../../shared/types/tasks';
 import { createPrefixedId } from '../../../shared/utils/id';
 import { toIsoNow } from '../../../shared/utils/text';
-import { chatService } from '../chat/chat_service';
+import { chatService } from '../chat/service';
 import { companionService } from '../companion/companion_service';
 import { getErrorMessage } from '../../utils/errors';
 import { getAllBrowserWindows } from '../../utils/browser_windows';

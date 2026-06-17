@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 
 import { toIpcSerializable } from '../../shared/utils/ipc_serialization';
-import { chatService, type ChatWebContents } from '../services/chat/chat_service';
+import { chatService, type ChatWebContents } from '../services/chat/service';
 
 let chatIpcRegistered = false;
 

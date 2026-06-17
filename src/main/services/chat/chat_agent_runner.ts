@@ -10,8 +10,8 @@ import { createLogger } from '../../../core/logger';
 import { defaultToolRegistry } from '../../../core/tools';
 import { LoadSkillTool } from '../../../core/tools/skill_tools';
 import { applyToolApprovalPolicy } from '../../../shared/utils/tool_approval';
-import { resolveChatToolMaxIterations } from './chat_constants';
-import { createTodoPrepareStep } from './chat_todo_planning';
+import { resolveChatToolMaxIterations } from './constants';
+import { createTodoPrepareStep } from './todo_planning';
 
 const logger = createLogger({ module: 'chat_agent_runner' });
 

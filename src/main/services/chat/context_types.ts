@@ -3,8 +3,8 @@ import type { ChatContextMode } from '../../../shared/chat/intervention_policy';
 import type { AffectState } from '../../../core/emotion/affect_state';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
 import type { SkillSummary } from '../../../shared/types/skill';
-import type { ChatInputMessage } from './chat_types';
-import type { EffectiveContextConfig } from './chat_context_budget';
+import type { ChatInputMessage } from './types';
+import type { EffectiveContextConfig } from './context_budget';
 
 export type ContextBlockKind =
   | 'recent-history'

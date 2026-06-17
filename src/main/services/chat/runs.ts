@@ -3,7 +3,7 @@ import type { AgentRunStatus } from '../../../shared/types/agent_run';
 import { createPrefixedId } from '../../../shared/utils/id';
 
 type ChatRunsDeps = {
-  activeStreams: Map<number, import('./chat_types').ActiveStreamState>;
+  activeStreams: Map<number, import('./types').ActiveStreamState>;
 };
 
 export const createChatRuns = (deps: ChatRunsDeps) => ({

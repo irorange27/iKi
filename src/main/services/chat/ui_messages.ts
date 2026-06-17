@@ -10,8 +10,9 @@ import type {
 } from '../../../shared/chat/message_parts';
 import { isChatUiMetadataPart } from '../../../shared/chat/message_parts';
 import { getErrorMessage } from '../../utils/errors';
-import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_types';
-import { createRuntimeId, normalizeToolPartForValidation } from './chat_ui_tool_parts';
+import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './types';
+import { createPrefixedId } from '../../../shared/utils/id';
+import { normalizeToolPartForValidation } from '../../../shared/chat/tool_parts';
 import { isObjectRecord } from '../../../shared/chat/tool_parts';
 
 const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMessage[] =>
@@ -19,7 +20,7 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
     const messageId =
       typeof message.id === 'string' && message.id.length > 0
         ? message.id
-        : createRuntimeId(`ui_msg_${messageIndex}`);
+        : createPrefixedId(`ui_msg_${messageIndex}`);
 
     const role =
       message.role === 'system' || message.role === 'user' || message.role === 'assistant'

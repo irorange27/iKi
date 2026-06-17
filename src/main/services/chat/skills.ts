@@ -9,8 +9,8 @@ import {
 import { getToolModel } from '../../../core/provider/tool_model';
 import { selectSkillsWithAgent } from '../../../core/provider/skill_selection';
 import type { SkillSummary } from '../../../shared/types/skill';
-import type { ChatInputMessage } from './chat_types';
-import { toLlmChatMessages } from './chat_ui';
+import type { ChatInputMessage } from './types';
+import { toLlmChatMessages } from './ui_messages';
 import { getAutoPinnedSkillIds, recordAutoSkillSelection } from '../workflow/workflow_optimizer';
 
 const chatSkillsLogger = createLogger({ module: 'chat_skills' });

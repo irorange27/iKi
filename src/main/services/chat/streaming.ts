@@ -7,21 +7,21 @@ import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
   resolveChatToolMaxIterations,
-} from './chat_constants';
-import type { ChatMemory } from './chat_memory';
-import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './chat_approval_types';
+} from './constants';
+import type { ChatMemory } from './memory';
+import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
 import {
   createApprovalRecoveryContext,
   describeApprovalRequiredTools,
-} from './chat_approval_types';
+} from './approval_types';
 import * as agentRunDb from '../../../core/db/agent_runs';
-import { createAgentRunTracker } from './chat_run_tracking';
+import { createAgentRunTracker } from '../../../core/agent/run_tracker';
 import { createChatAgentRunner } from './chat_agent_runner';
-import { createChatStreamingModels } from './chat_streaming_models';
-import { createChatTurnPreparer, type ChatTurnOptions } from './chat_turn_preparer';
-import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEvent } from './chat_types';
+import { createChatStreamingModels } from './models';
+import { createChatTurnPreparer, type ChatTurnOptions } from './turn_preparer';
+import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEvent } from './types';
 import type { ConversationPreview } from '../../../shared/types/companion';
-import { createUiChunkEmitter } from './chat_ui';
+import { createUiChunkEmitter } from './ui_stream';
 import { companionService } from '../companion/companion_service';
 import { createRateLimiter } from '../../../daemon/rate_limiter';
 
@@ -769,10 +769,15 @@ export const createChatStreaming = (deps: {
           );
         } catch (error) {
           if (
+            (streamState.steered ?? false) ||
             streamState.cancelled ||
             (error instanceof Error && error.name === 'AbortError')
           ) {
-            cancelled = true;
+            if ((streamState.steered ?? false) && !streamState.cancelled) {
+              steered = true;
+            } else {
+              cancelled = true;
+            }
             try { await agentGen.return(undefined); } catch { /* ignore */ }
           } else {
             throw error;
@@ -781,6 +786,25 @@ export const createChatStreaming = (deps: {
 
         if (steered) {
           streamState.steered = false;
+          streamHistory = runner.getHistory?.() ?? streamHistory;
+          if (steerQueue.length > 0) {
+            const drained: string[] = [];
+            while (steerQueue.length > 0) {
+              const msg = steerQueue.shift();
+              if (msg !== undefined) drained.push(msg);
+            }
+            if (drained.length > 0) {
+              const steerPrompt =
+                drained.length === 1
+                  ? drained[0]
+                  : drained.join('\n\n---\n\n');
+              streamHistory = [
+                ...streamHistory,
+                { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
+              ];
+            }
+          }
+          streamState.abortController = new AbortController();
           continue;
         }
 

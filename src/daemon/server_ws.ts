@@ -1,7 +1,7 @@
 import http from 'node:http';
 
-import type { ChatService } from '../main/services/chat/chat_service';
-import type { ChatTransportMessage } from '../main/services/chat/chat_types';
+import type { ChatService } from '../main/services/chat/service';
+import type { ChatTransportMessage } from '../main/services/chat/types';
 import { logDaemonHandlerFailure, type DaemonServerLogger } from './server_logging';
 import {
   readRequestedMcpServerIds,

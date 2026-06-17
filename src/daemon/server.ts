@@ -10,7 +10,7 @@ import { createDaemonLogger } from '../core/daemon_logs';
 import { initializeDatabase } from '../core/db/database';
 import { applyAppLoggingConfig, withLogContext } from '../core/logger';
 import { getUserDataPath, setPlatformInfo } from '../core/platform';
-import { createChatService } from '../main/services/chat/chat_service';
+import { createChatService } from '../main/services/chat/service';
 import { createNapCatReverseBridge } from './napcat_adapter';
 import { readOrCreateBootstrapToken } from './bootstrap_token';
 import { createDaemonRequestHandler } from './server_http';

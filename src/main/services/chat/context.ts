@@ -1,5 +1,5 @@
-import { deriveModelAwareContextConfig } from './chat_context_budget';
-import type { ChatMemory } from './chat_memory';
+import { deriveModelAwareContextConfig } from './context_budget';
+import type { ChatMemory } from './memory';
 import {
   buildAffectBlock,
   buildClipboardContext,
@@ -11,25 +11,25 @@ import {
   buildSkillContext,
   readAgentInstructions,
   resolveAffectMessage,
-} from './chat_context_blocks';
+} from './context_blocks';
 import {
   buildAssembleResult,
   getContextConfig,
   insertSystemMessages,
-} from './chat_context_helpers';
+} from './context_helpers';
 import {
   buildThreadSummaryContext,
   ensureThreadSummary,
   selectRecentHistory,
-} from './chat_context_history';
-import type { AssembleChatContextParams, SkillContext } from './chat_context_types';
+} from './context_history';
+import type { AssembleChatContextParams, SkillContext } from './context_types';
 
 export type {
   ContextBlockKind,
   ContextBlockStatus,
   ContextReportBlock,
   ContextReport,
-} from './chat_context_types';
+} from './context_types';
 
 export const createChatContextAssembler = (deps: {
   memory: ChatMemory;

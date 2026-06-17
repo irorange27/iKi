@@ -5,14 +5,14 @@ import type { AffectState } from '../../../core/emotion/affect_state';
 import { getThreadWorkspaceSelection } from '../../../core/workspaces/thread_workspace';
 import { normalizeWhitespace } from '../../../shared/utils/text';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
-import { resolveSkillsSystemPrompt } from './chat_skills';
+import { resolveSkillsSystemPrompt } from './skills';
 import { getClipboardContextMessage } from '../context/clipboard_monitor';
-import { getPromptFromMessage } from './chat_ui';
+import { getPromptFromMessage } from './ui_messages';
 import {
   getAssistantProfileContextMessage,
   retrieveRelevantContinuity,
 } from '../continuity/continuity_service';
-import type { ChatMemory } from './chat_memory';
+import type { ChatMemory } from './memory';
 import type {
   AssembleChatContextParams,
   ClipboardContext,
@@ -21,13 +21,13 @@ import type {
   IdentityContext,
   MemoryContext,
   SkillContext,
-} from './chat_context_types';
+} from './context_types';
 import {
   buildDroppedBlock,
   clipTextToTokenBudget,
   estimateTextTokens,
-} from './chat_context_helpers';
-import type { ChatInputMessage } from './chat_types';
+} from './context_helpers';
+import type { ChatInputMessage } from './types';
 
 const AGENT_INSTRUCTIONS_FILENAME = 'IKI.md';
 

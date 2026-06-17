@@ -9,13 +9,13 @@ import {
 } from '../../../core/context/token_estimator';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
-import type { ChatInputMessage } from './chat_types';
+import type { ChatInputMessage } from './types';
 import type {
   AssembleChatContextResult,
   ContextBlockKind,
   ContextConfig,
   ContextReportBlock,
-} from './chat_context_types';
+} from './context_types';
 
 export const getContextConfig = (): ContextConfig => {
   const configured = getAppConfig()?.memory?.context;

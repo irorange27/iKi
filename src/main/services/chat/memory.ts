@@ -20,8 +20,8 @@ import { isAffectLabel } from '../../../shared/emotion/affect';
 import type { AudioEmotionResult } from '../../../shared/types/speech';
 import { parseJsonStringArray } from '../../../shared/utils/json';
 import { getErrorMessage } from '../../utils/errors';
-import type { ChatInputMessage } from './chat_types';
-import { getPromptFromMessage } from './chat_ui';
+import type { ChatInputMessage } from './types';
+import { getPromptFromMessage } from './ui_messages';
 
 const chatMemoryLogger = createLogger({ module: 'chat_memory' });
 

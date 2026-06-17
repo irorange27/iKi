@@ -3,8 +3,8 @@ import { defaultToolRegistry } from '../../../core/tools';
 import { applyToolApprovalPolicyList } from '../../../shared/utils/tool_approval';
 import type { AffectState } from '../../../core/emotion/affect_state';
 import { selectToolsWithAgent } from '../../../core/provider/tool_selection';
-import type { ChatInputMessage } from './chat_types';
-import { toLlmChatMessages } from './chat_ui';
+import type { ChatInputMessage } from './types';
+import { toLlmChatMessages } from './ui_messages';
 
 type ToolResolveMode = 'manual' | 'auto';
 type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[number];

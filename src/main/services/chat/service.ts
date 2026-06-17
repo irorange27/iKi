@@ -1,14 +1,14 @@
 import * as agentRunDb from '../../../core/db/agent_runs';
-import type { ActiveStreamState, ChatWebContents } from './chat_types';
-import { createChatApproval } from './chat_approval';
-import { createChatMemory } from './chat_memory';
-import { createChatPersistence } from './chat_persistence';
-import { createChatRuns } from './chat_runs';
-import { createChatEval } from './chat_eval';
-import { createChatStreaming } from './chat_streaming';
-import { createChatUsage } from './chat_usage';
+import type { ActiveStreamState, ChatWebContents } from './types';
+import { createChatApproval } from './approval';
+import { createChatMemory } from './memory';
+import { createChatPersistence } from './persistence';
+import { createChatRuns } from './runs';
+import { createChatEval } from './eval';
+import { createChatStreaming } from './streaming';
+import { createChatUsage } from './usage';
 
-export type { ChatWebContents } from './chat_types';
+export type { ChatWebContents } from './types';
 
 export const createChatService = () => {
   const activeStreams = new Map<number, ActiveStreamState>();

@@ -10,21 +10,21 @@ import {
   type ThreadSummaryMessage,
 } from '../../../core/context/thread_summary';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
-import type { ChatInputMessage } from './chat_types';
+import type { ChatInputMessage } from './types';
 import {
   buildMessagePreview,
   clipMessageToBudget,
   clipTextToTokenBudget,
   countMessageTokens,
   estimateTextTokens,
-} from './chat_context_helpers';
+} from './context_helpers';
 import type {
   ContextConfig,
   ConversationChunk,
   RecentHistoryContext,
   SummaryContext,
   ThreadSummaryState,
-} from './chat_context_types';
+} from './context_types';
 
 const toStoredThreadSummaryMessages = (threadId: string): ThreadSummaryMessage[] =>
   chatMessageDb

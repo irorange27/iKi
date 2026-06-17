@@ -11,8 +11,8 @@ import { createPrefixedId } from '../../../shared/utils/id';
 import { ensureThreadWorkspaceSelection } from '../../../core/workspaces/thread_workspace';
 import { getErrorMessage } from '../../utils/errors';
 import { onMessagePersisted as onContinuityMessagePersisted } from '../continuity/continuity_service';
-import type { ChatMemory } from './chat_memory';
-import { sanitizeUiMessageJsonForStorage } from './chat_ui';
+import type { ChatMemory } from './memory';
+import { sanitizeUiMessageJsonForStorage } from '../../../shared/chat/ui_message_codec';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
