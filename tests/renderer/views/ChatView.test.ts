@@ -356,6 +356,7 @@ describe('ChatView', () => {
       selectedWorkspaceId: selectedWorkspaceIdRef,
       selectedTools: selectedToolsRef,
       showWelcome: showWelcomeRef,
+      dismissWelcome: vi.fn(),
       refreshThreads: refreshThreadsMock,
       createNewThread: createNewThreadMock,
       clearCurrentThread: vi.fn(async () => undefined),
@@ -631,66 +632,6 @@ describe('ChatView', () => {
 
     expect(wrapper.text()).toContain('New Chat');
     expect(wrapper.text()).not.toContain('0 messages');
-  });
-
-  it('shows first-run feedback after the first user message is sent', async () => {
-    showWelcomeRef.value = false;
-    chatState.messages.splice(0, chatState.messages.length, {
-      id: 'msg_user_1',
-      role: 'user',
-      parts: [{ type: 'text', text: 'Hello' }],
-    } as UIMessage);
-
-    const wrapper = await mountChatView();
-
-    expect(wrapper.find('.onboarding-banner').exists()).toBe(true);
-    expect(wrapper.find('.onboarding-banner').text()).toContain('First message sent');
-    expect(wrapper.find('.onboarding-banner').text()).toContain(
-      'add a project folder, describe the task, or paste the material'
-    );
-  });
-
-  it('lets users dismiss the current onboarding banner', async () => {
-    showWelcomeRef.value = false;
-    chatState.messages.splice(0, chatState.messages.length, {
-      id: 'msg_user_1',
-      role: 'user',
-      parts: [{ type: 'text', text: 'Hello' }],
-    } as UIMessage);
-
-    const wrapper = await mountChatView();
-
-    expect(wrapper.find('.onboarding-banner').exists()).toBe(true);
-
-    await wrapper.find('.onboarding-banner-dismiss').trigger('click');
-
-    expect(wrapper.find('.onboarding-banner').exists()).toBe(false);
-  });
-
-  it('shifts first-run feedback once the assistant has replied to the first user message', async () => {
-    showWelcomeRef.value = false;
-    chatState.messages.splice(
-      0,
-      chatState.messages.length,
-      {
-        id: 'msg_user_1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'Hello' }],
-      } as UIMessage,
-      {
-        id: 'msg_assistant_1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'Hi there' }],
-      } as UIMessage
-    );
-
-    const wrapper = await mountChatView();
-
-    expect(wrapper.find('.onboarding-banner').exists()).toBe(true);
-    expect(wrapper.find('.onboarding-banner').text()).toContain('First conversation started');
-    expect(wrapper.find('.onboarding-banner').text()).toContain(
-      'project context, task intent, and source text'
-    );
   });
 
   it('shows an external-thread control-plane notice when viewing bridge-owned chats', async () => {

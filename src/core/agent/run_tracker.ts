@@ -23,7 +23,7 @@ import {
   toIsoNow,
 } from '../../shared/utils/text';
 import type { AgentResult } from './types';
-import type { ConversationRunnerStreamEvent } from './runners/conversation_runner';
+import type { ConversationRunnerStreamEvent } from './types';
 
 type CreateAgentRunTrackerParams = {
   kind: AgentRunKind;

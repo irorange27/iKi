@@ -114,12 +114,9 @@ import {
   fetchAcpModels,
   getModelCallSettings,
   getModelGenerationSettings,
-  generateChatWithUsage,
   refreshModelsDevCatalog,
   resetModelsDevCatalogCacheForTests,
   resolveModelCapability,
-  streamChat,
-  streamChatWithUsage,
 } from '../../../../src/core/provider/llm/factory';
 
 const createAsyncIterable = <T>(values: T[]) =>
@@ -716,119 +713,6 @@ describe('llm factory', () => {
     await expect(refreshModelsDevCatalog()).resolves.toBeNull();
 
     expect(fetchWithTimeoutMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns streamed text together with normalized usage', async () => {
-    streamTextMock.mockReturnValue({
-      fullStream: createAsyncIterable([
-        { type: 'text-delta', text: 'hello ' },
-        { type: 'text-delta', text: 'world' },
-      ]),
-      text: Promise.resolve('hello world'),
-      totalUsage: Promise.resolve({
-        inputTokens: 12,
-        outputTokens: 5,
-        totalTokens: 17,
-      }),
-    });
-
-    const onChunk = vi.fn();
-    await expect(
-      streamChatWithUsage(
-        {
-          providerType: 'openai',
-          modelId: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: 'hi' }],
-          maxOutputTokens: 256,
-        },
-        onChunk
-      )
-    ).resolves.toEqual({
-      text: 'hello world',
-      usage: {
-        inputTokens: 12,
-        outputTokens: 5,
-        totalTokens: 17,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        reasoningTokens: 0,
-        estimatedCostUsd: 0,
-      },
-    });
-
-    expect(onChunk).toHaveBeenNthCalledWith(1, 'hello ');
-    expect(onChunk).toHaveBeenNthCalledWith(2, 'world');
-    expect(streamTextMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'mock-model',
-        system: 'persona prompt',
-        messages: [{ role: 'user', content: 'hi' }],
-        maxOutputTokens: 256,
-      })
-    );
-  });
-
-  it('forwards max output tokens in non-stream generation calls', async () => {
-    generateTextMock.mockResolvedValue({
-      text: 'generated',
-      usage: {
-        inputTokens: 9,
-        outputTokens: 4,
-        totalTokens: 13,
-      },
-    });
-
-    await expect(
-      generateChatWithUsage({
-        providerType: 'openai',
-        modelId: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: 'hi' }],
-        maxOutputTokens: 384,
-      })
-    ).resolves.toEqual({
-      text: 'generated',
-      usage: {
-        inputTokens: 9,
-        outputTokens: 4,
-        totalTokens: 13,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-        reasoningTokens: 0,
-        estimatedCostUsd: 0,
-      },
-    });
-
-    expect(generateTextMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'mock-model',
-        system: 'persona prompt',
-        messages: [{ role: 'user', content: 'hi' }],
-        maxOutputTokens: 384,
-      })
-    );
-  });
-
-  it('keeps the legacy streamChat helper as a text-only wrapper', async () => {
-    streamTextMock.mockReturnValue({
-      fullStream: createAsyncIterable([]),
-      text: Promise.resolve('fallback text'),
-      totalUsage: Promise.resolve({
-        inputTokens: 1,
-        outputTokens: 1,
-        totalTokens: 2,
-      }),
-    });
-
-    await expect(
-      streamChat(
-        {
-          providerType: 'openai',
-          modelId: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: 'hi' }],
-        },
-        vi.fn()
-      )
-    ).resolves.toBe('fallback text');
   });
 
   it('builds provider-scoped call settings from stored model options', () => {

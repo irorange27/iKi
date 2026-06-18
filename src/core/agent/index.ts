@@ -33,7 +33,7 @@ export type {
   AgentRunnerFactory,
 } from './runners/agent_runner';
 
-export type { ConversationRunnerStreamEvent } from './runners/conversation_runner';
+export type { ConversationRunnerStreamEvent } from './types';
 
 // Export current public schemas
 export {
