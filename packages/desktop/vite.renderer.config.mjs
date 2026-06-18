@@ -12,6 +12,10 @@ export default defineConfig({
     alias: [
       { find: '@iki/core/', replacement: path.join(ROOT, 'packages/core/src/') },
       { find: '@iki/core', replacement: path.join(ROOT, 'packages/core/src/index.ts') },
+      { find: '@iki/backend/', replacement: path.join(ROOT, 'packages/backend/src/') },
+      { find: '@iki/backend', replacement: path.join(ROOT, 'packages/backend/src/index.ts') },
+      { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },
+      { find: '@iki/theme', replacement: path.join(ROOT, 'packages/theme/src/index.ts') },
       { find: '@iki/daemon/', replacement: path.join(ROOT, 'packages/daemon/src/') },
       { find: '@iki/daemon', replacement: path.join(ROOT, 'packages/daemon/src/index.ts') },
     ],
