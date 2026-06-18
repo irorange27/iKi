@@ -504,7 +504,9 @@ export const createChatStreaming = (deps: {
         }
 
         if (event) {
-          runTracker?.recordToolEvent(event);
+          if (event.type !== 'tool-input-end') {
+            runTracker?.recordToolEvent(event);
+          }
           uiChunkEmitter.emitToolEvent(event);
         }
       };

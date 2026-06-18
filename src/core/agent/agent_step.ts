@@ -42,11 +42,6 @@ export interface ApprovalRequestStep {
   requests: ToolApprovalRequest[];
 }
 
-export interface ApprovalCollectedStep {
-  type: 'approval-collected';
-  responses: AgentApprovalResponse[];
-}
-
 export interface HandoffStep {
   type: 'handoff';
   summary: string;
@@ -73,14 +68,7 @@ export type AgentStep =
   | ToolResultStep
   | ToolErrorStep
   | ApprovalRequestStep
-  | ApprovalCollectedStep
   | HandoffStep
   | FinishStep
   | ErrorStep;
 
-/** Response to a tool approval request. */
-export interface AgentApprovalResponse {
-  approvalId: string;
-  approved: boolean;
-  reason?: string;
-}

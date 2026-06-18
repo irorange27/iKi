@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai';
 
-import type { AgentApprovalResponse, AgentStep } from '../agent_step';
+import type { AgentStep } from '../agent_step';
 import type { AgentResult, AgentTool, PartialAgentConfig } from '../types';
 import type { ToolApprovalRequest } from '../types';
 
@@ -27,16 +27,6 @@ export interface AgentRunnerRequest {
 
   /** Signal to cancel the run externally. */
   abortSignal?: AbortSignal;
-
-  /**
-   * Called when the runner encounters tools that need user approval.
-   * The runner yields `approval-request`, then awaits this callback.
-   * The returned responses are yielded as `approval-collected` before
-   * the runner continues.
-   */
-  onApprovalRequired?: (
-    requests: ToolApprovalRequest[],
-  ) => Promise<AgentApprovalResponse[]>;
 
   /** Additional free-form config overrides. */
   config?: PartialAgentConfig;

@@ -20,11 +20,9 @@ export type {
   ToolResultStep,
   ToolErrorStep,
   ApprovalRequestStep,
-  ApprovalCollectedStep,
   HandoffStep,
   FinishStep,
   ErrorStep,
-  AgentApprovalResponse,
 } from './agent_step';
 
 export type {

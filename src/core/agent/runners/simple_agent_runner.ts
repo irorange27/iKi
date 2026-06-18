@@ -3,7 +3,6 @@ import {
   stepCountIs,
   streamText,
   type ModelMessage,
-  type ToolApprovalResponse,
   type ToolSet,
 } from 'ai';
 
@@ -21,7 +20,6 @@ import {
 } from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import {
-  appendApprovalResponsesToHistory,
   appendResponseMessages,
   appendUserPromptToHistory,
   buildAiToolSet,
@@ -33,7 +31,6 @@ import {
   validateAgentConfig,
 } from '../ai_sdk_runtime';
 import type {
-  AgentApprovalResponse,
   AgentStep,
   ErrorStep,
   FinishStep,
@@ -44,7 +41,6 @@ import type {
   ToolResultStep,
   ToolErrorStep,
   ApprovalRequestStep,
-  ApprovalCollectedStep,
 } from '../agent_step';
 import type { AgentRunner, AgentRunnerRequest } from './agent_runner';
 import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '../types';
@@ -198,7 +194,6 @@ export class SimpleAgentRunner implements AgentRunner {
         });
 
         let streamedText = '';
-        let pendingToolCallId: string | null = null;
         let terminalToolName: string | null = null;
 
         for await (const part of result.fullStream) {
@@ -229,12 +224,6 @@ export class SimpleAgentRunner implements AgentRunner {
               toolName,
               input: (part.input ?? {}) as Record<string, unknown>,
             } satisfies ToolCallStartStep;
-            pendingToolCallId = part.toolCallId;
-            continue;
-          }
-
-          if (part.type === 'tool-input-start') {
-            pendingToolCallId = part.id;
             continue;
           }
 
@@ -325,29 +314,7 @@ export class SimpleAgentRunner implements AgentRunner {
             requests: approvalRequests,
           } satisfies ApprovalRequestStep;
 
-          if (request.onApprovalRequired) {
-            // Caller handles approval inline — await & continue loop
-            const responses = await request.onApprovalRequired(approvalRequests);
-
-            yield {
-              type: 'approval-collected',
-              responses,
-            } satisfies ApprovalCollectedStep;
-
-            const aiResponses: ToolApprovalResponse[] = responses.map(r => ({
-              type: 'tool-approval-response' as const,
-              approvalId: r.approvalId,
-              approved: r.approved,
-              ...(r.reason ? { reason: r.reason } : {}),
-            }));
-            this.history = appendApprovalResponsesToHistory(history, aiResponses);
-            history = this.history;
-            disposeLanguageModel(model);
-            retryAttempt = 0;
-            continue;
-          }
-
-          // No approval callback — return so caller can gate and resume
+          // Return so caller can gate approval and resume
           disposeLanguageModel(model);
           return {
             response: allText || streamedText,
@@ -359,8 +326,9 @@ export class SimpleAgentRunner implements AgentRunner {
         }
 
         // Check for handoff
+        const resultToolCalls = await result.toolCalls;
         if (terminalToolName === 'handoff') {
-          const toolCalls = collectToolCalls(steps, await result.toolCalls);
+          const toolCalls = collectToolCalls(steps, resultToolCalls);
           const handoffCall = toolCalls?.find(tc => tc.toolName === 'handoff');
           const handoffArgs = handoffCall?.args as Record<string, unknown> | undefined;
 
@@ -406,7 +374,7 @@ export class SimpleAgentRunner implements AgentRunner {
 
         disposeLanguageModel(model);
 
-        const allToolCalls = collectToolCalls(steps, await result.toolCalls);
+        const allToolCalls = collectToolCalls(steps, resultToolCalls);
 
         return {
           response: finalText,
@@ -492,14 +460,8 @@ export class SimpleAgentRunner implements AgentRunner {
   private buildTurnHistory(
     history: ModelMessage[] | undefined,
     prompt: string,
-    approvalResponses?: ToolApprovalResponse[]
   ): ModelMessage[] {
     const base = history ? cloneModelMessages(history) : [];
-
-    if (approvalResponses && approvalResponses.length > 0) {
-      return appendApprovalResponsesToHistory(base, approvalResponses);
-    }
-
     return appendUserPromptToHistory(base, prompt);
   }
 

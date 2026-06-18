@@ -93,7 +93,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.eval.compare.same': '一致',
   'chat.eval.compare.different': '不同',
   'chat.eval.compare.missing': '缺失',
-  'chat.input.placeholder': '输入消息...',
+  'chat.input.placeholder': '向 iKi 提问， 输入 / 使用命令， $ 使用技能',
   'chat.input.placeholder.skillInvocation': ({ skill }) =>
     `继续描述要让 ${asText(skill)} 做什么...`,
   'chat.input.placeholder.promptInvocation': ({ name }) => `继续补充 ${asText(name)} 的请求内容...`,
