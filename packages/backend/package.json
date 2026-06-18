@@ -1,0 +1,15 @@
+{
+  "name": "@iki/backend",
+  "version": "0.0.2",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@iki/core": "workspace:*",
+    "@iki/theme": "workspace:*"
+  }
+}

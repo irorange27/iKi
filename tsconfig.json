@@ -23,7 +23,9 @@
       "@iki/daemon": ["./packages/daemon/src/index.ts"],
       "@iki/daemon/*": ["./packages/daemon/src/*"],
       "@iki/theme": ["./packages/theme/src/index.ts"],
-      "@iki/theme/*": ["./packages/theme/src/*"]
+      "@iki/theme/*": ["./packages/theme/src/*"],
+      "@iki/backend": ["./packages/backend/src/index.ts"],
+      "@iki/backend/*": ["./packages/backend/src/*"]
     },
     "typeRoots": [
       "./node_modules/@types",
