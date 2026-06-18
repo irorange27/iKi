@@ -1,4 +1,3 @@
-import { MemoryRetrievalAgent } from '../agents/memory_retrieval_agent';
 import {
   createDefaultMemoryRetrievalRuntime,
   type MemoryRetrievalPlan,
@@ -6,23 +5,23 @@ import {
 } from '../runtimes/memory_retrieval_runtime';
 
 export type { MemoryRetrievalPlan, MemoryRetrievalRuntime };
-export { MemoryRetrievalAgent } from '../agents/memory_retrieval_agent';
 export { LlmMemoryRetrievalRuntime } from '../runtimes/memory_retrieval_runtime';
 
-let defaultMemoryRetrievalAgent: MemoryRetrievalAgent | null = null;
+let defaultMemoryRetrievalRuntime: MemoryRetrievalRuntime | null = null;
 
-const getDefaultMemoryRetrievalAgent = () => {
-  if (!defaultMemoryRetrievalAgent) {
-    defaultMemoryRetrievalAgent = new MemoryRetrievalAgent(createDefaultMemoryRetrievalRuntime());
+const getDefaultMemoryRetrievalRuntime = () => {
+  if (!defaultMemoryRetrievalRuntime) {
+    defaultMemoryRetrievalRuntime = createDefaultMemoryRetrievalRuntime();
   }
-  return defaultMemoryRetrievalAgent;
+  return defaultMemoryRetrievalRuntime;
 };
-
-export const createMemoryRetrievalAgent = (runtime: MemoryRetrievalRuntime) =>
-  new MemoryRetrievalAgent(runtime);
 
 export const planMemoryRetrieval = async (
   content: string
-): Promise<MemoryRetrievalPlan | null> => getDefaultMemoryRetrievalAgent().run(content);
+): Promise<MemoryRetrievalPlan | null> => {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+  return getDefaultMemoryRetrievalRuntime().run(trimmed);
+};
 
 export const planMemoryRetrievalWithAgent = planMemoryRetrieval;

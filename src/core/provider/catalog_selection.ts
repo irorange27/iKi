@@ -1,4 +1,3 @@
-import { CatalogSelectionAgent } from '../agents/catalog_selection_agent';
 import {
   buildTranscript,
   extractJsonCandidate,
@@ -15,7 +14,6 @@ import { getToolModel } from './tool_model';
 export type { CatalogSelectionRequest as CatalogSelectorParams };
 export type { CatalogSelectionRuntime, SelectionMessage };
 export {
-  CatalogSelectionAgent,
   LlmCatalogSelectionRuntime,
   buildTranscript,
   extractJsonCandidate,
@@ -23,17 +21,14 @@ export {
   tryParseJson,
 };
 
-export const createCatalogSelectionAgent = (runtime: CatalogSelectionRuntime) =>
-  new CatalogSelectionAgent(runtime);
-
 export const selectCatalogWithAgent = async <T>(
   params: CatalogSelectionRequest<T>
 ): Promise<string[]> => {
-  const agent = createCatalogSelectionAgent(
-    new LlmCatalogSelectionRuntime({
-      getToolModel,
-      createGenerator: createSimplePromptTextGenerator,
-    })
-  );
-  return agent.run(params);
+  if (params.availableCatalog.length === 0) return [];
+
+  const runtime = new LlmCatalogSelectionRuntime({
+    getToolModel,
+    createGenerator: createSimplePromptTextGenerator,
+  });
+  return runtime.run(params);
 };

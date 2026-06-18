@@ -1,4 +1,3 @@
-import { EmotionAgent } from '../agents/emotion_agent';
 import {
   createDefaultEmotionRuntime,
   type EmotionResult,
@@ -7,21 +6,21 @@ import {
 } from '../runtimes/emotion_runtime';
 
 export type { EmotionResult, EmotionRuntime, EmotionScore };
-export { EmotionAgent } from '../agents/emotion_agent';
 export { LlmEmotionRuntime } from '../runtimes/emotion_runtime';
 
-let defaultEmotionAgent: EmotionAgent | null = null;
+let defaultEmotionRuntime: EmotionRuntime | null = null;
 
-const getDefaultEmotionAgent = () => {
-  if (!defaultEmotionAgent) {
-    defaultEmotionAgent = new EmotionAgent(createDefaultEmotionRuntime());
+const getDefaultEmotionRuntime = () => {
+  if (!defaultEmotionRuntime) {
+    defaultEmotionRuntime = createDefaultEmotionRuntime();
   }
-  return defaultEmotionAgent;
+  return defaultEmotionRuntime;
 };
 
-export const createEmotionAgent = (runtime: EmotionRuntime) => new EmotionAgent(runtime);
-
-export const analyzeEmotion = async (content: string): Promise<EmotionResult | null> =>
-  getDefaultEmotionAgent().run(content);
+export const analyzeEmotion = async (content: string): Promise<EmotionResult | null> => {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+  return getDefaultEmotionRuntime().run(trimmed);
+};
 
 export const analyzeEmotionWithAgent = analyzeEmotion;

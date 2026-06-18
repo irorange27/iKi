@@ -3,7 +3,6 @@ import { generateText } from 'ai';
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { createLogger } from '../logger';
-import { TitleAgent } from '../agents/title_agent';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { createModel, disposeLanguageModel, getModelCallSettings } from './llm/factory';
@@ -187,18 +186,17 @@ export const testToolModelLatency = async (
 };
 
 export type { TitleRuntime };
-export { TitleAgent, LlmTitleRuntime };
-
-export const createTitleAgent = (runtime: TitleRuntime) => new TitleAgent(runtime);
+export { LlmTitleRuntime };
 
 export const generateTitle = async (conversationContent: string): Promise<string | null> => {
-  const agent = createTitleAgent(
-    new LlmTitleRuntime({
-      getToolModel,
-      createGenerator: createSimplePromptTextGenerator,
-    })
-  );
-  return agent.run(conversationContent);
+  const trimmed = conversationContent.trim();
+  if (!trimmed) return null;
+
+  const runtime = new LlmTitleRuntime({
+    getToolModel,
+    createGenerator: createSimplePromptTextGenerator,
+  });
+  return runtime.run(trimmed);
 };
 
 export const generateTitleWithAgent = generateTitle;

@@ -5,6 +5,9 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createMinimax } from 'vercel-minimax-ai-provider';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '../../logger';
 import { getPersonaPrompt } from '../../persona';
@@ -85,8 +88,40 @@ const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
   );
 };
 
+const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null => {
+  try {
+    const filePath = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const entry = raw?.[providerType];
+    if (!entry || entry.type !== 'api_key' || !entry.key) return null;
+
+    return {
+      id: `_bootstrap_${providerType}`,
+      type: providerType,
+      apiKey: entry.key,
+      baseURL: '',
+      models: [],
+      modelOptions: {},
+      isResponseApi: false,
+      acpCommand: '',
+      acpArgs: '',
+      acpMcpServerIds: '',
+      acpAuthMethodId: '',
+      acpApiProviderId: '',
+      acpModelMapping: '',
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const getProviderConfig = (providerType: string, providerId?: string | null): ProviderConfig => {
-  const providers = getProviders();
+  let providers: ReturnType<typeof getProviders> = [];
+  try {
+    providers = getProviders();
+  } catch {
+    // DB unavailable — fall through to auth.json bootstrap
+  }
   const normalizedProviderId =
     typeof providerId === 'string' && providerId.trim().length > 0 ? providerId.trim() : '';
   const provider = normalizedProviderId
@@ -97,6 +132,9 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     if (normalizedProviderId) {
       throw new Error(`Provider ${normalizedProviderId} is not configured or not enabled`);
     }
+    // Fallback to auth.json bootstrap before throwing
+    const bootstrap = readBootstrapAuthConfig(providerType);
+    if (bootstrap) return bootstrap;
     throw new Error(`Provider ${providerType} not configured or not enabled`);
   }
 
