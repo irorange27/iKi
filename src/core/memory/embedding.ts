@@ -2,7 +2,7 @@ import { createLogger } from '../logger';
 import { getAppConfig } from '../config';
 import { getProviders } from '../db/providers';
 import { getProviderConfig } from '../provider/llm/factory';
-import { fetchWithTimeout } from '../network/http';
+import { fetchWithTimeout } from '../../shared/network/http';
 import {
   DEFAULT_MEMORY_EMBEDDING_MODEL,
   listProviderEmbeddingModels,

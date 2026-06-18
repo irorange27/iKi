@@ -2,7 +2,7 @@ import { app, net, session, type Session } from 'electron';
 import { randomUUID } from 'node:crypto';
 
 import { getAppConfig } from '../../../core/config';
-import { clampNetworkTimeoutMs } from '../../../core/network/http';
+import { clampNetworkTimeoutMs } from '../../../shared/network/http';
 import { normalizeAppConfig } from '../../../shared/config/normalize';
 import { buildProxyUrl, getProxyCredentials } from '../../../shared/network/proxy';
 import type {

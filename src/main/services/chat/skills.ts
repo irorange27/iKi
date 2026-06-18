@@ -5,7 +5,7 @@ import {
   buildSkillsMetadataSystemPrompt,
   listSkills,
   normalizeSkillIds,
-} from '../../../core/skills';
+} from '../../../core/tools/skills';
 import { getToolModel } from '../../../core/provider/tool_model';
 import { selectSkillsWithAgent } from '../../../core/provider/skill_selection';
 import type { SkillSummary } from '../../../shared/types/skill';

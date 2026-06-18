@@ -5,7 +5,7 @@ import {
   type SelectionMessage,
 } from './catalog_selection';
 import { buildAffectDecisionMessage, type AffectState } from '../emotion/affect_state';
-import { formatSkillMetadataForPrompt } from '../skills';
+import { formatSkillMetadataForPrompt } from '../tools/skills';
 
 export type SkillSelectionMessage = SelectionMessage;
 

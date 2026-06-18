@@ -1,6 +1,6 @@
-import type { AppConfig } from '../../shared/types/config';
-import { buildProxyUrl } from '../../shared/network/proxy';
-import { getAppConfig } from '../config';
+import type { AppConfig } from '../types/config';
+import { buildProxyUrl } from './proxy';
+import { getAppConfig } from '../../core/config';
 import { canUseElectronNetworkStack, electronFetchWithTimeout } from './electron_fetch';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;

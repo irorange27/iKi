@@ -8,7 +8,7 @@ import {
 import {
   generateThreadSummary,
   type ThreadSummaryMessage,
-} from '../../../core/context/thread_summary';
+} from './thread_summary';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
 import type { ChatInputMessage } from './types';
 import {

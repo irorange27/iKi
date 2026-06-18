@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { writeThreadTodoPlan } from '../db/thread_todos';
-import { renderTaskPlan, summarizeTaskPlan } from '../todos/task_plan';
+import { renderTaskPlan, summarizeTaskPlan } from '../db/task_plan';
 import { BaseTool } from './base';
 import { zodSchemaToJsonSchema } from './json_schema';
 import { getToolRuntimeContext } from './runtime_context';

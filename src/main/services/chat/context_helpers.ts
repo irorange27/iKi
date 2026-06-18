@@ -6,7 +6,7 @@ import {
   clipTextToTokenBudget,
   estimateMessageTokens,
   estimateTextTokens,
-} from '../../../core/context/token_estimator';
+} from './token_estimator';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
 import type { ModelCapability } from '../../../shared/utils/provider_models';
 import type { ChatInputMessage } from './types';

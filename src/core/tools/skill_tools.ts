@@ -6,7 +6,7 @@ import {
   readPersonalSkill,
   readSkillInstructions,
   writePersonalSkill,
-} from '../skills';
+} from './skills';
 import { BaseTool } from './base';
 import { zodSchemaToJsonSchema } from './json_schema';
 import {

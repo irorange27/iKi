@@ -1,5 +1,5 @@
 import * as promptAppDb from '../core/db/prompt_apps';
-import { listSkills } from '../core/skills';
+import { listSkills } from '../core/tools/skills';
 import type { ComposerInvocationPartData } from '../shared/chat/message_parts';
 import {
   applyPromptAppSlashCommandTemplate,

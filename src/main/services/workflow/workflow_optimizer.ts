@@ -4,7 +4,7 @@ import {
   upsertWorkflowProfile,
   clearWorkflowProfiles,
 } from '../../../core/db/workflow_profile';
-import { normalizeSkillIds } from '../../../core/skills';
+import { normalizeSkillIds } from '../../../core/tools/skills';
 import type { WorkflowOptimizationConfig, WorkflowProfile } from '../../../shared/types/workflow';
 import { clonePlainData } from '../../../shared/utils/clone';
 

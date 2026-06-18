@@ -4,7 +4,7 @@ import {
   type TaskPlan,
   type TaskPlanItemDraft,
 } from '../../shared/types/task_plan';
-import { normalizeTaskPlanItems } from '../todos/task_plan';
+import { normalizeTaskPlanItems } from './task_plan';
 import { normalizeWhitespace, toIsoNow } from '../../shared/utils/text';
 
 type ThreadTodoRow = {

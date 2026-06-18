@@ -7,7 +7,7 @@ import {
   getSkillRootsForUi,
   listSkills,
   readSkillContent,
-} from '../../core/skills';
+} from '../../core/tools/skills';
 import { getErrorMessage } from '../utils/errors';
 
 let skillsIpcRegistered = false;

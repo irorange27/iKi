@@ -7,7 +7,7 @@ import {
   type ThreadWorkspaceSelection,
 } from '../workspaces/thread_workspace';
 import { getUserDataPath } from '../platform';
-import { isPathWithinRoot } from '../utils/path_boundary';
+import { isPathWithinRoot } from '../../shared/utils/path_boundary';
 import { getToolRuntimeContext } from './runtime_context';
 
 export type WorkspaceRoot = {

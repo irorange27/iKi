@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import type { SkillSummary, SkillSource } from '../../shared/types/skill';
 import { sanitizePromptMetadataText, stringifyPromptData } from '../../shared/utils/text';
 import { getUserDataPath } from '../platform';
-import { isPathWithinRoot } from '../utils/path_boundary';
+import { isPathWithinRoot } from '../../shared/utils/path_boundary';
 
 type SkillRecord = SkillSummary & {
   filePath: string;

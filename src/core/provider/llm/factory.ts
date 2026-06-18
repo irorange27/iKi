@@ -11,7 +11,7 @@ import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '../../logger';
 import { getPersonaPrompt } from '../../persona';
-import { fetchWithTimeout } from '../../network/http';
+import { fetchWithTimeout } from '../../../shared/network/http';
 import { getToolRuntimeContext } from '../../tools/runtime_context';
 import {
   getProviderModelOptions,

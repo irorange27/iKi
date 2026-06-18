@@ -1,6 +1,6 @@
-import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
-import { createLogger } from '../logger';
-import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
+import { getToolModel, type ToolModelConfig } from '../../../core/provider/tool_model';
+import { createLogger } from '../../../core/logger';
+import { createSimplePromptTextGenerator } from '../../../core/runtimes/prompt_text_generator';
 
 export type ThreadSummaryMessage = {
   role: 'user' | 'assistant';
