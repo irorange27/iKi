@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import type { UIMessage } from 'ai';
 
-import ChatMessageParts from '../../../src/renderer/components/chat/ChatMessageParts.vue';
+import ChatMessageParts from '../../../packages/desktop/src/renderer/components/chat/ChatMessageParts.vue';
 
 const createMessage = (): UIMessage =>
   ({

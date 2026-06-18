@@ -1,0 +1,23 @@
+{
+  "name": "@iki/daemon",
+  "version": "0.0.2",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./server_http": "./src/server_http.ts",
+    "./server_ws": "./src/server_ws.ts",
+    "./server_shared": "./src/server_shared.ts",
+    "./server_schemas": "./src/server_schemas.ts",
+    "./server_logging": "./src/server_logging.ts",
+    "./tool_access": "./src/tool_access.ts",
+    "./napcat_adapter": "./src/napcat_adapter.ts",
+    "./napcat_slash_commands": "./src/napcat_slash_commands.ts",
+    "./bootstrap_token": "./src/bootstrap_token.ts"
+  },
+  "dependencies": {
+    "@iki/core": "workspace:*"
+  }
+}

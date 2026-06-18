@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import ProviderModelOptionsModal from '../../../src/renderer/components/settings/providers/ProviderModelOptionsModal.vue';
+import ProviderModelOptionsModal from '../../../packages/desktop/src/renderer/components/settings/providers/ProviderModelOptionsModal.vue';
 
 describe('ProviderModelOptionsModal', () => {
   it('emits normalized model options when the form is saved', async () => {

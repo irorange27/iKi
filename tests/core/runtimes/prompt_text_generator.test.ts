@@ -21,18 +21,18 @@ vi.mock('ai', () => ({
   generateText: generateTextMock,
 }));
 
-vi.mock('../../../src/core/provider/llm/factory', () => ({
+vi.mock('@iki/core/provider/llm/factory', () => ({
   createModel: createModelMock,
   disposeLanguageModel: disposeLanguageModelMock,
   getModelGenerationSettings: getModelGenerationSettingsMock,
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-import { createSimplePromptTextGenerator } from '../../../src/core/runtimes/prompt_text_generator';
+import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
 
 beforeEach(() => {
   vi.clearAllMocks();

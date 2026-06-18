@@ -2,9 +2,9 @@ import type { UIMessage } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import { createChatMessageStore } from '../../../src/renderer/modules/chat/chat_message_store';
-import { useChatStreaming } from '../../../src/renderer/composables/useChatStreaming';
-import type { ChatThread } from '../../../src/shared/types/chat';
+import { createChatMessageStore } from '../../../packages/desktop/src/renderer/modules/chat/chat_message_store';
+import { useChatStreaming } from '../../../packages/desktop/src/renderer/composables/useChatStreaming';
+import type { ChatThread } from '@iki/core/types/chat';
 
 const flushMicrotasks = async () => {
   await Promise.resolve();

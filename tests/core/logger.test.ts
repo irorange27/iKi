@@ -9,7 +9,7 @@ describe('core logger', () => {
 
   it('builds canonical structured entries and merges async log context', async () => {
     const { createLogger, setBaseLogContext, setLoggingEnabled, withLogContext } =
-      await import('../../src/core/logger');
+      await import('@iki/core/logger');
 
     setLoggingEnabled(false);
     setBaseLogContext({ process: 'main' });
@@ -54,7 +54,7 @@ describe('core logger', () => {
   });
 
   it('redacts sensitive data in legacy log calls', async () => {
-    const { createLogger, setLoggingEnabled } = await import('../../src/core/logger');
+    const { createLogger, setLoggingEnabled } = await import('@iki/core/logger');
 
     setLoggingEnabled(false);
     const moduleLogger = createLogger({ module: 'tool_model' });
@@ -82,7 +82,7 @@ describe('core logger', () => {
 
   it('applies runtime logging config from app config', async () => {
     const { applyAppLoggingConfig, getRuntimeLoggingConfig } =
-      await import('../../src/core/logger');
+      await import('@iki/core/logger');
 
     applyAppLoggingConfig({
       security: {

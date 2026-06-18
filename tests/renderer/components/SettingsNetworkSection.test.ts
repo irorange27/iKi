@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
-import SettingsNetworkSection from '../../../src/renderer/components/settings/SettingsNetworkSection.vue';
-import { useConfigStore } from '../../../src/renderer/store/config';
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
+import SettingsNetworkSection from '../../../packages/desktop/src/renderer/components/settings/SettingsNetworkSection.vue';
+import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

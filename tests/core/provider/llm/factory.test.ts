@@ -74,36 +74,36 @@ vi.mock('vercel-minimax-ai-provider', () => ({
   createMinimax: createMinimaxMock,
 }));
 
-vi.mock('../../../../src/core/db/providers', () => ({
+vi.mock('@iki/core/db/providers', () => ({
   getProviders: getProvidersMock,
   getProvider: getProviderMock,
 }));
 
-vi.mock('../../../../src/core/db/mcp_servers', () => ({
+vi.mock('@iki/core/db/mcp_servers', () => ({
   listMcpServers: listMcpServersMock,
 }));
 
-vi.mock('../../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: createLoggerMock,
 }));
 
-vi.mock('../../../../src/core/persona', () => ({
+vi.mock('@iki/core/persona', () => ({
   getPersonaPrompt: getPersonaPromptMock,
 }));
 
-vi.mock('../../../../src/core/network/http', () => ({
+vi.mock('@iki/core/network/http', () => ({
   fetchWithTimeout: fetchWithTimeoutMock,
 }));
 
-vi.mock('../../../../src/core/platform', () => ({
+vi.mock('@iki/core/platform', () => ({
   getUserDataPath: getUserDataPathMock,
 }));
 
-vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
+vi.mock('@iki/core/workspaces/thread_workspace', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
 
-vi.mock('../../../../src/core/tools/runtime_context', () => ({
+vi.mock('@iki/core/tools/runtime_context', () => ({
   getToolRuntimeContext: getToolRuntimeContextMock,
 }));
 
@@ -117,7 +117,7 @@ import {
   refreshModelsDevCatalog,
   resetModelsDevCatalogCacheForTests,
   resolveModelCapability,
-} from '../../../../src/core/provider/llm/factory';
+} from '@iki/core/provider/llm/factory';
 
 const createAsyncIterable = <T>(values: T[]) =>
   (async function* () {

@@ -2,13 +2,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
-import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '../../../src/shared/utils/provider_models';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/core/utils/provider_models';
 
 const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('../../../src/renderer/logger', () => ({
+vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -19,9 +19,9 @@ vi.mock('../../../src/renderer/logger', () => ({
   })),
 }));
 
-import type { Provider } from '../../../src/shared/types/provider';
-import type { PromptApp, Workspace } from '../../../src/shared/types/chat';
-import type { SkillSummary } from '../../../src/shared/types/skill';
+import type { Provider } from '@iki/core/types/provider';
+import type { PromptApp, Workspace } from '@iki/core/types/chat';
+import type { SkillSummary } from '@iki/core/types/skill';
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -284,7 +284,7 @@ const mountChatInput = async (options?: {
   const mountProps = { ...(options?.props ?? {}) };
   delete mountProps.chat;
 
-  const ChatInput = (await import('../../../src/renderer/components/ChatInput.vue')).default;
+  const ChatInput = (await import('../../../packages/desktop/src/renderer/components/ChatInput.vue')).default;
   const wrapper = mount(ChatInput, {
     props: {
       ...mountProps,

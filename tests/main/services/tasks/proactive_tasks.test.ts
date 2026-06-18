@@ -19,21 +19,21 @@ vi.mock('electron', () => {
   };
 });
 
-vi.mock('../../../../src/core/db/tasks', () => ({
+vi.mock('@iki/core/db/tasks', () => ({
   getProactiveTask: vi.fn(),
   updateProactiveTask: vi.fn(),
   listDueProactiveTasks: vi.fn(),
 }));
 
-vi.mock('../../../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   touchChatThread: vi.fn(),
 }));
 
-vi.mock('../../../../src/daemon/bridge_dispatch', () => ({
+vi.mock('@iki/core/bridge_dispatch', () => ({
   deliverBridgeThreadMessage: vi.fn(),
 }));
 
-vi.mock('../../../../src/main/services/chat/service', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/chat/service', () => ({
   chatService: {
     getThread: vi.fn(),
     createThread: vi.fn(),
@@ -42,7 +42,7 @@ vi.mock('../../../../src/main/services/chat/service', () => ({
   },
 }));
 
-vi.mock('../../../../src/main/services/companion/companion_service', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/companion/companion_service', () => ({
   companionService: {
     pushTaskNudge: vi.fn(),
   },
@@ -50,12 +50,12 @@ vi.mock('../../../../src/main/services/companion/companion_service', () => ({
 
 import { BrowserWindow, Notification } from 'electron';
 
-import type { ProactiveTask } from '../../../../src/shared/types/tasks';
-import { runProactiveTask } from '../../../../src/main/services/tasks/proactive_tasks';
-import * as tasksDb from '../../../../src/core/db/tasks';
-import * as chatThreadDb from '../../../../src/core/db/chat_thread';
-import { deliverBridgeThreadMessage } from '../../../../src/daemon/bridge_dispatch';
-import { chatService } from '../../../../src/main/services/chat/service';
+import type { ProactiveTask } from '@iki/core/types/tasks';
+import { runProactiveTask } from '../../../../packages/desktop/src/main/services/tasks/proactive_tasks';
+import * as tasksDb from '@iki/core/db/tasks';
+import * as chatThreadDb from '@iki/core/db/chat_thread';
+import { deliverBridgeThreadMessage } from '@iki/core/bridge_dispatch';
+import { chatService } from '../../../../packages/desktop/src/main/services/chat/service';
 
 const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
   id: 'task_1',

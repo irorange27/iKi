@@ -29,15 +29,15 @@ import {
   WritePersonalSkillInputSchema,
   WriteTodoListInputSchema,
   WriteFileInputSchema,
-} from '../../../src/core/tools/schemas';
+} from '@iki/core/tools/schemas';
 
 describe('tool input schemas', () => {
   it('keeps tool schemas browser-safe for renderer payload parsing', () => {
-    const source = readFileSync(new URL('../../../src/core/tools/schemas.ts', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../../packages/core/src/tools/schemas.ts', import.meta.url), 'utf8');
     const importSpecifiers = Array.from(source.matchAll(/from ['"]([^'"]+)['"]/g), match => match[1]);
 
     expect(importSpecifiers.length).toBeGreaterThan(0);
-    expect(importSpecifiers.every(specifier => specifier === 'zod' || specifier.startsWith('../../shared/'))).toBe(
+    expect(importSpecifiers.every(specifier => specifier === 'zod' || specifier.startsWith('../'))).toBe(
       true
     );
   });

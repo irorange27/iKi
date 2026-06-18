@@ -1,9 +1,21 @@
 // eslint-disable-next-line import/no-unresolved
 import { defineConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 
 export default defineConfig({
   plugins: [vue()],
+  resolve: {
+    alias: [
+      { find: '@iki/core/', replacement: path.join(ROOT, 'packages/core/src/') },
+      { find: '@iki/core', replacement: path.join(ROOT, 'packages/core/src/index.ts') },
+      { find: '@iki/daemon/', replacement: path.join(ROOT, 'packages/daemon/src/') },
+      { find: '@iki/daemon', replacement: path.join(ROOT, 'packages/daemon/src/index.ts') },
+    ],
+  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
@@ -13,8 +25,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json-summary', 'lcov'],
       reportsDirectory: 'coverage',
-      include: ['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.vue'],
-      exclude: ['src/**/*.d.ts', 'src/core/db/migration/**'],
+      include: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx', 'packages/*/src/**/*.vue'],
+      exclude: ['packages/*/src/db/migration/**'],
       thresholds: {
         lines: 60,
         functions: 59,

@@ -4,7 +4,7 @@ import {
   extractTextFromModelMessageContent,
   hasToolPartInModelMessageContent,
   sanitizeModelConversationMessages,
-} from '../../../src/core/agent/model_messages';
+} from '@iki/core/agent/model_messages';
 
 describe('extractTextFromModelMessageContent', () => {
   it('concatenates text parts and ignores non-text parts', () => {

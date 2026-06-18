@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import WelcomeScreen from '../../../src/renderer/components/WelcomeScreen.vue';
+import WelcomeScreen from '../../../packages/desktop/src/renderer/components/WelcomeScreen.vue';
 
 const {
   mockOpenSettingsOverview,
@@ -27,11 +27,11 @@ const {
   })),
 }));
 
-vi.mock('../../../src/renderer/composables/useWelcomeScreenState', () => ({
+vi.mock('../../../packages/desktop/src/renderer/composables/useWelcomeScreenState', () => ({
   useWelcomeScreenState: useWelcomeScreenStateMock,
 }));
 
-vi.mock('../../../src/renderer/i18n', () => ({
+vi.mock('../../../packages/desktop/src/renderer/i18n', () => ({
   useI18n: useI18nMock,
 }));
 

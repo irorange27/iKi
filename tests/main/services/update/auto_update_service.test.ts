@@ -30,8 +30,8 @@ import {
   buildUpdateFeedUrl,
   createAppUpdateService,
   parseGitHubRepository,
-} from '../../../../src/main/services/update/auto_update_service';
-import { createDefaultAppConfig } from '../../../../src/shared/config/defaults';
+} from '../../../../packages/desktop/src/main/services/update/auto_update_service';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
 
 type AutoUpdaterMock = EventEmitter & {
   setFeedURL: ReturnType<typeof vi.fn>;

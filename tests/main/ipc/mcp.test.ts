@@ -22,11 +22,11 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/core/mcp', () => ({
+vi.mock('@iki/core/mcp', () => ({
   getMcpManager: vi.fn(() => manager),
 }));
 
-import { registerMcpIpc } from '../../../src/main/ipc/mcp';
+import { registerMcpIpc } from '../../../packages/desktop/src/main/ipc/mcp';
 
 beforeAll(() => {
   registerMcpIpc();

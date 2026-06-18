@@ -4,7 +4,7 @@ import {
   getRendererDevServerUrl,
   getRendererProdHtmlPath,
   loadRendererEntry,
-} from '../../../src/main/windows/renderer';
+} from '../../../packages/desktop/src/main/windows/renderer';
 
 describe('loadRendererEntry', () => {
   const loadURL = vi.fn((url: string) => Promise.resolve(void url));

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyToolApprovalPolicy,
   applyToolApprovalPolicyList,
-} from '../../src/shared/utils/tool_approval';
+} from '@iki/core/utils/tool_approval';
 
 describe('tool approval policy helpers', () => {
   it('preserves approval requirements when auto-approve is disabled', () => {

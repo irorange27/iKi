@@ -10,8 +10,8 @@ import {
   LoadSkillTool,
   ReadPersonalSkillTool,
   WritePersonalSkillTool,
-} from '../../../src/core/tools/skill_tools';
-import { runWithToolRuntimeContext } from '../../../src/core/tools/runtime_context';
+} from '@iki/core/tools/skill_tools';
+import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
 
 describe('load skill tool', () => {
   let tempRoot = '';

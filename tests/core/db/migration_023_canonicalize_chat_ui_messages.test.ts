@@ -13,7 +13,7 @@ const { state, getDbMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
 }));
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: getDbMock,
 }));
 
@@ -87,7 +87,7 @@ describe('023_canonicalize_chat_ui_messages migration', () => {
 
   it('canonicalizes only rows that actually need chat UI storage normalization', async () => {
     const { migration } = await import(
-      '../../../src/core/db/migration/023_canonicalize_chat_ui_messages'
+      '../../../packages/core/src/db/migration/023_canonicalize_chat_ui_messages'
     );
 
     migration.up();

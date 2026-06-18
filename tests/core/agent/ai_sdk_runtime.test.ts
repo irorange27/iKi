@@ -17,15 +17,15 @@ vi.mock('@mcpc-tech/acp-ai-provider', () => ({
   acpTools: acpToolsMock,
 }));
 
-vi.mock('../../../src/core/provider/llm/factory', () => ({
+vi.mock('@iki/core/provider/llm/factory', () => ({
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     error: vi.fn(),
     warn: vi.fn(),
@@ -47,7 +47,7 @@ import {
   collectToolCalls,
   getDefaultAgentConfig,
   loadAgentConfig,
-} from '../../../src/core/agent/ai_sdk_runtime';
+} from '@iki/core/agent/ai_sdk_runtime';
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: vi.fn(),
 }));
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(() => ({ memory: { enabled: true } })),
 }));
 
-vi.mock('../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 
-vi.mock('../../../src/core/memory/embedding', () => ({
+vi.mock('@iki/core/memory/embedding', () => ({
   embedTextsWithFallback: vi.fn(),
   HASH_EMBEDDING_DIM: 128,
   HASH_EMBEDDING_VERSION: 1,
@@ -21,12 +21,12 @@ vi.mock('../../../src/core/memory/embedding', () => ({
   createPreferredMemoryEmbeddingRuntime: vi.fn(),
 }));
 
-import { getDb } from '../../../src/core/db/database';
+import { getDb } from '@iki/core/db/database';
 import {
   createHashMemoryEmbeddingRuntime,
   createPreferredMemoryEmbeddingRuntime,
-} from '../../../src/core/memory/embedding';
-import { searchLongMemory, type LongMemoryEntry } from '../../../src/core/db/memory';
+} from '@iki/core/memory/embedding';
+import { searchLongMemory, type LongMemoryEntry } from '@iki/core/db/memory';
 
 const getDbMock = vi.mocked(getDb);
 

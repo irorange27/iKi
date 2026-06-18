@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { registerStandardTools, defaultToolRegistry } from '../../src/core/tools';
+import { registerStandardTools, defaultToolRegistry } from '@iki/core/tools';
 import {
   createSimpleAgentRunner,
   type AgentRunner,
   type AgentTool,
-} from '../../src/core/agent';
+} from '@iki/core/agent';
 
 const AUTH_PATH = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
 

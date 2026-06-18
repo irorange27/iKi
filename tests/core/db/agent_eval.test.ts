@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: vi.fn(),
 }));
 
-import { getDb } from '../../../src/core/db/database';
+import { getDb } from '@iki/core/db/database';
 import {
   createEvalLabel,
   getEvalLabel,
@@ -13,7 +13,7 @@ import {
   updateEvalLabel,
   deleteEvalLabel,
   listEvalLabelsByRunIds,
-} from '../../../src/core/db/agent_eval';
+} from '@iki/core/db/agent_eval';
 
 const getDbMock = vi.mocked(getDb);
 

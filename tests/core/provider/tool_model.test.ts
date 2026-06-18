@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import type { Provider } from '../../../src/shared/types/provider';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import type { Provider } from '@iki/core/types/provider';
 
 const {
   createModelMock,
@@ -25,22 +25,22 @@ vi.mock('ai', () => ({
   generateText: generateTextMock,
 }));
 
-vi.mock('../../../src/core/provider/llm/factory', () => ({
+vi.mock('@iki/core/provider/llm/factory', () => ({
   createModel: createModelMock,
   disposeLanguageModel: disposeLanguageModelMock,
   getFullSystemPrompt: getFullSystemPromptMock,
   getModelCallSettings: getModelCallSettingsMock,
 }));
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('../../../src/core/db/providers', () => ({
+vi.mock('@iki/core/db/providers', () => ({
   getProviders: getProvidersMock,
 }));
 
-vi.mock('../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock('../../../src/core/logger', () => ({
   })),
 }));
 
-import { getToolModel, testToolModelLatency } from '../../../src/core/provider/tool_model';
+import { getToolModel, testToolModelLatency } from '@iki/core/provider/tool_model';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type' | 'models'>

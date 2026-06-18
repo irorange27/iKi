@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 
-import SettingsSelect from '../../../src/renderer/components/settings/SettingsSelect.vue';
+import SettingsSelect from '../../../packages/desktop/src/renderer/components/settings/SettingsSelect.vue';
 
 const usagePeriodOptions = [
   { value: '7d', label: 'Last 7 Days' },

@@ -49,15 +49,15 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('../../../../src/daemon/server', () => ({
+vi.mock('@iki/daemon/server', () => ({
   startDaemonServer: startDaemonServerMock,
 }));
 
-vi.mock('../../../../src/core/daemon_logs', () => ({
+vi.mock('@iki/core/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
     event: daemonLoggerEventMock,
   })),
@@ -173,7 +173,7 @@ describe('daemon lifecycle', () => {
   it('starts embedded daemon in desktop mode without spawning a second Electron process', async () => {
     mockHealthOffline();
     const { startDesktopDaemon } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     const started = startDesktopDaemon();
@@ -188,7 +188,7 @@ describe('daemon lifecycle', () => {
   it('skips embedded startup when an existing daemon is already healthy on the configured binding', async () => {
     mockHealthOnline('127.0.0.1', 6127);
     const { startDesktopDaemon } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     await startDesktopDaemon();
@@ -208,7 +208,7 @@ describe('daemon lifecycle', () => {
     process.env.IKI_DAEMON_AUTOSTART = 'false';
     mockHealthOffline();
     const { startDesktopDaemon } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     await startDesktopDaemon();
@@ -220,7 +220,7 @@ describe('daemon lifecycle', () => {
     process.env.IKI_DAEMON_AUTOSTART = 'false';
     mockHealthOffline();
     const { startDesktopDaemon } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     const started = startDesktopDaemon({ ignoreAutostartEnv: true });
@@ -237,7 +237,7 @@ describe('daemon lifecycle', () => {
     });
     mockHealthOffline();
     const { startDesktopDaemon } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     const started = startDesktopDaemon();
@@ -259,7 +259,7 @@ describe('daemon lifecycle', () => {
   it('logs malformed health payloads before falling back to default binding metadata', async () => {
     mockHealthMalformedJson();
     const { startDesktopDaemon } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     await startDesktopDaemon();
@@ -318,7 +318,7 @@ describe('daemon lifecycle', () => {
       }
     );
     const { startDesktopDaemon, stopDesktopDaemon } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     const started = startDesktopDaemon();
@@ -348,7 +348,7 @@ describe('daemon lifecycle', () => {
     });
 
     const { startDesktopDaemon, isDesktopDaemonEmbeddedRunning } = await import(
-      '../../../../src/main/services/daemon/daemon_lifecycle'
+      '../../../../packages/desktop/src/main/services/daemon/daemon_lifecycle'
     );
 
     await startDesktopDaemon();

@@ -37,13 +37,13 @@ const {
   ensureThreadWorkspaceSelectionMock: vi.fn(),
 }));
 
-vi.mock('../../../../src/core/db/chat_message', () => ({
+vi.mock('@iki/core/db/chat_message', () => ({
   addChatMessage: addChatMessageMock,
   countChatMessagesByThread: countChatMessagesByThreadMock,
   getChatMessage: getChatMessageMock,
 }));
 
-vi.mock('../../../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   addChatThread: addChatThreadMock,
   deleteChatThread: deleteChatThreadMock,
   getChatThread: getChatThreadMock,
@@ -51,28 +51,28 @@ vi.mock('../../../../src/core/db/chat_thread', () => ({
   touchChatThread: touchChatThreadMock,
 }));
 
-vi.mock('../../../../src/core/db/awaiters', () => ({
+vi.mock('@iki/core/db/awaiters', () => ({
   deleteAwaitersByThread: deleteAwaitersByThreadMock,
 }));
 
-vi.mock('../../../../src/core/db/tasks', () => ({
+vi.mock('@iki/core/db/tasks', () => ({
   listProactiveTaskIdsByThread: listProactiveTaskIdsByThreadMock,
   updateProactiveTask: updateProactiveTaskMock,
 }));
 
-vi.mock('../../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('../../../../src/main/services/continuity/continuity_service', () => ({
+vi.mock('@iki/core/chat_service/platform', () => ({
   onMessagePersisted: onContinuityMessagePersistedMock,
 }));
 
-vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
+vi.mock('@iki/core/workspaces/thread_workspace', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/ui_messages', () => ({
+vi.mock('@iki/core/chat_service/ui_messages', () => ({
   sanitizeUiMessageJsonForStorage: vi.fn((value: string) => value),
 }));
 
@@ -104,7 +104,7 @@ describe('chat_persistence', () => {
 
   it('persists thread creation fields that drive composer state and workspace scoping', async () => {
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/persistence'
+      '@iki/core/chat_service/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -150,7 +150,7 @@ describe('chat_persistence', () => {
   it('touches thread ordering and persists continuity when saving a chat message', async () => {
     const onMessagePersisted = vi.fn();
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/persistence'
+      '@iki/core/chat_service/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -182,7 +182,7 @@ describe('chat_persistence', () => {
     countChatMessagesByThreadMock.mockReturnValue(3);
 
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/persistence'
+      '@iki/core/chat_service/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -205,7 +205,7 @@ describe('chat_persistence', () => {
 
   it('clears a thread atomically while re-binding proactive tasks to the recreated thread id', async () => {
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/persistence'
+      '@iki/core/chat_service/persistence'
     );
 
     getChatThreadMock

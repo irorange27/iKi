@@ -172,45 +172,45 @@ vi.mock('@ai-sdk/vue', () => ({
   },
 }));
 
-vi.mock('../../../src/renderer/composables/useChatThreads', () => ({
+vi.mock('../../../packages/desktop/src/renderer/composables/useChatThreads', () => ({
   useChatThreads: useChatThreadsMock,
 }));
 
-vi.mock('../../../src/renderer/composables/useChatStreaming', () => ({
+vi.mock('../../../packages/desktop/src/renderer/composables/useChatStreaming', () => ({
   useChatStreaming: useChatStreamingMock,
 }));
 
-vi.mock('../../../src/renderer/composables/useChatThreadTodoPlan', () => ({
+vi.mock('../../../packages/desktop/src/renderer/composables/useChatThreadTodoPlan', () => ({
   useChatThreadTodoPlan: useChatThreadTodoPlanMock,
 }));
 
-vi.mock('../../../src/renderer/composables/useToolMetadata', () => ({
+vi.mock('../../../packages/desktop/src/renderer/composables/useToolMetadata', () => ({
   useToolMetadata: useToolMetadataMock,
 }));
 
-vi.mock('../../../src/renderer/composables/useChatViewLifecycle', () => ({
+vi.mock('../../../packages/desktop/src/renderer/composables/useChatViewLifecycle', () => ({
   useChatViewLifecycle: useChatViewLifecycleMock,
 }));
 
-vi.mock('../../../src/renderer/store/config', () => ({
+vi.mock('../../../packages/desktop/src/renderer/store/config', () => ({
   useConfigStore: useConfigStoreMock,
 }));
 
-vi.mock('../../../src/renderer/composables/useMarkdownCopy', () => ({
+vi.mock('../../../packages/desktop/src/renderer/composables/useMarkdownCopy', () => ({
   useMarkdownCopy: () => ({
     handleMarkdownClick: handleMarkdownClickMock,
   }),
 }));
 
-vi.mock('../../../src/renderer/modules/chat/ui_message_references', () => ({
+vi.mock('../../../packages/desktop/src/renderer/modules/chat/ui_message_references', () => ({
   getTokenUsageSummary: getTokenUsageSummaryMock,
 }));
 
-vi.mock('../../../src/renderer/modules/chat/ui_message_persistence', () => ({
+vi.mock('../../../packages/desktop/src/renderer/modules/chat/ui_message_persistence', () => ({
   createUiMessagePersistence: createUiMessagePersistenceMock,
 }));
 
-vi.mock('../../../src/renderer/modules/chat/chat_message_store', () => ({
+vi.mock('../../../packages/desktop/src/renderer/modules/chat/chat_message_store', () => ({
   createChatMessageStore: createChatMessageStoreMock,
 }));
 
@@ -289,7 +289,7 @@ const mountChatView = async () => {
     value: {},
   });
 
-  const ChatView = (await import('../../../src/renderer/views/ChatView.vue')).default;
+  const ChatView = (await import('../../../packages/desktop/src/renderer/views/ChatView.vue')).default;
   const wrapper = mount(ChatView, {
     global: {
       stubs: {

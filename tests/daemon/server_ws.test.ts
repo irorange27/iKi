@@ -40,19 +40,19 @@ const {
   ),
 }));
 
-vi.mock('../../src/daemon/server_shared', () => ({
+vi.mock('@iki/daemon/server_shared', () => ({
   authenticateWebSocket: authenticateWebSocketMock,
   getThreadOrError: getThreadOrErrorMock,
   hasScope: hasScopeMock,
 }));
 
-vi.mock('../../src/daemon/tool_access', () => ({
+vi.mock('@iki/daemon/tool_access', () => ({
   readRequestedMcpServerIds: readRequestedMcpServerIdsMock,
   resolveMcpServerIdsForClient: resolveMcpServerIdsForClientMock,
   resolveToolsForClient: resolveToolsForClientMock,
 }));
 
-import { configureDaemonWebSockets } from '../../src/daemon/server_ws';
+import { configureDaemonWebSockets } from '@iki/daemon/server_ws';
 
 class FakeRawSocket {
   write = vi.fn();

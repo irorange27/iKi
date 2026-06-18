@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: vi.fn(),
 }));
 
-import { getDb } from '../../../src/core/db/database';
+import { getDb } from '@iki/core/db/database';
 import {
   createAgentRun,
   getAgentRunTrace,
@@ -14,7 +14,7 @@ import {
   listAgentRunsByRootRunId,
   listAgentRunSteps,
   updateAgentRun,
-} from '../../../src/core/db/agent_runs';
+} from '@iki/core/db/agent_runs';
 
 const getDbMock = vi.mocked(getDb);
 

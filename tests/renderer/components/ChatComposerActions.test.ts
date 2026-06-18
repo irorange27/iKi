@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 
-import ChatComposerActions from '../../../src/renderer/components/ChatComposerActions.vue';
+import ChatComposerActions from '../../../packages/desktop/src/renderer/components/ChatComposerActions.vue';
 
 const mountComponent = (overrides?: Record<string, unknown>) =>
   mount(ChatComposerActions, {

@@ -5,7 +5,7 @@ import {
   getElectronApiMethod,
   getOptionalElectronAPI,
   requireElectronApiSlice,
-} from '../../../src/renderer/services/electron_api';
+} from '../../../packages/desktop/src/renderer/services/electron_api';
 
 const mockWindow = (api: unknown) => {
   vi.stubGlobal('window', { electronAPI: api });

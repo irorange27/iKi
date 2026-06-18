@@ -5,7 +5,7 @@ import {
   createTestRunner,
   resolveEnabledTools,
 } from './setup';
-import type { AgentResult, AgentStep, FinishStep, ToolCallStartStep, ToolResultStep } from '../../src/core/agent';
+import type { AgentResult, AgentStep, FinishStep, ToolCallStartStep, ToolResultStep } from '@iki/core/agent';
 
 const skipIfNoProvider = () => !hasProviderConfig();
 

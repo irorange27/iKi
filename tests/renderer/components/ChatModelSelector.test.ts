@@ -3,8 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import type { Provider } from '../../../src/shared/types/provider';
-import ChatModelSelector from '../../../src/renderer/components/ChatModelSelector.vue';
+import type { Provider } from '@iki/core/types/provider';
+import ChatModelSelector from '../../../packages/desktop/src/renderer/components/ChatModelSelector.vue';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type'>

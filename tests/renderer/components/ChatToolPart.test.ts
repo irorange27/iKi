@@ -4,11 +4,11 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import type { UIMessage } from 'ai';
 
-import ChatToolPart from '../../../src/renderer/components/chat/ChatToolPart.vue';
+import ChatToolPart from '../../../packages/desktop/src/renderer/components/chat/ChatToolPart.vue';
 import {
   resetToolUiStateMap,
   updateToolUiState,
-} from '../../../src/renderer/modules/chat/tool_ui_state';
+} from '../../../packages/desktop/src/renderer/modules/chat/tool_ui_state';
 
 const createMessage = (): UIMessage =>
   ({

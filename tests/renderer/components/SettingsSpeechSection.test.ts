@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
-import SettingsSpeechSection from '../../../src/renderer/components/settings/SettingsSpeechSection.vue';
-import { useConfigStore } from '../../../src/renderer/store/config';
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
+import SettingsSpeechSection from '../../../packages/desktop/src/renderer/components/settings/SettingsSpeechSection.vue';
+import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
 import type {
   WhisperNodeDownloadProgress,
   WhisperNodeModelInfo,
-} from '../../../src/shared/types/speech';
+} from '@iki/core/types/speech';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

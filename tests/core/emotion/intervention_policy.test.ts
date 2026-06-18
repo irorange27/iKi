@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveInterventionPolicy,
   filterToolsByInterventionState,
-} from '../../../src/core/emotion/intervention_policy';
+} from '@iki/core/emotion/intervention_policy';
 
 const makeBoundaryMessages = (userText: string) => [
   {

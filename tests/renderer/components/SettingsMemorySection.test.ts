@@ -4,16 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
-import SettingsMemorySection from '../../../src/renderer/components/settings/SettingsMemorySection.vue';
-import { useConfigStore } from '../../../src/renderer/store/config';
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import type { ChatThread } from '../../../src/shared/types/chat';
-import type { Provider } from '../../../src/shared/types/provider';
+import SettingsMemorySection from '../../../packages/desktop/src/renderer/components/settings/SettingsMemorySection.vue';
+import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import type { ChatThread } from '@iki/core/types/chat';
+import type { Provider } from '@iki/core/types/provider';
 import type {
   AffectStateEntry,
   LongMemoryEntry,
   LongMemorySearchResult,
-} from '../../../src/shared/types/memory';
+} from '@iki/core/types/memory';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

@@ -32,31 +32,31 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/main/services/companion/companion_service', () => ({
+vi.mock('../../../packages/desktop/src/main/services/companion/companion_service', () => ({
   companionService: {
     getSnapshot: getSnapshotMock,
     refreshAvailability: refreshAvailabilityMock,
   },
 }));
 
-vi.mock('../../../src/main/windows/main_window', () => ({
+vi.mock('../../../packages/desktop/src/main/windows/main_window', () => ({
   showMainWindow: showMainWindowMock,
 }));
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
   setAppConfig: setAppConfigMock,
 }));
 
-vi.mock('../../../src/main/windows/companion_window', () => ({
+vi.mock('../../../packages/desktop/src/main/windows/companion_window', () => ({
   syncCompanionWindowToConfig: syncCompanionWindowToConfigMock,
 }));
 
-vi.mock('../../../src/main/utils/browser_windows', () => ({
+vi.mock('../../../packages/desktop/src/main/utils/browser_windows', () => ({
   getAllBrowserWindows: getAllBrowserWindowsMock,
 }));
 
-import { registerCompanionIpc } from '../../../src/main/ipc/companion';
+import { registerCompanionIpc } from '../../../packages/desktop/src/main/ipc/companion';
 
 beforeAll(() => {
   registerCompanionIpc();

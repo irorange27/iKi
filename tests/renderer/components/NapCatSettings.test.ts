@@ -16,7 +16,7 @@ const {
   controlDaemonMock: vi.fn(),
 }));
 
-vi.mock('../../../src/renderer/services/config_service', () => ({
+vi.mock('../../../packages/desktop/src/renderer/services/config_service', () => ({
   configService: {
     getRuntimeInfo: getRuntimeInfoMock,
     getDaemonStatus: getDaemonStatusMock,
@@ -25,9 +25,9 @@ vi.mock('../../../src/renderer/services/config_service', () => ({
   },
 }));
 
-import NapCatSettings from '../../../src/renderer/components/settings/NapCatSettings.vue';
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import { useConfigStore } from '../../../src/renderer/store/config';
+import NapCatSettings from '../../../packages/desktop/src/renderer/components/settings/NapCatSettings.vue';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

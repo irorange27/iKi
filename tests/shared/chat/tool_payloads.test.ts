@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseToolInput, parseToolOutput } from '../../../src/shared/chat/tool_payloads';
+import { parseToolInput, parseToolOutput } from '@iki/core/chat/tool_payloads';
 
 describe('parseToolInput', () => {
   it('parses JSON input and handles aliases', () => {

@@ -30,42 +30,42 @@ const {
   getThreadWorkspaceSelectionMock: vi.fn(() => null),
 }));
 
-vi.mock('../../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
+vi.mock('@iki/core/workspaces/thread_workspace', () => ({
   getThreadWorkspaceSelection: getThreadWorkspaceSelectionMock,
 }));
 
-vi.mock('../../../../src/core/db/chat_message', () => ({
+vi.mock('@iki/core/db/chat_message', () => ({
   getChatMessages: getChatMessagesMock,
 }));
 
-vi.mock('../../../../src/core/db/thread_context', () => ({
+vi.mock('@iki/core/db/thread_context', () => ({
   getThreadContext: getThreadContextMock,
   upsertThreadContext: upsertThreadContextMock,
   deleteThreadContext: deleteThreadContextMock,
 }));
 
-vi.mock('../../../../src/core/db/memory', () => ({
+vi.mock('@iki/core/db/memory', () => ({
   extractTextFromMessageJson: extractTextFromMessageJsonMock,
 }));
 
-vi.mock('../../../../src/core/context/thread_summary', () => ({
+vi.mock('@iki/core/chat_service/thread_summary', () => ({
   generateThreadSummary: generateThreadSummaryMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/skills', () => ({
+vi.mock('@iki/core/chat_service/skills', () => ({
   resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
 }));
 
-vi.mock('../../../../src/main/services/continuity/continuity_service', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/continuity/continuity_service', () => ({
   getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,
   retrieveRelevantContinuity: retrieveRelevantContinuityMock,
 }));
 
-import { createChatContextAssembler } from '../../../../src/main/services/chat/context';
+import { createChatContextAssembler } from '@iki/core/chat_service/context';
 
 const baseConfig = {
   memory: {

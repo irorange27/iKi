@@ -19,7 +19,7 @@ const { state, getDbMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
 }));
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: getDbMock,
 }));
 
@@ -106,7 +106,7 @@ describe('027_restore_legacy_desktop_thread_ownership migration', () => {
 
   it('restores pre-registration legacy desktop threads to null ownership without touching newer external threads', async () => {
     const { migration } = await import(
-      '../../../src/core/db/migration/027_restore_legacy_desktop_thread_ownership'
+      '../../../packages/core/src/db/migration/027_restore_legacy_desktop_thread_ownership'
     );
 
     migration.up();
@@ -149,7 +149,7 @@ describe('027_restore_legacy_desktop_thread_ownership migration', () => {
     ];
 
     const { migration } = await import(
-      '../../../src/core/db/migration/027_restore_legacy_desktop_thread_ownership'
+      '../../../packages/core/src/db/migration/027_restore_legacy_desktop_thread_ownership'
     );
 
     migration.up();

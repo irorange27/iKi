@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import { useThreadToolSelection } from '../../../src/renderer/composables/useThreadToolSelection';
+import { useThreadToolSelection } from '../../../packages/desktop/src/renderer/composables/useThreadToolSelection';
 
 const createHarness = (threadsById: Record<string, unknown>) => {
   const getThread = vi.fn(async (id: string) => threadsById[id] ?? null);

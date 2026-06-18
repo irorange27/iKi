@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
 
-import { useChatViewLifecycle } from '../../../src/renderer/composables/useChatViewLifecycle';
+import { useChatViewLifecycle } from '../../../packages/desktop/src/renderer/composables/useChatViewLifecycle';
 
 const mountHarness = async (deps: Parameters<typeof useChatViewLifecycle>[0]) => {
   const Harness = defineComponent({

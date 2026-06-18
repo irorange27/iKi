@@ -1,26 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('../../../src/core/network/electron_fetch', () => ({
+vi.mock('@iki/core/network/electron_fetch', () => ({
   canUseElectronNetworkStack: vi.fn(),
   electronFetchWithTimeout: vi.fn(),
 }));
 
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import type { AppConfig } from '../../../src/shared/types/config';
-import { getAppConfig } from '../../../src/core/config';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import type { AppConfig } from '@iki/core/types/config';
+import { getAppConfig } from '@iki/core/config';
 import {
   canUseElectronNetworkStack,
   electronFetchWithTimeout,
-} from '../../../src/core/network/electron_fetch';
+} from '@iki/core/network/electron_fetch';
 import {
   fetchWithTimeout,
   getNetworkRetryAttempts,
   getNetworkTimeoutMs,
-} from '../../../src/core/network/http';
+} from '@iki/core/network/http';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const canUseElectronNetworkStackMock = vi.mocked(canUseElectronNetworkStack);

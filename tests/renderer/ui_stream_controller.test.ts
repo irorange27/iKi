@@ -1,9 +1,9 @@
 import type { UIMessage } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createChatMessageStore } from '../../src/renderer/modules/chat/chat_message_store';
-import { createChatUiStreamController } from '../../src/renderer/modules/chat/ui_stream_controller';
-import { resetToolUiStateMap } from '../../src/renderer/modules/chat/tool_ui_state';
+import { createChatMessageStore } from '../../packages/desktop/src/renderer/modules/chat/chat_message_store';
+import { createChatUiStreamController } from '../../packages/desktop/src/renderer/modules/chat/ui_stream_controller';
+import { resetToolUiStateMap } from '../../packages/desktop/src/renderer/modules/chat/tool_ui_state';
 
 const flushMicrotasks = async () => {
   await Promise.resolve();

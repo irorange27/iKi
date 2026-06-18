@@ -3,9 +3,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
-import { useChatThreads } from '../../../src/renderer/composables/useChatThreads';
-import { setLocale } from '../../../src/renderer/i18n';
-import type { ChatThread } from '../../../src/shared/types/chat';
+import { useChatThreads } from '../../../packages/desktop/src/renderer/composables/useChatThreads';
+import { setLocale } from '../../../packages/desktop/src/renderer/i18n';
+import type { ChatThread } from '@iki/core/types/chat';
 
 const createStoredThread = (overrides: Partial<ChatThread> = {}): ChatThread => ({
   id: overrides.id ?? 'thread_1',

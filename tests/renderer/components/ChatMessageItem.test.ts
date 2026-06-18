@@ -4,7 +4,7 @@ import type { UIMessage } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 
-import ChatMessageItem from '../../../src/renderer/components/chat/ChatMessageItem.vue';
+import ChatMessageItem from '../../../packages/desktop/src/renderer/components/chat/ChatMessageItem.vue';
 
 const createUserMessage = (): UIMessage =>
   ({

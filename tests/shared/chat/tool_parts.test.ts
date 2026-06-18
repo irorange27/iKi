@@ -6,7 +6,7 @@ import {
   getToolName,
   isToolResultPart,
   normalizeDynamicToolPart,
-} from '../../../src/shared/chat/tool_parts';
+} from '@iki/core/chat/tool_parts';
 
 describe('tool_parts', () => {
   it('extracts approval ids from common fields', () => {

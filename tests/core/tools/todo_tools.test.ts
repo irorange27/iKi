@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/db/todos', () => ({
+vi.mock('@iki/core/db/todos', () => ({
   deleteTodoList: vi.fn(),
   getTodoListById: vi.fn(),
   getTodoListByTitle: vi.fn(),
@@ -8,13 +8,13 @@ vi.mock('../../../src/core/db/todos', () => ({
   writeTodoList: vi.fn(),
 }));
 
-import * as todoDb from '../../../src/core/db/todos';
+import * as todoDb from '@iki/core/db/todos';
 import {
   DeleteTodoListTool,
   ListTodoListsTool,
   ReadTodoListTool,
   WriteTodoListTool,
-} from '../../../src/core/tools/todo_tools';
+} from '@iki/core/tools/todo_tools';
 
 describe('todo tools', () => {
   beforeEach(() => {

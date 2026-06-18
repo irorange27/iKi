@@ -8,12 +8,12 @@ const {
   addIdentityProfileMock: vi.fn(),
 }));
 
-vi.mock('../../../../src/core/db/identity', () => ({
+vi.mock('@iki/core/db/identity', () => ({
   getActiveIdentityProfile: getActiveIdentityProfileMock,
   addIdentityProfile: addIdentityProfileMock,
 }));
 
-import { getOrCreateActiveIdentityProfile } from '../../../../src/main/services/identity/identity_service';
+import { getOrCreateActiveIdentityProfile } from '../../../../packages/desktop/src/main/services/identity/identity_service';
 
 beforeEach(() => {
   vi.clearAllMocks();

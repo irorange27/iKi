@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Awaiter } from '../../../src/shared/types/awaiters';
+import type { Awaiter } from '@iki/core/types/awaiters';
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: vi.fn(),
 }));
 
-import { getDb } from '../../../src/core/db/database';
+import { getDb } from '@iki/core/db/database';
 import {
   addAwaiter,
   addAwaiterWakeEvent,
   listDueAwaiters,
   updateAwaiter,
   updateAwaiterIfStatus,
-} from '../../../src/core/db/awaiters';
+} from '@iki/core/db/awaiters';
 
 const getDbMock = vi.mocked(getDb);
 type AwaiterUpdate = Partial<Awaiter>;

@@ -4,19 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, reactive } from 'vue';
 
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
 
 const useConfigStoreMock = vi.hoisted(() => vi.fn());
 const storeState = reactive({
   config: createDefaultAppConfig(),
 });
 
-vi.mock('../../../src/renderer/store/config', () => ({
+vi.mock('../../../packages/desktop/src/renderer/store/config', () => ({
   useConfigStore: useConfigStoreMock,
 }));
 
 const mountHarness = async () => {
-  const { useConfigEffects } = await import('../../../src/renderer/composables/useConfigEffects');
+  const { useConfigEffects } = await import('../../../packages/desktop/src/renderer/composables/useConfigEffects');
 
   const Harness = defineComponent({
     name: 'UseConfigEffectsHarness',

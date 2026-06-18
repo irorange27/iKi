@@ -7,8 +7,8 @@ import {
   parseDaemonWebSocketMessage,
   parseMcpServerCreatePayload,
   parseMcpServerUpdatePayload,
-} from '../../src/daemon/server_schemas';
-import { getDefaultAllowedTools } from '../../src/daemon/tool_access';
+} from '@iki/daemon/server_schemas';
+import { getDefaultAllowedTools } from '@iki/daemon/tool_access';
 
 describe('daemon server schemas', () => {
   it('normalizes client registration defaults and trims explicit values', () => {

@@ -28,15 +28,15 @@ const {
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('../../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('../../../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
 }));
 
-vi.mock('../../../../src/core/db/continuity', () => ({
+vi.mock('@iki/core/db/continuity', () => ({
   upsertAssistantProfile: upsertAssistantProfileMock,
   searchContinuityItems: searchContinuityItemsMock,
   touchContinuityItems: touchContinuityItemsMock,
@@ -45,19 +45,19 @@ vi.mock('../../../../src/core/db/continuity', () => ({
   addContinuityEvidence: addContinuityEvidenceMock,
 }));
 
-vi.mock('../../../../src/core/db/memory', () => ({
+vi.mock('@iki/core/db/memory', () => ({
   extractTextFromMessageJson: extractTextFromMessageJsonMock,
 }));
 
-vi.mock('../../../../src/main/services/identity/identity_service', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/identity/identity_service', () => ({
   getOrCreateActiveIdentityProfile: getOrCreateActiveIdentityProfileMock,
 }));
 
-vi.mock('../../../../src/main/services/identity/identity_brain', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/identity/identity_brain', () => ({
   getIdentityBrainDocuments: getIdentityBrainDocumentsMock,
 }));
 
-vi.mock('../../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     event: loggerEventMock,
   })),
@@ -67,7 +67,7 @@ import {
   getAssistantProfileContextMessage,
   onMessagePersisted,
   retrieveRelevantContinuity,
-} from '../../../../src/main/services/continuity/continuity_service';
+} from '../../../../packages/desktop/src/main/services/continuity/continuity_service';
 
 const baseConfig = {
   continuity: {

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ensureIdentityBrainLayout,
   getIdentityBrainDocuments,
-} from '../../../../src/main/services/identity/identity_brain';
+} from '../../../../packages/desktop/src/main/services/identity/identity_brain';
 
 const tempDirs: string[] = [];
 

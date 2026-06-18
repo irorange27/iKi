@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import { createSidebar } from '../../../src/renderer/composables/useSidebar';
+import { createSidebar } from '../../../packages/desktop/src/renderer/composables/useSidebar';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {
@@ -31,7 +31,7 @@ const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>>
   sidebarState.expand();
   sidebarState.setWidth(240);
 
-  const Sidebar = (await import('../../../src/renderer/components/Sidebar.vue')).default;
+  const Sidebar = (await import('../../../packages/desktop/src/renderer/components/Sidebar.vue')).default;
   const wrapper = mount(Sidebar, {
     global: {
       stubs: {

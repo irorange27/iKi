@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProactiveTask } from '../../../src/shared/types/tasks';
+import type { ProactiveTask } from '@iki/core/types/tasks';
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: vi.fn(),
 }));
 
-import { getDb } from '../../../src/core/db/database';
-import { addProactiveTask, updateProactiveTask } from '../../../src/core/db/tasks';
+import { getDb } from '@iki/core/db/database';
+import { addProactiveTask, updateProactiveTask } from '@iki/core/db/tasks';
 
 const getDbMock = vi.mocked(getDb);
 type TaskUpdate = Partial<ProactiveTask>;

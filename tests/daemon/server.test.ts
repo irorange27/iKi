@@ -332,15 +332,15 @@ vi.mock('node:fs', () => ({
   },
 }));
 
-vi.mock('../../src/core/tools', () => ({
+vi.mock('@iki/core/tools', () => ({
   registerStandardTools: registerStandardToolsMock,
 }));
 
-vi.mock('../../src/core/mcp', () => ({
+vi.mock('@iki/core/mcp', () => ({
   getMcpManager: getMcpManagerMock,
 }));
 
-vi.mock('../../src/core/daemon_logs', () => ({
+vi.mock('@iki/core/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
     event: daemonLoggerEventMock,
   })),
@@ -349,39 +349,46 @@ vi.mock('../../src/core/daemon_logs', () => ({
   },
 }));
 
-vi.mock('../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   initializeDatabase: initializeDatabaseMock,
 }));
 
-vi.mock('../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
+  createLogger: () => ({
+    event: daemonLoggerEventMock,
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
   applyAppLoggingConfig: applyAppLoggingConfigMock,
   withLogContext: (_context: unknown, fn: () => unknown) => fn(),
 }));
 
-vi.mock('../../src/core/platform', () => ({
+vi.mock('@iki/core/platform', () => ({
   getUserDataPath: getUserDataPathMock,
   setPlatformInfo: setPlatformInfoMock,
 }));
 
-vi.mock('../../src/main/services/chat/service', () => ({
+vi.mock('@iki/core/chat_service', () => ({
   createChatService: createChatServiceMock,
 }));
 
-vi.mock('../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
 }));
 
-vi.mock('../../src/core/db/memory', () => ({
+vi.mock('@iki/core/db/memory', () => ({
   listShortMemory: vi.fn(() => []),
   listLongMemory: vi.fn(() => []),
   searchLongMemoryAcrossThreads: searchLongMemoryAcrossThreadsMock,
 }));
 
-vi.mock('../../src/core/db/app_clients', () => ({
+vi.mock('@iki/core/db/app_clients', () => ({
   createAppClient: createAppClientMock,
   getAppClientById: getAppClientByIdMock,
   getAppClientByToken: getAppClientByTokenMock,
@@ -389,23 +396,23 @@ vi.mock('../../src/core/db/app_clients', () => ({
   touchAppClient: touchAppClientMock,
 }));
 
-vi.mock('../../src/daemon/napcat_adapter', () => ({
+vi.mock('@iki/daemon/napcat_adapter', () => ({
   createNapCatReverseBridge: createNapCatReverseBridgeMock,
 }));
 
-vi.mock('../../src/daemon/bootstrap_token', () => ({
+vi.mock('@iki/daemon/bootstrap_token', () => ({
   readOrCreateBootstrapToken: readOrCreateBootstrapTokenMock,
   rotateBootstrapToken: rotateBootstrapTokenMock,
 }));
 
-vi.mock('../../src/daemon/tool_access', () => ({
+vi.mock('@iki/daemon/tool_access', () => ({
   getDefaultAllowedTools: getDefaultAllowedToolsMock,
   readRequestedMcpServerIds: readRequestedMcpServerIdsMock,
   resolveMcpServerIdsForClient: resolveMcpServerIdsForClientMock,
   resolveToolsForClient: resolveToolsForClientMock,
 }));
 
-import { startDaemonServer } from '../../src/daemon/server';
+import { startDaemonServer } from '@iki/daemon/server';
 
 type StartedDaemon = ReturnType<typeof startDaemonServer>;
 

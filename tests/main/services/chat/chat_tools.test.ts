@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTool, defaultToolRegistry } from '../../../../src/core/tools';
-import { getAppConfig } from '../../../../src/core/config';
-import { selectToolsWithAgent } from '../../../../src/core/provider/tool_selection';
-import { resolveToolNames } from '../../../../src/main/services/chat/tool_guard';
+import { createTool, defaultToolRegistry } from '@iki/core/tools';
+import { getAppConfig } from '@iki/core/config';
+import { selectToolsWithAgent } from '@iki/core/provider/tool_selection';
+import { resolveToolNames } from '@iki/core/chat_service/tool_guard';
 
-vi.mock('../../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(() => ({
     general: {
       autoApproveToolRequests: false,
@@ -13,7 +13,7 @@ vi.mock('../../../../src/core/config', () => ({
   })),
 }));
 
-vi.mock('../../../../src/core/provider/tool_selection', () => ({
+vi.mock('@iki/core/provider/tool_selection', () => ({
   selectToolsWithAgent: vi.fn(async () => null),
 }));
 

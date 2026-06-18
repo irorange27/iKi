@@ -4,8 +4,8 @@ import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
-import type { Provider } from '../../../src/shared/types/provider';
-import ChatComposerSelectors from '../../../src/renderer/components/ChatComposerSelectors.vue';
+import type { Provider } from '@iki/core/types/provider';
+import ChatComposerSelectors from '../../../packages/desktop/src/renderer/components/ChatComposerSelectors.vue';
 
 const provider: Provider = {
   id: 'openai',

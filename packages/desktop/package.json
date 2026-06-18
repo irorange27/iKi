@@ -1,0 +1,21 @@
+{
+  "name": "@iki/desktop",
+  "version": "0.0.2",
+  "productName": "iki",
+  "private": true,
+  "main": ".vite/build/main.js",
+  "dependencies": {
+    "@iki/core": "workspace:*",
+    "@iki/daemon": "workspace:*"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.8.3",
+    "@electron-forge/maker-dmg": "^7.10.2",
+    "@electron-forge/maker-zip": "^7.10.2",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
+    "@electron-forge/plugin-fuses": "^7.10.2",
+    "@electron-forge/plugin-vite": "^7.10.2",
+    "@electron/fuses": "^1.8.0",
+    "electron": "39.2.7"
+  }
+}

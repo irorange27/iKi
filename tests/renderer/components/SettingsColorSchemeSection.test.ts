@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
-import SettingsColorSchemeSection from '../../../src/renderer/components/settings/SettingsColorSchemeSection.vue';
-import { useConfigStore } from '../../../src/renderer/store/config';
-import { THEME_QUICK_STARTS } from '../../../src/shared/theme/registry';
-import { createBase46ThemePresetFromQuickStart } from '../../../src/shared/theme/theme_creator';
+import SettingsColorSchemeSection from '../../../packages/desktop/src/renderer/components/settings/SettingsColorSchemeSection.vue';
+import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
+import { THEME_QUICK_STARTS } from '@iki/core/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '@iki/core/theme/theme_creator';
 
 const findButtonByText = (wrapper: ReturnType<typeof mount>, text: string) => {
   const match = wrapper

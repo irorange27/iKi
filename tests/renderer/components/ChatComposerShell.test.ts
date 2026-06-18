@@ -4,7 +4,7 @@ import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
-import ChatComposerShell from '../../../src/renderer/components/ChatComposerShell.vue';
+import ChatComposerShell from '../../../packages/desktop/src/renderer/components/ChatComposerShell.vue';
 
 const mountComponent = (overrides?: Record<string, unknown>) => {
   const inputRef = ref<HTMLTextAreaElement | null>(null);

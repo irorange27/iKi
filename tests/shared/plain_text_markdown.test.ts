@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { renderMarkdownToPlainText } from '../../src/shared/utils/plain_text_markdown';
+import { renderMarkdownToPlainText } from '@iki/core/utils/plain_text_markdown';
 
 describe('renderMarkdownToPlainText', () => {
   it('converts common markdown constructs into readable plain text', () => {

@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDefaultAppConfig } from '../../src/shared/config/defaults';
-import type { ChatThread } from '../../src/shared/types/chat';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import type { ChatThread } from '@iki/core/types/chat';
 
-vi.mock('../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   getChatThread: vi.fn(),
 }));
 
-vi.mock('../../src/core/db/memory', () => ({
+vi.mock('@iki/core/db/memory', () => ({
   extractTextFromMessageJson: vi.fn(),
   addShortMemoryFromChatMessage: vi.fn(),
   pruneShortMemory: vi.fn(),
@@ -19,28 +19,28 @@ vi.mock('../../src/core/db/memory', () => ({
   addLongMemory: vi.fn(),
 }));
 
-vi.mock('../../src/core/db/emotion', () => ({
+vi.mock('@iki/core/db/emotion', () => ({
   addEmotionEvent: vi.fn(),
   pruneEmotionEvents: vi.fn(),
   listEmotionEvents: vi.fn(() => []),
 }));
 
-vi.mock('../../src/core/db/affect_state', () => ({
+vi.mock('@iki/core/db/affect_state', () => ({
   upsertAffectState: vi.fn(),
   deleteAffectState: vi.fn(),
   getAffectState: vi.fn(() => null),
 }));
 
-vi.mock('../../src/core/provider/emotion_model', () => ({
+vi.mock('@iki/core/provider/emotion_model', () => ({
   analyzeEmotionWithAgent: vi.fn(),
 }));
 
-import { getAppConfig } from '../../src/core/config';
-import { getChatThread } from '../../src/core/db/chat_thread';
-import * as memoryDb from '../../src/core/db/memory';
-import * as emotionDb from '../../src/core/db/emotion';
-import { analyzeEmotionWithAgent } from '../../src/core/provider/emotion_model';
-import { createChatMemory } from '../../src/main/services/chat/memory';
+import { getAppConfig } from '@iki/core/config';
+import { getChatThread } from '@iki/core/db/chat_thread';
+import * as memoryDb from '@iki/core/db/memory';
+import * as emotionDb from '@iki/core/db/emotion';
+import { analyzeEmotionWithAgent } from '@iki/core/provider/emotion_model';
+import { createChatMemory } from '@iki/core/chat_service/memory';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getChatThreadMock = vi.mocked(getChatThread);

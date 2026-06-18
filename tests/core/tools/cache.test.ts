@@ -5,7 +5,7 @@ import {
   buildCacheKey,
   registerToolCache,
   invalidateCaches,
-} from '../../../src/core/tools/cache';
+} from '@iki/core/tools/cache';
 
 describe('ToolResultCache', () => {
   afterEach(() => {

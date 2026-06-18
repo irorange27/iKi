@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseJsonObjectRecord, parseJsonStringArray } from '../../src/shared/utils/json';
+import { parseJsonObjectRecord, parseJsonStringArray } from '@iki/core/utils/json';
 
 describe('json utils', () => {
   it('parses object records with invalid input fallback', () => {

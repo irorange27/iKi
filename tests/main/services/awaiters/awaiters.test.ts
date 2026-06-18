@@ -19,7 +19,7 @@ vi.mock('electron', () => {
   };
 });
 
-vi.mock('../../../../src/core/db/awaiters', () => ({
+vi.mock('@iki/core/db/awaiters', () => ({
   addAwaiterWakeEvent: vi.fn(),
   getAwaiter: vi.fn(),
   listDueAwaiters: vi.fn(),
@@ -27,20 +27,20 @@ vi.mock('../../../../src/core/db/awaiters', () => ({
   updateAwaiterIfStatus: vi.fn(() => ({ changes: 1 })),
 }));
 
-vi.mock('../../../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   touchChatThread: vi.fn(),
 }));
 
-vi.mock('../../../../src/daemon/bridge_dispatch', () => ({
+vi.mock('@iki/core/bridge_dispatch', () => ({
   deliverBridgeThreadMessage: vi.fn(),
 }));
 
-vi.mock('../../../../src/core/db/agent_runs', () => ({
+vi.mock('@iki/core/db/agent_runs', () => ({
   getAgentRun: vi.fn(() => null),
   getLatestAgentRunCheckpoint: vi.fn(() => null),
 }));
 
-vi.mock('../../../../src/main/services/chat/service', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/chat/service', () => ({
   chatService: {
     getThread: vi.fn(),
     createMessage: vi.fn(),
@@ -50,16 +50,16 @@ vi.mock('../../../../src/main/services/chat/service', () => ({
 
 import { BrowserWindow, Notification } from 'electron';
 
-import type { Awaiter } from '../../../../src/shared/types/awaiters';
+import type { Awaiter } from '@iki/core/types/awaiters';
 import {
   runAwaiterWake,
   startAwaiterScheduler,
   stopAwaiterScheduler,
-} from '../../../../src/main/services/awaiters/awaiters';
-import * as awaitersDb from '../../../../src/core/db/awaiters';
-import * as chatThreadDb from '../../../../src/core/db/chat_thread';
-import { deliverBridgeThreadMessage } from '../../../../src/daemon/bridge_dispatch';
-import { chatService } from '../../../../src/main/services/chat/service';
+} from '../../../../packages/desktop/src/main/services/awaiters/awaiters';
+import * as awaitersDb from '@iki/core/db/awaiters';
+import * as chatThreadDb from '@iki/core/db/chat_thread';
+import { deliverBridgeThreadMessage } from '@iki/core/bridge_dispatch';
+import { chatService } from '../../../../packages/desktop/src/main/services/chat/service';
 
 const baseAwaiter = (overrides: Partial<Awaiter> = {}): Awaiter => ({
   id: 'awaiter_1',

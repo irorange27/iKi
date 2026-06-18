@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/db/tasks', () => ({
+vi.mock('@iki/core/db/tasks', () => ({
   addProactiveTask: vi.fn(),
   deleteProactiveTask: vi.fn(),
   getProactiveTask: vi.fn(),
@@ -8,15 +8,15 @@ vi.mock('../../../src/core/db/tasks', () => ({
   updateProactiveTask: vi.fn(),
 }));
 
-import * as tasksDb from '../../../src/core/db/tasks';
-import type { ProactiveTask } from '../../../src/shared/types/tasks';
+import * as tasksDb from '@iki/core/db/tasks';
+import type { ProactiveTask } from '@iki/core/types/tasks';
 import {
   createProactiveTask,
   deleteProactiveTask,
   listProactiveTaskRecords,
   readProactiveTaskRecord,
   updateProactiveTask,
-} from '../../../src/core/tasks/proactive_task_manager';
+} from '@iki/core/tasks/proactive_task_manager';
 
 const createTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
   id: 'task_1',

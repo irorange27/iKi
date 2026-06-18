@@ -44,13 +44,13 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/main/services/update/auto_update_service', () => ({
+vi.mock('../../../packages/desktop/src/main/services/update/auto_update_service', () => ({
   getAppUpdateStatus: getAppUpdateStatusMock,
   checkForAppUpdates: checkForAppUpdatesMock,
   installDownloadedAppUpdate: installDownloadedAppUpdateMock,
 }));
 
-import { registerUpdaterIpc } from '../../../src/main/ipc/updater';
+import { registerUpdaterIpc } from '../../../packages/desktop/src/main/ipc/updater';
 
 beforeAll(() => {
   registerUpdaterIpc();

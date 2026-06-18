@@ -3,8 +3,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import SettingsUsageSection from '../../../src/renderer/components/settings/SettingsUsageSection.vue';
-import type { ChatUsageSummary } from '../../../src/shared/types/chat_usage';
+import SettingsUsageSection from '../../../packages/desktop/src/renderer/components/settings/SettingsUsageSection.vue';
+import type { ChatUsageSummary } from '@iki/core/types/chat_usage';
 
 const buildUsageSummary = (period: ChatUsageSummary['period']): ChatUsageSummary => ({
   period,

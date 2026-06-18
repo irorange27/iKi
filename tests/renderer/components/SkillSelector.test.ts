@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import SkillSelector from '../../../src/renderer/components/SkillSelector.vue';
+import SkillSelector from '../../../packages/desktop/src/renderer/components/SkillSelector.vue';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

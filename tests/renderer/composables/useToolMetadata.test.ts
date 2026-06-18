@@ -4,7 +4,7 @@ const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('../../../src/renderer/logger', () => ({
+vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('../../../src/renderer/logger', () => ({
   })),
 }));
 
-import { useToolMetadata } from '../../../src/renderer/composables/useToolMetadata';
+import { useToolMetadata } from '../../../packages/desktop/src/renderer/composables/useToolMetadata';
 
 const flushMicrotasks = async () => {
   await Promise.resolve();

@@ -112,12 +112,12 @@ vi.mock('node:http', () => ({
   get: httpGetMock,
 }));
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   setConfig: vi.fn(),
   migrateFromJson: vi.fn(),
 }));
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(() => ({
     bridges: {
       napcat: {
@@ -139,11 +139,11 @@ vi.mock('../../../src/core/config', () => ({
   })),
 }));
 
-vi.mock('../../../src/core/daemon_logs', () => ({
+vi.mock('@iki/core/daemon_logs', () => ({
   readRecentDaemonLogs: readRecentDaemonLogsMock,
 }));
 
-vi.mock('../../../src/main/services/daemon/daemon_lifecycle', () => ({
+vi.mock('../../../packages/desktop/src/main/services/daemon/daemon_lifecycle', () => ({
   applyDesktopDaemonConfigUpdate: applyDesktopDaemonConfigUpdateMock,
   getDesktopEmbeddedDaemonStatus: getDesktopEmbeddedDaemonStatusMock,
   isDesktopDaemonEmbeddedRunning: isDesktopDaemonEmbeddedRunningMock,
@@ -152,15 +152,15 @@ vi.mock('../../../src/main/services/daemon/daemon_lifecycle', () => ({
   stopDesktopDaemon: stopDesktopDaemonMock,
 }));
 
-vi.mock('../../../src/main/services/update/auto_update_service', () => ({
+vi.mock('../../../packages/desktop/src/main/services/update/auto_update_service', () => ({
   applyAppUpdateConfig: applyAppUpdateConfigMock,
 }));
 
-vi.mock('../../../src/main/services/network/network_diagnostics', () => ({
+vi.mock('../../../packages/desktop/src/main/services/network/network_diagnostics', () => ({
   testNetworkConnectivity: testNetworkConnectivityMock,
 }));
 
-vi.mock('../../../src/core/mcp', () => ({
+vi.mock('@iki/core/mcp', () => ({
   getMcpManager: vi.fn(() => ({
     disconnectAll: vi.fn(),
     initialize: vi.fn(),
@@ -169,11 +169,11 @@ vi.mock('../../../src/core/mcp', () => ({
   })),
 }));
 
-vi.mock('../../../src/shared/config/normalize', () => ({
+vi.mock('@iki/core/config/normalize', () => ({
   normalizeAppConfig: vi.fn((config: unknown) => config),
 }));
 
-import { registerConfigIpc } from '../../../src/main/ipc/config';
+import { registerConfigIpc } from '../../../packages/desktop/src/main/ipc/config';
 
 beforeAll(() => {
   registerConfigIpc();

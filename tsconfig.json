@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "nodenext",
+    "module": "ESNext",
     "allowJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -12,20 +12,25 @@
     "forceConsistentCasingInFileNames": true,
     "sourceMap": true,
     "outDir": "dist",
-    "moduleResolution": "nodenext",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "paths": {
       "@/*": [
         "./*"
       ],
+      "@iki/core": ["./packages/core/src/index.ts"],
+      "@iki/core/*": ["./packages/core/src/*"],
+      "@iki/daemon": ["./packages/daemon/src/index.ts"],
+      "@iki/daemon/*": ["./packages/daemon/src/*"]
     },
     "typeRoots": [
       "./node_modules/@types",
-      "./src/renderer/types"
-    ],
-   
+      "./packages/desktop/src/renderer/types"
+    ]
   },
   "include": [
-    "src/**/*",
+    "packages/core/src/**/*",
+    "packages/daemon/src/**/*",
+    "packages/desktop/src/**/*"
   ]
 }

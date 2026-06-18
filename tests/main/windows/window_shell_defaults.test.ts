@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const MAIN_WINDOW_PATH = resolve(process.cwd(), 'src/main/windows/main_window.ts');
-const SETTINGS_WINDOW_PATH = resolve(process.cwd(), 'src/main/windows/settings_window.ts');
-const THEME_BOOTSTRAP_PATH = resolve(process.cwd(), 'src/main/windows/theme_bootstrap.ts');
+const MAIN_WINDOW_PATH = resolve(process.cwd(), 'packages/desktop/src/main/windows/main_window.ts');
+const SETTINGS_WINDOW_PATH = resolve(process.cwd(), 'packages/desktop/src/main/windows/settings_window.ts');
+const THEME_BOOTSTRAP_PATH = resolve(process.cwd(), 'packages/desktop/src/main/windows/theme_bootstrap.ts');
 
 describe('window shell defaults', () => {
   it('boots frameless windows from the resolved theme preset and defers shadow opt-in to the renderer', () => {

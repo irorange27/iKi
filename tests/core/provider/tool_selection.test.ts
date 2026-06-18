@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/provider/tool_model', () => ({
+vi.mock('@iki/core/provider/tool_model', () => ({
   getToolModel: vi.fn(),
 }));
 
-vi.mock('../../../src/core/runtimes/prompt_text_generator', () => ({
+vi.mock('@iki/core/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
 }));
 
-import { getToolModel } from '../../../src/core/provider/tool_model';
-import { createSimplePromptTextGenerator } from '../../../src/core/runtimes/prompt_text_generator';
-import { selectToolsWithAgent } from '../../../src/core/provider/tool_selection';
+import { getToolModel } from '@iki/core/provider/tool_model';
+import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
+import { selectToolsWithAgent } from '@iki/core/provider/tool_selection';
 
 const getToolModelMock = vi.mocked(getToolModel);
 const createSimplePromptTextGeneratorMock = vi.mocked(createSimplePromptTextGenerator);

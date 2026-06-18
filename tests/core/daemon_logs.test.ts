@@ -19,8 +19,8 @@ describe('daemon_logs', () => {
 
   it('writes canonical structured daemon log entries and reads them back', async () => {
     const { setBaseLogContext, setLogLevel, setLoggingEnabled } =
-      await import('../../src/core/logger');
-    const { daemonLog, readRecentDaemonLogs } = await import('../../src/core/daemon_logs');
+      await import('@iki/core/logger');
+    const { daemonLog, readRecentDaemonLogs } = await import('@iki/core/daemon_logs');
 
     setBaseLogContext({ process: 'main' });
     setLoggingEnabled(true);
@@ -56,7 +56,7 @@ describe('daemon_logs', () => {
 
   it('parses legacy daemon log lines for compatibility', async () => {
     const { readRecentDaemonLogs, getDaemonLogFilePath } =
-      await import('../../src/core/daemon_logs');
+      await import('@iki/core/daemon_logs');
 
     const filePath = getDaemonLogFilePath(tempDir);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -90,9 +90,9 @@ describe('daemon_logs', () => {
   });
 
   it('records recent NapCat message previews independently from the log level setting', async () => {
-    const { setLoggingEnabled, setLogLevel } = await import('../../src/core/logger');
+    const { setLoggingEnabled, setLogLevel } = await import('@iki/core/logger');
     const { readRecentDaemonLogs, recordNapCatMessagePreview } =
-      await import('../../src/core/daemon_logs');
+      await import('@iki/core/daemon_logs');
 
     setLoggingEnabled(false);
     setLogLevel('error');

@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import ToolSelector from '../../../src/renderer/components/ToolSelector.vue';
+import ToolSelector from '../../../packages/desktop/src/renderer/components/ToolSelector.vue';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

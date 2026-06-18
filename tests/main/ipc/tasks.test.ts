@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProactiveTask } from '../../../src/shared/types/tasks';
+import type { ProactiveTask } from '@iki/core/types/tasks';
 
 type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
@@ -13,7 +13,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/core/db/tasks', () => ({
+vi.mock('@iki/core/db/tasks', () => ({
   getProactiveTasks: vi.fn(),
   getProactiveTask: vi.fn(),
   addProactiveTask: vi.fn(),
@@ -21,13 +21,13 @@ vi.mock('../../../src/core/db/tasks', () => ({
   deleteProactiveTask: vi.fn(),
 }));
 
-vi.mock('../../../src/main/services/tasks/proactive_tasks', () => ({
+vi.mock('../../../packages/desktop/src/main/services/tasks/proactive_tasks', () => ({
   runProactiveTask: vi.fn(),
 }));
 
-import { registerTasksIpc } from '../../../src/main/ipc/tasks';
-import * as tasksDb from '../../../src/core/db/tasks';
-import { runProactiveTask } from '../../../src/main/services/tasks/proactive_tasks';
+import { registerTasksIpc } from '../../../packages/desktop/src/main/ipc/tasks';
+import * as tasksDb from '@iki/core/db/tasks';
+import { runProactiveTask } from '../../../packages/desktop/src/main/services/tasks/proactive_tasks';
 
 const addProactiveTaskMock = vi.mocked(tasksDb.addProactiveTask);
 const getProactiveTaskMock = vi.mocked(tasksDb.getProactiveTask);

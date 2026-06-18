@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createTool, defaultToolRegistry } from '../../src/core/tools';
+import { createTool, defaultToolRegistry } from '@iki/core/tools';
 import {
   readRequestedMcpServerIds,
   resolveMcpServerIdsForClient,
   resolveToolsForClient,
-} from '../../src/daemon/tool_access';
+} from '@iki/daemon/tool_access';
 
 const TEST_MCP_TOOL_NAMES = ['mcp_alpha_lookup', 'mcp_beta_lookup'];
 

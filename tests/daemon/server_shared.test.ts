@@ -86,7 +86,7 @@ const {
   };
 });
 
-vi.mock('../../src/core/db/app_clients', () => ({
+vi.mock('@iki/core/db/app_clients', () => ({
   createAppClient: createAppClientMock,
   getAppClientById: getAppClientByIdMock,
   getAppClientByToken: getAppClientByTokenMock,
@@ -94,7 +94,7 @@ vi.mock('../../src/core/db/app_clients', () => ({
   touchAppClient: touchAppClientMock,
 }));
 
-vi.mock('../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
 }));
 
@@ -106,7 +106,7 @@ import {
   hasScope,
   isFirstUserClientRegistration,
   parseJsonBody,
-} from '../../src/daemon/server_shared';
+} from '@iki/daemon/server_shared';
 
 const createBodyRequest = () => {
   const req = new EventEmitter() as EventEmitter & { destroy: ReturnType<typeof vi.fn> };

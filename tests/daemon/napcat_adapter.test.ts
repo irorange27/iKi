@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultAppConfig } from '../../src/shared/config/defaults';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
 
 const { daemonLoggerEventMock, recordNapCatMessagePreviewMock } = vi.hoisted(() => ({
   daemonLoggerEventMock: vi.fn(),
@@ -31,23 +31,23 @@ class FakeBridgeSocket {
   }
 }
 
-vi.mock('../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('../../src/core/db/providers', () => ({
+vi.mock('@iki/core/db/providers', () => ({
   getProviders: vi.fn(),
 }));
 
-vi.mock('../../src/core/db/prompt_apps', () => ({
+vi.mock('@iki/core/db/prompt_apps', () => ({
   getEnabledPromptApps: vi.fn(() => []),
 }));
 
-vi.mock('../../src/core/skills', () => ({
+vi.mock('@iki/core/tools/skills', () => ({
   listSkills: vi.fn(async () => []),
 }));
 
-vi.mock('../../src/core/daemon_logs', () => ({
+vi.mock('@iki/core/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
     event: daemonLoggerEventMock,
   })),
@@ -60,15 +60,15 @@ vi.mock('../../src/core/daemon_logs', () => ({
   },
 }));
 
-vi.mock('../../src/main/services/chat/ui_messages', () => ({
+vi.mock('@iki/core/chat_service/ui_messages', () => ({
   parseStoredUiMessageRow: vi.fn((row: { message: string }) => JSON.parse(row.message)),
 }));
 
-import { getAppConfig } from '../../src/core/config';
-import { getProviders } from '../../src/core/db/providers';
-import { getEnabledPromptApps } from '../../src/core/db/prompt_apps';
-import { listSkills } from '../../src/core/skills';
-import { createNapCatReverseBridge } from '../../src/daemon/napcat_adapter';
+import { getAppConfig } from '@iki/core/config';
+import { getProviders } from '@iki/core/db/providers';
+import { getEnabledPromptApps } from '@iki/core/db/prompt_apps';
+import { listSkills } from '@iki/core/tools/skills';
+import { createNapCatReverseBridge } from '@iki/daemon/napcat_adapter';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getProvidersMock = vi.mocked(getProviders);

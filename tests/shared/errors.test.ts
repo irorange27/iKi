@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getErrorMessage } from '../../src/shared/utils/errors';
+import { getErrorMessage } from '@iki/core/utils/errors';
 
 describe('error utils', () => {
   it('prefers Error messages', () => {

@@ -4,9 +4,6 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const electronBinary = require('electron');
-const daemonEntry = path.join(__dirname, '..', 'dist', 'daemon', 'index.js');
-
 const APP_NAME = 'iki';
 
 const getDefaultDesktopUserDataPath = () => {
@@ -28,11 +25,13 @@ const userDataPath =
   (process.env.IKI_USER_DATA_PATH && process.env.IKI_USER_DATA_PATH.trim()) ||
   getDefaultDesktopUserDataPath();
 
-const child = spawn(electronBinary, [daemonEntry], {
+const daemonEntry = path.join(__dirname, '..', 'packages', 'daemon', 'src', 'index.ts');
+const tsxCli = path.join(__dirname, '..', 'node_modules', '.bin', 'tsx');
+
+const child = spawn(process.execPath, [tsxCli, daemonEntry], {
   stdio: 'inherit',
   env: {
     ...process.env,
-    ELECTRON_RUN_AS_NODE: '1',
     IKI_USER_DATA_PATH: userDataPath,
   },
 });
@@ -55,6 +54,6 @@ child.on('exit', (code, signal) => {
 });
 
 child.on('error', error => {
-  console.error('[Daemon] Failed to launch Electron runtime:', error);
+  console.error('[Daemon] Failed to launch:', error);
   process.exit(1);
 });

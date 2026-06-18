@@ -1,10 +1,10 @@
 import { ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
-import { useThemePresetGallery } from '../../../src/renderer/composables/useThemePresetGallery';
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import { createBase46ThemePresetFromQuickStart } from '../../../src/shared/theme/theme_creator';
-import { THEME_QUICK_STARTS } from '../../../src/shared/theme/registry';
+import { useThemePresetGallery } from '../../../packages/desktop/src/renderer/composables/useThemePresetGallery';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createBase46ThemePresetFromQuickStart } from '@iki/core/theme/theme_creator';
+import { THEME_QUICK_STARTS } from '@iki/core/theme/registry';
 
 const createHarness = (options?: { systemPrefersDark?: boolean }) => {
   const config = ref(createDefaultAppConfig());

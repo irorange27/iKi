@@ -38,14 +38,14 @@ const { state, execMock, prepareMock, repairIdentityProfileForeignKeysMock } = v
   };
 });
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: () => ({
     exec: execMock,
     prepare: prepareMock,
   }),
 }));
 
-vi.mock('../../../src/core/db/migration/identity_profile_foreign_key_repair', () => ({
+vi.mock('@iki/core/db/migration/identity_profile_foreign_key_repair', () => ({
   repairIdentityProfileForeignKeys: repairIdentityProfileForeignKeysMock,
 }));
 
@@ -76,7 +76,7 @@ describe('030_rename_identity_owner_role_field migration', () => {
     state.tables = new Set<string>(['identity_profiles']);
 
     const { migration } = await import(
-      '../../../src/core/db/migration/030_rename_identity_owner_role_field'
+      '../../../packages/core/src/db/migration/030_rename_identity_owner_role_field'
     );
 
     migration.up();
@@ -112,7 +112,7 @@ describe('030_rename_identity_owner_role_field migration', () => {
     state.tables = new Set<string>(['identity_profiles']);
 
     const { migration } = await import(
-      '../../../src/core/db/migration/030_rename_identity_owner_role_field'
+      '../../../packages/core/src/db/migration/030_rename_identity_owner_role_field'
     );
 
     migration.up();
@@ -139,7 +139,7 @@ describe('030_rename_identity_owner_role_field migration', () => {
     state.tables = new Set<string>(['identity_profiles_legacy_030']);
 
     const { migration } = await import(
-      '../../../src/core/db/migration/030_rename_identity_owner_role_field'
+      '../../../packages/core/src/db/migration/030_rename_identity_owner_role_field'
     );
 
     migration.up();

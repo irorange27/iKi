@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPrefixedId } from '../../src/shared/utils/id';
+import { createPrefixedId } from '@iki/core/utils/id';
 
 describe('createPrefixedId', () => {
   it('builds timestamped ids with the requested prefix and suffix length', () => {

@@ -5,7 +5,7 @@ import {
   maybeOpenDevTools,
   parseBooleanEnv,
   shouldAutoOpenDevTools,
-} from '../../../src/main/windows/devtools_policy';
+} from '../../../packages/desktop/src/main/windows/devtools_policy';
 
 describe('devtools policy', () => {
   it('parses supported boolean env values', () => {

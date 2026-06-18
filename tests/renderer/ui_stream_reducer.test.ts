@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ChatUiMessage, ChatUiMessageChunk } from '../../src/shared/chat/message_parts';
+import type { ChatUiMessage, ChatUiMessageChunk } from '@iki/core/chat/message_parts';
 import {
   createInitialStreamState,
   reduceStream,
   type MessageOp,
   type StreamAction,
   type StreamState,
-} from '../../src/renderer/modules/chat/ui_stream_reducer';
+} from '../../packages/desktop/src/renderer/modules/chat/ui_stream_reducer';
 
 const applyMessageOps = (messages: ChatUiMessage[], ops: MessageOp[]) => {
   for (const op of ops) {

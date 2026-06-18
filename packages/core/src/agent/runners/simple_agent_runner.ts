@@ -1,0 +1,482 @@
+import {
+  smoothStream,
+  stepCountIs,
+  streamText,
+  type ModelMessage,
+  type ToolSet,
+} from 'ai';
+
+import { createLogger } from '../../logger';
+import {
+  RefusalError,
+  getErrorMessage,
+  isRetryableError,
+} from '../../utils/errors';
+import {
+  createModel,
+  disposeLanguageModel,
+  getModelGenerationSettings,
+  injectReasoningContentIntoMessages,
+} from '../../provider/llm/factory';
+import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
+import {
+  appendResponseMessages,
+  appendUserPromptToHistory,
+  buildAiToolSet,
+  buildPromptContext,
+  cloneModelMessages,
+  collectApprovalRequests,
+  collectToolCalls,
+  loadAgentConfig,
+  validateAgentConfig,
+} from '../ai_sdk_runtime';
+import type {
+  AgentStep,
+  ErrorStep,
+  FinishStep,
+  HandoffStep,
+  TextDeltaStep,
+  ToolCallStartStep,
+  ToolCallEndStep,
+  ToolResultStep,
+  ToolErrorStep,
+  ApprovalRequestStep,
+} from '../agent_step';
+import type { AgentRunner, AgentRunnerRequest } from './agent_runner';
+import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '../types';
+
+const logger = createLogger({ module: 'simple_agent_runner' });
+
+const TERMINAL_TOOL_NAMES = new Set(['handoff']);
+
+const EMPTY_USAGE: AgentUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  reasoningTokens: 0,
+  estimatedCostUsd: 0,
+};
+
+const addUsage = (a: AgentUsage, b: AgentUsage | undefined): AgentUsage => {
+  if (!b) return a;
+  return {
+    inputTokens: (a.inputTokens ?? 0) + (b.inputTokens ?? 0),
+    outputTokens: (a.outputTokens ?? 0) + (b.outputTokens ?? 0),
+    totalTokens: (a.totalTokens ?? 0) + (b.totalTokens ?? 0),
+    cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
+    cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
+    reasoningTokens: (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0),
+    estimatedCostUsd: (a.estimatedCostUsd ?? 0) + (b.estimatedCostUsd ?? 0),
+  };
+};
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+type PrepareStep = NonNullable<Parameters<typeof streamText>[0]>['prepareStep'];
+
+export class SimpleAgentRunner implements AgentRunner {
+  private readonly prepareStep?: PrepareStep;
+  private abortController: AbortController | null = null;
+  private steerQueue: string[] = [];
+  private cancelRequested = false;
+  private history: ModelMessage[] = [];
+
+  constructor(config?: PartialAgentConfig & { prepareStep?: PrepareStep }) {
+    this.prepareStep = config?.prepareStep;
+  }
+
+  cancel(): void {
+    this.cancelRequested = true;
+    this.abortController?.abort('user-cancel');
+  }
+
+  steer(message: string): void {
+    this.steerQueue.push(message);
+    this.abortController?.abort('steer');
+  }
+
+  getHistory(): ModelMessage[] {
+    return cloneModelMessages(this.history);
+  }
+
+  async *run(request: AgentRunnerRequest): AsyncGenerator<AgentStep, AgentResult> {
+    this.abortController = new AbortController();
+    this.cancelRequested = false;
+    this.steerQueue = [];
+
+    const config = loadAgentConfig({
+      ...(request.config ?? {}),
+      providerType: request.providerType,
+      providerId: request.providerId,
+      model: request.model,
+      ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
+      ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+      ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
+    });
+
+    validateAgentConfig(config);
+
+    const maxIterations = request.maxIterations ?? config.maxIterations;
+    const retryMaxAttempts = 3;
+    const retryBaseDelayMs = 1000;
+    const retryMaxDelayMs = 30000;
+
+    this.history = this.buildTurnHistory(request.history, request.prompt);
+    let history = this.history;
+    let cumulativeUsage: AgentUsage = { ...EMPTY_USAGE };
+    let allText = '';
+    let totalSteps = 0;
+
+    // Outer retry loop
+    let retryAttempt = 0;
+
+    while (retryAttempt <= retryMaxAttempts) {
+      if (this.cancelRequested) {
+        throw new Error('Run cancelled');
+      }
+
+      // Flush steer queue into history
+      if (this.steerQueue.length > 0) {
+        const steerMessages: string[] = [];
+        while (this.steerQueue.length > 0) {
+          const msg = this.steerQueue.shift();
+          if (msg !== undefined) steerMessages.push(msg);
+        }
+        if (steerMessages.length > 0) {
+          const steerPrompt =
+            steerMessages.length === 1
+              ? steerMessages[0]
+              : steerMessages.join('\n\n---\n\n');
+          history = [
+            ...history,
+            { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
+          ];
+          retryAttempt = 0;
+        }
+      }
+
+      const model = createModel(config.providerType, config.model, config.providerId);
+      const tools = this.buildToolSet(config, request.tools);
+      const { systemPrompt, messages } = buildPromptContext(config, history);
+
+      // Track whether we need to restart due to steer mid-stream
+      let steeredMidStream = false;
+
+      try {
+        const result = streamText({
+          model,
+          system: systemPrompt,
+          messages: injectReasoningContentIntoMessages(messages),
+          tools,
+          ...getModelGenerationSettings({
+            providerType: config.providerType,
+            modelId: config.model,
+            providerId: config.providerId,
+            temperature: config.temperature,
+          }),
+          maxOutputTokens: config.maxTokens,
+          stopWhen: stepCountIs(
+            config.enableTools ? Math.max(1, maxIterations - totalSteps) : 1
+          ),
+          ...(this.prepareStep ? { prepareStep: this.prepareStep } : {}),
+          abortSignal: this.abortController?.signal,
+          experimental_transform: smoothStream(),
+          onAbort: () => {
+            logger.event({
+              level: 'info',
+              event: 'agent.stream.abort',
+              outcome: 'cancelled',
+              data: { provider: config.providerType, model: config.model },
+            });
+          },
+        });
+
+        let streamedText = '';
+        let terminalToolName: string | null = null;
+
+        for await (const part of result.fullStream) {
+          // Check for steer mid-stream
+          if (this.steerQueue.length > 0) {
+            steeredMidStream = true;
+            break;
+          }
+          if (this.cancelRequested) {
+            break;
+          }
+
+          if (part.type === 'text-delta' && part.text) {
+            streamedText += part.text;
+            yield { type: 'text-delta', text: part.text } satisfies TextDeltaStep;
+            continue;
+          }
+
+          if (part.type === 'tool-call') {
+            const toolName =
+              typeof part.toolName === 'string' ? part.toolName : '';
+            if (toolName && TERMINAL_TOOL_NAMES.has(toolName)) {
+              terminalToolName = toolName;
+            }
+            yield {
+              type: 'tool-call-start',
+              toolCallId: part.toolCallId,
+              toolName,
+              input: (part.input ?? {}) as Record<string, unknown>,
+            } satisfies ToolCallStartStep;
+            continue;
+          }
+
+          if (part.type === 'tool-input-end') {
+            if (part.id) {
+              yield {
+                type: 'tool-call-end',
+                toolCallId: part.id,
+              } satisfies ToolCallEndStep;
+            }
+            continue;
+          }
+
+          if (part.type === 'tool-result') {
+            yield {
+              type: 'tool-result',
+              toolCallId: part.toolCallId,
+              output: part.output,
+            } satisfies ToolResultStep;
+            continue;
+          }
+
+          if (part.type === 'tool-error') {
+            yield {
+              type: 'tool-error',
+              toolCallId: part.toolCallId,
+              error: typeof part.error === 'string' ? part.error : 'Tool execution failed',
+            } satisfies ToolErrorStep;
+            continue;
+          }
+        }
+
+        // If steered mid-stream, skip result processing and restart
+        if (steeredMidStream) {
+          disposeLanguageModel(model);
+          retryAttempt = 0;
+          continue;
+        }
+
+        if (this.cancelRequested) {
+          disposeLanguageModel(model);
+          throw new Error('Run cancelled');
+        }
+
+        const responseObj = await result.response;
+        const contentParts = await result.content;
+        const totalUsage = normalizeLanguageModelUsage(
+          await Promise.resolve(result.totalUsage)
+        );
+        const finishReason: string | undefined = await Promise.resolve(
+          result.finishReason
+        ).catch((): undefined => undefined);
+
+        cumulativeUsage = addUsage(cumulativeUsage, {
+          ...EMPTY_USAGE,
+          ...totalUsage,
+        });
+
+        // Detect model refusals
+        if (finishReason === 'content-filter') {
+          throw new RefusalError(
+            'Model response was blocked by content filter',
+            finishReason,
+            streamedText || undefined
+          );
+        }
+        if (finishReason === 'error') {
+          throw new RefusalError(
+            `Model produced an error response${streamedText ? `: ${streamedText.slice(0, 200)}` : ''}`,
+            finishReason,
+            streamedText || undefined
+          );
+        }
+
+        // Persist history
+        this.history = appendResponseMessages(history, responseObj.messages);
+        history = this.history;
+        const steps = await result.steps;
+        totalSteps += steps.length;
+
+        allText = allText ? allText + streamedText : streamedText;
+
+        // Check for approval requests
+        const approvalRequests = collectApprovalRequests(contentParts);
+        if (approvalRequests.length > 0) {
+          yield {
+            type: 'approval-request',
+            requests: approvalRequests,
+          } satisfies ApprovalRequestStep;
+
+          // Return so caller can gate approval and resume
+          disposeLanguageModel(model);
+          return {
+            response: allText || streamedText,
+            toolApprovalRequests: approvalRequests,
+            usage: cumulativeUsage,
+            iterations: totalSteps,
+            requiresApproval: true,
+          };
+        }
+
+        // Check for handoff
+        const resultToolCalls = await result.toolCalls;
+        if (terminalToolName === 'handoff') {
+          const toolCalls = collectToolCalls(steps, resultToolCalls);
+          const handoffCall = toolCalls?.find(tc => tc.toolName === 'handoff');
+          const handoffArgs = handoffCall?.args as Record<string, unknown> | undefined;
+
+          const handoffStep: HandoffStep = {
+            type: 'handoff',
+            summary:
+              typeof handoffArgs?.summary === 'string'
+                ? handoffArgs.summary
+                : '',
+            nextSteps:
+              typeof handoffArgs?.next_steps === 'string'
+                ? handoffArgs.next_steps
+                : '',
+            reason:
+              typeof handoffArgs?.reason === 'string'
+                ? handoffArgs.reason
+                : 'other',
+          };
+          yield handoffStep;
+        }
+
+        // Success — emit finish and return
+        const finalText = allText || streamedText || (await result.text) || '';
+
+        // Soft refusal: empty response with no tool calls
+        const hadToolCalls = steps.some(
+          step => (step.toolCalls?.length ?? 0) > 0
+        );
+        if (!hadToolCalls && !finalText.trim()) {
+          throw new RefusalError(
+            'Model returned an empty response with no tool calls',
+            finishReason,
+            undefined
+          );
+        }
+
+        const finishStep: FinishStep = {
+          type: 'finish',
+          text: finalText,
+          usage: cumulativeUsage,
+        };
+        yield finishStep;
+
+        disposeLanguageModel(model);
+
+        const allToolCalls = collectToolCalls(steps, resultToolCalls);
+
+        return {
+          response: finalText,
+          ...(allToolCalls && allToolCalls.length > 0
+            ? { toolCalls: allToolCalls }
+            : {}),
+          usage: cumulativeUsage,
+          iterations: totalSteps,
+        };
+      } catch (error) {
+        disposeLanguageModel(model);
+
+        // Steered mid-stream — restart the loop
+        if (steeredMidStream) {
+          retryAttempt = 0;
+          continue;
+        }
+
+        // Cancelled
+        if (
+          this.cancelRequested ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
+          throw error;
+        }
+
+        // Retryable error
+        if (
+          retryAttempt < retryMaxAttempts &&
+          isRetryableError(error)
+        ) {
+          const delay = Math.min(
+            retryBaseDelayMs * Math.pow(2, retryAttempt),
+            retryMaxDelayMs
+          );
+
+          let recoveryNote: string;
+          if (error instanceof RefusalError) {
+            recoveryNote =
+              'Your last response was blocked by content policies. Please rephrase your approach to comply with content policies while still being helpful, or find an alternative way to assist.';
+          } else {
+            recoveryNote = `Your last attempt encountered an error: ${getErrorMessage(error)}. Please try a different approach or simplify your response to avoid this issue.`;
+          }
+
+          history = appendUserPromptToHistory(
+            history,
+            `${recoveryNote}\n\n---\nContinue with the original task.`
+          );
+
+          logger.event({
+            level: 'warn',
+            event: 'agent.stream.retry',
+            outcome: 'started',
+            message: `Stream failed, retrying (attempt ${retryAttempt + 1}/${retryMaxAttempts + 1}) after ${delay}ms`,
+            error,
+          });
+
+          retryAttempt++;
+          await sleep(delay);
+          continue;
+        }
+
+        // Non-retryable error
+        const errorStep: ErrorStep = {
+          type: 'error',
+          message: getErrorMessage(error),
+          code:
+            error instanceof RefusalError
+              ? 'refusal'
+              : error instanceof Error
+                ? error.name
+                : undefined,
+        };
+        yield errorStep;
+        throw error;
+      }
+    }
+
+    // Exhausted retries
+    throw new Error('Agent run exhausted all retry attempts');
+  }
+
+  private buildTurnHistory(
+    history: ModelMessage[] | undefined,
+    prompt: string,
+  ): ModelMessage[] {
+    const base = history ? cloneModelMessages(history) : [];
+    return appendUserPromptToHistory(base, prompt);
+  }
+
+  private buildToolSet(
+    config: { enableTools: boolean; providerType: string },
+    tools: AgentTool[]
+  ): ToolSet | undefined {
+    if (!config.enableTools || tools.length === 0) return undefined;
+    return buildAiToolSet(
+      { enableTools: config.enableTools, providerType: config.providerType },
+      tools
+    ) as ToolSet | undefined;
+  }
+}
+
+export const createSimpleAgentRunner = (
+  config?: PartialAgentConfig & { prepareStep?: PrepareStep }
+): AgentRunner => new SimpleAgentRunner(config);

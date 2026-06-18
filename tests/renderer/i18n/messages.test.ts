@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { messages, type TranslationKey } from '../../../src/renderer/i18n/messages';
+import { messages, type TranslationKey } from '../../../packages/desktop/src/renderer/i18n/messages';
 
 const sortedKeys = (locale: keyof typeof messages): TranslationKey[] =>
   Object.keys(messages[locale]).sort() as TranslationKey[];

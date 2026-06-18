@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
-import SettingsView from '../../../src/renderer/views/SettingsView.vue';
-import { useConfigStore } from '../../../src/renderer/store/config';
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import type { Provider } from '../../../src/shared/types/provider';
+import SettingsView from '../../../packages/desktop/src/renderer/views/SettingsView.vue';
+import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import type { Provider } from '@iki/core/types/provider';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type' | 'models'>

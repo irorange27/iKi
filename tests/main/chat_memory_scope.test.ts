@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   getChatThread: vi.fn(),
 }));
 
-vi.mock('../../src/core/db/memory', () => ({
+vi.mock('@iki/core/db/memory', () => ({
   extractTextFromMessageJson: vi.fn(),
   addShortMemoryFromChatMessage: vi.fn(),
   pruneShortMemory: vi.fn(),
@@ -19,31 +19,31 @@ vi.mock('../../src/core/db/memory', () => ({
   searchLongMemoryAcrossThreads: vi.fn(() => []),
 }));
 
-vi.mock('../../src/core/db/emotion', () => ({
+vi.mock('@iki/core/db/emotion', () => ({
   addEmotionEvent: vi.fn(),
   pruneEmotionEvents: vi.fn(),
   listEmotionEvents: vi.fn(() => []),
 }));
 
-vi.mock('../../src/core/db/affect_state', () => ({
+vi.mock('@iki/core/db/affect_state', () => ({
   upsertAffectState: vi.fn(),
   deleteAffectState: vi.fn(),
   getAffectState: vi.fn(() => null),
 }));
 
-vi.mock('../../src/core/provider/emotion_model', () => ({
+vi.mock('@iki/core/provider/emotion_model', () => ({
   analyzeEmotionWithAgent: vi.fn(),
 }));
 
-vi.mock('../../src/core/provider/memory_retrieval', () => ({
+vi.mock('@iki/core/provider/memory_retrieval', () => ({
   planMemoryRetrieval: vi.fn(),
 }));
 
-import { getAppConfig } from '../../src/core/config';
-import { getChatThread } from '../../src/core/db/chat_thread';
-import * as memoryDb from '../../src/core/db/memory';
-import { planMemoryRetrieval } from '../../src/core/provider/memory_retrieval';
-import { createChatMemory } from '../../src/main/services/chat/memory';
+import { getAppConfig } from '@iki/core/config';
+import { getChatThread } from '@iki/core/db/chat_thread';
+import * as memoryDb from '@iki/core/db/memory';
+import { planMemoryRetrieval } from '@iki/core/provider/memory_retrieval';
+import { createChatMemory } from '@iki/core/chat_service/memory';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getChatThreadMock = vi.mocked(getChatThread);

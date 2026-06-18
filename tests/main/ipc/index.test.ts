@@ -30,52 +30,52 @@ const { registerMocks, callOrder } = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../../src/main/ipc/window', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/window', () => ({
   registerWindowIpc: registerMocks.registerWindowIpc,
 }));
-vi.mock('../../../src/main/ipc/config', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/config', () => ({
   registerConfigIpc: registerMocks.registerConfigIpc,
 }));
-vi.mock('../../../src/main/ipc/companion', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/companion', () => ({
   registerCompanionIpc: registerMocks.registerCompanionIpc,
 }));
-vi.mock('../../../src/main/ipc/providers', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/providers', () => ({
   registerProvidersIpc: registerMocks.registerProvidersIpc,
 }));
-vi.mock('../../../src/main/ipc/mcp', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/mcp', () => ({
   registerMcpIpc: registerMocks.registerMcpIpc,
 }));
-vi.mock('../../../src/main/ipc/memory', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/memory', () => ({
   registerMemoryIpc: registerMocks.registerMemoryIpc,
 }));
-vi.mock('../../../src/main/ipc/workspaces', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/workspaces', () => ({
   registerWorkspacesIpc: registerMocks.registerWorkspacesIpc,
 }));
-vi.mock('../../../src/main/ipc/prompt_apps', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/prompt_apps', () => ({
   registerPromptAppsIpc: registerMocks.registerPromptAppsIpc,
 }));
-vi.mock('../../../src/main/ipc/tool_model', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/tool_model', () => ({
   registerToolModelIpc: registerMocks.registerToolModelIpc,
 }));
-vi.mock('../../../src/main/ipc/tools', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/tools', () => ({
   registerToolsIpc: registerMocks.registerToolsIpc,
 }));
-vi.mock('../../../src/main/ipc/updater', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/updater', () => ({
   registerUpdaterIpc: registerMocks.registerUpdaterIpc,
 }));
-vi.mock('../../../src/main/ipc/skills', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/skills', () => ({
   registerSkillsIpc: registerMocks.registerSkillsIpc,
 }));
-vi.mock('../../../src/main/ipc/workflow', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/workflow', () => ({
   registerWorkflowIpc: registerMocks.registerWorkflowIpc,
 }));
-vi.mock('../../../src/main/ipc/speech', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/speech', () => ({
   registerSpeechIpc: registerMocks.registerSpeechIpc,
 }));
-vi.mock('../../../src/main/ipc/tasks', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/tasks', () => ({
   registerTasksIpc: registerMocks.registerTasksIpc,
 }));
-vi.mock('../../../src/main/ipc/chat', () => ({
+vi.mock('../../../packages/desktop/src/main/ipc/chat', () => ({
   registerChatIpc: registerMocks.registerChatIpc,
 }));
 
@@ -87,7 +87,7 @@ describe('main IPC registration', () => {
   });
 
   it('registers the main IPC modules once in the expected order', async () => {
-    const { registerMainIpc } = await import('../../../src/main/ipc/index');
+    const { registerMainIpc } = await import('../../../packages/desktop/src/main/ipc/index');
 
     registerMainIpc();
 

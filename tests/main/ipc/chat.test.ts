@@ -62,7 +62,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/main/services/chat/service', () => ({
+vi.mock('../../../packages/desktop/src/main/services/chat/service', () => ({
   chatService: chatServiceMock,
 }));
 
@@ -74,7 +74,7 @@ describe('chat IPC', () => {
   });
 
   it('registers the chat IPC surface once and keeps duplicate registration idempotent', async () => {
-    const { registerChatIpc } = await import('../../../src/main/ipc/chat');
+    const { registerChatIpc } = await import('../../../packages/desktop/src/main/ipc/chat');
 
     registerChatIpc();
 
@@ -123,7 +123,7 @@ describe('chat IPC', () => {
   });
 
   it('routes every chat handler through the shared chat service with the correct sender context', async () => {
-    const { registerChatIpc } = await import('../../../src/main/ipc/chat');
+    const { registerChatIpc } = await import('../../../packages/desktop/src/main/ipc/chat');
     registerChatIpc();
 
     const sender = { id: 77, send: vi.fn() };

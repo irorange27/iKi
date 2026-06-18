@@ -3,9 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
-import SettingsTasksSection from '../../../src/renderer/components/settings/SettingsTasksSection.vue';
-import type { ChatThread } from '../../../src/shared/types/chat';
-import type { ProactiveTask } from '../../../src/shared/types/tasks';
+import SettingsTasksSection from '../../../packages/desktop/src/renderer/components/settings/SettingsTasksSection.vue';
+import type { ChatThread } from '@iki/core/types/chat';
+import type { ProactiveTask } from '@iki/core/types/tasks';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

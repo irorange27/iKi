@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createCompanionService } from '../../src/main/services/companion/companion_service';
-import type { AppConfig } from '../../src/shared/types/config';
-import type { Provider } from '../../src/shared/types/provider';
+import { createCompanionService } from '../../packages/desktop/src/main/services/companion/companion_service';
+import type { AppConfig } from '@iki/core/types/config';
+import type { Provider } from '@iki/core/types/provider';
 
 const createProvider = (overrides: Partial<Provider> = {}): Provider => ({
   id: 'provider_1',

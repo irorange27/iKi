@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createRateLimiter } from '../../src/daemon/rate_limiter';
+import { createRateLimiter } from '@iki/core/rate_limiter';
 
 describe('createRateLimiter', () => {
   beforeEach(() => {

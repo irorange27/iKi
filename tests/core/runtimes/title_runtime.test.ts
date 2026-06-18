@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { LlmTitleRuntime, sanitizeGeneratedTitle } from '../../../src/core/runtimes/title_runtime';
+import { LlmTitleRuntime, sanitizeGeneratedTitle } from '@iki/core/runtimes/title_runtime';
 
 describe('sanitizeGeneratedTitle', () => {
   it('strips quotes and collapses newlines', () => {

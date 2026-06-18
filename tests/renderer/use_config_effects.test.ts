@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultAppConfig } from '../../src/shared/config/defaults';
-import { resolveThemeSelection, THEME_QUICK_STARTS } from '../../src/shared/theme/registry';
-import { createBase46ThemePresetFromQuickStart } from '../../src/shared/theme/theme_creator';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { resolveThemeSelection, THEME_QUICK_STARTS } from '@iki/core/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '@iki/core/theme/theme_creator';
 
 describe('config effects window chrome sync', () => {
   beforeEach(() => {
@@ -34,7 +34,7 @@ describe('config effects window chrome sync', () => {
       matchMedia: vi.fn(() => ({ matches: false })),
     });
 
-    const { applyCssVariables } = await import('../../src/renderer/composables/useConfigEffects');
+    const { applyCssVariables } = await import('../../packages/desktop/src/renderer/composables/useConfigEffects');
     const config = createDefaultAppConfig();
     config.general.theme = 'light';
     const expectedSelection = resolveThemeSelection({
@@ -77,7 +77,7 @@ describe('config effects window chrome sync', () => {
       matchMedia: vi.fn(() => ({ matches: true })),
     });
 
-    const { applyCssVariables } = await import('../../src/renderer/composables/useConfigEffects');
+    const { applyCssVariables } = await import('../../packages/desktop/src/renderer/composables/useConfigEffects');
     const config = createDefaultAppConfig();
     config.general.theme = 'dark';
 
@@ -106,7 +106,7 @@ describe('config effects window chrome sync', () => {
       matchMedia: vi.fn(() => ({ matches: true })),
     });
 
-    const { applyCssVariables } = await import('../../src/renderer/composables/useConfigEffects');
+    const { applyCssVariables } = await import('../../packages/desktop/src/renderer/composables/useConfigEffects');
     const config = createDefaultAppConfig();
     config.general.theme = 'dark';
     config.general.themePresetId = 'custom-base46';

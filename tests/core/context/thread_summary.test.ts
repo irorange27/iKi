@@ -4,15 +4,15 @@ const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('../../../src/core/provider/tool_model', () => ({
+vi.mock('@iki/core/provider/tool_model', () => ({
   getToolModel: vi.fn(),
 }));
 
-vi.mock('../../../src/core/runtimes/prompt_text_generator', () => ({
+vi.mock('@iki/core/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
 }));
 
-vi.mock('../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -23,9 +23,9 @@ vi.mock('../../../src/core/logger', () => ({
   })),
 }));
 
-import { getToolModel } from '../../../src/core/provider/tool_model';
-import { createSimplePromptTextGenerator } from '../../../src/core/runtimes/prompt_text_generator';
-import { generateThreadSummary } from '../../../src/core/context/thread_summary';
+import { getToolModel } from '@iki/core/provider/tool_model';
+import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
+import { generateThreadSummary } from '@iki/core/chat_service/thread_summary';
 
 const getToolModelMock = vi.mocked(getToolModel);
 const createSimplePromptTextGeneratorMock = vi.mocked(createSimplePromptTextGenerator);

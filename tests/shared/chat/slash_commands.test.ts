@@ -8,9 +8,9 @@ import {
   parseIncognitoArgument,
   extractPromptAppSlashCommands,
   parseSlashCommandDraft,
-} from '../../../src/shared/chat/slash_commands';
-import type { PromptApp } from '../../../src/shared/types/chat';
-import type { SkillSummary } from '../../../src/shared/types/skill';
+} from '@iki/core/chat/slash_commands';
+import type { PromptApp } from '@iki/core/types/chat';
+import type { SkillSummary } from '@iki/core/types/skill';
 
 const buildPromptApp = (
   overrides: Partial<PromptApp> & Pick<PromptApp, 'id' | 'name' | 'prompt_template'>

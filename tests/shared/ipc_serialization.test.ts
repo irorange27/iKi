@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ref } from 'vue';
 
-import { toIpcSerializable } from '../../src/shared/utils/ipc_serialization';
+import { toIpcSerializable } from '@iki/core/utils/ipc_serialization';
 
 describe('toIpcSerializable', () => {
   it('converts reactive task payloads into structured-clone-safe plain data', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import * as currentAgentApi from '../../../src/core/agent';
+import * as currentAgentApi from '@iki/core/agent';
 
 describe('core agent public surface', () => {
   it('keeps the default barrel runner-first and excludes removed legacy agent exports', () => {

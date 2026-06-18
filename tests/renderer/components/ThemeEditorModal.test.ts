@@ -3,11 +3,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
-import ThemeEditorModal from '../../../src/renderer/components/settings/ThemeEditorModal.vue';
-import { applySimpleThemeSeed } from '../../../src/shared/theme/theme_editor';
-import { THEME_QUICK_STARTS } from '../../../src/shared/theme/registry';
-import type { ThemeEditorState } from '../../../src/renderer/composables/useThemeEditor';
-import type { ThemeQuickStartDefinition, ThemeVariant } from '../../../src/shared/theme/types';
+import ThemeEditorModal from '../../../packages/desktop/src/renderer/components/settings/ThemeEditorModal.vue';
+import { applySimpleThemeSeed } from '@iki/core/theme/theme_editor';
+import { THEME_QUICK_STARTS } from '@iki/core/theme/registry';
+import type { ThemeEditorState } from '../../../packages/desktop/src/renderer/composables/useThemeEditor';
+import type { ThemeQuickStartDefinition, ThemeVariant } from '@iki/core/theme/types';
 
 const themeVariantOptions: Array<{ value: ThemeVariant; label: string }> = [
   { value: 'dark', label: 'Dark' },

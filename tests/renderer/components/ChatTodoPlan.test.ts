@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 
-import ChatTodoPlan from '../../../src/renderer/components/chat/ChatTodoPlan.vue';
+import ChatTodoPlan from '../../../packages/desktop/src/renderer/components/chat/ChatTodoPlan.vue';
 
 describe('ChatTodoPlan', () => {
   it('can collapse and expand the execution plan details', async () => {

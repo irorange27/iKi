@@ -1,30 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('../../../src/core/db/providers', () => ({
+vi.mock('@iki/core/db/providers', () => ({
   getProviders: vi.fn(),
 }));
 
-vi.mock('../../../src/core/provider/llm/factory', () => ({
+vi.mock('@iki/core/provider/llm/factory', () => ({
   getProviderConfig: vi.fn(),
 }));
 
-vi.mock('../../../src/core/network/http', () => ({
+vi.mock('@iki/core/network/http', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
-vi.mock('../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 
-import { getAppConfig } from '../../../src/core/config';
-import { getProviders } from '../../../src/core/db/providers';
-import { getProviderConfig } from '../../../src/core/provider/llm/factory';
-import { fetchWithTimeout } from '../../../src/core/network/http';
-import { createPreferredMemoryEmbeddingRuntime } from '../../../src/core/memory/embedding';
+import { getAppConfig } from '@iki/core/config';
+import { getProviders } from '@iki/core/db/providers';
+import { getProviderConfig } from '@iki/core/provider/llm/factory';
+import { fetchWithTimeout } from '@iki/core/network/http';
+import { createPreferredMemoryEmbeddingRuntime } from '@iki/core/memory/embedding';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getProvidersMock = vi.mocked(getProviders);

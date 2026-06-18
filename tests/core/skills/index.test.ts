@@ -8,7 +8,7 @@ import {
   buildSkillsMetadataSystemPrompt,
   listSkills,
   readSkillInstructions,
-} from '../../../src/core/skills';
+} from '@iki/core/tools/skills';
 
 describe('core skills metadata extraction', () => {
   let tempRoot = '';

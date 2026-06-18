@@ -4,7 +4,7 @@ const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('../../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -25,7 +25,7 @@ import {
   normalizeScheduleTimezone,
   normalizeScheduleType,
   validateCronExpression,
-} from '../../../../src/main/services/tasks/task_schedule';
+} from '../../../../packages/desktop/src/main/services/tasks/task_schedule';
 
 describe('task_schedule helpers', () => {
   it('clamps interval minutes to configured bounds', () => {

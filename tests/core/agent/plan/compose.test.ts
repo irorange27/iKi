@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { composePrepareSteps } from '../../../../src/core/agent/plan/compose';
+import { composePrepareSteps } from '@iki/core/agent/plan/compose';
 
 describe('composePrepareSteps', () => {
   it('returns a no-op function when no prepareSteps are provided', () => {

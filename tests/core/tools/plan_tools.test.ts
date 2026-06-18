@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PlanTool } from '../../../src/core/tools/plan_tools';
+import { PlanTool } from '@iki/core/tools/plan_tools';
 
 describe('PlanTool', () => {
   const tool = new PlanTool();

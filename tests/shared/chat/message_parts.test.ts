@@ -5,7 +5,7 @@ import {
   isChatUiMetadataPart,
   isSkillUsagePart,
   normalizeChatUiMetadataPart,
-} from '../../../src/shared/chat/message_parts';
+} from '@iki/core/chat/message_parts';
 
 describe('message_parts', () => {
   it('recognizes canonical chat metadata parts but not legacy flat runtime parts', () => {

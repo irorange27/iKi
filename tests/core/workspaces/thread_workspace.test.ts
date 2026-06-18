@@ -20,12 +20,12 @@ const {
   updateWorkspaceMock: vi.fn(),
 }));
 
-vi.mock('../../../src/core/db/chat_thread', () => ({
+vi.mock('@iki/core/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
   updateChatThread: updateChatThreadMock,
 }));
 
-vi.mock('../../../src/core/db/workspaces', () => ({
+vi.mock('@iki/core/db/workspaces', () => ({
   getWorkspace: getWorkspaceMock,
   getWorkspaceByPath: getWorkspaceByPathMock,
   addWorkspace: addWorkspaceMock,
@@ -81,7 +81,7 @@ describe('thread workspace helpers', () => {
     );
 
     const { ensureThreadWorkspaceSelection, buildThreadWorkspaceSystemMessage } = await import(
-      '../../../src/core/workspaces/thread_workspace'
+      '../../../packages/core/src/workspaces/thread_workspace'
     );
 
     const selection = ensureThreadWorkspaceSelection('thread_1');
@@ -138,7 +138,7 @@ describe('thread workspace helpers', () => {
     );
 
     const { ensureThreadWorkspaceSelection } = await import(
-      '../../../src/core/workspaces/thread_workspace'
+      '../../../packages/core/src/workspaces/thread_workspace'
     );
 
     const selection = ensureThreadWorkspaceSelection('thread_2');

@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useMarkdownCopy } from '../../../src/renderer/composables/useMarkdownCopy';
+import { useMarkdownCopy } from '../../../packages/desktop/src/renderer/composables/useMarkdownCopy';
 
 describe('useMarkdownCopy', () => {
   beforeEach(() => {

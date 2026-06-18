@@ -6,7 +6,7 @@ const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('../../../src/renderer/logger', () => ({
+vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -17,8 +17,8 @@ vi.mock('../../../src/renderer/logger', () => ({
   })),
 }));
 
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import { configService } from '../../../src/renderer/services/config_service';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { configService } from '../../../packages/desktop/src/renderer/services/config_service';
 
 describe('configService', () => {
   beforeEach(() => {

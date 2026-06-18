@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '../../src/shared/utils/provider_models';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/core/utils/provider_models';
 
 import {
   getAffectReferenceSummary,
@@ -10,7 +10,7 @@ import {
   getTokenUsageSummary,
   getToolReferenceSummary,
   hasReferenceSummary,
-} from '../../src/renderer/modules/chat/ui_message_references';
+} from '../../packages/desktop/src/renderer/modules/chat/ui_message_references';
 
 describe('ui_message_references', () => {
   it('reports tool call counts separately from tool types', () => {

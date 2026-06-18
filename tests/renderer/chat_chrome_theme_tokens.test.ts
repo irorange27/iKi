@@ -2,23 +2,23 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const VARIABLES_CSS_PATH = resolve(process.cwd(), 'src/renderer/assets/styles/variables.css');
-const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
+const VARIABLES_CSS_PATH = resolve(process.cwd(), 'packages/desktop/src/renderer/assets/styles/variables.css');
+const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'packages/desktop/src/renderer/components/ChatInput.vue');
 const CHAT_COMPOSER_SHELL_VUE_PATH = resolve(
   process.cwd(),
-  'src/renderer/components/ChatComposerShell.vue'
+  'packages/desktop/src/renderer/components/ChatComposerShell.vue'
 );
 const CHAT_COMPOSER_ACTIONS_VUE_PATH = resolve(
   process.cwd(),
-  'src/renderer/components/ChatComposerActions.vue'
+  'packages/desktop/src/renderer/components/ChatComposerActions.vue'
 );
 const CHAT_MESSAGE_ITEM_VUE_PATH = resolve(
   process.cwd(),
-  'src/renderer/components/chat/ChatMessageItem.vue'
+  'packages/desktop/src/renderer/components/chat/ChatMessageItem.vue'
 );
 const CHAT_MESSAGE_PARTS_VUE_PATH = resolve(
   process.cwd(),
-  'src/renderer/components/chat/ChatMessageParts.vue'
+  'packages/desktop/src/renderer/components/chat/ChatMessageParts.vue'
 );
 
 describe('chat chrome theme tokens', () => {

@@ -4,7 +4,7 @@ const { getDbMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
 }));
 
-vi.mock('../../../src/core/db/database', () => ({
+vi.mock('@iki/core/db/database', () => ({
   getDb: getDbMock,
 }));
 
@@ -33,7 +33,7 @@ describe('identity db helpers', () => {
       transaction: transactionMock,
     });
 
-    const { addIdentityProfile } = await import('../../../src/core/db/identity');
+    const { addIdentityProfile } = await import('@iki/core/db/identity');
     const result = addIdentityProfile({
       name: 'iKi Core',
       active: true,
@@ -72,7 +72,7 @@ describe('identity db helpers', () => {
       transaction: vi.fn((fn: () => unknown) => fn),
     });
 
-    const { getActiveIdentityProfile } = await import('../../../src/core/db/identity');
+    const { getActiveIdentityProfile } = await import('@iki/core/db/identity');
     const result = getActiveIdentityProfile();
 
     expect(result).toEqual(

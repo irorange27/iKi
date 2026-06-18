@@ -7,7 +7,7 @@ import {
   generateBootstrapToken,
   readOrCreateBootstrapToken,
   rotateBootstrapToken,
-} from '../../src/daemon/bootstrap_token';
+} from '@iki/daemon/bootstrap_token';
 
 describe('daemon bootstrap tokens', () => {
   const tempDirs: string[] = [];

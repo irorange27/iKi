@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseStoredUiMessageRow,
   sanitizeUiMessageJsonForStorage,
-} from '../../../../src/shared/chat/ui_message_codec';
+} from '@iki/core/chat/ui_message_codec';
 
 describe('chat_ui message serialization', () => {
   it('preserves skill and memory citation parts for persistence and reload', () => {

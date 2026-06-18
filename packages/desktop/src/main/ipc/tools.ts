@@ -1,0 +1,37 @@
+import { ipcMain } from 'electron';
+
+import { getAppConfig } from '@iki/core/config';
+import { createLogger } from '@iki/core/logger';
+import { defaultToolRegistry } from '@iki/core/tools';
+import { applyToolApprovalPolicyList } from '@iki/core/utils/tool_approval';
+
+let toolsIpcRegistered = false;
+const toolsIpcLogger = createLogger({ module: 'tools_ipc' });
+const shouldAutoApproveToolRequests = () => {
+  try {
+    return getAppConfig()?.general?.autoApproveToolRequests === true;
+  } catch {
+    return false;
+  }
+};
+
+export const registerToolsIpc = (): void => {
+  if (toolsIpcRegistered) return;
+  toolsIpcRegistered = true;
+
+  ipcMain.handle('tools:list', () => {
+    try {
+      return applyToolApprovalPolicyList(defaultToolRegistry.getToolMetadata(), {
+        autoApproveToolRequests: shouldAutoApproveToolRequests(),
+      });
+    } catch (error: unknown) {
+      toolsIpcLogger.event({
+        level: 'error',
+        event: 'ipc.tools.list',
+        outcome: 'failed',
+        error,
+      });
+      return [];
+    }
+  });
+};

@@ -21,11 +21,11 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/main/windows/settings_window', () => ({
+vi.mock('../../../packages/desktop/src/main/windows/settings_window', () => ({
   createSettingsWindow: createSettingsWindowMock,
 }));
 
-import { registerWindowIpc } from '../../../src/main/ipc/window';
+import { registerWindowIpc } from '../../../packages/desktop/src/main/ipc/window';
 
 beforeAll(() => {
   registerWindowIpc();

@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
-vi.mock('../../../src/renderer/services/config_service', () => ({
+vi.mock('../../../packages/desktop/src/renderer/services/config_service', () => ({
   configService: {
     get: vi.fn(),
     set: vi.fn(),
@@ -11,8 +11,8 @@ vi.mock('../../../src/renderer/services/config_service', () => ({
   },
 }));
 
-import { createDefaultAppConfig } from '../../../src/shared/config/defaults';
-import { useConfigStore } from '../../../src/renderer/store/config';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
 
 describe('config store settings write actions', () => {
   beforeEach(() => {

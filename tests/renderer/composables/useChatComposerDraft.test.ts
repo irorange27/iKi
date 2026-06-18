@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import { useChatComposerDraft } from '../../../src/renderer/composables/useChatComposerDraft';
+import { useChatComposerDraft } from '../../../packages/desktop/src/renderer/composables/useChatComposerDraft';
 
 const createEnterEvent = (overrides?: Partial<KeyboardEvent>): KeyboardEvent =>
   ({

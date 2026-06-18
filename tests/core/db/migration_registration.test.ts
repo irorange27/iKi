@@ -3,10 +3,10 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { registeredMigrations } from '../../../src/core/db/migration';
+import { registeredMigrations } from '@iki/core/db/migration';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const migrationDir = path.resolve(currentDir, '../../../src/core/db/migration');
+const migrationDir = path.resolve(currentDir, '../../../packages/core/src/db/migration');
 
 describe('migration registration', () => {
   it('keeps migration files uniquely and sequentially numbered', () => {

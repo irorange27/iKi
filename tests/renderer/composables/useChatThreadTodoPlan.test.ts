@@ -4,9 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, ref } from 'vue';
 
-import { useChatThreadTodoPlan } from '../../../src/renderer/composables/useChatThreadTodoPlan';
+import { useChatThreadTodoPlan } from '../../../packages/desktop/src/renderer/composables/useChatThreadTodoPlan';
 
-vi.mock('../../../src/renderer/logger', () => ({
+vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),

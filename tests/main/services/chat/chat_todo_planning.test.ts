@@ -5,7 +5,7 @@ import {
   TODO_PLANNING_TOOL_NAME,
   TODO_REMINDER_MESSAGE,
   TODO_REMINDER_THRESHOLD_STEPS,
-} from '../../../../src/main/services/chat/todo_planning';
+} from '@iki/core/chat_service/todo_planning';
 
 describe('chat_todo_planning', () => {
   it('stays disabled when todo is not in the enabled tool set', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { BaseTool } from '../../../src/core/tools/base';
-import { RetryableError } from '../../../src/shared/utils/errors';
+import { BaseTool } from '@iki/core/tools/base';
+import { RetryableError } from '@iki/core/utils/errors';
 
 // ---- Minimal concrete tools for testing ----
 

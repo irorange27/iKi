@@ -32,7 +32,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/core/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock('../../../src/core/logger', () => ({
   })),
 }));
 
-vi.mock('../../../src/core/config', () => ({
+vi.mock('@iki/core/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
@@ -53,61 +53,61 @@ vi.mock('node:fs/promises', () => ({
   },
 }));
 
-vi.mock('../../../src/core/skills', () => ({
+vi.mock('@iki/core/tools/skills', () => ({
   getSkillFolderPath: vi.fn(),
   getSkillRootsForUi: vi.fn(),
   listSkills: vi.fn(),
   readSkillContent: vi.fn(),
 }));
 
-vi.mock('../../../src/core/tools', () => ({
+vi.mock('@iki/core/tools', () => ({
   defaultToolRegistry: {
     getToolMetadata: vi.fn(),
   },
 }));
 
-vi.mock('../../../src/main/services/workflow/workflow_optimizer', () => ({
+vi.mock('../../../packages/desktop/src/main/services/workflow/workflow_optimizer', () => ({
   resetWorkflowOptimizationState: vi.fn(),
 }));
 
-vi.mock('../../../src/main/services/speech/speech_service', () => ({
+vi.mock('../../../packages/desktop/src/main/services/speech/speech_service', () => ({
   downloadWhisperNodeModel: vi.fn(),
   getSpeechStatus: vi.fn(),
   listWhisperNodeModels: vi.fn(),
   transcribeSpeech: vi.fn(),
 }));
 
-vi.mock('../../../src/core/provider/tool_model', () => ({
+vi.mock('@iki/core/provider/tool_model', () => ({
   getToolModel: vi.fn(),
   generateTitleWithAgent: vi.fn(),
   testToolModelLatency: vi.fn(),
 }));
 
-import { registerSkillsIpc } from '../../../src/main/ipc/skills';
-import { registerSpeechIpc } from '../../../src/main/ipc/speech';
-import { registerToolModelIpc } from '../../../src/main/ipc/tool_model';
-import { registerToolsIpc } from '../../../src/main/ipc/tools';
-import { registerWorkflowIpc } from '../../../src/main/ipc/workflow';
+import { registerSkillsIpc } from '../../../packages/desktop/src/main/ipc/skills';
+import { registerSpeechIpc } from '../../../packages/desktop/src/main/ipc/speech';
+import { registerToolModelIpc } from '../../../packages/desktop/src/main/ipc/tool_model';
+import { registerToolsIpc } from '../../../packages/desktop/src/main/ipc/tools';
+import { registerWorkflowIpc } from '../../../packages/desktop/src/main/ipc/workflow';
 import {
   getSkillFolderPath,
   getSkillRootsForUi,
   listSkills,
   readSkillContent,
-} from '../../../src/core/skills';
-import { defaultToolRegistry } from '../../../src/core/tools';
-import { resetWorkflowOptimizationState } from '../../../src/main/services/workflow/workflow_optimizer';
+} from '@iki/core/tools/skills';
+import { defaultToolRegistry } from '@iki/core/tools';
+import { resetWorkflowOptimizationState } from '../../../packages/desktop/src/main/services/workflow/workflow_optimizer';
 import {
   downloadWhisperNodeModel,
   getSpeechStatus,
   listWhisperNodeModels,
   transcribeSpeech,
-} from '../../../src/main/services/speech/speech_service';
+} from '../../../packages/desktop/src/main/services/speech/speech_service';
 import {
   generateTitleWithAgent,
   getToolModel,
   testToolModelLatency,
-} from '../../../src/core/provider/tool_model';
-import { getAppConfig } from '../../../src/core/config';
+} from '@iki/core/provider/tool_model';
+import { getAppConfig } from '@iki/core/config';
 
 const getSkillFolderPathMock = vi.mocked(getSkillFolderPath);
 const getSkillRootsForUiMock = vi.mocked(getSkillRootsForUi);

@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { updateService } from '../../../src/renderer/services/update_service';
+import { updateService } from '../../../packages/desktop/src/renderer/services/update_service';
 
 describe('updateService', () => {
   beforeEach(() => {

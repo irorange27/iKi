@@ -17,24 +17,24 @@ const {
   getAudioExtensionMock: vi.fn(() => 'webm'),
 }));
 
-vi.mock('../../../../src/main/services/speech/speech_config', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/speech/speech_config', () => ({
   DEFAULT_OPENAI_MODEL: 'whisper-1',
   getSpeechConfig: getSpeechConfigMock,
   normalizeOpenAiBaseUrl: normalizeOpenAiBaseUrlMock,
 }));
 
-vi.mock('../../../../src/main/services/speech/speech_audio', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/speech/speech_audio', () => ({
   getAudioExtension: getAudioExtensionMock,
 }));
 
-vi.mock('../../../../src/main/services/speech/speech_whisper', () => ({
+vi.mock('../../../../packages/desktop/src/main/services/speech/speech_whisper', () => ({
   downloadWhisperNodeModel: vi.fn(),
   getWhisperNodeStatus: getWhisperNodeStatusMock,
   listWhisperNodeModels: vi.fn(() => []),
   transcribeWithWhisperNode: transcribeWithWhisperNodeMock,
 }));
 
-import { getSpeechStatus, transcribeSpeech } from '../../../../src/main/services/speech/speech_service';
+import { getSpeechStatus, transcribeSpeech } from '../../../../packages/desktop/src/main/services/speech/speech_service';
 
 type MockSpeechConfig = {
   enabled: boolean;

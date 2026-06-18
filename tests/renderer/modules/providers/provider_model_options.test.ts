@@ -5,7 +5,7 @@ import {
   createModelOptionsEditorState,
   getModelOptionSummary,
   parseModelProviderOptions,
-} from '../../../../src/renderer/modules/providers/provider_model_options';
+} from '../../../../packages/desktop/src/renderer/modules/providers/provider_model_options';
 
 describe('provider_model_options helpers', () => {
   it('normalizes a model options editor state into persisted provider model options', () => {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
-import type { ElectronApi } from '../../src/shared/types/electron_api';
+import type { ElectronApi } from '@iki/core/types/electron_api';
 
 const invokeMock = vi.fn();
 const onMock = vi.fn();
@@ -27,7 +27,7 @@ vi.mock('electron', () => ({
 
 const loadPreload = async () => {
   exposedApi = null;
-  await import('../../src/preload/index');
+  await import('../../packages/desktop/src/preload/index');
   if (!exposedApi) throw new Error('electronAPI was not exposed');
 };
 

@@ -9,7 +9,7 @@ import {
   createVitePackagingIgnore,
   resolveRuntimePackagingPaths,
   resolveRuntimeUnpackPaths,
-} from '../../src/build/runtime_packaging';
+} from '../../packages/desktop/src/build/runtime_packaging';
 
 const tempDirs: string[] = [];
 

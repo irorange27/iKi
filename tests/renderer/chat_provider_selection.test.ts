@@ -4,7 +4,7 @@ const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('../../src/renderer/logger', () => ({
+vi.mock('../../packages/desktop/src/renderer/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -15,11 +15,11 @@ vi.mock('../../src/renderer/logger', () => ({
   })),
 }));
 
-import type { Provider } from '../../src/shared/types/provider';
+import type { Provider } from '@iki/core/types/provider';
 import {
   resolveProviderSelection,
   useChatProviderSelection,
-} from '../../src/renderer/composables/useChatProviderSelection';
+} from '../../packages/desktop/src/renderer/composables/useChatProviderSelection';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type'>

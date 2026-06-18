@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const SIDEBAR_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/Sidebar.vue');
-const SIDEBAR_CSS_PATH = resolve(process.cwd(), 'src/renderer/components/sidebar.css');
-const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'src/renderer/components/ChatInput.vue');
+const SIDEBAR_VUE_PATH = resolve(process.cwd(), 'packages/desktop/src/renderer/components/Sidebar.vue');
+const SIDEBAR_CSS_PATH = resolve(process.cwd(), 'packages/desktop/src/renderer/components/sidebar.css');
+const CHAT_INPUT_VUE_PATH = resolve(process.cwd(), 'packages/desktop/src/renderer/components/ChatInput.vue');
 
 describe('sidebar/composer spacing alignment', () => {
   it('anchors sidebar bottom gap to the same composer spacing token', () => {

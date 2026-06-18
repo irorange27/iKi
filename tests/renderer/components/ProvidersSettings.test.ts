@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
-import ProvidersSettings from '../../../src/renderer/components/settings/ProvidersSettings.vue';
+import ProvidersSettings from '../../../packages/desktop/src/renderer/components/settings/ProvidersSettings.vue';
 
 const setElectronApi = (api: unknown) => {
   const defaultApi = {

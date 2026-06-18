@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { describe, expect, it } from 'vitest';
 
-import { createPlanThenExecutePrepareStep } from '../../../../src/core/agent/plan/plan_prepare_step';
+import { createPlanThenExecutePrepareStep } from '@iki/core/agent/plan/plan_prepare_step';
 
 describe('createPlanThenExecutePrepareStep', () => {
   it('returns undefined when plan tool is not in enabledTools', () => {

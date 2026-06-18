@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultAppConfig } from '../../src/shared/config/defaults';
-import { normalizeAppConfig } from '../../src/shared/config/normalize';
-import { compileBase46ThemeDocument } from '../../src/shared/theme/base46_compile';
-import { parseBase46ThemePresetInput } from '../../src/shared/theme/base46_schema';
-import { BUILTIN_BASE46_DEFAULT_PRESET } from '../../src/shared/theme/builtins';
+import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { normalizeAppConfig } from '@iki/core/config/normalize';
+import { compileBase46ThemeDocument } from '@iki/core/theme/base46_compile';
+import { parseBase46ThemePresetInput } from '@iki/core/theme/base46_schema';
+import { BUILTIN_BASE46_DEFAULT_PRESET } from '@iki/core/theme/builtins';
 import {
   DEFAULT_THEME_PRESET_ID,
   THEME_QUICK_STARTS,
   createDefaultThemeConfig,
   listThemePresetSummaries,
   resolveThemeSelection,
-} from '../../src/shared/theme/registry';
-import { createBase46ThemePresetFromQuickStart } from '../../src/shared/theme/theme_creator';
+} from '@iki/core/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '@iki/core/theme/theme_creator';
 
 const oceanQuickStart = THEME_QUICK_STARTS.find(preset => preset.id === 'ocean');
 

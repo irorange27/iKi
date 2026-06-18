@@ -14,22 +14,22 @@ const {
   getToolModelMock: vi.fn(() => ({ providerType: 'openai', model: 'gpt-4o-mini' })),
 }));
 
-vi.mock('../../../src/core/agent/runners/simple_agent_runner', () => ({
+vi.mock('@iki/core/agent/runners/simple_agent_runner', () => ({
   createSimpleAgentRunner: createSimpleAgentRunnerMock,
 }));
 
-vi.mock('../../../src/core/provider/tool_model', () => ({
+vi.mock('@iki/core/provider/tool_model', () => ({
   getToolModel: getToolModelMock,
 }));
 
-vi.mock('../../../src/core/agent/run_tracker', () => ({
+vi.mock('@iki/core/agent/run_tracker', () => ({
   createAgentRunTracker: createAgentRunTrackerMock,
 }));
 
-import { DelegatedAgentTool } from '../../../src/core/tools/agent_tools';
-import { ListDirTool } from '../../../src/core/tools/file_tools';
-import { ShellExecutionTool } from '../../../src/core/tools/shell_tools';
-import { runWithToolRuntimeContext } from '../../../src/core/tools/runtime_context';
+import { DelegatedAgentTool } from '@iki/core/tools/agent_tools';
+import { ListDirTool } from '@iki/core/tools/file_tools';
+import { ShellExecutionTool } from '@iki/core/tools/shell_tools';
+import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
 
 const setRunResult = (result: unknown) => {
   runMock.mockImplementation(async function* () {
