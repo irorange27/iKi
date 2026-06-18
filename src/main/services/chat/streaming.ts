@@ -1,6 +1,5 @@
-import type { AgentStep, ToolApprovalRequest } from '../../../core/agent';
+import type { AgentStep } from '../../../core/agent';
 import { createLogger } from '../../../core/logger';
-import * as llmFactory from '../../../core/provider/llm/factory';
 import { runWithToolRuntimeContext } from '../../../core/tools/runtime_context';
 import { getErrorMessage } from '../../utils/errors';
 import {
@@ -10,15 +9,14 @@ import {
 } from './constants';
 import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
-import {
-  createApprovalRecoveryContext,
-  describeApprovalRequiredTools,
-} from './approval_types';
+import { createApprovalRecoveryContext } from './approval_types';
 import * as agentRunDb from '../../../core/db/agent_runs';
 import { createAgentRunTracker } from '../../../core/agent/run_tracker';
 import { createChatAgentRunner } from './chat_agent_runner';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from './turn_preparer';
+import { createChatSend } from './chat_send';
+export type { ChatSendResult } from './chat_send';
 import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEvent } from './types';
 import type { ConversationPreview } from '../../../shared/types/companion';
 import { createUiChunkEmitter } from './ui_stream';
@@ -29,18 +27,6 @@ const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
 const THREAD_RATE_LIMIT_WINDOW_MS = 10_000;
 const THREAD_RATE_LIMIT_MAX_REQUESTS = 5;
-
-export type ChatSendResult =
-  | {
-      success: true;
-      text: string;
-      runId?: string;
-    }
-  | {
-      success: false;
-      error: string;
-      runId?: string;
-    };
 
 export const createChatStreaming = (deps: {
   activeStreams: Map<number, ActiveStreamState>;
@@ -152,199 +138,11 @@ export const createChatStreaming = (deps: {
     return { success: true };
   };
 
-  const send = async (options: ChatTurnOptions): Promise<ChatSendResult> => {
-    let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
-
-    try {
-      if (options.threadId) {
-        const rateCheck = checkThreadRunRate(options.threadId);
-        if (!rateCheck.allowed) {
-          return {
-            success: false,
-            error: `Too many requests on this thread. Retry in ${Math.ceil((rateCheck.retryAfterMs ?? 1000) / 1000)}s.`,
-          };
-        }
-      }
-
-      const preparedTurn = await turnPreparer.prepareChatTurn(options);
-      const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
-      const systemPrompt = preparedTurn.enableTools
-        ? TOOL_AGENT_SYSTEM_PROMPT
-        : NO_TOOLS_SYSTEM_PROMPT;
-
-      runTracker = createAgentRunTracker({
-        kind: options.runConfig?.kind ?? 'chat-turn',
-        threadId: options.threadId,
-        parentRunId: options.runConfig?.parentRunId,
-        rootRunId: options.runConfig?.rootRunId,
-        providerType: options.providerType,
-        providerId: options.providerId,
-        model: options.model,
-        systemPrompt,
-        enabledTools: preparedTurn.guardedTools,
-        availableSkillIds: preparedTurn.selectedSkillIds,
-        input: {
-          ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
-          messages: preparedTurn.finalMessages,
-          metadata: {
-            ...(options.runConfig?.metadata ?? {}),
-            transport: 'send',
-            contextTokens: preparedTurn.report.totalEstimatedTokens,
-            skillMode: preparedTurn.skillMode,
-            maxIterations,
-            enableTools: preparedTurn.enableTools,
-          },
-        },
-        working: {
-          modelMessages: preparedTurn.history,
-          accumulatedText: '',
-          pendingApprovalIds: [],
-          lastStepIndex: 0,
-        },
-      });
-
-      if (preparedTurn.enableTools) {
-        const { runner, tools: runnerTools } = createChatAgentRunner({
-          threadId: options.threadId,
-          providerType: options.providerType,
-          providerId: options.providerId,
-          model: options.model,
-          systemPrompt,
-          enableTools: true,
-          enabledTools: preparedTurn.guardedTools,
-          availableSkillIds: preparedTurn.selectedSkillIds,
-          guardActive: preparedTurn.guardActive,
-          maxIterations,
-          ...(typeof preparedTurn.maxOutputTokens === 'number'
-            ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-            : {}),
-        });
-
-        if (!preparedTurn.prompt.trim()) {
-          throw new Error('No user prompt provided for tool-enabled chat');
-        }
-
-        const result = await runWithToolRuntimeContext(
-          { runId: runTracker.id, runTracker, threadId: options.threadId },
-          async () => {
-            const agentGen = runner.run({
-              config: { enabled: true, enableTools: true },
-              prompt: preparedTurn.prompt,
-              history: preparedTurn.history,
-              tools: runnerTools,
-              providerType: options.providerType,
-              providerId: options.providerId,
-              model: options.model,
-              systemPrompt,
-              maxIterations,
-              ...(typeof preparedTurn.maxOutputTokens === 'number'
-                ? { maxTokens: preparedTurn.maxOutputTokens }
-                : {}),
-            });
-
-            let next = await agentGen.next();
-            while (!next.done) {
-              next = await agentGen.next();
-            }
-            return next.value as import('../../../core/agent').AgentResult | undefined;
-          }
-        );
-
-        if (!result) {
-          throw new Error('Agent run produced no result');
-        }
-
-        runTracker.recordToolCalls(result.toolCalls);
-        runTracker.syncModelMessages(runner.getHistory?.() ?? preparedTurn.history);
-        deps.usage.recordUsageEvent({
-          threadId: options.threadId,
-          providerType: options.providerType,
-          model: options.model,
-          usage: result.usage,
-          source: 'chat.send.tools',
-          metadata: {
-            contextTokens: preparedTurn.report.totalEstimatedTokens,
-            approvalRequestCount: result.toolApprovalRequests?.length ?? 0,
-          },
-        });
-        if (result.toolApprovalRequests && result.toolApprovalRequests.length > 0) {
-          const approvalError = describeApprovalRequiredTools(result.toolApprovalRequests);
-          runTracker.markBlocked({
-            text: result.response,
-            usage: result.usage ? { ...result.usage } : undefined,
-            pendingApprovalIds: result.toolApprovalRequests.map(request => request.approvalId),
-          });
-          chatStreamingLogger.event({
-            level: 'warn',
-            event: 'chat.send.approval_required',
-            outcome: 'denied',
-            message: approvalError,
-            data: {
-              thread_id: options.threadId || null,
-              tool_names: result.toolApprovalRequests
-                .map(request => request.toolCall?.toolName)
-                .filter(
-                  (toolName): toolName is string =>
-                    typeof toolName === 'string' && toolName.trim().length > 0
-                ),
-            },
-          });
-          throw new Error(approvalError);
-        }
-        runTracker.markCompleted({
-          text: result.response,
-          usage: result.usage ? { ...result.usage } : undefined,
-          finishReason: 'completed',
-        });
-        return {
-          success: true,
-          text: result.response,
-          ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
-        };
-      }
-
-      const llmResult = await llmFactory.generateChatWithModelMessages({
-        providerType: options.providerType,
-        providerId: options.providerId,
-        modelId: options.model,
-        messages: preparedTurn.finalMessages,
-        extraSystemPrompt: NO_TOOLS_SYSTEM_PROMPT,
-        ...(typeof preparedTurn.maxOutputTokens === 'number'
-          ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-          : {}),
-      });
-      deps.usage.recordUsageEvent({
-        threadId: options.threadId,
-        providerType: options.providerType,
-        model: options.model,
-        usage: llmResult.usage,
-        source: 'chat.send.llm',
-        metadata: {
-          contextTokens: preparedTurn.report.totalEstimatedTokens,
-        },
-      });
-      runTracker.markCompleted({
-        text: llmResult.text,
-        usage: llmResult.usage ? { ...llmResult.usage } : undefined,
-        finishReason: 'completed',
-      });
-      return {
-        success: true,
-        text: llmResult.text,
-        ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
-      };
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      if (runTracker && runTracker.getRun().status === 'running') {
-        runTracker.markFailed({ message });
-      }
-      return {
-        success: false,
-        error: message,
-        ...(options.runConfig?.kind && runTracker ? { runId: runTracker.id } : {}),
-      };
-    }
-  };
+  const { send } = createChatSend({
+    turnPreparer,
+    usage: deps.usage,
+    checkThreadRunRate,
+  });
 
   const stream = async (webContents: ChatWebContents, options: ChatTurnOptions) => {
     const senderId = webContents.id;

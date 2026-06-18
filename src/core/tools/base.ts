@@ -4,7 +4,6 @@ import type { AgentTool, ToolApprovalMode } from '../agent/types';
 import { createLogger } from '../logger';
 import { zodSchemaToJsonSchema } from './json_schema';
 import type { ToolRetryConfig } from './retry';
-import { withRetry } from './retry';
 import type { ToolCacheConfig } from './cache';
 import { buildCacheKey, registerToolCache, ToolResultCache } from './cache';
 
@@ -84,15 +83,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       }
     }
 
-    // --- Build wrapped handler with retry ---
-    const executeHandler = this.retry
-      ? withRetry(
-          async (validatedArgs: z.infer<P>) => await this.handler(validatedArgs),
-          this.retry
-        )
-      : async (validatedArgs: z.infer<P>) => await this.handler(validatedArgs);
-
-    const promise = executeHandler(validatedArgs);
+    const promise = this.handler(validatedArgs);
 
     // --- Track execution with span ---
     const toolSpan = toolLogger.span({
@@ -152,6 +143,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       displayName: this.displayName ?? this.name,
       source: { kind: 'builtin' },
       handler: (args: unknown) => this.execute(args),
+      ...(this.retry ? { retry: this.retry } : {}),
     };
   }
 }

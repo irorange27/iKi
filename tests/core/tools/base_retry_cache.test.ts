@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { BaseTool } from '../../../src/core/tools/base';
 import { RetryableError } from '../../../src/shared/utils/errors';
@@ -53,18 +53,21 @@ describe('BaseTool without retry/cache (backward compat)', () => {
 });
 
 describe('BaseTool with retry', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
+  it('propagates retry config via toAgentTool', () => {
+    const tool = new RetryTool();
+    const agentTool = tool.toAgentTool();
+    expect(agentTool.retry).toEqual({ maxRetries: 2, backoffMs: 1 });
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  it('does not propagate retry when not configured', () => {
+    const tool = new NoRetryNoCacheTool();
+    const agentTool = tool.toAgentTool();
+    expect(agentTool.retry).toBeUndefined();
   });
 
-  it('retries handler on RetryableError', async () => {
+  it('calls handler once without retry in execute', async () => {
     const tool = new RetryTool();
     let calls = 0;
-    // Override handler for this test
     vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
       async (args: z.infer<typeof TestSchema>) => {
         calls++;
@@ -73,25 +76,12 @@ describe('BaseTool with retry', () => {
       }
     );
 
-    const p = tool.execute({ value: 'retry-test' });
-    for (let i = 0; i < 2; i++) {
-      await vi.advanceTimersByTimeAsync(1 * Math.pow(2, i));
-    }
-    const result = await p;
-    expect(result).toEqual({ result: 'retry-test' });
-    expect(calls).toBe(3);
+    // execute() no longer retries — it delegates retry to buildAiToolSet
+    await expect(tool.execute({ value: 'retry-test' })).rejects.toThrow('transient');
+    expect(calls).toBe(1);
   });
 
-  it('does not retry on plain Error', async () => {
-    const tool = new RetryTool();
-    vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockRejectedValue(
-      new Error('not transient')
-    );
-
-    await expect(tool.execute({ value: 'x' })).rejects.toThrow('not transient');
-  });
-
-  it('validates args before retrying', async () => {
+  it('validates args before calling handler', async () => {
     const tool = new RetryTool();
     await expect(tool.execute({ value: 123 })).rejects.toThrow(); // Zod validation fails
   });
