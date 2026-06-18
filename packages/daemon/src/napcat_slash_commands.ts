@@ -10,7 +10,7 @@ import {
   toPromptAppComposerInvocationToken,
   toSkillComposerInvocationToken,
 } from '@iki/core/chat/slash_commands';
-import { normalizeAppLocale, type SupportedLocale } from '@iki/core/i18n/locale';
+import { normalizeAppLocale, type SupportedLocale } from '@iki/backend/i18n/locale';
 
 type NapCatSlashFeedbackKey =
   | 'startReady'

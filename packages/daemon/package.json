@@ -18,6 +18,7 @@
     "./bootstrap_token": "./src/bootstrap_token.ts"
   },
   "dependencies": {
-    "@iki/core": "workspace:*"
+    "@iki/core": "workspace:*",
+    "@iki/backend": "workspace:*"
   }
 }

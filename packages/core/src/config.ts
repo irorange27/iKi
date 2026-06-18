@@ -1,7 +1,7 @@
 import type { AppConfig } from './types/config';
 import { createDefaultAppConfig } from './config/defaults';
 import { normalizeAppConfig } from './config/normalize';
-import { normalizeAppLocale } from './i18n/locale';
+import { normalizeAppLocale } from '@iki/backend/i18n/locale';
 import { getConfig, setConfig } from './db/database';
 import { getDisplayScale, getLocale, getTheme } from './platform';
 

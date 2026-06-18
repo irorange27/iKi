@@ -1,4 +1,4 @@
-import type { SupportedLocale } from '@iki/core/i18n/locale';
+import type { SupportedLocale } from '@iki/backend/i18n/locale';
 import { en } from './catalogs/en';
 import { zhCN } from './catalogs/zh-CN';
 import type { LocaleCatalog } from './shared';

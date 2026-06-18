@@ -21,8 +21,6 @@
     "./constants/acp": "./src/constants/acp.ts",
     "./db": "./src/db/index.ts",
     "./emotion": "./src/emotion/index.ts",
-    "./i18n": "./src/i18n/index.ts",
-    "./i18n/locale": "./src/i18n/locale.ts",
     "./logging": "./src/logging/index.ts",
     "./mcp": "./src/mcp/index.ts",
     "./memory": "./src/memory/index.ts",

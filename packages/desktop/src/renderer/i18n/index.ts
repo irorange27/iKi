@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import { DEFAULT_LOCALE, normalizeAppLocale, type SupportedLocale } from '@iki/core/i18n/locale';
+import { DEFAULT_LOCALE, normalizeAppLocale, type SupportedLocale } from '@iki/backend/i18n/locale';
 import { messages, type TranslationKey, type TranslationParams } from './messages';
 
 export type { TranslationKey } from './messages';
