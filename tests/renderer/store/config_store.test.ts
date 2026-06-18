@@ -11,7 +11,7 @@ vi.mock('../../../packages/desktop/src/renderer/services/config_service', () => 
   },
 }));
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
 
 describe('config store settings write actions', () => {

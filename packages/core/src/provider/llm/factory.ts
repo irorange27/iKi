@@ -8,9 +8,9 @@ import { createMinimax } from 'vercel-minimax-ai-provider';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { getProviders } from '../../db/providers';
+import { getProviders } from '@iki/backend/db/providers';
 import { createLogger } from '../../logger';
-import { getPersonaPrompt } from '../../persona';
+import { getPersonaPrompt } from '@iki/backend/persona';
 import { fetchWithTimeout } from '@iki/backend/network/http';
 import { getToolRuntimeContext } from '../../tools/runtime_context';
 import {

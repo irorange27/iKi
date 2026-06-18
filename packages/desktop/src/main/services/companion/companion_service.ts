@@ -1,5 +1,5 @@
-import * as providerDb from '@iki/core/db/providers';
-import { getAppConfig } from '@iki/core/config';
+import * as providerDb from '@iki/backend/db/providers';
+import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
 import { parseModelList } from '@iki/core/utils/provider_models';
 import type {
@@ -12,7 +12,7 @@ import type {
 } from '@iki/core/types/companion';
 import type { AppConfig } from '@iki/core/types/config';
 import type { Provider } from '@iki/core/types/provider';
-import type { InterventionPolicySignal } from '@iki/core/chat/intervention_policy';
+import type { InterventionPolicySignal } from '@iki/backend/chat/intervention_policy';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 type CompanionWindowTarget = {

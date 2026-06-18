@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 
-import * as affectDb from '@iki/core/db/affect_state';
-import * as memoryDb from '@iki/core/db/memory';
+import * as affectDb from '@iki/backend/db/affect_state';
+import * as memoryDb from '@iki/backend/db/memory';
 
 let memoryIpcRegistered = false;
 

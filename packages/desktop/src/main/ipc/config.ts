@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
-import { setConfig, migrateFromJson } from '@iki/core/db/database';
-import { getAppConfig } from '@iki/core/config';
-import { readRecentDaemonLogs } from '@iki/core/daemon_logs';
+import { setConfig, migrateFromJson } from '@iki/backend/db/database';
+import { getAppConfig } from '@iki/backend/config';
+import { readRecentDaemonLogs } from '@iki/backend/daemon_logs';
 import { applyAppLoggingConfig, createLogger } from '@iki/core/logger';
 import { getMcpManager } from '@iki/core/mcp';
-import { normalizeAppConfig } from '@iki/core/config/normalize';
+import { normalizeAppConfig } from '@iki/backend/config/normalize';
 import type {
   AppConfig,
   ConfigRuntimeInfo,

@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue';
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 
 import { toUiMessages } from '../modules/chat/ui_message_convert';
 import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
@@ -15,7 +15,7 @@ import type { UiMessagePersistence } from '../modules/chat/ui_message_persistenc
 import {
   parseJsonRecord,
   parseThreadLlmSelectionState,
-} from '@iki/core/chat/thread_runtime_hints';
+} from '@iki/backend/chat/thread_runtime_hints';
 
 export type ChatThread = StoredChatThread;
 

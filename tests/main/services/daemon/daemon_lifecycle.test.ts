@@ -49,7 +49,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
@@ -57,7 +57,7 @@ vi.mock('@iki/daemon/server', () => ({
   startDaemonServer: startDaemonServerMock,
 }));
 
-vi.mock('@iki/core/daemon_logs', () => ({
+vi.mock('@iki/backend/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
     event: daemonLoggerEventMock,
   })),

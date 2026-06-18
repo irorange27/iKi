@@ -11,7 +11,7 @@ import {
   type AffectSignalPart,
   type SkillUsageEntry,
   type UiMessagePart,
-} from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/message_parts';
 import { isAffectLabel, type AffectLabel } from '@iki/core/emotion/affect';
 import { updateAssistantMessage } from './ui_stream_reducer_message';
 import type {

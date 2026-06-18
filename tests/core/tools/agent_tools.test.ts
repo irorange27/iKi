@@ -26,9 +26,9 @@ vi.mock('@iki/core/agent/run_tracker', () => ({
   createAgentRunTracker: createAgentRunTrackerMock,
 }));
 
-import { DelegatedAgentTool } from '@iki/core/tools/agent_tools';
-import { ListDirTool } from '@iki/core/tools/file_tools';
-import { ShellExecutionTool } from '@iki/core/tools/shell_tools';
+import { DelegatedAgentTool } from '@iki/backend/tools/agent_tools';
+import { ListDirTool } from '@iki/backend/tools/file_tools';
+import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
 import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
 
 const setRunResult = (result: unknown) => {

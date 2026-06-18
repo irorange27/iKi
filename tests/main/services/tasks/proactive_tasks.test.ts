@@ -19,17 +19,17 @@ vi.mock('electron', () => {
   };
 });
 
-vi.mock('@iki/core/db/tasks', () => ({
+vi.mock('@iki/backend/db/tasks', () => ({
   getProactiveTask: vi.fn(),
   updateProactiveTask: vi.fn(),
   listDueProactiveTasks: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   touchChatThread: vi.fn(),
 }));
 
-vi.mock('@iki/core/bridge_dispatch', () => ({
+vi.mock('@iki/backend/bridge_dispatch', () => ({
   deliverBridgeThreadMessage: vi.fn(),
 }));
 
@@ -52,9 +52,9 @@ import { BrowserWindow, Notification } from 'electron';
 
 import type { ProactiveTask } from '@iki/core/types/tasks';
 import { runProactiveTask } from '../../../../packages/desktop/src/main/services/tasks/proactive_tasks';
-import * as tasksDb from '@iki/core/db/tasks';
-import * as chatThreadDb from '@iki/core/db/chat_thread';
-import { deliverBridgeThreadMessage } from '@iki/core/bridge_dispatch';
+import * as tasksDb from '@iki/backend/db/tasks';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
+import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import { chatService } from '../../../../packages/desktop/src/main/services/chat/service';
 
 const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({

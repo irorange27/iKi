@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultAppConfig, mergeAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig, mergeAppConfig } from '@iki/backend/config/defaults';
 
 describe('default app config', () => {
   it('enables emotion analysis by default without forcing realtime analysis', () => {

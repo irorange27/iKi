@@ -25,7 +25,7 @@ vi.mock('@iki/core/logger', () => ({
 
 import { getToolModel } from '@iki/core/provider/tool_model';
 import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
-import { generateThreadSummary } from '@iki/core/chat_service/thread_summary';
+import { generateThreadSummary } from '@iki/backend/chat_service/thread_summary';
 
 const getToolModelMock = vi.mocked(getToolModel);
 const createSimplePromptTextGeneratorMock = vi.mocked(createSimplePromptTextGenerator);

@@ -1,5 +1,5 @@
 import type { ModelCapabilitySnapshot } from './provider';
-import type { ChatExperimentalContext } from '../chat/intervention_policy';
+import type { ChatExperimentalContext } from '@iki/backend/chat/intervention_policy';
 
 export type ChatInvocationOptions = {
   providerType: string;

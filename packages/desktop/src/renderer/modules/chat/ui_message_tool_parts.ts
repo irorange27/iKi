@@ -23,14 +23,14 @@ import {
   isToolPart,
   isToolResultPart,
   normalizeToolNameKey,
-} from '@iki/core/chat/tool_parts';
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/tool_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 import {
   parseToolInput,
   parseToolOutput,
   type ParsedToolInput,
   type ParsedToolOutput,
-} from '@iki/core/chat/tool_payloads';
+} from '@iki/backend/chat/tool_payloads';
 import { translate } from '../../i18n';
 import { getToolUiState, updateToolUiState } from './tool_ui_state';
 
@@ -46,7 +46,7 @@ export {
   isToolResultPart,
   normalizeToolNameKey,
   parseToolInputFromText,
-} from '@iki/core/chat/tool_parts';
+} from '@iki/backend/chat/tool_parts';
 
 export type WebSearchCitation = {
   title: string;

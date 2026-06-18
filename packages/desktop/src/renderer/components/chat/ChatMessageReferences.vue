@@ -36,7 +36,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Brain, Heart, Sparkles, Wrench } from 'lucide-vue-next';
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 import { useI18n } from '../../i18n';
 
 import {

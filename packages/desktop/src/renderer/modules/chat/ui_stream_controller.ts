@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import type {
   ChatUiMessage,
   ChatUiMessageChunk,
-} from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/message_parts';
 import type { ElectronApi } from '@iki/core/types/electron_api';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { createLogger } from '../../logger';

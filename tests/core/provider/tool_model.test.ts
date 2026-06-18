@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { Provider } from '@iki/core/types/provider';
 
 const {
@@ -32,11 +32,11 @@ vi.mock('@iki/core/provider/llm/factory', () => ({
   getModelCallSettings: getModelCallSettingsMock,
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/core/db/providers', () => ({
+vi.mock('@iki/backend/db/providers', () => ({
   getProviders: getProvidersMock,
 }));
 

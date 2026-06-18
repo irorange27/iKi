@@ -6,7 +6,7 @@ import type { SkillSummary } from '@iki/core/types/skill';
 import type {
   ComposerInvocationPartData,
   ComposerInvocationToken,
-} from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/message_parts';
 import {
   extractPromptAppSlashCommands,
   extractSkillSlashCommands,
@@ -17,7 +17,7 @@ import {
   toPromptAppComposerInvocationToken,
   toSkillComposerInvocationToken,
   type PromptAppSlashCommand,
-} from '@iki/core/chat/slash_commands';
+} from '@iki/backend/chat/slash_commands';
 import type { ResolvedComposerSendRequest } from './useChatComposerSend';
 import { createLogger } from '../logger';
 

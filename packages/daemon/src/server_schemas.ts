@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getDefaultAllowedTools } from './tool_access';
 import type { ChatInvocationOptions } from '@iki/core/types/chat_invocation';
 import type { McpServerInput } from '@iki/core/types/mcp';
-import type { ChatExperimentalContext } from '@iki/core/chat/intervention_policy';
+import type { ChatExperimentalContext } from '@iki/backend/chat/intervention_policy';
 import type { AgentRunKind } from '@iki/core/types/agent_run';
 
 const DEFAULT_SCOPES = [

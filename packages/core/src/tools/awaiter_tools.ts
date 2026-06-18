@@ -7,7 +7,7 @@ import {
   readAwaiterRecord,
   updateAwaiter,
   type AwaiterUpdateInput,
-} from '../awaiters/awaiter_manager';
+} from '@iki/backend/awaiters/awaiter_manager';
 import { BaseTool } from './base';
 import { zodSchemaToJsonSchema } from './json_schema';
 import { getToolRuntimeContext } from './runtime_context';

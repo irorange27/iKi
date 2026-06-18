@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Avoid importing Electron-backed sqlite config in unit tests.
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   getConfig: vi.fn(() => null),
 }));
 
-import { FetchTool } from '@iki/core/tools/web_tools';
+import { FetchTool } from '@iki/backend/tools/web_tools';
 
 describe('FetchTool', () => {
   beforeEach(() => {

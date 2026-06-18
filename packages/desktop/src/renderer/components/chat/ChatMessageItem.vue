@@ -114,7 +114,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { Copy, MoreHorizontal, Pencil, RotateCcw } from 'lucide-vue-next';
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 import { copyTextToClipboard } from '../../composables/useMarkdownCopy';
 import { useI18n } from '../../i18n';
 import { extractTextFromMessage } from '../../modules/chat/ui_message_text';

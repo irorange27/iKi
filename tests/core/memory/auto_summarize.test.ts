@@ -11,7 +11,7 @@ vi.mock('@iki/core/runtimes/prompt_text_generator', () => ({
 import { getToolModel } from '@iki/core/provider/tool_model';
 import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
 import { generateLongMemorySummary } from '@iki/core/memory/auto_summarize';
-import type { ShortMemoryEntry } from '@iki/core/db/memory';
+import type { ShortMemoryEntry } from '@iki/backend/db/memory';
 
 const makeEntry = (overrides: Partial<ShortMemoryEntry>): ShortMemoryEntry => ({
   id: 'mems_1',

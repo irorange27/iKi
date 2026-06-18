@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeAppLocale } from '@iki/core/i18n/locale';
+import { normalizeAppLocale } from '@iki/backend/i18n/locale';
 
 describe('normalizeAppLocale', () => {
   it('normalizes Chinese variants to zh-CN', () => {

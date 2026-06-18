@@ -6,7 +6,7 @@ import {
   getTodoListByTitle,
   listTodoLists,
   writeTodoList,
-} from '../db/todos';
+} from '@iki/backend/db/todos';
 import { BaseTool } from './base';
 import {
   DEFAULT_TODO_LIST_LIMIT,

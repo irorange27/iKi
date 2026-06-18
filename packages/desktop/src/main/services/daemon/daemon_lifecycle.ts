@@ -2,9 +2,9 @@ import http from 'node:http';
 import { app } from 'electron';
 
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/core/constants/daemon';
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 import type { AppConfig, DaemonStatusInfo } from '@iki/core/types/config';
-import { createDaemonLogger } from '@iki/core/daemon_logs';
+import { createDaemonLogger } from '@iki/backend/daemon_logs';
 import { startDaemonServer } from '@iki/daemon/server';
 
 export const DAEMON_MODE_ARG = '--iki-daemon';

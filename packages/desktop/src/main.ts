@@ -1,10 +1,10 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/core/logger';
 import { registerStandardTools } from '@iki/core/tools';
 import { getMcpManager } from '@iki/core/mcp';
-import { setPlatformInfo } from '@iki/core/platform';
+import { setPlatformInfo } from '@iki/backend/platform';
 import { startDaemonServer } from '@iki/daemon/server';
 import { registerMainIpc } from './main/ipc';
 import {

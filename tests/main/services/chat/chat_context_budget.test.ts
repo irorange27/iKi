@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveModelAwareContextConfig } from '@iki/core/chat_service/context_budget';
+import { deriveModelAwareContextConfig } from '@iki/backend/chat_service/context_budget';
 
 const baseConfig = {
   enabled: true,

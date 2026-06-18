@@ -2,7 +2,7 @@ import type {
   ChatUiMessage,
   ChatUiMessageChunk,
   TokenUsagePartData,
-} from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/message_parts';
 import type { ToolUiState, ToolUiStatePatch } from './tool_ui_state';
 
 export type StreamState = {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 
 const { daemonLoggerEventMock, recordNapCatMessagePreviewMock } = vi.hoisted(() => ({
   daemonLoggerEventMock: vi.fn(),
@@ -31,23 +31,23 @@ class FakeBridgeSocket {
   }
 }
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/providers', () => ({
+vi.mock('@iki/backend/db/providers', () => ({
   getProviders: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/prompt_apps', () => ({
+vi.mock('@iki/backend/db/prompt_apps', () => ({
   getEnabledPromptApps: vi.fn(() => []),
 }));
 
-vi.mock('@iki/core/tools/skills', () => ({
+vi.mock('@iki/backend/tools/skills', () => ({
   listSkills: vi.fn(async () => []),
 }));
 
-vi.mock('@iki/core/daemon_logs', () => ({
+vi.mock('@iki/backend/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
     event: daemonLoggerEventMock,
   })),
@@ -60,14 +60,14 @@ vi.mock('@iki/core/daemon_logs', () => ({
   },
 }));
 
-vi.mock('@iki/core/chat_service/ui_messages', () => ({
+vi.mock('@iki/backend/chat_service/ui_messages', () => ({
   parseStoredUiMessageRow: vi.fn((row: { message: string }) => JSON.parse(row.message)),
 }));
 
-import { getAppConfig } from '@iki/core/config';
-import { getProviders } from '@iki/core/db/providers';
-import { getEnabledPromptApps } from '@iki/core/db/prompt_apps';
-import { listSkills } from '@iki/core/tools/skills';
+import { getAppConfig } from '@iki/backend/config';
+import { getProviders } from '@iki/backend/db/providers';
+import { getEnabledPromptApps } from '@iki/backend/db/prompt_apps';
+import { listSkills } from '@iki/backend/tools/skills';
 import { createNapCatReverseBridge } from '@iki/daemon/napcat_adapter';
 
 const getAppConfigMock = vi.mocked(getAppConfig);

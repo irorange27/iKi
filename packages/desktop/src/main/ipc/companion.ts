@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import { getAppConfig, setAppConfig } from '@iki/core/config';
+import { getAppConfig, setAppConfig } from '@iki/backend/config';
 import { companionService } from '../services/companion/companion_service';
 import { getAllBrowserWindows } from '../utils/browser_windows';
 import { syncCompanionWindowToConfig } from '../windows/companion_window';

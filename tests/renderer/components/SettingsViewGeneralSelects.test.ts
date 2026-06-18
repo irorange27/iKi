@@ -6,7 +6,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import SettingsView from '../../../packages/desktop/src/renderer/views/SettingsView.vue';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { Provider } from '@iki/core/types/provider';
 
 const buildProvider = (

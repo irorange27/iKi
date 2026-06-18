@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { repairIdentityProfileForeignKeys } from '@iki/core/db/migration/identity_profile_foreign_key_repair';
+import { repairIdentityProfileForeignKeys } from '@iki/backend/db/migration/identity_profile_foreign_key_repair';
 
 const escapeSqlString = (value: string): string => `'${value.replace(/'/g, "''")}'`;
 

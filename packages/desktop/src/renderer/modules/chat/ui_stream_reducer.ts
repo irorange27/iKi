@@ -1,4 +1,4 @@
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 import { reduceToolChunkAction } from './ui_stream_reducer_tools';
 import { resetTransientState, updateAssistantMessage } from './ui_stream_reducer_message';
 import {

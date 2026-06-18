@@ -1,4 +1,4 @@
-import { cleanupOldAgentRuns, recoverStuckRunsOnStartup } from '@iki/core/db/agent_runs';
+import { cleanupOldAgentRuns, recoverStuckRunsOnStartup } from '@iki/backend/db/agent_runs';
 import { createLogger } from '@iki/core/logger';
 import { startProactiveTaskScheduler, stopProactiveTaskScheduler } from '../tasks/proactive_tasks';
 import { startAwaiterScheduler, stopAwaiterScheduler } from '../awaiters/awaiters';

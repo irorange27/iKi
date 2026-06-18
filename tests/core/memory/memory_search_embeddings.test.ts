@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   getDb: vi.fn(),
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({ memory: { enabled: true } })),
 }));
 
@@ -21,12 +21,12 @@ vi.mock('@iki/core/memory/embedding', () => ({
   createPreferredMemoryEmbeddingRuntime: vi.fn(),
 }));
 
-import { getDb } from '@iki/core/db/database';
+import { getDb } from '@iki/backend/db/database';
 import {
   createHashMemoryEmbeddingRuntime,
   createPreferredMemoryEmbeddingRuntime,
 } from '@iki/core/memory/embedding';
-import { searchLongMemory, type LongMemoryEntry } from '@iki/core/db/memory';
+import { searchLongMemory, type LongMemoryEntry } from '@iki/backend/db/memory';
 
 const getDbMock = vi.mocked(getDb);
 

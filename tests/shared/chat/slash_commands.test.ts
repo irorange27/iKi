@@ -8,7 +8,7 @@ import {
   parseIncognitoArgument,
   extractPromptAppSlashCommands,
   parseSlashCommandDraft,
-} from '@iki/core/chat/slash_commands';
+} from '@iki/backend/chat/slash_commands';
 import type { PromptApp } from '@iki/core/types/chat';
 import type { SkillSummary } from '@iki/core/types/skill';
 

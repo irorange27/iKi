@@ -45,11 +45,11 @@ vi.mock('@iki/core/logger', () => ({
   })),
 }));
 
-vi.mock('@iki/core/db/affect_state', () => ({
+vi.mock('@iki/backend/db/affect_state', () => ({
   getAffectState: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/memory', () => ({
+vi.mock('@iki/backend/db/memory', () => ({
   listShortMemory: vi.fn(),
   addShortMemory: vi.fn(),
   listShortMemoryAcrossThreads: vi.fn(),
@@ -62,7 +62,7 @@ vi.mock('@iki/core/db/memory', () => ({
   searchLongMemoryAcrossThreads: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/providers', () => ({
+vi.mock('@iki/backend/db/providers', () => ({
   getProviders: vi.fn(),
   getProvider: vi.fn(),
   addProvider: vi.fn(),
@@ -70,7 +70,7 @@ vi.mock('@iki/core/db/providers', () => ({
   deleteProvider: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/workspaces', () => ({
+vi.mock('@iki/backend/db/workspaces', () => ({
   getWorkspaces: vi.fn(),
   getWorkspace: vi.fn(),
   getWorkspaceByPath: vi.fn(),
@@ -81,7 +81,7 @@ vi.mock('@iki/core/db/workspaces', () => ({
   toggleWorkspaceVisibility: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/prompt_apps', () => ({
+vi.mock('@iki/backend/db/prompt_apps', () => ({
   getPromptApps: vi.fn(),
   getPromptApp: vi.fn(),
   getEnabledPromptApps: vi.fn(),
@@ -96,11 +96,11 @@ import { registerMemoryIpc } from '../../../packages/desktop/src/main/ipc/memory
 import { registerPromptAppsIpc } from '../../../packages/desktop/src/main/ipc/prompt_apps';
 import { registerProvidersIpc } from '../../../packages/desktop/src/main/ipc/providers';
 import { registerWorkspacesIpc } from '../../../packages/desktop/src/main/ipc/workspaces';
-import * as affectDb from '@iki/core/db/affect_state';
-import * as memoryDb from '@iki/core/db/memory';
-import * as promptAppDb from '@iki/core/db/prompt_apps';
-import * as providerDb from '@iki/core/db/providers';
-import * as workspaceDb from '@iki/core/db/workspaces';
+import * as affectDb from '@iki/backend/db/affect_state';
+import * as memoryDb from '@iki/backend/db/memory';
+import * as promptAppDb from '@iki/backend/db/prompt_apps';
+import * as providerDb from '@iki/backend/db/providers';
+import * as workspaceDb from '@iki/backend/db/workspaces';
 
 const getAffectStateMock = vi.mocked(affectDb.getAffectState);
 const addLongMemoryMock = vi.mocked(memoryDb.addLongMemory);

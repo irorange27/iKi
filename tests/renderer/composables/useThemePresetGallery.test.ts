@@ -2,7 +2,7 @@ import { ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useThemePresetGallery } from '../../../packages/desktop/src/renderer/composables/useThemePresetGallery';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import { createBase46ThemePresetFromQuickStart } from '@iki/theme/theme_creator';
 import { THEME_QUICK_STARTS } from '@iki/theme/registry';
 

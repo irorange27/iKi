@@ -8,11 +8,11 @@ import {
 } from '@mcpc-tech/acp-ai-provider';
 import type { LanguageModel } from 'ai';
 
-import { listMcpServers } from '../../db/mcp_servers';
-import { getProvider } from '../../db/providers';
+import { listMcpServers } from '@iki/backend/db/mcp_servers';
+import { getProvider } from '@iki/backend/db/providers';
 import { createLogger } from '../../logger';
-import { getUserDataPath } from '../../platform';
-import { ensureThreadWorkspaceSelection } from '../../workspaces/thread_workspace';
+import { getUserDataPath } from '@iki/backend/platform';
+import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { ACP_PROVIDER_TYPE } from '../../constants/acp';
 import type { ProviderModelDescriptor } from '../../types/provider';
 import type { McpServer as IkiMcpServer } from '../../types/mcp';

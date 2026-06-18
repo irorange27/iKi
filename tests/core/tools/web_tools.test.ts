@@ -5,16 +5,16 @@ const { getAppConfigMock } = vi.hoisted(() => ({
 }));
 
 // Avoid importing Electron-backed sqlite config in unit tests.
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   getConfig: vi.fn(() => null),
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
-import { FetchTool, WebSearchTool } from '@iki/core/tools/web_tools';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
+import { FetchTool, WebSearchTool } from '@iki/backend/tools/web_tools';
 
 const asResults = (value: unknown): Array<{ title: string; url: string }> => {
   const record = value as { results?: unknown };

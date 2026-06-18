@@ -7,7 +7,7 @@ import {
   readProactiveTaskRecord,
   updateProactiveTask,
   type ProactiveTaskUpdateInput,
-} from '../tasks/proactive_task_manager';
+} from '@iki/backend/tasks/proactive_task_manager';
 import { BaseTool } from './base';
 import { zodSchemaToJsonSchema } from './json_schema';
 import { getToolRuntimeContext } from './runtime_context';

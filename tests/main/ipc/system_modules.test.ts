@@ -43,7 +43,7 @@ vi.mock('@iki/core/logger', () => ({
   })),
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
@@ -53,7 +53,7 @@ vi.mock('node:fs/promises', () => ({
   },
 }));
 
-vi.mock('@iki/core/tools/skills', () => ({
+vi.mock('@iki/backend/tools/skills', () => ({
   getSkillFolderPath: vi.fn(),
   getSkillRootsForUi: vi.fn(),
   listSkills: vi.fn(),
@@ -93,7 +93,7 @@ import {
   getSkillRootsForUi,
   listSkills,
   readSkillContent,
-} from '@iki/core/tools/skills';
+} from '@iki/backend/tools/skills';
 import { defaultToolRegistry } from '@iki/core/tools';
 import { resetWorkflowOptimizationState } from '../../../packages/desktop/src/main/services/workflow/workflow_optimizer';
 import {
@@ -107,7 +107,7 @@ import {
   getToolModel,
   testToolModelLatency,
 } from '@iki/core/provider/tool_model';
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 
 const getSkillFolderPathMock = vi.mocked(getSkillFolderPath);
 const getSkillRootsForUiMock = vi.mocked(getSkillRootsForUi);

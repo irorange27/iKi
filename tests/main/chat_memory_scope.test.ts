@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/memory', () => ({
+vi.mock('@iki/backend/db/memory', () => ({
   extractTextFromMessageJson: vi.fn(),
   addShortMemoryFromChatMessage: vi.fn(),
   pruneShortMemory: vi.fn(),
@@ -19,13 +19,13 @@ vi.mock('@iki/core/db/memory', () => ({
   searchLongMemoryAcrossThreads: vi.fn(() => []),
 }));
 
-vi.mock('@iki/core/db/emotion', () => ({
+vi.mock('@iki/backend/db/emotion', () => ({
   addEmotionEvent: vi.fn(),
   pruneEmotionEvents: vi.fn(),
   listEmotionEvents: vi.fn(() => []),
 }));
 
-vi.mock('@iki/core/db/affect_state', () => ({
+vi.mock('@iki/backend/db/affect_state', () => ({
   upsertAffectState: vi.fn(),
   deleteAffectState: vi.fn(),
   getAffectState: vi.fn(() => null),
@@ -39,11 +39,11 @@ vi.mock('@iki/core/provider/memory_retrieval', () => ({
   planMemoryRetrieval: vi.fn(),
 }));
 
-import { getAppConfig } from '@iki/core/config';
-import { getChatThread } from '@iki/core/db/chat_thread';
-import * as memoryDb from '@iki/core/db/memory';
+import { getAppConfig } from '@iki/backend/config';
+import { getChatThread } from '@iki/backend/db/chat_thread';
+import * as memoryDb from '@iki/backend/db/memory';
 import { planMemoryRetrieval } from '@iki/core/provider/memory_retrieval';
-import { createChatMemory } from '@iki/core/chat_service/memory';
+import { createChatMemory } from '@iki/backend/chat_service/memory';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getChatThreadMock = vi.mocked(getChatThread);

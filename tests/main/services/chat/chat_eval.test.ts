@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/db/agent_runs', () => ({
+vi.mock('@iki/backend/db/agent_runs', () => ({
   getAgentRunTrace: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/agent_eval', () => ({
+vi.mock('@iki/backend/db/agent_eval', () => ({
   createEvalLabel: vi.fn(),
   listEvalLabelsByRun: vi.fn(),
   deleteEvalLabel: vi.fn(),
@@ -22,9 +22,9 @@ vi.mock('node:fs', () => ({
   },
 }));
 
-import { createChatEval } from '@iki/core/chat_service/eval';
-import * as agentRunDb from '@iki/core/db/agent_runs';
-import * as agentEvalDb from '@iki/core/db/agent_eval';
+import { createChatEval } from '@iki/backend/chat_service/eval';
+import * as agentRunDb from '@iki/backend/db/agent_runs';
+import * as agentEvalDb from '@iki/backend/db/agent_eval';
 
 const getAgentRunTraceMock = vi.mocked(agentRunDb.getAgentRunTrace);
 const listEvalLabelsByRunMock = vi.mocked(agentEvalDb.listEvalLabelsByRun);

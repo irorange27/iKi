@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { createLogger } from '@iki/core/logger';
-import { getUserDataPath } from '@iki/core/platform';
+import { getUserDataPath } from '@iki/backend/platform';
 
 const identityBrainLogger = createLogger({ module: 'identity_brain' });
 

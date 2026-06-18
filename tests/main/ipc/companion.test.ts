@@ -43,7 +43,7 @@ vi.mock('../../../packages/desktop/src/main/windows/main_window', () => ({
   showMainWindow: showMainWindowMock,
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
   setAppConfig: setAppConfigMock,
 }));

@@ -166,7 +166,7 @@ import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/core/types/config';
 import type { Provider } from '@iki/core/types/provider';
 import { parseModelList } from '@iki/core/utils/provider_models';

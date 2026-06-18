@@ -4,23 +4,23 @@ const { daemonLoggerEventMock } = vi.hoisted(() => ({
   daemonLoggerEventMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: vi.fn(),
 }));
 
-vi.mock('@iki/core/daemon_logs', () => ({
+vi.mock('@iki/backend/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
     event: daemonLoggerEventMock,
   })),
 }));
 
-import * as chatThreadDb from '@iki/core/db/chat_thread';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import type { ChatThread } from '@iki/core/types/chat';
 import {
   deliverBridgeThreadMessage,
   getBridgeThreadSource,
   registerBridgeThreadSender,
-} from '@iki/core/bridge_dispatch';
+} from '@iki/backend/bridge_dispatch';
 
 const createThread = (
   overrides: Partial<ChatThread> & Pick<ChatThread, 'id'>

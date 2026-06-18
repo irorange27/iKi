@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 
 import type { SkillSummary, SkillSource } from '../types/skill';
 import { sanitizePromptMetadataText, stringifyPromptData } from '../utils/text';
-import { getUserDataPath } from '../platform';
+import { getUserDataPath } from '@iki/backend/platform';
 import { isPathWithinRoot } from '../utils/path_boundary';
 
 type SkillRecord = SkillSummary & {

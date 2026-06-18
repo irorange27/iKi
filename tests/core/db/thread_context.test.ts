@@ -4,7 +4,7 @@ const { getDbMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   getDb: getDbMock,
 }));
 
@@ -36,7 +36,7 @@ describe('thread_context db resilience', () => {
       prepare: prepareMock,
     });
 
-    const { getThreadContext } = await import('@iki/core/db/thread_context');
+    const { getThreadContext } = await import('@iki/backend/db/thread_context');
     const result = getThreadContext('thread_1');
 
     expect(result).toEqual(
@@ -65,7 +65,7 @@ describe('thread_context db resilience', () => {
       prepare: prepareMock,
     });
 
-    const { deleteThreadContext } = await import('@iki/core/db/thread_context');
+    const { deleteThreadContext } = await import('@iki/backend/db/thread_context');
     const result = deleteThreadContext('thread_2');
 
     expect(result).toEqual({ changes: 1 });

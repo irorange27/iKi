@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/db/thread_todos', () => ({
+vi.mock('@iki/backend/db/thread_todos', () => ({
   writeThreadTodoPlan: vi.fn(),
 }));
 
@@ -8,9 +8,9 @@ vi.mock('@iki/core/tools/runtime_context', () => ({
   getToolRuntimeContext: vi.fn(),
 }));
 
-import { writeThreadTodoPlan } from '@iki/core/db/thread_todos';
+import { writeThreadTodoPlan } from '@iki/backend/db/thread_todos';
 import { getToolRuntimeContext } from '@iki/core/tools/runtime_context';
-import { TodoTool } from '@iki/core/tools/task_plan_tools';
+import { TodoTool } from '@iki/backend/tools/task_plan_tools';
 
 describe('TodoTool', () => {
   beforeEach(() => {

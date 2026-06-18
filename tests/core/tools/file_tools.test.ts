@@ -21,7 +21,7 @@ const {
   updateChatThreadMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/workspaces', () => ({
+vi.mock('@iki/backend/db/workspaces', () => ({
   getVisibleWorkspaces: getVisibleWorkspacesMock,
   getWorkspace: getWorkspaceMock,
   getWorkspaceByPath: getWorkspaceByPathMock,
@@ -29,7 +29,7 @@ vi.mock('@iki/core/db/workspaces', () => ({
   updateWorkspace: updateWorkspaceMock,
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
   updateChatThread: updateChatThreadMock,
 }));
@@ -40,7 +40,7 @@ import {
   ListDirTool,
   ReadFileTool,
   WriteFileTool,
-} from '@iki/core/tools/file_tools';
+} from '@iki/backend/tools/file_tools';
 import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
 
 const createWorkspace = (workspacePath: string) => ({

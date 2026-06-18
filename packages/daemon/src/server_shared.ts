@@ -1,6 +1,6 @@
 import http from 'node:http';
 
-import * as chatThreadDb from '@iki/core/db/chat_thread';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import {
   createAppClient,
   getAppClientById,
@@ -8,7 +8,7 @@ import {
   listAppClients,
   touchAppClient,
   type AppClient,
-} from '@iki/core/db/app_clients';
+} from '@iki/backend/db/app_clients';
 
 export type DaemonSocket = {
   readyState: number;

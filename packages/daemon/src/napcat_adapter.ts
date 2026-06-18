@@ -2,21 +2,21 @@ import type http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
-import type { ChatService } from '@iki/core/chat_service';
-import { parseStoredUiMessageRow } from '@iki/core/chat/ui_message_codec';
-import type { ChatTransportMessage } from '@iki/core/chat_service';
-import { getAppConfig } from '@iki/core/config';
-import { createDaemonLogger, recordNapCatMessagePreview } from '@iki/core/daemon_logs';
-import { getProviders } from '@iki/core/db/providers';
-import { createComposerInvocationPart, type ComposerInvocationPartData } from '@iki/core/chat/message_parts';
-import { parseSlashCommandDraft } from '@iki/core/chat/slash_commands';
+import type { ChatService } from '@iki/backend/chat_service';
+import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
+import type { ChatTransportMessage } from '@iki/backend/chat_service';
+import { getAppConfig } from '@iki/backend/config';
+import { createDaemonLogger, recordNapCatMessagePreview } from '@iki/backend/daemon_logs';
+import { getProviders } from '@iki/backend/db/providers';
+import { createComposerInvocationPart, type ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
+import { parseSlashCommandDraft } from '@iki/backend/chat/slash_commands';
 import type { ChatThread } from '@iki/core/types/chat';
 import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '@iki/core/types/config';
 import { parseModelList } from '@iki/core/utils/provider_models';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { renderMarkdownToPlainText } from '@iki/core/utils/plain_text_markdown';
-import type { ParsedUiMessage } from '@iki/core/chat/ui_message_codec';
-import { registerBridgeThreadSender } from '@iki/core/bridge_dispatch';
+import type { ParsedUiMessage } from '@iki/backend/chat/ui_message_codec';
+import { registerBridgeThreadSender } from '@iki/backend/bridge_dispatch';
 import { resolveNapCatInboundSlashCommand } from './napcat_slash_commands';
 
 type ReverseBridgeSocket = {

@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, h } from 'vue';
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import { useAppConfig } from '../../../packages/desktop/src/renderer/composables/useAppConfig';
 
 type AppConfigApi = ReturnType<typeof useAppConfig>;

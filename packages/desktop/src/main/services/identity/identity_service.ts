@@ -1,7 +1,7 @@
 import {
   addIdentityProfile,
   getActiveIdentityProfile,
-} from '@iki/core/db/identity';
+} from '@iki/backend/db/identity';
 import type { IdentityProfile } from '@iki/core/types/identity';
 
 const DEFAULT_IDENTITY_PROFILE = {

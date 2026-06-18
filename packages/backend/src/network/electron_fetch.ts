@@ -1,6 +1,6 @@
 import type { Session } from 'electron';
 
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 import { buildProxyUrl, getProxyCredentials } from './proxy';
 import type { AppConfig } from '@iki/core/types/config';
 import { getErrorMessage } from '@iki/core/utils/errors';

@@ -340,7 +340,7 @@ vi.mock('@iki/core/mcp', () => ({
   getMcpManager: getMcpManagerMock,
 }));
 
-vi.mock('@iki/core/daemon_logs', () => ({
+vi.mock('@iki/backend/daemon_logs', () => ({
   createDaemonLogger: vi.fn(() => ({
     event: daemonLoggerEventMock,
   })),
@@ -349,11 +349,11 @@ vi.mock('@iki/core/daemon_logs', () => ({
   },
 }));
 
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   initializeDatabase: initializeDatabaseMock,
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
@@ -369,26 +369,26 @@ vi.mock('@iki/core/logger', () => ({
   withLogContext: (_context: unknown, fn: () => unknown) => fn(),
 }));
 
-vi.mock('@iki/core/platform', () => ({
+vi.mock('@iki/backend/platform', () => ({
   getUserDataPath: getUserDataPathMock,
   setPlatformInfo: setPlatformInfoMock,
 }));
 
-vi.mock('@iki/core/chat_service', () => ({
+vi.mock('@iki/backend/chat_service', () => ({
   createChatService: createChatServiceMock,
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
 }));
 
-vi.mock('@iki/core/db/memory', () => ({
+vi.mock('@iki/backend/db/memory', () => ({
   listShortMemory: vi.fn(() => []),
   listLongMemory: vi.fn(() => []),
   searchLongMemoryAcrossThreads: searchLongMemoryAcrossThreadsMock,
 }));
 
-vi.mock('@iki/core/db/app_clients', () => ({
+vi.mock('@iki/backend/db/app_clients', () => ({
   createAppClient: createAppClientMock,
   getAppClientById: getAppClientByIdMock,
   getAppClientByToken: getAppClientByTokenMock,

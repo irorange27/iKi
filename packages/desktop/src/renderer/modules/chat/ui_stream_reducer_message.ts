@@ -1,4 +1,4 @@
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 import type { MessageOp, StreamContext, StreamState } from './ui_stream_reducer_types';
 
 export const resetTransientState = (state: StreamState): StreamState => ({

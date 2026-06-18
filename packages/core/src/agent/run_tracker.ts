@@ -4,7 +4,7 @@ import {
   createAgentRunCheckpoint,
   getAgentRun,
   updateAgentRun,
-} from '../db/agent_runs';
+} from '@iki/backend/db/agent_runs';
 import type {
   AgentRun,
   AgentRunCheckpointReason,

@@ -17,7 +17,7 @@ import {
   formatStructuredConsoleLine,
   type StructuredConsoleFormatterInput,
 } from './logging/console_formatter';
-import { getUserDataPath } from './platform';
+import { getUserDataPath } from '@iki/backend/platform';
 
 type LogContext = {
   process?: StructuredLogProcess;

@@ -112,12 +112,12 @@ vi.mock('node:http', () => ({
   get: httpGetMock,
 }));
 
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   setConfig: vi.fn(),
   migrateFromJson: vi.fn(),
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({
     bridges: {
       napcat: {
@@ -139,7 +139,7 @@ vi.mock('@iki/core/config', () => ({
   })),
 }));
 
-vi.mock('@iki/core/daemon_logs', () => ({
+vi.mock('@iki/backend/daemon_logs', () => ({
   readRecentDaemonLogs: readRecentDaemonLogsMock,
 }));
 
@@ -169,7 +169,7 @@ vi.mock('@iki/core/mcp', () => ({
   })),
 }));
 
-vi.mock('@iki/core/config/normalize', () => ({
+vi.mock('@iki/backend/config/normalize', () => ({
   normalizeAppConfig: vi.fn((config: unknown) => config),
 }));
 

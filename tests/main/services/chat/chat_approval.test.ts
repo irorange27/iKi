@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/db/chat_tool_approval', () => ({
+vi.mock('@iki/backend/db/chat_tool_approval', () => ({
   upsertChatToolApprovalSession: vi.fn(),
   upsertChatToolApprovals: vi.fn(),
   getChatToolApproval: vi.fn(),
@@ -10,11 +10,11 @@ vi.mock('@iki/core/db/chat_tool_approval', () => ({
   consumeChatToolApprovalSession: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/chat_message', () => ({
+vi.mock('@iki/backend/db/chat_message', () => ({
   getChatMessages: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/agent_runs', () => ({
+vi.mock('@iki/backend/db/agent_runs', () => ({
   getAgentRun: vi.fn(),
   getLatestAgentRunCheckpoint: vi.fn(),
 }));
@@ -29,7 +29,7 @@ vi.mock('@iki/core/provider/llm/factory', () => ({
   resolveModelCapability: vi.fn(async () => null),
 }));
 
-vi.mock('@iki/core/chat_service/ui_messages', () => ({
+vi.mock('@iki/backend/chat_service/ui_messages', () => ({
   createUiChunkEmitter: vi.fn(() => ({
     messageId: 'assistant_resume',
     emitTextDelta: vi.fn(),
@@ -45,7 +45,7 @@ vi.mock('@iki/core/chat_service/ui_messages', () => ({
   toModelInputMessages: vi.fn(async messages => messages),
 }));
 
-vi.mock('@iki/core/chat_service/chat_agent_runner', () => ({
+vi.mock('@iki/backend/chat_service/chat_agent_runner', () => ({
   createChatAgentRunner: vi.fn(),
 }));
 
@@ -53,13 +53,13 @@ vi.mock('@iki/core/agent/run_tracker', () => ({
   createAgentRunTracker: vi.fn(),
 }));
 
-import * as agentRunDb from '@iki/core/db/agent_runs';
-import * as chatToolApprovalDb from '@iki/core/db/chat_tool_approval';
-import * as chatMessageDb from '@iki/core/db/chat_message';
+import * as agentRunDb from '@iki/backend/db/agent_runs';
+import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
+import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/core/tools';
-import { createChatApproval } from '@iki/core/chat_service/approval';
+import { createChatApproval } from '@iki/backend/chat_service/approval';
 import { createAgentRunTracker } from '@iki/core/agent/run_tracker';
-import { createChatAgentRunner } from '@iki/core/chat_service/chat_agent_runner';
+import { createChatAgentRunner } from '@iki/backend/chat_service/chat_agent_runner';
 
 const createChatAgentRunnerMock = vi.mocked(createChatAgentRunner);
 const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);

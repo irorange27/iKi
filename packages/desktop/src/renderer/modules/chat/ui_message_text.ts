@@ -5,7 +5,7 @@ import {
   isTextPart,
   type ChatUiMessage,
   type ComposerInvocationPartData,
-} from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/message_parts';
 
 export const extractTextFromMessage = (message: ChatUiMessage | undefined): string => {
   if (!message || !Array.isArray(message.parts)) return '';

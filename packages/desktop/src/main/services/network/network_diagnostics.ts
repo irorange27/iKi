@@ -1,9 +1,9 @@
 import { app, net, session, type Session } from 'electron';
 import { randomUUID } from 'node:crypto';
 
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 import { clampNetworkTimeoutMs } from '@iki/backend/network/http';
-import { normalizeAppConfig } from '@iki/core/config/normalize';
+import { normalizeAppConfig } from '@iki/backend/config/normalize';
 import { buildProxyUrl, getProxyCredentials } from '@iki/backend/network/proxy';
 import type {
   AppConfig,

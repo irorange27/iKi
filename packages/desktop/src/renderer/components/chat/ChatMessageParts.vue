@@ -60,7 +60,7 @@ import {
   isComposerInvocationPart,
   isDataPart,
   isTextPart,
-} from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/message_parts';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
 import ChatToolPart from './ChatToolPart.vue';

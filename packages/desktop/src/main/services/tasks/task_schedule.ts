@@ -1,1 +1,1 @@
-export * from '@iki/core/tasks/task_schedule';
+export * from '@iki/backend/tasks/task_schedule';

@@ -1,6 +1,6 @@
 import type { AppConfig } from '@iki/core/types/config';
 import { buildProxyUrl } from './proxy';
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 import { canUseElectronNetworkStack, electronFetchWithTimeout } from './electron_fetch';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;

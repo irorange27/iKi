@@ -4,7 +4,7 @@ export * from './chat';
 export * from './chat_tool_approval';
 export * from './chat_usage';
 export * from './companion';
-export * from './config';
+export * from '@iki/backend/config';
 export * from './continuity';
 export * from './electron_api';
 export * from './identity';

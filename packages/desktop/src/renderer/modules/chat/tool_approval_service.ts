@@ -4,8 +4,8 @@ import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
 import {
   type ChatUiMessage,
   isDynamicToolPart,
-} from '@iki/core/chat/message_parts';
-import { normalizeToolPartForValidation } from '@iki/core/chat/tool_parts';
+} from '@iki/backend/chat/message_parts';
+import { normalizeToolPartForValidation } from '@iki/backend/chat/tool_parts';
 
 export type ApprovalRequestPayload = {
   approvalId: string;

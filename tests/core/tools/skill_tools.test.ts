@@ -10,7 +10,7 @@ import {
   LoadSkillTool,
   ReadPersonalSkillTool,
   WritePersonalSkillTool,
-} from '@iki/core/tools/skill_tools';
+} from '@iki/backend/tools/skill_tools';
 import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
 
 describe('load skill tool', () => {

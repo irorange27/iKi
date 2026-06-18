@@ -6,7 +6,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import McpSettings from '../../../packages/desktop/src/renderer/components/settings/McpSettings.vue';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { McpServerSummary } from '@iki/core/types/mcp';
 
 const setElectronApi = (api: unknown) => {

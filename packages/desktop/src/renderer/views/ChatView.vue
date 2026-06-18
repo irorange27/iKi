@@ -133,7 +133,7 @@ import { useChatThreadTodoPlan } from '../composables/useChatThreadTodoPlan';
 import { useToolMetadata } from '../composables/useToolMetadata';
 import { getThreadOriginInfo } from '../modules/chat/thread_origin';
 import { getElectronAPI } from '../services/electron_api';
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 
 type ChatInputExpose = {
   setDraftMessage: (

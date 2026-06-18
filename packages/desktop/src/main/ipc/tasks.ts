@@ -1,13 +1,13 @@
 import { ipcMain } from 'electron';
 
-import * as tasksDb from '@iki/core/db/tasks';
+import * as tasksDb from '@iki/backend/db/tasks';
 import {
   createProactiveTask,
   deleteProactiveTask,
   updateProactiveTask,
   type ProactiveTaskCreateInput,
   type ProactiveTaskUpdateInput,
-} from '@iki/core/tasks/proactive_task_manager';
+} from '@iki/backend/tasks/proactive_task_manager';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { toIpcSerializable } from '@iki/core/utils/ipc_serialization';
 import { getErrorMessage } from '../utils/errors';

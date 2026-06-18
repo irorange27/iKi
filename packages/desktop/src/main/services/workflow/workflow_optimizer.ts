@@ -1,10 +1,10 @@
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 import {
   getWorkflowProfile,
   upsertWorkflowProfile,
   clearWorkflowProfiles,
-} from '@iki/core/db/workflow_profile';
-import { normalizeSkillIds } from '@iki/core/tools/skills';
+} from '@iki/backend/db/workflow_profile';
+import { normalizeSkillIds } from '@iki/backend/tools/skills';
 import type { WorkflowOptimizationConfig, WorkflowProfile } from '@iki/core/types/workflow';
 import { clonePlainData } from '@iki/core/utils/clone';
 

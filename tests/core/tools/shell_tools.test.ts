@@ -9,11 +9,11 @@ vi.mock('child_process', () => ({
   spawn: spawnMock,
 }));
 
-vi.mock('@iki/core/tools/workspace_paths', () => ({
+vi.mock('@iki/backend/tools/workspace_paths', () => ({
   resolveShellWorkingDirectory: vi.fn((cwd?: string) => cwd ?? '/tmp/workspace'),
 }));
 
-import { ShellExecutionTool } from '@iki/core/tools/shell_tools';
+import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
 
 const newTool = () => new ShellExecutionTool();
 

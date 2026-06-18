@@ -11,8 +11,8 @@ import {
   isTextPart,
   type DynamicToolPart,
   type UiMessagePart,
-} from '@iki/core/chat/message_parts';
-import { normalizeToolPartForValidation } from '@iki/core/chat/tool_parts';
+} from '@iki/backend/chat/message_parts';
+import { normalizeToolPartForValidation } from '@iki/backend/chat/tool_parts';
 import { updateAssistantMessage } from './ui_stream_reducer_message';
 import type {
   ReduceResult,

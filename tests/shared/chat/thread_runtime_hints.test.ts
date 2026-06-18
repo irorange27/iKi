@@ -8,7 +8,7 @@ import {
   parseThreadInterventionPolicyState,
   parseThreadToolNames,
   parseThreadToolSelectionState,
-} from '@iki/core/chat/thread_runtime_hints';
+} from '@iki/backend/chat/thread_runtime_hints';
 
 describe('thread_runtime_hints', () => {
   it('normalizes string arrays by trimming and de-duplicating values', () => {

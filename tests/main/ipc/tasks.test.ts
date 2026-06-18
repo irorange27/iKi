@@ -13,7 +13,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('@iki/core/db/tasks', () => ({
+vi.mock('@iki/backend/db/tasks', () => ({
   getProactiveTasks: vi.fn(),
   getProactiveTask: vi.fn(),
   addProactiveTask: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('../../../packages/desktop/src/main/services/tasks/proactive_tasks', () 
 }));
 
 import { registerTasksIpc } from '../../../packages/desktop/src/main/ipc/tasks';
-import * as tasksDb from '@iki/core/db/tasks';
+import * as tasksDb from '@iki/backend/db/tasks';
 import { runProactiveTask } from '../../../packages/desktop/src/main/services/tasks/proactive_tasks';
 
 const addProactiveTaskMock = vi.mocked(tasksDb.addProactiveTask);

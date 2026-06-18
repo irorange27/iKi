@@ -1,4 +1,4 @@
-import type { AffectLabel, AffectScore } from '../emotion/affect';
+import type { AffectLabel, AffectScore } from '@iki/core/emotion/affect';
 
 export type AudioEmotionResult = {
   label: AffectLabel;

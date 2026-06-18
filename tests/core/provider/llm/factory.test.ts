@@ -74,12 +74,12 @@ vi.mock('vercel-minimax-ai-provider', () => ({
   createMinimax: createMinimaxMock,
 }));
 
-vi.mock('@iki/core/db/providers', () => ({
+vi.mock('@iki/backend/db/providers', () => ({
   getProviders: getProvidersMock,
   getProvider: getProviderMock,
 }));
 
-vi.mock('@iki/core/db/mcp_servers', () => ({
+vi.mock('@iki/backend/db/mcp_servers', () => ({
   listMcpServers: listMcpServersMock,
 }));
 
@@ -87,19 +87,19 @@ vi.mock('@iki/core/logger', () => ({
   createLogger: createLoggerMock,
 }));
 
-vi.mock('@iki/core/persona', () => ({
+vi.mock('@iki/backend/persona', () => ({
   getPersonaPrompt: getPersonaPromptMock,
 }));
 
-vi.mock('@iki/core/network/http', () => ({
+vi.mock('@iki/backend/network/http', () => ({
   fetchWithTimeout: fetchWithTimeoutMock,
 }));
 
-vi.mock('@iki/core/platform', () => ({
+vi.mock('@iki/backend/platform', () => ({
   getUserDataPath: getUserDataPathMock,
 }));
 
-vi.mock('@iki/core/workspaces/thread_workspace', () => ({
+vi.mock('@iki/backend/workspaces/thread_workspace', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
 

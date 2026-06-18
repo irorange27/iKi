@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   getDb: vi.fn(),
 }));
 
-import { getDb } from '@iki/core/db/database';
+import { getDb } from '@iki/backend/db/database';
 import {
   addChatUsageEvent,
   getChatUsageTotals,
   listChatUsageDaily,
   listChatUsageMonthly,
-} from '@iki/core/db/chat_usage';
+} from '@iki/backend/db/chat_usage';
 
 const getDbMock = vi.mocked(getDb);
 

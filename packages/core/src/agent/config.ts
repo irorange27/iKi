@@ -1,4 +1,4 @@
-import { getAppConfig } from '../config';
+import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '../logger';
 import type { AgentConfig } from './types';
 

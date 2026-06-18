@@ -1,7 +1,7 @@
 import { BrowserWindow, Menu, app, screen } from 'electron';
 import path from 'node:path';
 
-import { getAppConfig, setAppConfig } from '@iki/core/config';
+import { getAppConfig, setAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
 import type { AppConfig } from '@iki/core/types/config';
 import { maybeOpenDevTools } from './devtools_policy';

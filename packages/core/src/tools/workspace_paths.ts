@@ -5,8 +5,8 @@ import {
   ensureThreadWorkspaceSelection,
   getThreadWorkspaceSelection,
   type ThreadWorkspaceSelection,
-} from '../workspaces/thread_workspace';
-import { getUserDataPath } from '../platform';
+} from '@iki/backend/workspaces/thread_workspace';
+import { getUserDataPath } from '@iki/backend/platform';
 import { isPathWithinRoot } from '../utils/path_boundary';
 import { getToolRuntimeContext } from './runtime_context';
 

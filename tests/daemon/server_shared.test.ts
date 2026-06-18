@@ -86,7 +86,7 @@ const {
   };
 });
 
-vi.mock('@iki/core/db/app_clients', () => ({
+vi.mock('@iki/backend/db/app_clients', () => ({
   createAppClient: createAppClientMock,
   getAppClientById: getAppClientByIdMock,
   getAppClientByToken: getAppClientByTokenMock,
@@ -94,7 +94,7 @@ vi.mock('@iki/core/db/app_clients', () => ({
   touchAppClient: touchAppClientMock,
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
 }));
 

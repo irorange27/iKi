@@ -3,7 +3,7 @@ import type { AffectState } from './affect_state';
 import type {
   InterventionPolicySignal,
   InterventionState,
-} from '../chat/intervention_policy';
+} from '@iki/backend/chat/intervention_policy';
 
 type PolicyMessage = {
   role?: string;

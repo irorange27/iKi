@@ -1,0 +1,311 @@
+import { isObjectRecord, type ObjectRecord } from '@iki/core/utils/guards';
+import {
+  isAffectLabel,
+  type AffectScore,
+  type AffectSignal,
+  type AffectSignalSource,
+} from '@iki/core/emotion/affect';
+import {
+  isInterventionState,
+  type InterventionPolicySignal,
+} from './intervention_policy';
+
+export type ThreadToolSelectionMode = 'manual' | 'auto';
+
+export type ThreadLlmSelectionState = {
+  providerType?: string;
+  providerId?: string;
+  model?: string;
+};
+
+export type ThreadToolSelectionState = {
+  mode?: ThreadToolSelectionMode;
+  mcpServerIds: string[];
+};
+
+export type ThreadAffectState = AffectSignal & {
+  updatedAt?: string;
+};
+
+export type ThreadInterventionPolicyState = InterventionPolicySignal & {
+  updatedAt?: string;
+};
+
+export const normalizeStringArray = (input: unknown): string[] => {
+  if (!Array.isArray(input)) return [];
+
+  const resolved: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of input) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    resolved.push(trimmed);
+  }
+
+  return resolved;
+};
+
+export const parseJsonRecord = (raw: unknown): ObjectRecord => {
+  if (isObjectRecord(raw)) return raw;
+  if (typeof raw !== 'string' || !raw.trim()) return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    return isObjectRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+export const parseThreadToolNames = (raw: unknown): string[] => {
+  if (typeof raw === 'string') {
+    try {
+      return normalizeStringArray(JSON.parse(raw));
+    } catch {
+      return [];
+    }
+  }
+
+  return normalizeStringArray(raw);
+};
+
+export const parseThreadToolSelectionState = (metadataRaw: unknown): ThreadToolSelectionState => {
+  const metadata = parseJsonRecord(metadataRaw);
+  const toolSelection = isObjectRecord(metadata.toolSelection) ? metadata.toolSelection : {};
+  const mode =
+    toolSelection.mode === 'auto' || toolSelection.mode === 'manual'
+      ? toolSelection.mode
+      : undefined;
+
+  return {
+    mode,
+    mcpServerIds: normalizeStringArray(toolSelection.mcpServerIds),
+  };
+};
+
+export const parseThreadLlmSelectionState = (metadataRaw: unknown): ThreadLlmSelectionState => {
+  const metadata = parseJsonRecord(metadataRaw);
+  const llm = isObjectRecord(metadata.llm) ? metadata.llm : {};
+  const providerType =
+    typeof llm.providerType === 'string' && llm.providerType.trim().length > 0
+      ? llm.providerType.trim()
+      : undefined;
+  const providerId =
+    typeof llm.providerId === 'string' && llm.providerId.trim().length > 0
+      ? llm.providerId.trim()
+      : undefined;
+  const model =
+    typeof llm.model === 'string' && llm.model.trim().length > 0 ? llm.model.trim() : undefined;
+
+  return {
+    ...(providerType ? { providerType } : {}),
+    ...(providerId ? { providerId } : {}),
+    ...(model ? { model } : {}),
+  };
+};
+
+const toFiniteNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const normalizeAffectScores = (value: unknown): AffectScore[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map(entry => {
+      if (!isObjectRecord(entry) || !isAffectLabel(entry.label)) return null;
+      const score = toFiniteNumber(entry.score);
+      if (score === undefined) return null;
+      return {
+        label: entry.label,
+        score: Math.min(1, Math.max(0, score)),
+      };
+    })
+    .filter((entry): entry is AffectScore => entry !== null)
+    .slice(0, 3);
+};
+
+export const parseThreadAffectState = (metadataRaw: unknown): ThreadAffectState | null => {
+  const metadata = parseJsonRecord(metadataRaw);
+  const affect = isObjectRecord(metadata.affect) ? metadata.affect : null;
+  const state = affect && isObjectRecord(affect.state) ? affect.state : null;
+  if (!affect || !state || !isAffectLabel(state.label)) return null;
+
+  const confidence = toFiniteNumber(state.confidence);
+  if (confidence === undefined) return null;
+
+  const source: AffectSignalSource =
+    affect.source === 'realtime' || affect.source === 'history' ? affect.source : 'history';
+
+  return {
+    source,
+    guardActive: affect.guardActive === true,
+    state: {
+      label: state.label,
+      confidence: Math.min(1, Math.max(0, confidence)),
+      ...(toFiniteNumber(state.valence) !== undefined
+        ? { valence: Math.min(1, Math.max(-1, toFiniteNumber(state.valence) as number)) }
+        : {}),
+      ...(toFiniteNumber(state.arousal) !== undefined
+        ? { arousal: Math.min(1, Math.max(0, toFiniteNumber(state.arousal) as number)) }
+        : {}),
+      ...(normalizeAffectScores(state.emotions).length > 0
+        ? { emotions: normalizeAffectScores(state.emotions) }
+        : {}),
+      sampleCount: Math.max(0, Math.trunc(toFiniteNumber(state.sampleCount) ?? 0)),
+      windowSize: Math.max(0, Math.trunc(toFiniteNumber(state.windowSize) ?? 0)),
+      startAt: typeof state.startAt === 'string' ? state.startAt : '',
+      endAt: typeof state.endAt === 'string' ? state.endAt : '',
+      ageMinutes: Math.max(0, toFiniteNumber(state.ageMinutes) ?? 0),
+      windowMinutes: Math.max(0, toFiniteNumber(state.windowMinutes) ?? 0),
+    },
+    ...(typeof affect.updatedAt === 'string' && affect.updatedAt.trim()
+      ? { updatedAt: affect.updatedAt }
+      : {}),
+  };
+};
+
+const normalizeReasonCodes = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  const reasonCodes: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    reasonCodes.push(trimmed);
+  }
+  return reasonCodes;
+};
+
+export const parseThreadInterventionPolicyState = (
+  metadataRaw: unknown
+): ThreadInterventionPolicyState | null => {
+  const metadata = parseJsonRecord(metadataRaw);
+  const policy = isObjectRecord(metadata.interventionPolicy) ? metadata.interventionPolicy : null;
+  if (!policy || !isInterventionState(policy.interventionState)) return null;
+
+  const escalateRaw = toFiniteNumber(policy.escalate);
+  const confidence = toFiniteNumber(policy.confidence);
+  const rationale =
+    typeof policy.rationale === 'string' && policy.rationale.trim()
+      ? policy.rationale.trim()
+      : '';
+
+  if (escalateRaw === undefined || confidence === undefined || !rationale) {
+    return null;
+  }
+
+  return {
+    interventionState: policy.interventionState,
+    escalate: escalateRaw >= 1 ? 1 : 0,
+    confidence: Math.min(1, Math.max(0, confidence)),
+    rationale,
+    reasonCodes: normalizeReasonCodes(policy.reasonCodes),
+    affectUsed: policy.affectUsed === true,
+    ...(policy.applied === true || policy.applied === false ? { applied: policy.applied === true } : {}),
+    ...(typeof policy.updatedAt === 'string' && policy.updatedAt.trim()
+      ? { updatedAt: policy.updatedAt }
+      : {}),
+  };
+};
+
+export const buildThreadRuntimeMetadata = (params: {
+  existingMetadata: unknown;
+  providerType: string;
+  providerId?: string;
+  model: string;
+  toolMode: ThreadToolSelectionMode;
+  mcpServerIds?: string[];
+  affectSignal?: AffectSignal | null;
+  interventionPolicy?: InterventionPolicySignal | null;
+  updatedAt?: string;
+}): ObjectRecord => {
+  const metadataRecord = parseJsonRecord(params.existingMetadata);
+  const nextLlm = isObjectRecord(metadataRecord.llm) ? metadataRecord.llm : {};
+  const nextToolSelection = isObjectRecord(metadataRecord.toolSelection)
+    ? metadataRecord.toolSelection
+    : {};
+  const updatedAt = params.updatedAt || new Date().toISOString();
+  const nextMetadata: ObjectRecord = {
+    ...metadataRecord,
+    llm: {
+      ...nextLlm,
+      providerType: params.providerType,
+      ...(typeof params.providerId === 'string' && params.providerId.trim().length > 0
+        ? { providerId: params.providerId.trim() }
+        : {}),
+      model: params.model,
+      updatedAt,
+    },
+    toolSelection: {
+      ...nextToolSelection,
+      mode: params.toolMode,
+      mcpServerIds: normalizeStringArray(params.mcpServerIds),
+      updatedAt,
+    },
+  };
+
+  if (Object.prototype.hasOwnProperty.call(params, 'affectSignal')) {
+    if (params.affectSignal) {
+      nextMetadata.affect = {
+        source: params.affectSignal.source,
+        guardActive: params.affectSignal.guardActive,
+        updatedAt,
+        state: {
+          label: params.affectSignal.state.label,
+          confidence: params.affectSignal.state.confidence,
+          ...(typeof params.affectSignal.state.valence === 'number'
+            ? { valence: params.affectSignal.state.valence }
+            : {}),
+          ...(typeof params.affectSignal.state.arousal === 'number'
+            ? { arousal: params.affectSignal.state.arousal }
+            : {}),
+          ...(Array.isArray(params.affectSignal.state.emotions) &&
+          params.affectSignal.state.emotions.length > 0
+            ? { emotions: params.affectSignal.state.emotions }
+            : {}),
+          sampleCount: params.affectSignal.state.sampleCount,
+          windowSize: params.affectSignal.state.windowSize,
+          startAt: params.affectSignal.state.startAt,
+          endAt: params.affectSignal.state.endAt,
+          ageMinutes: params.affectSignal.state.ageMinutes,
+          windowMinutes: params.affectSignal.state.windowMinutes,
+        },
+      };
+    } else {
+      delete nextMetadata.affect;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(params, 'interventionPolicy')) {
+    if (params.interventionPolicy) {
+      nextMetadata.interventionPolicy = {
+        interventionState: params.interventionPolicy.interventionState,
+        escalate: params.interventionPolicy.escalate,
+        confidence: params.interventionPolicy.confidence,
+        rationale: params.interventionPolicy.rationale,
+        reasonCodes: [...params.interventionPolicy.reasonCodes],
+        affectUsed: params.interventionPolicy.affectUsed,
+        ...(params.interventionPolicy.applied === true || params.interventionPolicy.applied === false
+          ? { applied: params.interventionPolicy.applied === true }
+          : {}),
+        updatedAt,
+      };
+    } else {
+      delete nextMetadata.interventionPolicy;
+    }
+  }
+
+  return nextMetadata;
+};

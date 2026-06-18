@@ -58,14 +58,14 @@ const { dbState, execMock, prepareMock } = vi.hoisted(() => {
   };
 });
 
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   getDb: () => ({
     exec: execMock,
     prepare: prepareMock,
   }),
 }));
 
-import { getExecutedMigrations, runMigration } from '@iki/core/db/migration/runner';
+import { getExecutedMigrations, runMigration } from '@iki/backend/db/migration/runner';
 
 beforeEach(() => {
   dbState.executedRows = [];

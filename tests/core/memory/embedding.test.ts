@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/providers', () => ({
+vi.mock('@iki/backend/db/providers', () => ({
   getProviders: vi.fn(),
 }));
 
@@ -12,7 +12,7 @@ vi.mock('@iki/core/provider/llm/factory', () => ({
   getProviderConfig: vi.fn(),
 }));
 
-vi.mock('@iki/core/network/http', () => ({
+vi.mock('@iki/backend/network/http', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
@@ -20,10 +20,10 @@ vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 
-import { getAppConfig } from '@iki/core/config';
-import { getProviders } from '@iki/core/db/providers';
+import { getAppConfig } from '@iki/backend/config';
+import { getProviders } from '@iki/backend/db/providers';
 import { getProviderConfig } from '@iki/core/provider/llm/factory';
-import { fetchWithTimeout } from '@iki/core/network/http';
+import { fetchWithTimeout } from '@iki/backend/network/http';
 import { createPreferredMemoryEmbeddingRuntime } from '@iki/core/memory/embedding';
 
 const getAppConfigMock = vi.mocked(getAppConfig);

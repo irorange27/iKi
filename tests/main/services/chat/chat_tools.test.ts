@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTool, defaultToolRegistry } from '@iki/core/tools';
-import { getAppConfig } from '@iki/core/config';
+import { getAppConfig } from '@iki/backend/config';
 import { selectToolsWithAgent } from '@iki/core/provider/tool_selection';
-import { resolveToolNames } from '@iki/core/chat_service/tool_guard';
+import { resolveToolNames } from '@iki/backend/chat_service/tool_guard';
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({
     general: {
       autoApproveToolRequests: false,

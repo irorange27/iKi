@@ -1,4 +1,4 @@
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 import type { ElectronApi } from '@iki/core/types/electron_api';
 import { createLogger } from '../../logger';
 import type { ChatMessageStore } from './chat_message_store';

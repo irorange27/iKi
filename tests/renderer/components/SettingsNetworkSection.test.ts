@@ -6,7 +6,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import SettingsNetworkSection from '../../../packages/desktop/src/renderer/components/settings/SettingsNetworkSection.vue';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

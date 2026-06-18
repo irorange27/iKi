@@ -6,7 +6,7 @@ import {
   normalizeTaskPlanItems,
   renderTaskPlan,
   summarizeTaskPlan,
-} from '@iki/core/db/task_plan';
+} from '@iki/backend/db/task_plan';
 
 describe('task_plan helpers', () => {
   it('normalizes ids, statuses, and summary counts', () => {

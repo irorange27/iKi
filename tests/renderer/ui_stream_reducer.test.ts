@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ChatUiMessage, ChatUiMessageChunk } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage, ChatUiMessageChunk } from '@iki/backend/chat/message_parts';
 import {
   createInitialStreamState,
   reduceStream,

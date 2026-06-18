@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from './base';
 import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '@iki/backend/network/http';
 import { RetryableError } from '../utils/errors';
-import { getAppConfig } from '../config';
+import { getAppConfig } from '@iki/backend/config';
 import type { WebSearchEngine } from '../types/config';
 import {
   DEFAULT_FETCH_MAX_CHARS,

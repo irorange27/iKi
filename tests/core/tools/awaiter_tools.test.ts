@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/awaiters/awaiter_manager', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/core/awaiters/awaiter_manager')>();
+vi.mock('@iki/backend/awaiters/awaiter_manager', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/backend/awaiters/awaiter_manager')>();
   return {
     ...actual,
     createAwaiter: vi.fn(),
@@ -16,11 +16,11 @@ import {
   deleteAwaiter,
   readAwaiterRecord,
   updateAwaiter,
-} from '@iki/core/awaiters/awaiter_manager';
+} from '@iki/backend/awaiters/awaiter_manager';
 import {
   DeleteAwaiterTool,
   WriteAwaiterTool,
-} from '@iki/core/tools/awaiter_tools';
+} from '@iki/backend/tools/awaiter_tools';
 import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
 
 describe('awaiter tools', () => {

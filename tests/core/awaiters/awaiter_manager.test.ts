@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/db/awaiters', () => ({
+vi.mock('@iki/backend/db/awaiters', () => ({
   addAwaiter: vi.fn(),
   deleteAwaiter: vi.fn(),
   getAwaiter: vi.fn(),
@@ -8,7 +8,7 @@ vi.mock('@iki/core/db/awaiters', () => ({
   updateAwaiter: vi.fn(),
 }));
 
-import * as awaitersDb from '@iki/core/db/awaiters';
+import * as awaitersDb from '@iki/backend/db/awaiters';
 import type { Awaiter } from '@iki/core/types/awaiters';
 import {
   createAwaiter,
@@ -16,7 +16,7 @@ import {
   listAwaiterRecords,
   readAwaiterRecord,
   updateAwaiter,
-} from '@iki/core/awaiters/awaiter_manager';
+} from '@iki/backend/awaiters/awaiter_manager';
 
 const createAwaiterRow = (overrides: Partial<Awaiter> = {}): Awaiter => ({
   id: 'awaiter_1',

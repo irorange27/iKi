@@ -6,7 +6,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import SettingsMemorySection from '../../../packages/desktop/src/renderer/components/settings/SettingsMemorySection.vue';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { ChatThread } from '@iki/core/types/chat';
 import type { Provider } from '@iki/core/types/provider';
 import type {

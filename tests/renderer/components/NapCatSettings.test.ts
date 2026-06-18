@@ -26,7 +26,7 @@ vi.mock('../../../packages/desktop/src/renderer/services/config_service', () => 
 }));
 
 import NapCatSettings from '../../../packages/desktop/src/renderer/components/settings/NapCatSettings.vue';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
 
 const setElectronApi = (api: unknown) => {

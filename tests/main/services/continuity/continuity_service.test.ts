@@ -28,15 +28,15 @@ const {
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/config', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
 }));
 
-vi.mock('@iki/core/db/continuity', () => ({
+vi.mock('@iki/backend/db/continuity', () => ({
   upsertAssistantProfile: upsertAssistantProfileMock,
   searchContinuityItems: searchContinuityItemsMock,
   touchContinuityItems: touchContinuityItemsMock,
@@ -45,7 +45,7 @@ vi.mock('@iki/core/db/continuity', () => ({
   addContinuityEvidence: addContinuityEvidenceMock,
 }));
 
-vi.mock('@iki/core/db/memory', () => ({
+vi.mock('@iki/backend/db/memory', () => ({
   extractTextFromMessageJson: extractTextFromMessageJsonMock,
 }));
 

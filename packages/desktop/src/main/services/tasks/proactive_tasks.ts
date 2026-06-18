@@ -1,10 +1,10 @@
 import { Notification, app } from 'electron';
 
-import * as tasksDb from '@iki/core/db/tasks';
-import * as chatThreadDb from '@iki/core/db/chat_thread';
+import * as tasksDb from '@iki/backend/db/tasks';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { createLogger } from '@iki/core/logger';
-import { clampIntervalMinutes, computeNextRunAt } from '@iki/core/tasks/task_schedule';
-import { deliverBridgeThreadMessage } from '@iki/core/bridge_dispatch';
+import { clampIntervalMinutes, computeNextRunAt } from '@iki/backend/tasks/task_schedule';
+import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import {
   filterSafeProactiveTaskTools,
   inferProactiveTaskToolMode,

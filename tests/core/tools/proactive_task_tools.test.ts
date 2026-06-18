@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/tasks/proactive_task_manager', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/core/tasks/proactive_task_manager')>();
+vi.mock('@iki/backend/tasks/proactive_task_manager', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/backend/tasks/proactive_task_manager')>();
   return {
     ...actual,
     createProactiveTask: vi.fn(),
@@ -17,11 +17,11 @@ import {
   deleteProactiveTask,
   readProactiveTaskRecord,
   updateProactiveTask,
-} from '@iki/core/tasks/proactive_task_manager';
+} from '@iki/backend/tasks/proactive_task_manager';
 import {
   DeleteProactiveTaskTool,
   WriteProactiveTaskTool,
-} from '@iki/core/tools/proactive_task_tools';
+} from '@iki/backend/tools/proactive_task_tools';
 import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
 
 describe('proactive task tools', () => {

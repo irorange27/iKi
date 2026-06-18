@@ -1,4 +1,4 @@
-import { addClipboardSnapshot, pruneClipboardSnapshots, listRecentClipboardSnapshots } from '@iki/core/db/clipboard';
+import { addClipboardSnapshot, pruneClipboardSnapshots, listRecentClipboardSnapshots } from '@iki/backend/db/clipboard';
 
 const POLL_INTERVAL_MS = 2_000;
 const MAX_SNAPSHOTS = 200;

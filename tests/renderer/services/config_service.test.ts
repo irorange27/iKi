@@ -17,7 +17,7 @@ vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
   })),
 }));
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import { configService } from '../../../packages/desktop/src/renderer/services/config_service';
 
 describe('configService', () => {

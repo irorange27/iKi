@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import { resolveThemeSelection, THEME_QUICK_STARTS } from '@iki/theme/registry';
 import { createBase46ThemePresetFromQuickStart } from '@iki/theme/theme_creator';
 

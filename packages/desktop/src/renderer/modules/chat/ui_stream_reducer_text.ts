@@ -4,7 +4,7 @@ import {
   isTextPart,
   type TextPart,
   type UiMessagePart,
-} from '@iki/core/chat/message_parts';
+} from '@iki/backend/chat/message_parts';
 
 export const buildStreamingTextParts = (parts: UiMessagePart[], delta: string): UiMessagePart[] => {
   const nextParts = [...parts];

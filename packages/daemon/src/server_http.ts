@@ -1,10 +1,10 @@
 import http from 'node:http';
 
-import * as memoryDb from '@iki/core/db/memory';
-import { createAppClient } from '@iki/core/db/app_clients';
+import * as memoryDb from '@iki/backend/db/memory';
+import { createAppClient } from '@iki/backend/db/app_clients';
 import type { McpManager } from '@iki/core/mcp';
-import type { ChatTransportMessage } from '@iki/core/chat_service';
-import type { ChatService } from '@iki/core/chat_service';
+import type { ChatTransportMessage } from '@iki/backend/chat_service';
+import type { ChatService } from '@iki/backend/chat_service';
 import type { NapCatBridgeStatusInfo } from '@iki/core/types/config';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {

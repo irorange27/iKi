@@ -243,7 +243,7 @@ import {
   ShieldBan,
   XCircle,
 } from 'lucide-vue-next';
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 
 import {
   canToggleToolCollapse,

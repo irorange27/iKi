@@ -1,7 +1,7 @@
-import * as chatThreadDb from '@iki/core/db/chat_thread';
-import * as continuityDb from '@iki/core/db/continuity';
-import { extractTextFromMessageJson } from '@iki/core/db/memory';
-import { getAppConfig } from '@iki/core/config';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
+import * as continuityDb from '@iki/backend/db/continuity';
+import { extractTextFromMessageJson } from '@iki/backend/db/memory';
+import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
 import type {
   AssistantProfileRecord,

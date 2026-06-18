@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
-import { normalizeAppConfig } from '@iki/core/config/normalize';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
+import { normalizeAppConfig } from '@iki/backend/config/normalize';
 import { compileBase46ThemeDocument } from '@iki/theme/base46_compile';
 import { parseBase46ThemePresetInput } from '@iki/theme/base46_schema';
 import { BUILTIN_BASE46_DEFAULT_PRESET } from '@iki/theme/builtins';

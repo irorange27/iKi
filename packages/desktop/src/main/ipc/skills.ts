@@ -7,7 +7,7 @@ import {
   getSkillRootsForUi,
   listSkills,
   readSkillContent,
-} from '@iki/core/tools/skills';
+} from '@iki/backend/tools/skills';
 import { getErrorMessage } from '../utils/errors';
 
 let skillsIpcRegistered = false;

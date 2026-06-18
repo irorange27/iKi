@@ -8,7 +8,7 @@ const {
   addIdentityProfileMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/identity', () => ({
+vi.mock('@iki/backend/db/identity', () => ({
   getActiveIdentityProfile: getActiveIdentityProfileMock,
   addIdentityProfile: addIdentityProfileMock,
 }));

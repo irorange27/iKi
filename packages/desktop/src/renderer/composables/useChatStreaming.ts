@@ -16,7 +16,7 @@ import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
-import type { ChatUiMessage } from '@iki/core/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 

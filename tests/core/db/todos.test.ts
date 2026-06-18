@@ -4,7 +4,7 @@ const { getDbMock } = vi.hoisted(() => ({
   getDbMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/database', () => ({
+vi.mock('@iki/backend/db/database', () => ({
   getDb: getDbMock,
 }));
 
@@ -167,7 +167,7 @@ describe('todo db helpers', () => {
     vi.setSystemTime(new Date('2026-03-20T10:00:00.000Z'));
     createFakeDb();
 
-    const { writeTodoList } = await import('@iki/core/db/todos');
+    const { writeTodoList } = await import('@iki/backend/db/todos');
     const result = writeTodoList({
       title: 'Today',
       summary: 'Focus on shipping',
@@ -218,7 +218,7 @@ describe('todo db helpers', () => {
       ],
     });
 
-    const { writeTodoList } = await import('@iki/core/db/todos');
+    const { writeTodoList } = await import('@iki/backend/db/todos');
     const result = writeTodoList({
       title: 'Today',
       summary: 'New',
@@ -246,7 +246,7 @@ describe('todo db helpers', () => {
       items: [],
     });
 
-    const { deleteTodoList, listTodoLists } = await import('@iki/core/db/todos');
+    const { deleteTodoList, listTodoLists } = await import('@iki/backend/db/todos');
     expect(listTodoLists({ query: 'inbox' })).toEqual([
       expect.objectContaining({
         id: 'todo_list_2',

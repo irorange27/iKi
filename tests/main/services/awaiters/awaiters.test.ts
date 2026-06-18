@@ -19,7 +19,7 @@ vi.mock('electron', () => {
   };
 });
 
-vi.mock('@iki/core/db/awaiters', () => ({
+vi.mock('@iki/backend/db/awaiters', () => ({
   addAwaiterWakeEvent: vi.fn(),
   getAwaiter: vi.fn(),
   listDueAwaiters: vi.fn(),
@@ -27,15 +27,15 @@ vi.mock('@iki/core/db/awaiters', () => ({
   updateAwaiterIfStatus: vi.fn(() => ({ changes: 1 })),
 }));
 
-vi.mock('@iki/core/db/chat_thread', () => ({
+vi.mock('@iki/backend/db/chat_thread', () => ({
   touchChatThread: vi.fn(),
 }));
 
-vi.mock('@iki/core/bridge_dispatch', () => ({
+vi.mock('@iki/backend/bridge_dispatch', () => ({
   deliverBridgeThreadMessage: vi.fn(),
 }));
 
-vi.mock('@iki/core/db/agent_runs', () => ({
+vi.mock('@iki/backend/db/agent_runs', () => ({
   getAgentRun: vi.fn(() => null),
   getLatestAgentRunCheckpoint: vi.fn(() => null),
 }));
@@ -56,9 +56,9 @@ import {
   startAwaiterScheduler,
   stopAwaiterScheduler,
 } from '../../../../packages/desktop/src/main/services/awaiters/awaiters';
-import * as awaitersDb from '@iki/core/db/awaiters';
-import * as chatThreadDb from '@iki/core/db/chat_thread';
-import { deliverBridgeThreadMessage } from '@iki/core/bridge_dispatch';
+import * as awaitersDb from '@iki/backend/db/awaiters';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
+import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import { chatService } from '../../../../packages/desktop/src/main/services/chat/service';
 
 const baseAwaiter = (overrides: Partial<Awaiter> = {}): Awaiter => ({

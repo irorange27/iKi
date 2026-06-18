@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useThemeEditor } from '../../../packages/desktop/src/renderer/composables/useThemeEditor';
-import { createDefaultAppConfig } from '@iki/core/config/defaults';
+import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import { listThemePresetSummaries, THEME_QUICK_STARTS } from '@iki/theme/registry';
 import {
   cloneBase46ThemeDocument,

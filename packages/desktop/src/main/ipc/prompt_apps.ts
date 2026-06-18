@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import * as promptAppDb from '@iki/core/db/prompt_apps';
+import * as promptAppDb from '@iki/backend/db/prompt_apps';
 import { createPrefixedId } from '@iki/core/utils/id';
 
 let promptAppsIpcRegistered = false;

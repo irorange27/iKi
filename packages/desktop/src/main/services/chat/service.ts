@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import { dialog } from 'electron';
 
-import { createChatService } from '@iki/core/chat_service';
-import type { ChatServicePlatformDeps } from '@iki/core/chat_platform';
+import { createChatService } from '@iki/backend/chat_service';
+import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { companionService } from '../companion/companion_service';
 import { getClipboardContextMessage } from '../context/clipboard_monitor';
 import {
@@ -14,12 +14,12 @@ import {
   getAutoPinnedSkillIds,
   recordAutoSkillSelection,
 } from '../workflow/workflow_optimizer';
-import * as agentRunDb from '@iki/core/db/agent_runs';
-import * as agentEvalDb from '@iki/core/db/agent_eval';
+import * as agentRunDb from '@iki/backend/db/agent_runs';
+import * as agentEvalDb from '@iki/backend/db/agent_eval';
 import { toIsoNow } from '@iki/core/utils/text';
 import type { EvalExportPayload } from '@iki/core/types/agent_run';
 
-export type { ChatWebContents, ChatService } from '@iki/core/chat_service';
+export type { ChatWebContents, ChatService } from '@iki/backend/chat_service';
 
 const platformDeps: ChatServicePlatformDeps = {
   companion: companionService,

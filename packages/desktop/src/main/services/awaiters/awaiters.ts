@@ -1,13 +1,13 @@
 import { Notification, app } from 'electron';
 
-import * as agentRunDb from '@iki/core/db/agent_runs';
-import * as awaitersDb from '@iki/core/db/awaiters';
-import * as chatThreadDb from '@iki/core/db/chat_thread';
+import * as agentRunDb from '@iki/backend/db/agent_runs';
+import * as awaitersDb from '@iki/backend/db/awaiters';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { createLogger } from '@iki/core/logger';
 import { parseAwaiterTriggerSpec, type Awaiter } from '@iki/core/types/awaiters';
 import { createPrefixedId } from '@iki/core/utils/id';
 import { toIsoNow } from '@iki/core/utils/text';
-import { deliverBridgeThreadMessage } from '@iki/core/bridge_dispatch';
+import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import { getErrorMessage } from '../../utils/errors';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 import { chatService } from '../chat/service';

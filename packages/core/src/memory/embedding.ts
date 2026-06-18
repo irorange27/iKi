@@ -1,6 +1,6 @@
 import { createLogger } from '../logger';
-import { getAppConfig } from '../config';
-import { getProviders } from '../db/providers';
+import { getAppConfig } from '@iki/backend/config';
+import { getProviders } from '@iki/backend/db/providers';
 import { getProviderConfig } from '../provider/llm/factory';
 import { fetchWithTimeout } from '@iki/backend/network/http';
 import {

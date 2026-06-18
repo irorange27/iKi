@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import * as providerDb from '@iki/core/db/providers';
+import * as providerDb from '@iki/backend/db/providers';
 import { createLogger } from '@iki/core/logger';
 import type { ProviderUpdatedEvent } from '@iki/core/types/provider';
 import { getAllBrowserWindows } from '../utils/browser_windows';
