@@ -13,17 +13,6 @@ export type {
 } from './types';
 
 export type {
-  ConversationRunner,
-  ConversationRunnerFactory,
-  ConversationRunnerGenerateRequest,
-  ConversationRunnerRequest,
-  ConversationRunnerStreamEvent,
-  ConversationRunnerStreamRequest,
-  ConversationRunnerStreamOptions,
-} from './runners/conversation_runner';
-
-// New AgentRunner v2 types (additive, coexists with legacy ConversationRunner)
-export type {
   AgentStep,
   TextDeltaStep,
   ToolCallStartStep,
@@ -44,6 +33,8 @@ export type {
   AgentRunnerFactory,
 } from './runners/agent_runner';
 
+export type { ConversationRunnerStreamEvent } from './runners/conversation_runner';
+
 // Export current public schemas
 export {
   AgentConfigSchema,
@@ -53,11 +44,6 @@ export {
 } from './types';
 
 // Export implementations
-export {
-  SimpleConversationRunner,
-  createSimpleConversationRunner,
-} from './runners/simple_conversation_runner';
-
 export { SimpleAgentRunner, createSimpleAgentRunner } from './runners/simple_agent_runner';
 export { ClaudeCodeRunner, createClaudeCodeRunner } from './runners/claude_code_runner';
 

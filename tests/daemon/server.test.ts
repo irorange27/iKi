@@ -367,7 +367,7 @@ vi.mock('../../src/core/platform', () => ({
   setPlatformInfo: setPlatformInfoMock,
 }));
 
-vi.mock('../../src/main/services/chat/chat_service', () => ({
+vi.mock('../../src/main/services/chat/service', () => ({
   createChatService: createChatServiceMock,
 }));
 

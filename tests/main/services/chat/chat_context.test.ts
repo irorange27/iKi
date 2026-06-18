@@ -56,7 +56,7 @@ vi.mock('../../../../src/core/context/thread_summary', () => ({
   generateThreadSummary: generateThreadSummaryMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_skills', () => ({
+vi.mock('../../../../src/main/services/chat/skills', () => ({
   resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
 }));
 
@@ -65,7 +65,7 @@ vi.mock('../../../../src/main/services/continuity/continuity_service', () => ({
   retrieveRelevantContinuity: retrieveRelevantContinuityMock,
 }));
 
-import { createChatContextAssembler } from '../../../../src/main/services/chat/chat_context';
+import { createChatContextAssembler } from '../../../../src/main/services/chat/context';
 
 const baseConfig = {
   memory: {

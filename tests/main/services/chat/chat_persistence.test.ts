@@ -72,7 +72,7 @@ vi.mock('../../../../src/core/workspaces/thread_workspace', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
+vi.mock('../../../../src/main/services/chat/ui_messages', () => ({
   sanitizeUiMessageJsonForStorage: vi.fn((value: string) => value),
 }));
 
@@ -104,7 +104,7 @@ describe('chat_persistence', () => {
 
   it('persists thread creation fields that drive composer state and workspace scoping', async () => {
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/chat_persistence'
+      '../../../../src/main/services/chat/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -150,7 +150,7 @@ describe('chat_persistence', () => {
   it('touches thread ordering and persists continuity when saving a chat message', async () => {
     const onMessagePersisted = vi.fn();
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/chat_persistence'
+      '../../../../src/main/services/chat/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -171,7 +171,10 @@ describe('chat_persistence', () => {
     expect(onContinuityMessagePersistedMock).toHaveBeenCalledWith({
       threadId: 'thread_1',
       messageId: 'msg_1',
-      messageJson: JSON.stringify({ role: 'user', content: 'hello' }),
+      messageJson: JSON.stringify({
+        role: 'user',
+        parts: [{ type: 'text', text: 'hello' }],
+      }),
     });
   });
 
@@ -179,7 +182,7 @@ describe('chat_persistence', () => {
     countChatMessagesByThreadMock.mockReturnValue(3);
 
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/chat_persistence'
+      '../../../../src/main/services/chat/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -202,7 +205,7 @@ describe('chat_persistence', () => {
 
   it('clears a thread atomically while re-binding proactive tasks to the recreated thread id', async () => {
     const { createChatPersistence } = await import(
-      '../../../../src/main/services/chat/chat_persistence'
+      '../../../../src/main/services/chat/persistence'
     );
 
     getChatThreadMock

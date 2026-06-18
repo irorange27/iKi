@@ -43,7 +43,7 @@ import { getAppConfig } from '../../src/core/config';
 import { getChatThread } from '../../src/core/db/chat_thread';
 import * as memoryDb from '../../src/core/db/memory';
 import { planMemoryRetrieval } from '../../src/core/provider/memory_retrieval';
-import { createChatMemory } from '../../src/main/services/chat/chat_memory';
+import { createChatMemory } from '../../src/main/services/chat/memory';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getChatThreadMock = vi.mocked(getChatThread);

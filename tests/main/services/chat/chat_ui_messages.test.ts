@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { toModelInputMessages } from '../../../../src/main/services/chat/chat_ui';
+import { toModelInputMessages } from '../../../../src/main/services/chat/ui_messages';
 
 describe('chat_ui message conversion', () => {
   it('strips canonical metadata parts before AI SDK model conversion', async () => {

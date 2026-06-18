@@ -40,7 +40,7 @@ import { getChatThread } from '../../src/core/db/chat_thread';
 import * as memoryDb from '../../src/core/db/memory';
 import * as emotionDb from '../../src/core/db/emotion';
 import { analyzeEmotionWithAgent } from '../../src/core/provider/emotion_model';
-import { createChatMemory } from '../../src/main/services/chat/chat_memory';
+import { createChatMemory } from '../../src/main/services/chat/memory';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getChatThreadMock = vi.mocked(getChatThread);

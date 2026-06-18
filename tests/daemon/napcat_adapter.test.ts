@@ -60,7 +60,7 @@ vi.mock('../../src/core/daemon_logs', () => ({
   },
 }));
 
-vi.mock('../../src/main/services/chat/chat_ui', () => ({
+vi.mock('../../src/main/services/chat/ui_messages', () => ({
   parseStoredUiMessageRow: vi.fn((row: { message: string }) => JSON.parse(row.message)),
 }));
 

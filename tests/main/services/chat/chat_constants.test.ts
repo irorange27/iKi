@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TOOL_AGENT_SYSTEM_PROMPT } from '../../../../src/main/services/chat/chat_constants';
+import { TOOL_AGENT_SYSTEM_PROMPT } from '../../../../src/main/services/chat/constants';
 
 describe('TOOL_AGENT_SYSTEM_PROMPT', () => {
   it('teaches the main agent when delegated agent use is appropriate', () => {

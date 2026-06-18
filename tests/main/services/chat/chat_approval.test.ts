@@ -29,7 +29,7 @@ vi.mock('../../../../src/core/provider/llm/factory', () => ({
   resolveModelCapability: vi.fn(async () => null),
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
+vi.mock('../../../../src/main/services/chat/ui_messages', () => ({
   createUiChunkEmitter: vi.fn(() => ({
     messageId: 'assistant_resume',
     emitTextDelta: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock('../../../../src/main/services/chat/chat_agent_runner', () => ({
   createChatAgentRunner: vi.fn(),
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_run_tracking', () => ({
+vi.mock('../../../../src/core/agent/run_tracker', () => ({
   createAgentRunTracker: vi.fn(),
 }));
 
@@ -57,8 +57,8 @@ import * as agentRunDb from '../../../../src/core/db/agent_runs';
 import * as chatToolApprovalDb from '../../../../src/core/db/chat_tool_approval';
 import * as chatMessageDb from '../../../../src/core/db/chat_message';
 import { defaultToolRegistry } from '../../../../src/core/tools';
-import { createChatApproval } from '../../../../src/main/services/chat/chat_approval';
-import { createAgentRunTracker } from '../../../../src/main/services/chat/chat_run_tracking';
+import { createChatApproval } from '../../../../src/main/services/chat/approval';
+import { createAgentRunTracker } from '../../../../src/core/agent/run_tracker';
 import { createChatAgentRunner } from '../../../../src/main/services/chat/chat_agent_runner';
 
 const createChatAgentRunnerMock = vi.mocked(createChatAgentRunner);

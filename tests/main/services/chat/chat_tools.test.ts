@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTool, defaultToolRegistry } from '../../../../src/core/tools';
 import { getAppConfig } from '../../../../src/core/config';
 import { selectToolsWithAgent } from '../../../../src/core/provider/tool_selection';
-import { resolveToolNames } from '../../../../src/main/services/chat/chat_tools';
+import { resolveToolNames } from '../../../../src/main/services/chat/tool_guard';
 
 vi.mock('../../../../src/core/config', () => ({
   getAppConfig: vi.fn(() => ({

@@ -33,7 +33,7 @@ vi.mock('../../../../src/daemon/bridge_dispatch', () => ({
   deliverBridgeThreadMessage: vi.fn(),
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_service', () => ({
+vi.mock('../../../../src/main/services/chat/service', () => ({
   chatService: {
     getThread: vi.fn(),
     createThread: vi.fn(),
@@ -55,7 +55,7 @@ import { runProactiveTask } from '../../../../src/main/services/tasks/proactive_
 import * as tasksDb from '../../../../src/core/db/tasks';
 import * as chatThreadDb from '../../../../src/core/db/chat_thread';
 import { deliverBridgeThreadMessage } from '../../../../src/daemon/bridge_dispatch';
-import { chatService } from '../../../../src/main/services/chat/chat_service';
+import { chatService } from '../../../../src/main/services/chat/service';
 
 const baseTask = (overrides: Partial<ProactiveTask> = {}): ProactiveTask => ({
   id: 'task_1',

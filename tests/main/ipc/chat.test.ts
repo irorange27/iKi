@@ -62,7 +62,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('../../../src/main/services/chat/chat_service', () => ({
+vi.mock('../../../src/main/services/chat/service', () => ({
   chatService: chatServiceMock,
 }));
 

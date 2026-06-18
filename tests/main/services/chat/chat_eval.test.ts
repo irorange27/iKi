@@ -22,7 +22,7 @@ vi.mock('node:fs', () => ({
   },
 }));
 
-import { createChatEval } from '../../../../src/main/services/chat/chat_eval';
+import { createChatEval } from '../../../../src/main/services/chat/eval';
 import * as agentRunDb from '../../../../src/core/db/agent_runs';
 import * as agentEvalDb from '../../../../src/core/db/agent_eval';
 

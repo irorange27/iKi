@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { sanitizeUiMessageJsonForStorage } from '../../../../src/main/services/chat/chat_ui';
-import { parseStoredUiMessageRow } from '../../../../src/shared/chat/ui_message_codec';
+import {
+  parseStoredUiMessageRow,
+  sanitizeUiMessageJsonForStorage,
+} from '../../../../src/shared/chat/ui_message_codec';
 
 describe('chat_ui message serialization', () => {
   it('preserves skill and memory citation parts for persistence and reload', () => {

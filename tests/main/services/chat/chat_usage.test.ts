@@ -8,7 +8,7 @@ vi.mock('../../../../src/core/db/chat_usage', () => ({
 }));
 
 import * as chatUsageDb from '../../../../src/core/db/chat_usage';
-import { createChatUsage } from '../../../../src/main/services/chat/chat_usage';
+import { createChatUsage } from '../../../../src/main/services/chat/usage';
 
 beforeEach(() => {
   vi.clearAllMocks();

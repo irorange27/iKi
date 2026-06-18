@@ -40,7 +40,7 @@ vi.mock('../../../../src/core/db/agent_runs', () => ({
   getLatestAgentRunCheckpoint: vi.fn(() => null),
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_service', () => ({
+vi.mock('../../../../src/main/services/chat/service', () => ({
   chatService: {
     getThread: vi.fn(),
     createMessage: vi.fn(),
@@ -59,7 +59,7 @@ import {
 import * as awaitersDb from '../../../../src/core/db/awaiters';
 import * as chatThreadDb from '../../../../src/core/db/chat_thread';
 import { deliverBridgeThreadMessage } from '../../../../src/daemon/bridge_dispatch';
-import { chatService } from '../../../../src/main/services/chat/chat_service';
+import { chatService } from '../../../../src/main/services/chat/service';
 
 const baseAwaiter = (overrides: Partial<Awaiter> = {}): Awaiter => ({
   id: 'awaiter_1',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveModelAwareContextConfig } from '../../../../src/main/services/chat/chat_context_budget';
+import { deriveModelAwareContextConfig } from '../../../../src/main/services/chat/context_budget';
 
 const baseConfig = {
   enabled: true,

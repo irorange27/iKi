@@ -5,7 +5,11 @@ import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '../agent/types';
 import { createAgentRunTracker } from '../agent/run_tracker';
-import { createSimpleConversationRunner } from '../agent/runners/simple_conversation_runner';
+import { createSimpleAgentRunner } from '../agent/runners/simple_agent_runner';
+import type {
+  AgentRunner,
+  AgentRunnerRequest,
+} from '../agent/runners/agent_runner';
 import { getToolModel } from '../provider/tool_model';
 import { BaseTool, defaultToolRegistry } from './base';
 import { zodSchemaToJsonSchema } from './json_schema';
@@ -188,6 +192,17 @@ const summarizeUsedTools = (
     .map(([name, callCount]) => ({ name, callCount }));
 };
 
+const runAgentToCompletion = async (
+  runner: AgentRunner,
+  request: AgentRunnerRequest
+): Promise<AgentResult> => {
+  const generator = runner.run(request);
+  while (true) {
+    const next = await generator.next();
+    if (next.done) return next.value;
+  }
+};
+
 export class DelegatedAgentTool extends BaseTool {
   override name = AGENT_TOOL_NAME;
   override displayName = 'Agent';
@@ -220,31 +235,35 @@ export class DelegatedAgentTool extends BaseTool {
     const systemPrompt = `${SUBAGENT_SYSTEM_PROMPT_BASE}\nScratchpad directory: ${scratchpadPath}`;
     const prompt = buildDelegationPrompt(args, delegatedToolNames, scratchpadPath);
 
-    const runner = createSimpleConversationRunner({
-      enabled: true,
+    const runner = createSimpleAgentRunner();
+    const resolvedMaxIterations = Math.max(
+      1,
+      Math.trunc(args.maxIterations || DEFAULT_AGENT_MAX_ITERATIONS)
+    );
+    const resolvedMaxTokens =
+      typeof conversationModel.maxTokens === 'number' &&
+      Number.isFinite(conversationModel.maxTokens) &&
+      conversationModel.maxTokens > 0
+        ? Math.trunc(conversationModel.maxTokens)
+        : DEFAULT_AGENT_MAX_TOKENS;
+
+    const runRequest: AgentRunnerRequest = {
+      prompt,
+      tools: delegatedTools,
       providerType: conversationModel.providerType,
       ...(typeof conversationModel.providerId === 'string' && conversationModel.providerId.trim()
         ? { providerId: conversationModel.providerId.trim() }
         : {}),
       model: conversationModel.model,
       systemPrompt,
-      maxTokens:
-        typeof conversationModel.maxTokens === 'number' &&
-        Number.isFinite(conversationModel.maxTokens) &&
-        conversationModel.maxTokens > 0
-          ? Math.trunc(conversationModel.maxTokens)
-          : DEFAULT_AGENT_MAX_TOKENS,
-      maxIterations: Math.max(
-        1,
-        Math.trunc(args.maxIterations || DEFAULT_AGENT_MAX_ITERATIONS)
-      ),
-      enableTools: delegatedTools.length > 0,
-      enableMemory: false,
-    });
-
-    for (const tool of delegatedTools) {
-      runner.registerTool(tool);
-    }
+      maxTokens: resolvedMaxTokens,
+      maxIterations: resolvedMaxIterations,
+      config: {
+        enabled: true,
+        enableTools: delegatedTools.length > 0,
+        enableMemory: false,
+      },
+    };
 
     const runTracker = createAgentRunTracker({
       kind: 'delegated-agent',
@@ -261,7 +280,7 @@ export class DelegatedAgentTool extends BaseTool {
         metadata: {
           source: 'delegated-agent',
           requestedToolNames: delegatedToolNames,
-          maxIterations: Math.max(1, Math.trunc(args.maxIterations || DEFAULT_AGENT_MAX_ITERATIONS)),
+          maxIterations: resolvedMaxIterations,
           scratchpadPath,
         },
       },
@@ -296,10 +315,7 @@ export class DelegatedAgentTool extends BaseTool {
           conversationModel,
           delegationDepth: delegationDepth + 1,
         },
-        async () =>
-          await runner.generate({
-            prompt,
-          })
+        async () => await runAgentToCompletion(runner, runRequest)
       );
       runTracker.recordToolCalls(result.toolCalls);
       runTracker.syncModelMessages(runner.getHistory?.() ?? []);

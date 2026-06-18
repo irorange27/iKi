@@ -4,7 +4,7 @@ import {
   DEFAULT_CHAT_TOOL_MAX_ITERATIONS,
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
-} from '../../../../src/main/services/chat/chat_constants';
+} from '../../../../src/main/services/chat/constants';
 import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '../../../../src/shared/utils/provider_models';
 
 const {
@@ -167,21 +167,21 @@ vi.mock('../../../../src/main/utils/errors', () => ({
   getErrorMessage: getErrorMessageMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_context', () => ({
+vi.mock('../../../../src/main/services/chat/context', () => ({
   createChatContextAssembler: vi.fn(() => ({
     assemble: assembleContextMock,
   })),
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_thread_hints', () => ({
+vi.mock('../../../../src/main/services/chat/thread_hints', () => ({
   persistThreadRuntimeHints: persistThreadRuntimeHintsMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_tools', () => ({
+vi.mock('../../../../src/main/services/chat/tool_guard', () => ({
   resolveToolNames: resolveToolNamesMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_ui', () => ({
+vi.mock('../../../../src/main/services/chat/ui_messages', () => ({
   createUiChunkEmitter: createUiChunkEmitterMock,
   getPromptFromMessage: getPromptFromMessageMock,
   toLlmChatMessages: toLlmChatMessagesMock,
@@ -192,11 +192,11 @@ vi.mock('../../../../src/main/services/chat/chat_agent_runner', () => ({
   createChatAgentRunner: createChatAgentRunnerMock,
 }));
 
-vi.mock('../../../../src/main/services/chat/chat_run_tracking', () => ({
+vi.mock('../../../../src/core/agent/run_tracker', () => ({
   createAgentRunTracker: createAgentRunTrackerMock,
 }));
 
-import { createChatStreaming } from '../../../../src/main/services/chat/chat_streaming';
+import { createChatStreaming } from '../../../../src/main/services/chat/streaming';
 
 const createDeps = () => {
   const activeStreams = new Map();
