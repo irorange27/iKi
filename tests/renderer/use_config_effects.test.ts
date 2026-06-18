@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultAppConfig } from '@iki/core/config/defaults';
-import { resolveThemeSelection, THEME_QUICK_STARTS } from '@iki/core/theme/registry';
-import { createBase46ThemePresetFromQuickStart } from '@iki/core/theme/theme_creator';
+import { resolveThemeSelection, THEME_QUICK_STARTS } from '@iki/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '@iki/theme/theme_creator';
 
 describe('config effects window chrome sync', () => {
   beforeEach(() => {

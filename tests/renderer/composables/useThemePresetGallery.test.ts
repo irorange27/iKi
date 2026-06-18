@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { useThemePresetGallery } from '../../../packages/desktop/src/renderer/composables/useThemePresetGallery';
 import { createDefaultAppConfig } from '@iki/core/config/defaults';
-import { createBase46ThemePresetFromQuickStart } from '@iki/core/theme/theme_creator';
-import { THEME_QUICK_STARTS } from '@iki/core/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '@iki/theme/theme_creator';
+import { THEME_QUICK_STARTS } from '@iki/theme/registry';
 
 const createHarness = (options?: { systemPrefersDark?: boolean }) => {
   const config = ref(createDefaultAppConfig());

@@ -1,7 +1,7 @@
 import { nativeTheme } from 'electron';
 
 import { getAppConfig } from '@iki/core/config';
-import { resolveThemeSelection } from '@iki/core/theme/registry';
+import { resolveThemeSelection } from '@iki/theme/registry';
 
 export const resolveWindowBootstrapBackgroundColor = (): string => {
   const config = getAppConfig();

@@ -1,7 +1,7 @@
 import { onMounted, onUnmounted, watch } from 'vue';
 import type { AppConfig } from '@iki/core/types/config';
-import { resolveThemeSelection } from '@iki/core/theme/registry';
-import { THEME_SLOT_TO_CSS_VARIABLE } from '@iki/core/theme/types';
+import { resolveThemeSelection } from '@iki/theme/registry';
+import { THEME_SLOT_TO_CSS_VARIABLE } from '@iki/theme/types';
 import { getElectronApiMethod } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
 

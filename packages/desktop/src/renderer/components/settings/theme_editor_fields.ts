@@ -1,4 +1,4 @@
-import type { AdvancedThemeSeed, SimpleThemeSeed } from '@iki/core/theme/types';
+import type { AdvancedThemeSeed, SimpleThemeSeed } from '@iki/theme/types';
 import type { TranslationKey } from '../../i18n';
 
 type ThemeFieldDefinition<Key extends string> = {

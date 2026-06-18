@@ -56,7 +56,7 @@
 import { Check, Pencil, Trash2 } from 'lucide-vue-next';
 
 import { useI18n } from '../../i18n';
-import type { ThemeVariant } from '@iki/core/theme/types';
+import type { ThemeVariant } from '@iki/theme/types';
 
 type ThemePresetCard = {
   id: string;

@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { useThemeEditor } from '../../../packages/desktop/src/renderer/composables/useThemeEditor';
 import { createDefaultAppConfig } from '@iki/core/config/defaults';
-import { listThemePresetSummaries, THEME_QUICK_STARTS } from '@iki/core/theme/registry';
+import { listThemePresetSummaries, THEME_QUICK_STARTS } from '@iki/theme/registry';
 import {
   cloneBase46ThemeDocument,
   createBase46ThemePresetFromQuickStart,
-} from '@iki/core/theme/theme_creator';
+} from '@iki/theme/theme_creator';
 
 const createHarness = () => {
   const config = ref(createDefaultAppConfig());

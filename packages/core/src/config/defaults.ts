@@ -1,7 +1,7 @@
 import type { AppConfig, WebSearchEngine } from '../types/config';
 import { clonePlainData } from '../utils/clone';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '../constants/daemon';
-import { createDefaultThemeConfig } from '../theme/registry';
+import { createDefaultThemeConfig } from '@iki/theme/registry';
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   general: {

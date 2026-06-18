@@ -152,7 +152,7 @@ import type {
   SimpleThemeSeed,
   ThemeQuickStartDefinition,
   ThemeVariant,
-} from '@iki/core/theme/types';
+} from '@iki/theme/types';
 
 const props = defineProps<{
   editor: ThemeEditorState;

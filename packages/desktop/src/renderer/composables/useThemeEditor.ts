@@ -1,6 +1,6 @@
 import { computed, reactive, type ComputedRef, type Ref } from 'vue';
 
-import { DEFAULT_THEME_PRESET_ID, THEME_QUICK_STARTS } from '@iki/core/theme/registry';
+import { DEFAULT_THEME_PRESET_ID, THEME_QUICK_STARTS } from '@iki/theme/registry';
 import { translate } from '../i18n';
 import {
   applySimpleThemeSeed,
@@ -10,15 +10,15 @@ import {
   createThemePreviewDocument,
   createThemePreviewPalette,
   createThemePreviewStyle,
-} from '@iki/core/theme/theme_editor';
-import { cloneBase46ThemePresetInput, createThemePresetId } from '@iki/core/theme/theme_creator';
+} from '@iki/theme/theme_editor';
+import { cloneBase46ThemePresetInput, createThemePresetId } from '@iki/theme/theme_creator';
 import type {
   AdvancedThemeSeed,
   Base46ThemePresetInput,
   SimpleThemeSeed,
   ThemePresetSummary,
   ThemeVariant,
-} from '@iki/core/theme/types';
+} from '@iki/theme/types';
 import type { AppConfig } from '@iki/core/types/config';
 
 export type ThemeEditorMode = 'simple' | 'advanced';

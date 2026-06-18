@@ -21,7 +21,9 @@
       "@iki/core": ["./packages/core/src/index.ts"],
       "@iki/core/*": ["./packages/core/src/*"],
       "@iki/daemon": ["./packages/daemon/src/index.ts"],
-      "@iki/daemon/*": ["./packages/daemon/src/*"]
+      "@iki/daemon/*": ["./packages/daemon/src/*"],
+      "@iki/theme": ["./packages/theme/src/index.ts"],
+      "@iki/theme/*": ["./packages/theme/src/*"]
     },
     "typeRoots": [
       "./node_modules/@types",

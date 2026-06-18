@@ -6,8 +6,8 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import SettingsColorSchemeSection from '../../../packages/desktop/src/renderer/components/settings/SettingsColorSchemeSection.vue';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
-import { THEME_QUICK_STARTS } from '@iki/core/theme/registry';
-import { createBase46ThemePresetFromQuickStart } from '@iki/core/theme/theme_creator';
+import { THEME_QUICK_STARTS } from '@iki/theme/registry';
+import { createBase46ThemePresetFromQuickStart } from '@iki/theme/theme_creator';
 
 const findButtonByText = (wrapper: ReturnType<typeof mount>, text: string) => {
   const match = wrapper

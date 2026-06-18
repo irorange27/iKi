@@ -26,7 +26,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import { normalizeHexColor } from '@iki/core/theme/color_utils';
+import { normalizeHexColor } from '@iki/theme/color_utils';
 
 const props = defineProps<{
   label: string;

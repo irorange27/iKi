@@ -5,8 +5,8 @@ import {
   DEFAULT_THEME_PRESET_ID,
   listThemePresetSummaries,
   resolveThemeSelection,
-} from '@iki/core/theme/registry';
-import type { ThemePresetSummary, ThemeSlotPalette, ThemeVariant } from '@iki/core/theme/types';
+} from '@iki/theme/registry';
+import type { ThemePresetSummary, ThemeSlotPalette, ThemeVariant } from '@iki/theme/types';
 import type { AppConfig } from '@iki/core/types/config';
 
 export type ThemePresetCard = ThemePresetSummary & {
