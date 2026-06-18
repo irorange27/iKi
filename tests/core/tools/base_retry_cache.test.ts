@@ -50,15 +50,6 @@ describe('BaseTool without retry/cache (backward compat)', () => {
     const result = await tool.execute({ value: 'hello' });
     expect(result).toEqual({ result: 'hello' });
   });
-
-  it('toAiSdkTool creates an executable tool', async () => {
-    const tool = new NoRetryNoCacheTool();
-    const sdkTool = tool.toAiSdkTool();
-    const result = await (sdkTool as { execute: (args: unknown) => Promise<unknown> }).execute({
-      value: 'world',
-    });
-    expect(result).toEqual({ result: 'world' });
-  });
 });
 
 describe('BaseTool with retry', () => {
@@ -103,27 +94,6 @@ describe('BaseTool with retry', () => {
   it('validates args before retrying', async () => {
     const tool = new RetryTool();
     await expect(tool.execute({ value: 123 })).rejects.toThrow(); // Zod validation fails
-  });
-
-  it('toAiSdkTool routes through execute with retry', async () => {
-    const tool = new RetryTool();
-    let calls = 0;
-    vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
-      async () => {
-        calls++;
-        if (calls < 2) throw new RetryableError('transient');
-        return { result: 'sdk' };
-      }
-    );
-
-    const sdkTool = tool.toAiSdkTool();
-    const p = (sdkTool as { execute: (args: unknown) => Promise<unknown> }).execute({
-      value: 'sdk-test',
-    });
-    await vi.advanceTimersByTimeAsync(1);
-    const result = await p;
-    expect(result).toEqual({ result: 'sdk' });
-    expect(calls).toBe(2);
   });
 });
 
@@ -192,25 +162,6 @@ describe('BaseTool with cache', () => {
     await expect(tool.execute({ value: 'err' })).rejects.toThrow('boom');
 
     expect(handlerCalls).toBe(2); // errors not cached
-  });
-
-  it('toAiSdkTool routes through execute with cache', async () => {
-    const tool = new CacheTool();
-    let handlerCalls = 0;
-    vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
-      async (args: z.infer<typeof TestSchema>) => {
-        handlerCalls++;
-        return { result: args.value };
-      }
-    );
-
-    const sdkTool = tool.toAiSdkTool();
-    const execute = (sdkTool as { execute: (args: unknown) => Promise<unknown> }).execute;
-
-    await execute({ value: 'sdk-cache' });
-    await execute({ value: 'sdk-cache' });
-
-    expect(handlerCalls).toBe(1);
   });
 
   it('deduplicates concurrent calls for the same key', async () => {

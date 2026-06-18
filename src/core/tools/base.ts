@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { jsonSchema, tool, type Tool } from 'ai';
 import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 import type { AgentTool, ToolApprovalMode } from '../agent/types';
 import { createLogger } from '../logger';
@@ -134,22 +133,6 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
     }
 
     return promise.then(onResolve, onReject);
-  }
-
-  /**
-   * Convert to AI SDK Tool definition
-   */
-  toAiSdkTool() {
-    const definition: Tool<z.infer<P>, unknown> = {
-      description: this.description,
-      inputSchema: this.paramSchema,
-      ...(this.outputSchema ? { outputSchema: jsonSchema(this.outputSchema as object) } : {}),
-      needsApproval: this.needsApproval ?? false,
-      ...(this.approvalMode ? { approvalMode: this.approvalMode } : {}),
-      execute: async (args: z.infer<P>) => await this.execute(args),
-    };
-
-    return tool(definition);
   }
 
   /**
