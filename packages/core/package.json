@@ -36,6 +36,7 @@
     "./theme": "./src/theme/index.ts",
     "./tools": "./src/tools/index.ts",
     "./types": "./src/types/index.ts",
+    "./types/chat_invocation": "./src/types/chat_invocation.ts",
     "./utils": "./src/utils/index.ts",
     "./workspaces": "./src/workspaces/index.ts",
     "./bridge_dispatch": "./src/bridge_dispatch.ts",

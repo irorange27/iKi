@@ -8,7 +8,6 @@ import type {
   NetworkDiagnosticResult,
 } from './config';
 import type {
-  ModelCapabilitySnapshot,
   Provider,
   ProviderModelDescriptor,
   ProviderModelDiscoveryOverride,
@@ -35,9 +34,10 @@ import type {
 import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
-import type { ChatExperimentalContext } from '../chat/intervention_policy';
 import type { AgentRun, AgentEvalComparison, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, RegressionAssessment } from './agent_run';
 import type { CompanionSnapshot } from './companion';
+import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
+export type { ChatInvocationOptions, ChatInvocationResult };
 
 export type ProviderInput = Partial<Provider> &
   Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
@@ -69,30 +69,6 @@ export type ProactiveTaskInput = Omit<Partial<ProactiveTask>, 'tools'> &
   Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model'> & {
     tools?: string[] | string | null;
   };
-
-export type ChatInvocationOptions = {
-  providerType: string;
-  providerId?: string;
-  model: string;
-  modelCapability?: ModelCapabilitySnapshot;
-  messages: unknown[];
-  tools?: string[];
-  mcpServerIds?: string[];
-  skillIds?: string[];
-  skillMode?: 'manual' | 'auto';
-  threadId?: string;
-  maxIterations?: number;
-  autonomous?: {
-    maxIterations: number;
-    continuePrompt?: string;
-  };
-  experimentalContext?: ChatExperimentalContext;
-};
-
-export type ChatInvocationResult = {
-  success?: boolean;
-  error?: string;
-};
 
 export type RunStatusEvent = {
   runId: string;
