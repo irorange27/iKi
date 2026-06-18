@@ -1,4 +1,4 @@
-import { defaultToolRegistry } from '@iki/core/tools';
+import { defaultToolRegistry } from '@iki/backend/tools';
 
 const MCP_ALLOW_ALL_TOKEN = 'mcp:*';
 const MCP_SERVER_PREFIX = 'mcp:server:';

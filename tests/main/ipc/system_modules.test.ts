@@ -60,7 +60,7 @@ vi.mock('@iki/backend/tools/skills', () => ({
   readSkillContent: vi.fn(),
 }));
 
-vi.mock('@iki/core/tools', () => ({
+vi.mock('@iki/backend/tools', () => ({
   defaultToolRegistry: {
     getToolMetadata: vi.fn(),
   },
@@ -94,7 +94,7 @@ import {
   listSkills,
   readSkillContent,
 } from '@iki/backend/tools/skills';
-import { defaultToolRegistry } from '@iki/core/tools';
+import { defaultToolRegistry } from '@iki/backend/tools';
 import { resetWorkflowOptimizationState } from '../../../packages/desktop/src/main/services/workflow/workflow_optimizer';
 import {
   downloadWhisperNodeModel,

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 import { getAppConfig } from '@iki/backend/config';
-import { registerStandardTools } from '@iki/core/tools';
+import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/core/mcp';
 import { createDaemonLogger } from '@iki/backend/daemon_logs';
 import { initializeDatabase } from '@iki/backend/db/database';

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { registerStandardTools, defaultToolRegistry } from '@iki/core/tools';
+import { registerStandardTools, defaultToolRegistry } from '@iki/backend/tools';
 import {
   createSimpleAgentRunner,
   type AgentRunner,
