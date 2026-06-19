@@ -1,6 +1,6 @@
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { ChatContextMode } from '@iki/backend/chat/intervention_policy';
-import type { AffectState } from '@iki/core/emotion/affect_state';
+import type { AffectState } from '@iki/backend/affect/affect_state';
 import type { ModelCapability } from '@iki/core/utils/provider_models';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import type { ChatInputMessage } from './types';

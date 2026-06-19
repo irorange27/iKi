@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { AffectState } from '@iki/core/emotion/affect_state';
+import type { AffectState } from '@iki/backend/affect/affect_state';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { normalizeWhitespace } from '@iki/core/utils/text';
 import type { ModelCapability } from '@iki/core/utils/provider_models';

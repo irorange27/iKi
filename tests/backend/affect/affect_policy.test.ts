@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldGuardTools, type AffectToolGuardConfig } from '@iki/core/emotion/affect_policy';
-import type { AffectState } from '@iki/core/emotion/affect_state';
+import { shouldGuardTools, type AffectToolGuardConfig } from '@iki/backend/affect/affect_policy';
+import type { AffectState } from '@iki/backend/affect/affect_state';
 
 const baseConfig: AffectToolGuardConfig = {
   enabled: true,

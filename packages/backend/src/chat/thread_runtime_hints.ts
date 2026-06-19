@@ -4,7 +4,7 @@ import {
   type AffectScore,
   type AffectSignal,
   type AffectSignalSource,
-} from '@iki/core/emotion/affect';
+} from '@iki/core/types/affect';
 import {
   isInterventionState,
   type InterventionPolicySignal,

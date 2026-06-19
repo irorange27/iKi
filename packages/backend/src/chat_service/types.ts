@@ -5,7 +5,7 @@ import type {
   TokenUsagePartData,
 } from '@iki/backend/chat/message_parts';
 import type { ModelMessage } from 'ai';
-import type { AffectSignal } from '@iki/core/emotion/affect';
+import type { AffectSignal } from '@iki/core/types/affect';
 
 export type ChatWebContents = {
   id: number;

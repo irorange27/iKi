@@ -1,7 +1,7 @@
 import { getProviderConfig } from '@iki/backend/provider/llm/factory';
 import { createLogger } from '@iki/core/logger';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
-import { isAffectLabel, type AffectLabel, type AffectScore } from '@iki/core/emotion/affect';
+import { isAffectLabel, type AffectLabel, type AffectScore } from '@iki/core/types/affect';
 
 const speechEmotionLogger = createLogger({ module: 'speech_emotion' });
 

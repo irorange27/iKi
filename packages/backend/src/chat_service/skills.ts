@@ -1,5 +1,5 @@
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import type { AffectState } from '@iki/core/emotion/affect_state';
+import type { AffectState } from '@iki/backend/affect/affect_state';
 import { createLogger } from '@iki/core/logger';
 import {
   buildSkillsMetadataSystemPrompt,

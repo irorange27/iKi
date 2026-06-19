@@ -8,7 +8,7 @@ import {
   buildAffectSystemMessage,
   collectEmotionSamples,
   computeAffectState,
-} from '@iki/core/emotion/affect_state';
+} from '@iki/backend/affect/affect_state';
 import { createLogger } from '@iki/core/logger';
 import { generateLongMemorySummary } from '../memory/auto_summarize';
 import {
@@ -16,7 +16,7 @@ import {
   type EmotionResult,
 } from '../provider/emotion_model';
 import { planMemoryRetrieval } from '../provider/memory_retrieval';
-import { isAffectLabel } from '@iki/core/emotion/affect';
+import { isAffectLabel } from '@iki/core/types/affect';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
 import { parseJsonStringArray } from '@iki/core/utils/json';
 import { getErrorMessage } from '@iki/core/utils/errors';

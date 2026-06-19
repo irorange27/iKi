@@ -3,7 +3,7 @@ import {
   type AffectLabel,
   type AffectScore,
   type AffectSnapshot,
-} from '../emotion/affect';
+} from '@iki/core/types/affect';
 
 export type EmotionPayload = {
   label: AffectLabel;

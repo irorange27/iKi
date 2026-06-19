@@ -1,7 +1,7 @@
 import { getAppConfig } from '@iki/backend/config';
 import { defaultToolRegistry } from '@iki/core/tools';
 import { applyToolApprovalPolicyList } from '@iki/core/utils/tool_approval';
-import type { AffectState } from '@iki/core/emotion/affect_state';
+import type { AffectState } from '@iki/backend/affect/affect_state';
 import { selectToolsWithAgent } from '../provider/tool_selection';
 import type { ChatInputMessage } from './types';
 import { toLlmChatMessages } from './ui_messages';

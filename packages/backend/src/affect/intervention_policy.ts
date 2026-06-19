@@ -1,4 +1,4 @@
-import { extractTextFromModelMessageContent } from '../agent/model_messages';
+import { extractTextFromModelMessageContent } from '@iki/core/agent/model_messages';
 import type { AffectState } from './affect_state';
 
 export const INTERVENTION_STATES = [

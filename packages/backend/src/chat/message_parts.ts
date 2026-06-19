@@ -5,7 +5,7 @@ import {
   type AffectLabel,
   type AffectScore,
   type AffectSignalSource,
-} from '@iki/core/emotion/affect';
+} from '@iki/core/types/affect';
 import type { SkillSource } from '@iki/backend/types/skill';
 import { isObjectRecord } from '@iki/core/utils/guards';
 

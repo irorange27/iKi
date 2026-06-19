@@ -6,7 +6,7 @@ import {
   parseEmotionPayload,
   type AffectConfig,
   type EmotionSample,
-} from '@iki/core/emotion/affect_state';
+} from '@iki/backend/affect/affect_state';
 
 const baseConfig: AffectConfig = {
   enabled: true,

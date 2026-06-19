@@ -12,7 +12,7 @@ import {
   type SkillUsageEntry,
   type UiMessagePart,
 } from '@iki/backend/chat/message_parts';
-import { isAffectLabel, type AffectLabel } from '@iki/core/emotion/affect';
+import { isAffectLabel, type AffectLabel } from '@iki/core/types/affect';
 import { updateAssistantMessage } from './ui_stream_reducer_message';
 import type {
   ReduceResult,

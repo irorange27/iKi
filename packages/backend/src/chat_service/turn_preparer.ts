@@ -1,18 +1,18 @@
 import { getAppConfig } from '@iki/backend/config';
 import * as affectDb from '@iki/backend/db/affect_state';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { type AffectState, rehydrateAffectState } from '@iki/core/emotion/affect_state';
+import { type AffectState, rehydrateAffectState } from '@iki/backend/affect/affect_state';
 import {
   buildInterventionPolicySystemMessage,
   deriveInterventionPolicy,
   filterToolsByInterventionState,
-} from '@iki/core/emotion/intervention_policy';
-import { shouldGuardTools } from '@iki/core/emotion/affect_policy';
+} from '@iki/backend/affect/intervention_policy';
+import { shouldGuardTools } from '@iki/backend/affect/affect_policy';
 import * as llmFactory from '../provider/llm/factory';
 import { defaultToolRegistry } from '@iki/core/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/backend/workspaces/thread_workspace';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
-import type { AffectSignal } from '@iki/core/emotion/affect';
+import type { AffectSignal } from '@iki/core/types/affect';
 import type {
   ChatAffectExperimentMode,
   ChatExperimentalContext,
