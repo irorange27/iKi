@@ -49,5 +49,12 @@ export { getConversationRunnerConfig } from './config';
 export type { Plan, PlanStep } from './plan';
 export { createPlanThenExecutePrepareStep, composePrepareSteps } from './plan';
 
+// Export model message utilities
+export {
+  extractTextFromModelMessageContent,
+  hasToolPartInModelMessageContent,
+  sanitizeModelConversationMessages,
+} from './model_messages';
+
 // Export tools
 export * from '../tools';

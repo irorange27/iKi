@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./agent": "./src/agent/index.ts",
+    "./agent/model_messages": "./src/agent/model_messages.ts",
     "./constants": "./src/constants/index.ts",
     "./constants/acp": "./src/constants/acp.ts",
     "./emotion": "./src/emotion/index.ts",
