@@ -12,7 +12,7 @@ import {
   MAX_SEARCH_RESULT_LIMIT,
   MIN_FETCH_MAX_CHARS,
   WebToolInputSchema,
-} from '@iki/core/tools/schemas';
+} from './schemas';
 
 // Give search a bit more time than the global default, but keep it interactive.
 const MIN_WEB_SEARCH_TIMEOUT_MS = 12000;

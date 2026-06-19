@@ -9,7 +9,7 @@ import {
   ListDirInputSchema,
   ReadFileInputSchema,
   WriteFileInputSchema,
-} from '@iki/core/tools/schemas';
+} from './schemas';
 import {
   resolveDeleteWorkspacePath,
   resolveReadableWorkspacePath,

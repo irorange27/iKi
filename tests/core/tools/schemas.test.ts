@@ -13,8 +13,6 @@ import {
   TodoToolInputSchema,
   WebToolInputSchema,
   WriteFileInputSchema,
-} from '@iki/core/tools/schemas';
-import {
   DeleteAwaiterInputSchema,
   DeletePersonalSkillInputSchema,
   DeleteProactiveTaskInputSchema,
@@ -35,13 +33,18 @@ import {
 
 describe('tool input schemas', () => {
   it('keeps tool schemas browser-safe for renderer payload parsing', () => {
-    const source = readFileSync(new URL('../../../packages/core/src/tools/schemas.ts', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../../packages/backend/src/tools/schemas.ts', import.meta.url), 'utf8');
     const importSpecifiers = Array.from(source.matchAll(/from ['"]([^'"]+)['"]/g), match => match[1]);
 
     expect(importSpecifiers.length).toBeGreaterThan(0);
-    expect(importSpecifiers.every(specifier => specifier === 'zod' || specifier.startsWith('../'))).toBe(
-      true
-    );
+    expect(
+      importSpecifiers.every(
+        specifier =>
+          specifier === 'zod' ||
+          specifier === '@iki/core/tools/schemas' ||
+          specifier.startsWith('../types/')
+      )
+    ).toBe(true);
   });
 
   it('preserves tool-call description across built-in tools', () => {

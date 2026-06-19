@@ -23,8 +23,6 @@ import {
   WebToolOutputSchema,
   WriteFileInputSchemaUi,
   WriteFileOutputSchema,
-} from '@iki/core/tools/schemas';
-import {
   DeleteAwaiterInputSchemaUi,
   DeleteAwaiterOutputSchema,
   DeletePersonalSkillInputSchemaUi,

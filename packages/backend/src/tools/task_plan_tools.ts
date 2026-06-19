@@ -5,7 +5,7 @@ import { renderTaskPlan, summarizeTaskPlan } from '../db/task_plan';
 import { BaseTool } from '@iki/core/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
 import { getToolRuntimeContext } from '@iki/core/tools/runtime_context';
-import { TodoToolInputSchema, TodoToolOutputSchema } from '@iki/core/tools/schemas';
+import { TodoToolInputSchema, TodoToolOutputSchema } from './schemas';
 
 export class TodoTool extends BaseTool {
   override name = 'todo';

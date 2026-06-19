@@ -17,7 +17,7 @@ import {
   AgentToolInputSchema,
   AgentToolOutputSchema,
   DEFAULT_AGENT_MAX_ITERATIONS,
-} from '@iki/core/tools/schemas';
+} from './schemas';
 import {
   getToolRuntimeContext,
   runWithToolRuntimeContext,

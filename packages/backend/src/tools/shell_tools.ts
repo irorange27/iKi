@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import { z } from 'zod';
 
 import { BaseTool } from '@iki/core/tools/base';
-import { ShellToolInputSchema } from '@iki/core/tools/schemas';
+import { ShellToolInputSchema } from './schemas';
 import { resolveShellWorkingDirectory } from './workspace_paths';
 
 const MAX_SHELL_TIMEOUT_MS = 600_000;
