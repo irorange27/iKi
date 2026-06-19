@@ -2,27 +2,20 @@ import { createLogger } from '@iki/core/logger';
 import { defaultToolRegistry } from '@iki/core/tools';
 import { LoadSkillTool } from '@iki/backend/tools/skill_tools';
 import { applyToolApprovalPolicy } from '@iki/core/utils/tool_approval';
-import { getAppConfig } from '@iki/core/context/config_provider';
 import type { AgentTool } from '@iki/core/agent/types';
 
 const logger = createLogger({ module: 'tool_resolver' });
 
 const GUARD_BYPASS_TOOLS = new Set(['handoff', 'plan', 'todo']);
 
-const getEmotionConfig = () => getAppConfig()?.memory?.emotion ?? null;
-
-const shouldAutoApproveToolRequests = () =>
-  getAppConfig()?.general?.autoApproveToolRequests === true;
-
 const prepareToolWithGuard = (
   toolName: string,
   guardActive: boolean,
+  requireApproval: boolean,
+  autoApproveToolRequests: boolean,
 ): AgentTool | null => {
   const tool = defaultToolRegistry.get(toolName);
   if (!tool) return null;
-
-  const emotionConfig = getEmotionConfig();
-  const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
 
   let resolved = tool;
   if (requireApproval) {
@@ -31,9 +24,7 @@ const prepareToolWithGuard = (
     resolved = { ...tool, needsApproval: false };
   }
 
-  return applyToolApprovalPolicy(resolved, {
-    autoApproveToolRequests: shouldAutoApproveToolRequests(),
-  });
+  return applyToolApprovalPolicy(resolved, { autoApproveToolRequests });
 };
 
 export const resolveTools = (params: {
@@ -41,6 +32,9 @@ export const resolveTools = (params: {
   enabledToolNames: string[];
   availableSkillIds: string[];
   guardActive: boolean;
+  requireApproval: boolean;
+  autoApproveToolRequests: boolean;
+  skillToolFactory?: () => AgentTool;
 }): AgentTool[] => {
   if (!params.enableTools) return [];
 
@@ -52,8 +46,8 @@ export const resolveTools = (params: {
   }
 
   if (params.availableSkillIds.length > 0) {
-    const loadSkill = new LoadSkillTool().toAgentTool();
-    resolvedTools.push(loadSkill);
+    const factory = params.skillToolFactory ?? (() => new LoadSkillTool().toAgentTool());
+    resolvedTools.push(factory());
   }
 
   for (const toolName of params.enabledToolNames) {
@@ -62,7 +56,12 @@ export const resolveTools = (params: {
       logger.warn(`Tool ${toolName} not found in registry`);
       continue;
     }
-    const registered = prepareToolWithGuard(toolName, params.guardActive);
+    const registered = prepareToolWithGuard(
+      toolName,
+      params.guardActive,
+      params.requireApproval,
+      params.autoApproveToolRequests,
+    );
     if (registered) {
       resolvedTools.push(registered);
     }

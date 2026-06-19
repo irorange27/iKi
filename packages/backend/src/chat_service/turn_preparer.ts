@@ -69,6 +69,8 @@ export type PreparedChatTurn = {
   history: ChatInputMessage[];
   prompt: string;
   guardActive: boolean;
+  requireApproval: boolean;
+  autoApproveToolRequests: boolean;
   affectSignal: AffectSignal | null;
   interventionPolicy: InterventionPolicySignal | null;
   guardedTools: string[];
@@ -260,6 +262,9 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
     const affectContextMode = experimentalAffectMode === 'no_affect' ? 'disabled' : 'default';
     const guardState = experimentalModeActive ? null : storedAffectState;
     const guardActive = shouldRequireGuardedTools(guardState);
+    const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
+    const autoApproveToolRequests =
+      getAppConfig()?.general?.autoApproveToolRequests === true;
     const affectSignal = experimentalModeActive
       ? rawAffectEnabled
         ? toAffectSignal(effectiveAffectState, affectSource, false)
@@ -359,6 +364,8 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
       history,
       prompt,
       guardActive,
+      requireApproval,
+      autoApproveToolRequests,
       affectSignal,
       interventionPolicy,
       guardedTools,

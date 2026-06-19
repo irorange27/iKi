@@ -31,6 +31,8 @@ export class AgentHarness {
       enabledToolNames: this.config_.enabledToolNames,
       availableSkillIds: this.config_.availableSkillIds,
       guardActive: this.config_.guardActive,
+      requireApproval: this.config_.requireApproval ?? this.config_.guardActive,
+      autoApproveToolRequests: this.config_.autoApproveToolRequests ?? false,
     });
 
     const runner = createSimpleAgentRunner({

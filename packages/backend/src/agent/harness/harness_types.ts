@@ -15,6 +15,10 @@ export type HarnessConfig = {
   enabledToolNames: string[];
   availableSkillIds: string[];
   guardActive: boolean;
+  /** Whether guard requires explicit tool approval. Defaults to guardActive. */
+  requireApproval?: boolean;
+  /** Bypass approval for tools when user has opted in globally. */
+  autoApproveToolRequests?: boolean;
   maxIterations: number;
   maxOutputTokens?: number;
   threadId?: string;

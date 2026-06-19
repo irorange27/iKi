@@ -372,6 +372,8 @@ export const createChatStreaming = (deps: {
         enabledToolNames: guardedTools,
         availableSkillIds: preparedTurn.selectedSkillIds,
         guardActive: preparedTurn.guardActive,
+        requireApproval: preparedTurn.requireApproval,
+        autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
         maxIterations,
         ...(typeof preparedTurn.maxOutputTokens === 'number'
           ? { maxOutputTokens: preparedTurn.maxOutputTokens }
