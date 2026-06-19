@@ -330,4 +330,83 @@ describe('AgentHarness', () => {
     // Without runWithToolRuntimeContext, conversationModel should be undefined
     expect(toolEnd.output).toEqual({ conversationModel: undefined });
   });
+
+  it('validates runtime context through the full tool execution pipeline', async () => {
+    const contextTool = createTool({
+      name: 'check_context',
+      type: 'function',
+      description: 'Check runtime context',
+      paramSchema: z.object({}),
+      handler: async () => {
+        const ctx = getToolRuntimeContext();
+        return {
+          threadId: ctx.threadId,
+          runId: ctx.runId,
+          hasRunTracker: !!ctx.runTracker,
+          conversationModel: ctx.conversationModel,
+        };
+      },
+    });
+
+    const faux = new FauxModelProvider([
+      fauxToolCall('check_context', {}),
+      fauxText('ok'),
+    ]);
+    const harness = new AgentHarness({
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'gpt-4o-mini',
+      systemPrompt: 'Test.',
+      enableTools: true,
+      enabledToolNames: [],
+      availableSkillIds: [],
+      guardActive: false,
+      maxIterations: 10,
+      modelFactory: () => faux,
+    });
+    const runTracker = {
+      id: 'run_1',
+      syncModelMessages: vi.fn(),
+      recordChildRun: vi.fn(),
+    } as any;
+
+    const events: TurnEvent[] = [];
+    await runWithToolRuntimeContext(
+      {
+        threadId: 'thread_1',
+        runId: runTracker.id,
+        runTracker,
+        conversationModel: {
+          providerType: 'openai',
+          providerId: 'provider_primary',
+          model: 'gpt-4o-mini',
+        },
+      },
+      async () => {
+        for await (const event of harness.turn({
+          prompt: 'check context',
+          toolsOverride: [contextTool],
+          runTracker,
+        })) {
+          events.push(event);
+        }
+      },
+    );
+
+    const toolEnd = events.find(
+      e => e.event === 'step' && e.step.type === 'tool_execution_end',
+    ) as { event: 'step'; step: { type: 'tool_execution_end'; outcome: string; output?: unknown } };
+
+    expect(toolEnd.step.outcome).toBe('success');
+    expect(toolEnd.step.output).toEqual({
+      threadId: 'thread_1',
+      runId: 'run_1',
+      hasRunTracker: true,
+      conversationModel: {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'gpt-4o-mini',
+      },
+    });
+  });
 });

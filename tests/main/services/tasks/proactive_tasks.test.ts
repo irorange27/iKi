@@ -51,7 +51,11 @@ vi.mock('../../../../packages/desktop/src/main/services/companion/companion_serv
 import { BrowserWindow, Notification } from 'electron';
 
 import type { ProactiveTask } from '@iki/backend/types/tasks';
-import { runProactiveTask } from '../../../../packages/desktop/src/main/services/tasks/proactive_tasks';
+import {
+  runProactiveTask,
+  startProactiveTaskScheduler,
+  stopProactiveTaskScheduler,
+} from '../../../../packages/desktop/src/main/services/tasks/proactive_tasks';
 import * as tasksDb from '@iki/backend/db/tasks';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
@@ -110,6 +114,7 @@ describe('runProactiveTask', () => {
   });
 
   afterEach(() => {
+    stopProactiveTaskScheduler();
     vi.useRealTimers();
   });
 
@@ -368,5 +373,61 @@ describe('runProactiveTask', () => {
 
     deferred.resolve({ success: true, text: 'done' });
     await firstRun;
+  });
+
+  it('scheduler runs due enabled tasks immediately and on interval', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T00:00:00.000Z'));
+
+    vi.mocked(tasksDb.listDueProactiveTasks).mockReturnValue([
+      baseTask({ id: 'task_enabled', enabled: true }),
+      baseTask({ id: 'task_disabled', enabled: false }),
+    ]);
+    getProactiveTaskMock.mockImplementation(id => baseTask({ id }));
+    chatServiceMock.getThread.mockReturnValue(null);
+    chatServiceMock.createThread.mockImplementation(() => ({ id: 'thread_scheduled' }));
+    chatServiceMock.send.mockResolvedValue({ success: true, text: 'scheduled ok' });
+
+    startProactiveTaskScheduler();
+    await Promise.resolve();
+
+    expect(tasksDb.listDueProactiveTasks).toHaveBeenCalledWith('2026-03-18T00:00:00.000Z');
+    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.send.mock.calls[0][0].runConfig.metadata).toMatchObject({
+      taskId: 'task_enabled',
+      reason: 'schedule',
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(tasksDb.listDueProactiveTasks).toHaveBeenCalledWith('2026-03-18T00:00:30.000Z');
+    expect(chatServiceMock.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('scheduler does not overlap ticks while a task run is in flight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T00:00:00.000Z'));
+
+    vi.mocked(tasksDb.listDueProactiveTasks).mockReturnValue([baseTask({ id: 'task_slow' })]);
+    getProactiveTaskMock.mockReturnValue(baseTask({ id: 'task_slow' }));
+    chatServiceMock.getThread.mockReturnValue(null);
+    chatServiceMock.createThread.mockReturnValue({ id: 'thread_slow' });
+
+    const deferred = createDeferred<{ success: true; text: string }>();
+    chatServiceMock.send.mockReturnValue(deferred.promise);
+
+    startProactiveTaskScheduler();
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(tasksDb.listDueProactiveTasks).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+
+    deferred.resolve({ success: true, text: 'done' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(tasksDb.listDueProactiveTasks).toHaveBeenCalledTimes(2);
+    expect(chatServiceMock.send).toHaveBeenCalledTimes(2);
   });
 });
