@@ -5,6 +5,7 @@ export * from './agent_tools';
 export * from './skill_tools';
 export * from './web_tools';
 export * from '@iki/core/tools/schemas';
+export * from './schemas';
 export * from './task_plan_tools';
 export * from './todo_tools';
 export * from './proactive_task_tools';

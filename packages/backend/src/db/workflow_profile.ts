@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import type { WorkflowProfile } from '@iki/core/types/workflow';
+import type { WorkflowProfile } from '@iki/backend/types/workflow';
 import { toIsoNow } from '@iki/core/utils/text';
 
 type WorkflowProfileRow = {

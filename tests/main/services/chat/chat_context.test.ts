@@ -60,9 +60,10 @@ vi.mock('@iki/backend/chat_service/skills', () => ({
   resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
 }));
 
-vi.mock('../../../../packages/desktop/src/main/services/continuity/continuity_service', () => ({
+vi.mock('@iki/backend/chat_service/platform', () => ({
   getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,
   retrieveRelevantContinuity: retrieveRelevantContinuityMock,
+  getClipboardContextMessage: () => undefined,
 }));
 
 import { createChatContextAssembler } from '@iki/backend/chat_service/context';

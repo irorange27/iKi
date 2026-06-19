@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { inferProactiveTaskToolMode, type ProactiveTask } from '@iki/core/types/tasks';
+import { inferProactiveTaskToolMode, type ProactiveTask } from '@iki/backend/types/tasks';
 import { toIsoNow } from '@iki/core/utils/text';
 import { buildSetClause } from './utils';
 

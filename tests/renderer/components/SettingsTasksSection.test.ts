@@ -5,7 +5,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
 import SettingsTasksSection from '../../../packages/desktop/src/renderer/components/settings/SettingsTasksSection.vue';
 import type { ChatThread } from '@iki/backend/types/chat';
-import type { ProactiveTask } from '@iki/core/types/tasks';
+import type { ProactiveTask } from '@iki/backend/types/tasks';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

@@ -50,7 +50,7 @@ vi.mock('../../../../packages/desktop/src/main/services/chat/service', () => ({
 
 import { BrowserWindow, Notification } from 'electron';
 
-import type { Awaiter } from '@iki/core/types/awaiters';
+import type { Awaiter } from '@iki/backend/types/awaiters';
 import {
   runAwaiterWake,
   startAwaiterScheduler,

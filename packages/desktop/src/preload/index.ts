@@ -19,7 +19,7 @@ import type {
 } from '@iki/core/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/backend/types/chat_usage';
 import type { AffectStateEntry } from '@iki/backend/types/memory';
-import type { ProactiveTask } from '@iki/core/types/tasks';
+import type { ProactiveTask } from '@iki/backend/types/tasks';
 import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
 import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/core/types/agent_run';
 import type {

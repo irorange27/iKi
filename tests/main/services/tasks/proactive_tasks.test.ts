@@ -50,7 +50,7 @@ vi.mock('../../../../packages/desktop/src/main/services/companion/companion_serv
 
 import { BrowserWindow, Notification } from 'electron';
 
-import type { ProactiveTask } from '@iki/core/types/tasks';
+import type { ProactiveTask } from '@iki/backend/types/tasks';
 import { runProactiveTask } from '../../../../packages/desktop/src/main/services/tasks/proactive_tasks';
 import * as tasksDb from '@iki/backend/db/tasks';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';

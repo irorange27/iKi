@@ -8,13 +8,13 @@ import type {
   ProactiveTask,
   ProactiveTaskToolMode,
   SafeProactiveTaskTool,
-} from '@iki/core/types/tasks';
+} from '@iki/backend/types/tasks';
 import {
   SAFE_PROACTIVE_TASK_TOOLS,
   filterSafeProactiveTaskTools,
   inferProactiveTaskToolMode,
   parseProactiveTaskTools,
-} from '@iki/core/types/tasks';
+} from '@iki/backend/types/tasks';
 import { getErrorMessage } from '@iki/core/utils/errors';
 
 export type TaskProviderModels = {

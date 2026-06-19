@@ -1,6 +1,6 @@
 import { CronExpressionParser } from 'cron-parser';
 
-import type { ProactiveTaskScheduleType } from '@iki/core/types/tasks';
+import type { ProactiveTaskScheduleType } from '@iki/backend/types/tasks';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { toIsoNow } from '@iki/core/utils/text';
 import { createLogger } from '@iki/core/logger';

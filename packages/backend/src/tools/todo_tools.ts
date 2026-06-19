@@ -15,7 +15,7 @@ import {
   MAX_TODO_LIST_LIMIT,
   ReadTodoListInputSchema,
   WriteTodoListInputSchema,
-} from '@iki/core/tools/schemas';
+} from './schemas';
 
 const clampLimit = (value: number): number =>
   Math.max(1, Math.min(MAX_TODO_LIST_LIMIT, Math.trunc(value || DEFAULT_TODO_LIST_LIMIT)));

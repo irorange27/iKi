@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { computePinnedSkills } from '../../../../packages/desktop/src/main/services/workflow/workflow_optimizer.ts';
-import type { WorkflowOptimizationConfig, WorkflowProfile } from '@iki/core/types/workflow';
+import type { WorkflowOptimizationConfig, WorkflowProfile } from '@iki/backend/types/workflow';
 
 const baseConfig: WorkflowOptimizationConfig = {
   enabled: true,

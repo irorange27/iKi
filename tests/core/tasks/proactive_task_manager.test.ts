@@ -9,7 +9,7 @@ vi.mock('@iki/backend/db/tasks', () => ({
 }));
 
 import * as tasksDb from '@iki/backend/db/tasks';
-import type { ProactiveTask } from '@iki/core/types/tasks';
+import type { ProactiveTask } from '@iki/backend/types/tasks';
 import {
   createProactiveTask,
   deleteProactiveTask,

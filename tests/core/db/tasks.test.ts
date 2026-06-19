@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProactiveTask } from '@iki/core/types/tasks';
+import type { ProactiveTask } from '@iki/backend/types/tasks';
 
 vi.mock('@iki/backend/db/database', () => ({
   getDb: vi.fn(),

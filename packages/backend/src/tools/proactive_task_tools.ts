@@ -20,7 +20,7 @@ import {
   ReadProactiveTaskOutputSchema,
   WriteProactiveTaskInputSchema,
   WriteProactiveTaskOutputSchema,
-} from '@iki/core/tools/schemas';
+} from './schemas';
 
 const WEEKDAY_TO_CRON: Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', string> = {
   mon: 'MON',

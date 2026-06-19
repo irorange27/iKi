@@ -3,7 +3,7 @@ import {
   parseAwaiterTriggerSpec,
   type AwaiterTriggerKind,
   type AwaiterTriggerSpec,
-} from '@iki/core/types/awaiters';
+} from '@iki/backend/types/awaiters';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { toIsoNow } from '@iki/core/utils/text';
 

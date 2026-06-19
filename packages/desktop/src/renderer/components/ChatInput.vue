@@ -179,7 +179,7 @@
 import { computed, ref, toRef, watchEffect } from 'vue';
 import type { FileUIPart } from 'ai';
 import type { Provider } from '@iki/core/types/provider';
-import type { TaskPlan } from '@iki/core/types/task_plan';
+import type { TaskPlan } from '@iki/backend/types/task_plan';
 import {
   buildTokenUsageIndicator,
   type TokenUsageSummary,

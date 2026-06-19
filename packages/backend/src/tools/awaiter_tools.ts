@@ -20,7 +20,7 @@ import {
   ReadAwaiterOutputSchema,
   WriteAwaiterInputSchema,
   WriteAwaiterOutputSchema,
-} from '@iki/core/tools/schemas';
+} from './schemas';
 
 const toStoredTrigger = (trigger: z.infer<typeof WriteAwaiterInputSchema>['trigger']) => {
   if (!trigger) return undefined;

@@ -254,6 +254,21 @@ export class SimpleAgentRunner implements AgentRunner {
             } satisfies ToolErrorStep;
             continue;
           }
+
+          if (part.type === 'error') {
+            // The AI SDK emits error parts in fullStream for model-level
+            // failures (NoOutputGeneratedError, gateway errors, etc.).
+            // Collect them so the post-stream promise resolution can surface
+            // the underlying cause instead of a generic "No output generated".
+            const error = part.error as Error;
+            logger.event({
+              level: 'error',
+              event: 'agent.stream.error_part',
+              message: error?.message ?? 'Unknown stream error',
+              error,
+            });
+            continue;
+          }
         }
 
         // If steered mid-stream, skip result processing and restart
@@ -268,14 +283,46 @@ export class SimpleAgentRunner implements AgentRunner {
           throw new Error('Run cancelled');
         }
 
-        const responseObj = await result.response;
-        const contentParts = await result.content;
-        const totalUsage = normalizeLanguageModelUsage(
-          await Promise.resolve(result.totalUsage)
-        );
-        const finishReason: string | undefined = await Promise.resolve(
-          result.finishReason
-        ).catch((): undefined => undefined);
+        // Resolve post-stream promises. The AI SDK may reject them with
+        // NoOutputGeneratedError when the model produced zero output (empty
+        // stream, gateway error, etc.).  Treat that the same as an empty
+        // text response so the retry / refusal logic below can handle it.
+        let responseObj: Awaited<typeof result.response>;
+        let contentParts: Awaited<typeof result.content>;
+        let totalUsage: ReturnType<typeof normalizeLanguageModelUsage>;
+        let finishReason: string | undefined;
+        let steps: Awaited<typeof result.steps>;
+
+        try {
+          responseObj = await result.response;
+          contentParts = await result.content;
+          totalUsage = normalizeLanguageModelUsage(
+            await Promise.resolve(result.totalUsage)
+          );
+          finishReason = await Promise.resolve(result.finishReason).catch(
+            (): undefined => undefined
+          );
+          steps = await result.steps;
+        } catch (error) {
+          // NoOutputGeneratedError → treat as empty model response
+          if (
+            error instanceof Error &&
+            error.name === 'AI_NoOutputGeneratedError'
+          ) {
+            responseObj = {
+              id: 'no-output',
+              timestamp: new Date(),
+              modelId: config.model,
+              messages: [],
+            };
+            contentParts = [];
+            totalUsage = normalizeLanguageModelUsage(undefined);
+            finishReason = undefined;
+            steps = [];
+          } else {
+            throw error;
+          }
+        }
 
         cumulativeUsage = addUsage(cumulativeUsage, {
           ...EMPTY_USAGE,
@@ -301,7 +348,6 @@ export class SimpleAgentRunner implements AgentRunner {
         // Persist history
         this.history = appendResponseMessages(history, responseObj.messages);
         history = this.history;
-        const steps = await result.steps;
         totalSteps += steps.length;
 
         allText = allText ? allText + streamedText : streamedText;

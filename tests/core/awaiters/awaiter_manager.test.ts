@@ -9,7 +9,7 @@ vi.mock('@iki/backend/db/awaiters', () => ({
 }));
 
 import * as awaitersDb from '@iki/backend/db/awaiters';
-import type { Awaiter } from '@iki/core/types/awaiters';
+import type { Awaiter } from '@iki/backend/types/awaiters';
 import {
   createAwaiter,
   deleteAwaiter,

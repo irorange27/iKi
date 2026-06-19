@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Awaiter } from '@iki/core/types/awaiters';
+import type { Awaiter } from '@iki/backend/types/awaiters';
 
 vi.mock('@iki/backend/db/database', () => ({
   getDb: vi.fn(),

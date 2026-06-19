@@ -52,7 +52,7 @@ import {
   MAX_EXECUTION_TASK_PLAN_ITEMS,
   type TaskPlan,
   type TaskPlanItemStatus,
-} from '@iki/core/types/task_plan';
+} from '@iki/backend/types/task_plan';
 import { useI18n } from '../../i18n';
 
 defineOptions({

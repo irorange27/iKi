@@ -8,7 +8,7 @@ import {
   parseProactiveTaskTools,
   type ProactiveTask,
   type ProactiveTaskToolMode,
-} from '@iki/core/types/tasks';
+} from '@iki/backend/types/tasks';
 import { createPrefixedId } from '@iki/core/utils/id';
 import {
   clampIntervalMinutes,

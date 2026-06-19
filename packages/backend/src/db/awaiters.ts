@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import type { Awaiter, AwaiterWakeEvent } from '@iki/core/types/awaiters';
+import type { Awaiter, AwaiterWakeEvent } from '@iki/backend/types/awaiters';
 import { toIsoNow } from '@iki/core/utils/text';
 import { buildSetClause } from './utils';
 

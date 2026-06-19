@@ -1,4 +1,3 @@
-import type { WorkflowOptimizationConfig } from './workflow';
 import type { ThemeConfig } from '@iki/theme/types';
 import type {
   StructuredLogEntry,
@@ -116,6 +115,16 @@ export interface NetworkDiagnosticResult {
 }
 
 export type WebSearchEngine = 'google' | 'duckduckgo' | 'bing';
+
+export type WorkflowOptimizationConfig = {
+  enabled: boolean;
+  autoPinSkills: boolean;
+  minAutoSkillRuns: number;
+  minSkillSelections: number;
+  pinConfidence: number;
+  unpinConfidence: number;
+  maxPinnedSkills: number;
+};
 
 export interface AppConfig {
   general: {

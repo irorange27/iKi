@@ -10,7 +10,7 @@ import {
   inferProactiveTaskToolMode,
   parseProactiveTaskTools,
   type ProactiveTask,
-} from '@iki/core/types/tasks';
+} from '@iki/backend/types/tasks';
 import { createPrefixedId } from '@iki/core/utils/id';
 import { toIsoNow } from '@iki/core/utils/text';
 import { chatService } from '../chat/service';

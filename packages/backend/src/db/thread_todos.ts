@@ -3,7 +3,7 @@ import {
   MAX_EXECUTION_TASK_PLAN_ITEMS,
   type TaskPlan,
   type TaskPlanItemDraft,
-} from '@iki/core/types/task_plan';
+} from '@iki/backend/types/task_plan';
 import { normalizeTaskPlanItems } from './task_plan';
 import { normalizeWhitespace, toIsoNow } from '@iki/core/utils/text';
 

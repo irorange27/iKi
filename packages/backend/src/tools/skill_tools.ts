@@ -9,6 +9,7 @@ import {
 } from './skills';
 import { BaseTool } from '@iki/core/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
+import { LoadSkillInputSchema, LoadSkillOutputSchema } from '@iki/core/tools/schemas';
 import {
   DEFAULT_PERSONAL_SKILL_LIST_LIMIT,
   DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS,
@@ -16,8 +17,6 @@ import {
   DeletePersonalSkillOutputSchema,
   ListPersonalSkillsInputSchema,
   ListPersonalSkillsOutputSchema,
-  LoadSkillInputSchema,
-  LoadSkillOutputSchema,
   MAX_PERSONAL_SKILL_LIST_LIMIT,
   MAX_PERSONAL_SKILL_READ_MAX_CHARS,
   MIN_PERSONAL_SKILL_READ_MAX_CHARS,
@@ -25,7 +24,7 @@ import {
   ReadPersonalSkillOutputSchema,
   WritePersonalSkillInputSchema,
   WritePersonalSkillOutputSchema,
-} from '@iki/core/tools/schemas';
+} from './schemas';
 
 const formatSkillEnvelope = (params: {
   id: string;

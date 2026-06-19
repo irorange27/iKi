@@ -5,7 +5,7 @@ import {
   clearWorkflowProfiles,
 } from '@iki/backend/db/workflow_profile';
 import { normalizeSkillIds } from '@iki/backend/tools/skills';
-import type { WorkflowOptimizationConfig, WorkflowProfile } from '@iki/core/types/workflow';
+import type { WorkflowOptimizationConfig, WorkflowProfile } from '@iki/backend/types/workflow';
 import { clonePlainData } from '@iki/core/utils/clone';
 
 const DEFAULT_PROFILE: WorkflowProfile = {

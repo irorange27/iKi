@@ -5,7 +5,7 @@ import {
   parseAwaiterTriggerSpec,
   type Awaiter,
   type AwaiterTriggerSpec,
-} from '@iki/core/types/awaiters';
+} from '@iki/backend/types/awaiters';
 import { createPrefixedId } from '@iki/core/utils/id';
 import { toIsoNow } from '@iki/core/utils/text';
 import {

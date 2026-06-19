@@ -54,6 +54,7 @@ export class RetryableError extends Error {
  */
 export const isRetryableError = (error: unknown): boolean => {
   if (error instanceof RetryableError) return true;
+  if (error instanceof RefusalError) return true;
 
   // Extract message from Error instances or plain objects with .message
   const candidate =
