@@ -1,11 +1,10 @@
-import type { AgentResult } from '@iki/core/agent';
 import { createAgentRunTracker } from '../agent/run_tracker';
+import { AgentHarness } from '../agent/harness';
 import { createLogger } from '@iki/core/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { runWithToolRuntimeContext } from '../tools/runtime_context';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { describeApprovalRequiredTools } from './approval_types';
-import { createChatAgentRunner } from './chat_agent_runner';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
@@ -105,14 +104,17 @@ export const createChatSend = (deps: ChatSendDeps) => {
       });
 
       if (preparedTurn.enableTools) {
-        const { runner, tools: runnerTools } = createChatAgentRunner({
-          threadId: options.threadId,
+        if (!preparedTurn.prompt.trim()) {
+          throw new Error('No user prompt provided for tool-enabled chat');
+        }
+
+        const harness = new AgentHarness({
           providerType: options.providerType,
           providerId: options.providerId,
           model: options.model,
           systemPrompt,
           enableTools: true,
-          enabledTools: preparedTurn.guardedTools,
+          enabledToolNames: preparedTurn.guardedTools,
           availableSkillIds: preparedTurn.selectedSkillIds,
           guardActive: preparedTurn.guardActive,
           maxIterations,
@@ -121,59 +123,39 @@ export const createChatSend = (deps: ChatSendDeps) => {
             : {}),
         });
 
-        if (!preparedTurn.prompt.trim()) {
-          throw new Error('No user prompt provided for tool-enabled chat');
-        }
-
-        const result = await runWithToolRuntimeContext(
+        const output = await runWithToolRuntimeContext(
           { runId: runTracker.id, runTracker, threadId: options.threadId },
           async () => {
-            const agentGen = runner.run({
-              config: { enabled: true, enableTools: true },
+            for await (const event of harness.turn({
               prompt: preparedTurn.prompt,
               history: preparedTurn.history,
-              tools: runnerTools,
-              providerType: options.providerType,
-              providerId: options.providerId,
-              model: options.model,
-              systemPrompt,
-              maxIterations,
-              ...(typeof preparedTurn.maxOutputTokens === 'number'
-                ? { maxTokens: preparedTurn.maxOutputTokens }
-                : {}),
-            });
-
-            let next = await agentGen.next();
-            while (!next.done) {
-              next = await agentGen.next();
+              runTracker,
+            })) {
+              if (event.event === 'done') return event.output;
             }
-            return next.value as AgentResult | undefined;
+            throw new Error('Agent harness produced no output');
           }
         );
 
-        if (!result) {
-          throw new Error('Agent run produced no result');
-        }
-
-        runTracker.recordToolCalls(result.toolCalls);
-        runTracker.syncModelMessages(runner.getHistory?.() ?? preparedTurn.history);
+        runTracker.recordToolCalls(output.toolCalls);
+        // harness.turn() already calls runTracker.syncModelMessages() internally
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
           model: options.model,
-          usage: result.usage,
+          usage: output.usage,
           source: 'chat.send.tools',
           metadata: {
             contextTokens: preparedTurn.report.totalEstimatedTokens,
-            approvalRequestCount: result.toolApprovalRequests?.length ?? 0,
+            approvalRequestCount: output.toolApprovalRequests?.length ?? 0,
           },
         });
-        if (result.toolApprovalRequests && result.toolApprovalRequests.length > 0) {
-          const approvalError = describeApprovalRequiredTools(result.toolApprovalRequests);
+        if (output.toolApprovalRequests && output.toolApprovalRequests.length > 0) {
+          const approvalError = describeApprovalRequiredTools(output.toolApprovalRequests);
           runTracker.markBlocked({
-            text: result.response,
-            usage: result.usage ? { ...result.usage } : undefined,
-            pendingApprovalIds: result.toolApprovalRequests.map(request => request.approvalId),
+            text: output.text,
+            usage: output.usage ? { ...output.usage } : undefined,
+            pendingApprovalIds: output.toolApprovalRequests.map(request => request.approvalId),
           });
           logger.event({
             level: 'warn',
@@ -182,7 +164,7 @@ export const createChatSend = (deps: ChatSendDeps) => {
             message: approvalError,
             data: {
               thread_id: options.threadId || null,
-              tool_names: result.toolApprovalRequests
+              tool_names: output.toolApprovalRequests
                 .map(request => request.toolCall?.toolName)
                 .filter(
                   (toolName): toolName is string =>
@@ -193,13 +175,13 @@ export const createChatSend = (deps: ChatSendDeps) => {
           throw new Error(approvalError);
         }
         runTracker.markCompleted({
-          text: result.response,
-          usage: result.usage ? { ...result.usage } : undefined,
+          text: output.text,
+          usage: output.usage ? { ...output.usage } : undefined,
           finishReason: 'completed',
         });
         return {
           success: true,
-          text: result.response,
+          text: output.text,
           ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
         };
       }

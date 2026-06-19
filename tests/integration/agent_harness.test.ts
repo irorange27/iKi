@@ -5,7 +5,7 @@ import {
   createTestRunner,
   resolveEnabledTools,
 } from './setup';
-import type { AgentResult, AgentStep, FinishStep, ToolCallStartStep, ToolResultStep } from '@iki/core/agent';
+import type { AgentResult, AgentStep, TurnEndStep } from '@iki/core/agent';
 
 const skipIfNoProvider = () => !hasProviderConfig();
 
@@ -65,8 +65,8 @@ describe('Agent — basic generation (no tools)', () => {
     expect(result.response.length).toBeGreaterThan(0);
     expect(result.response.toLowerCase()).toContain('hello');
 
-    const finish = steps[steps.length - 1] as FinishStep | undefined;
-    expect(finish?.type).toBe('finish');
+    const finish = steps[steps.length - 1] as TurnEndStep | undefined;
+    expect(finish?.type).toBe('turn_end');
     expect(finish?.text).toBeTruthy();
     expect(result.usage?.totalTokens).toBeGreaterThan(0);
   }, 30000);
@@ -83,7 +83,7 @@ describe('Agent — basic generation (no tools)', () => {
   it.skipIf(skipIfNoProvider())('produces a FinishStep with usage info', async () => {
     const { steps, result } = await collectRun('Count from 1 to 3.');
 
-    const finish = steps.find(s => s.type === 'finish') as FinishStep | undefined;
+    const finish = steps.find(s => s.type === 'turn_end') as TurnEndStep | undefined;
     expect(finish).toBeDefined();
     expect(finish!.usage).toBeDefined();
     expect(result.response.length).toBeGreaterThan(0);
@@ -103,9 +103,9 @@ describe('Agent — tool calls', () => {
     expect(result.response.length).toBeGreaterThan(0);
 
     // Finish step must exist
-    const finish = steps.find(s => s.type === 'finish') as FinishStep | undefined;
+    const finish = steps.find(s => s.type === 'turn_end') as TurnEndStep | undefined;
     expect(finish).toBeDefined();
-    expect(finish!.text.length).toBeGreaterThan(0);
+    expect(finish!.text!.length).toBeGreaterThan(0);
   }, 60000);
 
   it.skipIf(skipIfNoProvider())('skips tools for simple math questions', async () => {
@@ -129,7 +129,7 @@ describe('Agent — handoff', () => {
     );
 
     const handoff = steps.find(s => s.type === 'handoff');
-    const finish = steps[steps.length - 1] as FinishStep | undefined;
+    const finish = steps[steps.length - 1] as TurnEndStep | undefined;
 
     if (handoff) {
       expect(handoff).toBeDefined();
@@ -150,15 +150,14 @@ describe('Agent — multi-step reasoning', () => {
     expect(result.usage?.totalTokens).toBeGreaterThan(0);
 
     // The runner should at minimum produce a finish, handoff, or error
-    const terminal = steps.find(s => s.type === 'finish' || s.type === 'handoff' || s.type === 'error') as
-      | FinishStep
-      | { type: 'handoff' | 'error'; message?: string }
-      | undefined;
+    const terminal = steps.find(s =>
+      s.type === 'turn_end' || s.type === 'handoff'
+    ) as TurnEndStep | { type: 'handoff'; summary?: string } | undefined;
     expect(terminal).toBeDefined();
 
-    if (terminal!.type === 'error') {
+    if (terminal!.type === 'turn_end' && (terminal as TurnEndStep).outcome === 'error') {
       // Error step is acceptable for this smoke test — just verify it exists
-      expect((terminal as { message: string }).message).toBeTruthy();
+      expect((terminal as TurnEndStep).message).toBeTruthy();
     }
   }, 60000);
 });

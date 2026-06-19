@@ -12,7 +12,8 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_
 import { createApprovalRecoveryContext } from './approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from '../agent/run_tracker';
-import { createChatAgentRunner } from './chat_agent_runner';
+import { AgentHarness } from '../agent/harness';
+import type { TurnOutput } from '../agent/harness/harness_types';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from './turn_preparer';
 import { createChatSend } from './chat_send';
@@ -362,14 +363,13 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      let agentRunnerData = createChatAgentRunner({
-        threadId: options.threadId,
+      let harness = new AgentHarness({
         providerType: options.providerType,
         providerId: options.providerId,
         model: options.model,
         systemPrompt,
         enableTools: preparedTurn.enableTools,
-        enabledTools: guardedTools,
+        enabledToolNames: guardedTools,
         availableSkillIds: preparedTurn.selectedSkillIds,
         guardActive: preparedTurn.guardActive,
         maxIterations,
@@ -377,8 +377,6 @@ export const createChatStreaming = (deps: {
           ? { maxOutputTokens: preparedTurn.maxOutputTokens }
           : {}),
       });
-      let runner = agentRunnerData.runner;
-      const runnerTools = agentRunnerData.tools;
 
       if (!preparedTurn.prompt.trim()) {
         throw new Error('No user prompt provided for streaming');
@@ -428,24 +426,19 @@ export const createChatStreaming = (deps: {
       /** Convert AgentStep to ToolStreamEvent for runTracker + UI emitter. */
       const forwardAgentStep = (step: AgentStep) => {
         // Emit text deltas via the dedicated ui chunk emitter path
-        if (step.type === 'text-delta') {
+        if (step.type === 'message_update') {
           uiChunkEmitter.emitTextDelta(step.text);
-          previewText = previewText + step.text;
-          debouncedTextPreview(previewText);
-          return;
-        }
-
-        // Forward reasoning content as text so it reaches the UI.
-        // (A future UI layer can render it in a collapsible thinking section.)
-        if (step.type === 'reasoning-delta') {
-          uiChunkEmitter.emitTextDelta(step.text);
+          if (step.kind === 'text') {
+            previewText = previewText + step.text;
+            debouncedTextPreview(previewText);
+          }
           return;
         }
 
         // Convert AgentStep → ToolStreamEvent-like shape for runTracker and UI
         let event: ToolStreamEvent | null = null;
 
-        if (step.type === 'tool-call-start') {
+        if (step.type === 'tool_execution_start') {
           turnHadToolCalls = true;
           sendConversationPreview('tool', previewText || ' ', step.toolName);
           event = {
@@ -454,26 +447,28 @@ export const createChatStreaming = (deps: {
             toolName: step.toolName,
             input: step.input,
           };
-        } else if (step.type === 'tool-call-end') {
+        } else if (step.type === 'tool_input_end') {
           event = { type: 'tool-input-end', toolCallId: step.toolCallId };
-        } else if (step.type === 'tool-result') {
-          event = {
-            type: 'tool-result',
-            toolCallId: step.toolCallId,
-            output: step.output,
-          };
-        } else if (step.type === 'tool-error') {
-          event = {
-            type: 'tool-error',
-            toolCallId: step.toolCallId,
-            error: step.error,
-          };
-        } else if (step.type === 'approval-request') {
+        } else if (step.type === 'tool_execution_end') {
+          if (step.outcome === 'success') {
+            event = {
+              type: 'tool-result',
+              toolCallId: step.toolCallId,
+              output: step.output,
+            };
+          } else {
+            event = {
+              type: 'tool-error',
+              toolCallId: step.toolCallId,
+              error: step.error ?? 'Tool execution failed',
+            };
+          }
+        } else if (step.type === 'approval_request') {
           for (const req of step.requests) {
             if (req.approvalId) {
               deps.approvals.ensurePendingApprovalSession(req.approvalId, {
                 webContents,
-                history: runner.getHistory?.() ?? streamHistory,
+                history: harness.getHistory() ?? streamHistory,
                 recoveryContext: approvalContext,
               });
             }
@@ -531,23 +526,7 @@ export const createChatStreaming = (deps: {
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        // Run agent via runner — manual iteration to capture both steps and result
-        const agentGen = runner.run({
-          config: { enabled: true, enableTools: true },
-          prompt: streamPrompt,
-          history: streamHistory,
-          tools: runnerTools,
-          providerType: options.providerType,
-          providerId: options.providerId,
-          model: options.model,
-          systemPrompt,
-          maxIterations,
-          ...(typeof preparedTurn.maxOutputTokens === 'number'
-            ? { maxTokens: preparedTurn.maxOutputTokens }
-            : {}),
-          abortSignal: streamState.abortController.signal,
-        });
-
+        // Run agent via harness — for-await consumes TurnEvent stream
         let agentResult: import('@iki/core/agent').AgentResult | undefined;
         let cancelled = false;
         let steered = false;
@@ -557,30 +536,28 @@ export const createChatStreaming = (deps: {
           agentResult = await runWithToolRuntimeContext(
             { runId: runTracker.id, runTracker, threadId: options.threadId },
             async () => {
-              let next = await agentGen.next();
-
-              while (!next.done) {
-                const step = next.value as AgentStep | undefined;
-                if (step) {
-                  forwardAgentStep(step);
+              for await (const event of harness.turn({
+                prompt: streamPrompt,
+                history: streamHistory,
+                runTracker,
+                abortSignal: streamState.abortController.signal,
+              })) {
+                if (event.event === 'step') {
+                  forwardAgentStep(event.step);
+                  continue;
                 }
 
-                // Check cancel/steer between steps
-                if (streamState.cancelled || (streamState.steered ?? false)) {
-                  if ((streamState.steered ?? false) && !streamState.cancelled) {
-                    steered = true;
-                  } else {
-                    cancelled = true;
-                  }
-                  try { await agentGen.return(undefined); } catch { /* ignore */ }
-                  break;
+                if (event.event === 'done') {
+                  const output = event.output;
+                  return {
+                    response: output.text,
+                    toolCalls: output.toolCalls,
+                    toolApprovalRequests: output.toolApprovalRequests,
+                    usage: output.usage,
+                    iterations: 0,
+                    requiresApproval: output.requiresApproval,
+                  } as import('@iki/core/agent').AgentResult;
                 }
-
-                next = await agentGen.next();
-              }
-
-              if (next.done && !cancelled && !steered) {
-                return next.value as import('@iki/core/agent').AgentResult | undefined;
               }
               return undefined;
             }
@@ -596,7 +573,6 @@ export const createChatStreaming = (deps: {
             } else {
               cancelled = true;
             }
-            try { await agentGen.return(undefined); } catch { /* ignore */ }
           } else {
             throw error;
           }
@@ -604,7 +580,7 @@ export const createChatStreaming = (deps: {
 
         if (steered) {
           streamState.steered = false;
-          streamHistory = runner.getHistory?.() ?? streamHistory;
+          streamHistory = harness.getHistory();
           if (steerQueue.length > 0) {
             const drained: string[] = [];
             while (steerQueue.length > 0) {
@@ -635,7 +611,7 @@ export const createChatStreaming = (deps: {
         if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
           deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
             webContents,
-            history: runner.getHistory?.() ?? streamHistory,
+            history: harness.getHistory() ?? streamHistory,
             ...(approvalContext ? { recoveryContext: approvalContext } : {}),
           });
           streamResult = {
@@ -691,7 +667,7 @@ export const createChatStreaming = (deps: {
         }
         previewText = '';
 
-        runTracker.syncModelMessages(runner.getHistory?.() ?? streamHistory);
+        runTracker.syncModelMessages(harness.getHistory() ?? streamHistory);
 
         if (streamResult.cancelled) break;
         if (streamResult.awaitingApproval) break;
@@ -751,14 +727,13 @@ export const createChatStreaming = (deps: {
           });
           streamState.runId = runTracker.id;
 
-          agentRunnerData = createChatAgentRunner({
-            threadId: options.threadId,
+          harness = new AgentHarness({
             providerType: options.providerType,
             providerId: options.providerId,
             model: options.model,
             systemPrompt,
             enableTools: preparedTurn.enableTools,
-            enabledTools: guardedTools,
+            enabledToolNames: guardedTools,
             availableSkillIds: preparedTurn.selectedSkillIds,
             guardActive: preparedTurn.guardActive,
             maxIterations,
@@ -766,7 +741,6 @@ export const createChatStreaming = (deps: {
               ? { maxOutputTokens: preparedTurn.maxOutputTokens }
               : {}),
           });
-          runner = agentRunnerData.runner;
 
           approvalContext = preparedTurn.enableTools
             ? createApprovalRecoveryContext({
@@ -814,7 +788,7 @@ export const createChatStreaming = (deps: {
           runTracker.createCheckpoint('periodic');
         }
 
-        streamHistory = runner.getHistory?.() ?? streamHistory;
+        streamHistory = harness.getHistory() ?? streamHistory;
         streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
       }
 

@@ -14,17 +14,14 @@ export type {
 
 export type {
   AgentStep,
-  TextDeltaStep,
-  ReasoningDeltaStep,
-  ToolCallStartStep,
-  ToolCallEndStep,
-  ToolResultStep,
-  ToolErrorStep,
+  MessageUpdateStep,
+  ToolExecutionStartStep,
+  ToolInputEndStep,
+  ToolExecutionEndStep,
   SourceStep,
   ApprovalRequestStep,
   HandoffStep,
-  FinishStep,
-  ErrorStep,
+  TurnEndStep,
 } from './agent_step';
 
 export type {

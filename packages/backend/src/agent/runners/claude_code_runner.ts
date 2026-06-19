@@ -8,12 +8,10 @@ import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/ag
 import type { AgentResult, AgentUsage } from '@iki/core/agent/types';
 import type {
   AgentStep,
-  FinishStep,
-  TextDeltaStep,
-  ToolCallStartStep,
-  ToolResultStep,
-  ToolErrorStep,
-  ErrorStep,
+  MessageUpdateStep,
+  ToolExecutionStartStep,
+  ToolExecutionEndStep,
+  TurnEndStep,
 } from '@iki/core/agent/agent_step';
 
 const logger = createLogger({ module: 'claude_code_runner' });
@@ -139,9 +137,11 @@ export class ClaudeCodeRunner implements AgentRunner {
         if (event.type === 'error') {
           hadError = true;
           yield {
-            type: 'error',
+            type: 'turn_end',
+            outcome: 'error',
+            text: '',
             message: event.error ?? 'Claude Code CLI reported an error',
-          } satisfies ErrorStep;
+          } satisfies TurnEndStep;
           continue;
         }
 
@@ -150,18 +150,19 @@ export class ClaudeCodeRunner implements AgentRunner {
             if (block.type === 'text' && block.text) {
               accumulatedText += block.text;
               yield {
-                type: 'text-delta',
+                type: 'message_update',
                 text: block.text,
-              } satisfies TextDeltaStep;
+                kind: 'text',
+              } satisfies MessageUpdateStep;
             }
 
             if (block.type === 'tool_use' && block.name) {
               yield {
-                type: 'tool-call-start',
+                type: 'tool_execution_start',
                 toolCallId: block.id ?? `cc-${block.name}-${Date.now()}`,
                 toolName: block.name,
                 input: block.input ?? {},
-              } satisfies ToolCallStartStep;
+              } satisfies ToolExecutionStartStep;
             }
           }
           continue;
@@ -171,10 +172,11 @@ export class ClaudeCodeRunner implements AgentRunner {
           for (const block of event.message.content) {
             if (block.type === 'tool_result' && block.tool_use_id) {
               yield {
-                type: 'tool-result',
+                type: 'tool_execution_end',
                 toolCallId: block.tool_use_id,
+                outcome: 'success',
                 output: block.content,
-              } satisfies ToolResultStep;
+              } satisfies ToolExecutionEndStep;
             }
           }
           continue;
@@ -202,10 +204,11 @@ export class ClaudeCodeRunner implements AgentRunner {
           const finalText = event.result ?? accumulatedText;
 
           yield {
-            type: 'finish',
+            type: 'turn_end',
+            outcome: 'completed',
             text: finalText,
             usage: cumulativeUsage,
-          } satisfies FinishStep;
+          } satisfies TurnEndStep;
 
           this.child = null;
           return {
@@ -220,8 +223,10 @@ export class ClaudeCodeRunner implements AgentRunner {
         // Already handled (cancel called)
         throw new Error('Run cancelled');
       }
-      const errorStep: ErrorStep = {
-        type: 'error',
+      const errorStep: TurnEndStep = {
+        type: 'turn_end',
+        outcome: 'error',
+        text: '',
         message: getErrorMessage(error),
       };
       yield errorStep;
@@ -236,8 +241,10 @@ export class ClaudeCodeRunner implements AgentRunner {
     this.child = null;
 
     if (exitCode !== 0 && exitCode !== null) {
-      const errorStep: ErrorStep = {
-        type: 'error',
+      const errorStep: TurnEndStep = {
+        type: 'turn_end',
+        outcome: 'error',
+        text: '',
         message: `Claude Code CLI exited with code ${exitCode}`,
       };
       yield errorStep;
@@ -247,10 +254,11 @@ export class ClaudeCodeRunner implements AgentRunner {
     const finalText = accumulatedText;
 
     yield {
-      type: 'finish',
+      type: 'turn_end',
+      outcome: 'completed',
       text: finalText,
       usage: cumulativeUsage,
-    } satisfies FinishStep;
+    } satisfies TurnEndStep;
 
     return {
       response: finalText,

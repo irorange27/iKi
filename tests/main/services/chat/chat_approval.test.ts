@@ -45,8 +45,8 @@ vi.mock('@iki/backend/chat_service/ui_messages', () => ({
   toModelInputMessages: vi.fn(async messages => messages),
 }));
 
-vi.mock('@iki/backend/chat_service/chat_agent_runner', () => ({
-  createChatAgentRunner: vi.fn(),
+vi.mock('@iki/backend/agent/harness', () => ({
+  AgentHarness: vi.fn(),
 }));
 
 vi.mock('@iki/backend/agent/run_tracker', () => ({
@@ -59,9 +59,9 @@ import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/core/tools';
 import { createChatApproval } from '@iki/backend/chat_service/approval';
 import { createAgentRunTracker } from '@iki/backend/agent/run_tracker';
-import { createChatAgentRunner } from '@iki/backend/chat_service/chat_agent_runner';
+import { AgentHarness } from '@iki/backend/agent/harness';
 
-const createChatAgentRunnerMock = vi.mocked(createChatAgentRunner);
+const AgentHarnessMock = vi.mocked(AgentHarness);
 const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);
 const getAgentRunMock = vi.mocked(agentRunDb.getAgentRun);
 const getLatestAgentRunCheckpointMock = vi.mocked(agentRunDb.getLatestAgentRunCheckpoint);
@@ -83,17 +83,22 @@ const consumeChatToolApprovalSessionMock = vi.mocked(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  createChatAgentRunnerMock.mockReturnValue({
-    runner: {
-      run: vi.fn().mockImplementation(async function* () {
-        yield { type: 'finish' as const, text: '', usage: undefined };
-        return { response: '', iterations: 0 };
+  AgentHarnessMock.mockImplementation(function () {
+    let capturedHistory: ModelMessage[] = [];
+    return {
+      turn: vi.fn().mockImplementation(async function* (
+        input: { history?: ModelMessage[] }
+      ) {
+        capturedHistory = input.history ?? [];
+        yield {
+          event: 'done' as const,
+          output: { text: '', usage: undefined, requiresApproval: false },
+        };
       }),
       cancel: vi.fn(),
       steer: vi.fn(),
-      getHistory: vi.fn(() => undefined),
-    },
-    tools: [],
+      getHistory: vi.fn(() => capturedHistory),
+    };
   });
   getAgentRunMock.mockReturnValue(null);
   getLatestAgentRunCheckpointMock.mockReturnValue(null);
@@ -304,6 +309,8 @@ describe('createChatApproval', () => {
 
     const result = await approvals.approveTool({ id: 9, send: vi.fn() }, 'approval_1', true);
 
+    // Session history with approval response fed to the runner
+
     expect(answerChatToolApprovalMock).toHaveBeenCalledWith(
       'approval_1',
       'approved',
@@ -319,14 +326,14 @@ describe('createChatApproval', () => {
         parentRunId: 'run_blocked_1',
       })
     );
-    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
+    expect(AgentHarnessMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         providerId: 'primary-openai',
         model: 'gpt-4o-mini',
         systemPrompt: 'system prompt',
         enableTools: true,
-        enabledTools: ['web'],
+        enabledToolNames: ['web'],
         availableSkillIds: [],
         maxIterations: 12,
         maxOutputTokens: 640,
@@ -435,13 +442,13 @@ describe('createChatApproval', () => {
     await approvals.approveTool({ id: 11, send: vi.fn() }, 'approval_2', true);
 
     expect(getChatMessagesMock).toHaveBeenCalledWith('thread_skill_1');
-    expect(createChatAgentRunnerMock).toHaveBeenCalledWith(
+    expect(AgentHarnessMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',
         systemPrompt: 'system prompt',
         enableTools: true,
-        enabledTools: ['web'],
+        enabledToolNames: ['web'],
         availableSkillIds: ['user:planner'],
       })
     );

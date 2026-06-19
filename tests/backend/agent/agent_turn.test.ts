@@ -50,11 +50,87 @@ describe('agent turn with FauxModelProvider', () => {
 
     const { steps, result } = await collectSteps(runner, 'Say hello');
 
-    const textDeltas = steps.filter(s => s.type === 'text-delta');
-    expect(textDeltas.map(s => (s as { text: string }).text).join('')).toBe('Hello, world!');
+    const updates = steps.filter(s => s.type === 'message_update');
+    expect(updates.map(s => (s as { text: string }).text).join('')).toBe('Hello, world!');
 
     expect(result).toBeDefined();
     expect((result as Record<string, unknown>)?.response).toBe('Hello, world!');
+  });
+
+  it('multi-turn tool chain (search → read → answer)', async () => {
+    const searchTool = createTool({
+      name: 'search',
+      type: 'function',
+      description: 'Search the web',
+      paramSchema: z.object({ query: z.string() }),
+      handler: async (args: { query: string }) => `Results for: ${args.query}`,
+    });
+    const readTool = createTool({
+      name: 'read',
+      type: 'function',
+      description: 'Read a file',
+      paramSchema: z.object({ path: z.string() }),
+      handler: async (args: { path: string }) => `Contents of: ${args.path}`,
+    });
+
+    const faux = new FauxModelProvider([
+      fauxToolCall('search', { query: 'best restaurant' }),
+      fauxToolCall('read', { path: '/tmp/menu' }),
+      fauxText('La Maison is the best restaurant.'),
+    ]);
+    const runner = createSimpleAgentRunner({
+      enableTools: true,
+      providerType: 'faux',
+      model: 'faux-model',
+      systemPrompt: 'Test agent.',
+      modelFactory: () => faux,
+    });
+
+    const { steps } = await collectSteps(runner, 'Find the best restaurant', [searchTool, readTool]);
+
+    const toolStarts = steps.filter(s => s.type === 'tool_execution_start');
+    expect(toolStarts).toHaveLength(2);
+    expect(toolStarts.map(s => (s as { toolName: string }).toolName)).toEqual(['search', 'read']);
+
+    const updates = steps.filter(s => s.type === 'message_update');
+    expect(updates.map(s => (s as { text: string }).text).join('')).toContain('La Maison');
+  });
+
+  it('yields handoff step when model calls handoff tool', async () => {
+    const handoffTool = createTool({
+      name: 'handoff',
+      type: 'function',
+      description: 'Hand off to another agent',
+      paramSchema: z.object({
+        summary: z.string(),
+        next_steps: z.string(),
+        reason: z.string(),
+      }),
+      handler: async () => 'handoff initiated',
+    });
+
+    const faux = new FauxModelProvider([
+      fauxToolCall('handoff', { summary: 'Research done', next_steps: 'Write report', reason: 'delegation' }),
+      fauxText('Handoff complete.'),
+    ]);
+    const runner = createSimpleAgentRunner({
+      enableTools: true,
+      providerType: 'faux',
+      model: 'faux-model',
+      systemPrompt: 'Test agent.',
+      modelFactory: () => faux,
+    });
+
+    const { steps } = await collectSteps(runner, 'Research then handoff', [handoffTool]);
+
+    const handoffStep = steps.find(s => s.type === 'handoff');
+    expect(handoffStep).toBeDefined();
+    expect((handoffStep as { summary: string }).summary).toBe('Research done');
+    expect((handoffStep as { nextSteps: string }).nextSteps).toBe('Write report');
+
+    // Should also complete normally after handoff
+    const turnEnd = steps.find(s => s.type === 'turn_end');
+    expect(turnEnd).toBeDefined();
   });
 
   it('tool call then text response (two-turn)', async () => {
@@ -73,8 +149,8 @@ describe('agent turn with FauxModelProvider', () => {
     const { steps } = await collectSteps(runner, 'Echo hello', [echoTool]);
 
     const types = steps.map(s => s.type);
-    expect(types).toContain('text-delta');
-    expect(types).toContain('tool-call-start');
-    expect(types).toContain('tool-result');
+    expect(types).toContain('message_update');
+    expect(types).toContain('tool_execution_start');
+    expect(types).toContain('tool_execution_end');
   });
 });

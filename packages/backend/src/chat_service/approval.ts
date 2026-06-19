@@ -23,7 +23,8 @@ import type { ActiveStreamState, ChatWebContents, ToolStreamEvent } from './type
 import { createUiChunkEmitter } from './ui_stream';
 import { toModelInputMessages } from './ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
-import { createChatAgentRunner } from './chat_agent_runner';
+import { AgentHarness } from '../agent/harness';
+import type { TurnOutput } from '../agent/harness/harness_types';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -508,16 +509,15 @@ export const createChatApproval = (deps: {
           threadId: nextApprovalContext?.threadId ?? session.recoveryContext?.threadId,
         },
         async () => {
-          // Create a fresh runner from the recovery context
+          // Create a fresh harness from the recovery context
           const ctx = nextApprovalContext ?? session.recoveryContext;
-          const runnerCfg = {
-            threadId: ctx?.threadId,
+          const harnessCfg = {
             providerType: ctx?.providerType ?? '',
             providerId: ctx?.providerId,
             model: ctx?.model ?? '',
             systemPrompt: ctx?.systemPrompt ?? '',
             enableTools: true,
-            enabledTools: ctx?.enabledTools ?? [],
+            enabledToolNames: ctx?.enabledTools ?? [],
             availableSkillIds: ctx?.availableSkillIds ?? [],
             guardActive: false,
             maxIterations: ctx?.maxIterations ?? 10,
@@ -525,9 +525,7 @@ export const createChatApproval = (deps: {
               ? { maxOutputTokens: ctx.maxOutputTokens }
               : {}),
           };
-          const approvalRunnerData = createChatAgentRunner(runnerCfg);
-          const approvalRunner = approvalRunnerData.runner;
-          const approvalTools = approvalRunnerData.tools;
+          const approvalHarness = new AgentHarness(harnessCfg);
 
           // Build history with collected approval responses
           const responses = Array.from(session.collectedApprovalResponses.values());
@@ -544,40 +542,29 @@ export const createChatApproval = (deps: {
             );
           }
 
-          const agentGen = approvalRunner.run({
-            config: { enabled: true },
-            prompt: '',
-            history: streamHistory,
-            tools: approvalTools,
-            providerType: runnerCfg.providerType,
-            providerId: runnerCfg.providerId,
-            model: runnerCfg.model,
-            systemPrompt: runnerCfg.systemPrompt,
-            maxIterations: runnerCfg.maxIterations,
-            ...(runnerCfg.maxOutputTokens ? { maxTokens: runnerCfg.maxOutputTokens } : {}),
-            abortSignal: streamState.abortController.signal,
-          });
-
           let awaitingApproval = false;
           let cancelled = false;
           let responseText = '';
+          let agentResult: AgentResult | undefined;
 
-          let next = await agentGen.next();
-          while (!next.done) {
+          for await (const turnEvent of approvalHarness.turn({
+            prompt: '',
+            history: streamHistory,
+            runTracker: resumeRunTracker ?? undefined,
+            abortSignal: streamState.abortController.signal,
+          })) {
             if (streamState.cancelled) {
               cancelled = true;
-              try { await agentGen.return(undefined); } catch { /* ignore */ }
+              approvalHarness.cancel();
               break;
             }
 
-            const step = next.value as AgentStep | undefined;
-            if (step) {
-              if (step.type === 'text-delta') {
+            if (turnEvent.event === 'step') {
+              const step = turnEvent.step;
+              if (step.type === 'message_update') {
                 responseText += step.text;
                 uiChunkEmitter.emitTextDelta(step.text);
-              } else if (step.type === 'reasoning-delta') {
-                uiChunkEmitter.emitTextDelta(step.text);
-              } else if (step.type === 'tool-call-start') {
+              } else if (step.type === 'tool_execution_start') {
                 const event: ToolStreamEvent = {
                   type: 'tool-call',
                   toolCallId: step.toolCallId,
@@ -586,33 +573,35 @@ export const createChatApproval = (deps: {
                 };
                 resumeRunTracker?.recordToolEvent(event);
                 uiChunkEmitter.emitToolEvent(event);
-              } else if (step.type === 'tool-call-end') {
+              } else if (step.type === 'tool_input_end') {
                 const event: ToolStreamEvent = { type: 'tool-input-end', toolCallId: step.toolCallId };
                 resumeRunTracker?.recordToolEvent(event);
                 uiChunkEmitter.emitToolEvent(event);
-              } else if (step.type === 'tool-result') {
-                const event: ToolStreamEvent = {
-                  type: 'tool-result',
-                  toolCallId: step.toolCallId,
-                  output: step.output,
-                };
-                resumeRunTracker?.recordToolEvent(event);
-                uiChunkEmitter.emitToolEvent(event);
-              } else if (step.type === 'tool-error') {
-                const event: ToolStreamEvent = {
-                  type: 'tool-error',
-                  toolCallId: step.toolCallId,
-                  error: step.error,
-                };
-                resumeRunTracker?.recordToolEvent(event);
-                uiChunkEmitter.emitToolEvent(event);
-              } else if (step.type === 'approval-request') {
+              } else if (step.type === 'tool_execution_end') {
+                if (step.outcome === 'success') {
+                  const event: ToolStreamEvent = {
+                    type: 'tool-result',
+                    toolCallId: step.toolCallId,
+                    output: step.output,
+                  };
+                  resumeRunTracker?.recordToolEvent(event);
+                  uiChunkEmitter.emitToolEvent(event);
+                } else {
+                  const event: ToolStreamEvent = {
+                    type: 'tool-error',
+                    toolCallId: step.toolCallId,
+                    error: step.error ?? 'Tool execution failed',
+                  };
+                  resumeRunTracker?.recordToolEvent(event);
+                  uiChunkEmitter.emitToolEvent(event);
+                }
+              } else if (step.type === 'approval_request') {
                 awaitingApproval = true;
                 for (const req of step.requests) {
                   if (req.approvalId) {
                     ensurePendingApprovalSession(req.approvalId, {
                       webContents: session.webContents,
-                      history: approvalRunner.getHistory?.() ?? streamHistory,
+                      history: approvalHarness.getHistory(),
                       recoveryContext: nextApprovalContext,
                     });
                   }
@@ -647,12 +636,18 @@ export const createChatApproval = (deps: {
                   },
                 });
               }
+            } else if (turnEvent.event === 'done') {
+              const output = turnEvent.output;
+              agentResult = {
+                response: output.text,
+                toolCalls: output.toolCalls,
+                toolApprovalRequests: output.toolApprovalRequests,
+                usage: output.usage,
+                iterations: 0,
+                requiresApproval: output.requiresApproval,
+              } as AgentResult;
             }
-
-            next = await agentGen.next();
           }
-
-          const agentResult: AgentResult | undefined = next.done ? (next.value as AgentResult | undefined) : undefined;
 
           const result: ToolLoopStreamResult = {
             awaitingApproval:
@@ -667,8 +662,7 @@ export const createChatApproval = (deps: {
           };
 
           // Track history for subsequent getHistory() calls
-          resolvedHistory =
-            approvalRunner.getHistory?.() ?? streamHistory;
+          resolvedHistory = approvalHarness.getHistory();
 
           return result;
         }

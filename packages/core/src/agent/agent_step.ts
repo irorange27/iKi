@@ -1,44 +1,44 @@
 import type { AgentUsage, ToolApprovalRequest } from './types';
 
 /**
- * Agent step types — iKi-defined, independent of any LLM SDK.
+ * Agent step types — canonical `scope_lifecycle` event vocabulary.
  *
  * Each step represents a discrete event in the agent execution cycle.
  * The runner yields these; the chat streaming layer forwards them
  * to the UI emitter and run tracker.
+ *
+ * Scopes: agent > turn > message > tool_execution
+ * Lifecycles: start, update, end
  */
 
-export interface TextDeltaStep {
-  type: 'text-delta';
+export interface MessageUpdateStep {
+  type: 'message_update';
   text: string;
+  kind: 'text' | 'reasoning';
 }
 
-export interface ToolCallStartStep {
-  type: 'tool-call-start';
+export interface ToolExecutionStartStep {
+  type: 'tool_execution_start';
   toolCallId: string;
   toolName: string;
   input: Record<string, unknown>;
 }
 
-export interface ToolCallEndStep {
-  type: 'tool-call-end';
+export interface ToolInputEndStep {
+  type: 'tool_input_end';
   toolCallId: string;
 }
 
-export interface ToolResultStep {
-  type: 'tool-result';
+export interface ToolExecutionEndStep {
+  type: 'tool_execution_end';
   toolCallId: string;
-  output: unknown;
-}
-
-export interface ToolErrorStep {
-  type: 'tool-error';
-  toolCallId: string;
-  error: string;
+  outcome: 'success' | 'error';
+  output?: unknown;
+  error?: string;
 }
 
 export interface ApprovalRequestStep {
-  type: 'approval-request';
+  type: 'approval_request';
   requests: ToolApprovalRequest[];
 }
 
@@ -49,17 +49,6 @@ export interface HandoffStep {
   reason: string;
 }
 
-export interface FinishStep {
-  type: 'finish';
-  text: string;
-  usage?: AgentUsage;
-}
-
-export interface ReasoningDeltaStep {
-  type: 'reasoning-delta';
-  text: string;
-}
-
 export interface SourceStep {
   type: 'source';
   sourceId: string;
@@ -67,22 +56,21 @@ export interface SourceStep {
   url?: string;
 }
 
-export interface ErrorStep {
-  type: 'error';
-  message: string;
+export interface TurnEndStep {
+  type: 'turn_end';
+  outcome: 'completed' | 'error' | 'cancelled';
+  text?: string;
+  usage?: AgentUsage;
+  message?: string;
   code?: string;
 }
 
 export type AgentStep =
-  | TextDeltaStep
-  | ReasoningDeltaStep
-  | ToolCallStartStep
-  | ToolCallEndStep
-  | ToolResultStep
-  | ToolErrorStep
+  | MessageUpdateStep
+  | ToolExecutionStartStep
+  | ToolInputEndStep
+  | ToolExecutionEndStep
   | SourceStep
   | ApprovalRequestStep
   | HandoffStep
-  | FinishStep
-  | ErrorStep;
-
+  | TurnEndStep;

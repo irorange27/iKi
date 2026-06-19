@@ -5,11 +5,8 @@ import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '@iki/core/agent/types';
 import { createAgentRunTracker } from '../agent/run_tracker';
-import { createSimpleAgentRunner } from '../agent/runners/simple_agent_runner';
-import type {
-  AgentRunner,
-  AgentRunnerRequest,
-} from '@iki/core/agent/runners/agent_runner';
+import { AgentHarness } from '../agent/harness';
+import type { TurnOutput } from '../agent/harness/harness_types';
 import { getToolModel } from '../provider/tool_model';
 import { BaseTool, defaultToolRegistry } from '@iki/core/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
@@ -193,17 +190,6 @@ const summarizeUsedTools = (
     .map(([name, callCount]) => ({ name, callCount }));
 };
 
-const runAgentToCompletion = async (
-  runner: AgentRunner,
-  request: AgentRunnerRequest
-): Promise<AgentResult> => {
-  const generator = runner.run(request);
-  while (true) {
-    const next = await generator.next();
-    if (next.done) return next.value;
-  }
-};
-
 export class DelegatedAgentTool extends BaseTool {
   override name = AGENT_TOOL_NAME;
   override displayName = 'Agent';
@@ -236,7 +222,6 @@ export class DelegatedAgentTool extends BaseTool {
     const systemPrompt = `${SUBAGENT_SYSTEM_PROMPT_BASE}\nScratchpad directory: ${scratchpadPath}`;
     const prompt = buildDelegationPrompt(args, delegatedToolNames, scratchpadPath);
 
-    const runner = createSimpleAgentRunner();
     const resolvedMaxIterations = Math.max(
       1,
       Math.trunc(args.maxIterations || DEFAULT_AGENT_MAX_ITERATIONS)
@@ -248,23 +233,20 @@ export class DelegatedAgentTool extends BaseTool {
         ? Math.trunc(conversationModel.maxTokens)
         : DEFAULT_AGENT_MAX_TOKENS;
 
-    const runRequest: AgentRunnerRequest = {
-      prompt,
-      tools: delegatedTools,
+    const harness = new AgentHarness({
       providerType: conversationModel.providerType,
       ...(typeof conversationModel.providerId === 'string' && conversationModel.providerId.trim()
         ? { providerId: conversationModel.providerId.trim() }
         : {}),
       model: conversationModel.model,
       systemPrompt,
-      maxTokens: resolvedMaxTokens,
+      enableTools: delegatedTools.length > 0,
+      enabledToolNames: [],
+      availableSkillIds: runtimeContext.availableSkillIds ?? [],
+      guardActive: false,
       maxIterations: resolvedMaxIterations,
-      config: {
-        enabled: true,
-        enableTools: delegatedTools.length > 0,
-        enableMemory: false,
-      },
-    };
+      maxOutputTokens: resolvedMaxTokens,
+    });
 
     const runTracker = createAgentRunTracker({
       kind: 'delegated-agent',
@@ -306,9 +288,9 @@ export class DelegatedAgentTool extends BaseTool {
       },
     });
 
-    let result: AgentResult;
+    let turnOutput: TurnOutput | undefined;
     try {
-      result = await runWithToolRuntimeContext(
+      turnOutput = await runWithToolRuntimeContext(
         {
           ...runtimeContext,
           runId: runTracker.id,
@@ -316,10 +298,20 @@ export class DelegatedAgentTool extends BaseTool {
           conversationModel,
           delegationDepth: delegationDepth + 1,
         },
-        async () => await runAgentToCompletion(runner, runRequest)
+        async () => {
+          for await (const event of harness.turn({
+            prompt,
+            toolsOverride: delegatedTools,
+            runTracker,
+          })) {
+            if (event.event === 'done') return event.output;
+          }
+          throw new Error('Delegated agent produced no output');
+        }
       );
-      runTracker.recordToolCalls(result.toolCalls);
-      runTracker.syncModelMessages(runner.getHistory?.() ?? []);
+      if (!turnOutput) throw new Error('Delegated agent produced no output');
+      runTracker.recordToolCalls(turnOutput.toolCalls);
+      // harness.turn() already calls runTracker.syncModelMessages() internally
     } catch (error) {
       runTracker.markFailed({
         message: error instanceof Error ? error.message : String(error),
@@ -327,10 +319,10 @@ export class DelegatedAgentTool extends BaseTool {
       throw error;
     }
 
-    if ((result.toolApprovalRequests?.length ?? 0) > 0) {
+    if ((turnOutput.toolApprovalRequests?.length ?? 0) > 0) {
       const toolNames = Array.from(
         new Set(
-          (result.toolApprovalRequests ?? [])
+          (turnOutput.toolApprovalRequests ?? [])
             .map(request => request.toolCall?.toolName)
             .filter(
               (toolName): toolName is string =>
@@ -347,8 +339,8 @@ export class DelegatedAgentTool extends BaseTool {
     }
 
     runTracker.markCompleted({
-      text: result.response,
-      ...(result.usage ? { usage: result.usage } : {}),
+      text: turnOutput.text,
+      ...(turnOutput.usage ? { usage: turnOutput.usage } : {}),
       finishReason: 'completed',
     });
 
@@ -386,10 +378,10 @@ export class DelegatedAgentTool extends BaseTool {
     const hasScratchpad = scratchpadFiles.length > 0;
 
     return {
-      response: result.response,
-      iterations: result.iterations,
-      toolCallCount: result.toolCalls?.length ?? 0,
-      usedTools: summarizeUsedTools(result.toolCalls),
+      response: turnOutput.text,
+      iterations: 0, // ponytail: harness doesn't expose iterations; consumers only need response
+      toolCallCount: turnOutput.toolCalls?.length ?? 0,
+      usedTools: summarizeUsedTools(turnOutput.toolCalls),
       model: {
         providerType: conversationModel.providerType,
         ...(typeof conversationModel.providerId === 'string' && conversationModel.providerId.trim()

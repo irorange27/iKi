@@ -257,11 +257,11 @@ describe('SimpleAgentRunner — characterization tests', () => {
       result_ = iterResult.value;
 
       // Should have received both text deltas
-      const textSteps = steps.filter((s: any) => s.type === 'text-delta');
+      const textSteps = steps.filter((s: any) => s.type === 'message_update');
       expect(textSteps).toHaveLength(2);
 
       // Should have completed successfully despite the error part
-      const finishStep = steps.find((s: any) => s.type === 'finish');
+      const finishStep = steps.find((s: any) => s.type === 'turn_end');
       expect(finishStep).toBeDefined();
       expect((finishStep as any)?.text).toContain('After error');
     });
@@ -294,7 +294,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
       }
       await gen.next();
 
-      const finishStep = steps.find((s: any) => s.type === 'finish');
+      const finishStep = steps.find((s: any) => s.type === 'turn_end');
       expect(finishStep).toBeDefined();
     });
   });
@@ -374,7 +374,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
       await gen.next();
 
       // The runner should not have thrown — it should complete
-      const finishStep = steps.find((s: any) => s.type === 'finish');
+      const finishStep = steps.find((s: any) => s.type === 'turn_end');
       expect(finishStep).toBeDefined();
 
       // History should contain the tool messages (not replaced with empty array)
@@ -426,7 +426,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
       await gen.next();
 
       // Should complete (usage falls back to empty, response preserved)
-      const finishStep = steps.find((s: any) => s.type === 'finish');
+      const finishStep = steps.find((s: any) => s.type === 'turn_end');
       expect(finishStep).toBeDefined();
 
       // Usage should be the empty default
@@ -534,7 +534,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
       await gen.next();
 
       // Reasoning content is now yielded as a step (was silently dropped before)
-      const reasoningStep = steps.find((s: any) => s.type === 'reasoning-delta');
+      const reasoningStep = steps.find((s: any) => s.type === 'message_update');
       expect(reasoningStep).toBeDefined();
       expect((reasoningStep as any)?.text).toBe('Let me think about this...');
 
@@ -545,7 +545,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
       expect((sourceStep as any)?.url).toBe('https://example.com');
 
       // Marker parts should still be skipped (no crash)
-      const finishStep = steps.find((s: any) => s.type === 'finish');
+      const finishStep = steps.find((s: any) => s.type === 'turn_end');
       expect(finishStep).toBeDefined();
     });
   });
@@ -594,7 +594,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
       }
       await gen.next();
 
-      const toolErrorStep = steps.find((s: any) => s.type === 'tool-error');
+      const toolErrorStep = steps.find((s: any) => s.type === 'tool_execution_end');
       expect(toolErrorStep).toBeDefined();
       expect((toolErrorStep as any)?.toolCallId).toBe('tc-err');
     });

@@ -34,17 +34,14 @@ import {
 } from '../ai_sdk_runtime';
 import type {
   AgentStep,
-  ErrorStep,
-  FinishStep,
-  HandoffStep,
-  ReasoningDeltaStep,
+  MessageUpdateStep,
+  ToolExecutionStartStep,
+  ToolInputEndStep,
+  ToolExecutionEndStep,
   SourceStep,
-  TextDeltaStep,
-  ToolCallStartStep,
-  ToolCallEndStep,
-  ToolResultStep,
-  ToolErrorStep,
   ApprovalRequestStep,
+  HandoffStep,
+  TurnEndStep,
 } from '@iki/core/agent/agent_step';
 import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/agent_runner';
 import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@iki/core/agent/types';
@@ -239,7 +236,7 @@ export class SimpleAgentRunner implements AgentRunner {
 
           if (part.type === 'text-delta' && part.text) {
             streamedText += part.text;
-            yield { type: 'text-delta', text: part.text } satisfies TextDeltaStep;
+            yield { type: 'message_update', text: part.text, kind: 'text' } satisfies MessageUpdateStep;
             continue;
           }
 
@@ -250,11 +247,11 @@ export class SimpleAgentRunner implements AgentRunner {
               terminalToolName = toolName;
             }
             yield {
-              type: 'tool-call-start',
+              type: 'tool_execution_start',
               toolCallId: part.toolCallId,
               toolName,
               input: (part.input ?? {}) as Record<string, unknown>,
-            } satisfies ToolCallStartStep;
+            } satisfies ToolExecutionStartStep;
             continue;
           }
 
@@ -281,38 +278,41 @@ export class SimpleAgentRunner implements AgentRunner {
 
           if (part.type === 'tool-output-denied') {
             yield {
-              type: 'tool-error',
+              type: 'tool_execution_end',
               toolCallId: (part as { toolCallId: string }).toolCallId,
+              outcome: 'error',
               error: 'Tool execution was denied',
-            } satisfies ToolErrorStep;
+            } satisfies ToolExecutionEndStep;
             continue;
           }
 
           if (part.type === 'tool-input-end') {
             if (part.id) {
               yield {
-                type: 'tool-call-end',
+                type: 'tool_input_end',
                 toolCallId: part.id,
-              } satisfies ToolCallEndStep;
+              } satisfies ToolInputEndStep;
             }
             continue;
           }
 
           if (part.type === 'tool-result') {
             yield {
-              type: 'tool-result',
+              type: 'tool_execution_end',
               toolCallId: part.toolCallId,
+              outcome: 'success',
               output: part.output,
-            } satisfies ToolResultStep;
+            } satisfies ToolExecutionEndStep;
             continue;
           }
 
           if (part.type === 'tool-error') {
             yield {
-              type: 'tool-error',
+              type: 'tool_execution_end',
               toolCallId: part.toolCallId,
+              outcome: 'error',
               error: typeof part.error === 'string' ? part.error : 'Tool execution failed',
-            } satisfies ToolErrorStep;
+            } satisfies ToolExecutionEndStep;
             continue;
           }
 
@@ -333,9 +333,10 @@ export class SimpleAgentRunner implements AgentRunner {
 
           if (part.type === 'reasoning-delta' && part.text) {
             yield {
-              type: 'reasoning-delta',
+              type: 'message_update',
               text: part.text,
-            } satisfies ReasoningDeltaStep;
+              kind: 'reasoning',
+            } satisfies MessageUpdateStep;
             continue;
           }
 
@@ -486,7 +487,7 @@ export class SimpleAgentRunner implements AgentRunner {
         }
         if (mergedApprovalRequests.length > 0) {
           yield {
-            type: 'approval-request',
+            type: 'approval_request',
             requests: mergedApprovalRequests,
           } satisfies ApprovalRequestStep;
 
@@ -527,7 +528,11 @@ export class SimpleAgentRunner implements AgentRunner {
         }
 
         // Success — emit finish and return
-        const finalText = allText || streamedText || (await result.text) || '';
+        const finalText =
+          allText ||
+          streamedText ||
+          (await Promise.resolve(result.text).catch((): string => '')) ||
+          '';
 
         // Soft refusal: empty response with no tool calls
         const hadToolCalls = steps.some(
@@ -541,8 +546,9 @@ export class SimpleAgentRunner implements AgentRunner {
           );
         }
 
-        const finishStep: FinishStep = {
-          type: 'finish',
+        const finishStep: TurnEndStep = {
+          type: 'turn_end',
+          outcome: 'completed',
           text: finalText,
           usage: cumulativeUsage,
         };
@@ -614,8 +620,10 @@ export class SimpleAgentRunner implements AgentRunner {
         }
 
         // Non-retryable error
-        const errorStep: ErrorStep = {
-          type: 'error',
+        const errorStep: TurnEndStep = {
+          type: 'turn_end',
+          outcome: 'error',
+          text: '',
           message: getErrorMessage(error),
           code:
             error instanceof RefusalError
