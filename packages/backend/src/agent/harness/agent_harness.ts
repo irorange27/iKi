@@ -9,9 +9,13 @@ import {
   getToolRuntimeContext,
   bindToolRuntimeContextToGenerator,
 } from '../../tools/runtime_context';
-import { cloneModelMessages } from '../ai_sdk_runtime';
 import type { AgentRunTracker } from '../run_tracker';
 import type { HarnessConfig, TurnInput, TurnOutput, TurnEvent } from './harness_types';
+
+export const cloneModelMessages = (messages?: ModelMessage[]): ModelMessage[] => {
+  if (!messages || messages.length === 0) return [];
+  return structuredClone(messages);
+};
 
 export class AgentHarness {
   private config_: HarnessConfig;

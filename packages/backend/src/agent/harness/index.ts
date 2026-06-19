@@ -1,4 +1,4 @@
-export { AgentHarness } from './agent_harness';
+export { AgentHarness, cloneModelMessages } from './agent_harness';
 export type {
   HarnessConfig,
   TurnInput,

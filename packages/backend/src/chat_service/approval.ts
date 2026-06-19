@@ -4,10 +4,8 @@ import {
   type AgentStep,
   type AgentResult,
 } from '@iki/core/agent';
-import {
-  appendApprovalResponsesToHistory,
-  cloneModelMessages,
-} from '../agent/ai_sdk_runtime';
+import { appendApprovalResponsesToHistory } from '../agent/ai_sdk_runtime';
+import { cloneModelMessages } from '../agent/harness';
 import type { AgentRun } from '@iki/core/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
