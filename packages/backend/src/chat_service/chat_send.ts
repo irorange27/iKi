@@ -12,6 +12,7 @@ import {
 } from './constants';
 import type { ChatTurnOptions } from './turn_preparer';
 import type { createChatTurnPreparer } from './turn_preparer';
+import { writeThreadTodoPlan } from '../db/thread_todos';
 
 const logger = createLogger({ module: 'chat_send' });
 
@@ -124,6 +125,9 @@ export const createChatSend = (deps: ChatSendDeps) => {
             ? { maxOutputTokens: preparedTurn.maxOutputTokens }
             : {}),
         });
+
+        // ponytail: clear stale todo plan from previous turn
+        writeThreadTodoPlan({ threadId: options.threadId, items: [] });
 
         const output = await runWithToolRuntimeContext(
           {

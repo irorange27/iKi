@@ -23,6 +23,7 @@ import type { ConversationPreview } from '@iki/backend/types/companion';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import { createRateLimiter } from '@iki/core/rate_limiter';
+import { writeThreadTodoPlan } from '../db/thread_todos';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -510,6 +511,9 @@ export const createChatStreaming = (deps: {
           uiChunkEmitter.emitToolEvent(event);
         }
       };
+
+      // ponytail: clear stale todo plan from previous turn before starting fresh
+      writeThreadTodoPlan({ threadId: options.threadId, items: [] });
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
