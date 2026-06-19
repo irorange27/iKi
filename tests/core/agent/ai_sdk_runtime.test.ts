@@ -47,7 +47,7 @@ import {
   collectToolCalls,
   getDefaultAgentConfig,
   loadAgentConfig,
-} from '@iki/core/agent/ai_sdk_runtime';
+} from '@iki/backend/agent/ai_sdk_runtime';
 
 beforeEach(() => {
   vi.clearAllMocks();

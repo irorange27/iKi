@@ -10,12 +10,12 @@ import {
   computeAffectState,
 } from '@iki/core/emotion/affect_state';
 import { createLogger } from '@iki/core/logger';
-import { generateLongMemorySummary } from '@iki/core/memory/auto_summarize';
+import { generateLongMemorySummary } from '../memory/auto_summarize';
 import {
   analyzeEmotionWithAgent,
   type EmotionResult,
-} from '@iki/core/provider/emotion_model';
-import { planMemoryRetrieval } from '@iki/core/provider/memory_retrieval';
+} from '../provider/emotion_model';
+import { planMemoryRetrieval } from '../provider/memory_retrieval';
 import { isAffectLabel } from '@iki/core/emotion/affect';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
 import { parseJsonStringArray } from '@iki/core/utils/json';

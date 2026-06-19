@@ -3,11 +3,22 @@ import { describe, expect, it } from 'vitest';
 import * as currentAgentApi from '@iki/core/agent';
 
 describe('core agent public surface', () => {
-  it('keeps the default barrel runner-first and excludes removed legacy agent exports', () => {
-    expect(currentAgentApi).toHaveProperty('createSimpleAgentRunner');
-    expect(currentAgentApi).toHaveProperty('SimpleAgentRunner');
+  it('exports types, schemas, config, and plan but not implementation runners', () => {
     expect(currentAgentApi).toHaveProperty('getConversationRunnerConfig');
+    expect(currentAgentApi).toHaveProperty('AgentConfigSchema');
+    expect(currentAgentApi).toHaveProperty('AgentToolSchema');
+    expect(currentAgentApi).toHaveProperty('createPlanThenExecutePrepareStep');
+    expect(currentAgentApi).toHaveProperty('composePrepareSteps');
 
+    // Implementation runners moved to @iki/backend/agent/runners/
+    expect(currentAgentApi).not.toHaveProperty('createSimpleAgentRunner');
+    expect(currentAgentApi).not.toHaveProperty('SimpleAgentRunner');
+    expect(currentAgentApi).not.toHaveProperty('createAgentRunTracker');
+    expect(currentAgentApi).not.toHaveProperty('AgentRunTracker');
+    expect(currentAgentApi).not.toHaveProperty('ClaudeCodeRunner');
+    expect(currentAgentApi).not.toHaveProperty('createClaudeCodeRunner');
+
+    // Legacy agent exports removed
     expect(currentAgentApi).not.toHaveProperty('createSimpleConversationRunner');
     expect(currentAgentApi).not.toHaveProperty('SimpleConversationRunner');
     expect(currentAgentApi).not.toHaveProperty('SimpleAgent');

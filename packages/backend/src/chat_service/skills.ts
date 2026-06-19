@@ -6,8 +6,8 @@ import {
   listSkills,
   normalizeSkillIds,
 } from '@iki/backend/tools/skills';
-import { getToolModel } from '@iki/core/provider/tool_model';
-import { selectSkillsWithAgent } from '@iki/core/provider/skill_selection';
+import { getToolModel } from '../provider/tool_model';
+import { selectSkillsWithAgent } from '../provider/skill_selection';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import type { ChatInputMessage } from './types';
 import { toLlmChatMessages } from './ui_messages';

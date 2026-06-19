@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { LlmMemoryRetrievalRuntime } from '@iki/core/runtimes/memory_retrieval_runtime';
+import { LlmMemoryRetrievalRuntime } from '@iki/backend/runtimes/memory_retrieval_runtime';
 
 describe('LlmMemoryRetrievalRuntime', () => {
   it('returns null when no tool model is available', async () => {

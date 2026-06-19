@@ -1,4 +1,4 @@
-import { createLogger } from '../logger';
+import { createLogger } from '@iki/core/logger';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
 

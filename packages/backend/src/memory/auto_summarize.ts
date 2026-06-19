@@ -1,5 +1,5 @@
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
-import { createLogger } from '../logger';
+import { createLogger } from '@iki/core/logger';
 
 type ShortMemoryEntry = {
   message_id: string;

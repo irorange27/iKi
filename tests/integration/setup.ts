@@ -3,8 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { registerStandardTools, defaultToolRegistry } from '@iki/backend/tools';
+import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
 import {
-  createSimpleAgentRunner,
   type AgentRunner,
   type AgentTool,
 } from '@iki/core/agent';

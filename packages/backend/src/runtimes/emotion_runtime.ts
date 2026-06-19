@@ -1,5 +1,5 @@
-import { isAffectLabel, type AffectLabel, type AffectScore } from '../emotion/affect';
-import { createLogger } from '../logger';
+import { isAffectLabel, type AffectLabel, type AffectScore } from '@iki/core/emotion/affect';
+import { createLogger } from '@iki/core/logger';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import {
   createSimplePromptTextGenerator,

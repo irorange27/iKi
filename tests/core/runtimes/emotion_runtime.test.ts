@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { LlmEmotionRuntime } from '@iki/core/runtimes/emotion_runtime';
+import { LlmEmotionRuntime } from '@iki/backend/runtimes/emotion_runtime';
 
 describe('LlmEmotionRuntime', () => {
   it('returns null when no tool model is available', async () => {

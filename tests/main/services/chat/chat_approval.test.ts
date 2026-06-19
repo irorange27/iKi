@@ -49,7 +49,7 @@ vi.mock('@iki/backend/chat_service/chat_agent_runner', () => ({
   createChatAgentRunner: vi.fn(),
 }));
 
-vi.mock('@iki/core/agent/run_tracker', () => ({
+vi.mock('@iki/backend/agent/run_tracker', () => ({
   createAgentRunTracker: vi.fn(),
 }));
 
@@ -58,7 +58,7 @@ import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/core/tools';
 import { createChatApproval } from '@iki/backend/chat_service/approval';
-import { createAgentRunTracker } from '@iki/core/agent/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/agent/run_tracker';
 import { createChatAgentRunner } from '@iki/backend/chat_service/chat_agent_runner';
 
 const createChatAgentRunnerMock = vi.mocked(createChatAgentRunner);

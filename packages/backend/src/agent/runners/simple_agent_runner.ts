@@ -6,19 +6,19 @@ import {
   type ToolSet,
 } from 'ai';
 
-import { createLogger } from '../../logger';
+import { createLogger } from '@iki/core/logger';
 import {
   RefusalError,
   getErrorMessage,
   isRetryableError,
-} from '../../utils/errors';
+} from '@iki/core/utils/errors';
 import {
   createModel,
   disposeLanguageModel,
   getModelGenerationSettings,
   injectReasoningContentIntoMessages,
-} from '../../provider/llm/factory';
-import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
+} from '@iki/core/provider/llm/factory';
+import { normalizeLanguageModelUsage } from '@iki/core/provider/llm/usage';
 import {
   appendResponseMessages,
   appendUserPromptToHistory,
@@ -41,9 +41,9 @@ import type {
   ToolResultStep,
   ToolErrorStep,
   ApprovalRequestStep,
-} from '../agent_step';
-import type { AgentRunner, AgentRunnerRequest } from './agent_runner';
-import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '../types';
+} from '@iki/core/agent/agent_step';
+import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/agent_runner';
+import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@iki/core/agent/types';
 
 const logger = createLogger({ module: 'simple_agent_runner' });
 

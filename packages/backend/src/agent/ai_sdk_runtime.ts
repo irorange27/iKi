@@ -9,23 +9,23 @@ import {
 } from 'ai';
 import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
-import { getAppConfig } from '../context/config_provider';
-import { createLogger } from '../logger';
-import { withRetry } from '../tools/retry';
-import { getFullSystemPrompt } from '../provider/llm/factory';
-import { ACP_PROVIDER_TYPE } from '../constants/acp';
-import { unwrapAcpDynamicToolCall } from '../utils/acp';
+import { getAppConfig } from '@iki/core/context/config_provider';
+import { createLogger } from '@iki/core/logger';
+import { withRetry } from '@iki/core/tools/retry';
+import { getFullSystemPrompt } from '@iki/core/provider/llm/factory';
+import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
+import { unwrapAcpDynamicToolCall } from '@iki/core/utils/acp';
 import {
   extractTextFromModelMessageContent,
   sanitizeModelConversationMessages,
-} from './model_messages';
+} from '@iki/core/agent/model_messages';
 import {
   AgentConfigSchema,
   type AgentConfig,
   type AgentTool,
   type PartialAgentConfig,
   type ToolApprovalRequest,
-} from './types';
+} from '@iki/core/agent/types';
 
 const agentRuntimeLogger = createLogger({ module: 'ai_sdk_runtime' });
 

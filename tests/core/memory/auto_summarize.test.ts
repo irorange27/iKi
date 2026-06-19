@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/provider/tool_model', () => ({
+vi.mock('@iki/backend/provider/tool_model', () => ({
   getToolModel: vi.fn(),
 }));
 
-vi.mock('@iki/core/runtimes/prompt_text_generator', () => ({
+vi.mock('@iki/backend/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
 }));
 
-import { getToolModel } from '@iki/core/provider/tool_model';
-import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
-import { generateLongMemorySummary } from '@iki/core/memory/auto_summarize';
+import { getToolModel } from '@iki/backend/provider/tool_model';
+import { createSimplePromptTextGenerator } from '@iki/backend/runtimes/prompt_text_generator';
+import { generateLongMemorySummary } from '@iki/backend/memory/auto_summarize';
 import type { ShortMemoryEntry } from '@iki/backend/db/memory';
 
 const makeEntry = (overrides: Partial<ShortMemoryEntry>): ShortMemoryEntry => ({

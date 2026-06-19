@@ -4,8 +4,8 @@ import {
   tryParseJson,
   type SelectionMessage,
 } from './catalog_selection';
-import { buildAffectDecisionMessage, type AffectState } from '../emotion/affect_state';
-import { formatSkillMetadataForPrompt } from '../context/skill_format';
+import { buildAffectDecisionMessage, type AffectState } from '@iki/core/emotion/affect_state';
+import { formatSkillMetadataForPrompt } from '@iki/core/context/skill_format';
 
 export type SkillSelectionMessage = SelectionMessage;
 

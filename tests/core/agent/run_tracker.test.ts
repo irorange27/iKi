@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/context/agent_run_store', () => ({
+vi.mock('@iki/backend/db/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
   createAgentRun: vi.fn(),
   createAgentRunCheckpoint: vi.fn(),
@@ -8,8 +8,8 @@ vi.mock('@iki/core/context/agent_run_store', () => ({
   updateAgentRun: vi.fn(),
 }));
 
-import * as agentRunDb from '@iki/core/context/agent_run_store';
-import { createAgentRunTracker } from '@iki/core/agent/run_tracker';
+import * as agentRunDb from '@iki/backend/db/agent_runs';
+import { createAgentRunTracker } from '@iki/backend/agent/run_tracker';
 
 const createAgentRunMock = vi.mocked(agentRunDb.createAgentRun);
 const updateAgentRunMock = vi.mocked(agentRunDb.updateAgentRun);

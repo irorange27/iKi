@@ -1,10 +1,10 @@
 import {
   composePrepareSteps,
   createPlanThenExecutePrepareStep,
-  createSimpleAgentRunner,
   type AgentRunner,
   type AgentTool,
 } from '@iki/core/agent';
+import { createSimpleAgentRunner } from '../agent/runners/simple_agent_runner';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
 import { defaultToolRegistry } from '@iki/core/tools';

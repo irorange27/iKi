@@ -6,12 +6,12 @@ import {
   loadAgentConfig,
   validateAgentConfig,
 } from '../agent/ai_sdk_runtime';
-import type { AgentConfig, AgentResult, PartialAgentConfig } from '../agent/types';
+import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/core/agent/types';
 import {
   createModel,
   disposeLanguageModel,
   getModelGenerationSettings,
-} from '../provider/llm/factory';
+} from '@iki/core/provider/llm/factory';
 
 export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
 

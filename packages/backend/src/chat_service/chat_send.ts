@@ -1,5 +1,5 @@
 import type { AgentResult } from '@iki/core/agent';
-import { createAgentRunTracker } from '@iki/core/agent/run_tracker';
+import { createAgentRunTracker } from '../agent/run_tracker';
 import { createLogger } from '@iki/core/logger';
 import * as llmFactory from '@iki/core/provider/llm/factory';
 import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';

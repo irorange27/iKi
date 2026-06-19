@@ -1,12 +1,12 @@
 import { generateText } from 'ai';
 
-import { getProviders } from '../context/provider_store';
-import { getAppConfig } from '../context/config_provider';
-import { createLogger } from '../logger';
+import { getProviders } from '@iki/core/context/provider_store';
+import { getAppConfig } from '@iki/core/context/config_provider';
+import { createLogger } from '@iki/core/logger';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
-import { createModel, disposeLanguageModel, getModelCallSettings } from './llm/factory';
-import { parseModelList } from '../utils/provider_models';
+import { createModel, disposeLanguageModel, getModelCallSettings } from '@iki/core/provider/llm/factory';
+import { parseModelList } from '@iki/core/utils/provider_models';
 
 export interface ToolModelConfig {
   providerType: string;

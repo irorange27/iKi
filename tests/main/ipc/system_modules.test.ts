@@ -77,7 +77,7 @@ vi.mock('../../../packages/desktop/src/main/services/speech/speech_service', () 
   transcribeSpeech: vi.fn(),
 }));
 
-vi.mock('@iki/core/provider/tool_model', () => ({
+vi.mock('@iki/backend/provider/tool_model', () => ({
   getToolModel: vi.fn(),
   generateTitleWithAgent: vi.fn(),
   testToolModelLatency: vi.fn(),
@@ -106,7 +106,7 @@ import {
   generateTitleWithAgent,
   getToolModel,
   testToolModelLatency,
-} from '@iki/core/provider/tool_model';
+} from '@iki/backend/provider/tool_model';
 import { getAppConfig } from '@iki/backend/config';
 
 const getSkillFolderPathMock = vi.mocked(getSkillFolderPath);

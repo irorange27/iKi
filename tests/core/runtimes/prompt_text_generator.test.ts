@@ -32,7 +32,7 @@ vi.mock('@iki/core/context/config_provider', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
+import { createSimplePromptTextGenerator } from '@iki/backend/runtimes/prompt_text_generator';
 
 beforeEach(() => {
   vi.clearAllMocks();

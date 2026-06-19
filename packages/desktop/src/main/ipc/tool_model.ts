@@ -5,7 +5,7 @@ import {
   getToolModel,
   generateTitleWithAgent,
   testToolModelLatency,
-} from '@iki/core/provider/tool_model';
+} from '@iki/backend/provider/tool_model';
 import { getErrorMessage } from '@iki/core/utils/errors';
 
 let toolModelIpcRegistered = false;

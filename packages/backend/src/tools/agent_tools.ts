@@ -4,13 +4,13 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '@iki/core/agent/types';
-import { createAgentRunTracker } from '@iki/core/agent/run_tracker';
-import { createSimpleAgentRunner } from '@iki/core/agent/runners/simple_agent_runner';
+import { createAgentRunTracker } from '../agent/run_tracker';
+import { createSimpleAgentRunner } from '../agent/runners/simple_agent_runner';
 import type {
   AgentRunner,
   AgentRunnerRequest,
 } from '@iki/core/agent/runners/agent_runner';
-import { getToolModel } from '@iki/core/provider/tool_model';
+import { getToolModel } from '../provider/tool_model';
 import { BaseTool, defaultToolRegistry } from '@iki/core/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
 import {

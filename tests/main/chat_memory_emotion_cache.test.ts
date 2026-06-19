@@ -31,7 +31,7 @@ vi.mock('@iki/backend/db/affect_state', () => ({
   getAffectState: vi.fn(() => null),
 }));
 
-vi.mock('@iki/core/provider/emotion_model', () => ({
+vi.mock('@iki/backend/provider/emotion_model', () => ({
   analyzeEmotionWithAgent: vi.fn(),
 }));
 
@@ -39,7 +39,7 @@ import { getAppConfig } from '@iki/backend/config';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import * as memoryDb from '@iki/backend/db/memory';
 import * as emotionDb from '@iki/backend/db/emotion';
-import { analyzeEmotionWithAgent } from '@iki/core/provider/emotion_model';
+import { analyzeEmotionWithAgent } from '@iki/backend/provider/emotion_model';
 import { createChatMemory } from '@iki/backend/chat_service/memory';
 
 const getAppConfigMock = vi.mocked(getAppConfig);

@@ -11,7 +11,7 @@ import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
 import { createApprovalRecoveryContext } from './approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { createAgentRunTracker } from '@iki/core/agent/run_tracker';
+import { createAgentRunTracker } from '../agent/run_tracker';
 import { createChatAgentRunner } from './chat_agent_runner';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from './turn_preparer';

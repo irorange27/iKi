@@ -14,15 +14,15 @@ const {
   getToolModelMock: vi.fn(() => ({ providerType: 'openai', model: 'gpt-4o-mini' })),
 }));
 
-vi.mock('@iki/core/agent/runners/simple_agent_runner', () => ({
+vi.mock('@iki/backend/agent/runners/simple_agent_runner', () => ({
   createSimpleAgentRunner: createSimpleAgentRunnerMock,
 }));
 
-vi.mock('@iki/core/provider/tool_model', () => ({
+vi.mock('@iki/backend/provider/tool_model', () => ({
   getToolModel: getToolModelMock,
 }));
 
-vi.mock('@iki/core/agent/run_tracker', () => ({
+vi.mock('@iki/backend/agent/run_tracker', () => ({
   createAgentRunTracker: createAgentRunTrackerMock,
 }));
 

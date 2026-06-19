@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTool, defaultToolRegistry } from '@iki/core/tools';
 import { getAppConfig } from '@iki/backend/config';
-import { selectToolsWithAgent } from '@iki/core/provider/tool_selection';
+import { selectToolsWithAgent } from '@iki/backend/provider/tool_selection';
 import { resolveToolNames } from '@iki/backend/chat_service/tool_guard';
 
 vi.mock('@iki/backend/config', () => ({
@@ -13,7 +13,7 @@ vi.mock('@iki/backend/config', () => ({
   })),
 }));
 
-vi.mock('@iki/core/provider/tool_selection', () => ({
+vi.mock('@iki/backend/provider/tool_selection', () => ({
   selectToolsWithAgent: vi.fn(async () => null),
 }));
 

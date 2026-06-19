@@ -1,6 +1,6 @@
-import { getToolModel, type ToolModelConfig } from '@iki/core/provider/tool_model';
+import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import { createLogger } from '@iki/core/logger';
-import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
+import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 
 export type ThreadSummaryMessage = {
   role: 'user' | 'assistant';

@@ -7,7 +7,7 @@ import {
 import {
   appendApprovalResponsesToHistory,
   cloneModelMessages,
-} from '@iki/core/agent/ai_sdk_runtime';
+} from '../agent/ai_sdk_runtime';
 import type { AgentRun } from '@iki/core/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
@@ -18,7 +18,7 @@ import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
 import { resolveChatToolMaxIterations } from './constants';
-import { createAgentRunTracker } from '@iki/core/agent/run_tracker';
+import { createAgentRunTracker } from '../agent/run_tracker';
 import type { ActiveStreamState, ChatWebContents, ToolStreamEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import { toModelInputMessages } from './ui_messages';

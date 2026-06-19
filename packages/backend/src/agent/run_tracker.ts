@@ -4,7 +4,7 @@ import {
   createAgentRunCheckpoint,
   getAgentRun,
   updateAgentRun,
-} from '../context/agent_run_store';
+} from '../db/agent_runs';
 import type {
   AgentRun,
   AgentRunCheckpointReason,
@@ -15,15 +15,15 @@ import type {
   AgentRunStep,
   AgentRunStepType,
   AgentRunWorkingState,
-} from '../types/agent_run';
-import { createPrefixedId } from '../utils/id';
+} from '@iki/core/types/agent_run';
+import { createPrefixedId } from '@iki/core/utils/id';
 import {
   normalizeWhitespace,
   sanitizePromptMetadataText,
   toIsoNow,
-} from '../utils/text';
-import type { AgentResult } from './types';
-import type { ConversationRunnerStreamEvent } from './types';
+} from '@iki/core/utils/text';
+import type { AgentResult } from '@iki/core/agent/types';
+import type { ConversationRunnerStreamEvent } from '@iki/core/agent/types';
 
 type CreateAgentRunTrackerParams = {
   kind: AgentRunKind;

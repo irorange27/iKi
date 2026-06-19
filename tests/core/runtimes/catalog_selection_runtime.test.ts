@@ -4,7 +4,7 @@ import {
   buildTranscript,
   extractJsonCandidate,
   tryParseJson,
-} from '@iki/core/runtimes/catalog_selection_runtime';
+} from '@iki/backend/runtimes/catalog_selection_runtime';
 
 describe('catalog_selection_runtime', () => {
   it('extracts trimmed JSON from fenced output', () => {
