@@ -1,4 +1,4 @@
-import type { JSONValue } from '@ai-sdk/provider';
+import type { JsonValue } from '../types/provider';
 
 import type { ProviderModelOptions, ProviderModelOptionsMap } from '../types/provider';
 
@@ -119,7 +119,7 @@ const parseJsonRecord = (value: unknown): Record<string, unknown> | null => {
   return asRecord(value);
 };
 
-const normalizeJsonValue = (value: unknown): JSONValue | undefined => {
+const normalizeJsonValue = (value: unknown): JsonValue | undefined => {
   if (value === null) return null;
   if (typeof value === 'string' || typeof value === 'boolean') {
     return value;
@@ -147,13 +147,13 @@ const normalizeJsonValue = (value: unknown): JSONValue | undefined => {
   return Object.fromEntries(normalizedEntries);
 };
 
-const normalizeJsonObject = (value: unknown): Record<string, JSONValue> | null => {
+const normalizeJsonObject = (value: unknown): Record<string, JsonValue> | null => {
   const normalized = normalizeJsonValue(value);
   if (!normalized || Array.isArray(normalized) || typeof normalized !== 'object') {
     return null;
   }
 
-  return normalized as Record<string, JSONValue>;
+  return normalized as Record<string, JsonValue>;
 };
 
 const getLimitRecord = (model: ModelsDevModelRecord): ModelsDevLimitRecord | null => {

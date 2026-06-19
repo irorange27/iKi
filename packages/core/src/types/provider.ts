@@ -1,4 +1,4 @@
-import type { JSONValue } from '@ai-sdk/provider';
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export interface ProviderModelOptions {
   displayName?: string;
@@ -10,7 +10,7 @@ export interface ProviderModelOptions {
   supportsVision?: boolean | null;
   supportsEmbeddings?: boolean | null;
   supportsStructuredOutputs?: boolean | null;
-  providerOptions?: Record<string, JSONValue> | null;
+  providerOptions?: Record<string, JsonValue> | null;
 }
 
 export type ProviderModelOptionsMap = Record<string, ProviderModelOptions>;

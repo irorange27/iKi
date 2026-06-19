@@ -7,8 +7,8 @@ describe('core agent public surface', () => {
     expect(currentAgentApi).toHaveProperty('getConversationRunnerConfig');
     expect(currentAgentApi).toHaveProperty('AgentConfigSchema');
     expect(currentAgentApi).toHaveProperty('AgentToolSchema');
-    expect(currentAgentApi).toHaveProperty('createPlanThenExecutePrepareStep');
-    expect(currentAgentApi).toHaveProperty('composePrepareSteps');
+    expect(currentAgentApi).not.toHaveProperty('createPlanThenExecutePrepareStep');
+    expect(currentAgentApi).not.toHaveProperty('composePrepareSteps');
 
     // Implementation runners moved to @iki/backend/agent/runners/
     expect(currentAgentApi).not.toHaveProperty('createSimpleAgentRunner');

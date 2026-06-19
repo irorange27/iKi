@@ -45,9 +45,8 @@ export {
 
 export { getConversationRunnerConfig } from './config';
 
-// Export plan module
+// Export plan data types
 export type { Plan, PlanStep } from './plan';
-export { createPlanThenExecutePrepareStep, composePrepareSteps } from './plan';
 
 // Export model message utilities
 export {
