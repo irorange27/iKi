@@ -22,7 +22,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('@iki/core/mcp', () => ({
+vi.mock('@iki/backend/mcp', () => ({
   getMcpManager: vi.fn(() => manager),
 }));
 

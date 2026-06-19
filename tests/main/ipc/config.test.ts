@@ -160,7 +160,7 @@ vi.mock('../../../packages/desktop/src/main/services/network/network_diagnostics
   testNetworkConnectivity: testNetworkConnectivityMock,
 }));
 
-vi.mock('@iki/core/mcp', () => ({
+vi.mock('@iki/backend/mcp', () => ({
   getMcpManager: vi.fn(() => ({
     disconnectAll: vi.fn(),
     initialize: vi.fn(),

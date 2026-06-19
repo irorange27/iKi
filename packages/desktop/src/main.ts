@@ -4,7 +4,7 @@ import { wireCoreContext } from '@iki/backend/core_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/core/logger';
 import { registerStandardTools } from '@iki/backend/tools';
-import { getMcpManager } from '@iki/core/mcp';
+import { getMcpManager } from '@iki/backend/mcp';
 import { setPlatformInfo } from '@iki/backend/platform';
 import { startDaemonServer } from '@iki/daemon/server';
 import { registerMainIpc } from './main/ipc';

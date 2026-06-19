@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveMcpToolResult } from '@iki/core/mcp/tool_results';
+import { resolveMcpToolResult } from '@iki/backend/mcp/tool_results';
 import type { McpToolCatalogItem } from '@iki/core/types/mcp';
 
 const toolWithOutputSchema: McpToolCatalogItem = {

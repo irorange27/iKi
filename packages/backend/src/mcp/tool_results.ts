@@ -1,6 +1,6 @@
 import type { CallToolResult, ContentBlock } from '@modelcontextprotocol/sdk/types.js';
 
-import type { McpToolCatalogItem } from '../types/mcp';
+import type { McpToolCatalogItem } from '@iki/core/types/mcp';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

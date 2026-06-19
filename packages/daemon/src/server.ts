@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { wireCoreContext } from '@iki/backend/core_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { registerStandardTools } from '@iki/backend/tools';
-import { getMcpManager } from '@iki/core/mcp';
+import { getMcpManager } from '@iki/backend/mcp';
 import { createDaemonLogger } from '@iki/backend/daemon_logs';
 import { initializeDatabase } from '@iki/backend/db/database';
 import { applyAppLoggingConfig, withLogContext } from '@iki/core/logger';

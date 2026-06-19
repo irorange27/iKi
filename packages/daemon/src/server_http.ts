@@ -2,7 +2,7 @@ import http from 'node:http';
 
 import * as memoryDb from '@iki/backend/db/memory';
 import { createAppClient } from '@iki/backend/db/app_clients';
-import type { McpManager } from '@iki/core/mcp';
+import type { McpManager } from '@iki/backend/mcp';
 import type { ChatTransportMessage } from '@iki/backend/chat_service';
 import type { ChatService } from '@iki/backend/chat_service';
 import type { NapCatBridgeStatusInfo } from '@iki/core/types/config';

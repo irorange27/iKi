@@ -13,18 +13,18 @@ import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.j
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { getAppConfig } from '../context/config_provider';
-import { createLogger } from '../logger';
+import { getAppConfig } from '@iki/core/context/config_provider';
+import { createLogger } from '@iki/core/logger';
 import {
   addMcpServer,
   deleteMcpServer,
   getMcpServer,
   listMcpServers,
   updateMcpServer,
-} from '../context/mcp_server_store';
-import { createTool, defaultToolRegistry } from '../tools';
+} from '@iki/core/context/mcp_server_store';
+import { createTool, defaultToolRegistry } from '@iki/core/tools';
 import { resolveMcpToolResult } from './tool_results';
-import { createPrefixedId } from '../utils/id';
+import { createPrefixedId } from '@iki/core/utils/id';
 import type {
   McpApprovalMode,
   McpServer,
@@ -32,7 +32,7 @@ import type {
   McpServerStatus,
   McpServerSummary,
   McpToolCatalogItem,
-} from '../types/mcp';
+} from '@iki/core/types/mcp';
 
 type McpConnection = {
   server: McpServer;

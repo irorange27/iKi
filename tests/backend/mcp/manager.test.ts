@@ -122,7 +122,7 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
   SSEClientTransport: MockSSEClientTransport,
 }));
 
-import { McpManager } from '@iki/core/mcp/manager';
+import { McpManager } from '@iki/backend/mcp/manager';
 import type { McpServer } from '@iki/core/types/mcp';
 
 type TransportBuilder = {

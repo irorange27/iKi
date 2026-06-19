@@ -12,7 +12,6 @@
     "./constants/acp": "./src/constants/acp.ts",
     "./emotion": "./src/emotion/index.ts",
     "./logging": "./src/logging/index.ts",
-    "./mcp": "./src/mcp/index.ts",
     "./tools": "./src/tools/index.ts",
     "./types": "./src/types/index.ts",
     "./utils": "./src/utils/index.ts",

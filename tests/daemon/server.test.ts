@@ -336,7 +336,7 @@ vi.mock('@iki/core/tools', () => ({
   registerStandardTools: registerStandardToolsMock,
 }));
 
-vi.mock('@iki/core/mcp', () => ({
+vi.mock('@iki/backend/mcp', () => ({
   getMcpManager: getMcpManagerMock,
 }));
 
