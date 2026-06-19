@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
 import type { ToolRetryConfig } from '../tools/retry';
 import type { ToolCacheConfig } from '../tools/cache';
+
+export type ToolApprovalFunction = (input: unknown, options: { toolCallId: string; messages: unknown[]; experimental_context?: unknown }) => boolean | Promise<boolean>;
 
 /**
  * Agent framework type definitions using Zod schemas
@@ -51,7 +52,7 @@ export const AgentToolSchema = z.object({
 });
 
 export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> & {
-  needsApproval?: boolean | ToolNeedsApprovalFunction<unknown>;
+  needsApproval?: boolean | ToolApprovalFunction;
   approvalMode?: ToolApprovalMode;
   handler: (args: unknown) => Promise<unknown>;
   paramSchema?: z.ZodTypeAny;

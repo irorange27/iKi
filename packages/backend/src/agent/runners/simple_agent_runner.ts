@@ -2,6 +2,7 @@ import {
   smoothStream,
   stepCountIs,
   streamText,
+  type LanguageModel,
   type ModelMessage,
   type ToolSet,
 } from 'ai';
@@ -81,13 +82,28 @@ type PrepareStep = NonNullable<Parameters<typeof streamText>[0]>['prepareStep'];
 
 export class SimpleAgentRunner implements AgentRunner {
   private readonly prepareStep?: PrepareStep;
+  private readonly modelFactory?: (
+    providerType: string,
+    modelId: string,
+    providerId: string,
+  ) => LanguageModel;
   private abortController: AbortController | null = null;
   private steerQueue: string[] = [];
   private cancelRequested = false;
   private history: ModelMessage[] = [];
 
-  constructor(config?: PartialAgentConfig & { prepareStep?: PrepareStep }) {
+  constructor(
+    config?: PartialAgentConfig & {
+      prepareStep?: PrepareStep;
+      modelFactory?: (
+        providerType: string,
+        modelId: string,
+        providerId: string,
+      ) => LanguageModel;
+    },
+  ) {
     this.prepareStep = config?.prepareStep;
+    this.modelFactory = config?.modelFactory;
   }
 
   cancel(): void {
@@ -160,9 +176,14 @@ export class SimpleAgentRunner implements AgentRunner {
         }
       }
 
-      const model = createModel(config.providerType, config.model, config.providerId);
+      const usingCustomModel = Boolean(this.modelFactory);
+      const model = usingCustomModel
+        ? this.modelFactory!(config.providerType, config.model, config.providerId)
+        : createModel(config.providerType, config.model, config.providerId);
       const tools = this.buildToolSet(config, request.tools);
-      const { systemPrompt, messages } = buildPromptContext(config, history);
+      const { systemPrompt, messages } = usingCustomModel
+        ? { systemPrompt: config.systemPrompt, messages: history }
+        : buildPromptContext(config, history);
 
       // Track whether we need to restart due to steer mid-stream
       let steeredMidStream = false;
@@ -628,9 +649,9 @@ export class SimpleAgentRunner implements AgentRunner {
 
   private buildToolSet(
     config: { enableTools: boolean; providerType: string },
-    tools: AgentTool[]
+    tools: AgentTool[] | undefined,
   ): ToolSet | undefined {
-    if (!config.enableTools || tools.length === 0) return undefined;
+    if (!config.enableTools || !tools || tools.length === 0) return undefined;
     return buildAiToolSet(
       { enableTools: config.enableTools, providerType: config.providerType },
       tools
@@ -639,5 +660,12 @@ export class SimpleAgentRunner implements AgentRunner {
 }
 
 export const createSimpleAgentRunner = (
-  config?: PartialAgentConfig & { prepareStep?: PrepareStep }
+  config?: PartialAgentConfig & {
+    prepareStep?: PrepareStep;
+    modelFactory?: (
+      providerType: string,
+      modelId: string,
+      providerId: string,
+    ) => LanguageModel;
+  },
 ): AgentRunner => new SimpleAgentRunner(config);

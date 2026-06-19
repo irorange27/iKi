@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import type { ToolNeedsApprovalFunction } from '@ai-sdk/provider-utils';
-import type { AgentTool, ToolApprovalMode } from '../agent/types';
+import type { AgentTool, ToolApprovalFunction, ToolApprovalMode } from '../agent/types';
 import { createLogger } from '../logger';
 import { zodSchemaToJsonSchema } from './json_schema';
 import type { ToolRetryConfig } from './retry';
@@ -9,7 +8,7 @@ import { buildCacheKey, registerToolCache, ToolResultCache } from './cache';
 
 const toolLogger = createLogger({ module: 'base_tool' });
 
-type ApprovalPolicy = boolean | ToolNeedsApprovalFunction<unknown>;
+type ApprovalPolicy = boolean | ToolApprovalFunction;
 
 /**
  * Base class for all tools with built-in validation
