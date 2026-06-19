@@ -1,6 +1,6 @@
 import type { LanguageModelUsage } from 'ai';
 
-import type { TokenUsageMetrics } from '../../types/chat_usage';
+import type { TokenUsageMetrics } from '@iki/core/types/chat_usage';
 
 const clampInteger = (value: unknown): number => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;

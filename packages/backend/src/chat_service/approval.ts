@@ -400,6 +400,11 @@ export const createChatApproval = (deps: {
     };
 
     if (session.collectedApprovalResponses.has(approvalId)) {
+      const existing = session.collectedApprovalResponses.get(approvalId);
+      // Idempotent: if the same decision was already recorded, treat as success
+      if (existing && existing.approved === approved) {
+        return { success: true };
+      }
       return {
         success: false,
         error: 'Approval request already processed.',
@@ -570,6 +575,8 @@ export const createChatApproval = (deps: {
               if (step.type === 'text-delta') {
                 responseText += step.text;
                 uiChunkEmitter.emitTextDelta(step.text);
+              } else if (step.type === 'reasoning-delta') {
+                uiChunkEmitter.emitTextDelta(step.text);
               } else if (step.type === 'tool-call-start') {
                 const event: ToolStreamEvent = {
                   type: 'tool-call',
@@ -628,6 +635,17 @@ export const createChatApproval = (deps: {
                     });
                   }
                 }
+              } else if (step.type === 'source') {
+                uiChunkEmitter.emitToolEvent({
+                  type: 'tool-call',
+                  toolCallId: step.sourceId,
+                  toolName: 'source',
+                  input: {
+                    sourceId: step.sourceId,
+                    ...(step.title ? { title: step.title } : {}),
+                    ...(step.url ? { url: step.url } : {}),
+                  },
+                });
               }
             }
 

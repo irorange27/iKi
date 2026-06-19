@@ -17,8 +17,8 @@ import {
   disposeLanguageModel,
   getModelGenerationSettings,
   injectReasoningContentIntoMessages,
-} from '@iki/core/provider/llm/factory';
-import { normalizeLanguageModelUsage } from '@iki/core/provider/llm/usage';
+} from '../../provider/llm/factory';
+import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import {
   appendResponseMessages,
   appendUserPromptToHistory,
@@ -28,6 +28,7 @@ import {
   collectApprovalRequests,
   collectToolCalls,
   loadAgentConfig,
+  normalizeCollectedToolCall,
   validateAgentConfig,
 } from '../ai_sdk_runtime';
 import type {
@@ -35,6 +36,8 @@ import type {
   ErrorStep,
   FinishStep,
   HandoffStep,
+  ReasoningDeltaStep,
+  SourceStep,
   TextDeltaStep,
   ToolCallStartStep,
   ToolCallEndStep,
@@ -195,6 +198,13 @@ export class SimpleAgentRunner implements AgentRunner {
 
         let streamedText = '';
         let terminalToolName: string | null = null;
+        // Collect approval requests from fullStream — AI SDK v6 emits
+        // tool-approval-request parts inline when needsApproval is set on a tool.
+        const streamApprovalRequests: Array<{
+          approvalId: string;
+          toolCallId?: string;
+          toolCall?: { toolName: string; toolCallId?: string; input?: unknown; args?: unknown };
+        }> = [];
 
         for await (const part of result.fullStream) {
           // Check for steer mid-stream
@@ -224,6 +234,36 @@ export class SimpleAgentRunner implements AgentRunner {
               toolName,
               input: (part.input ?? {}) as Record<string, unknown>,
             } satisfies ToolCallStartStep;
+            continue;
+          }
+
+          if (part.type === 'tool-approval-request') {
+            const approvalPart = part as {
+              approvalId: string;
+              toolCallId?: string;
+              toolCall?: { toolName: string; toolCallId?: string; input?: unknown; args?: unknown };
+            };
+            streamApprovalRequests.push({
+              approvalId: approvalPart.approvalId,
+              toolCallId: approvalPart.toolCallId ?? approvalPart.toolCall?.toolCallId,
+              toolCall: approvalPart.toolCall
+                ? {
+                    toolName: approvalPart.toolCall.toolName,
+                    toolCallId: approvalPart.toolCall.toolCallId,
+                    input: approvalPart.toolCall.input,
+                    args: approvalPart.toolCall.args,
+                  }
+                : undefined,
+            });
+            continue;
+          }
+
+          if (part.type === 'tool-output-denied') {
+            yield {
+              type: 'tool-error',
+              toolCallId: (part as { toolCallId: string }).toolCallId,
+              error: 'Tool execution was denied',
+            } satisfies ToolErrorStep;
             continue;
           }
 
@@ -269,6 +309,47 @@ export class SimpleAgentRunner implements AgentRunner {
             });
             continue;
           }
+
+          if (part.type === 'reasoning-delta' && part.text) {
+            yield {
+              type: 'reasoning-delta',
+              text: part.text,
+            } satisfies ReasoningDeltaStep;
+            continue;
+          }
+
+          if (part.type === 'source') {
+            yield {
+              type: 'source',
+              sourceId: (part as { sourceId?: string }).sourceId ?? '',
+              title: (part as { title?: string }).title,
+              url: (part as { url?: string }).url,
+            } satisfies SourceStep;
+            continue;
+          }
+
+          // Markers and internal events — intentionally skipped.
+          // text-start / text-end: text stream lifecycle markers (no data).
+          // tool-input-start / tool-input-delta: intermediate streaming states;
+          //   the complete input arrives in tool-input-end which is handled above.
+          // reasoning-start / reasoning-end: reasoning lifecycle markers (no data).
+          // start-step / finish-step: step boundary markers (no actionable data).
+          // stream-start / response-metadata: lifecycle markers (no data).
+          // raw: provider-internal events, not meaningful for consumers.
+          if (
+            part.type === 'text-start' ||
+            part.type === 'text-end' ||
+            part.type === 'tool-input-start' ||
+            part.type === 'tool-input-delta' ||
+            part.type === 'reasoning-start' ||
+            part.type === 'reasoning-end' ||
+            part.type === 'start-step' ||
+            part.type === 'finish-step' ||
+            part.type === 'raw' ||
+            part.type === 'finish'
+          ) {
+            continue;
+          }
         }
 
         // If steered mid-stream, skip result processing and restart
@@ -283,46 +364,57 @@ export class SimpleAgentRunner implements AgentRunner {
           throw new Error('Run cancelled');
         }
 
-        // Resolve post-stream promises. The AI SDK may reject them with
-        // NoOutputGeneratedError when the model produced zero output (empty
-        // stream, gateway error, etc.).  Treat that the same as an empty
-        // text response so the retry / refusal logic below can handle it.
-        let responseObj: Awaited<typeof result.response>;
-        let contentParts: Awaited<typeof result.content>;
-        let totalUsage: ReturnType<typeof normalizeLanguageModelUsage>;
-        let finishReason: string | undefined;
-        let steps: Awaited<typeof result.steps>;
-
-        try {
-          responseObj = await result.response;
-          contentParts = await result.content;
-          totalUsage = normalizeLanguageModelUsage(
-            await Promise.resolve(result.totalUsage)
-          );
-          finishReason = await Promise.resolve(result.finishReason).catch(
-            (): undefined => undefined
-          );
-          steps = await result.steps;
-        } catch (error) {
-          // NoOutputGeneratedError → treat as empty model response
-          if (
-            error instanceof Error &&
-            error.name === 'AI_NoOutputGeneratedError'
-          ) {
-            responseObj = {
-              id: 'no-output',
-              timestamp: new Date(),
-              modelId: config.model,
-              messages: [],
-            };
-            contentParts = [];
-            totalUsage = normalizeLanguageModelUsage(undefined);
-            finishReason = undefined;
-            steps = [];
-          } else {
+        // Resolve post-stream promises independently. The AI SDK may reject
+        // some of them with NoOutputGeneratedError when the outer stream
+        // flush finds zero recorded steps (no finish chunk), even though
+        // inner steps produced tool calls, tool results, and text deltas.
+        // Replacing ALL values with empties would drop valid tool messages
+        // and cause "insufficient tool messages" errors on retry.
+        const resolveWithFallback = async <T>(
+          promise: PromiseLike<T>,
+          fallback: T,
+        ): Promise<T> => {
+          try {
+            return await Promise.resolve(promise);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.name === 'AI_NoOutputGeneratedError'
+            ) {
+              return fallback;
+            }
             throw error;
           }
-        }
+        };
+
+        const responseObj = await resolveWithFallback(result.response, {
+          id: 'no-output',
+          timestamp: new Date(),
+          modelId: config.model,
+          messages: [] as Awaited<typeof result.response>['messages'],
+        });
+
+        const contentParts = await resolveWithFallback(
+          result.content,
+          [] as Awaited<typeof result.content>,
+        );
+
+        const totalUsage = normalizeLanguageModelUsage(
+          await resolveWithFallback(
+            Promise.resolve(result.totalUsage),
+            undefined,
+          ),
+        );
+
+        const finishReason: string | undefined =
+          await Promise.resolve(result.finishReason).catch(
+            (): undefined => undefined,
+          );
+
+        const steps = await resolveWithFallback(
+          result.steps,
+          [] as Awaited<typeof result.steps>,
+        );
 
         cumulativeUsage = addUsage(cumulativeUsage, {
           ...EMPTY_USAGE,
@@ -352,19 +444,36 @@ export class SimpleAgentRunner implements AgentRunner {
 
         allText = allText ? allText + streamedText : streamedText;
 
-        // Check for approval requests
-        const approvalRequests = collectApprovalRequests(contentParts);
-        if (approvalRequests.length > 0) {
+        // Check for approval requests from both sources:
+        // 1. result.content (post-stream promise) — the primary source.
+        // 2. fullStream tool-approval-request parts — fallback when
+        //    result.content rejects with NoOutputGeneratedError.
+        const contentApprovalRequests = collectApprovalRequests(contentParts);
+        const seenApprovalIds = new Set(contentApprovalRequests.map(r => r.approvalId));
+        const mergedApprovalRequests = [...contentApprovalRequests];
+        for (const streamReq of streamApprovalRequests) {
+          if (!seenApprovalIds.has(streamReq.approvalId)) {
+            seenApprovalIds.add(streamReq.approvalId);
+            mergedApprovalRequests.push({
+              approvalId: streamReq.approvalId,
+              toolCallId: streamReq.toolCallId,
+              toolCall: streamReq.toolCall
+                ? normalizeCollectedToolCall(streamReq.toolCall as { toolName: string; input?: unknown; args?: unknown })
+                : undefined,
+            });
+          }
+        }
+        if (mergedApprovalRequests.length > 0) {
           yield {
             type: 'approval-request',
-            requests: approvalRequests,
+            requests: mergedApprovalRequests,
           } satisfies ApprovalRequestStep;
 
           // Return so caller can gate approval and resume
           disposeLanguageModel(model);
           return {
             response: allText || streamedText,
-            toolApprovalRequests: approvalRequests,
+            toolApprovalRequests: mergedApprovalRequests,
             usage: cumulativeUsage,
             iterations: totalSteps,
             requiresApproval: true,
@@ -508,6 +617,12 @@ export class SimpleAgentRunner implements AgentRunner {
     prompt: string,
   ): ModelMessage[] {
     const base = history ? cloneModelMessages(history) : [];
+    // When the prompt is empty AND we already have conversation history
+    // (e.g. approval-resume flow), don't append an empty user message.
+    // AI SDK v6 collectToolApprovals requires the last message to have
+    // role 'tool' so it can match tool-approval-response parts against
+    // prior tool-approval-request parts.
+    if (!prompt.trim() && base.length > 0) return base;
     return appendUserPromptToHistory(base, prompt);
   }
 

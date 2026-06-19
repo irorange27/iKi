@@ -235,7 +235,7 @@ export class ReadFileTool extends BaseTool {
   override name = 'read_file';
   override type = 'function';
   override autoAllowed = true;
-  override needsApproval = true;
+  override needsApproval = false;
   override description = 'Read the content of a file from the local filesystem.';
 
   override paramSchema = ReadFileInputSchema;

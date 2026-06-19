@@ -8,11 +8,11 @@ import { createMinimax } from 'vercel-minimax-ai-provider';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { getProviders } from '../../context/provider_store';
-import { createLogger } from '../../logger';
-import { getPersonaPrompt } from '../../context/persona_provider';
-import { fetchWithTimeout } from '../../context/network_provider';
-import { getToolRuntimeContext } from '../../tools/runtime_context';
+import { getProviders } from '@iki/core/context/provider_store';
+import { createLogger } from '@iki/core/logger';
+import { getPersonaPrompt } from '@iki/core/context/persona_provider';
+import { fetchWithTimeout } from '@iki/core/context/network_provider';
+import { getToolRuntimeContext } from '@iki/core/tools/runtime_context';
 import {
   getProviderModelOptions,
   listModelsDevProviderModels,
@@ -22,13 +22,13 @@ import {
   parseProviderModelOptionsMap,
   type ModelCapability,
   type ModelsDevCatalog,
-} from '../../utils/provider_models';
+} from '@iki/core/utils/provider_models';
 import type {
   ProviderModelDiscoveryOverride,
   ProviderModelOptions,
   ProviderModelOptionsMap,
-} from '../../types/provider';
-import type { TokenUsageMetrics } from '../../types/chat_usage';
+} from '@iki/core/types/provider';
+import type { TokenUsageMetrics } from '@iki/core/types/chat_usage';
 import {
   createAcpLanguageModel,
   disposeAcpLanguageModel,

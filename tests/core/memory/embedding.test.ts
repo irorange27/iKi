@@ -8,7 +8,7 @@ vi.mock('@iki/core/context/provider_store', () => ({
   getProviders: vi.fn(),
 }));
 
-vi.mock('@iki/core/provider/llm/factory', () => ({
+vi.mock('@iki/backend/provider/llm/factory', () => ({
   getProviderConfig: vi.fn(),
 }));
 
@@ -22,9 +22,9 @@ vi.mock('@iki/core/logger', () => ({
 
 import { getAppConfig } from '@iki/core/context/config_provider';
 import { getProviders } from '@iki/core/context/provider_store';
-import { getProviderConfig } from '@iki/core/provider/llm/factory';
+import { getProviderConfig } from '@iki/backend/provider/llm/factory';
 import { fetchWithTimeout } from '@iki/core/context/network_provider';
-import { createPreferredMemoryEmbeddingRuntime } from '@iki/core/memory/embedding';
+import { createPreferredMemoryEmbeddingRuntime } from '@iki/backend/memory/embedding';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getProvidersMock = vi.mocked(getProviders);

@@ -389,6 +389,11 @@ export const createChatUiStreamController = (deps: {
   ): Promise<void> => {
     const approvalId = getApprovalId(part);
     if (!approvalId) return;
+
+    // Guard against double-clicks: Vue reactivity is async, so a rapid
+    // second click can arrive before the button re-renders as disabled.
+    if (approvals.isApprovalProcessing(part)) return;
+
     const toolCallId = getToolCallIdFromPart(part);
 
     // After a reload, transient streaming state is empty, so UI chunks from a resumed approval would be ignored.

@@ -55,6 +55,18 @@ export interface FinishStep {
   usage?: AgentUsage;
 }
 
+export interface ReasoningDeltaStep {
+  type: 'reasoning-delta';
+  text: string;
+}
+
+export interface SourceStep {
+  type: 'source';
+  sourceId: string;
+  title?: string;
+  url?: string;
+}
+
 export interface ErrorStep {
   type: 'error';
   message: string;
@@ -63,10 +75,12 @@ export interface ErrorStep {
 
 export type AgentStep =
   | TextDeltaStep
+  | ReasoningDeltaStep
   | ToolCallStartStep
   | ToolCallEndStep
   | ToolResultStep
   | ToolErrorStep
+  | SourceStep
   | ApprovalRequestStep
   | HandoffStep
   | FinishStep

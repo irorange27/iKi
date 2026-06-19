@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 
 import { createLogger } from '@iki/core/logger';
 import { getErrorMessage } from '@iki/core/utils/errors';
-import { normalizeLanguageModelUsage } from '@iki/core/provider/llm/usage';
+import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/agent_runner';
 import type { AgentResult, AgentUsage } from '@iki/core/agent/types';
 import type {

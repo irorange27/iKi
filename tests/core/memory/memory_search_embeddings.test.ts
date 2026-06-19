@@ -12,7 +12,7 @@ vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 
-vi.mock('@iki/core/memory/embedding', () => ({
+vi.mock('@iki/backend/memory/embedding', () => ({
   embedTextsWithFallback: vi.fn(),
   HASH_EMBEDDING_DIM: 128,
   HASH_EMBEDDING_VERSION: 1,
@@ -25,7 +25,7 @@ import { getDb } from '@iki/backend/db/database';
 import {
   createHashMemoryEmbeddingRuntime,
   createPreferredMemoryEmbeddingRuntime,
-} from '@iki/core/memory/embedding';
+} from '@iki/backend/memory/embedding';
 import { searchLongMemory, type LongMemoryEntry } from '@iki/backend/db/memory';
 
 const getDbMock = vi.mocked(getDb);

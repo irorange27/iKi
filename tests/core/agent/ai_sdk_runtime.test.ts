@@ -17,7 +17,7 @@ vi.mock('@mcpc-tech/acp-ai-provider', () => ({
   acpTools: acpToolsMock,
 }));
 
-vi.mock('@iki/core/provider/llm/factory', () => ({
+vi.mock('@iki/backend/provider/llm/factory', () => ({
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 

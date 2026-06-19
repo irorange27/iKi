@@ -117,7 +117,7 @@ import {
   refreshModelsDevCatalog,
   resetModelsDevCatalogCacheForTests,
   resolveModelCapability,
-} from '@iki/core/provider/llm/factory';
+} from '@iki/backend/provider/llm/factory';
 
 const createAsyncIterable = <T>(values: T[]) =>
   (async function* () {

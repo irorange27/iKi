@@ -12,7 +12,7 @@ import { acpTools } from '@mcpc-tech/acp-ai-provider';
 import { getAppConfig } from '@iki/core/context/config_provider';
 import { createLogger } from '@iki/core/logger';
 import { withRetry } from '@iki/core/tools/retry';
-import { getFullSystemPrompt } from '@iki/core/provider/llm/factory';
+import { getFullSystemPrompt } from '../provider/llm/factory';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
 import { unwrapAcpDynamicToolCall } from '@iki/core/utils/acp';
 import {
@@ -363,7 +363,7 @@ export const normalizeToolArgs = (input: unknown): Record<string, unknown> => {
 const getToolCallInput = (toolCall: { input?: unknown; args?: unknown }): unknown =>
   toolCall.input !== undefined ? toolCall.input : toolCall.args;
 
-const normalizeCollectedToolCall = (toolCall: {
+export const normalizeCollectedToolCall = (toolCall: {
   toolName: string;
   input?: unknown;
   args?: unknown;

@@ -21,7 +21,7 @@ vi.mock('ai', () => ({
   generateText: generateTextMock,
 }));
 
-vi.mock('@iki/core/provider/llm/factory', () => ({
+vi.mock('@iki/backend/provider/llm/factory', () => ({
   createModel: createModelMock,
   disposeLanguageModel: disposeLanguageModelMock,
   getModelGenerationSettings: getModelGenerationSettingsMock,

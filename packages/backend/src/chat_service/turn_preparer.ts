@@ -8,7 +8,7 @@ import {
   filterToolsByInterventionState,
 } from '@iki/core/emotion/intervention_policy';
 import { shouldGuardTools } from '@iki/core/emotion/affect_policy';
-import * as llmFactory from '@iki/core/provider/llm/factory';
+import * as llmFactory from '../provider/llm/factory';
 import { defaultToolRegistry } from '@iki/core/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/backend/workspaces/thread_workspace';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';

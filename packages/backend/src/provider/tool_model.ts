@@ -5,7 +5,7 @@ import { getAppConfig } from '@iki/core/context/config_provider';
 import { createLogger } from '@iki/core/logger';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
-import { createModel, disposeLanguageModel, getModelCallSettings } from '@iki/core/provider/llm/factory';
+import { createModel, disposeLanguageModel, getModelCallSettings } from '../provider/llm/factory';
 import { parseModelList } from '@iki/core/utils/provider_models';
 
 export interface ToolModelConfig {

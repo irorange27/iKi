@@ -25,7 +25,7 @@ vi.mock('@iki/core/tools', () => ({
   },
 }));
 
-vi.mock('@iki/core/provider/llm/factory', () => ({
+vi.mock('@iki/backend/provider/llm/factory', () => ({
   resolveModelCapability: vi.fn(async () => null),
 }));
 

@@ -8,7 +8,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({ memory: { enabled: true } })),
 }));
 
-vi.mock('@iki/core/memory/embedding', () => ({
+vi.mock('@iki/backend/memory/embedding', () => ({
   embedTextsWithFallback: vi.fn(async (texts: string[]) => ({
     results: texts.map(() => ({
       vector: [0.25, 0.75],

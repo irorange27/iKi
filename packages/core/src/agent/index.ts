@@ -15,10 +15,12 @@ export type {
 export type {
   AgentStep,
   TextDeltaStep,
+  ReasoningDeltaStep,
   ToolCallStartStep,
   ToolCallEndStep,
   ToolResultStep,
   ToolErrorStep,
+  SourceStep,
   ApprovalRequestStep,
   HandoffStep,
   FinishStep,

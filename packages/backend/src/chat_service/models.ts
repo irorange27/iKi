@@ -1,8 +1,8 @@
-import * as llmFactory from '@iki/core/provider/llm/factory';
-import * as deepseekProvider from '@iki/core/provider/llm/deepseek';
-import * as kimiProvider from '@iki/core/provider/llm/kimi';
-import * as minimaxProvider from '@iki/core/provider/llm/minimax';
-import * as openaiProvider from '@iki/core/provider/llm/openai';
+import * as llmFactory from '../provider/llm/factory';
+import * as deepseekProvider from '../provider/llm/deepseek';
+import * as kimiProvider from '../provider/llm/kimi';
+import * as minimaxProvider from '../provider/llm/minimax';
+import * as openaiProvider from '../provider/llm/openai';
 import { createLogger } from '@iki/core/logger';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
 import type {

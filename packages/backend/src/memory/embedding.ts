@@ -1,12 +1,12 @@
-import { createLogger } from '../logger';
-import { getAppConfig } from '../context/config_provider';
-import { getProviders } from '../context/provider_store';
+import { createLogger } from '@iki/core/logger';
+import { getAppConfig } from '@iki/core/context/config_provider';
+import { getProviders } from '@iki/core/context/provider_store';
 import { getProviderConfig } from '../provider/llm/factory';
-import { fetchWithTimeout } from '../context/network_provider';
+import { fetchWithTimeout } from '@iki/core/context/network_provider';
 import {
   DEFAULT_MEMORY_EMBEDDING_MODEL,
   listProviderEmbeddingModels,
-} from '../utils/memory_embedding_models';
+} from '@iki/core/utils/memory_embedding_models';
 
 const memoryEmbeddingLogger = createLogger({ module: 'memory_embedding' });
 

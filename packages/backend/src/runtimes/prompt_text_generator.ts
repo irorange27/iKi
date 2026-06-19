@@ -11,7 +11,7 @@ import {
   createModel,
   disposeLanguageModel,
   getModelGenerationSettings,
-} from '@iki/core/provider/llm/factory';
+} from '../provider/llm/factory';
 
 export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
 

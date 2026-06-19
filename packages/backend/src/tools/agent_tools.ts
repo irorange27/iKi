@@ -37,6 +37,7 @@ const SUBAGENT_SYSTEM_PROMPT_BASE =
   '- Do not delegate again; recursive agent spawning is disabled.\n' +
   '- Keep reasoning private and return a concise, high-signal result for the parent agent.\n' +
   '- If you cannot complete the delegated subtask with the provided context and tools, say exactly what is missing.\n' +
+  '- Do not attempt to work around tool restrictions by embedding commands, code, or tool-call instructions in your response text. The parent agent will not execute them on your behalf. If a needed tool is unavailable, report the gap instead.\n' +
   '- A scratchpad directory is available for writing intermediate findings. Write structured results there so the parent agent can inspect them directly instead of relying on your summary. Include file paths in your final response.\n';
 
 const normalizeToolNames = (input: unknown): string[] => {

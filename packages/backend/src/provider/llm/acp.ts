@@ -8,14 +8,14 @@ import {
 } from '@mcpc-tech/acp-ai-provider';
 import type { LanguageModel } from 'ai';
 
-import { listMcpServers } from '../../context/mcp_server_store';
-import { getProvider } from '../../context/provider_store';
-import { createLogger } from '../../logger';
-import { getUserDataPath } from '../../context/platform_provider';
-import { ensureThreadWorkspaceSelection } from '../../context/workspace_provider';
-import { ACP_PROVIDER_TYPE } from '../../constants/acp';
-import type { ProviderModelDescriptor } from '../../types/provider';
-import type { McpServer as IkiMcpServer } from '../../types/mcp';
+import { listMcpServers } from '@iki/core/context/mcp_server_store';
+import { getProvider } from '@iki/core/context/provider_store';
+import { createLogger } from '@iki/core/logger';
+import { getUserDataPath } from '@iki/core/context/platform_provider';
+import { ensureThreadWorkspaceSelection } from '@iki/core/context/workspace_provider';
+import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
+import type { ProviderModelDescriptor } from '@iki/core/types/provider';
+import type { McpServer as IkiMcpServer } from '@iki/core/types/mcp';
 
 const acpProviderLogger = createLogger({ module: 'acp_provider' });
 const ACP_SESSION_DIR = 'acp-session';

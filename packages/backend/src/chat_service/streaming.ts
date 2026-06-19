@@ -435,6 +435,13 @@ export const createChatStreaming = (deps: {
           return;
         }
 
+        // Forward reasoning content as text so it reaches the UI.
+        // (A future UI layer can render it in a collapsible thinking section.)
+        if (step.type === 'reasoning-delta') {
+          uiChunkEmitter.emitTextDelta(step.text);
+          return;
+        }
+
         // Convert AgentStep → ToolStreamEvent-like shape for runTracker and UI
         let event: ToolStreamEvent | null = null;
 
@@ -499,6 +506,17 @@ export const createChatStreaming = (deps: {
               summary: step.summary,
               nextSteps: step.nextSteps,
               reason: step.reason,
+            },
+          };
+        } else if (step.type === 'source') {
+          event = {
+            type: 'tool-call',
+            toolCallId: step.sourceId,
+            toolName: 'source',
+            input: {
+              sourceId: step.sourceId,
+              ...(step.title ? { title: step.title } : {}),
+              ...(step.url ? { url: step.url } : {}),
             },
           };
         }
