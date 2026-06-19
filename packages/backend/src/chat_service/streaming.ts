@@ -521,7 +521,16 @@ export const createChatStreaming = (deps: {
 
         try {
           agentResult = await runWithToolRuntimeContext(
-            { runId: runTracker.id, runTracker, threadId: options.threadId },
+            {
+              runId: runTracker.id,
+              runTracker,
+              threadId: options.threadId,
+              conversationModel: {
+                providerType: options.providerType,
+                providerId: options.providerId,
+                model: options.model,
+              },
+            },
             async () => {
               for await (const event of harness.turn({
                 prompt: streamPrompt,

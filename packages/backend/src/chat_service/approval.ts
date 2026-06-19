@@ -500,15 +500,20 @@ export const createChatApproval = (deps: {
     let isAwaitingApproval = false;
 
     try {
+      const ctx = nextApprovalContext ?? session.recoveryContext;
       const streamResult = await runWithToolRuntimeContext(
         {
           runId: resumeRunTracker?.id ?? nextApprovalContext?.runId,
           ...(resumeRunTracker ? { runTracker: resumeRunTracker } : {}),
           threadId: nextApprovalContext?.threadId ?? session.recoveryContext?.threadId,
+          conversationModel: {
+            providerType: ctx?.providerType ?? '',
+            providerId: ctx?.providerId,
+            model: ctx?.model ?? '',
+          },
         },
         async () => {
           // Create a fresh harness from the recovery context
-          const ctx = nextApprovalContext ?? session.recoveryContext;
           const harnessCfg = {
             providerType: ctx?.providerType ?? '',
             providerId: ctx?.providerId,

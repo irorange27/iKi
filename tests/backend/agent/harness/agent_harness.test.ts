@@ -5,6 +5,7 @@ import { AgentHarness } from '@iki/backend/agent/harness';
 import type { TurnEvent, TurnOutput } from '@iki/backend/agent/harness/harness_types';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { createTool } from '@iki/core/tools';
+import { runWithToolRuntimeContext, getToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -205,5 +206,128 @@ describe('AgentHarness', () => {
       modelFactory: () => faux,
     });
     expect(harness2.getRunTracker()).toBeNull();
+  });
+
+  it('propagates conversationModel from runtime context to tool handlers', async () => {
+    // Tool that reads conversationModel from context and returns it as output
+    const readModelTool = createTool({
+      name: 'read_model',
+      type: 'function',
+      description: 'Read the current model from runtime context',
+      paramSchema: z.object({}),
+      handler: async () => {
+        const ctx = getToolRuntimeContext();
+        return { conversationModel: ctx.conversationModel };
+      },
+    });
+
+    const faux = new FauxModelProvider([
+      fauxToolCall('read_model', {}),
+      fauxText('Got the model info.'),
+    ]);
+
+    const harness = new AgentHarness({
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      providerId: 'provider_primary',
+      systemPrompt: 'Test.',
+      enableTools: true,
+      enabledToolNames: [],
+      availableSkillIds: [],
+      guardActive: false,
+      maxIterations: 10,
+      modelFactory: () => faux,
+    });
+
+    const events: TurnEvent[] = [];
+    let output: TurnOutput | undefined;
+
+    await runWithToolRuntimeContext(
+      {
+        threadId: 'thread_1',
+        conversationModel: {
+          providerType: 'anthropic',
+          providerId: 'provider_secondary',
+          model: 'claude-sonnet-4-5',
+        },
+      },
+      async () => {
+        for await (const event of harness.turn({
+          prompt: 'what model are we using?',
+          toolsOverride: [readModelTool],
+        })) {
+          events.push(event);
+          if (event.event === 'done') output = event.output;
+        }
+      },
+    );
+
+    // The tool should have executed and returned the conversationModel from context
+    const toolEndEvent = events.find(
+      e => e.event === 'step' && e.step.type === 'tool_execution_end',
+    );
+    expect(toolEndEvent).toBeDefined();
+
+    const toolEnd = (toolEndEvent as { event: 'step'; step: { type: 'tool_execution_end'; output?: unknown } }).step;
+    expect(toolEnd.outcome).toBe('success');
+    expect(toolEnd.output).toEqual({
+      conversationModel: {
+        providerType: 'anthropic',
+        providerId: 'provider_secondary',
+        model: 'claude-sonnet-4-5',
+      },
+    });
+
+    // The turn should complete normally
+    expect(output?.text).toBe('Got the model info.');
+  });
+
+  it('sees undefined conversationModel when context is not populated', async () => {
+    const readModelTool = createTool({
+      name: 'read_model',
+      type: 'function',
+      description: 'Read the current model from runtime context',
+      paramSchema: z.object({}),
+      handler: async () => {
+        const ctx = getToolRuntimeContext();
+        return { conversationModel: ctx.conversationModel };
+      },
+    });
+
+    const faux = new FauxModelProvider([
+      fauxToolCall('read_model', {}),
+      fauxText('No model in context.'),
+    ]);
+
+    const harness = new AgentHarness({
+      providerType: 'faux',
+      model: 'faux-model',
+      systemPrompt: 'Test.',
+      enableTools: true,
+      enabledToolNames: [],
+      availableSkillIds: [],
+      guardActive: false,
+      maxIterations: 10,
+      modelFactory: () => faux,
+    });
+
+    const events: TurnEvent[] = [];
+    // No runWithToolRuntimeContext wrapper — simulates the bug scenario
+    for await (const event of harness.turn({
+      prompt: 'what model?',
+      toolsOverride: [readModelTool],
+    })) {
+      events.push(event);
+    }
+
+    const toolEndEvent = events.find(
+      e => e.event === 'step' && e.step.type === 'tool_execution_end',
+    );
+    expect(toolEndEvent).toBeDefined();
+
+    const toolEnd = (toolEndEvent as { event: 'step'; step: { type: 'tool_execution_end'; output?: unknown } }).step;
+    expect(toolEnd.outcome).toBe('success');
+    // Without runWithToolRuntimeContext, conversationModel should be undefined
+    expect(toolEnd.output).toEqual({ conversationModel: undefined });
   });
 });
