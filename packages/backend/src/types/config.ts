@@ -172,11 +172,6 @@ export interface AppConfig {
     enableLogging: boolean;
     logLevel: 'debug' | 'info' | 'warn' | 'error';
   };
-  advanced: {
-    enableExperimentalFeatures: boolean;
-    debugMode: boolean;
-    developerMode: boolean;
-  };
   keybindings: {
     sendMessage: string; // e.g. "Enter"
     openSettings: string; // e.g. "Cmd+," or "Ctrl+,"

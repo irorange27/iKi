@@ -94,12 +94,6 @@ export const useConfigStore = defineStore('config', {
     ) {
       this.config.security[key] = value;
     },
-    updateAdvanced<K extends keyof AppConfig['advanced']>(
-      key: K,
-      value: AppConfig['advanced'][K]
-    ) {
-      this.config.advanced[key] = value;
-    },
     updateKeybinding<K extends keyof AppConfig['keybindings']>(
       key: K,
       value: AppConfig['keybindings'][K]

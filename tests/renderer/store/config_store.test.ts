@@ -34,7 +34,6 @@ describe('config store settings write actions', () => {
     store.updateNetwork('timeout', 15000);
     store.updateNetwork('retryAttempts', 5);
     store.updateSecurity('logLevel', 'debug');
-    store.updateAdvanced('developerMode', true);
     store.updateKeybinding('sendMessage', 'Ctrl+Enter');
     store.setChatComposerSelection({
       preferredProviderId: 'openai',
@@ -57,7 +56,6 @@ describe('config store settings write actions', () => {
       },
     });
     expect(store.config.security.logLevel).toBe('debug');
-    expect(store.config.advanced.developerMode).toBe(true);
     expect(store.config.keybindings.sendMessage).toBe('Ctrl+Enter');
     expect(store.config.chat.composer).toEqual({
       preferredProviderId: 'openai',

@@ -56,11 +56,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     enableLogging: true,
     logLevel: 'info',
   },
-  advanced: {
-    enableExperimentalFeatures: false,
-    debugMode: false,
-    developerMode: false,
-  },
   keybindings: {
     sendMessage: 'Enter',
     openSettings: 'Cmd+,',
@@ -245,10 +240,6 @@ export const mergeAppConfigWithBase = (
     security: {
       ...base.security,
       ...(rawConfig.security ?? {}),
-    },
-    advanced: {
-      ...base.advanced,
-      ...(rawConfig.advanced ?? {}),
     },
     keybindings: {
       ...base.keybindings,

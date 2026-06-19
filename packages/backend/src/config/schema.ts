@@ -115,16 +115,6 @@ const SecuritySchema = z
   })
   .catch(DEFAULT_APP_CONFIG.security);
 
-const AdvancedSchema = z
-  .object({
-    enableExperimentalFeatures: booleanField(
-      DEFAULT_APP_CONFIG.advanced.enableExperimentalFeatures
-    ),
-    debugMode: booleanField(DEFAULT_APP_CONFIG.advanced.debugMode),
-    developerMode: booleanField(DEFAULT_APP_CONFIG.advanced.developerMode),
-  })
-  .catch(DEFAULT_APP_CONFIG.advanced);
-
 const KeybindingsSchema = z
   .object({
     sendMessage: stringField(DEFAULT_APP_CONFIG.keybindings.sendMessage),
@@ -308,7 +298,6 @@ export const AppConfigSchema = z
     themes: ThemesSchema,
     network: NetworkSchema,
     security: SecuritySchema,
-    advanced: AdvancedSchema,
     keybindings: KeybindingsSchema,
     chat: ChatSchema,
     memory: MemorySchema,

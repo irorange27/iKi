@@ -41,8 +41,6 @@ export const useAppConfig = () => {
   const network = computed(() => config.value?.network);
   /** 安全配置 */
   const security = computed(() => config.value?.security);
-  /** 高级配置 */
-  const advanced = computed(() => config.value?.advanced);
   /** 快捷键配置 */
   const keybindings = computed(() => config.value?.keybindings);
   /** 记忆配置 */
@@ -144,18 +142,6 @@ export const useAppConfig = () => {
   };
 
   /**
-   * 更新 Advanced 配置
-   */
-  const updateAdvanced = <K extends keyof AppConfig['advanced']>(
-    key: K,
-    value: AppConfig['advanced'][K]
-  ) => {
-    if (!config.value) return;
-    store.updateAdvanced(key, value);
-    debouncedSave();
-  };
-
-  /**
    * 更新 Keybindings 配置
    */
   const updateKeybinding = <K extends keyof AppConfig['keybindings']>(key: K, value: string) => {
@@ -251,7 +237,6 @@ export const useAppConfig = () => {
     general,
     network,
     security,
-    advanced,
     keybindings,
     memory,
     toolModel,
@@ -271,7 +256,6 @@ export const useAppConfig = () => {
     updateGeneral,
     updateNetwork,
     updateSecurity,
-    updateAdvanced,
     updateKeybinding,
     updateMemory,
     updateToolModel,

@@ -81,11 +81,6 @@
         @reset="resetSection('security')"
       />
 
-      <SettingsAdvancedSection
-        v-show="activeSection === 'advanced'"
-        @config-change="autoSave"
-        @reset="resetSection('advanced')"
-      />
 
       <SettingsKeybindingsSection
         v-show="activeSection === 'keybindings'"
@@ -150,7 +145,6 @@ import {
 import SettingsGeneralSection from '../components/settings/SettingsGeneralSection.vue';
 import SettingsUiSection from '../components/settings/SettingsUiSection.vue';
 import SettingsSecuritySection from '../components/settings/SettingsSecuritySection.vue';
-import SettingsAdvancedSection from '../components/settings/SettingsAdvancedSection.vue';
 import SettingsKeybindingsSection from '../components/settings/SettingsKeybindingsSection.vue';
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
@@ -190,7 +184,6 @@ const SETTINGS_SECTION_KEYS = new Set([
   'speech',
   'tasks',
   'security',
-  'advanced',
   'keybindings',
 ]);
 
