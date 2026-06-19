@@ -10,7 +10,7 @@ import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type {
   WhisperNodeDownloadProgress,
   WhisperNodeModelInfo,
-} from '@iki/core/types/speech';
+} from '@iki/backend/types/speech';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

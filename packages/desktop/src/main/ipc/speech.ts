@@ -7,7 +7,7 @@ import {
   listWhisperNodeModels,
   transcribeSpeech,
 } from '../services/speech/speech_service';
-import type { SpeechTranscriptionInput } from '@iki/core/types/speech';
+import type { SpeechTranscriptionInput } from '@iki/backend/types/speech';
 
 let speechIpcRegistered = false;
 const speechIpcLogger = createLogger({ module: 'speech_ipc' });

@@ -10,7 +10,7 @@ import { createDaemonLogger, recordNapCatMessagePreview } from '@iki/backend/dae
 import { getProviders } from '@iki/backend/db/providers';
 import { createComposerInvocationPart, type ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
 import { parseSlashCommandDraft } from '@iki/backend/chat/slash_commands';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '@iki/core/types/config';
 import { parseModelList } from '@iki/core/utils/provider_models';
 import { isObjectRecord } from '@iki/core/utils/guards';

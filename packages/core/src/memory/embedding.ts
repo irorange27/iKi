@@ -1,8 +1,8 @@
 import { createLogger } from '../logger';
-import { getAppConfig } from '@iki/backend/config';
-import { getProviders } from '@iki/backend/db/providers';
+import { getAppConfig } from '../context/config_provider';
+import { getProviders } from '../context/provider_store';
 import { getProviderConfig } from '../provider/llm/factory';
-import { fetchWithTimeout } from '@iki/backend/network/http';
+import { fetchWithTimeout } from '../context/network_provider';
 import {
   DEFAULT_MEMORY_EMBEDDING_MODEL,
   listProviderEmbeddingModels,

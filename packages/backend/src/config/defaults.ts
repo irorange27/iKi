@@ -1,6 +1,6 @@
 import type { AppConfig, WebSearchEngine } from '@iki/core/types/config';
 import { clonePlainData } from '@iki/core/utils/clone';
-import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/core/constants/daemon';
+import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/backend/constants/daemon';
 import { createDefaultThemeConfig } from '@iki/theme/registry';
 
 export const DEFAULT_APP_CONFIG: AppConfig = {

@@ -10,15 +10,15 @@ import {
   DaemonStatusInfo,
   NetworkDiagnosticResult,
 } from '@iki/core/types/config';
-import type { AppUpdateStatus } from '@iki/core/types/update';
-import type { CompanionSnapshot } from '@iki/core/types/companion';
+import type { AppUpdateStatus } from '@iki/backend/types/update';
+import type { CompanionSnapshot } from '@iki/backend/types/companion';
 import type {
   Provider,
   ProviderUpdatedEvent,
   ProviderModelDiscoveryOverride,
 } from '@iki/core/types/provider';
-import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/core/types/chat_usage';
-import type { AffectStateEntry } from '@iki/core/types/memory';
+import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/backend/types/chat_usage';
+import type { AffectStateEntry } from '@iki/backend/types/memory';
 import type { ProactiveTask } from '@iki/core/types/tasks';
 import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
 import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/core/types/agent_run';
@@ -29,7 +29,7 @@ import type {
   WhisperNodeDownloadProgress,
   WhisperNodeDownloadResult,
   WhisperNodeModelInfo,
-} from '@iki/core/types/speech';
+} from '@iki/backend/types/speech';
 import type {
   ChatInvocationOptions,
   ElectronApi,
@@ -41,7 +41,7 @@ import type {
   WorkspaceInput,
   ChatThreadInput,
   ChatMessageInput,
-} from '@iki/core/types/electron_api';
+} from '@iki/backend/types/electron_api';
 import { toIpcSerializable } from '@iki/core/utils/ipc_serialization';
 
 const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => void) => {
@@ -110,7 +110,7 @@ const electronApi: ElectronApi = {
     approveTool: (approvalId: string, approved: boolean) => {
       return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);
     },
-    onRunStatus: (callback: (event: import('@iki/core/types/electron_api').RunStatusEvent) => void) =>
+    onRunStatus: (callback: (event: import('@iki/backend/types/electron_api').RunStatusEvent) => void) =>
       subscribe('chat:run-status', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('chat:ui-chunk');

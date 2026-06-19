@@ -1,7 +1,7 @@
 import { onMounted, onUnmounted } from 'vue';
 
 import type { ChatUiStreamController } from '../modules/chat/ui_stream_controller';
-import type { ElectronApi } from '@iki/core/types/electron_api';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 
 type ConfigInitializer = {

@@ -4,7 +4,7 @@ import type {
   ChatUsageEvent,
   ChatUsageMonthlyPoint,
   ChatUsageTotals,
-} from '@iki/core/types/chat_usage';
+} from '@iki/backend/types/chat_usage';
 
 type ChatUsageRange = {
   from?: string | null;

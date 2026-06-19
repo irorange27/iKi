@@ -8,7 +8,7 @@ import type {
   ContinuityItemSourceKind,
   ContinuityItemStatus,
   ContinuitySearchResult,
-} from '@iki/core/types/continuity';
+} from '@iki/backend/types/continuity';
 import { createPrefixedId } from '@iki/core/utils/id';
 import {
   normalizeOptionalWhitespace,

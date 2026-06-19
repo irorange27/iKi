@@ -76,7 +76,7 @@ import {
   AFFECT_TIRED_SPRITE,
 } from '../composables/useCompanionSprites';
 import { useCompanionVoice } from '../composables/useCompanionVoice';
-import type { CompanionSnapshot } from '@iki/core/types/companion';
+import type { CompanionSnapshot } from '@iki/backend/types/companion';
 
 const companionLogger = createLogger({ module: 'companion_view' });
 const configStore = useConfigStore();

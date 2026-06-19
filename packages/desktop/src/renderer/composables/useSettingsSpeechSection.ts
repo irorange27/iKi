@@ -9,7 +9,7 @@ import type {
   SpeechStatus,
   WhisperNodeDownloadProgress,
   WhisperNodeModelInfo,
-} from '@iki/core/types/speech';
+} from '@iki/backend/types/speech';
 import { getErrorMessage } from '@iki/core/utils/errors';
 
 type WhisperDownloadStage = 'idle' | 'downloading' | 'compiling' | 'done' | 'error';

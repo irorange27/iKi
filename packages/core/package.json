@@ -8,7 +8,6 @@
     ".": "./src/index.ts",
     "./agent": "./src/agent/index.ts",
     "./constants": "./src/constants/index.ts",
-    "./constants/daemon": "./src/constants/daemon.ts",
     "./constants/acp": "./src/constants/acp.ts",
     "./emotion": "./src/emotion/index.ts",
     "./logging": "./src/logging/index.ts",
@@ -17,12 +16,19 @@
     "./provider": "./src/provider/index.ts",
     "./provider/llm": "./src/provider/llm/index.ts",
     "./runtimes": "./src/runtimes/index.ts",
-    "./theme": "./src/theme/index.ts",
     "./tools": "./src/tools/index.ts",
     "./types": "./src/types/index.ts",
-    "./types/chat_invocation": "./src/types/chat_invocation.ts",
     "./utils": "./src/utils/index.ts",
     "./logger": "./src/logger.ts",
-    "./rate_limiter": "./src/rate_limiter.ts"
+    "./rate_limiter": "./src/rate_limiter.ts",
+    "./context/agent_run_store": "./src/context/agent_run_store.ts",
+    "./context/config_provider": "./src/context/config_provider.ts",
+    "./context/mcp_server_store": "./src/context/mcp_server_store.ts",
+    "./context/network_provider": "./src/context/network_provider.ts",
+    "./context/persona_provider": "./src/context/persona_provider.ts",
+    "./context/platform_provider": "./src/context/platform_provider.ts",
+    "./context/provider_store": "./src/context/provider_store.ts",
+    "./context/skill_format": "./src/context/skill_format.ts",
+    "./context/workspace_provider": "./src/context/workspace_provider.ts"
   }
 }

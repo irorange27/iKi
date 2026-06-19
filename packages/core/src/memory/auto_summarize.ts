@@ -1,6 +1,11 @@
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
-import type { ShortMemoryEntry } from '@iki/backend/db/memory';
 import { createLogger } from '../logger';
+
+type ShortMemoryEntry = {
+  message_id: string;
+  role: string;
+  content: string;
+};
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 
 export type LongMemorySummaryResult = {

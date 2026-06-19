@@ -86,11 +86,11 @@ const {
   };
 });
 
-vi.mock('@iki/backend/config', () => ({
+vi.mock('@iki/core/context/config_provider', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/backend/db/mcp_servers', () => ({
+vi.mock('@iki/core/context/mcp_server_store', () => ({
   addMcpServer: vi.fn(),
   deleteMcpServer: vi.fn(),
   getMcpServer: vi.fn(),

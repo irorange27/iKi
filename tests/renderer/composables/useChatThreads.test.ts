@@ -5,7 +5,7 @@ import { nextTick, ref } from 'vue';
 
 import { useChatThreads } from '../../../packages/desktop/src/renderer/composables/useChatThreads';
 import { setLocale } from '../../../packages/desktop/src/renderer/i18n';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 
 const createStoredThread = (overrides: Partial<ChatThread> = {}): ChatThread => ({
   id: overrides.id ?? 'thread_1',

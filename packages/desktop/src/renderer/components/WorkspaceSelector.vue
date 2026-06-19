@@ -166,7 +166,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import type { Workspace } from '@iki/core/types/chat';
+import type { Workspace } from '@iki/backend/types/chat';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';

@@ -5,7 +5,7 @@ import {
   type SelectionMessage,
 } from './catalog_selection';
 import { buildAffectDecisionMessage, type AffectState } from '../emotion/affect_state';
-import { formatSkillMetadataForPrompt } from '@iki/backend/tools/skills';
+import { formatSkillMetadataForPrompt } from '../context/skill_format';
 
 export type SkillSelectionMessage = SelectionMessage;
 

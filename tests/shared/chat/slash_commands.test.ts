@@ -9,8 +9,8 @@ import {
   extractPromptAppSlashCommands,
   parseSlashCommandDraft,
 } from '@iki/backend/chat/slash_commands';
-import type { PromptApp } from '@iki/core/types/chat';
-import type { SkillSummary } from '@iki/core/types/skill';
+import type { PromptApp } from '@iki/backend/types/chat';
+import type { SkillSummary } from '@iki/backend/types/skill';
 
 const buildPromptApp = (
   overrides: Partial<PromptApp> & Pick<PromptApp, 'id' | 'name' | 'prompt_template'>

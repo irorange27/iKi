@@ -5,7 +5,7 @@ import type {
   TodoList,
   TodoListItemDraft,
   TodoListSummary,
-} from '@iki/core/types/todos';
+} from '@iki/backend/types/todos';
 import { createPrefixedId } from '@iki/core/utils/id';
 import {
   normalizeOptionalWhitespace,

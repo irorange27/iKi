@@ -18,7 +18,7 @@ import {
   buildNapCatWsUrl,
   DEFAULT_DAEMON_HOST,
   DEFAULT_DAEMON_PORT,
-} from '@iki/core/constants/daemon';
+} from '@iki/backend/constants/daemon';
 import {
   formatStructuredConsoleLine,
   type StructuredConsoleFormatterInput,

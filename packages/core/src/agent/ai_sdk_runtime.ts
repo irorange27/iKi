@@ -9,7 +9,7 @@ import {
 } from 'ai';
 import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
-import { getAppConfig } from '@iki/backend/config';
+import { getAppConfig } from '../context/config_provider';
 import { createLogger } from '../logger';
 import { withRetry } from '../tools/retry';
 import { getFullSystemPrompt } from '../provider/llm/factory';

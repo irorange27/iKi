@@ -23,7 +23,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
-    setupFiles: ['tests/setup/strict_error_logs.ts'],
+    setupFiles: ['tests/setup/wire_core_context.ts', 'tests/setup/strict_error_logs.ts'],
     clearMocks: true,
     coverage: {
       provider: 'v8',

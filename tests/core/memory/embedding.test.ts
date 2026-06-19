@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/config', () => ({
+vi.mock('@iki/core/context/config_provider', () => ({
   getAppConfig: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/providers', () => ({
+vi.mock('@iki/core/context/provider_store', () => ({
   getProviders: vi.fn(),
 }));
 
@@ -12,7 +12,7 @@ vi.mock('@iki/core/provider/llm/factory', () => ({
   getProviderConfig: vi.fn(),
 }));
 
-vi.mock('@iki/backend/network/http', () => ({
+vi.mock('@iki/core/context/network_provider', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
@@ -20,10 +20,10 @@ vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 
-import { getAppConfig } from '@iki/backend/config';
-import { getProviders } from '@iki/backend/db/providers';
+import { getAppConfig } from '@iki/core/context/config_provider';
+import { getProviders } from '@iki/core/context/provider_store';
 import { getProviderConfig } from '@iki/core/provider/llm/factory';
-import { fetchWithTimeout } from '@iki/backend/network/http';
+import { fetchWithTimeout } from '@iki/core/context/network_provider';
 import { createPreferredMemoryEmbeddingRuntime } from '@iki/core/memory/embedding';
 
 const getAppConfigMock = vi.mocked(getAppConfig);

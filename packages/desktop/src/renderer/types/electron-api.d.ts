@@ -1,4 +1,4 @@
-import type { ElectronApi } from '@iki/core/types/electron_api';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
 
 declare global {
   interface Window {

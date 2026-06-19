@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { ChatMessage } from '@iki/core/types/chat';
+import { ChatMessage } from '@iki/backend/types/chat';
 import { buildSetClause } from './utils';
 
 export const getChatMessages = (threadId: string): ChatMessage[] => {

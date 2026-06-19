@@ -9,7 +9,7 @@ import {
   upsertTextIntoMessageParts,
   extractTextFromMessage,
 } from '../modules/chat/ui_message_text';
-import type { ElectronApi } from '@iki/core/types/electron_api';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import type { ChatThread } from './useChatThreads';
 import type {

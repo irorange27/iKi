@@ -35,7 +35,7 @@ import {
   DEFAULT_DAEMON_HOST,
   DEFAULT_DAEMON_PORT,
   NAPCAT_REVERSE_WS_PATH,
-} from '@iki/core/constants/daemon';
+} from '@iki/backend/constants/daemon';
 import { getAllBrowserWindows } from '../utils/browser_windows';
 import { companionService } from '../services/companion/companion_service';
 import { syncCompanionWindowToConfig } from '../windows/companion_window';

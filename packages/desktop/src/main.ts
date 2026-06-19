@@ -1,5 +1,6 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
+import { wireCoreContext } from '@iki/backend/core_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/core/logger';
 import { registerStandardTools } from '@iki/backend/tools';
@@ -25,6 +26,8 @@ const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
 const appLogger = createLogger({ module: 'app' });
 
 setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
+
+wireCoreContext();
 
 const syncLoggingConfig = () => {
   try {

@@ -4,7 +4,7 @@ import { ref } from 'vue';
 
 import { createChatMessageStore } from '../../../packages/desktop/src/renderer/modules/chat/chat_message_store';
 import { useChatStreaming } from '../../../packages/desktop/src/renderer/composables/useChatStreaming';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 
 const flushMicrotasks = async () => {
   await Promise.resolve();

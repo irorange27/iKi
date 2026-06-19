@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { PromptApp } from '@iki/core/types/chat';
+import { PromptApp } from '@iki/backend/types/chat';
 import { buildSetClause } from './utils';
 
 type PromptAppRow = PromptApp & {

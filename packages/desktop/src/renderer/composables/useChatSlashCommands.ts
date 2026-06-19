@@ -1,8 +1,8 @@
 import { computed, nextTick, onMounted, ref, watch, type Ref } from 'vue';
 
-import type { PromptApp } from '@iki/core/types/chat';
-import type { ElectronApi } from '@iki/core/types/electron_api';
-import type { SkillSummary } from '@iki/core/types/skill';
+import type { PromptApp } from '@iki/backend/types/chat';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
+import type { SkillSummary } from '@iki/backend/types/skill';
 import type {
   ComposerInvocationPartData,
   ComposerInvocationToken,

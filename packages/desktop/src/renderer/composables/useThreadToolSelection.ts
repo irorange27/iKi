@@ -5,7 +5,7 @@ import {
   parseThreadToolNames,
   parseThreadToolSelectionState,
 } from '@iki/backend/chat/thread_runtime_hints';
-import type { ElectronApi } from '@iki/core/types/electron_api';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 
 const threadToolSelectionLogger = createLogger({ module: 'thread_tool_selection' });

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
+import { wireCoreContext } from '@iki/backend/core_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/core/mcp';
@@ -22,7 +23,7 @@ import {
   type WsSession,
 } from './server_shared';
 import { configureDaemonWebSockets } from './server_ws';
-import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/core/constants/daemon';
+import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/backend/constants/daemon';
 import type { DaemonStatusInfo } from '@iki/core/types/config';
 
 const nodeRequire = createRequire(fileURLToPath(import.meta.url));
@@ -65,6 +66,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     });
 
     initializeDatabase();
+    wireCoreContext();
     applyAppLoggingConfig(getAppConfig());
     registerStandardTools();
     const mcpManager = getMcpManager();

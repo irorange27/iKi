@@ -28,7 +28,7 @@ vi.mock('@iki/core/provider/llm/factory', () => ({
   getFullSystemPrompt: getFullSystemPromptMock,
 }));
 
-vi.mock('@iki/backend/config', () => ({
+vi.mock('@iki/core/context/config_provider', () => ({
   getAppConfig: getAppConfigMock,
 }));
 

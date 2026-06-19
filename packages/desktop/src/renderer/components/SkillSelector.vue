@@ -102,7 +102,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import type { SkillSummary } from '@iki/core/types/skill';
+import type { SkillSummary } from '@iki/backend/types/skill';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';

@@ -18,7 +18,7 @@ import { createChatTurnPreparer, type ChatTurnOptions } from './turn_preparer';
 import { createChatSend } from './chat_send';
 export type { ChatSendResult } from './chat_send';
 import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEvent } from './types';
-import type { ConversationPreview } from '@iki/core/types/companion';
+import type { ConversationPreview } from '@iki/backend/types/companion';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import { createRateLimiter } from '@iki/core/rate_limiter';

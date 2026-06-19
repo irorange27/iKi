@@ -2,8 +2,8 @@ import { ref, watch, type Ref } from 'vue';
 import type { FileUIPart } from 'ai';
 
 import type { ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
-import type { AudioEmotionResult } from '@iki/core/types/speech';
-import type { ElectronApi } from '@iki/core/types/electron_api';
+import type { AudioEmotionResult } from '@iki/backend/types/speech';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/core/types/provider';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { createLogger } from '../logger';

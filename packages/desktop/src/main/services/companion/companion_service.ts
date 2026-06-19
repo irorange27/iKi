@@ -9,7 +9,7 @@ import type {
   CompanionPhase,
   CompanionSnapshot,
   ConversationPreview,
-} from '@iki/core/types/companion';
+} from '@iki/backend/types/companion';
 import type { AppConfig } from '@iki/core/types/config';
 import type { Provider } from '@iki/core/types/provider';
 import type { InterventionPolicySignal } from '@iki/backend/chat/intervention_policy';

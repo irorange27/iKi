@@ -1,6 +1,6 @@
 import type { ComposerInvocationToken } from './message_parts';
-import type { PromptApp } from '@iki/core/types/chat';
-import type { SkillSummary } from '@iki/core/types/skill';
+import type { PromptApp } from '@iki/backend/types/chat';
+import type { SkillSummary } from '@iki/backend/types/skill';
 
 export type PromptAppSlashCommand = {
   id: string;

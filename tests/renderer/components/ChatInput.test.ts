@@ -20,8 +20,8 @@ vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
 }));
 
 import type { Provider } from '@iki/core/types/provider';
-import type { PromptApp, Workspace } from '@iki/core/types/chat';
-import type { SkillSummary } from '@iki/core/types/skill';
+import type { PromptApp, Workspace } from '@iki/backend/types/chat';
+import type { SkillSummary } from '@iki/backend/types/skill';
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;

@@ -7,13 +7,13 @@ import { createPinia, setActivePinia } from 'pinia';
 import SettingsMemorySection from '../../../packages/desktop/src/renderer/components/settings/SettingsMemorySection.vue';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 import type { Provider } from '@iki/core/types/provider';
 import type {
   AffectStateEntry,
   LongMemoryEntry,
   LongMemorySearchResult,
-} from '@iki/core/types/memory';
+} from '@iki/backend/types/memory';
 
 const setElectronApi = (api: unknown) => {
   Object.defineProperty(window, 'electronAPI', {

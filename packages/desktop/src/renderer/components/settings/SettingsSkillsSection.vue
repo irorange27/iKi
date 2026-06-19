@@ -167,7 +167,7 @@ import { useConfigStore } from '../../store/config';
 import { useI18n } from '../../i18n';
 import { getElectronApiSlice, getElectronApiSliceMethod } from '../../services/electron_api';
 import type { AppConfig } from '@iki/core/types/config';
-import type { SkillSummary } from '@iki/core/types/skill';
+import type { SkillSummary } from '@iki/backend/types/skill';
 import { getErrorMessage } from '@iki/core/utils/errors';
 
 const emit = defineEmits<{

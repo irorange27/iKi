@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { Workspace } from '@iki/core/types/chat';
+import { Workspace } from '@iki/backend/types/chat';
 import { buildSetClause } from './utils';
 
 type WorkspaceRow = Workspace & { is_temporary?: number; show_in_list?: number };

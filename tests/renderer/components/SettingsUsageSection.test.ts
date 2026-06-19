@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 import SettingsUsageSection from '../../../packages/desktop/src/renderer/components/settings/SettingsUsageSection.vue';
-import type { ChatUsageSummary } from '@iki/core/types/chat_usage';
+import type { ChatUsageSummary } from '@iki/backend/types/chat_usage';
 
 const buildUsageSummary = (period: ChatUsageSummary['period']): ChatUsageSummary => ({
   period,

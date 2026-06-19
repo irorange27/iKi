@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import type { IdentityProfile } from '@iki/core/types/identity';
+import type { IdentityProfile } from '@iki/backend/types/identity';
 import { createPrefixedId } from '@iki/core/utils/id';
 import { toIsoNow } from '@iki/core/utils/text';
 

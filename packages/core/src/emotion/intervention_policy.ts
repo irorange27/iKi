@@ -1,9 +1,25 @@
 import { extractTextFromModelMessageContent } from '../agent/model_messages';
 import type { AffectState } from './affect_state';
-import type {
-  InterventionPolicySignal,
-  InterventionState,
-} from '@iki/backend/chat/intervention_policy';
+
+export const INTERVENTION_STATES = [
+  'stabilize',
+  'clarify',
+  'co_plan',
+  'guided_execute',
+  'autonomous_execute',
+] as const;
+
+export type InterventionState = (typeof INTERVENTION_STATES)[number];
+
+export type InterventionPolicySignal = {
+  interventionState: InterventionState;
+  escalate: 0 | 1;
+  confidence: number;
+  rationale: string;
+  reasonCodes: string[];
+  affectUsed: boolean;
+  applied?: boolean;
+};
 
 type PolicyMessage = {
   role?: string;

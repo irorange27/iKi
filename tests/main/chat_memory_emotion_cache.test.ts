@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 
 vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(),

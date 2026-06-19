@@ -7,7 +7,7 @@ import type {
   AssistantProfileRecord,
   ContinuityItemKind,
   ContinuityItemRecord,
-} from '@iki/core/types/continuity';
+} from '@iki/backend/types/continuity';
 import { normalizeWhitespace } from '@iki/core/utils/text';
 import { getOrCreateActiveIdentityProfile } from '../identity/identity_service';
 import { getIdentityBrainDocuments } from '../identity/identity_brain';

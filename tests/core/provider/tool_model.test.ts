@@ -32,11 +32,11 @@ vi.mock('@iki/core/provider/llm/factory', () => ({
   getModelCallSettings: getModelCallSettingsMock,
 }));
 
-vi.mock('@iki/backend/config', () => ({
+vi.mock('@iki/core/context/config_provider', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/backend/db/providers', () => ({
+vi.mock('@iki/core/context/provider_store', () => ({
   getProviders: getProvidersMock,
 }));
 

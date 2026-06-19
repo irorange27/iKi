@@ -1,6 +1,6 @@
 import { computed, nextTick, onUnmounted, ref } from 'vue';
 import type { Ref } from 'vue';
-import type { AudioEmotionResult, SpeechStatus } from '@iki/core/types/speech';
+import type { AudioEmotionResult, SpeechStatus } from '@iki/backend/types/speech';
 import { createLogger } from '../logger';
 import { translate } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';

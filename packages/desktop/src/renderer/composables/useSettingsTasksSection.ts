@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref, toRaw, watch, type Ref } from 'vue';
 import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 import type {
   ProactiveTask,
   ProactiveTaskToolMode,

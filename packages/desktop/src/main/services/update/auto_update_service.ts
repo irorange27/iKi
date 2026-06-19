@@ -3,7 +3,7 @@ import path from 'node:path';
 import { app, autoUpdater, BrowserWindow, dialog } from 'electron';
 
 import type { AppConfig } from '@iki/core/types/config';
-import type { AppUpdateStatus, AppUpdateUnsupportedReason } from '@iki/core/types/update';
+import type { AppUpdateStatus, AppUpdateUnsupportedReason } from '@iki/backend/types/update';
 import { createLogger } from '@iki/core/logger';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 

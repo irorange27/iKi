@@ -13,7 +13,7 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
-import type { ChatToolApprovalDecision } from '@iki/core/types/chat_tool_approval';
+import type { ChatToolApprovalDecision } from '@iki/backend/types/chat_tool_approval';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';

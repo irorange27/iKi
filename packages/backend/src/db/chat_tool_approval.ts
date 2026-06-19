@@ -4,7 +4,7 @@ import type {
   ChatToolApprovalDecision,
   ChatToolApprovalSession,
   ChatToolApprovalState,
-} from '@iki/core/types/chat_tool_approval';
+} from '@iki/backend/types/chat_tool_approval';
 
 type UpsertChatToolApprovalSessionInput = Omit<
   ChatToolApprovalSession,

@@ -3,12 +3,12 @@ import { storeToRefs } from 'pinia';
 
 import { useI18n } from '../../../i18n';
 import { useConfigStore } from '../../../store/config';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 import type {
   AffectStateEntry,
   LongMemoryEntry,
   LongMemorySearchResult,
-} from '@iki/core/types/memory';
+} from '@iki/backend/types/memory';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { getElectronAPI } from '../../../services/electron_api';
 import {

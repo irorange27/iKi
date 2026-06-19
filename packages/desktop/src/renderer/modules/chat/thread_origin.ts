@@ -1,4 +1,4 @@
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { normalizeWhitespace } from '@iki/core/utils/text';
 

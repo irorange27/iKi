@@ -5,7 +5,7 @@ import type {
   ChatUsagePeriod,
   ChatUsageSummary,
   TokenUsageMetrics,
-} from '@iki/core/types/chat_usage';
+} from '@iki/backend/types/chat_usage';
 import { createPrefixedId } from '@iki/core/utils/id';
 
 const PERIOD_DAYS: Record<Exclude<ChatUsagePeriod, 'all'>, number> = {

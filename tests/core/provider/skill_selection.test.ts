@@ -8,6 +8,21 @@ vi.mock('@iki/core/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
 }));
 
+vi.mock('@iki/core/context/skill_format', () => ({
+  formatSkillMetadataForPrompt: vi.fn(
+    (skill: { id: string; name?: string; description?: string; source?: string }) => {
+      const sanitize = (v: string | undefined) =>
+        (v || '').replace(/\0/g, '').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      return JSON.stringify({
+        id: (skill.id || '').replace(/\0/g, ''),
+        name: sanitize(skill.name),
+        description: sanitize(skill.description),
+        source: skill.source || '',
+      });
+    }
+  ),
+}));
+
 import { getToolModel } from '@iki/core/provider/tool_model';
 import { createSimplePromptTextGenerator } from '@iki/core/runtimes/prompt_text_generator';
 import { selectSkillsWithAgent } from '@iki/core/provider/skill_selection';

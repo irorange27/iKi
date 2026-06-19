@@ -19,7 +19,7 @@ import type {
   InterventionPolicySignal,
 } from '@iki/backend/chat/intervention_policy';
 import type { AgentRunKind } from '@iki/core/types/agent_run';
-import type { SkillSummary } from '@iki/core/types/skill';
+import type { SkillSummary } from '@iki/backend/types/skill';
 import { ensureModelCapability } from '@iki/core/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './context';
 import type { ChatMemory } from './memory';

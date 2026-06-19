@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import * as chatThreadDb from '../db/chat_thread';
 import * as workspaceDb from '../db/workspaces';
-import type { Workspace } from '@iki/core/types/chat';
+import type { Workspace } from '@iki/backend/types/chat';
 import { getUserDataPath } from '../platform';
 
 export type ThreadWorkspaceSelection = {

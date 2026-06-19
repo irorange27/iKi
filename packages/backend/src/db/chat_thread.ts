@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { ChatThread } from '@iki/core/types/chat';
+import { ChatThread } from '@iki/backend/types/chat';
 import { buildSetClause } from './utils';
 
 type ChatThreadRow = ChatThread & {

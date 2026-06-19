@@ -12,7 +12,7 @@ import type {
   WhisperNodeDownloadProgress,
   WhisperNodeDownloadResult,
   WhisperNodeModelInfo,
-} from '@iki/core/types/speech';
+} from '@iki/backend/types/speech';
 import {
   DEFAULT_WHISPER_MODEL_BASE_URL,
   FALLBACK_WHISPER_MODEL_BASE_URLS,

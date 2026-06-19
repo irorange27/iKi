@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
-import type { ElectronApi } from '@iki/core/types/electron_api';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
 
 const invokeMock = vi.fn();
 const onMock = vi.fn();

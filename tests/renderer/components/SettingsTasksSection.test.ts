@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
 import SettingsTasksSection from '../../../packages/desktop/src/renderer/components/settings/SettingsTasksSection.vue';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 import type { ProactiveTask } from '@iki/core/types/tasks';
 
 const setElectronApi = (api: unknown) => {

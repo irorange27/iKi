@@ -15,7 +15,7 @@ vi.mock('@iki/backend/daemon_logs', () => ({
 }));
 
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import type { ChatThread } from '@iki/core/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
 import {
   deliverBridgeThreadMessage,
   getBridgeThreadSource,

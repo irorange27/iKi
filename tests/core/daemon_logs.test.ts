@@ -3,6 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@iki/core/context/platform_provider', () => ({
+  getUserDataPath: vi.fn(() => '/tmp/iki-test-user-data'),
+}));
+
 let tempDir = '';
 
 describe('daemon_logs', () => {

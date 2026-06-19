@@ -6,7 +6,7 @@ import type {
   StructuredLogOutcome,
   StructuredLogProcess,
 } from './logging';
-import type { SupportedLocale } from '@iki/backend/i18n/locale';
+type SupportedLocale = 'en' | 'zh-CN';
 
 export interface ConfigRuntimeInfo {
   userDataPath: string;

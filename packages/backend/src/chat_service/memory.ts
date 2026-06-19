@@ -17,7 +17,7 @@ import {
 } from '@iki/core/provider/emotion_model';
 import { planMemoryRetrieval } from '@iki/core/provider/memory_retrieval';
 import { isAffectLabel } from '@iki/core/emotion/affect';
-import type { AudioEmotionResult } from '@iki/core/types/speech';
+import type { AudioEmotionResult } from '@iki/backend/types/speech';
 import { parseJsonStringArray } from '@iki/core/utils/json';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ChatInputMessage } from './types';
