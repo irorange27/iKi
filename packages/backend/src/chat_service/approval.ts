@@ -4,7 +4,7 @@ import {
   type AgentStep,
   type AgentResult,
 } from '@iki/core/agent';
-import { appendApprovalResponsesToHistory } from '../agent/ai_sdk_runtime';
+import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
 import { cloneModelMessages } from '../agent/harness';
 import type { AgentRun } from '@iki/core/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
@@ -571,10 +571,6 @@ export const createChatApproval = (deps: {
                 };
                 resumeRunTracker?.recordToolEvent(event);
                 uiChunkEmitter.emitToolEvent(event);
-              } else if (step.type === 'tool_input_end') {
-                const event: ToolStreamEvent = { type: 'tool-input-end', toolCallId: step.toolCallId };
-                resumeRunTracker?.recordToolEvent(event);
-                uiChunkEmitter.emitToolEvent(event);
               } else if (step.type === 'tool_execution_end') {
                 if (step.outcome === 'success') {
                   const event: ToolStreamEvent = {
@@ -622,17 +618,6 @@ export const createChatApproval = (deps: {
                     });
                   }
                 }
-              } else if (step.type === 'source') {
-                uiChunkEmitter.emitToolEvent({
-                  type: 'tool-call',
-                  toolCallId: step.sourceId,
-                  toolName: 'source',
-                  input: {
-                    sourceId: step.sourceId,
-                    ...(step.title ? { title: step.title } : {}),
-                    ...(step.url ? { url: step.url } : {}),
-                  },
-                });
               }
             } else if (turnEvent.event === 'done') {
               const output = turnEvent.output;

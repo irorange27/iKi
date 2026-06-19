@@ -24,11 +24,6 @@ export interface ToolExecutionStartStep {
   input: Record<string, unknown>;
 }
 
-export interface ToolInputEndStep {
-  type: 'tool_input_end';
-  toolCallId: string;
-}
-
 export interface ToolExecutionEndStep {
   type: 'tool_execution_end';
   toolCallId: string;
@@ -49,8 +44,7 @@ export interface HandoffStep {
   reason: string;
 }
 
-export interface SourceStep {
-  type: 'source';
+export interface SourceInfo {
   sourceId: string;
   title?: string;
   url?: string;
@@ -63,14 +57,14 @@ export interface TurnEndStep {
   usage?: AgentUsage;
   message?: string;
   code?: string;
+  /** Citations / references produced during the turn. */
+  sources?: SourceInfo[];
 }
 
 export type AgentStep =
   | MessageUpdateStep
   | ToolExecutionStartStep
-  | ToolInputEndStep
   | ToolExecutionEndStep
-  | SourceStep
   | ApprovalRequestStep
   | HandoffStep
   | TurnEndStep;

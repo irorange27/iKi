@@ -181,6 +181,10 @@ export function fauxToolCall(
       input: JSON.stringify(input),
     } satisfies LanguageModelV3StreamPart,
     {
+      type: 'tool-input-end',
+      id: toolId,
+    } satisfies LanguageModelV3StreamPart,
+    {
       type: 'finish',
       finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
       usage: ZERO_USAGE,

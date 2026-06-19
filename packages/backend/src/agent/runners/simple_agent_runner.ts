@@ -28,20 +28,21 @@ import {
   cloneModelMessages,
   collectApprovalRequests,
   collectToolCalls,
-  loadAgentConfig,
   normalizeCollectedToolCall,
+} from '../../provider/ai_sdk_runtime';
+import {
+  loadAgentConfig,
   validateAgentConfig,
-} from '../ai_sdk_runtime';
+} from '../ai_sdk_config';
 import type {
   AgentStep,
   MessageUpdateStep,
   ToolExecutionStartStep,
-  ToolInputEndStep,
   ToolExecutionEndStep,
-  SourceStep,
   ApprovalRequestStep,
   HandoffStep,
   TurnEndStep,
+  SourceInfo,
 } from '@iki/core/agent/agent_step';
 import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/agent_runner';
 import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@iki/core/agent/types';
@@ -223,6 +224,8 @@ export class SimpleAgentRunner implements AgentRunner {
           toolCallId?: string;
           toolCall?: { toolName: string; toolCallId?: string; input?: unknown; args?: unknown };
         }> = [];
+        const collectedSources: SourceInfo[] = [];
+        const pendingToolStarts = new Map<string, { toolName: string; input: Record<string, unknown> }>();
 
         for await (const part of result.fullStream) {
           // Check for steer mid-stream
@@ -246,12 +249,10 @@ export class SimpleAgentRunner implements AgentRunner {
             if (toolName && TERMINAL_TOOL_NAMES.has(toolName)) {
               terminalToolName = toolName;
             }
-            yield {
-              type: 'tool_execution_start',
-              toolCallId: part.toolCallId,
+            pendingToolStarts.set(part.toolCallId, {
               toolName,
               input: (part.input ?? {}) as Record<string, unknown>,
-            } satisfies ToolExecutionStartStep;
+            });
             continue;
           }
 
@@ -288,10 +289,16 @@ export class SimpleAgentRunner implements AgentRunner {
 
           if (part.type === 'tool-input-end') {
             if (part.id) {
-              yield {
-                type: 'tool_input_end',
-                toolCallId: part.id,
-              } satisfies ToolInputEndStep;
+              const pending = pendingToolStarts.get(part.id);
+              if (pending) {
+                yield {
+                  type: 'tool_execution_start',
+                  toolCallId: part.id,
+                  toolName: pending.toolName,
+                  input: pending.input,
+                } satisfies ToolExecutionStartStep;
+                pendingToolStarts.delete(part.id);
+              }
             }
             continue;
           }
@@ -341,12 +348,11 @@ export class SimpleAgentRunner implements AgentRunner {
           }
 
           if (part.type === 'source') {
-            yield {
-              type: 'source',
+            collectedSources.push({
               sourceId: (part as { sourceId?: string }).sourceId ?? '',
               title: (part as { title?: string }).title,
               url: (part as { url?: string }).url,
-            } satisfies SourceStep;
+            });
             continue;
           }
 
@@ -551,6 +557,7 @@ export class SimpleAgentRunner implements AgentRunner {
           outcome: 'completed',
           text: finalText,
           usage: cumulativeUsage,
+          ...(collectedSources.length > 0 ? { sources: collectedSources } : {}),
         };
         yield finishStep;
 

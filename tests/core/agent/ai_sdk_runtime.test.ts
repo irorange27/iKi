@@ -45,9 +45,11 @@ import {
   cloneModelMessages,
   collectApprovalRequests,
   collectToolCalls,
+} from '@iki/backend/provider/ai_sdk_runtime';
+import {
   getDefaultAgentConfig,
   loadAgentConfig,
-} from '@iki/backend/agent/ai_sdk_runtime';
+} from '@iki/backend/agent/ai_sdk_config';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -306,58 +308,15 @@ describe('ai_sdk_runtime', () => {
     ]);
   });
 
-  it('merges runtime overrides on top of the app config base without losing pre-configured settings', () => {
-    getAppConfigMock.mockReturnValue({
-      agent: {
-        enabled: true,
-        providerType: 'deepseek',
-        model: 'deepseek-chat',
-        systemPrompt: 'stored prompt',
-        temperature: 0.3,
-        maxTokens: 512,
-        maxIterations: 4,
-        enableTools: true,
-        enableMemory: true,
-      },
-    });
-
+  it('merges runtime overrides on top of static defaults, override wins', () => {
     expect(
       loadAgentConfig({
         enabled: true,
         providerType: 'openai',
         model: 'gpt-4o-mini',
         systemPrompt: 'runtime prompt',
-        enableTools: false,
-      })
-    ).toEqual({
-      enabled: true,
-      providerType: 'openai',
-      providerId: '',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'runtime prompt',
-      temperature: 0.3,
-      maxTokens: 512,
-      maxIterations: 4,
-      enableTools: false,
-      enableMemory: true,
-    });
-
-    expect(getAppConfigMock).toHaveBeenCalled();
-  });
-
-  it('falls back to defaults when app config fails and override is provided', () => {
-    const error = new Error('db unavailable');
-    getAppConfigMock.mockImplementation(() => {
-      throw error;
-    });
-
-    expect(
-      loadAgentConfig({
-        enabled: true,
-        providerType: 'openai',
-        model: 'gpt-4o-mini',
-        systemPrompt: 'runtime prompt',
-        enableTools: false,
+        temperature: 0.7,
+        maxTokens: 1024,
       })
     ).toEqual({
       ...getDefaultAgentConfig(),
@@ -366,57 +325,13 @@ describe('ai_sdk_runtime', () => {
       providerId: '',
       model: 'gpt-4o-mini',
       systemPrompt: 'runtime prompt',
-      enableTools: false,
+      temperature: 0.7,
+      maxTokens: 1024,
     });
   });
 
-  it('loads app config only when no explicit runtime override is provided', () => {
-    getAppConfigMock.mockReturnValue({
-      agent: {
-        enabled: true,
-        providerType: 'deepseek',
-        model: 'deepseek-chat',
-        systemPrompt: 'stored prompt',
-        temperature: 0.3,
-        maxTokens: 512,
-        maxIterations: 4,
-        enableTools: true,
-        enableMemory: true,
-      },
-    });
-
-    expect(loadAgentConfig()).toEqual({
-      enabled: true,
-      providerType: 'deepseek',
-      providerId: '',
-      model: 'deepseek-chat',
-      systemPrompt: 'stored prompt',
-      temperature: 0.3,
-      maxTokens: 512,
-      maxIterations: 4,
-      enableTools: true,
-      enableMemory: true,
-    });
-
-    expect(getAppConfigMock).toHaveBeenCalledTimes(1);
-    expect(loggerEventMock).not.toHaveBeenCalled();
-  });
-
-  it('falls back to defaults and logs when app config loading fails', () => {
-    const error = new Error('db unavailable');
-    getAppConfigMock.mockImplementation(() => {
-      throw error;
-    });
-
+  it('returns static defaults when called with no override', () => {
     expect(loadAgentConfig()).toEqual(getDefaultAgentConfig());
-    expect(loggerEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'error',
-        event: 'agent.config.load',
-        outcome: 'failed',
-        error,
-      })
-    );
   });
 
   it('builds executable AI SDK tools from both Zod and JSON schemas', async () => {

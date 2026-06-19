@@ -3,9 +3,11 @@ import { generateText } from 'ai';
 import {
   appendUserPromptToHistory,
   buildPromptContext,
+} from '../provider/ai_sdk_runtime';
+import {
   loadAgentConfig,
   validateAgentConfig,
-} from '../agent/ai_sdk_runtime';
+} from '../agent/ai_sdk_config';
 import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/core/agent/types';
 import {
   createModel,

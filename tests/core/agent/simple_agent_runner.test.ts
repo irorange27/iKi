@@ -239,7 +239,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: {},
+        config: { enabled: true },
         prompt: 'test',
         tools: [],
         providerType: 'openai',
@@ -280,7 +280,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: {},
+        config: { enabled: true },
         prompt: 'test',
         tools: [],
         providerType: 'openai',
@@ -353,7 +353,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: { enableTools: true },
+        config: { enabled: true, enableTools: true },
         prompt: 'read /tmp/test',
         tools: [
           {
@@ -411,7 +411,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: {},
+        config: { enabled: true },
         prompt: 'test',
         tools: [],
         providerType: 'openai',
@@ -448,7 +448,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: {},
+        config: { enabled: true },
         prompt: 'test',
         tools: [],
         providerType: 'openai',
@@ -476,7 +476,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: {},
+        config: { enabled: true },
         prompt: 'test',
         tools: [],
         providerType: 'openai',
@@ -513,7 +513,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: { enableTools: true },
+        config: { enabled: true, enableTools: true },
         prompt: 'test',
         tools: [
           {
@@ -538,14 +538,15 @@ describe('SimpleAgentRunner — characterization tests', () => {
       expect(reasoningStep).toBeDefined();
       expect((reasoningStep as any)?.text).toBe('Let me think about this...');
 
-      // Source citations are now yielded as a step (was silently dropped before)
-      const sourceStep = steps.find((s: any) => s.type === 'source');
-      expect(sourceStep).toBeDefined();
-      expect((sourceStep as any)?.sourceId).toBe('src-1');
-      expect((sourceStep as any)?.url).toBe('https://example.com');
+      // Source citations are collected and attached to turn_end
+      const finishStep = steps.find((s: any) => s.type === 'turn_end');
+      expect(finishStep).toBeDefined();
+      const sources = (finishStep as any)?.sources;
+      expect(sources).toBeDefined();
+      expect(sources[0]?.sourceId).toBe('src-1');
+      expect(sources[0]?.url).toBe('https://example.com');
 
       // Marker parts should still be skipped (no crash)
-      const finishStep = steps.find((s: any) => s.type === 'turn_end');
       expect(finishStep).toBeDefined();
     });
   });
@@ -572,7 +573,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       const runner = new SimpleAgentRunner();
       const gen = runner.run({
-        config: { enableTools: true },
+        config: { enabled: true, enableTools: true },
         prompt: 'run a command',
         tools: [
           {

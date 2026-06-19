@@ -449,8 +449,6 @@ export const createChatStreaming = (deps: {
             toolName: step.toolName,
             input: step.input,
           };
-        } else if (step.type === 'tool_input_end') {
-          event = { type: 'tool-input-end', toolCallId: step.toolCallId };
         } else if (step.type === 'tool_execution_end') {
           if (step.outcome === 'success') {
             event = {
@@ -505,23 +503,10 @@ export const createChatStreaming = (deps: {
               reason: step.reason,
             },
           };
-        } else if (step.type === 'source') {
-          event = {
-            type: 'tool-call',
-            toolCallId: step.sourceId,
-            toolName: 'source',
-            input: {
-              sourceId: step.sourceId,
-              ...(step.title ? { title: step.title } : {}),
-              ...(step.url ? { url: step.url } : {}),
-            },
-          };
         }
 
         if (event) {
-          if (event.type !== 'tool-input-end') {
-            runTracker?.recordToolEvent(event);
-          }
+          runTracker?.recordToolEvent(event);
           uiChunkEmitter.emitToolEvent(event);
         }
       };
