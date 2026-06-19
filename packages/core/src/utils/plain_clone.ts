@@ -30,7 +30,7 @@ const cloneTypedArray = <T extends TypedArray>(value: T): T => {
   return new TypedArrayConstructor(value);
 };
 
-const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): unknown => {
+const cloneFallback = (value: unknown, seen: WeakMap<object, unknown>): unknown => {
   if (value === null) return null;
 
   const valueType = typeof value;
@@ -77,7 +77,7 @@ const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): un
     seen.set(value, next);
 
     for (const item of value) {
-      const cloned = cloneForIpcFallback(item, seen);
+      const cloned = cloneFallback(item, seen);
       next.push(typeof cloned === 'undefined' ? null : cloned);
     }
 
@@ -93,8 +93,8 @@ const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): un
     seen.set(value, next);
 
     for (const [key, entryValue] of value.entries()) {
-      const clonedKey = cloneForIpcFallback(key, seen);
-      const clonedValue = cloneForIpcFallback(entryValue, seen);
+      const clonedKey = cloneFallback(key, seen);
+      const clonedValue = cloneFallback(entryValue, seen);
       if (typeof clonedKey === 'undefined' || typeof clonedValue === 'undefined') continue;
       next.set(clonedKey, clonedValue);
     }
@@ -111,7 +111,7 @@ const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): un
     seen.set(value, next);
 
     for (const entry of value.values()) {
-      const cloned = cloneForIpcFallback(entry, seen);
+      const cloned = cloneFallback(entry, seen);
       if (typeof cloned === 'undefined') continue;
       next.add(cloned);
     }
@@ -136,7 +136,7 @@ const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): un
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor?.enumerable) continue;
 
-    const cloned = cloneForIpcFallback((value as Record<string, unknown>)[key], seen);
+    const cloned = cloneFallback((value as Record<string, unknown>)[key], seen);
     if (typeof cloned === 'undefined') continue;
     next[key] = cloned;
   }
@@ -144,7 +144,7 @@ const cloneForIpcFallback = (value: unknown, seen: WeakMap<object, unknown>): un
   return next;
 };
 
-export const toIpcSerializable = <T>(value: T): T => {
+export const toPlainData = <T>(value: T): T => {
   if (hasStructuredClone) {
     try {
       return structuredClone(value);
@@ -154,7 +154,7 @@ export const toIpcSerializable = <T>(value: T): T => {
   }
 
   try {
-    return cloneForIpcFallback(value, new WeakMap()) as T;
+    return cloneFallback(value, new WeakMap()) as T;
   } catch {
     // Fall through to the JSON round-trip as a final plain-data backstop.
   }

@@ -42,7 +42,7 @@ import type {
   ChatThreadInput,
   ChatMessageInput,
 } from '@iki/backend/types/electron_api';
-import { toIpcSerializable } from '@iki/core/utils/ipc_serialization';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 
 const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => void) => {
   const handler = (_event: Electron.IpcRendererEvent, payload: T) => {
@@ -252,9 +252,9 @@ const electronApi: ElectronApi = {
     list: () => ipcRenderer.invoke('tasks:list'),
     get: (id: string) => ipcRenderer.invoke('tasks:get', id),
     create: (task: ProactiveTaskInput) =>
-      ipcRenderer.invoke('tasks:create', toIpcSerializable(task)),
+      ipcRenderer.invoke('tasks:create', toPlainData(task)),
     update: (id: string, updates: Partial<ProactiveTask>) =>
-      ipcRenderer.invoke('tasks:update', id, toIpcSerializable(updates)),
+      ipcRenderer.invoke('tasks:update', id, toPlainData(updates)),
     delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),
     runNow: (id: string) => ipcRenderer.invoke('tasks:run-now', id),
     onPush: (callback: (payload: unknown) => void) => subscribe('tasks:push', callback),

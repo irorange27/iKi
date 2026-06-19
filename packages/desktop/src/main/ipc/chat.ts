@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import { toIpcSerializable } from '@iki/core/utils/ipc_serialization';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 import { chatService, type ChatWebContents } from '../services/chat/service';
 
 let chatIpcRegistered = false;
@@ -29,16 +29,16 @@ export const registerChatIpc = (): void => {
   );
   ipcMain.handle('chat:messages:delete', (_, id) => chatService.deleteMessage(id));
   ipcMain.handle('chat:runs:list', (_, threadId: string) =>
-    toIpcSerializable(chatService.listRuns(threadId))
+    toPlainData(chatService.listRuns(threadId))
   );
   ipcMain.handle('chat:runs:trace:get', (_, runId: string) =>
-    toIpcSerializable(chatService.getRunTrace(runId))
+    toPlainData(chatService.getRunTrace(runId))
   );
   ipcMain.handle('chat:runs:tree:get', (_, rootRunId: string) =>
-    toIpcSerializable(chatService.getRunTree(rootRunId))
+    toPlainData(chatService.getRunTree(rootRunId))
   );
   ipcMain.handle('chat:runs:list-by-status', (_, statuses: string[], opts?: { clientId?: string; limit?: number }) =>
-    toIpcSerializable(chatService.listRunsByStatus(statuses as import('@iki/core/types/agent_run').AgentRunStatus[], opts))
+    toPlainData(chatService.listRunsByStatus(statuses as import('@iki/core/types/agent_run').AgentRunStatus[], opts))
   );
   ipcMain.handle('chat:runs:cancel', (_, runId: string) =>
     chatService.cancelRun(runId)

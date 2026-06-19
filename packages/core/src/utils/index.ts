@@ -3,7 +3,7 @@ export * from './clone';
 export * from './errors';
 export * from './guards';
 export * from './id';
-export * from './ipc_serialization';
+export * from './plain_clone';
 export * from './json';
 export * from './memory_embedding_models';
 export * from './path_boundary';

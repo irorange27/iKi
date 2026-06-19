@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ref } from 'vue';
 
-import { toIpcSerializable } from '@iki/core/utils/ipc_serialization';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 
-describe('toIpcSerializable', () => {
+describe('toPlainData', () => {
   it('converts reactive task payloads into structured-clone-safe plain data', () => {
     const taskForm = ref({
       name: 'Daily',
@@ -23,7 +23,7 @@ describe('toIpcSerializable', () => {
 
     expect(() => structuredClone(payload)).toThrow();
 
-    const serialized = toIpcSerializable(payload);
+    const serialized = toPlainData(payload);
 
     expect(serialized).toEqual({
       name: 'Daily',
@@ -44,7 +44,7 @@ describe('toIpcSerializable', () => {
       buffer: new Uint8Array([1, 2, 3]),
     };
 
-    const serialized = toIpcSerializable(payload);
+    const serialized = toPlainData(payload);
 
     expect(serialized.ranAt).toBeInstanceOf(Date);
     expect(serialized.ranAt.toISOString()).toBe('2026-03-20T09:30:00.000Z');
@@ -58,7 +58,7 @@ describe('toIpcSerializable', () => {
       buffer: new BigUint64Array([1n, 2n, 3n]),
     };
 
-    const serialized = toIpcSerializable(payload);
+    const serialized = toPlainData(payload);
 
     expect(serialized.buffer).toBeInstanceOf(BigUint64Array);
     expect(Array.from(serialized.buffer)).toEqual([1n, 2n, 3n]);

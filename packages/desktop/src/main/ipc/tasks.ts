@@ -9,7 +9,7 @@ import {
   type ProactiveTaskUpdateInput,
 } from '@iki/backend/tasks/proactive_task_manager';
 import { isObjectRecord } from '@iki/core/utils/guards';
-import { toIpcSerializable } from '@iki/core/utils/ipc_serialization';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 import { getErrorMessage } from '../utils/errors';
 import { runProactiveTask } from '../services/tasks/proactive_tasks';
 
@@ -24,24 +24,24 @@ export const registerTasksIpc = (): void => {
   if (tasksIpcRegistered) return;
   tasksIpcRegistered = true;
 
-  ipcMain.handle('tasks:list', () => toIpcSerializable(tasksDb.getProactiveTasks()));
-  ipcMain.handle('tasks:get', (_, id: string) => toIpcSerializable(tasksDb.getProactiveTask(id)));
+  ipcMain.handle('tasks:list', () => toPlainData(tasksDb.getProactiveTasks()));
+  ipcMain.handle('tasks:get', (_, id: string) => toPlainData(tasksDb.getProactiveTask(id)));
 
   ipcMain.handle('tasks:create', async (_event, input: unknown) => {
     try {
       const task = createProactiveTask(normalizeTaskCreateInput(input));
-      return toIpcSerializable({ success: true, task });
+      return toPlainData({ success: true, task });
     } catch (error) {
-      return toIpcSerializable({ success: false, error: getErrorMessage(error) });
+      return toPlainData({ success: false, error: getErrorMessage(error) });
     }
   });
 
   ipcMain.handle('tasks:update', async (_event, id: string, updates: unknown) => {
     try {
       const task = updateProactiveTask({ id }, normalizeTaskUpdateInput(updates));
-      return toIpcSerializable({ success: true, task });
+      return toPlainData({ success: true, task });
     } catch (error) {
-      return toIpcSerializable({ success: false, error: getErrorMessage(error) });
+      return toPlainData({ success: false, error: getErrorMessage(error) });
     }
   });
 
@@ -51,18 +51,18 @@ export const registerTasksIpc = (): void => {
       if (!result.deleted) {
         throw new Error('Task not found');
       }
-      return toIpcSerializable({ success: true });
+      return toPlainData({ success: true });
     } catch (error) {
-      return toIpcSerializable({ success: false, error: getErrorMessage(error) });
+      return toPlainData({ success: false, error: getErrorMessage(error) });
     }
   });
 
   ipcMain.handle('tasks:run-now', async (_event, id: string) => {
     try {
       const result = await runProactiveTask(id, { reason: 'manual' });
-      return toIpcSerializable(result);
+      return toPlainData(result);
     } catch (error) {
-      return toIpcSerializable({ success: false, error: getErrorMessage(error) });
+      return toPlainData({ success: false, error: getErrorMessage(error) });
     }
   });
 };
