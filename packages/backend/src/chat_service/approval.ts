@@ -12,7 +12,7 @@ import type { AgentRun } from '@iki/core/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
-import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { runWithToolRuntimeContext } from '../tools/runtime_context';
 import type { ChatToolApprovalDecision } from '@iki/backend/types/chat_tool_approval';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ChatMemory } from './memory';

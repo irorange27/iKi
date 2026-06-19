@@ -4,12 +4,12 @@ vi.mock('@iki/backend/db/thread_todos', () => ({
   writeThreadTodoPlan: vi.fn(),
 }));
 
-vi.mock('@iki/core/tools/runtime_context', () => ({
+vi.mock('@iki/backend/tools/runtime_context', () => ({
   getToolRuntimeContext: vi.fn(),
 }));
 
 import { writeThreadTodoPlan } from '@iki/backend/db/thread_todos';
-import { getToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { getToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 import { TodoTool } from '@iki/backend/tools/task_plan_tools';
 
 describe('TodoTool', () => {

@@ -8,7 +8,7 @@ import {
 } from '../workspaces/thread_workspace';
 import { getUserDataPath } from '../platform';
 import { isPathWithinRoot } from '@iki/core/utils/path_boundary';
-import { getToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { getToolRuntimeContext } from './runtime_context';
 
 export type WorkspaceRoot = {
   resolvedPath: string;

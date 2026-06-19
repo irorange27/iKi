@@ -103,7 +103,7 @@ vi.mock('@iki/core/context/workspace_provider', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
 
-vi.mock('@iki/core/tools/runtime_context', () => ({
+vi.mock('@iki/backend/tools/runtime_context', () => ({
   getToolRuntimeContext: getToolRuntimeContextMock,
 }));
 

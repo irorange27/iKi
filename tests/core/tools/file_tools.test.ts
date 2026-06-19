@@ -41,7 +41,7 @@ import {
   ReadFileTool,
   WriteFileTool,
 } from '@iki/backend/tools/file_tools';
-import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
 const createWorkspace = (workspacePath: string) => ({
   id: 'workspace_1',

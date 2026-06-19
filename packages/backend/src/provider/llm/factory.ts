@@ -12,7 +12,7 @@ import { getProviders } from '@iki/core/context/provider_store';
 import { createLogger } from '@iki/core/logger';
 import { getPersonaPrompt } from '@iki/core/context/persona_provider';
 import { fetchWithTimeout } from '@iki/core/context/network_provider';
-import { getToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { getToolRuntimeContext } from '../../tools/runtime_context';
 import {
   getProviderModelOptions,
   listModelsDevProviderModels,

@@ -22,7 +22,7 @@ import {
   DeleteProactiveTaskTool,
   WriteProactiveTaskTool,
 } from '@iki/backend/tools/proactive_task_tools';
-import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
 describe('proactive task tools', () => {
   beforeEach(() => {

@@ -2,7 +2,7 @@ import type { AgentResult } from '@iki/core/agent';
 import { createAgentRunTracker } from '../agent/run_tracker';
 import { createLogger } from '@iki/core/logger';
 import * as llmFactory from '../provider/llm/factory';
-import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { runWithToolRuntimeContext } from '../tools/runtime_context';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { describeApprovalRequiredTools } from './approval_types';
 import { createChatAgentRunner } from './chat_agent_runner';

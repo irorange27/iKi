@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { AgentTool } from '../agent/types';
-import type { AgentRun, AgentRunKind } from '../types/agent_run';
+import type { AgentTool } from '@iki/core/agent/types';
+import type { AgentRun, AgentRunKind } from '@iki/core/types/agent_run';
 
 export type ToolRuntimeChildRunRecorder = {
   id: string;

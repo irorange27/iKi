@@ -29,7 +29,7 @@ vi.mock('@iki/backend/agent/run_tracker', () => ({
 import { DelegatedAgentTool } from '@iki/backend/tools/agent_tools';
 import { ListDirTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
-import { runWithToolRuntimeContext } from '@iki/core/tools/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
 const setRunResult = (result: unknown) => {
   runMock.mockImplementation(async function* () {
