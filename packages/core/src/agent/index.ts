@@ -39,8 +39,6 @@ export {
   PartialAgentConfigSchema,
 } from './types';
 
-export { getConversationRunnerConfig } from './config';
-
 // Export plan data types
 export type { Plan, PlanStep } from './plan';
 

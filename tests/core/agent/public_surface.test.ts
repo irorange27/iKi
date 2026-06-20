@@ -4,7 +4,6 @@ import * as currentAgentApi from '@iki/core/agent';
 
 describe('core agent public surface', () => {
   it('exports types, schemas, config, and plan but not implementation runners', () => {
-    expect(currentAgentApi).toHaveProperty('getConversationRunnerConfig');
     expect(currentAgentApi).toHaveProperty('AgentConfigSchema');
     expect(currentAgentApi).toHaveProperty('AgentToolSchema');
     expect(currentAgentApi).not.toHaveProperty('createPlanThenExecutePrepareStep');

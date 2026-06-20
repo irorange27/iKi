@@ -3,7 +3,6 @@
 // Tests that DO mock a context module via vi.mock will override these
 // defaults (vi.mock hoisting replaces the entire module).
 
-import { injectGetAppConfig } from '@iki/core/context/config_provider';
 import { injectProviderStore } from '@iki/core/context/provider_store';
 import { injectGetUserDataPath } from '@iki/core/context/platform_provider';
 import { injectFetchWithTimeout } from '@iki/core/context/network_provider';
@@ -11,12 +10,6 @@ import { injectGetPersonaPrompt } from '@iki/core/context/persona_provider';
 import { injectMcpServerStore } from '@iki/core/context/mcp_server_store';
 import { injectEnsureThreadWorkspaceSelection } from '@iki/core/context/workspace_provider';
 import { injectFormatSkillMetadataForPrompt } from '@iki/core/context/skill_format';
-
-injectGetAppConfig(() => {
-  throw new Error(
-    'getAppConfig not mocked. Use vi.mock("@iki/core/context/config_provider") in your test.'
-  );
-});
 
 injectProviderStore({
   getProviders: () => [],

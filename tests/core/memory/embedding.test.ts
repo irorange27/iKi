@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/core/context/config_provider', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(),
 }));
 
@@ -20,7 +20,7 @@ vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 
-import { getAppConfig } from '@iki/core/context/config_provider';
+import { getAppConfig } from '@iki/backend/config';
 import { getProviders } from '@iki/core/context/provider_store';
 import { getProviderConfig } from '@iki/backend/provider/llm/factory';
 import { fetchWithTimeout } from '@iki/core/context/network_provider';

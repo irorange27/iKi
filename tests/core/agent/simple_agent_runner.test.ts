@@ -64,9 +64,8 @@ const { getAppConfigMock } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/context/config_provider', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
-  injectGetAppConfig: vi.fn(),
 }));
 
 // ───────────────────────────────────────────────────────────────────────────

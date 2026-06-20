@@ -86,7 +86,7 @@ const {
   };
 });
 
-vi.mock('@iki/core/context/config_provider', () => ({
+vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 

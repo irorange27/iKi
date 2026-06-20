@@ -17,7 +17,6 @@
     "./utils": "./src/utils/index.ts",
     "./logger": "./src/logger.ts",
     "./rate_limiter": "./src/rate_limiter.ts",
-    "./context/config_provider": "./src/context/config_provider.ts",
     "./context/mcp_server_store": "./src/context/mcp_server_store.ts",
     "./context/network_provider": "./src/context/network_provider.ts",
     "./context/persona_provider": "./src/context/persona_provider.ts",
