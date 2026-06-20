@@ -185,6 +185,9 @@ export function createTool<P extends z.ZodTypeAny>(options: {
 }): AgentTool {
   const parameters =
     options.parameters ?? zodSchemaToJsonSchema(options.paramSchema, { title: options.name });
+  const handler: AgentTool['handler'] = options.paramSchema
+    ? (args: unknown) => options.handler(options.paramSchema!.parse(args))
+    : (args: unknown) => options.handler(args as z.infer<P>);
   return {
     ...options,
     parameters,
@@ -194,6 +197,7 @@ export function createTool<P extends z.ZodTypeAny>(options: {
     paramSchema: options.paramSchema,
     displayName: options.displayName ?? options.name,
     source: options.source ?? { kind: 'builtin' },
+    handler,
     ...(options.retry ? { retry: options.retry } : {}),
   };
 }

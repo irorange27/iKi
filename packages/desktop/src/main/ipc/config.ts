@@ -19,7 +19,7 @@ import type {
   NapCatBridgeHeartbeatInfo,
   NapCatBridgeStatusInfo,
   NetworkDiagnosticResult,
-} from '@iki/core/types/config';
+} from '@iki/backend/types/config';
 import {
   applyDesktopDaemonConfigUpdate,
   getDesktopEmbeddedDaemonStatus,

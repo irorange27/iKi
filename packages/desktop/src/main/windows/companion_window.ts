@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { getAppConfig, setAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import { maybeOpenDevTools } from './devtools_policy';
 import { loadRendererEntry } from './renderer';
 

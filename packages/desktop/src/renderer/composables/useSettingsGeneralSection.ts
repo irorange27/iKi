@@ -6,7 +6,7 @@ import { getElectronAPI } from '../services/electron_api';
 import { updateService } from '../services/update_service';
 import { useConfigStore } from '../store/config';
 import { useI18n } from '../i18n';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import type { Provider } from '@iki/core/types/provider';
 import type { AppUpdateStatus } from '@iki/backend/types/update';
 import { getErrorMessage } from '@iki/core/utils/errors';

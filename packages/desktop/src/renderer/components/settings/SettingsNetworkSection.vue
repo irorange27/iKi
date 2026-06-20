@@ -212,7 +212,7 @@ import type {
   NetworkDiagnosticResult,
   NetworkDiagnosticTargetKey,
   WebSearchEngine,
-} from '@iki/core/types/config';
+} from '@iki/backend/types/config';
 import { buildProxyUrl } from '@iki/backend/network/proxy';
 import { getErrorMessage } from '@iki/core/utils/errors';
 

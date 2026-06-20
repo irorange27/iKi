@@ -3,7 +3,7 @@ import { app } from 'electron';
 
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/backend/constants/daemon';
 import { getAppConfig } from '@iki/backend/config';
-import type { AppConfig, DaemonStatusInfo } from '@iki/core/types/config';
+import type { AppConfig, DaemonStatusInfo } from '@iki/backend/types/config';
 import { createDaemonLogger } from '@iki/backend/daemon_logs';
 import { startDaemonServer } from '@iki/daemon/server';
 

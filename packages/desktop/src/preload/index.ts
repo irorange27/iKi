@@ -9,7 +9,7 @@ import {
   DaemonLogsInfo,
   DaemonStatusInfo,
   NetworkDiagnosticResult,
-} from '@iki/core/types/config';
+} from '@iki/backend/types/config';
 import type { AppUpdateStatus } from '@iki/backend/types/update';
 import type { CompanionSnapshot } from '@iki/backend/types/companion';
 import type {

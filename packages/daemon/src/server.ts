@@ -24,7 +24,7 @@ import {
 } from './server_shared';
 import { configureDaemonWebSockets } from './server_ws';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/backend/constants/daemon';
-import type { DaemonStatusInfo } from '@iki/core/types/config';
+import type { DaemonStatusInfo } from '@iki/backend/types/config';
 
 const nodeRequire = createRequire(fileURLToPath(import.meta.url));
 

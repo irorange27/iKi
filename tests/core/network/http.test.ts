@@ -10,7 +10,7 @@ vi.mock('@iki/backend/network/electron_fetch', () => ({
 }));
 
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import { getAppConfig } from '@iki/backend/config';
 import {
   canUseElectronNetworkStack,

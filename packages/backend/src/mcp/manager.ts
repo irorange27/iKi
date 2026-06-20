@@ -13,7 +13,7 @@ import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.j
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { getAppConfig } from '@iki/core/context/config_provider';
+import { getAppConfig } from '../config';
 import { createLogger } from '@iki/core/logger';
 import {
   addMcpServer,

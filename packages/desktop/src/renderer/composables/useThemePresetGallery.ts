@@ -7,7 +7,7 @@ import {
   resolveThemeSelection,
 } from '@iki/theme/registry';
 import type { ThemePresetSummary, ThemeSlotPalette, ThemeVariant } from '@iki/theme/types';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 
 export type ThemePresetCard = ThemePresetSummary & {
   swatches: string[];

@@ -1,5 +1,5 @@
 import { createLogger } from '@iki/core/logger';
-import { getAppConfig } from '@iki/core/context/config_provider';
+import { getAppConfig } from '../config';
 import { getProviders } from '@iki/core/context/provider_store';
 import { getProviderConfig } from '../provider/llm/factory';
 import { fetchWithTimeout } from '@iki/core/context/network_provider';

@@ -1,5 +1,5 @@
 import { getAppConfig } from '@iki/backend/config';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 
 export const DEFAULT_OPENAI_MODEL = 'whisper-1';

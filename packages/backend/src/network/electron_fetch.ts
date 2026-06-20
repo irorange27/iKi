@@ -2,7 +2,7 @@ import type { Session } from 'electron';
 
 import { getAppConfig } from '@iki/backend/config';
 import { buildProxyUrl, getProxyCredentials } from './proxy';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '../types/config';
 import { getErrorMessage } from '@iki/core/utils/errors';
 
 const ELECTRON_NETWORK_PARTITION = 'iki-runtime-network';

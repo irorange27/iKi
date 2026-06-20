@@ -1,4 +1,4 @@
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '../types/config';
 
 type NetworkConfig = AppConfig['network'];
 

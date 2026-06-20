@@ -104,7 +104,7 @@ import { storeToRefs } from 'pinia';
 
 import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;

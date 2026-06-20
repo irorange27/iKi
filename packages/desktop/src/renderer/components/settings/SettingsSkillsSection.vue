@@ -166,7 +166,7 @@ import { RefreshCw } from 'lucide-vue-next';
 import { useConfigStore } from '../../store/config';
 import { useI18n } from '../../i18n';
 import { getElectronApiSlice, getElectronApiSliceMethod } from '../../services/electron_api';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import { getErrorMessage } from '@iki/core/utils/errors';
 

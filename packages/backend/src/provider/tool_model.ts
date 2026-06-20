@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 
 import { getProviders } from '@iki/core/context/provider_store';
-import { getAppConfig } from '@iki/core/context/config_provider';
+import { getAppConfig } from '../config';
 import { createLogger } from '@iki/core/logger';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';

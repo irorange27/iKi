@@ -3,7 +3,7 @@ import { BaseTool } from '@iki/core/tools/base';
 import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '@iki/backend/network/http';
 import { RetryableError } from '@iki/core/utils/errors';
 import { getAppConfig } from '../config';
-import type { WebSearchEngine } from '@iki/core/types/config';
+import type { WebSearchEngine } from '../types/config';
 import {
   DEFAULT_FETCH_MAX_CHARS,
   DEFAULT_SEARCH_RESULT_LIMIT,

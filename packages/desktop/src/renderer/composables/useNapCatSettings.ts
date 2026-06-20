@@ -12,7 +12,7 @@ import type {
   DaemonLogsInfo,
   DaemonStatusInfo,
   NapCatMessagePreviewEntry,
-} from '@iki/core/types/config';
+} from '@iki/backend/types/config';
 import type { Provider } from '@iki/core/types/provider';
 import {
   buildNapCatWsUrl,

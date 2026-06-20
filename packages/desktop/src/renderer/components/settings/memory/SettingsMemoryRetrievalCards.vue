@@ -90,7 +90,7 @@ import { storeToRefs } from 'pinia';
 import SettingsSelect from '../SettingsSelect.vue';
 import { useI18n } from '../../../i18n';
 import { useConfigStore } from '../../../store/config';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import type { Provider } from '@iki/core/types/provider';
 import { listProviderEmbeddingModels } from '@iki/core/utils/memory_embedding_models';
 import { getProviderDisplayName } from '../../../modules/providers/provider_display';

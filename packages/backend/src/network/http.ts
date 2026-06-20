@@ -1,4 +1,4 @@
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '../types/config';
 import { buildProxyUrl } from './proxy';
 import { getAppConfig } from '@iki/backend/config';
 import { canUseElectronNetworkStack, electronFetchWithTimeout } from './electron_fetch';

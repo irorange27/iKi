@@ -11,7 +11,7 @@ import { getProviders } from '@iki/backend/db/providers';
 import { createComposerInvocationPart, type ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
 import { parseSlashCommandDraft } from '@iki/backend/chat/slash_commands';
 import type { ChatThread } from '@iki/backend/types/chat';
-import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '@iki/core/types/config';
+import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '@iki/backend/types/config';
 import { parseModelList } from '@iki/core/utils/provider_models';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { renderMarkdownToPlainText } from '@iki/core/utils/plain_text_markdown';

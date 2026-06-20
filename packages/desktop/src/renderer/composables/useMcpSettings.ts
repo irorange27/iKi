@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import type {
   McpApprovalMode,
   McpServerInput,

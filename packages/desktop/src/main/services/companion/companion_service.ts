@@ -10,7 +10,7 @@ import type {
   CompanionSnapshot,
   ConversationPreview,
 } from '@iki/backend/types/companion';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 import type { Provider } from '@iki/core/types/provider';
 import type { InterventionPolicySignal } from '@iki/backend/chat/intervention_policy';
 import { getAllBrowserWindows } from '../../utils/browser_windows';

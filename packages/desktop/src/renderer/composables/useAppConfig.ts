@@ -2,7 +2,7 @@ import { computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useConfigStore } from '../store/config';
 import { createLogger } from '../logger';
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '@iki/backend/types/config';
 
 const appConfigLogger = createLogger({ module: 'app_config' });
 

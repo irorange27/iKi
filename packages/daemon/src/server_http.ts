@@ -5,7 +5,7 @@ import { createAppClient } from '@iki/backend/db/app_clients';
 import type { McpManager } from '@iki/backend/mcp';
 import type { ChatTransportMessage } from '@iki/backend/chat_service';
 import type { ChatService } from '@iki/backend/chat_service';
-import type { NapCatBridgeStatusInfo } from '@iki/core/types/config';
+import type { NapCatBridgeStatusInfo } from '@iki/backend/types/config';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {
   logDaemonHandlerFailure,

@@ -1,4 +1,4 @@
-import type { AppConfig } from '@iki/core/types/config';
+import type { AppConfig } from '../types/config';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { mergeAppConfig, mergeAppConfigWithBase } from './defaults';
 import { AppConfigSchema } from './schema';
