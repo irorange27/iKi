@@ -139,7 +139,7 @@ import type {
   ChatUsagePeriod,
   ChatUsageSummary,
 } from '@iki/backend/types/chat_usage';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const props = defineProps<{
   active: boolean;

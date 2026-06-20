@@ -3,7 +3,7 @@ import {
   AgentConfigSchema,
   type AgentConfig,
   type PartialAgentConfig,
-} from '@iki/core/agent/types';
+} from '@iki/backend/agent/types';
 
 const configLogger = createLogger({ module: 'ai_sdk_config' });
 

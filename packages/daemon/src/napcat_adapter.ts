@@ -12,9 +12,9 @@ import { createComposerInvocationPart, type ComposerInvocationPartData } from '@
 import { parseSlashCommandDraft } from '@iki/backend/chat/slash_commands';
 import type { ChatThread } from '@iki/backend/types/chat';
 import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '@iki/backend/types/config';
-import { parseModelList } from '@iki/core/utils/provider_models';
-import { isObjectRecord } from '@iki/core/utils/guards';
-import { renderMarkdownToPlainText } from '@iki/core/utils/plain_text_markdown';
+import { parseModelList } from '@iki/backend/utils/provider_models';
+import { isObjectRecord } from '@iki/backend/utils/guards';
+import { renderMarkdownToPlainText } from '@iki/backend/utils/plain_text_markdown';
 import type { ParsedUiMessage } from '@iki/backend/chat/ui_message_codec';
 import { registerBridgeThreadSender } from '@iki/backend/bridge_dispatch';
 import { resolveNapCatInboundSlashCommand } from './napcat_slash_commands';

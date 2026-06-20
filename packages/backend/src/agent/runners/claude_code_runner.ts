@@ -2,17 +2,17 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 import { createLogger } from '@iki/backend/logger';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
-import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/agent_runner';
-import type { AgentResult, AgentUsage } from '@iki/core/agent/types';
+import type { AgentRunner, AgentRunnerRequest } from '@iki/backend/agent/runners/agent_runner';
+import type { AgentResult, AgentUsage } from '@iki/backend/agent/types';
 import type {
   AgentStep,
   MessageUpdateStep,
   ToolExecutionStartStep,
   ToolExecutionEndStep,
   TurnEndStep,
-} from '@iki/core/agent/agent_step';
+} from '@iki/backend/agent/agent_step';
 
 const logger = createLogger({ module: 'claude_code_runner' });
 

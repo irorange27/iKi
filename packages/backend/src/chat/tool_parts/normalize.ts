@@ -3,7 +3,7 @@ import type { ProviderMetadata } from 'ai';
 import type { DynamicToolPart, DynamicToolState } from '../message_parts';
 import { isObjectRecord } from '../message_parts';
 import { getApprovalIdValue, getToolCallIdFromPart } from './ids';
-import { unwrapAcpDynamicToolCall } from '@iki/core/utils/acp';
+import { unwrapAcpDynamicToolCall } from '@iki/backend/utils/acp';
 
 export const normalizeToolNameKey = (value: string): string =>
   value.trim().toLowerCase().replace(/[-\s]+/g, '_');

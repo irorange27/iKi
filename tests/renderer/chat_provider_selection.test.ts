@@ -15,7 +15,7 @@ vi.mock('../../packages/desktop/src/renderer/logger', () => ({
   })),
 }));
 
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import {
   resolveProviderSelection,
   useChatProviderSelection,

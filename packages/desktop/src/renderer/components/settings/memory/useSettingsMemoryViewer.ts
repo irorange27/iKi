@@ -9,7 +9,7 @@ import type {
   LongMemoryEntry,
   LongMemorySearchResult,
 } from '@iki/backend/types/memory';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import { getElectronAPI } from '../../../services/electron_api';
 import {
   formatJson,

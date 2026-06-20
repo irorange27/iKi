@@ -12,8 +12,8 @@ import {
   type MemoryEmbeddingRuntime,
 } from '../memory/embedding';
 import { extractTextFromMessageParts } from '../chat/message_parts';
-import { createPrefixedId } from '@iki/core/utils/id';
-import { toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/backend/utils/id';
+import { toIsoNow } from '@iki/backend/utils/text';
 
 const memoryLogger = createLogger({ module: 'memory_db' });
 

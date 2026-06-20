@@ -16,12 +16,12 @@ import type {
   Provider,
   ProviderUpdatedEvent,
   ProviderModelDiscoveryOverride,
-} from '@iki/core/types/provider';
+} from '@iki/backend/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/backend/types/chat_usage';
 import type { AffectStateEntry } from '@iki/backend/types/memory';
 import type { ProactiveTask } from '@iki/backend/types/tasks';
-import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
-import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/core/types/agent_run';
+import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
+import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/backend/types/agent_run';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -42,7 +42,7 @@ import type {
   ChatThreadInput,
   ChatMessageInput,
 } from '@iki/backend/types/electron_api';
-import { toPlainData } from '@iki/core/utils/plain_clone';
+import { toPlainData } from '@iki/backend/utils/plain_clone';
 
 const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => void) => {
   const handler = (_event: Electron.IpcRendererEvent, payload: T) => {

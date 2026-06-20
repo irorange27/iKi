@@ -5,7 +5,7 @@ import { toUiMessages } from '../modules/chat/ui_message_convert';
 import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
 import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
 import { extractTextFromMessage } from '../modules/chat/ui_message_text';
-import { isObjectRecord } from '@iki/core/utils/guards';
+import { isObjectRecord } from '@iki/backend/utils/guards';
 import type { ChatMessage, ChatThread as StoredChatThread } from '@iki/backend/types/chat';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';

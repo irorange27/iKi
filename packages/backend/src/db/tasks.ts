@@ -1,6 +1,6 @@
 import { getDb } from './database';
 import { inferProactiveTaskToolMode, type ProactiveTask } from '@iki/backend/types/tasks';
-import { toIsoNow } from '@iki/core/utils/text';
+import { toIsoNow } from '@iki/backend/utils/text';
 import { buildSetClause } from './utils';
 
 type ProactiveTaskRow = Omit<ProactiveTask, 'enabled' | 'notify'> & {

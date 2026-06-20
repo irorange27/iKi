@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { withRetry } from '@iki/backend/tools/retry';
-import { RetryableError, isRetryableError } from '@iki/core/utils/errors';
+import { RetryableError, isRetryableError } from '@iki/backend/utils/errors';
 
 describe('withRetry', () => {
   beforeEach(() => {

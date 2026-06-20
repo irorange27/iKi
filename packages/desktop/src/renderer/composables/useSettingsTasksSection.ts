@@ -15,7 +15,7 @@ import {
   inferProactiveTaskToolMode,
   parseProactiveTaskTools,
 } from '@iki/backend/types/tasks';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 export type TaskProviderModels = {
   id: string;

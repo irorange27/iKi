@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 
 import * as providerDb from '@iki/backend/db/providers';
 import { createLogger } from '@iki/backend/logger';
-import type { ProviderUpdatedEvent } from '@iki/core/types/provider';
+import type { ProviderUpdatedEvent } from '@iki/backend/types/provider';
 import { getAllBrowserWindows } from '../utils/browser_windows';
 import { companionService } from '../services/companion/companion_service';
 

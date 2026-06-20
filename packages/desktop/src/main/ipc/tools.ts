@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { applyToolApprovalPolicyList } from '@iki/core/utils/tool_approval';
+import { applyToolApprovalPolicyList } from '@iki/backend/utils/tool_approval';
 
 let toolsIpcRegistered = false;
 const toolsIpcLogger = createLogger({ module: 'tools_ipc' });

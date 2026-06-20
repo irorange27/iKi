@@ -1,7 +1,7 @@
 import * as providerDb from '@iki/backend/db/providers';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
-import { parseModelList } from '@iki/core/utils/provider_models';
+import { parseModelList } from '@iki/backend/utils/provider_models';
 import type {
   CompanionAffectHint,
   CompanionDormantReason,
@@ -11,7 +11,7 @@ import type {
   ConversationPreview,
 } from '@iki/backend/types/companion';
 import type { AppConfig } from '@iki/backend/types/config';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import type { InterventionPolicySignal } from '@iki/backend/chat/intervention_policy';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 

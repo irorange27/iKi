@@ -5,7 +5,7 @@ import {
   type TaskPlanItemDraft,
 } from '@iki/backend/types/task_plan';
 import { normalizeTaskPlanItems } from './task_plan';
-import { normalizeWhitespace, toIsoNow } from '@iki/core/utils/text';
+import { normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
 
 type ThreadTodoRow = {
   thread_id: string;

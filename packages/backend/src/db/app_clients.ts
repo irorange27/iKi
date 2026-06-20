@@ -1,7 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { getDb } from './database';
-import { createPrefixedId } from '@iki/core/utils/id';
-import { toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/backend/utils/id';
+import { toIsoNow } from '@iki/backend/utils/text';
 
 type AppClientRow = {
   id: string;

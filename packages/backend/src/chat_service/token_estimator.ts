@@ -1,7 +1,7 @@
 import { countTokens, decode, encode } from 'gpt-tokenizer';
 import type { ModelMessage } from 'ai';
 
-import { extractTextFromModelMessageContent } from '@iki/core/agent/model_messages';
+import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const TOOL_MESSAGE_OVERHEAD_TOKENS = 8;

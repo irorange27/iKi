@@ -12,7 +12,7 @@ import type {
   NetworkDiagnosticTargetKey,
   WebSearchEngine,
 } from '@iki/backend/types/config';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 type NetworkDiagnosticTarget = {
   key: NetworkDiagnosticTargetKey;

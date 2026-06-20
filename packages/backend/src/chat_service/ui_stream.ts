@@ -5,11 +5,11 @@ import type {
   SkillUsageEntry,
   TokenUsagePartData,
 } from '@iki/backend/chat/message_parts';
-import type { AffectSignal } from '@iki/core/types/affect';
+import type { AffectSignal } from '@iki/backend/types/affect';
 import { isObjectRecord } from '@iki/backend/chat/tool_parts';
 
 import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './types';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 
 const getNestedToolEventField = (
   event: ToolStreamEvent,

@@ -281,7 +281,7 @@ import SettingsSelect from '../SettingsSelect.vue';
 import ProviderModelsPanel from './ProviderModelsPanel.vue';
 import { useI18n } from '../../../i18n';
 import type { ProviderDraft } from '../../../composables/useProviderDrafts';
-import type { BuiltInProvider } from '@iki/core/types/settings';
+import type { BuiltInProvider } from '@iki/backend/types/settings';
 import type {
   AcpMcpServerEntry,
   ProviderSelectOption,

@@ -4,12 +4,12 @@ import * as memoryDb from '@iki/backend/db/memory';
 import {
   hasToolPartInModelMessageContent,
   sanitizeModelConversationMessages,
-} from '@iki/core/agent/model_messages';
+} from '@iki/backend/agent/model_messages';
 import {
   generateThreadSummary,
   type ThreadSummaryMessage,
 } from './thread_summary';
-import type { ModelCapability } from '@iki/core/utils/provider_models';
+import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { ChatInputMessage } from '../chat_service/types';
 import {
   buildMessagePreview,

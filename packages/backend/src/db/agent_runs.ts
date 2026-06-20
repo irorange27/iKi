@@ -9,8 +9,8 @@ import type {
   AgentRunTree,
   AgentRunStep,
   AgentRunWorkingState,
-} from '@iki/core/types/agent_run';
-import { normalizeWhitespace, toIsoNow } from '@iki/core/utils/text';
+} from '@iki/backend/types/agent_run';
+import { normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
 
 type AgentRunRow = {
   id: string;

@@ -198,32 +198,21 @@ importers:
 
   packages/backend:
     dependencies:
-      '@iki/core':
-        specifier: workspace:*
-        version: link:../core
       '@iki/theme':
         specifier: workspace:*
         version: link:../theme
-
-  packages/core: {}
 
   packages/daemon:
     dependencies:
       '@iki/backend':
         specifier: workspace:*
         version: link:../backend
-      '@iki/core':
-        specifier: workspace:*
-        version: link:../core
 
   packages/desktop:
     dependencies:
       '@iki/backend':
         specifier: workspace:*
         version: link:../backend
-      '@iki/core':
-        specifier: workspace:*
-        version: link:../core
       '@iki/daemon':
         specifier: workspace:*
         version: link:../daemon

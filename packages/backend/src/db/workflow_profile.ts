@@ -1,6 +1,6 @@
 import { getDb } from './database';
 import type { WorkflowProfile } from '@iki/backend/types/workflow';
-import { toIsoNow } from '@iki/core/utils/text';
+import { toIsoNow } from '@iki/backend/utils/text';
 
 type WorkflowProfileRow = {
   thread_id: string;

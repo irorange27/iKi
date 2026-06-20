@@ -11,8 +11,8 @@ import {
   parseProactiveTaskTools,
   type ProactiveTask,
 } from '@iki/backend/types/tasks';
-import { createPrefixedId } from '@iki/core/utils/id';
-import { toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/backend/utils/id';
+import { toIsoNow } from '@iki/backend/utils/text';
 import { chatService } from '../chat/service';
 import { companionService } from '../companion/companion_service';
 import { getErrorMessage } from '../../utils/errors';

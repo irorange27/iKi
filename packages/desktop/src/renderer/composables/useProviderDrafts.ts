@@ -1,8 +1,8 @@
 import { computed, ref, type Ref } from 'vue';
 
-import type { Provider, ProviderModelOptionsMap } from '@iki/core/types/provider';
-import type { BuiltInProvider } from '@iki/core/types/settings';
-import { parseModelList, parseProviderModelOptionsMap } from '@iki/core/utils/provider_models';
+import type { Provider, ProviderModelOptionsMap } from '@iki/backend/types/provider';
+import type { BuiltInProvider } from '@iki/backend/types/settings';
+import { parseModelList, parseProviderModelOptionsMap } from '@iki/backend/utils/provider_models';
 import { isCanonicalBuiltInProvider } from '../modules/providers/provider_icons';
 
 const safeClone = <T>(value: T, fallback?: T): T => {

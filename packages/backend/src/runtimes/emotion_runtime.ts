@@ -1,4 +1,4 @@
-import { isAffectLabel, type AffectLabel, type AffectScore } from '@iki/core/types/affect';
+import { isAffectLabel, type AffectLabel, type AffectScore } from '@iki/backend/types/affect';
 import { createLogger } from '@iki/backend/logger';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import {

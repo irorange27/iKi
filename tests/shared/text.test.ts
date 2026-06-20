@@ -4,7 +4,7 @@ import {
   normalizeOptionalWhitespace,
   normalizeWhitespace,
   toIsoNow,
-} from '@iki/core/utils/text';
+} from '@iki/backend/utils/text';
 
 describe('text utils', () => {
   it('normalizes whitespace-only string inputs consistently', () => {

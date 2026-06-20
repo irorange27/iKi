@@ -1,11 +1,11 @@
-import type { ConversationRunnerStreamEvent } from '@iki/core/agent';
+import type { ConversationRunnerStreamEvent } from '@iki/backend/agent';
 import type {
   ChatUiMessage,
   SkillUsageEntry,
   TokenUsagePartData,
 } from '@iki/backend/chat/message_parts';
 import type { ModelMessage } from 'ai';
-import type { AffectSignal } from '@iki/core/types/affect';
+import type { AffectSignal } from '@iki/backend/types/affect';
 
 export type ChatWebContents = {
   id: number;
@@ -32,7 +32,7 @@ export type ToolStreamEvent = ConversationRunnerStreamEvent;
 
 export type RunStatusEvent = {
   runId: string;
-  status: import('@iki/core/types/agent_run').AgentRunStatus;
+  status: import('@iki/backend/types/agent_run').AgentRunStatus;
   threadId?: string | null;
   timestamp: string;
 };

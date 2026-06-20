@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/core/utils/provider_models';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
 
 import {
   getAffectReferenceSummary,

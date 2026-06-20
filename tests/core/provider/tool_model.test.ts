@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 
 const {
   createModelMock,

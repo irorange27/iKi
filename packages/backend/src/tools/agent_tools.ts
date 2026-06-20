@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-import type { AgentResult, AgentTool } from '@iki/core/agent/types';
+import type { AgentResult, AgentTool } from '@iki/backend/agent/types';
 import { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';

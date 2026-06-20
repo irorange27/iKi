@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { Provider } from '@iki/core/types/provider';
+import { Provider } from '@iki/backend/types/provider';
 import { buildSetClause } from './utils';
 
 type ProviderRow = Provider & { enabled: number | boolean; is_response_api?: number | boolean };

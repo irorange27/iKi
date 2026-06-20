@@ -2,7 +2,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import type { TaskPlan } from '@iki/backend/types/task_plan';
-import { isObjectRecord } from '@iki/core/utils/guards';
+import { isObjectRecord } from '@iki/backend/utils/guards';
 import { createLogger } from '../logger';
 
 const chatThreadTodoPlanLogger = createLogger({ module: 'chat_thread_todo_plan' });

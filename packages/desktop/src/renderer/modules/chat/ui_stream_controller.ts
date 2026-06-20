@@ -5,7 +5,7 @@ import type {
   ChatUiMessageChunk,
 } from '@iki/backend/chat/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
-import { isObjectRecord } from '@iki/core/utils/guards';
+import { isObjectRecord } from '@iki/backend/utils/guards';
 import { createLogger } from '../../logger';
 import { getApprovalId, getToolCallIdFromPart } from './ui_message_tool_parts';
 import type { ChatMessageStore } from './chat_message_store';

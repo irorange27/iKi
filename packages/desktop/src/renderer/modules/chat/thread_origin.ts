@@ -1,6 +1,6 @@
 import type { ChatThread } from '@iki/backend/types/chat';
-import { isObjectRecord } from '@iki/core/utils/guards';
-import { normalizeWhitespace } from '@iki/core/utils/text';
+import { isObjectRecord } from '@iki/backend/utils/guards';
+import { normalizeWhitespace } from '@iki/backend/utils/text';
 
 export type ThreadOriginInfo = {
   isExternal: boolean;

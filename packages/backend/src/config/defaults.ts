@@ -1,5 +1,5 @@
 import type { AppConfig, WebSearchEngine } from '../types/config';
-import { clonePlainData } from '@iki/core/utils/clone';
+import { clonePlainData } from '@iki/backend/utils/clone';
 import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/backend/constants/daemon';
 import { createDefaultThemeConfig } from '@iki/theme/registry';
 

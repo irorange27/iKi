@@ -9,12 +9,12 @@ import type {
   ContinuityItemStatus,
   ContinuitySearchResult,
 } from '@iki/backend/types/continuity';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 import {
   normalizeOptionalWhitespace,
   normalizeWhitespace,
   toIsoNow,
-} from '@iki/core/utils/text';
+} from '@iki/backend/utils/text';
 
 const clampUnit = (value: unknown, fallback: number): number => {
   const parsed = Number(value);

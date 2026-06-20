@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ref } from 'vue';
 
-import { toPlainData } from '@iki/core/utils/plain_clone';
+import { toPlainData } from '@iki/backend/utils/plain_clone';
 
 describe('toPlainData', () => {
   it('converts reactive task payloads into structured-clone-safe plain data', () => {

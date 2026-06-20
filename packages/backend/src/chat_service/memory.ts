@@ -16,10 +16,10 @@ import {
   type EmotionResult,
 } from '../provider/emotion_model';
 import { planMemoryRetrieval } from '../provider/memory_retrieval';
-import { isAffectLabel } from '@iki/core/types/affect';
+import { isAffectLabel } from '@iki/backend/types/affect';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
-import { parseJsonStringArray } from '@iki/core/utils/json';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { parseJsonStringArray } from '@iki/backend/utils/json';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatInputMessage } from './types';
 import { getPromptFromMessage } from './ui_messages';
 

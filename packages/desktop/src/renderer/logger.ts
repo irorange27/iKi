@@ -3,8 +3,8 @@ import type {
   StructuredLogError,
   StructuredLogLevel,
   StructuredLogOutcome,
-} from '@iki/core/types/logging';
-import { formatStructuredConsoleLine } from '@iki/core/logging/console_formatter';
+} from '@iki/backend/types/logging';
+import { formatStructuredConsoleLine } from '@iki/backend/logging/console_formatter';
 
 type LogEventInput = {
   level: StructuredLogLevel;

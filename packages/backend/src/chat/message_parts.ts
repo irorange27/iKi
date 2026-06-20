@@ -5,9 +5,9 @@ import {
   type AffectLabel,
   type AffectScore,
   type AffectSignalSource,
-} from '@iki/core/types/affect';
+} from '@iki/backend/types/affect';
 import type { SkillSource } from '@iki/backend/types/skill';
-import { isObjectRecord } from '@iki/core/utils/guards';
+import { isObjectRecord } from '@iki/backend/utils/guards';
 
 export { isObjectRecord };
 

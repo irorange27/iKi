@@ -24,7 +24,7 @@ import {
 } from '../db/mcp_servers';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { resolveMcpToolResult } from './tool_results';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 import type {
   McpApprovalMode,
   McpServer,
@@ -32,7 +32,7 @@ import type {
   McpServerStatus,
   McpServerSummary,
   McpToolCatalogItem,
-} from '@iki/core/types/mcp';
+} from '@iki/backend/types/mcp';
 
 type McpConnection = {
   server: McpServer;

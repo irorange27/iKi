@@ -71,7 +71,7 @@ vi.mock('@iki/backend/config', () => ({
 // ───────────────────────────────────────────────────────────────────────────
 
 import { SimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
-import { isRetryableError, RefusalError } from '@iki/core/utils/errors';
+import { isRetryableError, RefusalError } from '@iki/backend/utils/errors';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

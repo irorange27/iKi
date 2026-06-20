@@ -6,7 +6,7 @@ import { createLogger } from '@iki/backend/logger';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { createModel, disposeLanguageModel, getModelCallSettings } from '../provider/llm/factory';
-import { parseModelList } from '@iki/core/utils/provider_models';
+import { parseModelList } from '@iki/backend/utils/provider_models';
 
 export interface ToolModelConfig {
   providerType: string;

@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai';
 
-import type { AgentStep, HandoffStep } from '@iki/core/agent/agent_step';
-import type { AgentResult } from '@iki/core/agent/types';
+import type { AgentStep, HandoffStep } from '@iki/backend/agent/agent_step';
+import type { AgentResult } from '@iki/backend/agent/types';
 
 import { createSimpleAgentRunner } from '../runners/simple_agent_runner';
 import { resolveTools } from './tool_resolver';

@@ -1,3 +1,5 @@
+export * from './affect';
+export * from './agent_run';
 export * from './awaiters';
 export * from './chat';
 export * from './chat_invocation';
@@ -9,7 +11,9 @@ export * from './continuity';
 export * from './electron_api';
 export * from './identity';
 export * from './logging';
+export * from './mcp';
 export * from './memory';
+export * from './provider';
 export * from './settings';
 export * from './skill';
 export * from './speech';

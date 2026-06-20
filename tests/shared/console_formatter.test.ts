@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatStructuredConsoleLine } from '@iki/core/logging/console_formatter';
+import { formatStructuredConsoleLine } from '@iki/backend/logging/console_formatter';
 
 describe('structured console formatter', () => {
   it('formats a console line with time, level, scope, body, and compact extras', () => {

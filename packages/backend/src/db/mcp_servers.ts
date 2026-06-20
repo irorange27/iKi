@@ -1,6 +1,6 @@
 import { getDb } from './database';
-import type { McpServer, McpServerInput, McpServerUpdate } from '@iki/core/types/mcp';
-import { toIsoNow } from '@iki/core/utils/text';
+import type { McpServer, McpServerInput, McpServerUpdate } from '@iki/backend/types/mcp';
+import { toIsoNow } from '@iki/backend/utils/text';
 import { buildSetClause } from './utils';
 
 type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'headers' | 'env'> & {

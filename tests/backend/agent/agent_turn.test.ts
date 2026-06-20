@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { createTool } from '@iki/backend/tools';
 import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
 import { FauxModelProvider, fauxToolCall, fauxText } from '@iki/backend/agent/testing/faux_model';
-import type { AgentStep } from '@iki/core/agent';
+import type { AgentStep } from '@iki/backend/agent';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

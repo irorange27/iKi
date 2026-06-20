@@ -10,8 +10,6 @@ export default defineConfig({
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: [
-      { find: '@iki/core/', replacement: path.join(ROOT, 'packages/core/src/') },
-      { find: '@iki/core', replacement: path.join(ROOT, 'packages/core/src/index.ts') },
       { find: '@iki/backend/', replacement: path.join(ROOT, 'packages/backend/src/') },
       { find: '@iki/backend', replacement: path.join(ROOT, 'packages/backend/src/index.ts') },
       { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },

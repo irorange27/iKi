@@ -12,13 +12,13 @@ import { acpTools } from '@mcpc-tech/acp-ai-provider';
 import { createLogger } from '@iki/backend/logger';
 import { withRetry } from '@iki/backend/tools/retry';
 import { getFullSystemPrompt } from './llm/factory';
-import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
-import { unwrapAcpDynamicToolCall } from '@iki/core/utils/acp';
+import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
+import { unwrapAcpDynamicToolCall } from '@iki/backend/utils/acp';
 import {
   extractTextFromModelMessageContent,
   sanitizeModelConversationMessages,
-} from '@iki/core/agent/model_messages';
-import type { AgentConfig, AgentTool, ToolApprovalRequest } from '@iki/core/agent/types';
+} from '@iki/backend/agent/model_messages';
+import type { AgentConfig, AgentTool, ToolApprovalRequest } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'ai_sdk_runtime' });
 

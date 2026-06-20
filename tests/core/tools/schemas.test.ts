@@ -41,7 +41,7 @@ describe('tool input schemas', () => {
       importSpecifiers.every(
         specifier =>
           specifier === 'zod' ||
-          specifier === '@iki/core/tools/schemas' ||
+          specifier === '@iki/backend/tools/schemas' ||
           specifier.startsWith('../types/')
       )
     ).toBe(true);

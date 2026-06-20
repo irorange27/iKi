@@ -7,7 +7,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import SettingsView from '../../../packages/desktop/src/renderer/views/SettingsView.vue';
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type' | 'models'>

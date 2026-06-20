@@ -6,12 +6,12 @@ import type {
   TodoListItemDraft,
   TodoListSummary,
 } from '@iki/backend/types/todos';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 import {
   normalizeOptionalWhitespace,
   normalizeWhitespace,
   toIsoNow,
-} from '@iki/core/utils/text';
+} from '@iki/backend/utils/text';
 
 type TodoListRow = {
   id: string;

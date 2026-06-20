@@ -6,7 +6,7 @@ import { fetchWithTimeout } from '../network/http';
 import {
   DEFAULT_MEMORY_EMBEDDING_MODEL,
   listProviderEmbeddingModels,
-} from '@iki/core/utils/memory_embedding_models';
+} from '@iki/backend/utils/memory_embedding_models';
 
 const memoryEmbeddingLogger = createLogger({ module: 'memory_embedding' });
 

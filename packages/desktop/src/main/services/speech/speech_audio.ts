@@ -2,7 +2,7 @@ import { promises as fs, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 
 const runFfmpeg = async (args: string[], ffmpegPath: string): Promise<void> => {
   await new Promise<void>((resolve, reject) => {

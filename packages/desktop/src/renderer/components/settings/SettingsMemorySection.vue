@@ -22,7 +22,7 @@ import SettingsMemoryEmotionCards from './memory/SettingsMemoryEmotionCards.vue'
 import SettingsMemoryRetrievalCards from './memory/SettingsMemoryRetrievalCards.vue';
 import SettingsMemoryViewerCard from './memory/SettingsMemoryViewerCard.vue';
 import { useI18n } from '../../i18n';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;

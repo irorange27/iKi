@@ -1,7 +1,7 @@
-import type { BuiltInProvider } from '@iki/core/types/settings';
+import type { BuiltInProvider } from '@iki/backend/types/settings';
 import type { SidebarProvider, ProviderSupportLink } from './provider_settings_shared';
 import type { ProviderRecord } from '../../../composables/useProviderDrafts';
-import { parseModelList } from '@iki/core/utils/provider_models';
+import { parseModelList } from '@iki/backend/utils/provider_models';
 import { getProviderDisplayName } from '../../../modules/providers/provider_display';
 
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string;

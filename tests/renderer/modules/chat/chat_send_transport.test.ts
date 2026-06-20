@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createChatComposerStreamPayload } from '../../../../packages/desktop/src/renderer/modules/chat/chat_send_transport';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type'>

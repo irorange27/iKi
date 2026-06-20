@@ -3,8 +3,8 @@ import path from 'node:path';
 
 import type { AffectState } from '@iki/backend/affect/affect_state';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
-import { normalizeWhitespace } from '@iki/core/utils/text';
-import type { ModelCapability } from '@iki/core/utils/provider_models';
+import { normalizeWhitespace } from '@iki/backend/utils/text';
+import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import { resolveSkillsSystemPrompt } from '../chat_service/skills';
 import { getClipboardContextMessage, getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../chat_service/platform';
 import { getPromptFromMessage } from '../chat_service/ui_messages';

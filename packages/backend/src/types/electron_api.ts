@@ -12,7 +12,7 @@ import type {
   ProviderModelDescriptor,
   ProviderModelDiscoveryOverride,
   ProviderUpdatedEvent,
-} from '@iki/core/types/provider';
+} from '@iki/backend/types/provider';
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
 import type {
@@ -22,7 +22,7 @@ import type {
   ShortMemoryEntry,
 } from './memory';
 import type { ProactiveTask } from './tasks';
-import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
+import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -34,7 +34,7 @@ import type {
 import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
-import type { AgentRun, AgentEvalComparison, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, RegressionAssessment } from '@iki/core/types/agent_run';
+import type { AgentRun, AgentEvalComparison, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, RegressionAssessment } from '@iki/backend/types/agent_run';
 import type { CompanionSnapshot } from './companion';
 import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
 export type { ChatInvocationOptions, ChatInvocationResult };

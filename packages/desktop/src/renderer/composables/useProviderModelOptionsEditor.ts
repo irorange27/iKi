@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue';
 
-import type { ProviderModelOptions } from '@iki/core/types/provider';
+import type { ProviderModelOptions } from '@iki/backend/types/provider';
 import type { ProviderDraft } from './useProviderDrafts';
 import type { ActiveModelOptionsEditor } from '../components/settings/providers/provider_settings_shared';
 

@@ -15,15 +15,15 @@ import type {
   AgentRunStep,
   AgentRunStepType,
   AgentRunWorkingState,
-} from '@iki/core/types/agent_run';
-import { createPrefixedId } from '@iki/core/utils/id';
+} from '@iki/backend/types/agent_run';
+import { createPrefixedId } from '@iki/backend/utils/id';
 import {
   normalizeWhitespace,
   sanitizePromptMetadataText,
   toIsoNow,
-} from '@iki/core/utils/text';
-import type { AgentResult } from '@iki/core/agent/types';
-import type { ConversationRunnerStreamEvent } from '@iki/core/agent/types';
+} from '@iki/backend/utils/text';
+import type { AgentResult } from '@iki/backend/agent/types';
+import type { ConversationRunnerStreamEvent } from '@iki/backend/agent/types';
 
 type CreateAgentRunTrackerParams = {
   kind: AgentRunKind;

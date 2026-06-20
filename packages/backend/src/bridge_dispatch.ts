@@ -1,8 +1,8 @@
 import * as chatThreadDb from './db/chat_thread';
 import { createDaemonLogger } from './daemon_logs';
 import type { ChatThread } from './types/chat';
-import { isObjectRecord } from '@iki/core/utils/guards';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { isObjectRecord } from '@iki/backend/utils/guards';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 export type BridgeThreadMessageSender = (params: {
   thread: ChatThread;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import * as currentAgentApi from '@iki/core/agent';
+import * as currentAgentApi from '@iki/backend/agent';
 
 describe('core agent public surface', () => {
   it('exports types, schemas, config, and plan but not implementation runners', () => {

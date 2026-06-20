@@ -8,8 +8,8 @@ import {
   type ProactiveTaskCreateInput,
   type ProactiveTaskUpdateInput,
 } from '@iki/backend/tasks/proactive_task_manager';
-import { isObjectRecord } from '@iki/core/utils/guards';
-import { toPlainData } from '@iki/core/utils/plain_clone';
+import { isObjectRecord } from '@iki/backend/utils/guards';
+import { toPlainData } from '@iki/backend/utils/plain_clone';
 import { getErrorMessage } from '../utils/errors';
 import { runProactiveTask } from '../services/tasks/proactive_tasks';
 

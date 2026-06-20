@@ -22,13 +22,13 @@ import {
   parseProviderModelOptionsMap,
   type ModelCapability,
   type ModelsDevCatalog,
-} from '@iki/core/utils/provider_models';
+} from '@iki/backend/utils/provider_models';
 import type {
   ProviderModelDiscoveryOverride,
   ProviderModelOptions,
   ProviderModelOptionsMap,
-} from '@iki/core/types/provider';
-import type { TokenUsageMetrics } from '@iki/core/types/chat_usage';
+} from '@iki/backend/types/provider';
+import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
 import {
   createAcpLanguageModel,
   disposeAcpLanguageModel,

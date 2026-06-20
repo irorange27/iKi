@@ -6,7 +6,7 @@ import type {
   AgentEvalComparison,
   RegressionAssessment,
   StepComparison,
-} from '@iki/core/types/agent_run';
+} from '@iki/backend/types/agent_run';
 
 export const createChatEval = (deps?: {
   exportTrace?: (

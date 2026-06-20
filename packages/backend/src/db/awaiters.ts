@@ -1,6 +1,6 @@
 import { getDb } from './database';
 import type { Awaiter, AwaiterWakeEvent } from '@iki/backend/types/awaiters';
-import { toIsoNow } from '@iki/core/utils/text';
+import { toIsoNow } from '@iki/backend/utils/text';
 import { buildSetClause } from './utils';
 
 type AwaiterRow = Omit<Awaiter, 'notify'> & {

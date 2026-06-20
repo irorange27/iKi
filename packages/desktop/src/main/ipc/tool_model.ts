@@ -6,7 +6,7 @@ import {
   generateTitleWithAgent,
   testToolModelLatency,
 } from '@iki/backend/provider/tool_model';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 let toolModelIpcRegistered = false;
 const toolModelIpcLogger = createLogger({ module: 'tool_model_ipc' });

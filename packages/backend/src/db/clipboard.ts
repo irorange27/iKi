@@ -1,6 +1,6 @@
 import { getDb } from './database';
-import { createPrefixedId } from '@iki/core/utils/id';
-import { toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/backend/utils/id';
+import { toIsoNow } from '@iki/backend/utils/text';
 import { createHash } from 'node:crypto';
 
 export type ClipboardSnapshotEntry = {

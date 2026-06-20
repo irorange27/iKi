@@ -4,7 +4,7 @@ import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import ChatComposerSelectors from '../../../packages/desktop/src/renderer/components/ChatComposerSelectors.vue';
 
 const provider: Provider = {

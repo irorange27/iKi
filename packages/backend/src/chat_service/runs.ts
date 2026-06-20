@@ -1,6 +1,6 @@
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import type { AgentRunStatus } from '@iki/core/types/agent_run';
-import { createPrefixedId } from '@iki/core/utils/id';
+import type { AgentRunStatus } from '@iki/backend/types/agent_run';
+import { createPrefixedId } from '@iki/backend/utils/id';
 
 type ChatRunsDeps = {
   activeStreams: Map<number, import('./types').ActiveStreamState>;

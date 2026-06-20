@@ -1,10 +1,10 @@
-import { isObjectRecord, type ObjectRecord } from '@iki/core/utils/guards';
+import { isObjectRecord, type ObjectRecord } from '@iki/backend/utils/guards';
 import {
   isAffectLabel,
   type AffectScore,
   type AffectSignal,
   type AffectSignalSource,
-} from '@iki/core/types/affect';
+} from '@iki/backend/types/affect';
 import {
   isInterventionState,
   type InterventionPolicySignal,

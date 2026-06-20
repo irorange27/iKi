@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { toIsoNow } from '@iki/core/utils/text';
+import { toIsoNow } from '@iki/backend/utils/text';
 
 export type AffectStateEntry = {
   thread_id: string;

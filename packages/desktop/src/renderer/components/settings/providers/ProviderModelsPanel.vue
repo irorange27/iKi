@@ -145,8 +145,8 @@ import {
   SlidersHorizontal,
 } from 'lucide-vue-next';
 
-import type { ProviderModelOptionsMap } from '@iki/core/types/provider';
-import { getProviderModelOptions } from '@iki/core/utils/provider_models';
+import type { ProviderModelOptionsMap } from '@iki/backend/types/provider';
+import { getProviderModelOptions } from '@iki/backend/utils/provider_models';
 import { useI18n } from '../../../i18n';
 import { getModelOptionSummary } from '../../../modules/providers/provider_model_options';
 

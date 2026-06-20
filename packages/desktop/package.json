@@ -5,7 +5,6 @@
   "private": true,
   "main": ".vite/build/main.js",
   "dependencies": {
-    "@iki/core": "workspace:*",
     "@iki/daemon": "workspace:*",
     "@iki/backend": "workspace:*",
     "@iki/theme": "workspace:*"

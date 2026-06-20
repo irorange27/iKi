@@ -205,7 +205,7 @@ import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { configService } from '../../services/config_service';
-import { clonePlainData } from '@iki/core/utils/clone';
+import { clonePlainData } from '@iki/backend/utils/clone';
 import type {
   AppConfig,
   NetworkDiagnosticProbeResult,
@@ -214,7 +214,7 @@ import type {
   WebSearchEngine,
 } from '@iki/backend/types/config';
 import { buildProxyUrl } from '@iki/backend/network/proxy';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 defineProps<{
   active?: boolean;

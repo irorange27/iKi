@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import AutonomousSelector from './AutonomousSelector.vue';
 import ChatModelSelector from './ChatModelSelector.vue';
 import SkillSelector from './SkillSelector.vue';

@@ -1,14 +1,14 @@
 import { getAppConfig } from '@iki/backend/config';
 import {
   extractTextFromModelMessageContent,
-} from '@iki/core/agent/model_messages';
+} from '@iki/backend/agent/model_messages';
 import {
   clipTextToTokenBudget,
   estimateMessageTokens,
   estimateTextTokens,
 } from '../chat_service/token_estimator';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
-import type { ModelCapability } from '@iki/core/utils/provider_models';
+import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { ChatInputMessage } from '../chat_service/types';
 import type {
   AssembleChatContextResult,

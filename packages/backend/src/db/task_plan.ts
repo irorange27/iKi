@@ -5,7 +5,7 @@ import {
   type TaskPlanItemDraft,
   type TaskPlanItemStatus,
 } from '@iki/backend/types/task_plan';
-import { normalizeWhitespace } from '@iki/core/utils/text';
+import { normalizeWhitespace } from '@iki/backend/utils/text';
 
 export const MAX_TASK_PLAN_ITEMS = MAX_STORED_TASK_PLAN_ITEMS;
 export { MAX_EXECUTION_TASK_PLAN_ITEMS };

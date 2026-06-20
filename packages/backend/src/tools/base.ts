@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AgentTool, ToolApprovalFunction, ToolApprovalMode, ToolRetryConfig } from '@iki/core/agent/types';
+import type { AgentTool, ToolApprovalFunction, ToolApprovalMode, ToolRetryConfig } from '@iki/backend/agent/types';
 import { createLogger } from '../logger';
 import { zodSchemaToJsonSchema } from './json_schema';
 

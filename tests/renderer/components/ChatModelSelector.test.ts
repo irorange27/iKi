@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import ChatModelSelector from '../../../packages/desktop/src/renderer/components/ChatModelSelector.vue';
 
 const buildProvider = (

@@ -18,8 +18,6 @@
       "@/*": [
         "./*"
       ],
-      "@iki/core": ["./packages/core/src/index.ts"],
-      "@iki/core/*": ["./packages/core/src/*"],
       "@iki/daemon": ["./packages/daemon/src/index.ts"],
       "@iki/daemon/*": ["./packages/daemon/src/*"],
       "@iki/theme": ["./packages/theme/src/index.ts"],
@@ -33,7 +31,6 @@
     ]
   },
   "include": [
-    "packages/core/src/**/*",
     "packages/daemon/src/**/*",
     "packages/desktop/src/**/*"
   ]

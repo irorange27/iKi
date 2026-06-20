@@ -162,8 +162,8 @@ import { getElectronAPI } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/backend/types/config';
-import type { Provider } from '@iki/core/types/provider';
-import { parseModelList } from '@iki/core/utils/provider_models';
+import type { Provider } from '@iki/backend/types/provider';
+import { parseModelList } from '@iki/backend/utils/provider_models';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
 
 const electronAPI = getElectronAPI();

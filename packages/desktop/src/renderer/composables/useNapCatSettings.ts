@@ -13,7 +13,7 @@ import type {
   DaemonStatusInfo,
   NapCatMessagePreviewEntry,
 } from '@iki/backend/types/config';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import {
   buildNapCatWsUrl,
   DEFAULT_DAEMON_HOST,
@@ -22,9 +22,9 @@ import {
 import {
   formatStructuredConsoleLine,
   type StructuredConsoleFormatterInput,
-} from '@iki/core/logging/console_formatter';
-import { getErrorMessage } from '@iki/core/utils/errors';
-import { parseModelList } from '@iki/core/utils/provider_models';
+} from '@iki/backend/logging/console_formatter';
+import { getErrorMessage } from '@iki/backend/utils/errors';
+import { parseModelList } from '@iki/backend/utils/provider_models';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
 
 type ProviderOption = {

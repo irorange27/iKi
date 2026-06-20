@@ -1,7 +1,41 @@
 import { z } from 'zod';
-import { requireEitherField, toolCallDescriptionField, uiSchema } from '@iki/core/tools/schemas';
 import { DEFAULT_PROACTIVE_TASK_LIST_LIMIT, SAFE_PROACTIVE_TASK_TOOLS } from '../types/tasks';
 import { DEFAULT_AWAITER_LIST_LIMIT } from '../types/awaiters';
+
+// ---------------------------------------------------------------------------
+// Shared Zod helpers (moved from core/tools/schemas)
+// ---------------------------------------------------------------------------
+
+export function uiSchema<T extends Record<string, z.ZodTypeAny>>(shape: T) {
+  const ui: Record<string, z.ZodTypeAny> = {};
+  for (const key of Object.keys(shape)) {
+    const field = shape[key];
+    ui[key] = (field instanceof z.ZodDefault ? field.removeDefault() : field) as z.ZodTypeAny;
+    ui[key] = (ui[key] as z.ZodTypeAny).optional();
+  }
+  return z.object(ui).passthrough();
+}
+
+export function requireEitherField(a: string, b: string, message?: string) {
+  return (value: Record<string, unknown>, ctx: z.RefinementCtx): void => {
+    const hasA = typeof value[a] === 'string' && (value[a] as string).trim().length > 0;
+    const hasB = typeof value[b] === 'string' && (value[b] as string).trim().length > 0;
+    if (!hasA && !hasB) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [a],
+        message: message ?? `Either ${a} or ${b} is required`,
+      });
+    }
+  };
+}
+
+export const toolCallDescriptionField = z
+  .string()
+  .trim()
+  .max(160)
+  .describe('One short sentence explaining why this tool call is needed')
+  .optional();
 
 // ---------------------------------------------------------------------------
 // Built-in tool constants

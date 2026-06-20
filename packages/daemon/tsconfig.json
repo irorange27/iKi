@@ -13,14 +13,12 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "paths": {
-      "@iki/core": ["../core/src/index.ts"],
-      "@iki/core/*": ["../core/src/*"]
+      "@iki/backend/*": ["../backend/src/*"]
     },
     "declaration": true,
     "declarationMap": true,
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../core" }]
+  "include": ["src/**/*.ts"]
 }

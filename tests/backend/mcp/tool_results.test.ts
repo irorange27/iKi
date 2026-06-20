@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveMcpToolResult } from '@iki/backend/mcp/tool_results';
-import type { McpToolCatalogItem } from '@iki/core/types/mcp';
+import type { McpToolCatalogItem } from '@iki/backend/types/mcp';
 
 const toolWithOutputSchema: McpToolCatalogItem = {
   name: 'lookup',

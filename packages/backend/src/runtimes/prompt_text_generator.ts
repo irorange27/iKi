@@ -8,7 +8,7 @@ import {
   loadAgentConfig,
   validateAgentConfig,
 } from '../agent/ai_sdk_config';
-import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/core/agent/types';
+import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/backend/agent/types';
 import {
   createModel,
   disposeLanguageModel,

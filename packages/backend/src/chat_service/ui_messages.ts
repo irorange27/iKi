@@ -1,7 +1,7 @@
 import { convertToModelMessages, validateUIMessages } from 'ai';
 import type { FileUIPart } from 'ai';
 
-import { extractTextFromModelMessageContent } from '@iki/core/agent/model_messages';
+import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 import type {
   ChatUiMessage,
   DynamicToolPart,
@@ -9,9 +9,9 @@ import type {
   UiMessagePart,
 } from '@iki/backend/chat/message_parts';
 import { isChatUiMetadataPart } from '@iki/backend/chat/message_parts';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './types';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 import { normalizeToolPartForValidation } from '@iki/backend/chat/tool_parts';
 import { isObjectRecord } from '@iki/backend/chat/tool_parts';
 

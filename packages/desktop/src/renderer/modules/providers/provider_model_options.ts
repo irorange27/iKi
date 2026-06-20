@@ -1,7 +1,7 @@
 import type { JSONValue } from '@ai-sdk/provider';
 
-import type { ProviderModelOptions } from '@iki/core/types/provider';
-import { parseProviderModelOptionsMap } from '@iki/core/utils/provider_models';
+import type { ProviderModelOptions } from '@iki/backend/types/provider';
+import { parseProviderModelOptionsMap } from '@iki/backend/utils/provider_models';
 
 export type ModelBooleanOverride = 'default' | 'true' | 'false';
 

@@ -6,8 +6,8 @@ import {
   type Awaiter,
   type AwaiterTriggerSpec,
 } from '@iki/backend/types/awaiters';
-import { createPrefixedId } from '@iki/core/utils/id';
-import { toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/backend/utils/id';
+import { toIsoNow } from '@iki/backend/utils/text';
 import {
   computeAwaiterNextWakeAt,
   formatAwaiterTriggerSummary,

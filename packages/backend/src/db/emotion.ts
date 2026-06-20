@@ -1,6 +1,6 @@
 import { getDb } from './database';
-import { createPrefixedId } from '@iki/core/utils/id';
-import { toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/backend/utils/id';
+import { toIsoNow } from '@iki/backend/utils/text';
 
 export type EmotionEventEntry = {
   id: string;

@@ -3,7 +3,7 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import RunCompareView from '../../../packages/desktop/src/renderer/components/RunCompareView.vue';
-import type { AgentEvalComparison } from '@iki/core/types/agent_run';
+import type { AgentEvalComparison } from '@iki/backend/types/agent_run';
 
 const t = (key: string) => key;
 

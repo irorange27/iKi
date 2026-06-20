@@ -11,16 +11,16 @@ import { shouldGuardTools } from '@iki/backend/affect/affect_policy';
 import * as llmFactory from '../provider/llm/factory';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/backend/workspaces/thread_workspace';
-import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
-import type { AffectSignal } from '@iki/core/types/affect';
+import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
+import type { AffectSignal } from '@iki/backend/types/affect';
 import type {
   ChatAffectExperimentMode,
   ChatExperimentalContext,
   InterventionPolicySignal,
 } from '@iki/backend/chat/intervention_policy';
-import type { AgentRunKind } from '@iki/core/types/agent_run';
+import type { AgentRunKind } from '@iki/backend/types/agent_run';
 import type { SkillSummary } from '@iki/backend/types/skill';
-import { ensureModelCapability } from '@iki/core/utils/provider_models';
+import { ensureModelCapability } from '@iki/backend/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './context';
 import type { ChatMemory } from '../chat_service/memory';
 import type { ChatInputMessage, ChatTransportMessage } from '../chat_service/types';

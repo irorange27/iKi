@@ -1,7 +1,7 @@
-import type { AgentStep } from '@iki/core/agent';
+import type { AgentStep } from '@iki/backend/agent';
 import { createLogger } from '@iki/backend/logger';
 import { runWithToolRuntimeContext } from '../tools/runtime_context';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
@@ -22,7 +22,7 @@ import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEven
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
-import { createRateLimiter } from '@iki/core/rate_limiter';
+import { createRateLimiter } from '@iki/backend/rate_limiter';
 import { writeThreadTodoPlan } from '../db/thread_todos';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
@@ -397,7 +397,7 @@ export const createChatStreaming = (deps: {
         finished?: boolean;
         partialFailure?: boolean;
         response?: string;
-        usage?: import('@iki/core/agent').AgentResult['usage'];
+        usage?: import('@iki/backend/agent').AgentResult['usage'];
         handoff?: { summary: string; nextSteps: string; reason: string };
       };
       let streamResult: StreamResult | undefined;
@@ -518,7 +518,7 @@ export const createChatStreaming = (deps: {
       // eslint-disable-next-line no-constant-condition
       while (true) {
         // Run agent via harness — for-await consumes TurnEvent stream
-        let agentResult: import('@iki/core/agent').AgentResult | undefined;
+        let agentResult: import('@iki/backend/agent').AgentResult | undefined;
         let cancelled = false;
         let steered = false;
         let awaitingApproval = false;
@@ -556,7 +556,7 @@ export const createChatStreaming = (deps: {
                     usage: output.usage,
                     iterations: 0,
                     requiresApproval: output.requiresApproval,
-                  } as import('@iki/core/agent').AgentResult;
+                  } as import('@iki/backend/agent').AgentResult;
                 }
               }
               return undefined;

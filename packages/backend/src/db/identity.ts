@@ -1,7 +1,7 @@
 import { getDb } from './database';
 import type { IdentityProfile } from '@iki/backend/types/identity';
-import { createPrefixedId } from '@iki/core/utils/id';
-import { toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/backend/utils/id';
+import { toIsoNow } from '@iki/backend/utils/text';
 
 const toJsonString = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;

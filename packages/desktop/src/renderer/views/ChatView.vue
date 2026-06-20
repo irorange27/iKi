@@ -123,7 +123,7 @@ import { useI18n } from '../i18n';
 import { getTokenUsageSummary } from '../modules/chat/ui_message_references';
 import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import { createChatMessageStore } from '../modules/chat/chat_message_store';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';
 import { useMarkdownCopy } from '../composables/useMarkdownCopy';

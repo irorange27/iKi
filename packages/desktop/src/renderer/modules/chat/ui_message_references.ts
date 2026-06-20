@@ -2,9 +2,9 @@ import type {
   ChatUiMessage,
   SkillUsageEntry,
 } from '@iki/backend/chat/message_parts';
-import { isAffectLabel, type AffectLabel } from '@iki/core/types/affect';
-import { normalizeModelCapabilityLimits } from '@iki/core/utils/provider_models';
-import { normalizeWhitespace } from '@iki/core/utils/text';
+import { isAffectLabel, type AffectLabel } from '@iki/backend/types/affect';
+import { normalizeModelCapabilityLimits } from '@iki/backend/utils/provider_models';
+import { normalizeWhitespace } from '@iki/backend/utils/text';
 import { translate } from '../../i18n';
 
 import {

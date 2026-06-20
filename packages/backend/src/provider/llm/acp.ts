@@ -13,9 +13,9 @@ import { getProvider } from '../../db/providers';
 import { createLogger } from '@iki/backend/logger';
 import { getUserDataPath } from '../../platform';
 import { ensureThreadWorkspaceSelection } from '../../workspaces/thread_workspace';
-import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
-import type { ProviderModelDescriptor } from '@iki/core/types/provider';
-import type { McpServer as IkiMcpServer } from '@iki/core/types/mcp';
+import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
+import type { ProviderModelDescriptor } from '@iki/backend/types/provider';
+import type { McpServer as IkiMcpServer } from '@iki/backend/types/mcp';
 
 const acpProviderLogger = createLogger({ module: 'acp_provider' });
 const ACP_SESSION_DIR = 'acp-session';

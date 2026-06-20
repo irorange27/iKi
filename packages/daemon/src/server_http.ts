@@ -34,7 +34,7 @@ import {
   parseMcpServerUpdatePayload,
   parseMemorySearchPayload,
 } from './server_schemas';
-import { createRateLimiter } from '@iki/core/rate_limiter';
+import { createRateLimiter } from '@iki/backend/rate_limiter';
 import {
   authenticateRequest,
   getThreadOrError,
@@ -396,7 +396,7 @@ export const createDaemonRequestHandler =
           : [];
         const limit = Number(url.searchParams.get('limit') || '');
         const runs = deps.chatService.listRunsByStatus(
-          statuses.length > 0 ? (statuses as import('@iki/core/types/agent_run').AgentRunStatus[]) : ['queued', 'running', 'blocked', 'completed', 'failed', 'cancelled'],
+          statuses.length > 0 ? (statuses as import('@iki/backend/types/agent_run').AgentRunStatus[]) : ['queued', 'running', 'blocked', 'completed', 'failed', 'cancelled'],
           {
             clientId: client.id,
             ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),

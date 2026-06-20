@@ -14,7 +14,7 @@ import {
   parseProviderModelOptionsMap,
   serializeProviderModelOptionsMap,
   type ModelsDevCatalog,
-} from '@iki/core/utils/provider_models';
+} from '@iki/backend/utils/provider_models';
 
 describe('provider_models helpers', () => {
   it('parses stored provider model lists from JSON strings', () => {

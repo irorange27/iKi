@@ -10,8 +10,8 @@ import type {
   McpServerInput,
   McpServerSummary,
   McpTransport,
-} from '@iki/core/types/mcp';
-import { getErrorMessage } from '@iki/core/utils/errors';
+} from '@iki/backend/types/mcp';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 type ServerForm = {
   name: string;

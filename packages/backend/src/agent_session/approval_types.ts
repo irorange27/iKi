@@ -1,5 +1,5 @@
 import type { ModelMessage } from 'ai';
-import type { AgentResult, ToolApprovalRequest } from '@iki/core/agent';
+import type { AgentResult, ToolApprovalRequest } from '@iki/backend/agent';
 import type { ChatWebContents } from '../chat_service/types';
 
 export type ApprovalRecoveryContext = {

@@ -12,7 +12,7 @@ import {
   RefusalError,
   getErrorMessage,
   isRetryableError,
-} from '@iki/core/utils/errors';
+} from '@iki/backend/utils/errors';
 import {
   createModel,
   disposeLanguageModel,
@@ -43,9 +43,9 @@ import type {
   HandoffStep,
   TurnEndStep,
   SourceInfo,
-} from '@iki/core/agent/agent_step';
-import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/agent_runner';
-import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@iki/core/agent/types';
+} from '@iki/backend/agent/agent_step';
+import type { AgentRunner, AgentRunnerRequest } from '@iki/backend/agent/runners/agent_runner';
+import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'simple_agent_runner' });
 

@@ -13,8 +13,7 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "paths": {
-      "@iki/core": ["../core/src/index.ts"],
-      "@iki/core/*": ["../core/src/*"],
+      "@iki/backend/*": ["../backend/src/*"],
       "@iki/daemon": ["../daemon/src/index.ts"],
       "@iki/daemon/*": ["../daemon/src/*"]
     },
@@ -24,5 +23,5 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../core" }, { "path": "../daemon" }]
+  "references": [{ "path": "../daemon" }]
 }

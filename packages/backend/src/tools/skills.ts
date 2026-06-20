@@ -4,9 +4,9 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
 import type { SkillSummary, SkillSource } from '@iki/backend/types/skill';
-import { sanitizePromptMetadataText, stringifyPromptData } from '@iki/core/utils/text';
+import { sanitizePromptMetadataText, stringifyPromptData } from '@iki/backend/utils/text';
 import { getUserDataPath } from '../platform';
-import { isPathWithinRoot } from '@iki/core/utils/path_boundary';
+import { isPathWithinRoot } from '@iki/backend/utils/path_boundary';
 
 type SkillRecord = SkillSummary & {
   filePath: string;

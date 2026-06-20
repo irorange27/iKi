@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import { getDefaultAllowedTools } from './tool_access';
 import type { ChatInvocationOptions } from '@iki/backend/types/chat_invocation';
-import type { McpServerInput } from '@iki/core/types/mcp';
+import type { McpServerInput } from '@iki/backend/types/mcp';
 import type { ChatExperimentalContext } from '@iki/backend/chat/intervention_policy';
-import type { AgentRunKind } from '@iki/core/types/agent_run';
+import type { AgentRunKind } from '@iki/backend/types/agent_run';
 
 const DEFAULT_SCOPES = [
   'chat:read',

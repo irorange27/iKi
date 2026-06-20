@@ -4,12 +4,12 @@ import * as kimiProvider from '../provider/llm/kimi';
 import * as minimaxProvider from '../provider/llm/minimax';
 import * as openaiProvider from '../provider/llm/openai';
 import { createLogger } from '@iki/backend/logger';
-import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
+import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import type {
   ProviderModelDescriptor,
   ProviderModelDiscoveryOverride,
-} from '@iki/core/types/provider';
-import { ensureModelCapability } from '@iki/core/utils/provider_models';
+} from '@iki/backend/types/provider';
+import { ensureModelCapability } from '@iki/backend/utils/provider_models';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 

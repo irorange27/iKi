@@ -3,16 +3,16 @@ import type { ModelMessage, ToolApprovalResponse } from 'ai';
 import {
   type AgentStep,
   type AgentResult,
-} from '@iki/core/agent';
+} from '@iki/backend/agent';
 import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
 import { cloneModelMessages } from '../agent/harness';
-import type { AgentRun } from '@iki/core/types/agent_run';
+import type { AgentRun } from '@iki/backend/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { runWithToolRuntimeContext } from '../tools/runtime_context';
 import type { ChatToolApprovalDecision } from '@iki/backend/types/chat_tool_approval';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from '../chat_service/memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
 import { resolveChatToolMaxIterations } from '../chat_service/constants';

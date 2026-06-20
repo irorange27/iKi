@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue';
 
-import type { McpServerSummary } from '@iki/core/types/mcp';
+import type { McpServerSummary } from '@iki/backend/types/mcp';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';

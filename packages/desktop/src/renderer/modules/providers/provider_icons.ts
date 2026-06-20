@@ -1,5 +1,5 @@
-import { BUILTIN_PROVIDERS } from '@iki/core/constants/ProvidersSettings';
-import type { Provider } from '@iki/core/types/provider';
+import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
+import type { Provider } from '@iki/backend/types/provider';
 import { getCanonicalBuiltInProviderName, getProviderFallbackText } from './provider_display';
 
 export type ProviderIconProps = {

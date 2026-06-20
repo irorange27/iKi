@@ -124,7 +124,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import type { ProviderModelOptions } from '@iki/core/types/provider';
+import type { ProviderModelOptions } from '@iki/backend/types/provider';
 import { useI18n } from '../../../i18n';
 import {
   buildProviderModelOptions,

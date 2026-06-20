@@ -168,7 +168,7 @@ import { useI18n } from '../../i18n';
 import { getElectronApiSlice, getElectronApiSliceMethod } from '../../services/electron_api';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { SkillSummary } from '@iki/backend/types/skill';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const emit = defineEmits<{
   (event: 'config-change'): void;

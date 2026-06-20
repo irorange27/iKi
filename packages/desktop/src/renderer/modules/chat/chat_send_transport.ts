@@ -1,6 +1,6 @@
 import type { ChatInvocationOptions } from '@iki/backend/types/electron_api';
-import { clonePlainData } from '@iki/core/utils/clone';
-import type { ModelCapabilitySnapshot, Provider } from '@iki/core/types/provider';
+import { clonePlainData } from '@iki/backend/utils/clone';
+import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
 
 import type { PreparedMessageSend } from './chat_prepare_send';
 

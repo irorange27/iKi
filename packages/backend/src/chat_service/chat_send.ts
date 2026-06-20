@@ -3,7 +3,7 @@ import { AgentHarness } from '../agent/harness';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { runWithToolRuntimeContext } from '../tools/runtime_context';
-import { getErrorMessage } from '@iki/core/utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import { describeApprovalRequiredTools } from '../agent_session/approval_types';
 import {
   NO_TOOLS_SYSTEM_PROMPT,

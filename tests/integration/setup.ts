@@ -7,7 +7,7 @@ import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent
 import {
   type AgentRunner,
   type AgentTool,
-} from '@iki/core/agent';
+} from '@iki/backend/agent';
 
 const AUTH_PATH = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
 

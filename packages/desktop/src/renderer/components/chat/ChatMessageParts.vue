@@ -61,7 +61,7 @@ import {
   isDataPart,
   isTextPart,
 } from '@iki/backend/chat/message_parts';
-import { isObjectRecord } from '@iki/core/utils/guards';
+import { isObjectRecord } from '@iki/backend/utils/guards';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
 import ChatToolPart from './ChatToolPart.vue';
 import ImageViewerOverlay from '../ImageViewerOverlay.vue';

@@ -1,5 +1,5 @@
-import { BUILTIN_PROVIDERS } from '@iki/core/constants/ProvidersSettings';
-import type { Provider } from '@iki/core/types/provider';
+import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
+import type { Provider } from '@iki/backend/types/provider';
 
 const BUILTIN_PROVIDER_NAME_BY_ID = new Map(
   BUILTIN_PROVIDERS.map(provider => [provider.id, provider.name])

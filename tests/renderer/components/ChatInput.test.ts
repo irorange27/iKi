@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
-import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/core/utils/provider_models';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
 
 const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
   })),
 }));
 
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import type { PromptApp, Workspace } from '@iki/backend/types/chat';
 import type { SkillSummary } from '@iki/backend/types/skill';
 

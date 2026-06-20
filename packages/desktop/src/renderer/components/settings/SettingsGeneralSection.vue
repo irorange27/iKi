@@ -247,7 +247,7 @@ import { RefreshCw } from 'lucide-vue-next';
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
 import { useSettingsGeneralSection } from '../../composables/useSettingsGeneralSection';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 
 const props = defineProps<{
   providers: Provider[];

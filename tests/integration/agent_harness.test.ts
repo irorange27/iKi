@@ -5,7 +5,7 @@ import {
   createTestRunner,
   resolveEnabledTools,
 } from './setup';
-import type { AgentResult, AgentStep, TurnEndStep } from '@iki/core/agent';
+import type { AgentResult, AgentStep, TurnEndStep } from '@iki/backend/agent';
 
 const skipIfNoProvider = () => !hasProviderConfig();
 

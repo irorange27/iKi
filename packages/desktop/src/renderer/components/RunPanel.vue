@@ -175,7 +175,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue';
-import type { AgentEvalComparison, AgentEvalLabel, AgentEvalLabelType, AgentRun, AgentRunStep } from '@iki/core/types/agent_run';
+import type { AgentEvalComparison, AgentEvalLabel, AgentEvalLabelType, AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import RunCompareView from './RunCompareView.vue';
 

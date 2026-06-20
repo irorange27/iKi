@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isRetryableError } from '@iki/core/utils/errors';
+import { isRetryableError } from '@iki/backend/utils/errors';
 
 describe('isRetryableError', () => {
   // Rate limit errors

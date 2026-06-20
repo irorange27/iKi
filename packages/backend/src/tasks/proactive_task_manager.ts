@@ -9,7 +9,7 @@ import {
   type ProactiveTask,
   type ProactiveTaskToolMode,
 } from '@iki/backend/types/tasks';
-import { createPrefixedId } from '@iki/core/utils/id';
+import { createPrefixedId } from '@iki/backend/utils/id';
 import {
   clampIntervalMinutes,
   computeNextRunAt,

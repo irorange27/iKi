@@ -1,4 +1,4 @@
-import type { Plan } from '@iki/core/agent/plan';
+import type { Plan } from '@iki/backend/agent/plan';
 
 interface Step {
   toolCalls?: Array<{ toolName: string; input: unknown }>;

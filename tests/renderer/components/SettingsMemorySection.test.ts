@@ -8,7 +8,7 @@ import SettingsMemorySection from '../../../packages/desktop/src/renderer/compon
 import { useConfigStore } from '../../../packages/desktop/src/renderer/store/config';
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { ChatThread } from '@iki/backend/types/chat';
-import type { Provider } from '@iki/core/types/provider';
+import type { Provider } from '@iki/backend/types/provider';
 import type {
   AffectStateEntry,
   LongMemoryEntry,

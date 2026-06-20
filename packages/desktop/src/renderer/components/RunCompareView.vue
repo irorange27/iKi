@@ -94,7 +94,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { AgentEvalComparison } from '@iki/core/types/agent_run';
+import type { AgentEvalComparison } from '@iki/backend/types/agent_run';
 
 const props = defineProps<{
   comparison: AgentEvalComparison;
