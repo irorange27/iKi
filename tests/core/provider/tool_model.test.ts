@@ -36,7 +36,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/core/context/provider_store', () => ({
+vi.mock('@iki/backend/db/providers', () => ({
   getProviders: getProvidersMock,
 }));
 

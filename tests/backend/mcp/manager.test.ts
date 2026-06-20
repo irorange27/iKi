@@ -90,7 +90,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/core/context/mcp_server_store', () => ({
+vi.mock('@iki/backend/db/mcp_servers', () => ({
   addMcpServer: vi.fn(),
   deleteMcpServer: vi.fn(),
   getMcpServer: vi.fn(),

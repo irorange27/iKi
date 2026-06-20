@@ -8,10 +8,10 @@ import { createMinimax } from 'vercel-minimax-ai-provider';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { getProviders } from '@iki/core/context/provider_store';
+import { getProviders } from '../../db/providers';
 import { createLogger } from '@iki/core/logger';
-import { getPersonaPrompt } from '@iki/core/context/persona_provider';
-import { fetchWithTimeout } from '@iki/core/context/network_provider';
+import { getPersonaPrompt } from '../../persona';
+import { fetchWithTimeout } from '../../network/http';
 import { getToolRuntimeContext } from '../../tools/runtime_context';
 import {
   getProviderModelOptions,

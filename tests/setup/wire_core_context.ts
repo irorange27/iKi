@@ -3,37 +3,6 @@
 // Tests that DO mock a context module via vi.mock will override these
 // defaults (vi.mock hoisting replaces the entire module).
 
-import { injectProviderStore } from '@iki/core/context/provider_store';
 import { injectGetUserDataPath } from '@iki/core/context/platform_provider';
-import { injectFetchWithTimeout } from '@iki/core/context/network_provider';
-import { injectGetPersonaPrompt } from '@iki/core/context/persona_provider';
-import { injectMcpServerStore } from '@iki/core/context/mcp_server_store';
-import { injectEnsureThreadWorkspaceSelection } from '@iki/core/context/workspace_provider';
-import { injectFormatSkillMetadataForPrompt } from '@iki/core/context/skill_format';
-
-injectProviderStore({
-  getProviders: () => [],
-  getProvider: () => null,
-});
 
 injectGetUserDataPath(() => '/tmp/iki-test-user-data');
-
-injectFetchWithTimeout(async () => {
-  throw new Error(
-    'fetchWithTimeout not mocked. Use vi.mock("@iki/core/context/network_provider") in your test.'
-  );
-});
-
-injectGetPersonaPrompt(() => 'You are a helpful assistant.');
-
-injectMcpServerStore({
-  listMcpServers: () => [],
-  getMcpServer: () => null,
-  addMcpServer: () => {},
-  updateMcpServer: () => {},
-  deleteMcpServer: () => {},
-});
-
-injectEnsureThreadWorkspaceSelection(() => null);
-
-injectFormatSkillMetadataForPrompt(skill => `${skill.id}: ${skill.name || ''}`);

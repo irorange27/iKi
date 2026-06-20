@@ -8,7 +8,7 @@ vi.mock('@iki/backend/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
 }));
 
-vi.mock('@iki/core/context/skill_format', () => ({
+vi.mock('@iki/backend/tools/skills', () => ({
   formatSkillMetadataForPrompt: vi.fn(
     (skill: { id: string; name?: string; description?: string; source?: string }) => {
       const sanitize = (v: string | undefined) =>

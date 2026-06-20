@@ -21,7 +21,7 @@ import {
   getMcpServer,
   listMcpServers,
   updateMcpServer,
-} from '@iki/core/context/mcp_server_store';
+} from '../db/mcp_servers';
 import { createTool, defaultToolRegistry } from '@iki/core/tools';
 import { resolveMcpToolResult } from './tool_results';
 import { createPrefixedId } from '@iki/core/utils/id';

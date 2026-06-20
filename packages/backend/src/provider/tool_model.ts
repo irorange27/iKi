@@ -1,6 +1,6 @@
 import { generateText } from 'ai';
 
-import { getProviders } from '@iki/core/context/provider_store';
+import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { createLogger } from '@iki/core/logger';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
