@@ -1,22 +1,10 @@
 import { createLogger } from '../logger';
-import { isRetryableError } from '../utils/errors';
+import { isRetryableError } from '@iki/core/utils/errors';
+import type { ToolRetryConfig } from '@iki/core/agent/types';
+
+export type { ToolRetryConfig };
 
 const retryLogger = createLogger({ module: 'tool_retry' });
-
-export interface ToolRetryConfig {
-  /** Maximum number of retry attempts (total attempts = 1 + maxRetries). */
-  maxRetries: number;
-  /** Base backoff in milliseconds. Doubles each attempt, capped at 2000ms. Default 250. */
-  backoffMs?: number;
-  /** Custom predicate to decide if an error should be retried. Falls back to isRetryableError. */
-  retryableError?: (error: unknown) => boolean;
-  /**
-   * If provided, called when all retries are exhausted.
-   * The return value replaces the error, allowing graceful degradation
-   * (e.g., returning partial output on timeout).
-   */
-  fallback?: (lastError: unknown) => unknown | Promise<unknown>;
-}
 
 const MAX_BACKOFF_MS = 2000;
 

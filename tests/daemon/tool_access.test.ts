@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createTool, defaultToolRegistry } from '@iki/core/tools';
+import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import {
   readRequestedMcpServerIds,
   resolveMcpServerIdsForClient,

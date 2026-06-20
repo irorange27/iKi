@@ -9,8 +9,8 @@ import {
 } from 'ai';
 import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
-import { createLogger } from '@iki/core/logger';
-import { withRetry } from '@iki/core/tools/retry';
+import { createLogger } from '@iki/backend/logger';
+import { withRetry } from '@iki/backend/tools/retry';
 import { getFullSystemPrompt } from './llm/factory';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
 import { unwrapAcpDynamicToolCall } from '@iki/core/utils/acp';

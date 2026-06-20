@@ -67,7 +67,7 @@ import { createChatApproval } from '@iki/backend/agent_session/approval';
 import { AgentHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
-import { createTool, defaultToolRegistry } from '@iki/core/tools';
+import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
 const toolName = 'approval_resume_probe';
 

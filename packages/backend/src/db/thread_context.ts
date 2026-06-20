@@ -1,7 +1,7 @@
 import { getDb } from './database';
 import type { ThreadContextEntry } from '@iki/backend/types/memory';
 import { toIsoNow } from '@iki/core/utils/text';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { CHAT_THREAD_CONTEXT_SCHEMA_SQL } from './thread_context_schema';
 
 let threadContextSchemaEnsured = false;

@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { initializeMigrations } from './migration';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { getUserDataPath } from '../platform';
 
 let db: Database.Database | null = null;

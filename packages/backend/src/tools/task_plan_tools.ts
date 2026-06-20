@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 import { writeThreadTodoPlan } from '../db/thread_todos';
 import { renderTaskPlan, summarizeTaskPlan } from '../db/task_plan';
-import { BaseTool } from '@iki/core/tools/base';
-import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
+import { BaseTool } from '@iki/backend/tools/base';
+import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import { getToolRuntimeContext } from './runtime_context';
 import { TodoToolInputSchema, TodoToolOutputSchema } from './schemas';
 

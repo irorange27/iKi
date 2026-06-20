@@ -1,4 +1,4 @@
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { getAppConfig } from '../config';
 import { getProviders } from '../db/providers';
 import { getProviderConfig } from '../provider/llm/factory';

@@ -8,8 +8,8 @@ import { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import { getToolModel } from '../provider/tool_model';
-import { BaseTool, defaultToolRegistry } from '@iki/core/tools/base';
-import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
+import { BaseTool, defaultToolRegistry } from '@iki/backend/tools/base';
+import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import {
   AgentToolInputSchema,
   AgentToolOutputSchema,

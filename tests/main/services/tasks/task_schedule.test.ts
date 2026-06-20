@@ -4,7 +4,7 @@ const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),

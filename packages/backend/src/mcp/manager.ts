@@ -14,7 +14,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getAppConfig } from '../config';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import {
   addMcpServer,
   deleteMcpServer,
@@ -22,7 +22,7 @@ import {
   listMcpServers,
   updateMcpServer,
 } from '../db/mcp_servers';
-import { createTool, defaultToolRegistry } from '@iki/core/tools';
+import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { resolveMcpToolResult } from './tool_results';
 import { createPrefixedId } from '@iki/core/utils/id';
 import type {

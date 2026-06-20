@@ -83,7 +83,7 @@ vi.mock('@iki/backend/db/mcp_servers', () => ({
   listMcpServers: listMcpServersMock,
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: createLoggerMock,
 }));
 

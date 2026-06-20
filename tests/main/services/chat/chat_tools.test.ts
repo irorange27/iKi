@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTool, defaultToolRegistry } from '@iki/core/tools';
+import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { getAppConfig } from '@iki/backend/config';
 import { selectToolsWithAgent } from '@iki/backend/provider/tool_selection';
 import { resolveToolNames } from '@iki/backend/agent_session/tool_guard';

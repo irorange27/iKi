@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 
 import { z } from 'zod';
 
-import { BaseTool } from '@iki/core/tools/base';
+import { BaseTool } from '@iki/backend/tools/base';
 import { ShellToolInputSchema } from './schemas';
 import { resolveShellWorkingDirectory } from './workspace_paths';
 

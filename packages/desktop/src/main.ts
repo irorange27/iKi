@@ -2,7 +2,7 @@ import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { wireCoreContext } from '@iki/backend/core_wiring';
 import { getAppConfig } from '@iki/backend/config';
-import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/core/logger';
+import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/backend/logger';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
 import { setPlatformInfo } from '@iki/backend/platform';

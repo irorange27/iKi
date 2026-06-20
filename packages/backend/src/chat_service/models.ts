@@ -3,7 +3,7 @@ import * as deepseekProvider from '../provider/llm/deepseek';
 import * as kimiProvider from '../provider/llm/kimi';
 import * as minimaxProvider from '../provider/llm/minimax';
 import * as openaiProvider from '../provider/llm/openai';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
 import type {
   ProviderModelDescriptor,

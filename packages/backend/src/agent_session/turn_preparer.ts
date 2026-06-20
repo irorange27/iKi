@@ -9,7 +9,7 @@ import {
 } from '@iki/backend/affect/intervention_policy';
 import { shouldGuardTools } from '@iki/backend/affect/affect_policy';
 import * as llmFactory from '../provider/llm/factory';
-import { defaultToolRegistry } from '@iki/core/tools';
+import { defaultToolRegistry } from '@iki/backend/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/backend/workspaces/thread_workspace';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';
 import type { AffectSignal } from '@iki/core/types/affect';

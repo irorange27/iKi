@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseTool } from '@iki/core/tools/base';
+import { BaseTool } from '@iki/backend/tools/base';
 import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '@iki/backend/network/http';
 import { RetryableError } from '@iki/core/utils/errors';
 import { getAppConfig } from '../config';

@@ -1,6 +1,6 @@
 import { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { runWithToolRuntimeContext } from '../tools/runtime_context';
 import { getErrorMessage } from '@iki/core/utils/errors';

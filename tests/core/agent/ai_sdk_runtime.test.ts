@@ -25,7 +25,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: vi.fn(() => ({
     error: vi.fn(),
     warn: vi.fn(),

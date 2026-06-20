@@ -1,6 +1,6 @@
 import { getDb } from './database';
 import { getAppConfig } from '../config';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import {
   createHashMemoryEmbeddingRuntime,
   createPreferredMemoryEmbeddingRuntime,

@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '../../db/providers';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import { getToolRuntimeContext } from '../../tools/runtime_context';

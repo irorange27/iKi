@@ -98,7 +98,7 @@ vi.mock('@iki/backend/db/mcp_servers', () => ({
   updateMcpServer: vi.fn(),
 }));
 
-vi.mock('@iki/core/tools', () => ({
+vi.mock('@iki/backend/tools', () => ({
   createTool: vi.fn((options: Record<string, unknown>) => options),
   defaultToolRegistry: {
     register: vi.fn(),

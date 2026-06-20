@@ -1,5 +1,5 @@
-import { createLogger } from '@iki/core/logger';
-import { defaultToolRegistry } from '@iki/core/tools';
+import { createLogger } from '@iki/backend/logger';
+import { defaultToolRegistry } from '@iki/backend/tools';
 import { LoadSkillTool } from '@iki/backend/tools/skill_tools';
 import { applyToolApprovalPolicy } from '@iki/core/utils/tool_approval';
 import type { AgentTool } from '@iki/core/agent/types';

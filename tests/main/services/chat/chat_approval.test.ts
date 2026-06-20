@@ -19,7 +19,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   getLatestAgentRunCheckpoint: vi.fn(),
 }));
 
-vi.mock('@iki/core/tools', () => ({
+vi.mock('@iki/backend/tools', () => ({
   defaultToolRegistry: {
     get: vi.fn(),
   },
@@ -56,7 +56,7 @@ vi.mock('@iki/backend/agent_session/run_tracker', () => ({
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
-import { defaultToolRegistry } from '@iki/core/tools';
+import { defaultToolRegistry } from '@iki/backend/tools';
 import { createChatApproval } from '@iki/backend/agent_session/approval';
 import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
 import { AgentHarness } from '@iki/backend/agent/harness';

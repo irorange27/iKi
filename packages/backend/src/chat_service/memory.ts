@@ -9,7 +9,7 @@ import {
   collectEmotionSamples,
   computeAffectState,
 } from '@iki/backend/affect/affect_state';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { generateLongMemorySummary } from '../memory/auto_summarize';
 import {
   analyzeEmotionWithAgent,

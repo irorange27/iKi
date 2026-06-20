@@ -4,7 +4,7 @@ import * as threadTodoDb from '@iki/backend/db/thread_todos';
 import * as awaitersDb from '@iki/backend/db/awaiters';
 import * as tasksDb from '@iki/backend/db/tasks';
 import { getDb } from '@iki/backend/db/database';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import type { ChatMessage, ChatThread } from '@iki/backend/types/chat';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { createPrefixedId } from '@iki/core/utils/id';

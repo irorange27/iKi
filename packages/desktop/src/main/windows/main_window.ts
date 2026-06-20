@@ -1,7 +1,7 @@
 import { BrowserWindow, app } from 'electron';
 import path from 'node:path';
 
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { maybeOpenDevTools } from './devtools_policy';
 import { loadRendererEntry } from './renderer';
 import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';

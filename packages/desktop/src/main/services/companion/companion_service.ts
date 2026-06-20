@@ -1,6 +1,6 @@
 import * as providerDb from '@iki/backend/db/providers';
 import { getAppConfig } from '@iki/backend/config';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { parseModelList } from '@iki/core/utils/provider_models';
 import type {
   CompanionAffectHint,

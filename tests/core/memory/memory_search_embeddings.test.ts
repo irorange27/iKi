@@ -8,7 +8,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({ memory: { enabled: true } })),
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 

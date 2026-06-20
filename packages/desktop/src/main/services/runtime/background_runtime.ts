@@ -1,5 +1,5 @@
 import { cleanupOldAgentRuns, recoverStuckRunsOnStartup } from '@iki/backend/db/agent_runs';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { startProactiveTaskScheduler, stopProactiveTaskScheduler } from '../tasks/proactive_tasks';
 import { startAwaiterScheduler, stopAwaiterScheduler } from '../awaiters/awaiters';
 import { startClipboardMonitor, stopClipboardMonitor } from '../context/clipboard_monitor';

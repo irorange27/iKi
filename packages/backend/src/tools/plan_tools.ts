@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-import { createLogger } from '@iki/core/logger';
-import { BaseTool } from '@iki/core/tools/base';
-import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
+import { createLogger } from '@iki/backend/logger';
+import { BaseTool } from '@iki/backend/tools/base';
+import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import { MAX_PLAN_STEPS, PlanToolInputSchema, PlanToolOutputSchema } from './schemas';
 
 const planLogger = createLogger({ module: 'plan_tool' });

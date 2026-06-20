@@ -16,7 +16,7 @@ vi.mock('@iki/backend/network/http', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: vi.fn(() => ({ event: vi.fn() })),
 }));
 

@@ -15,7 +15,6 @@
     "./types": "./src/types/index.ts",
     "./types/affect": "./src/types/affect.ts",
     "./utils": "./src/utils/index.ts",
-    "./logger": "./src/logger.ts",
     "./rate_limiter": "./src/rate_limiter.ts"
   }
 }

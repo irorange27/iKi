@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 
 import { getAppConfig } from '@iki/backend/config';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { applyToolApprovalPolicyList } from '@iki/core/utils/tool_approval';
 

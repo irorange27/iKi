@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AgentHarness } from '@iki/backend/agent/harness';
 import type { TurnEvent, TurnOutput } from '@iki/backend/agent/harness/harness_types';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
-import { createTool } from '@iki/core/tools';
+import { createTool } from '@iki/backend/tools';
 import { runWithToolRuntimeContext, getToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
 // ── Helpers ──────────────────────────────────────────────────────────

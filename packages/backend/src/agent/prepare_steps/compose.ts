@@ -1,4 +1,4 @@
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 
 const composeLogger = createLogger({ module: 'prepare_step_compose' });
 

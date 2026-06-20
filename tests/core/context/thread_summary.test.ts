@@ -12,7 +12,7 @@ vi.mock('@iki/backend/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),

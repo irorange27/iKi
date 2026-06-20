@@ -2,7 +2,7 @@ import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import * as continuityDb from '@iki/backend/db/continuity';
 import { extractTextFromMessageJson } from '@iki/backend/db/memory';
 import { getAppConfig } from '@iki/backend/config';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import type {
   AssistantProfileRecord,
   ContinuityItemKind,

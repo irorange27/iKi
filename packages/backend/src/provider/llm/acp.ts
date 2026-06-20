@@ -10,7 +10,7 @@ import type { LanguageModel } from 'ai';
 
 import { listMcpServers } from '../../db/mcp_servers';
 import { getProvider } from '../../db/providers';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { getUserDataPath } from '../../platform';
 import { ensureThreadWorkspaceSelection } from '../../workspaces/thread_workspace';
 import { ACP_PROVIDER_TYPE } from '@iki/core/constants/acp';

@@ -57,7 +57,7 @@ vi.mock('../../../../packages/desktop/src/main/services/identity/identity_brain'
   getIdentityBrainDocuments: getIdentityBrainDocumentsMock,
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: vi.fn(() => ({
     event: loggerEventMock,
   })),

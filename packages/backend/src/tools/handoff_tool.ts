@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { BaseTool } from '@iki/core/tools/base';
+import { BaseTool } from '@iki/backend/tools/base';
 
 export const HandoffInputSchema = z.object({
   summary: z

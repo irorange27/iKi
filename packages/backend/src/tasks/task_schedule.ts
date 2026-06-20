@@ -3,7 +3,7 @@ import { CronExpressionParser } from 'cron-parser';
 import type { ProactiveTaskScheduleType } from '@iki/backend/types/tasks';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { toIsoNow } from '@iki/core/utils/text';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 
 export const MIN_INTERVAL_MINUTES = 1;
 export const MAX_INTERVAL_MINUTES = 60 * 24 * 7; // 7 days

@@ -332,7 +332,7 @@ vi.mock('node:fs', () => ({
   },
 }));
 
-vi.mock('@iki/core/tools', () => ({
+vi.mock('@iki/backend/tools', () => ({
   registerStandardTools: registerStandardToolsMock,
 }));
 
@@ -357,7 +357,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/core/logger', () => ({
+vi.mock('@iki/backend/logger', () => ({
   createLogger: () => ({
     event: daemonLoggerEventMock,
     info: vi.fn(),

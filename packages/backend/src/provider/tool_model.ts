@@ -2,7 +2,7 @@ import { generateText } from 'ai';
 
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { createModel, disposeLanguageModel, getModelCallSettings } from '../provider/llm/factory';

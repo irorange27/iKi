@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { BaseTool } from '@iki/core/tools/base';
+import { BaseTool } from '@iki/backend/tools/base';
 import {
   DeleteFileInputSchema,
   EditFileInputSchema,

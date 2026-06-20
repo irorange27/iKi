@@ -1,5 +1,5 @@
 import { getProviderConfig } from '@iki/backend/provider/llm/factory';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
 import { isAffectLabel, type AffectLabel, type AffectScore } from '@iki/core/types/affect';
 

@@ -5,18 +5,18 @@ import os from 'node:os';
 import path from 'node:path';
 import winston from 'winston';
 
-import type { AppConfig } from './types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import type {
   StructuredLogEntry,
   StructuredLogError,
   StructuredLogLevel,
   StructuredLogOutcome,
   StructuredLogProcess,
-} from './types/logging';
+} from '@iki/core/types/logging';
 import {
   formatStructuredConsoleLine,
   type StructuredConsoleFormatterInput,
-} from './logging/console_formatter';
+} from '@iki/core/logging/console_formatter';
 
 let _getUserDataPath: (() => string) | null = null;
 

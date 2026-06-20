@@ -8,8 +8,8 @@ import {
   updateAwaiter,
   type AwaiterUpdateInput,
 } from '../awaiters/awaiter_manager';
-import { BaseTool } from '@iki/core/tools/base';
-import { zodSchemaToJsonSchema } from '@iki/core/tools/json_schema';
+import { BaseTool } from '@iki/backend/tools/base';
+import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import { getToolRuntimeContext } from './runtime_context';
 import {
   DeleteAwaiterInputSchema,

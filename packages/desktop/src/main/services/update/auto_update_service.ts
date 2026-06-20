@@ -4,7 +4,7 @@ import { app, autoUpdater, BrowserWindow, dialog } from 'electron';
 
 import type { AppConfig } from '@iki/backend/types/config';
 import type { AppUpdateStatus, AppUpdateUnsupportedReason } from '@iki/backend/types/update';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 const UPDATE_SERVER_BASE_URL = 'https://update.electronjs.org';

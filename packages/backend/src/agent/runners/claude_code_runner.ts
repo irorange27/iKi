@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import type { AgentRunner, AgentRunnerRequest } from '@iki/core/agent/runners/agent_runner';

@@ -7,7 +7,7 @@ import {
   type ToolSet,
 } from 'ai';
 
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import {
   RefusalError,
   getErrorMessage,

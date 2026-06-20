@@ -16,7 +16,7 @@ import {
   getRuntimeLoggingConfig,
   sanitizeLogData,
   writeStructuredLogEntry,
-} from '@iki/core/logger';
+} from '@iki/backend/logger';
 import { getUserDataPath } from './platform';
 
 const MAX_BUFFER_ENTRIES = 300;

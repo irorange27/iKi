@@ -1,5 +1,5 @@
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import type { ChatThread } from '@iki/backend/types/chat';
 import type { AffectSignal } from '@iki/core/types/affect';
 import type { InterventionPolicySignal } from '@iki/backend/chat/intervention_policy';

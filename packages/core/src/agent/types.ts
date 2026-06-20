@@ -1,7 +1,21 @@
 import { z } from 'zod';
-import type { ToolRetryConfig } from '../tools/retry';
 
 export type ToolApprovalFunction = (input: unknown, options: { toolCallId: string; messages: unknown[]; experimental_context?: unknown }) => boolean | Promise<boolean>;
+
+export interface ToolRetryConfig {
+  /** Maximum number of retry attempts (total attempts = 1 + maxRetries). */
+  maxRetries: number;
+  /** Base backoff in milliseconds. Doubles each attempt, capped at 2000ms. Default 250. */
+  backoffMs?: number;
+  /** Custom predicate to decide if an error should be retried. Falls back to isRetryableError. */
+  retryableError?: (error: unknown) => boolean;
+  /**
+   * If provided, called when all retries are exhausted.
+   * The return value replaces the error, allowing graceful degradation
+   * (e.g., returning partial output on timeout).
+   */
+  fallback?: (lastError: unknown) => unknown | Promise<unknown>;
+}
 
 /**
  * Agent framework type definitions using Zod schemas

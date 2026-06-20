@@ -2,7 +2,7 @@ import { Notification, app } from 'electron';
 
 import * as tasksDb from '@iki/backend/db/tasks';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import { clampIntervalMinutes, computeNextRunAt } from '@iki/backend/tasks/task_schedule';
 import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import {

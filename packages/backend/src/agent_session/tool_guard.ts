@@ -1,5 +1,5 @@
 import { getAppConfig } from '@iki/backend/config';
-import { defaultToolRegistry } from '@iki/core/tools';
+import { defaultToolRegistry } from '@iki/backend/tools';
 import { applyToolApprovalPolicyList } from '@iki/core/utils/tool_approval';
 import type { AffectState } from '@iki/backend/affect/affect_state';
 import { selectToolsWithAgent } from '../provider/tool_selection';

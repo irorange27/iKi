@@ -6,7 +6,7 @@ import path from 'node:path';
 import { setConfig, migrateFromJson } from '@iki/backend/db/database';
 import { getAppConfig } from '@iki/backend/config';
 import { readRecentDaemonLogs } from '@iki/backend/daemon_logs';
-import { applyAppLoggingConfig, createLogger } from '@iki/core/logger';
+import { applyAppLoggingConfig, createLogger } from '@iki/backend/logger';
 import { getMcpManager } from '@iki/backend/mcp';
 import { normalizeAppConfig } from '@iki/backend/config/normalize';
 import type {

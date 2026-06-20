@@ -1,7 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import fs from 'node:fs/promises';
 
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import {
   getSkillFolderPath,
   getSkillRootsForUi,

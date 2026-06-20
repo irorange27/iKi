@@ -10,7 +10,7 @@ import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
 import { createDaemonLogger } from '@iki/backend/daemon_logs';
 import { initializeDatabase } from '@iki/backend/db/database';
-import { applyAppLoggingConfig, withLogContext } from '@iki/core/logger';
+import { applyAppLoggingConfig, withLogContext } from '@iki/backend/logger';
 import { getUserDataPath, setPlatformInfo } from '@iki/backend/platform';
 import { createChatService } from '@iki/backend/chat_service';
 import { createNapCatReverseBridge } from './napcat_adapter';

@@ -7,7 +7,7 @@ import {
   listTodoLists,
   writeTodoList,
 } from '../db/todos';
-import { BaseTool } from '@iki/core/tools/base';
+import { BaseTool } from '@iki/backend/tools/base';
 import {
   DEFAULT_TODO_LIST_LIMIT,
   DeleteTodoListInputSchema,

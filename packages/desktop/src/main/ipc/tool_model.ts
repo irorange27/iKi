@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 import {
   getToolModel,
   generateTitleWithAgent,

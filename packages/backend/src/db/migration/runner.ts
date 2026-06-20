@@ -1,5 +1,5 @@
 import { getDb } from '../database';
-import { createLogger } from '@iki/core/logger';
+import { createLogger } from '@iki/backend/logger';
 
 const migrationLogger = createLogger({ module: 'db_migration_runner' });
 
