@@ -94,6 +94,41 @@ describe('file tools workspace boundaries', () => {
     expect(result.content).toBe('hello workspace');
   });
 
+  it('caches reads and clears the cache after file writes', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    const filePath = path.join(workspaceRoot, 'docs', 'note.txt');
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, 'first', 'utf8');
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const reader = new ReadFileTool();
+    const writer = new WriteFileTool();
+
+    const first = (await runInWorkspaceContext('thread_1', async () =>
+      reader.execute({ path: 'docs/note.txt' })
+    )) as { content: string };
+    await fs.writeFile(filePath, 'external', 'utf8');
+    const cached = (await runInWorkspaceContext('thread_1', async () =>
+      reader.execute({ path: 'docs/note.txt' })
+    )) as { content: string };
+
+    await runInWorkspaceContext('thread_1', async () =>
+      writer.execute({ path: 'docs/note.txt', content: 'via tool' })
+    );
+    const refreshed = (await runInWorkspaceContext('thread_1', async () =>
+      reader.execute({ path: 'docs/note.txt' })
+    )) as { content: string };
+
+    expect(first.content).toBe('first');
+    expect(cached.content).toBe('first');
+    expect(refreshed.content).toBe('via tool');
+  });
+
   it('rejects reads that escape through a symlinked directory', async () => {
     const workspaceRoot = path.join(tempRoot, 'workspace');
     const outsideRoot = path.join(tempRoot, 'outside');

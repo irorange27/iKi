@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { ToolRetryConfig } from '../tools/retry';
-import type { ToolCacheConfig } from '../tools/cache';
 
 export type ToolApprovalFunction = (input: unknown, options: { toolCallId: string; messages: unknown[]; experimental_context?: unknown }) => boolean | Promise<boolean>;
 
@@ -58,8 +57,6 @@ export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> &
   paramSchema?: z.ZodTypeAny;
   /** Retry configuration. Applied in buildAiToolSet for non-BaseTool tools. */
   retry?: ToolRetryConfig;
-  /** Cache configuration. Applied in buildAiToolSet for non-BaseTool tools. */
-  cache?: ToolCacheConfig;
 };
 
 // Tool Call Result Schema

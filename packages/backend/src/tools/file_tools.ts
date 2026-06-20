@@ -2,7 +2,6 @@ import { z } from 'zod';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { BaseTool } from '@iki/core/tools/base';
-import { invalidateCaches } from '@iki/core/tools/cache';
 import {
   DeleteFileInputSchema,
   EditFileInputSchema,
@@ -15,6 +14,30 @@ import {
   resolveReadableWorkspacePath,
   resolveWritableWorkspacePath,
 } from './workspace_paths';
+
+const FILE_CACHE_TTL_MS = 30_000;
+const readFileCache = new Map<string, { createdAt: number; value: unknown }>();
+const listDirCache = new Map<string, { createdAt: number; value: unknown }>();
+
+const getCached = (cache: Map<string, { createdAt: number; value: unknown }>, key: string): unknown | undefined => {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.createdAt > FILE_CACHE_TTL_MS) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+};
+
+const setCached = (cache: Map<string, { createdAt: number; value: unknown }>, key: string, value: unknown): unknown => {
+  cache.set(key, { createdAt: Date.now(), value });
+  return value;
+};
+
+const clearFileReadCaches = () => {
+  readFileCache.clear();
+  listDirCache.clear();
+};
 
 const listDirEntries = async (
   dir: string,
@@ -240,13 +263,14 @@ export class ReadFileTool extends BaseTool {
 
   override paramSchema = ReadFileInputSchema;
 
-  override cache = { ttlMs: 30_000 };
-
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveReadableWorkspacePath(args.path);
+    const cacheKey = JSON.stringify([absolutePath, args.encoding]);
+    const cached = getCached(readFileCache, cacheKey);
+    if (cached !== undefined) return cached;
 
     const content = await fs.readFile(absolutePath, { encoding: args.encoding as BufferEncoding });
-    return { path: absolutePath, content };
+    return setCached(readFileCache, cacheKey, { path: absolutePath, content });
   }
 }
 
@@ -268,7 +292,7 @@ export class WriteFileTool extends BaseTool {
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
 
     await fs.writeFile(absolutePath, args.content, { encoding: args.encoding as BufferEncoding });
-    invalidateCaches(name => name === 'read_file' || name === 'list_dir');
+    clearFileReadCaches();
     return { path: absolutePath, success: true };
   }
 }
@@ -370,7 +394,7 @@ export class EditFileTool extends BaseTool {
       await fs.writeFile(absolutePath, updatedContent, {
         encoding: args.encoding as BufferEncoding,
       });
-      invalidateCaches(name => name === 'read_file' || name === 'list_dir');
+      clearFileReadCaches();
     }
 
     return {
@@ -395,11 +419,14 @@ export class ListDirTool extends BaseTool {
   override needsApproval = false;
   override paramSchema = ListDirInputSchema;
 
-  override cache = { ttlMs: 30_000 };
-
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveReadableWorkspacePath(args.path);
-    return listDirEntries(absolutePath, Boolean(args.recursive));
+    const recursive = Boolean(args.recursive);
+    const cacheKey = JSON.stringify([absolutePath, recursive]);
+    const cached = getCached(listDirCache, cacheKey);
+    if (cached !== undefined) return cached;
+
+    return setCached(listDirCache, cacheKey, await listDirEntries(absolutePath, recursive));
   }
 }
 
@@ -418,7 +445,7 @@ export class DeleteFileTool extends BaseTool {
     const absolutePath = await resolveDeleteWorkspacePath(args.path);
 
     await fs.unlink(absolutePath);
-    invalidateCaches(name => name === 'read_file' || name === 'list_dir');
+    clearFileReadCaches();
     return { path: absolutePath, deleted: true };
   }
 }

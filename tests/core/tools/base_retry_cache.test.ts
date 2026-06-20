@@ -7,7 +7,7 @@ import { RetryableError } from '@iki/core/utils/errors';
 
 const TestSchema = z.object({ value: z.string() });
 
-class NoRetryNoCacheTool extends BaseTool<typeof TestSchema> {
+class NoRetryTool extends BaseTool<typeof TestSchema> {
   override name = 'test_bare';
   override type = 'function';
   override description = 'Bare tool';
@@ -30,23 +30,11 @@ class RetryTool extends BaseTool<typeof TestSchema> {
   }
 }
 
-class CacheTool extends BaseTool<typeof TestSchema> {
-  override name = 'test_cache';
-  override type = 'function';
-  override description = 'Cache tool';
-  override paramSchema = TestSchema;
-  override cache = { ttlMs: 60_000 };
-
-  protected override async handler(args: z.infer<typeof TestSchema>): Promise<unknown> {
-    return { result: args.value };
-  }
-}
-
 // ---- Tests ----
 
 describe('BaseTool without retry/cache (backward compat)', () => {
   it('behaves exactly as before when no retry/cache config', async () => {
-    const tool = new NoRetryNoCacheTool();
+    const tool = new NoRetryTool();
     const result = await tool.execute({ value: 'hello' });
     expect(result).toEqual({ result: 'hello' });
   });
@@ -60,7 +48,7 @@ describe('BaseTool with retry', () => {
   });
 
   it('does not propagate retry when not configured', () => {
-    const tool = new NoRetryNoCacheTool();
+    const tool = new NoRetryTool();
     const agentTool = tool.toAgentTool();
     expect(agentTool.retry).toBeUndefined();
   });
@@ -87,27 +75,9 @@ describe('BaseTool with retry', () => {
   });
 });
 
-describe('BaseTool with cache', () => {
-  it('returns cached result on second call', async () => {
-    const tool = new CacheTool();
-    let handlerCalls = 0;
-    vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
-      async (args: z.infer<typeof TestSchema>) => {
-        handlerCalls++;
-        return { result: args.value };
-      }
-    );
-
-    const r1 = await tool.execute({ value: 'cached' });
-    const r2 = await tool.execute({ value: 'cached' });
-
-    expect(r1).toEqual({ result: 'cached' });
-    expect(r2).toEqual({ result: 'cached' });
-    expect(handlerCalls).toBe(1); // second call served from cache
-  });
-
-  it('does not cache when cache is not configured', async () => {
-    const tool = new NoRetryNoCacheTool();
+describe('BaseTool without cache', () => {
+  it('calls handler on repeated execute calls', async () => {
+    const tool = new NoRetryTool();
     let handlerCalls = 0;
     vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
       async (args: z.infer<typeof TestSchema>) => {
@@ -119,61 +89,6 @@ describe('BaseTool with cache', () => {
     await tool.execute({ value: 'a' });
     await tool.execute({ value: 'a' });
 
-    expect(handlerCalls).toBe(2); // no caching
-  });
-
-  it('different args produce different cache keys', async () => {
-    const tool = new CacheTool();
-    let handlerCalls = 0;
-    vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
-      async (args: z.infer<typeof TestSchema>) => {
-        handlerCalls++;
-        return { result: args.value };
-      }
-    );
-
-    await tool.execute({ value: 'a' });
-    await tool.execute({ value: 'b' });
-
-    expect(handlerCalls).toBe(2); // different args, both miss cache
-  });
-
-  it('does not cache errors', async () => {
-    const tool = new CacheTool();
-    let handlerCalls = 0;
-    vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
-      async () => {
-        handlerCalls++;
-        throw new Error('boom');
-      }
-    );
-
-    await expect(tool.execute({ value: 'err' })).rejects.toThrow('boom');
-    await expect(tool.execute({ value: 'err' })).rejects.toThrow('boom');
-
-    expect(handlerCalls).toBe(2); // errors not cached
-  });
-
-  it('deduplicates concurrent calls for the same key', async () => {
-    const tool = new CacheTool();
-    let handlerCalls = 0;
-
-    vi.spyOn(tool as unknown as { handler: typeof tool['handler'] }, 'handler').mockImplementation(
-      async (args: z.infer<typeof TestSchema>) => {
-        handlerCalls++;
-        return { result: args.value };
-      }
-    );
-
-    // Fire two concurrent calls with same args
-    const [r1, r2] = await Promise.all([
-      tool.execute({ value: 'concurrent' }),
-      tool.execute({ value: 'concurrent' }),
-    ]);
-
-    expect(r1).toEqual({ result: 'concurrent' });
-    expect(r2).toEqual({ result: 'concurrent' });
-    // The second call should get the in-flight promise from the first
-    expect(handlerCalls).toBe(1);
+    expect(handlerCalls).toBe(2);
   });
 });

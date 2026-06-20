@@ -3,8 +3,6 @@ import type { AgentTool, ToolApprovalFunction, ToolApprovalMode } from '../agent
 import { createLogger } from '../logger';
 import { zodSchemaToJsonSchema } from './json_schema';
 import type { ToolRetryConfig } from './retry';
-import type { ToolCacheConfig } from './cache';
-import { buildCacheKey, registerToolCache, ToolResultCache } from './cache';
 
 const toolLogger = createLogger({ module: 'base_tool' });
 
@@ -27,10 +25,6 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   /** Retry configuration. If undefined, no retry is applied. */
   retry?: ToolRetryConfig;
 
-  /** Cache configuration. If undefined, no caching is applied. */
-  cache?: ToolCacheConfig;
-
-  private _cacheInstance?: ToolResultCache;
 
   /**
    * Raw handler implementation
@@ -45,84 +39,26 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   }
 
   /**
-   * Execute the tool with validation, caching, and retry.
+   * Execute the tool with validation and tracing.
    */
   async execute(args: unknown): Promise<unknown> {
     const validatedArgs = this.paramSchema.parse(args);
-
-    // --- Cache check ---
-    if (this.cache) {
-      if (!this._cacheInstance) {
-        this._cacheInstance = new ToolResultCache(this.cache);
-        registerToolCache(this.name, this._cacheInstance);
-      }
-      const cacheKey = buildCacheKey(this.name, validatedArgs);
-
-      const cached = this._cacheInstance.get(cacheKey);
-      if (cached !== undefined) {
-        toolLogger.event({
-          level: 'debug',
-          event: 'tool.cache',
-          outcome: 'hit',
-          entity: { tool_name: this.name },
-        });
-        return cached;
-      }
-
-      // In-flight deduplication
-      const inFlight = this._cacheInstance.getInFlight(cacheKey);
-      if (inFlight) {
-        toolLogger.event({
-          level: 'debug',
-          event: 'tool.cache',
-          outcome: 'dedup',
-          entity: { tool_name: this.name },
-        });
-        return inFlight;
-      }
-    }
-
-    const promise = this.handler(validatedArgs);
-
-    // --- Track execution with span ---
     const toolSpan = toolLogger.span({
       level: 'debug',
       event: 'tool.execute',
       data: { tool_name: this.name },
     });
 
-    const onResolve = (result: unknown) => {
-      toolSpan.succeed({ data: { tool_name: this.name } });
-      return result;
-    };
-    const onReject = (error: unknown) => {
-      toolSpan.fail(error, { data: { tool_name: this.name } });
-      throw error;
-    };
-
-    // --- Cache store (only on success) ---
-    if (this.cache && this._cacheInstance) {
-      const cacheKey = buildCacheKey(this.name, validatedArgs);
-      this._cacheInstance.setInFlight(cacheKey, promise);
-
-      try {
-        const result = await promise;
-        this._cacheInstance.set(cacheKey, result);
-        toolLogger.event({
-          level: 'debug',
-          event: 'tool.cache',
-          outcome: 'miss',
-          entity: { tool_name: this.name },
-        });
-        return onResolve(result);
-      } catch (error) {
-        onReject(error);
-      } finally {
-        this._cacheInstance.deleteInFlight(cacheKey);
+    return this.handler(validatedArgs).then(
+      result => {
+        toolSpan.succeed({ data: { tool_name: this.name } });
+        return result;
+      },
+      error => {
+        toolSpan.fail(error, { data: { tool_name: this.name } });
+        throw error;
       }
-    }
-
-    return promise.then(onResolve, onReject);
+    );
   }
 
   /**
@@ -245,7 +181,6 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   displayName?: string;
   source?: AgentTool['source'];
   retry?: ToolRetryConfig;
-  cache?: ToolCacheConfig;
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
   const parameters =
@@ -260,7 +195,6 @@ export function createTool<P extends z.ZodTypeAny>(options: {
     displayName: options.displayName ?? options.name,
     source: options.source ?? { kind: 'builtin' },
     ...(options.retry ? { retry: options.retry } : {}),
-    ...(options.cache ? { cache: options.cache } : {}),
   };
 }
 
