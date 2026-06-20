@@ -3,8 +3,8 @@ import { defaultToolRegistry } from '@iki/core/tools';
 import { applyToolApprovalPolicyList } from '@iki/core/utils/tool_approval';
 import type { AffectState } from '@iki/backend/affect/affect_state';
 import { selectToolsWithAgent } from '../provider/tool_selection';
-import type { ChatInputMessage } from './types';
-import { toLlmChatMessages } from './ui_messages';
+import type { ChatInputMessage } from '../chat_service/types';
+import { toLlmChatMessages } from '../chat_service/ui_messages';
 
 type ToolResolveMode = 'manual' | 'auto';
 type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[number];

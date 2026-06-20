@@ -22,7 +22,7 @@ vi.mock('@iki/backend/provider/tool_model', () => ({
   getToolModel: getToolModelMock,
 }));
 
-vi.mock('@iki/backend/agent/run_tracker', () => ({
+vi.mock('@iki/backend/agent_session/run_tracker', () => ({
   createAgentRunTracker: createAgentRunTrackerMock,
 }));
 

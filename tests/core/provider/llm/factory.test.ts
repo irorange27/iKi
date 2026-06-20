@@ -95,10 +95,6 @@ vi.mock('@iki/backend/network/http', () => ({
   fetchWithTimeout: fetchWithTimeoutMock,
 }));
 
-vi.mock('@iki/core/context/platform_provider', () => ({
-  getUserDataPath: getUserDataPathMock,
-}));
-
 vi.mock('@iki/backend/platform', () => ({
   getUserDataPath: getUserDataPathMock,
 }));

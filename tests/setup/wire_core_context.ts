@@ -1,8 +1,7 @@
-// Wire core context injection points with no-op defaults so that tests
-// that don't specifically mock a context module can still run.
-// Tests that DO mock a context module via vi.mock will override these
-// defaults (vi.mock hoisting replaces the entire module).
+// Inject a no-op user data path into the core logger so tests that don't
+// specifically mock it can still run. Tests that DO mock the logger via
+// vi.mock will override this (vi.mock hoisting replaces the entire module).
 
-import { injectGetUserDataPath } from '@iki/core/context/platform_provider';
+import { injectGetUserDataPath } from '@iki/core/logger';
 
 injectGetUserDataPath(() => '/tmp/iki-test-user-data');

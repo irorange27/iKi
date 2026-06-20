@@ -22,12 +22,12 @@ import type { AgentRunKind } from '@iki/core/types/agent_run';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import { ensureModelCapability } from '@iki/core/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './context';
-import type { ChatMemory } from './memory';
-import type { ChatInputMessage, ChatTransportMessage } from './types';
+import type { ChatMemory } from '../chat_service/memory';
+import type { ChatInputMessage, ChatTransportMessage } from '../chat_service/types';
 import { persistThreadRuntimeHints } from './thread_hints';
 import { resolveToolNames } from './tool_guard';
-import { getPromptFromMessage, toModelInputMessages } from './ui_messages';
-import { TODO_PLANNING_TOOL_NAME } from './todo_planning';
+import { getPromptFromMessage, toModelInputMessages } from '../chat_service/ui_messages';
+import { TODO_PLANNING_TOOL_NAME } from '../chat_service/todo_planning';
 
 export type ChatTurnOptions = {
   providerType: string;

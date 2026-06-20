@@ -44,7 +44,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
 }));
 
-vi.mock('@iki/backend/chat_service/turn_preparer', () => ({
+vi.mock('@iki/backend/agent_session/turn_preparer', () => ({
   createChatTurnPreparer: () => ({
     prepareChatTurn: prepareChatTurnMock,
   }),

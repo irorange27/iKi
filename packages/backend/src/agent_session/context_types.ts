@@ -3,7 +3,7 @@ import type { ChatContextMode } from '@iki/backend/chat/intervention_policy';
 import type { AffectState } from '@iki/backend/affect/affect_state';
 import type { ModelCapability } from '@iki/core/utils/provider_models';
 import type { SkillSummary } from '@iki/backend/types/skill';
-import type { ChatInputMessage } from './types';
+import type { ChatInputMessage } from '../chat_service/types';
 import type { EffectiveContextConfig } from './context_budget';
 
 export type ContextBlockKind =

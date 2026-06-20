@@ -10,7 +10,7 @@ import {
   type ThreadSummaryMessage,
 } from './thread_summary';
 import type { ModelCapability } from '@iki/core/utils/provider_models';
-import type { ChatInputMessage } from './types';
+import type { ChatInputMessage } from '../chat_service/types';
 import {
   buildMessagePreview,
   clipMessageToBudget,

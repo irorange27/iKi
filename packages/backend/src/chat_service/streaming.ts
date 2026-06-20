@@ -8,14 +8,14 @@ import {
   resolveChatToolMaxIterations,
 } from './constants';
 import type { ChatMemory } from './memory';
-import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
-import { createApprovalRecoveryContext } from './approval_types';
+import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../agent_session/approval_types';
+import { createApprovalRecoveryContext } from '../agent_session/approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { createAgentRunTracker } from '../agent/run_tracker';
+import { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import { createChatStreamingModels } from './models';
-import { createChatTurnPreparer, type ChatTurnOptions } from './turn_preparer';
+import { createChatTurnPreparer, type ChatTurnOptions } from '../agent_session/turn_preparer';
 import { createChatSend } from './chat_send';
 export type { ChatSendResult } from './chat_send';
 import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEvent } from './types';

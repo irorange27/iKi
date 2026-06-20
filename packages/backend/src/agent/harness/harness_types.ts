@@ -2,7 +2,7 @@ import type { LanguageModel, ModelMessage } from 'ai';
 
 import type { AgentStep } from '@iki/core/agent/agent_step';
 import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult } from '@iki/core/agent/types';
-import type { AgentRunTracker } from '../../agent/run_tracker';
+import type { AgentRunTracker } from '../../agent_session/run_tracker';
 
 // ── Harness configuration ─────────────────────────────────────────────
 

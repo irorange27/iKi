@@ -10,8 +10,8 @@ import { isObjectRecord } from '@iki/core/utils/guards';
 import { createPrefixedId } from '@iki/core/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { getErrorMessage } from '@iki/core/utils/errors';
-import { onMessagePersisted as onContinuityMessagePersisted } from './platform';
-import type { ChatMemory } from './memory';
+import { onMessagePersisted as onContinuityMessagePersisted } from '../chat_service/platform';
+import type { ChatMemory } from '../chat_service/memory';
 import { sanitizeUiMessageJsonForStorage } from '@iki/backend/chat/ui_message_codec';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });

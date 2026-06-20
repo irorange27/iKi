@@ -17,7 +17,19 @@ import {
   formatStructuredConsoleLine,
   type StructuredConsoleFormatterInput,
 } from './logging/console_formatter';
-import { getUserDataPath } from './context/platform_provider';
+
+let _getUserDataPath: (() => string) | null = null;
+
+export function injectGetUserDataPath(fn: () => string) {
+  _getUserDataPath = fn;
+}
+
+function getUserDataPath(): string {
+  if (_getUserDataPath) return _getUserDataPath();
+  const envPath = process.env.IKI_USER_DATA_PATH;
+  if (typeof envPath === 'string' && envPath.trim()) return envPath.trim();
+  return path.join(os.homedir(), '.iki');
+}
 
 type LogContext = {
   process?: StructuredLogProcess;

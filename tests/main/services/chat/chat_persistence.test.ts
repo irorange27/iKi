@@ -104,7 +104,7 @@ describe('chat_persistence', () => {
 
   it('persists thread creation fields that drive composer state and workspace scoping', async () => {
     const { createChatPersistence } = await import(
-      '@iki/backend/chat_service/persistence'
+      '@iki/backend/agent_session/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -150,7 +150,7 @@ describe('chat_persistence', () => {
   it('touches thread ordering and persists continuity when saving a chat message', async () => {
     const onMessagePersisted = vi.fn();
     const { createChatPersistence } = await import(
-      '@iki/backend/chat_service/persistence'
+      '@iki/backend/agent_session/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -182,7 +182,7 @@ describe('chat_persistence', () => {
     countChatMessagesByThreadMock.mockReturnValue(3);
 
     const { createChatPersistence } = await import(
-      '@iki/backend/chat_service/persistence'
+      '@iki/backend/agent_session/persistence'
     );
 
     const persistence = createChatPersistence({
@@ -205,7 +205,7 @@ describe('chat_persistence', () => {
 
   it('clears a thread atomically while re-binding proactive tasks to the recreated thread id', async () => {
     const { createChatPersistence } = await import(
-      '@iki/backend/chat_service/persistence'
+      '@iki/backend/agent_session/persistence'
     );
 
     getChatThreadMock

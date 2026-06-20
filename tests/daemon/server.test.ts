@@ -367,6 +367,7 @@ vi.mock('@iki/core/logger', () => ({
   }),
   applyAppLoggingConfig: applyAppLoggingConfigMock,
   withLogContext: (_context: unknown, fn: () => unknown) => fn(),
+  injectGetUserDataPath: vi.fn(),
 }));
 
 vi.mock('@iki/backend/platform', () => ({

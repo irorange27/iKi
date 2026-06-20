@@ -1,5 +1,5 @@
 import { deriveModelAwareContextConfig } from './context_budget';
-import type { ChatMemory } from './memory';
+import type { ChatMemory } from '../chat_service/memory';
 import {
   buildAffectBlock,
   buildClipboardContext,

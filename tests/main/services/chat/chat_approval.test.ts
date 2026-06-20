@@ -49,7 +49,7 @@ vi.mock('@iki/backend/agent/harness', () => ({
   AgentHarness: vi.fn(),
 }));
 
-vi.mock('@iki/backend/agent/run_tracker', () => ({
+vi.mock('@iki/backend/agent_session/run_tracker', () => ({
   createAgentRunTracker: vi.fn(),
 }));
 
@@ -57,8 +57,8 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/core/tools';
-import { createChatApproval } from '@iki/backend/chat_service/approval';
-import { createAgentRunTracker } from '@iki/backend/agent/run_tracker';
+import { createChatApproval } from '@iki/backend/agent_session/approval';
+import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
 import { AgentHarness } from '@iki/backend/agent/harness';
 
 const AgentHarnessMock = vi.mocked(AgentHarness);

@@ -63,7 +63,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
 
 import * as approvalDb from '@iki/backend/db/chat_tool_approval';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { createChatApproval } from '@iki/backend/chat_service/approval';
+import { createChatApproval } from '@iki/backend/agent_session/approval';
 import { AgentHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';

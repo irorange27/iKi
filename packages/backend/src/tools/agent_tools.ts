@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '@iki/core/agent/types';
-import { createAgentRunTracker } from '../agent/run_tracker';
+import { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import { getToolModel } from '../provider/tool_model';

@@ -9,7 +9,7 @@ import {
   getToolRuntimeContext,
   bindToolRuntimeContextToGenerator,
 } from '../../tools/runtime_context';
-import type { AgentRunTracker } from '../run_tracker';
+import type { AgentRunTracker } from '../../agent_session/run_tracker';
 import type { HarnessConfig, TurnInput, TurnOutput, TurnEvent } from './harness_types';
 
 export const cloneModelMessages = (messages?: ModelMessage[]): ModelMessage[] => {

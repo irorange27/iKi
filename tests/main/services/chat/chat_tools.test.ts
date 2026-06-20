@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTool, defaultToolRegistry } from '@iki/core/tools';
 import { getAppConfig } from '@iki/backend/config';
 import { selectToolsWithAgent } from '@iki/backend/provider/tool_selection';
-import { resolveToolNames } from '@iki/backend/chat_service/tool_guard';
+import { resolveToolNames } from '@iki/backend/agent_session/tool_guard';
 
 vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({

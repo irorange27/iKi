@@ -1,4 +1,4 @@
-import { injectGetUserDataPath } from '@iki/core/context/platform_provider';
+import { injectGetUserDataPath } from '@iki/core/logger';
 import { getUserDataPath } from './platform';
 
 export function wireCoreContext(): void {
