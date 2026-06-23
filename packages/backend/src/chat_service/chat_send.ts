@@ -207,6 +207,7 @@ export const createChatSend = (deps: ChatSendDeps) => {
         modelId: options.model,
         messages: preparedTurn.finalMessages,
         extraSystemPrompt: NO_TOOLS_SYSTEM_PROMPT,
+        ...(options.threadId ? { threadId: options.threadId } : {}),
         ...(typeof preparedTurn.maxOutputTokens === 'number'
           ? { maxOutputTokens: preparedTurn.maxOutputTokens }
           : {}),

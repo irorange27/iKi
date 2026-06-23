@@ -97,6 +97,7 @@ const buildPrompt = (params: { existingSummary?: string; messages: ThreadSummary
 export const generateThreadSummary = async (params: {
   existingSummary?: string;
   messages: ThreadSummaryMessage[];
+  threadId?: string;
 }): Promise<ThreadSummaryResult | null> => {
   if (!Array.isArray(params.messages) || params.messages.length === 0) return null;
 
@@ -124,6 +125,7 @@ export const generateThreadSummary = async (params: {
     maxIterations: 1,
     enableTools: false,
     enableMemory: false,
+    ...(params.threadId ? { threadId: params.threadId } : {}),
   });
 
   try {

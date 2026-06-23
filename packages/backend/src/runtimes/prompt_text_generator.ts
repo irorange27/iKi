@@ -22,7 +22,10 @@ export interface PromptTextGenerator {
   generate(prompt: string): Promise<PromptTextGeneratorResult>;
 }
 
-export type PromptTextGeneratorConfig = PartialAgentConfig;
+export type PromptTextGeneratorConfig = PartialAgentConfig & {
+  /** Optional thread id — forwarded to Langfuse as sessionId. */
+  threadId?: string;
+};
 
 export type PromptTextGeneratorFactory = (
   config?: PromptTextGeneratorConfig
@@ -30,9 +33,11 @@ export type PromptTextGeneratorFactory = (
 
 export class SimplePromptTextGenerator implements PromptTextGenerator {
   private readonly config: AgentConfig;
+  private readonly threadId?: string;
 
   constructor(config?: PromptTextGeneratorConfig) {
     this.config = loadAgentConfig(config);
+    this.threadId = config?.threadId;
   }
 
   async generate(prompt: string): Promise<PromptTextGeneratorResult> {
@@ -43,6 +48,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
     const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
     try {
       const telemetry = langfuseTelemetry('prompt.generate', {
+        sessionId: this.threadId,
         provider: this.config.providerType,
         providerId: this.config.providerId,
         model: this.config.model,

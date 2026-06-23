@@ -33,7 +33,7 @@ export const initLangfuseTracing = (): void => {
     level: 'info',
     event: 'langfuse.init.ok',
     message: 'Langfuse tracing initialized',
-    data: { baseUrl: process.env.LANGFUSE_BASE_URL ?? null },
+    data: { baseUrl: process.env.LANGFUSE_BASE_URL ?? 'https://cloud.langfuse.com' },
   });
 };
 

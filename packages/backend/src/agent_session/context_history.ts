@@ -86,6 +86,7 @@ export const ensureThreadSummary = async (
   const generated = await generateThreadSummary({
     existingSummary: shouldRegenerate ? '' : existing?.summary,
     messages: deltaMessages,
+    threadId,
   });
 
   if (!generated) {

@@ -497,6 +497,8 @@ export const generateChatWithModelMessages = async (options: {
   messages: ModelMessage[];
   extraSystemPrompt?: string;
   maxOutputTokens?: number;
+  /** Optional thread id — forwarded to Langfuse as sessionId. */
+  threadId?: string;
 }): Promise<ChatGenerationResult> => {
   const model = createModel(options.providerType, options.modelId, options.providerId);
   const systemPrompt = [
@@ -508,6 +510,7 @@ export const generateChatWithModelMessages = async (options: {
 
   try {
     const telemetry = langfuseTelemetry('chat.generate', {
+      sessionId: options.threadId,
       provider: options.providerType,
       providerId: options.providerId,
       model: options.modelId,
