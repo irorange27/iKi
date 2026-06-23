@@ -13,3 +13,4 @@ allowBuilds:
   ffmpeg-static: true
   fs-xattr: true
   macos-alias: true
+  protobufjs: false

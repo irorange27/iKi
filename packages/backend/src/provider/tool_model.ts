@@ -3,6 +3,7 @@ import { generateText } from 'ai';
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { createLogger } from '@iki/backend/logger';
+import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { createModel, disposeLanguageModel, getModelCallSettings } from '../provider/llm/factory';
@@ -172,6 +173,14 @@ export const testToolModelLatency = async (
         resolvedToolModel.providerId
       ),
       maxOutputTokens: 8,
+      ...(() => {
+        const telemetry = langfuseTelemetry('tool_model.probe', {
+          provider: resolvedToolModel.providerType,
+          providerId: resolvedToolModel.providerId,
+          model: resolvedToolModel.model,
+        });
+        return telemetry ? { experimental_telemetry: telemetry } : {};
+      })(),
     });
   } finally {
     disposeLanguageModel(model);

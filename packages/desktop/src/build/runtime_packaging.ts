@@ -6,6 +6,11 @@ export const VITE_EXTERNAL_RUNTIME_DEPS = [
   'better-sqlite3',
   'whisper-node',
   'ffmpeg-static',
+  // ponytail: otel/langfuse pulled in a process-introspection path that crashed Vite's CJS interop; load at runtime instead.
+  '@langfuse/otel',
+  '@langfuse/tracing',
+  '@opentelemetry/api',
+  '@opentelemetry/sdk-node',
 ] as const;
 
 type InstalledPackageManifest = {

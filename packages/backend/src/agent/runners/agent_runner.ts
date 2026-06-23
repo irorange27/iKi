@@ -28,6 +28,9 @@ export interface AgentRunnerRequest {
   /** Signal to cancel the run externally. */
   abortSignal?: AbortSignal;
 
+  /** Optional thread / session identifier — forwarded to Langfuse as sessionId. */
+  threadId?: string;
+
   /** Additional free-form config overrides. */
   config?: PartialAgentConfig;
 }

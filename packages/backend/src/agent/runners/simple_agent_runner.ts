@@ -8,6 +8,7 @@ import {
 } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
+import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import {
   RefusalError,
   getErrorMessage,
@@ -187,6 +188,12 @@ export class SimpleAgentRunner implements AgentRunner {
       let steeredMidStream = false;
 
       try {
+        const telemetry = langfuseTelemetry('agent.stream', {
+          sessionId: request.threadId,
+          provider: config.providerType,
+          providerId: config.providerId,
+          model: config.model,
+        });
         const result = streamText({
           model,
           system: systemPrompt,
@@ -205,6 +212,7 @@ export class SimpleAgentRunner implements AgentRunner {
           ...(this.prepareStep ? { prepareStep: this.prepareStep } : {}),
           abortSignal: this.abortController?.signal,
           experimental_transform: smoothStream(),
+          ...(telemetry ? { experimental_telemetry: telemetry } : {}),
           onAbort: () => {
             logger.event({
               level: 'info',

@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '@iki/backend/logger';
+import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import { getToolRuntimeContext } from '../../tools/runtime_context';
@@ -506,6 +507,11 @@ export const generateChatWithModelMessages = async (options: {
     .join('\n\n');
 
   try {
+    const telemetry = langfuseTelemetry('chat.generate', {
+      provider: options.providerType,
+      providerId: options.providerId,
+      model: options.modelId,
+    });
     const result = await generateText({
       model,
       system: systemPrompt,
@@ -514,6 +520,7 @@ export const generateChatWithModelMessages = async (options: {
       ...(typeof options.maxOutputTokens === 'number'
         ? { maxOutputTokens: options.maxOutputTokens }
         : {}),
+      ...(telemetry ? { experimental_telemetry: telemetry } : {}),
     });
 
     if (!result.text) {

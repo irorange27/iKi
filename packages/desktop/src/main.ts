@@ -5,6 +5,10 @@ import { getAppConfig } from '@iki/backend/config';
 import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/backend/logger';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
+import {
+  initLangfuseTracing,
+  shutdownLangfuseTracing,
+} from '@iki/backend/observability/langfuse';
 import { setPlatformInfo } from '@iki/backend/platform';
 import { startDaemonServer } from '@iki/daemon/server';
 import { registerMainIpc } from './main/ipc';
@@ -28,6 +32,7 @@ const appLogger = createLogger({ module: 'app' });
 setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
 
 wireCoreContext();
+initLangfuseTracing();
 
 const syncLoggingConfig = () => {
   try {
@@ -156,6 +161,7 @@ if (isDaemonMode) {
     });
     stopBackgroundRuntime();
     stopDesktopDaemon();
+    void shutdownLangfuseTracing();
   });
 
   // Quit when all windows are closed, except on macOS. There, it's common

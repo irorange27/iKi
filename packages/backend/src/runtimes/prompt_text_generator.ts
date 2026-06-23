@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
 
+import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import {
   appendUserPromptToHistory,
   buildPromptContext,
@@ -41,6 +42,11 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
     const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
     try {
+      const telemetry = langfuseTelemetry('prompt.generate', {
+        provider: this.config.providerType,
+        providerId: this.config.providerId,
+        model: this.config.model,
+      });
       const result = await generateText({
         model,
         system: systemPrompt,
@@ -52,6 +58,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
           temperature: this.config.temperature,
         }),
         maxOutputTokens: this.config.maxTokens,
+        ...(telemetry ? { experimental_telemetry: telemetry } : {}),
       });
 
       return { response: result.text };
