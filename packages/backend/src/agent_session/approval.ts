@@ -514,6 +514,8 @@ export const createChatApproval = (deps: {
         },
         async () => {
           // Create a fresh harness from the recovery context
+          const approvalThreadId =
+            nextApprovalContext?.threadId ?? session.recoveryContext?.threadId;
           const harnessCfg = {
             providerType: ctx?.providerType ?? '',
             providerId: ctx?.providerId,
@@ -524,6 +526,7 @@ export const createChatApproval = (deps: {
             availableSkillIds: ctx?.availableSkillIds ?? [],
             guardActive: false,
             maxIterations: ctx?.maxIterations ?? 10,
+            ...(approvalThreadId ? { threadId: approvalThreadId } : {}),
             ...(typeof ctx?.maxOutputTokens === 'number'
               ? { maxOutputTokens: ctx.maxOutputTokens }
               : {}),

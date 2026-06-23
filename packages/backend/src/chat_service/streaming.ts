@@ -376,6 +376,7 @@ export const createChatStreaming = (deps: {
         requireApproval: preparedTurn.requireApproval,
         autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
         maxIterations,
+        ...(options.threadId ? { threadId: options.threadId } : {}),
         ...(typeof preparedTurn.maxOutputTokens === 'number'
           ? { maxOutputTokens: preparedTurn.maxOutputTokens }
           : {}),
@@ -737,6 +738,7 @@ export const createChatStreaming = (deps: {
             availableSkillIds: preparedTurn.selectedSkillIds,
             guardActive: preparedTurn.guardActive,
             maxIterations,
+            ...(options.threadId ? { threadId: options.threadId } : {}),
             ...(typeof preparedTurn.maxOutputTokens === 'number'
               ? { maxOutputTokens: preparedTurn.maxOutputTokens }
               : {}),

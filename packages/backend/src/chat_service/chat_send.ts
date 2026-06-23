@@ -121,6 +121,7 @@ export const createChatSend = (deps: ChatSendDeps) => {
           requireApproval: preparedTurn.requireApproval,
           autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
           maxIterations,
+          ...(options.threadId ? { threadId: options.threadId } : {}),
           ...(typeof preparedTurn.maxOutputTokens === 'number'
             ? { maxOutputTokens: preparedTurn.maxOutputTokens }
             : {}),
