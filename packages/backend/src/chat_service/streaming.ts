@@ -14,6 +14,7 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
+import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../agent_session/turn_preparer';
 import { createChatSend } from './chat_send';
@@ -525,43 +526,53 @@ export const createChatStreaming = (deps: {
         let awaitingApproval = false;
 
         try {
-          agentResult = await runWithToolRuntimeContext(
+          agentResult = await traceChatTurn(
             {
-              runId: runTracker.id,
-              runTracker,
               threadId: options.threadId,
-              conversationModel: {
-                providerType: options.providerType,
-                providerId: options.providerId,
-                model: options.model,
-              },
+              prompt: streamPrompt,
+              provider: options.providerType,
+              model: options.model,
             },
-            async () => {
-              for await (const event of harness.turn({
-                prompt: streamPrompt,
-                history: streamHistory,
-                runTracker,
-                abortSignal: streamState.abortController.signal,
-              })) {
-                if (event.event === 'step') {
-                  forwardAgentStep(event.step);
-                  continue;
-                }
+            () =>
+              runWithToolRuntimeContext(
+                {
+                  runId: runTracker.id,
+                  runTracker,
+                  threadId: options.threadId,
+                  conversationModel: {
+                    providerType: options.providerType,
+                    providerId: options.providerId,
+                    model: options.model,
+                  },
+                },
+                async () => {
+                  for await (const event of harness.turn({
+                    prompt: streamPrompt,
+                    history: streamHistory,
+                    runTracker,
+                    abortSignal: streamState.abortController.signal,
+                  })) {
+                    if (event.event === 'step') {
+                      forwardAgentStep(event.step);
+                      continue;
+                    }
 
-                if (event.event === 'done') {
-                  const output = event.output;
-                  return {
-                    response: output.text,
-                    toolCalls: output.toolCalls,
-                    toolApprovalRequests: output.toolApprovalRequests,
-                    usage: output.usage,
-                    iterations: 0,
-                    requiresApproval: output.requiresApproval,
-                  } as import('@iki/backend/agent').AgentResult;
+                    if (event.event === 'done') {
+                      const output = event.output;
+                      return {
+                        response: output.text,
+                        toolCalls: output.toolCalls,
+                        toolApprovalRequests: output.toolApprovalRequests,
+                        usage: output.usage,
+                        iterations: 0,
+                        requiresApproval: output.requiresApproval,
+                      } as import('@iki/backend/agent').AgentResult;
+                    }
+                  }
+                  return undefined;
                 }
-              }
-              return undefined;
-            }
+              ),
+            result => result?.response
           );
         } catch (error) {
           if (

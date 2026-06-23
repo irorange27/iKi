@@ -1,4 +1,10 @@
 import { LangfuseSpanProcessor } from '@langfuse/otel';
+import {
+  startActiveObservation,
+  setActiveTraceIO,
+  propagateAttributes,
+  type LangfuseAgent,
+} from '@langfuse/tracing';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 
 import { createLogger } from '@iki/backend/logger';
@@ -88,4 +94,53 @@ export const langfuseTelemetry = (
     functionId,
     ...(Object.keys(filtered).length > 0 ? { metadata: filtered } : {}),
   };
+};
+
+/**
+ * Wrap a chat turn so its nested AI SDK spans (agent.stream, prompt.generate, …)
+ * become children of one `chat.turn` agent observation. The trace's input/output
+ * is set from the user prompt and final answer; sessionId is set on the trace.
+ *
+ * No-op (just runs the callback) when tracing is disabled.
+ */
+export const traceChatTurn = async <T>(
+  params: {
+    threadId?: string;
+    prompt: string;
+    provider?: string;
+    model?: string;
+  },
+  run: () => Promise<T>,
+  getOutput?: (result: T) => string | undefined
+): Promise<T> => {
+  if (!isLangfuseEnabled()) return run();
+
+  return startActiveObservation(
+    'chat.turn',
+    async (agent: LangfuseAgent) => {
+      agent.update({ input: params.prompt });
+      setActiveTraceIO({ input: params.prompt });
+
+      return propagateAttributes(
+        {
+          traceName: 'chat.turn',
+          ...(params.threadId ? { sessionId: params.threadId } : {}),
+          metadata: {
+            ...(params.provider ? { provider: params.provider } : {}),
+            ...(params.model ? { model: params.model } : {}),
+          },
+        },
+        async () => {
+          const result = await run();
+          const output = getOutput?.(result);
+          if (output !== undefined) {
+            agent.update({ output });
+            setActiveTraceIO({ output });
+          }
+          return result;
+        }
+      );
+    },
+    { asType: 'agent' }
+  );
 };
