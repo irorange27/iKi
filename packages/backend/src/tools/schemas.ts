@@ -34,7 +34,10 @@ export const toolCallDescriptionField = z
   .string()
   .trim()
   .max(160)
-  .describe('One short sentence explaining why this tool call is needed')
+  .describe(
+    'REQUIRED in practice: one short sentence (max 160 chars) stating WHY you are calling this tool right now. ' +
+      'This is shown to the user in the UI as the tool-call title — always include it, even when the reason seems obvious.'
+  )
   .optional();
 
 // ---------------------------------------------------------------------------
