@@ -61,6 +61,49 @@ export type StandardToolRegistrationOptions = {
   delegatedAgentRuntime: DelegatedAgentRuntime;
 };
 
+// Lazy: tools/index sits in an import cycle (agent_tools -> agent/harness ->
+// tool_resolver -> tools barrel), so tool instances must not be constructed at
+// module-load time — only after evaluation of every module in the cycle.
+const buildStandardTools = () => [
+  new ReadFileTool(),
+  new EditFileTool(),
+  new UndoEditTool(),
+  new WriteFileTool(),
+  new DeleteFileTool(),
+  new ShellExecutionTool(),
+  new DelegatedAgentTool(),
+  new WebSearchTool(),
+  new FetchTool(),
+  new ListPersonalSkillsTool(),
+  new ReadPersonalSkillTool(),
+  new LoadSkillTool(),
+  new WritePersonalSkillTool(),
+  new DeletePersonalSkillTool(),
+  new PlanTool(),
+  new TodoTool(),
+  new ListTodoListsTool(),
+  new ReadTodoListTool(),
+  new WriteTodoListTool(),
+  new DeleteTodoListTool(),
+  new ListProactiveTasksTool(),
+  new ReadProactiveTaskTool(),
+  new WriteProactiveTaskTool(),
+  new DeleteProactiveTaskTool(),
+  new ListAwaitersTool(),
+  new ReadAwaiterTool(),
+  new WriteAwaiterTool(),
+  new DeleteAwaiterTool(),
+  new HandoffTool(),
+];
+
+let standardTools: ReturnType<typeof buildStandardTools> | null = null;
+
+const getStandardTools = () => (standardTools ??= buildStandardTools());
+
+/** Canonical names of the built-in tool set, in registration order. */
+export const getBuiltinToolNames = (): readonly string[] =>
+  getStandardTools().map(tool => tool.name);
+
 /**
  * Register all standard system tools to the default global registry
  */
@@ -68,33 +111,7 @@ export function registerStandardTools({
   delegatedAgentRuntime,
 }: StandardToolRegistrationOptions) {
   setDelegatedAgentRuntime(delegatedAgentRuntime);
-  defaultToolRegistry.register(new ReadFileTool());
-  defaultToolRegistry.register(new EditFileTool());
-  defaultToolRegistry.register(new UndoEditTool());
-  defaultToolRegistry.register(new WriteFileTool());
-  defaultToolRegistry.register(new DeleteFileTool());
-  defaultToolRegistry.register(new ShellExecutionTool());
-  defaultToolRegistry.register(new DelegatedAgentTool());
-  defaultToolRegistry.register(new WebSearchTool());
-  defaultToolRegistry.register(new FetchTool());
-  defaultToolRegistry.register(new ListPersonalSkillsTool());
-  defaultToolRegistry.register(new ReadPersonalSkillTool());
-  defaultToolRegistry.register(new LoadSkillTool());
-  defaultToolRegistry.register(new WritePersonalSkillTool());
-  defaultToolRegistry.register(new DeletePersonalSkillTool());
-  defaultToolRegistry.register(new PlanTool());
-  defaultToolRegistry.register(new TodoTool());
-  defaultToolRegistry.register(new ListTodoListsTool());
-  defaultToolRegistry.register(new ReadTodoListTool());
-  defaultToolRegistry.register(new WriteTodoListTool());
-  defaultToolRegistry.register(new DeleteTodoListTool());
-  defaultToolRegistry.register(new ListProactiveTasksTool());
-  defaultToolRegistry.register(new ReadProactiveTaskTool());
-  defaultToolRegistry.register(new WriteProactiveTaskTool());
-  defaultToolRegistry.register(new DeleteProactiveTaskTool());
-  defaultToolRegistry.register(new ListAwaitersTool());
-  defaultToolRegistry.register(new ReadAwaiterTool());
-  defaultToolRegistry.register(new WriteAwaiterTool());
-  defaultToolRegistry.register(new DeleteAwaiterTool());
-  defaultToolRegistry.register(new HandoffTool());
+  for (const tool of getStandardTools()) {
+    defaultToolRegistry.register(tool);
+  }
 }

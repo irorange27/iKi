@@ -1,36 +1,7 @@
-import { defaultToolRegistry } from '@iki/backend/tools';
+import { defaultToolRegistry, getBuiltinToolNames } from '@iki/backend/tools';
 
 const MCP_ALLOW_ALL_TOKEN = 'mcp:*';
 const MCP_SERVER_PREFIX = 'mcp:server:';
-const FALLBACK_DEFAULT_BUILTIN_TOOL_NAMES = [
-  'web',
-  'fetch',
-  'load_skill',
-  'read_file',
-  'edit',
-  'undo_edit',
-  'write_file',
-  'delete_file',
-  'shell',
-  'agent',
-  'list_personal_skills',
-  'read_personal_skill',
-  'write_personal_skill',
-  'delete_personal_skill',
-  'todo',
-  'list_awaiters',
-  'read_awaiter',
-  'write_awaiter',
-  'delete_awaiter',
-  'list_todo_lists',
-  'read_todo_list',
-  'write_todo_list',
-  'delete_todo_list',
-  'list_proactive_tasks',
-  'read_proactive_task',
-  'write_proactive_task',
-  'delete_proactive_task',
-];
 
 const normalizeStringArray = (input: unknown): string[] => {
   if (!Array.isArray(input)) return [];
@@ -82,19 +53,24 @@ const getBuiltinToolOrder = (toolName: string): number => {
   return explicitOrder[toolName] ?? 100;
 };
 
+const sortBuiltinToolNames = (names: string[]): string[] =>
+  [...names].sort((left, right) => {
+    const orderDiff = getBuiltinToolOrder(left) - getBuiltinToolOrder(right);
+    if (orderDiff !== 0) return orderDiff;
+    return left.localeCompare(right);
+  });
+
 const getDefaultBuiltinToolNames = (): string[] => {
   const registered = normalizeStringArray(
     defaultToolRegistry
       .getAll()
       .filter(tool => tool.autoAllowed === true && tool.source?.kind !== 'mcp')
       .map(tool => tool.name)
-  ).sort((left, right) => {
-    const orderDiff = getBuiltinToolOrder(left) - getBuiltinToolOrder(right);
-    if (orderDiff !== 0) return orderDiff;
-    return left.localeCompare(right);
-  });
+  );
 
-  return registered.length > 0 ? registered : [...FALLBACK_DEFAULT_BUILTIN_TOOL_NAMES];
+  return sortBuiltinToolNames(
+    registered.length > 0 ? registered : [...getBuiltinToolNames()]
+  );
 };
 
 export const getDefaultAllowedTools = (): string[] => [
