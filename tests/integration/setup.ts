@@ -32,7 +32,7 @@ export const hasProviderConfig = (): boolean => hasAuth;
 
 export const getIntegrationTestContext = () => {
   if (!hasAuth) return null;
-  return { providerType: 'deepseek' as const, model: 'deepseek-chat' };
+  return { providerType: 'deepseek' as const, model: 'deepseek-v4-flash' };
 };
 
 export const createTestRunner = (
@@ -43,7 +43,7 @@ export const createTestRunner = (
       opts.systemPrompt ??
       'You are a concise AI assistant for integration testing. Answer directly and briefly.',
     providerType: 'deepseek',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     enableTools: (opts.tools?.length ?? 0) > 0,
     maxIterations: opts.maxIterations ?? 3,
     maxTokens: 500,

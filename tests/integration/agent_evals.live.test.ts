@@ -154,7 +154,11 @@ describe.skipIf(skip)('agent evals (live model, deterministic graders)', () => {
         passed: outcome.passed,
         failures: outcome.failures,
         durationMs: outcome.durationMs,
-      });
+        toolsUsed: outcome.toolsUsed,
+        stepTypes: outcome.stepTypes,
+        iterations: outcome.iterations,
+        response: outcome.response.slice(0, 300),
+      } as never);
 
       expect(outcome.passed, outcome.failures.join('\n')).toBe(true);
     });
