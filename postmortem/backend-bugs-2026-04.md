@@ -1,5 +1,7 @@
 # Backend Bug Audit Postmortem — April 2026
 
+> **Path note (2026-09):** file references below use pre-monorepo paths (`src/main/…`, `src/core/…`, `src/daemon/…`). After the `packages/` restructure: `src/main` → `packages/desktop/src/main`, `src/core` → `packages/backend`, `src/daemon` → `packages/daemon`; some files were renamed or removed. The bugs and root-cause patterns are still current.
+
 ## Summary
 
 Audit of the iKi backend (main process IPC, daemon server, core agent/tools, database/services) found ~40 issues across 4 layers, consolidated to 20 key bugs: 8 high severity, 8 medium, 4 low.
