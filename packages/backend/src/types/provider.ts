@@ -22,7 +22,7 @@ export interface ProviderModelDescriptor extends ProviderModelOptions {
 
 export type ModelCapabilitySnapshot = Pick<
   ProviderModelOptions,
-  'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
+  'contextWindow' | 'maxInputTokens' | 'maxOutputTokens' | 'supportsVision'
 >;
 
 export interface Provider {

@@ -102,6 +102,7 @@ export const useChatProviderSelection = (deps: {
       contextWindow: limits.contextWindow,
       maxInputTokens: limits.maxInputTokens,
       ...(limits.maxOutputTokens !== null ? { maxOutputTokens: limits.maxOutputTokens } : {}),
+      ...(descriptor?.supportsVision != null ? { supportsVision: descriptor.supportsVision } : {}),
     };
   };
 

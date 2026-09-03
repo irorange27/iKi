@@ -10,6 +10,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'common.add': '添加',
   'common.edit': '编辑',
   'common.delete': '删除',
+  'common.remove': '移除',
   'common.open': '打开',
   'common.search': '搜索',
   'common.create': '创建',

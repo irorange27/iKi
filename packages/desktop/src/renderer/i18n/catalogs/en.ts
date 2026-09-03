@@ -9,6 +9,7 @@ export const en = defineCatalog({
   'common.add': 'Add',
   'common.edit': 'Edit',
   'common.delete': 'Delete',
+  'common.remove': 'Remove',
   'common.open': 'Open',
   'common.search': 'Search',
   'common.create': 'Create',
