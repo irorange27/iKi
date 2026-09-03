@@ -22,8 +22,6 @@ export type HarnessConfig = {
   maxIterations: number;
   maxOutputTokens?: number;
   threadId?: string;
-  /** AI SDK prepareStep callback — composed from plan + todo steps. */
-  prepareStep?: Record<string, unknown>;
   /** Inject a custom model (FauxModelProvider in tests). */
   modelFactory?: (providerType: string, modelId: string, providerId: string) => LanguageModel;
 };
@@ -59,20 +57,3 @@ export type TurnOutput = {
 export type TurnEvent =
   | { event: 'step'; step: AgentStep }
   | { event: 'done'; output: TurnOutput };
-
-// ── Internal session store ────────────────────────────────────────────
-
-export interface SessionStore {
-  getHistory(): ModelMessage[];
-  syncHistory(messages: ModelMessage[]): void;
-  getRunTracker(): AgentRunTracker | null;
-  createRunTracker(params: {
-    threadId?: string;
-    kind: string;
-    runRoot?: unknown;
-    provider?: string;
-    model?: string;
-    iterationLimit?: number;
-  }): AgentRunTracker;
-  updateRunTracker(result: TurnOutput): void;
-}

@@ -165,7 +165,7 @@ describe('AgentHarness', () => {
     expect(history2.length).toBeGreaterThan(history.length);
   });
 
-  it('accepts runTracker from caller and exposes via getRunTracker', async () => {
+  it('accepts runTracker from caller and syncs model messages', async () => {
     const faux = new FauxModelProvider([fauxText('ok')]);
     const harness = new AgentHarness({
       providerType: 'faux',
@@ -190,22 +190,7 @@ describe('AgentHarness', () => {
     }
 
     // runTracker should be the one we passed in
-    expect(harness.getRunTracker()).toBe(mockTracker);
     expect(mockTracker.syncModelMessages).toHaveBeenCalled();
-
-    // Default: null when not provided
-    const harness2 = new AgentHarness({
-      providerType: 'faux',
-      model: 'faux-model',
-      systemPrompt: 'Test agent.',
-      enableTools: false,
-      enabledToolNames: [],
-      availableSkillIds: [],
-      guardActive: false,
-      maxIterations: 1,
-      modelFactory: () => faux,
-    });
-    expect(harness2.getRunTracker()).toBeNull();
   });
 
   it('propagates conversationModel from runtime context to tool handlers', async () => {

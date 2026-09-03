@@ -23,12 +23,6 @@ export type {
   TurnEndStep,
 } from './agent_step';
 
-export type {
-  AgentRunner,
-  AgentRunnerRequest,
-  AgentRunnerFactory,
-} from './runners/agent_runner';
-
 export type { ConversationRunnerStreamEvent } from './types';
 
 // Export current public schemas

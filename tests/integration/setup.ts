@@ -4,10 +4,7 @@ import os from 'node:os';
 
 import { registerStandardTools, defaultToolRegistry } from '@iki/backend/tools';
 import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
-import {
-  type AgentRunner,
-  type AgentTool,
-} from '@iki/backend/agent';
+import { type AgentTool } from '@iki/backend/agent';
 
 const AUTH_PATH = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
 
@@ -40,7 +37,7 @@ export const getIntegrationTestContext = () => {
 
 export const createTestRunner = (
   opts: { tools?: AgentTool[]; systemPrompt?: string; maxIterations?: number } = {}
-): AgentRunner => {
+): ReturnType<typeof createSimpleAgentRunner> => {
   return createSimpleAgentRunner({
     systemPrompt:
       opts.systemPrompt ??

@@ -44,7 +44,6 @@ describe('DelegatedAgentTool', () => {
       getHistory: getHistoryMock,
       run: runMock,
       cancel: vi.fn(),
-      steer: vi.fn(),
     });
     createAgentRunTrackerMock.mockReturnValue({
       id: 'run_child_1',

@@ -48,7 +48,6 @@ export class AgentHarness {
       enableTools: tools.length > 0,
       maxIterations: this.config_.maxIterations,
       maxTokens: this.config_.maxOutputTokens,
-      ...(this.config_.prepareStep ? { prepareStep: this.config_.prepareStep as any } : {}),
       ...(this.config_.modelFactory ? { modelFactory: this.config_.modelFactory } : {}),
     });
 
@@ -135,19 +134,8 @@ export class AgentHarness {
     this.activeRunner?.cancel();
   }
 
-  steer(message: string): void {
-    this.activeRunner?.steer(message);
-  }
-
   getHistory(): ModelMessage[] {
     return cloneModelMessages(this.history);
   }
 
-  getRunTracker(): AgentRunTracker | null {
-    return this.runTracker;
-  }
-
-  reconfigure(partial: Partial<HarnessConfig>): void {
-    this.config_ = { ...this.config_, ...partial };
-  }
 }

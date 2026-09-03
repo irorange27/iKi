@@ -45,7 +45,6 @@ import type {
   TurnEndStep,
   SourceInfo,
 } from '@iki/backend/agent/agent_step';
-import type { AgentRunner, AgentRunnerRequest } from '@iki/backend/agent/runners/agent_runner';
 import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'simple_agent_runner' });
@@ -77,42 +76,63 @@ const addUsage = (a: AgentUsage, b: AgentUsage | undefined): AgentUsage => {
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-type PrepareStep = NonNullable<Parameters<typeof streamText>[0]>['prepareStep'];
 
-export class SimpleAgentRunner implements AgentRunner {
-  private readonly prepareStep?: PrepareStep;
+/**
+ * Configuration passed to the runner when starting a run.
+ */
+export interface AgentRunnerRequest {
+  prompt: string;
+  history?: ModelMessage[];
+  tools: AgentTool[];
+
+  /** Provider / model selection. */
+  providerType: string;
+  providerId?: string;
+  model: string;
+
+  /** Optional LLM knobs. */
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+
+  /** Maximum tool-calling iterations before forced stop. */
+  maxIterations?: number;
+
+  /** Signal to cancel the run externally. */
+  abortSignal?: AbortSignal;
+
+  /** Optional thread / session identifier — forwarded to Langfuse as sessionId. */
+  threadId?: string;
+
+  /** Additional free-form config overrides. */
+  config?: PartialAgentConfig;
+}
+
+export class SimpleAgentRunner {
   private readonly modelFactory?: (
     providerType: string,
     modelId: string,
     providerId: string,
   ) => LanguageModel;
   private abortController: AbortController | null = null;
-  private steerQueue: string[] = [];
   private cancelRequested = false;
   private history: ModelMessage[] = [];
 
   constructor(
     config?: PartialAgentConfig & {
-      prepareStep?: PrepareStep;
-      modelFactory?: (
+        modelFactory?: (
         providerType: string,
         modelId: string,
         providerId: string,
       ) => LanguageModel;
     },
   ) {
-    this.prepareStep = config?.prepareStep;
     this.modelFactory = config?.modelFactory;
   }
 
   cancel(): void {
     this.cancelRequested = true;
     this.abortController?.abort('user-cancel');
-  }
-
-  steer(message: string): void {
-    this.steerQueue.push(message);
-    this.abortController?.abort('steer');
   }
 
   getHistory(): ModelMessage[] {
@@ -122,7 +142,6 @@ export class SimpleAgentRunner implements AgentRunner {
   async *run(request: AgentRunnerRequest): AsyncGenerator<AgentStep, AgentResult> {
     this.abortController = new AbortController();
     this.cancelRequested = false;
-    this.steerQueue = [];
 
     const config = loadAgentConfig({
       ...(request.config ?? {}),
@@ -155,26 +174,6 @@ export class SimpleAgentRunner implements AgentRunner {
         throw new Error('Run cancelled');
       }
 
-      // Flush steer queue into history
-      if (this.steerQueue.length > 0) {
-        const steerMessages: string[] = [];
-        while (this.steerQueue.length > 0) {
-          const msg = this.steerQueue.shift();
-          if (msg !== undefined) steerMessages.push(msg);
-        }
-        if (steerMessages.length > 0) {
-          const steerPrompt =
-            steerMessages.length === 1
-              ? steerMessages[0]
-              : steerMessages.join('\n\n---\n\n');
-          history = [
-            ...history,
-            { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
-          ];
-          retryAttempt = 0;
-        }
-      }
-
       const usingCustomModel = Boolean(this.modelFactory);
       const model = usingCustomModel
         ? this.modelFactory!(config.providerType, config.model, config.providerId)
@@ -183,9 +182,6 @@ export class SimpleAgentRunner implements AgentRunner {
       const { systemPrompt, messages } = usingCustomModel
         ? { systemPrompt: config.systemPrompt, messages: history }
         : buildPromptContext(config, history);
-
-      // Track whether we need to restart due to steer mid-stream
-      let steeredMidStream = false;
 
       try {
         const telemetry = langfuseTelemetry('agent.stream', {
@@ -209,7 +205,6 @@ export class SimpleAgentRunner implements AgentRunner {
           stopWhen: stepCountIs(
             config.enableTools ? Math.max(1, maxIterations - totalSteps) : 1
           ),
-          ...(this.prepareStep ? { prepareStep: this.prepareStep } : {}),
           abortSignal: this.abortController?.signal,
           experimental_transform: smoothStream(),
           ...(telemetry ? { experimental_telemetry: telemetry } : {}),
@@ -236,11 +231,6 @@ export class SimpleAgentRunner implements AgentRunner {
         const pendingToolStarts = new Map<string, { toolName: string; input: Record<string, unknown> }>();
 
         for await (const part of result.fullStream) {
-          // Check for steer mid-stream
-          if (this.steerQueue.length > 0) {
-            steeredMidStream = true;
-            break;
-          }
           if (this.cancelRequested) {
             break;
           }
@@ -386,13 +376,6 @@ export class SimpleAgentRunner implements AgentRunner {
           ) {
             continue;
           }
-        }
-
-        // If steered mid-stream, skip result processing and restart
-        if (steeredMidStream) {
-          disposeLanguageModel(model);
-          retryAttempt = 0;
-          continue;
         }
 
         if (this.cancelRequested) {
@@ -584,12 +567,6 @@ export class SimpleAgentRunner implements AgentRunner {
       } catch (error) {
         disposeLanguageModel(model);
 
-        // Steered mid-stream — restart the loop
-        if (steeredMidStream) {
-          retryAttempt = 0;
-          continue;
-        }
-
         // Cancelled
         if (
           this.cancelRequested ||
@@ -684,11 +661,10 @@ export class SimpleAgentRunner implements AgentRunner {
 
 export const createSimpleAgentRunner = (
   config?: PartialAgentConfig & {
-    prepareStep?: PrepareStep;
     modelFactory?: (
       providerType: string,
       modelId: string,
       providerId: string,
     ) => LanguageModel;
   },
-): AgentRunner => new SimpleAgentRunner(config);
+): SimpleAgentRunner => new SimpleAgentRunner(config);
