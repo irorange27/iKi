@@ -38,6 +38,7 @@ import {
   DeleteFileTool,
   EditFileTool,
   ReadFileTool,
+  UndoEditTool,
   WriteFileTool,
 } from '@iki/backend/tools/file_tools';
 import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
@@ -418,5 +419,110 @@ describe('file tools workspace boundaries', () => {
         'utf8'
       )
     ).toContain('Preferred name: Nina');
+  });
+});
+
+describe('edit_file lint gate and undo', () => {
+  let lintTempRoot = '';
+
+  beforeEach(async () => {
+    lintTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-file-tools-lint-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(lintTempRoot, { recursive: true, force: true });
+  });
+
+  const setupWorkspace = async (fileName: string, content: string) => {
+    const workspaceRoot = path.join(lintTempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    const filePath = path.join(workspaceRoot, fileName);
+    await fs.writeFile(filePath, content, 'utf8');
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_1',
+      workspace_id: 'workspace_1',
+    });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+    return { workspaceRoot, filePath };
+  };
+
+  it('rejects edits that would break JSON syntax and leaves the file untouched', async () => {
+    const original = '{\n  "name": "demo"\n}\n';
+    const { filePath } = await setupWorkspace('config.json', original);
+
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      new EditFileTool().execute({
+        path: 'config.json',
+        edits: [{ oldText: '"name": "demo"', newText: '"name": "demo",, "broken": tru' }],
+      })
+    )) as { success: boolean; error: boolean; message: string };
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(true);
+    expect(result.message).toContain('syntax check failed');
+    expect(await fs.readFile(filePath, 'utf8')).toBe(original);
+  });
+
+  it('does not block edits to file types without a syntax checker', async () => {
+    const { filePath } = await setupWorkspace('note.txt', 'hello\n');
+
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      new EditFileTool().execute({
+        path: 'note.txt',
+        edits: [{ oldText: 'hello', newText: 'hello edited' }],
+      })
+    )) as { success: boolean; syntaxCheck?: string };
+
+    expect(result.success).toBe(true);
+    expect(result.syntaxCheck).toBe('skipped');
+    expect(await fs.readFile(filePath, 'utf8')).toBe('hello edited\n');
+  });
+
+  it('reverts the most recent edit via undo_edit', async () => {
+    const { filePath } = await setupWorkspace('app.js', 'const value = 1;\n');
+
+    const editResult = (await runInWorkspaceContext('thread_1', async () =>
+      new EditFileTool().execute({
+        path: 'app.js',
+        edits: [{ oldText: 'const value = 1;', newText: 'const value = 2;' }],
+      })
+    )) as { success: boolean };
+    expect(editResult.success).toBe(true);
+    expect(await fs.readFile(filePath, 'utf8')).toBe('const value = 2;\n');
+
+    const undoResult = (await runInWorkspaceContext('thread_1', async () =>
+      new UndoEditTool().execute({ path: 'app.js' })
+    )) as { success: boolean; restored: boolean; editsRemaining: number };
+
+    expect(undoResult).toMatchObject({ success: true, restored: true, editsRemaining: 0 });
+    expect(await fs.readFile(filePath, 'utf8')).toBe('const value = 1;\n');
+
+    const secondUndo = (await runInWorkspaceContext('thread_1', async () =>
+      new UndoEditTool().execute({ path: 'app.js' })
+    )) as { success: boolean; error: boolean };
+
+    expect(secondUndo.success).toBe(false);
+    expect(secondUndo.error).toBe(true);
+  });
+
+  it('undoes sequential edits step by step', async () => {
+    const { filePath } = await setupWorkspace('steps.py', 'value = 1\n');
+
+    for (const next of ['2', '3']) {
+      await runInWorkspaceContext('thread_1', async () =>
+        new EditFileTool().execute({
+          path: 'steps.py',
+          edits: [{ oldText: `value = ${next === '2' ? '1' : '2'}`, newText: `value = ${next}` }],
+        })
+      );
+    }
+    expect(await fs.readFile(filePath, 'utf8')).toBe('value = 3\n');
+
+    await runInWorkspaceContext('thread_1', async () => new UndoEditTool().execute({ path: 'steps.py' }));
+    expect(await fs.readFile(filePath, 'utf8')).toBe('value = 2\n');
+
+    await runInWorkspaceContext('thread_1', async () => new UndoEditTool().execute({ path: 'steps.py' }));
+    expect(await fs.readFile(filePath, 'utf8')).toBe('value = 1\n');
   });
 });

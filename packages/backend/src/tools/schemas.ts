@@ -229,6 +229,24 @@ export const EditFileInputSchema = z.object(editFileInputShape);
 export const EditFileInputSchemaUi = uiSchema(editFileInputShape);
 
 // ---------------------------------------------------------------------------
+// Undo edit schemas
+// ---------------------------------------------------------------------------
+
+const undoEditInputFields = {
+  path: z
+    .string()
+    .describe('Path of the file whose most recent edit_file change should be reverted'),
+};
+
+const undoEditInputShape = {
+  path: undoEditInputFields.path,
+  description: toolCallDescriptionField,
+};
+
+export const UndoEditInputSchema = z.object(undoEditInputShape);
+export const UndoEditInputSchemaUi = uiSchema(undoEditInputShape);
+
+// ---------------------------------------------------------------------------
 // Delete file schemas
 // ---------------------------------------------------------------------------
 

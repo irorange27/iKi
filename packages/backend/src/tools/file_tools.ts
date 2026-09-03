@@ -6,8 +6,10 @@ import {
   DeleteFileInputSchema,
   EditFileInputSchema,
   ReadFileInputSchema,
+  UndoEditInputSchema,
   WriteFileInputSchema,
 } from './schemas';
+import { checkEditedFileSyntax } from './lint_gate';
 import {
   resolveDeleteWorkspacePath,
   resolveReadableWorkspacePath,
@@ -15,7 +17,9 @@ import {
 } from './workspace_paths';
 
 const FILE_CACHE_TTL_MS = 30_000;
+const MAX_EDIT_UNDO_DEPTH = 10;
 const readFileCache = new Map<string, { createdAt: number; value: unknown }>();
+const editUndoStacks = new Map<string, Array<{ previousContent: string; encoding: BufferEncoding }>>();
 
 const getCached = (cache: Map<string, { createdAt: number; value: unknown }>, key: string): unknown | undefined => {
   const entry = cache.get(key);
@@ -265,7 +269,7 @@ export class EditFileTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override description =
-    'Edit an existing file by applying text replacements. Include 1-3 lines of surrounding context in oldText to make matches unambiguous. Use contextBefore/contextAfter anchors when the same text appears in multiple places.';
+    'Edit an existing file by applying text replacements. Include 1-3 lines of surrounding context in oldText to make matches unambiguous. Use contextBefore/contextAfter anchors when the same text appears in multiple places. Edited files are syntax-checked before writing (JSON, Python, JS); syntax-breaking edits are rejected and the file stays untouched. Revert the most recent edit to a file with undo_edit.';
   override needsApproval = true;
   override paramSchema = EditFileInputSchema;
 
@@ -351,10 +355,43 @@ export class EditFileTool extends BaseTool {
       : '';
 
     if (changed) {
+      const syntaxVerdict = await checkEditedFileSyntax(absolutePath, updatedContent);
+      if (syntaxVerdict.status === 'failed') {
+        return {
+          path: absolutePath,
+          success: false,
+          changed: false,
+          error: true,
+          message: `Edit rejected: ${syntaxVerdict.checker} syntax check failed. The file was not modified.`,
+          recovery: {
+            suggestion: 'Fix the reported syntax error and retry the edit with corrected newText.',
+            fileSnippet: syntaxVerdict.output,
+          },
+        };
+      }
+
+      const undoStack = editUndoStacks.get(absolutePath) ?? [];
+      undoStack.push({
+        previousContent: originalContent,
+        encoding: args.encoding as BufferEncoding,
+      });
+      if (undoStack.length > MAX_EDIT_UNDO_DEPTH) undoStack.shift();
+      editUndoStacks.set(absolutePath, undoStack);
+
       await fs.writeFile(absolutePath, updatedContent, {
         encoding: args.encoding as BufferEncoding,
       });
       clearFileReadCaches();
+
+      return {
+        path: absolutePath,
+        success: true,
+        changed,
+        appliedEditCount: args.edits.length,
+        totalReplacements,
+        syntaxCheck: syntaxVerdict.status === 'ok' ? 'checked' : 'skipped',
+        ...(diff ? { diff } : {}),
+      };
     }
 
     return {
@@ -364,6 +401,45 @@ export class EditFileTool extends BaseTool {
       appliedEditCount: args.edits.length,
       totalReplacements,
       ...(diff ? { diff } : {}),
+    };
+  }
+}
+
+/**
+ * Reverts the most recent successful edit_file change to a file
+ */
+export class UndoEditTool extends BaseTool {
+  override name = 'undo_edit';
+  override type = 'function';
+  override autoAllowed = true;
+  override description =
+    'Revert the most recent successful edit_file change to the given file, restoring the content from before that edit. Only edits made during this session can be undone.';
+  override needsApproval = false;
+  override paramSchema = UndoEditInputSchema;
+
+  protected override async handler(args: z.infer<typeof this.paramSchema>) {
+    const absolutePath = await resolveWritableWorkspacePath(args.path);
+    const undoStack = editUndoStacks.get(absolutePath);
+    const entry = undoStack?.pop();
+    if (!undoStack || !entry) {
+      return {
+        path: absolutePath,
+        success: false,
+        error: true,
+        message: `No edit_file changes to undo for "${args.path}" in this session.`,
+        recovery: {
+          suggestion: 'Only edits applied by edit_file during this session can be undone.',
+        },
+      };
+    }
+
+    await fs.writeFile(absolutePath, entry.previousContent, { encoding: entry.encoding });
+    clearFileReadCaches();
+    return {
+      path: absolutePath,
+      success: true,
+      restored: true,
+      editsRemaining: undoStack.length,
     };
   }
 }

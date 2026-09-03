@@ -20,6 +20,7 @@ import {
   ReadFileTool,
   WriteFileTool,
   EditFileTool,
+  UndoEditTool,
   DeleteFileTool,
 } from './file_tools';
 import { ShellExecutionTool } from './shell_tools';
@@ -59,6 +60,7 @@ import { HandoffTool } from './handoff_tool';
 export function registerStandardTools() {
   defaultToolRegistry.register(new ReadFileTool());
   defaultToolRegistry.register(new EditFileTool());
+  defaultToolRegistry.register(new UndoEditTool());
   defaultToolRegistry.register(new WriteFileTool());
   defaultToolRegistry.register(new DeleteFileTool());
   defaultToolRegistry.register(new ShellExecutionTool());
