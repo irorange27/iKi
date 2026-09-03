@@ -8,6 +8,8 @@ import type {
   StepComparison,
 } from '@iki/backend/types/agent_run';
 
+import { exportRunTrajectory } from './atif_export';
+
 export const createChatEval = (deps?: {
   exportTrace?: (
     runId: string
@@ -142,6 +144,7 @@ export const createChatEval = (deps?: {
 
   return {
     exportTrace,
+    exportRunTrajectory,
     addLabel,
     listLabels,
     deleteLabel,

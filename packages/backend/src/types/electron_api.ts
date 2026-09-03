@@ -211,6 +211,9 @@ export interface ElectronApi {
       listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) => Promise<AgentRun[]>;
       eval: {
         exportTrace: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+        exportRunTrajectory: (
+          runId: string
+        ) => Promise<import('@iki/backend/chat_service/atif_export').AtifTrajectoryExportResult>;
         addLabel: (input: { runId: string; stepId?: string | null; label: string; note?: string | null }) => Promise<AgentEvalLabel>;
         listLabels: (runId: string) => Promise<AgentEvalLabel[]>;
         deleteLabel: (labelId: string) => Promise<{ success: boolean }>;

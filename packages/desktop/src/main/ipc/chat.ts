@@ -110,6 +110,9 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:eval:export-trace', async (_, runId: string) => {
     return chatService.eval.exportTrace(runId);
   });
+  ipcMain.handle('chat:eval:export-run-trajectory', async (_, runId: string) => {
+    return chatService.eval.exportRunTrajectory(runId);
+  });
   ipcMain.handle('chat:eval:add-label', (_, input) => {
     return chatService.eval.addLabel(input);
   });

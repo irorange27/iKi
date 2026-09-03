@@ -108,6 +108,7 @@ describe('chat IPC', () => {
       'chat:stream',
       'chat:approve-tool',
       'chat:eval:export-trace',
+      'chat:eval:export-run-trajectory',
       'chat:eval:add-label',
       'chat:eval:list-labels',
       'chat:eval:delete-label',
