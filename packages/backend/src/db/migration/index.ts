@@ -1,93 +1,34 @@
-import { runMigrations } from './runner';
-import { migration as migration001 } from './001_add_chat_tables';
-import { migration as migration002 } from './002_add_workspaces_table';
-import { migration as migration003 } from './003_add_prompt_apps_table';
-import { migration as migration004 } from './004_add_memory_tables';
-import { migration as migration005 } from './005_add_proactive_tasks_table';
-import { migration as migration006 } from './006_add_app_clients_table';
-import { migration as migration007 } from './007_add_emotion_events_table';
-import { migration as migration008 } from './008_add_workflow_profiles_table';
-import { migration as migration009AffectStates } from './009_add_affect_states_table';
-import { migration as migration010McpServers } from './010_add_mcp_servers_table';
-import { migration as migration011ProactiveCron } from './011_add_proactive_tasks_cron';
-import { migration as migration012ChatToolApprovals } from './012_add_chat_tool_approval_tables';
-import { migration as migration013ChatUsage } from './013_add_chat_usage_table';
-import { migration as migration014ThreadContext } from './014_add_chat_thread_context_table';
-import { migration as migration015ProactiveTaskToolMode } from './015_add_proactive_task_tool_mode';
-import { migration as migration016TodoLists } from './016_add_todo_lists_table';
-import { migration as migration017IdentityProfiles } from './017_add_identity_profiles_table';
-import { migration as migration018PresenceRuntime } from './018_add_presence_runtime_tables';
-import { migration as migration019PresenceReflections } from './019_add_presence_reflections_table';
-import { migration as migration020LegacyThreadContextSchema } from './020_legacy_thread_context_schema';
-import { migration as migration021ChatToolApprovalSkillIds } from './021_add_chat_tool_approval_skill_ids';
-import { migration as migration022ChatToolApprovalMaxOutputTokens } from './022_add_chat_tool_approval_max_output_tokens';
-import { migration as migration023CanonicalizeChatUiMessages } from './023_canonicalize_chat_ui_messages';
-import { migration as migration024AddProviderModelOptions } from './024_add_provider_model_options';
-import { migration as migration025AddChatThreadTodos } from './025_add_chat_thread_todos_table';
-import { migration as migration026AddChatToolApprovalMaxIterations } from './026_add_chat_tool_approval_max_iterations';
-import { migration as migration027RestoreLegacyDesktopThreadOwnership } from './027_restore_legacy_desktop_thread_ownership';
-import { migration as migration028AddContinuityTables } from './028_add_continuity_tables';
-import { migration as migration029DropLegacyThreadContextTable } from './029_drop_legacy_thread_context_table';
-import { migration as migration030RenameIdentityOwnerRoleField } from './030_rename_identity_owner_role_field';
-import { migration as migration031DropPresenceTables } from './031_drop_presence_tables';
-import { migration as migration032RepairIdentityProfileForeignKeys } from './032_repair_identity_profile_foreign_keys';
-import { migration as migration033AddChatToolApprovalProviderId } from './033_add_chat_tool_approval_provider_id';
-import { migration as migration034AddChatToolApprovalMaxInputTokens } from './034_add_chat_tool_approval_max_input_tokens';
-import { migration as migration035AddAgentRunTables } from './035_add_agent_run_tables';
-import { migration as migration036AddChatToolApprovalRunId } from './036_add_chat_tool_approval_run_id';
-import { migration as migration037AddProactiveTaskProviderId } from './037_add_proactive_task_provider_id';
-import { migration as migration038AddAwaitersTables } from './038_add_awaiters_tables';
-import { migration as migration039AddAgentEvalLabelsTable } from './039_add_agent_eval_labels_table';
-import { migration as migration040AddClipboardSnapshotsTable } from './040_add_clipboard_snapshots_table';
-import { migration as migration041AddToolAllowlistTable } from './041_add_tool_allowlist_table';
+import { getDb } from '../database';
+import {
+  isMigrationExecuted,
+  markMigrationExecuted,
+  runMigrations,
+  type Migration,
+} from './runner';
+import { migration as baseline } from './001_baseline';
 
-// Register all migrations here
-export const registeredMigrations = [
-  migration001,
-  migration002,
-  migration003,
-  migration004,
-  migration005,
-  migration006,
-  migration007,
-  migration008,
-  migration009AffectStates,
-  migration010McpServers,
-  migration011ProactiveCron,
-  migration012ChatToolApprovals,
-  migration013ChatUsage,
-  migration014ThreadContext,
-  migration015ProactiveTaskToolMode,
-  migration016TodoLists,
-  migration017IdentityProfiles,
-  migration018PresenceRuntime,
-  migration019PresenceReflections,
-  migration020LegacyThreadContextSchema,
-  migration021ChatToolApprovalSkillIds,
-  migration022ChatToolApprovalMaxOutputTokens,
-  migration023CanonicalizeChatUiMessages,
-  migration024AddProviderModelOptions,
-  migration025AddChatThreadTodos,
-  migration026AddChatToolApprovalMaxIterations,
-  migration027RestoreLegacyDesktopThreadOwnership,
-  migration028AddContinuityTables,
-  migration029DropLegacyThreadContextTable,
-  migration030RenameIdentityOwnerRoleField,
-  migration031DropPresenceTables,
-  migration032RepairIdentityProfileForeignKeys,
-  migration033AddChatToolApprovalProviderId,
-  migration034AddChatToolApprovalMaxInputTokens,
-  migration035AddAgentRunTables,
-  migration036AddChatToolApprovalRunId,
-  migration037AddProactiveTaskProviderId,
-  migration038AddAwaitersTables,
-  migration039AddAgentEvalLabelsTable,
-  migration040AddClipboardSnapshotsTable,
-  migration041AddToolAllowlistTable,
-  // Add more migrations here as needed
-];
+// Forward-only migrations after the baseline. Add new ones above 001 in name
+// order (002_*, 003_*, …) — runMigrations sorts by name.
+export const registeredMigrations: Migration[] = [baseline];
 
-// Run all migrations on import
 export const initializeMigrations = () => {
+  // Databases created before the migration squash already carry the full
+  // schema: detect any pre-existing user table and mark the baseline as
+  // applied so they open unchanged. Fresh databases run the baseline to
+  // create the schema from scratch. config/providers/migrations are excluded
+  // because database.ts bootstrap-creates them before migrations run.
+  const hasPreBaselineSchema = Boolean(
+    getDb()
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('config', 'providers', 'migrations') LIMIT 1"
+      )
+      .get()
+  );
+
+  if (hasPreBaselineSchema && !isMigrationExecuted(baseline.name)) {
+    runMigrations([]); // ensures the migrations bookkeeping table exists
+    markMigrationExecuted(baseline.name);
+  }
+
   runMigrations(registeredMigrations);
 };

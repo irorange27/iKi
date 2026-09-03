@@ -3,10 +3,10 @@ import type { Migration } from './runner';
 
 // Baseline schema generated on 2026-09-04 by replaying the full legacy
 // migration chain (001_add_chat_tables .. 041_add_tool_allowlist_table) on a
-// fresh database. The legacy chain was then removed (ADR-style squash):
-// pre-baseline databases are detected in initializeMigrations and marked as
-// already baseline. Re-generate by replaying the chain when the schema
-// changes materially; otherwise append forward migrations above 001.
+// fresh database, then squashing the chain (ADR-style): pre-baseline
+// databases are detected in initializeMigrations and marked as already
+// baseline, so they open unchanged. Re-generate by replaying a chain when the
+// schema changes materially; otherwise append forward migrations above 001.
 const BASELINE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS affect_states (
         thread_id TEXT PRIMARY KEY,
