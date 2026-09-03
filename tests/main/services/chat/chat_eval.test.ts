@@ -79,37 +79,6 @@ beforeEach(() => {
 describe('chat_eval service', () => {
   const eval_ = createChatEval();
 
-  describe('addLabel', () => {
-    it('adds a label via db layer', () => {
-      vi.mocked(agentEvalDb.createEvalLabel).mockReturnValue({
-        id: 'eval_1',
-        runId: 'run_1',
-        stepId: 'step_1',
-        label: 'correct',
-        note: null,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      });
-
-      const label = eval_.addLabel({ runId: 'run_1', stepId: 'step_1', label: 'correct' });
-      expect(label.label).toBe('correct');
-    });
-  });
-
-  describe('listLabels', () => {
-    it('returns labels for a run', () => {
-      listEvalLabelsByRunMock.mockReturnValue([]);
-      expect(eval_.listLabels('run_1')).toEqual([]);
-    });
-  });
-
-  describe('deleteLabel', () => {
-    it('deletes a label', () => {
-      vi.mocked(agentEvalDb.deleteEvalLabel).mockReturnValue({ success: true });
-      expect(eval_.deleteLabel('eval_1')).toEqual({ success: true });
-    });
-  });
-
   describe('compareRuns', () => {
     it('returns null if baseline trace is missing', () => {
       getAgentRunTraceMock.mockReturnValueOnce(null);

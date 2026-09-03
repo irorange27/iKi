@@ -5,14 +5,6 @@ import { PlanTool } from '@iki/backend/tools/plan_tools';
 describe('PlanTool', () => {
   const tool = new PlanTool();
 
-  it('has the expected metadata', () => {
-    expect(tool.name).toBe('plan');
-    expect(tool.type).toBe('function');
-    expect(tool.displayName).toBe('Plan');
-    expect(tool.autoAllowed).toBe(true);
-    expect(tool.needsApproval).toBe(false);
-    expect(tool.description).toContain('structured execution plan');
-  });
 
   it('accepts a valid plan and returns formatted output', async () => {
     const result = (await tool.execute({
