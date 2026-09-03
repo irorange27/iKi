@@ -36,6 +36,7 @@
     "ts:vue": "vue-tsc --noEmit",
     "ci:quality": "pnpm run -s lint && pnpm run -s ts && pnpm run -s ts:vue && pnpm run -s test:coverage",
     "commit": "git-cz",
+    "eval:live": "IKI_RUN_LIVE_EVALS=1 vitest run --config vitest.integration.config.mts tests/integration/agent_evals.live.test.ts",
     "commit:check": "commitlint --from=HEAD~20 --to=HEAD --verbose",
     "prepare": "husky"
   },
