@@ -9,7 +9,6 @@ import {
   createAgentRun,
   getAgentRunTrace,
   getAgentRunTree,
-  getLatestAgentRunCheckpoint,
   listAgentRunsByParentRunId,
   listAgentRunsByRootRunId,
   listAgentRunSteps,
@@ -224,43 +223,6 @@ describe('agent_runs db', () => {
       },
     ]);
 
-    expect(getLatestAgentRunCheckpoint('run_1')).toEqual({
-      id: 'checkpoint_1',
-      runId: 'run_1',
-      stepIndex: 2,
-      reason: 'approval-requested',
-      snapshot: {
-        id: 'run_1',
-        kind: 'chat-turn',
-        status: 'blocked',
-        threadId: 'thread_1',
-        parentRunId: null,
-        rootRunId: 'run_1',
-        providerType: 'openai',
-        providerId: null,
-        model: 'gpt-5.4',
-        systemPrompt: 'system prompt',
-        enabledTools: ['web'],
-        availableSkillIds: ['user:planner'],
-        input: {
-          prompt: 'hello',
-        },
-        working: {
-          modelMessages: [{ role: 'user', content: 'hello' }],
-          accumulatedText: 'partial',
-          pendingApprovalIds: ['approval_1'],
-          lastStepIndex: 2,
-        },
-        output: {
-          text: 'partial',
-          finishReason: 'approval-requested',
-        },
-        error: null,
-        createdAt: '2026-04-10T00:00:00.000Z',
-        updatedAt: '2026-04-10T00:00:10.000Z',
-      },
-      createdAt: '2026-04-10T00:00:10.000Z',
-    });
   });
 
   it('exposes run traces and root/parent query surfaces for inspection', () => {
@@ -420,10 +382,6 @@ describe('agent_runs db', () => {
           type: 'child-run',
         }),
       ],
-      latestCheckpoint: expect.objectContaining({
-        id: 'checkpoint_root_1',
-        reason: 'child-run-spawned',
-      }),
       children: [expect.objectContaining({ id: 'run_child_1' })],
     });
 
@@ -433,17 +391,11 @@ describe('agent_runs db', () => {
         {
           run: expect.objectContaining({ id: 'run_root_1' }),
           steps: [expect.objectContaining({ id: 'step_root_1', type: 'child-run' })],
-          latestCheckpoint: expect.objectContaining({
-            id: 'checkpoint_root_1',
-          }),
           children: [expect.objectContaining({ id: 'run_child_1' })],
         },
         {
           run: expect.objectContaining({ id: 'run_child_1' }),
           steps: [expect.objectContaining({ id: 'step_child_1', type: 'tool-call' })],
-          latestCheckpoint: expect.objectContaining({
-            id: 'checkpoint_child_1',
-          }),
           children: [],
         },
       ],
