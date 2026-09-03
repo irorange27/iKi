@@ -10,7 +10,7 @@ import {
 import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
 import { createLogger } from '@iki/backend/logger';
-import { withRetry } from '@iki/backend/tools/retry';
+import { withRetry } from '@iki/backend/utils/retry';
 import { getFullSystemPrompt } from './llm/factory';
 import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import { unwrapAcpDynamicToolCall } from '@iki/backend/utils/acp';

@@ -30,7 +30,7 @@ module.exports = {
       from: { path: '^packages/backend/src/provider' },
       to: {
         path: '^packages/backend/src/(tools|agent_session|chat_service)',
-        pathNot: '^packages/backend/src/tools/(skills|retry|runtime_context)\\.ts$',
+        pathNot: '^packages/backend/src/tools/skills\\.ts$',
       },
     },
     {
