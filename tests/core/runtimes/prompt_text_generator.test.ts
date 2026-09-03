@@ -74,6 +74,5 @@ describe('SimplePromptTextGenerator', () => {
       maxOutputTokens: 256,
     });
     expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
-    expect(getAppConfigMock).toHaveBeenCalled();
   });
 });

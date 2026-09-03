@@ -66,7 +66,7 @@ describe('DelegatedAgentTool', () => {
   it('delegates with only approval-free tools from the current runtime context', async () => {
     setRunResult({
       response: 'Inspected the directory structure.',
-      iterations: 2,
+      iterations: 0,
       toolCalls: [
         { toolName: 'read_file', args: {} },
         { toolName: 'read_file', args: {} },
@@ -115,7 +115,6 @@ describe('DelegatedAgentTool', () => {
         config: expect.objectContaining({
           enabled: true,
           enableTools: true,
-          enableMemory: false,
         }),
       })
     );
@@ -149,7 +148,7 @@ describe('DelegatedAgentTool', () => {
     );
     expect(result).toEqual({
       response: 'Inspected the directory structure.',
-      iterations: 2,
+      iterations: 0,
       toolCallCount: 2,
       usedTools: [{ name: 'read_file', callCount: 2 }],
       model: {

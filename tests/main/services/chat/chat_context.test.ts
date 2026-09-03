@@ -1036,6 +1036,7 @@ describe('chat_context assembler', () => {
     });
 
     expect(generateThreadSummaryMock).toHaveBeenCalledWith({
+      threadId: 'thread_summary_stale',
       existingSummary: 'Existing summary.',
       messages: [
         { role: 'user', content: 'u3' },
@@ -1136,6 +1137,7 @@ describe('chat_context assembler', () => {
     });
 
     expect(generateThreadSummaryMock).toHaveBeenCalledWith({
+      threadId: 'thread_summary_regen',
       existingSummary: '',
       messages: [
         { role: 'user', content: 'u1' },
