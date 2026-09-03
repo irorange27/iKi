@@ -14,7 +14,11 @@ export * from './plan_tools';
 export * from './handoff_tool';
 
 import { defaultToolRegistry } from './base';
-import { DelegatedAgentTool } from './agent_tools';
+import {
+  DelegatedAgentTool,
+  setDelegatedAgentRuntime,
+  type DelegatedAgentRuntime,
+} from './agent_tools';
 import {
   ReadFileTool,
   WriteFileTool,
@@ -53,10 +57,17 @@ import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
 import { HandoffTool } from './handoff_tool';
 
+export type StandardToolRegistrationOptions = {
+  delegatedAgentRuntime: DelegatedAgentRuntime;
+};
+
 /**
  * Register all standard system tools to the default global registry
  */
-export function registerStandardTools() {
+export function registerStandardTools({
+  delegatedAgentRuntime,
+}: StandardToolRegistrationOptions) {
+  setDelegatedAgentRuntime(delegatedAgentRuntime);
   defaultToolRegistry.register(new ReadFileTool());
   defaultToolRegistry.register(new EditFileTool());
   defaultToolRegistry.register(new UndoEditTool());

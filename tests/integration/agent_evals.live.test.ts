@@ -26,9 +26,16 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
 import type { EvalScenario } from '@iki/backend/evals/types';
 import { runScenarioLive } from '@iki/backend/evals/live_runner';
 import { registerStandardTools } from '@iki/backend/tools';
+import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { getToolModel } from '@iki/backend/provider/tool_model';
 import { getIntegrationTestContext, hasProviderConfig } from './setup';
 
-registerStandardTools();
+registerStandardTools({
+  delegatedAgentRuntime: {
+    createRunTracker: createAgentRunTracker,
+    getConversationToolModel: getToolModel,
+  },
+});
 
 // Live-model evals cost money and are non-deterministic: they only run when
 // explicitly requested (`pnpm run eval:live`) AND a provider is configured.

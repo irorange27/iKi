@@ -6,6 +6,8 @@ import { createRequire } from 'node:module';
 
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
+import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
 import { createDaemonLogger } from '@iki/backend/daemon_logs';
@@ -68,7 +70,12 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     initializeDatabase();
     wirePlatformContext();
     applyAppLoggingConfig(getAppConfig());
-    registerStandardTools();
+    registerStandardTools({
+      delegatedAgentRuntime: {
+        createRunTracker: createAgentRunTracker,
+        getConversationToolModel: getToolModel,
+      },
+    });
     const mcpManager = getMcpManager();
     void mcpManager.initialize();
 

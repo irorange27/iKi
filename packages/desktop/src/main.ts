@@ -10,6 +10,8 @@ import {
   shutdownLangfuseTracing,
 } from '@iki/backend/observability/langfuse';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
+import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { getToolModel } from '@iki/backend/provider/tool_model';
 import { startDaemonServer } from '@iki/daemon/server';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';
@@ -124,7 +126,12 @@ if (isDaemonMode) {
   });
 
   // Register standard tools + IPC handlers on startup.
-  registerStandardTools();
+  registerStandardTools({
+    delegatedAgentRuntime: {
+      createRunTracker: createAgentRunTracker,
+      getConversationToolModel: getToolModel,
+    },
+  });
   void getMcpManager().initialize();
   registerMainIpc();
 

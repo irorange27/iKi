@@ -35,9 +35,9 @@ module.exports = {
     },
     {
       name: 'tools-below-session',
-      comment: 'R2: concrete tools stay below agent_session/provider/chat_service',
+      comment: 'R2: concrete tools stay below agent_session/provider/chat_service (type-only DI contracts are not counted)',
       severity: 'error',
-      from: { path: '^packages/backend/src/tools', pathNot: '^packages/backend/src/tools/agent_tools\\.ts$' },
+      from: { path: '^packages/backend/src/tools' },
       to: { path: '^packages/backend/src/(agent_session|provider|chat_service)' },
     },
     {

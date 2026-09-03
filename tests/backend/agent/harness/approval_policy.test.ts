@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { registerStandardTools } from '@iki/backend/tools';
+import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 
-registerStandardTools();
+registerStandardTools({
+  delegatedAgentRuntime: {
+    createRunTracker: createAgentRunTracker,
+    getConversationToolModel: getToolModel,
+  },
+});
 
 const resolve = (
   approvalPolicy?: 'never' | 'trustWorkspace' | 'askRisky' | 'always',

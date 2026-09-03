@@ -18,15 +18,7 @@ vi.mock('@iki/backend/agent/runners/simple_agent_runner', () => ({
   createSimpleAgentRunner: createSimpleAgentRunnerMock,
 }));
 
-vi.mock('@iki/backend/provider/tool_model', () => ({
-  getToolModel: getToolModelMock,
-}));
-
-vi.mock('@iki/backend/agent_session/run_tracker', () => ({
-  createAgentRunTracker: createAgentRunTrackerMock,
-}));
-
-import { DelegatedAgentTool } from '@iki/backend/tools/agent_tools';
+import { DelegatedAgentTool, setDelegatedAgentRuntime } from '@iki/backend/tools/agent_tools';
 import { ReadFileTool, WriteFileTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
@@ -59,6 +51,10 @@ describe('DelegatedAgentTool', () => {
       markBlocked: vi.fn(),
       markFailed: vi.fn(),
       markCancelled: vi.fn(),
+    });
+    setDelegatedAgentRuntime({
+      createRunTracker: createAgentRunTrackerMock,
+      getConversationToolModel: getToolModelMock,
     });
   });
 

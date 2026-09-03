@@ -4,10 +4,10 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '@iki/backend/agent/types';
-import { createAgentRunTracker } from '../agent_session/run_tracker';
+import type { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
-import { getToolModel } from '../provider/tool_model';
+import type { ToolModelConfig } from '../provider/tool_model';
 import { BaseTool, defaultToolRegistry } from '@iki/backend/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import {
@@ -24,6 +24,33 @@ import {
 const AGENT_TOOL_NAME = 'agent';
 const DEFAULT_AGENT_MAX_TOKENS = 2000;
 const MAX_TOOL_NAMES_IN_ERROR = 10;
+
+type DelegatedAgentRunTracker = ReturnType<typeof createAgentRunTracker>;
+type DelegatedAgentRunTrackerParams = Parameters<typeof createAgentRunTracker>[0];
+
+/**
+ * Backend pieces the delegated-agent tool needs at execution time, injected at
+ * registration (registerStandardTools) so tools/ stays below agent_session/provider.
+ */
+export type DelegatedAgentRuntime = {
+  createRunTracker: (params: DelegatedAgentRunTrackerParams) => DelegatedAgentRunTracker;
+  getConversationToolModel: () => ToolModelConfig | null;
+};
+
+let delegatedAgentRuntime: DelegatedAgentRuntime | null = null;
+
+export const setDelegatedAgentRuntime = (runtime: DelegatedAgentRuntime): void => {
+  delegatedAgentRuntime = runtime;
+};
+
+const requireDelegatedAgentRuntime = (): DelegatedAgentRuntime => {
+  if (!delegatedAgentRuntime) {
+    throw new Error(
+      'Delegated agent runtime is not registered; call registerStandardTools before using the agent tool.'
+    );
+  }
+  return delegatedAgentRuntime;
+};
 
 const SUBAGENT_SYSTEM_PROMPT_BASE =
   'You are a delegated subagent working for the parent iKi agent.\n' +
@@ -134,7 +161,7 @@ const resolveConversationModel = (): ToolRuntimeConversationModel => {
     return runtimeModel;
   }
 
-  const toolModel = getToolModel();
+  const toolModel = requireDelegatedAgentRuntime().getConversationToolModel();
   if (!toolModel) {
     throw new Error('Delegated agent model is unavailable for this turn.');
   }
@@ -292,7 +319,7 @@ export class DelegatedAgentTool extends BaseTool {
       maxOutputTokens: resolvedMaxTokens,
     });
 
-    const runTracker = createAgentRunTracker({
+    const runTracker = requireDelegatedAgentRuntime().createRunTracker({
       kind: 'delegated-agent',
       threadId: runtimeContext.threadId,
       parentRunId: runtimeContext.runId,

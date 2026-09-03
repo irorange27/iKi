@@ -3,6 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { registerStandardTools, defaultToolRegistry } from '@iki/backend/tools';
+import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { getToolModel } from '@iki/backend/provider/tool_model';
 import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
 import { type AgentTool } from '@iki/backend/agent';
 
@@ -23,7 +25,12 @@ const hasAuth = checkAuth();
 let toolsRegistered = false;
 const ensureTools = () => {
   if (!toolsRegistered) {
-    registerStandardTools();
+    registerStandardTools({
+      delegatedAgentRuntime: {
+        createRunTracker: createAgentRunTracker,
+        getConversationToolModel: getToolModel,
+      },
+    });
     toolsRegistered = true;
   }
 };
