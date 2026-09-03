@@ -379,6 +379,59 @@ const createInstrumentedFetch = (): typeof globalThis.fetch => {
   };
 };
 
+/**
+ * Per-provider model wiring for the static (non-ACP) provider types. Each entry
+ * owns its SDK client construction and default endpoint; providers absent from
+ * this table fall through to isResponseApi handling or the OpenAI-compatible path.
+ */
+const STATIC_PROVIDER_MODEL_FACTORIES: Record<string, (config: ProviderConfig, modelId: string) => LanguageModel> = {
+  openai: (config, modelId) => {
+    const client = createOpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.openai.com/v1',
+    });
+    return client(modelId);
+  },
+  anthropic: (config, modelId) => {
+    const model = createAnthropic({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
+    })(modelId);
+    if (!isLanguageModelInstance(model)) {
+      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
+    }
+    return model;
+  },
+  'anthropic-compatible': (config, modelId) => {
+    const model = createAnthropic({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
+      name: 'anthropic-compatible',
+    })(modelId);
+    if (!isLanguageModelInstance(model)) {
+      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
+    }
+    return model;
+  },
+  deepseek: (config, modelId) => {
+    const client = createDeepSeek({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.deepseek.com/v1',
+    });
+    return client(modelId);
+  },
+  minimax: (config, modelId) => {
+    const model = createMinimax({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || 'https://api.minimax.io/anthropic/v1',
+    })(modelId);
+    if (!isLanguageModelInstance(model)) {
+      throw new Error(`MiniMax provider returned an invalid language model for "${modelId}".`);
+    }
+    return model;
+  },
+};
+
 export const createModel = (
   providerType: string,
   modelId: string,
@@ -418,42 +471,9 @@ export const createModel = (
     );
   }
 
-  if (providerType === 'openai') {
-    const client = createOpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.openai.com/v1',
-    });
-    return client(modelId);
-  }
-  if (providerType === 'anthropic' || providerType === 'anthropic-compatible') {
-    const client = createAnthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
-      ...(providerType === 'anthropic-compatible' ? { name: providerType } : {}),
-    });
-    const model = client(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  }
-  if (providerType === 'deepseek') {
-    const client = createDeepSeek({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.deepseek.com/v1',
-    });
-    return client(modelId);
-  }
-  if (providerType === 'minimax') {
-    const client = createMinimax({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.minimax.io/anthropic/v1',
-    });
-    const model = client(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`MiniMax provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
+  const staticFactory = STATIC_PROVIDER_MODEL_FACTORIES[providerType];
+  if (staticFactory) {
+    return staticFactory(config, modelId);
   }
 
   if (config.isResponseApi) {
