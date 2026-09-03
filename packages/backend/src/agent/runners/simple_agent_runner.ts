@@ -49,6 +49,34 @@ import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@ik
 
 const logger = createLogger({ module: 'simple_agent_runner' });
 
+const ANTHROPIC_CACHE_PROVIDER_TYPES = new Set(['anthropic', 'anthropic-compatible']);
+
+/**
+ * Anthropic prompt caching: mark the last message as an ephemeral cache
+ * breakpoint so the system prompt, tool definitions and the growing history
+ * prefix are cache-served on subsequent steps/batches instead of being
+ * re-billed as fresh input tokens (SWE-agent's CacheControl equivalent).
+ * The caller's history array is never mutated.
+ */
+const withCacheBreakpoint = (providerType: string, messages: ModelMessage[]): ModelMessage[] => {
+  if (!ANTHROPIC_CACHE_PROVIDER_TYPES.has(providerType) || messages.length === 0) {
+    return messages;
+  }
+
+  const last = messages[messages.length - 1]!;
+  return [
+    ...messages.slice(0, -1),
+    {
+      ...last,
+      providerOptions: {
+        ...((last as ModelMessage & { providerOptions?: Record<string, unknown> }).providerOptions ??
+          {}),
+        anthropic: { cacheControl: { type: 'ephemeral' } },
+      },
+    } as ModelMessage,
+  ];
+};
+
 const TERMINAL_TOOL_NAMES = new Set(['handoff']);
 
 const EMPTY_USAGE: AgentUsage = {
@@ -194,9 +222,11 @@ export class SimpleAgentRunner {
         ? this.modelFactory!(config.providerType, config.model, config.providerId)
         : createModel(config.providerType, config.model, config.providerId);
       const tools = this.buildToolSet(config, request.tools);
-      const { systemPrompt, messages } = usingCustomModel
+      const promptContext = usingCustomModel
         ? { systemPrompt: config.systemPrompt, messages: history }
         : buildPromptContext(config, history);
+      const messages = withCacheBreakpoint(config.providerType, promptContext.messages);
+      const { systemPrompt } = promptContext;
 
       try {
         const telemetry = langfuseTelemetry('agent.stream', {
