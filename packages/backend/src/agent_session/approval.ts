@@ -257,9 +257,7 @@ export const createChatApproval = (deps: {
       )
     );
     const storedRunId = typeof approvalSession.run_id === 'string' ? approvalSession.run_id.trim() : '';
-    const runSnapshot =
-      (storedRunId ? agentRunDb.getLatestAgentRunCheckpoint(storedRunId)?.snapshot : null) ??
-      (storedRunId ? agentRunDb.getAgentRun(storedRunId) : null);
+    const runSnapshot = storedRunId ? agentRunDb.getAgentRun(storedRunId) : null;
     const activeApprovalIds = activeApprovals.map(record => record.approval_id);
     const runPendingApprovalIds = new Set(runSnapshot?.working.pendingApprovalIds ?? []);
     const historyFromRun =

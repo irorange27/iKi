@@ -241,18 +241,16 @@ export const runAwaiterWake = async (awaiterId: string) => {
     ];
 
     if (awaiter.origin_run_id) {
-      const checkpoint = agentRunDb.getLatestAgentRunCheckpoint(awaiter.origin_run_id);
-      if (
-        checkpoint?.snapshot?.working?.modelMessages &&
-        Array.isArray(checkpoint.snapshot.working.modelMessages) &&
-        checkpoint.snapshot.working.modelMessages.length > 0
-      ) {
-        const checkpointMessages = checkpoint.snapshot.working.modelMessages as import('ai').ModelMessage[];
+      const originRun = agentRunDb.getAgentRun(awaiter.origin_run_id);
+      const resumedMessages = Array.isArray(originRun?.working?.modelMessages)
+        ? (originRun!.working!.modelMessages as import('ai').ModelMessage[])
+        : [];
+      if (resumedMessages.length > 0) {
         messages.push({
           role: 'system',
           content: '[RESUMED CONTEXT] Continuing from a deferred continuation created during a previous agent run. The conversation history from that run is provided below.',
         });
-        messages.push(...checkpointMessages);
+        messages.push(...resumedMessages);
         messages.push({
           role: 'system',
           content: '[CONTINUATION] The following is the scheduled wake instruction:',

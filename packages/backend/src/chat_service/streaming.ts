@@ -168,70 +168,70 @@ export const createChatStreaming = (deps: {
       let streamPrompt = preparedTurn.prompt;
 
       if (options.runConfig?.kind === 'handoff-resume' && options.runConfig?.parentRunId) {
-        const checkpoint = agentRunDb.getLatestAgentRunCheckpoint(options.runConfig.parentRunId);
-        if (checkpoint?.snapshot?.working?.modelMessages) {
-          const checkpointMessages = checkpoint.snapshot.working.modelMessages as import('ai').ModelMessage[];
-          if (checkpointMessages.length > 0) {
-            let handoffSummary = '';
-            let handoffNextSteps = '';
-            let handoffReason = '';
+        const parentRun = agentRunDb.getAgentRun(options.runConfig.parentRunId);
+        const resumedMessages = Array.isArray(parentRun?.working?.modelMessages)
+          ? (parentRun!.working!.modelMessages as import('ai').ModelMessage[])
+          : [];
+        if (resumedMessages.length > 0) {
+          let handoffSummary = '';
+          let handoffNextSteps = '';
+          let handoffReason = '';
 
-            for (let i = checkpointMessages.length - 1; i >= 0; i--) {
-              const msg = checkpointMessages[i] as Record<string, unknown>;
-              if (msg.role !== 'assistant') continue;
-              const content = msg.content;
-              if (!Array.isArray(content)) continue;
-              for (const part of content) {
-                if (
-                  typeof part === 'object' &&
-                  part !== null &&
-                  (part as Record<string, unknown>).type === 'tool-call' &&
-                  (part as Record<string, unknown>).toolName === 'handoff'
-                ) {
-                  const args = (part as Record<string, unknown>).args as Record<string, unknown> | undefined;
-                  if (args) {
-                    handoffSummary = typeof args.summary === 'string' ? args.summary : '';
-                    handoffNextSteps = typeof args.next_steps === 'string' ? args.next_steps : '';
-                    handoffReason = typeof args.reason === 'string' ? args.reason : '';
-                  }
-                  break;
+          for (let i = resumedMessages.length - 1; i >= 0; i--) {
+            const msg = resumedMessages[i] as Record<string, unknown>;
+            if (msg.role !== 'assistant') continue;
+            const content = msg.content;
+            if (!Array.isArray(content)) continue;
+            for (const part of content) {
+              if (
+                typeof part === 'object' &&
+                part !== null &&
+                (part as Record<string, unknown>).type === 'tool-call' &&
+                (part as Record<string, unknown>).toolName === 'handoff'
+              ) {
+                const args = (part as Record<string, unknown>).args as Record<string, unknown> | undefined;
+                if (args) {
+                  handoffSummary = typeof args.summary === 'string' ? args.summary : '';
+                  handoffNextSteps = typeof args.next_steps === 'string' ? args.next_steps : '';
+                  handoffReason = typeof args.reason === 'string' ? args.reason : '';
                 }
+                break;
               }
-              if (handoffSummary || handoffNextSteps) break;
             }
-
-            const handoffContextParts: string[] = [
-              'You are resuming work from a previous agent run.',
-            ];
-            if (handoffSummary) {
-              handoffContextParts.push(`\nSummary of previous work:\n${handoffSummary}`);
-            }
-            if (handoffNextSteps) {
-              handoffContextParts.push(`\nNext steps to complete:\n${handoffNextSteps}`);
-            }
-            if (handoffReason) {
-              handoffContextParts.push(`\nReason for handoff: ${handoffReason}`);
-            }
-            handoffContextParts.push('\nThe conversation history from the previous run is below. Continue the work based on what was done before.');
-
-            streamHistory = [
-              {
-                role: 'system' as const,
-                content: `[HANDOFF CONTEXT] ${handoffContextParts.join('')}`,
-              },
-              ...checkpointMessages,
-              ...(preparedTurn.history.length > 0
-                ? [
-                    {
-                      role: 'system' as const,
-                      content: `[CURRENT THREAD] The following messages are from the current conversation thread:`,
-                    } as import('ai').ModelMessage,
-                    ...preparedTurn.history,
-                  ]
-                : []),
-            ];
-            streamPrompt = preparedTurn.prompt || 'Continue the work from where the previous agent left off.';
+            if (handoffSummary || handoffNextSteps) break;
           }
+
+          const handoffContextParts: string[] = [
+            'You are resuming work from a previous agent run.',
+          ];
+          if (handoffSummary) {
+            handoffContextParts.push(`\nSummary of previous work:\n${handoffSummary}`);
+          }
+          if (handoffNextSteps) {
+            handoffContextParts.push(`\nNext steps to complete:\n${handoffNextSteps}`);
+          }
+          if (handoffReason) {
+            handoffContextParts.push(`\nReason for handoff: ${handoffReason}`);
+          }
+          handoffContextParts.push('\nThe conversation history from the previous run is below. Continue the work based on what was done before.');
+
+          streamHistory = [
+            {
+              role: 'system' as const,
+              content: `[HANDOFF CONTEXT] ${handoffContextParts.join('')}`,
+            },
+            ...resumedMessages,
+            ...(preparedTurn.history.length > 0
+              ? [
+                  {
+                    role: 'system' as const,
+                    content: `[CURRENT THREAD] The following messages are from the current conversation thread:`,
+                  } as import('ai').ModelMessage,
+                  ...preparedTurn.history,
+                ]
+              : []),
+          ];
+          streamPrompt = preparedTurn.prompt || 'Continue the work from where the previous agent left off.';
         }
       }
 
@@ -711,10 +711,6 @@ export const createChatStreaming = (deps: {
 
         outerBatch++;
         if (outerBatch >= MAX_OUTER_AUTONOMOUS_BATCHES) break;
-
-        if (outerBatch % 5 === 0) {
-          runTracker.createCheckpoint('periodic');
-        }
 
         streamHistory = harness.getHistory() ?? streamHistory;
         streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';

@@ -82,9 +82,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       return { success: true, ...(result as Record<string, unknown>) };
     }
 
-    const checkpoint = agentRunDb.getLatestAgentRunCheckpoint(runId);
-    const snapshot = checkpoint?.snapshot;
-
     const result = await streaming.stream(target, {
       providerType: run.providerType,
       providerId: run.providerId ?? undefined,
@@ -101,10 +98,10 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
           source: 'resume',
           originalRunId: run.id,
           blockedAt: run.updatedAt,
-          ...(checkpoint?.stepIndex !== undefined ? { resumeFromStep: checkpoint.stepIndex } : {}),
+          ...(run.working.lastStepIndex > 0 ? { resumeFromStep: run.working.lastStepIndex } : {}),
         },
       },
-      autonomous: snapshot?.working?.pendingApprovalIds?.length
+      autonomous: run.working.pendingApprovalIds.length > 0
         ? {
             maxIterations: 10,
             continuePrompt: 'Continue the work that was interrupted.',

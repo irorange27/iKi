@@ -1,13 +1,11 @@
 import {
   appendAgentRunStep,
   createAgentRun,
-  createAgentRunCheckpoint,
   getAgentRun,
   updateAgentRun,
 } from '../db/agent_runs';
 import type {
   AgentRun,
-  AgentRunCheckpointReason,
   AgentRunError,
   AgentRunInput,
   AgentRunKind,
@@ -97,7 +95,6 @@ export type AgentRunTracker = {
   id: string;
   getRun: () => AgentRun;
   syncModelMessages: (messages: unknown[]) => AgentRun;
-  createCheckpoint: (reason: AgentRunCheckpointReason) => void;
   recordToolEvent: (event: ChatStreamEvent) => void;
   recordChildRun: (params: {
     childRunId: string;
@@ -153,16 +150,6 @@ export const createAgentRunTracker = (
     }
   };
 
-  const createCheckpoint = (reason: AgentRunCheckpointReason) => {
-    createAgentRunCheckpoint({
-      id: createPrefixedId('checkpoint'),
-      runId: currentRun.id,
-      stepIndex: currentRun.working.lastStepIndex,
-      reason,
-      snapshot: currentRun,
-    });
-  };
-
   const appendStep = (params: {
     type: AgentRunStepType;
     status: AgentRunStep['status'];
@@ -205,9 +192,6 @@ export const createAgentRunTracker = (
         },
       });
       return currentRun;
-    },
-    createCheckpoint: reason => {
-      createCheckpoint(reason);
     },
     recordToolEvent: event => {
       if (!event || typeof event !== 'object' || typeof event.type !== 'string') return;
@@ -304,7 +288,6 @@ export const createAgentRunTracker = (
             pendingApprovalIds,
           },
         });
-        createCheckpoint('approval-requested');
       }
     },
     recordChildRun: params => {
@@ -322,7 +305,6 @@ export const createAgentRunTracker = (
         },
         output: params.output ?? null,
       });
-      createCheckpoint('child-run-spawned');
       return currentRun;
     },
     recordToolCalls: toolCalls => {
@@ -370,7 +352,6 @@ export const createAgentRunTracker = (
         }),
         error: null,
       });
-      createCheckpoint('run-completed');
       return currentRun;
     },
     markBlocked: params => {
@@ -405,7 +386,6 @@ export const createAgentRunTracker = (
         }),
         error: null,
       });
-      createCheckpoint('approval-requested');
       return currentRun;
     },
     markFailed: params => {
@@ -424,7 +404,6 @@ export const createAgentRunTracker = (
         status: 'failed',
         error: params,
       });
-      createCheckpoint('run-failed');
       return currentRun;
     },
     markCancelled: params => {
@@ -446,7 +425,6 @@ export const createAgentRunTracker = (
           finishReason: 'cancelled',
         }),
       });
-      createCheckpoint('run-cancelled');
       return currentRun;
     },
   };

@@ -37,7 +37,6 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
   createAgentRunCheckpoint: vi.fn(),
   getAgentRun: vi.fn(() => null),
-  getLatestAgentRunCheckpoint: vi.fn(),
   updateAgentRun: vi.fn((id: string, updates: Record<string, unknown>) => ({
     id,
     kind: 'approval-resume',
@@ -181,12 +180,7 @@ describe('createChatApproval resume integration', () => {
       updated_at: '2026-06-20T00:00:00.000Z',
     } as never);
     vi.mocked(approvalDb.getActiveChatToolApprovalsBySession).mockReturnValue([approvedRecord] as never);
-    vi.mocked(agentRunDb.getLatestAgentRunCheckpoint).mockReturnValue({
-      id: 'checkpoint_1',
-      runId: 'run_blocked_1',
-      stepIndex: 1,
-      reason: 'approval-requested',
-      snapshot: {
+    vi.mocked(agentRunDb.getAgentRun).mockReturnValue({
         id: 'run_blocked_1',
         kind: 'chat-turn',
         status: 'blocked',
@@ -210,8 +204,6 @@ describe('createChatApproval resume integration', () => {
         error: null,
         createdAt: '2026-06-20T00:00:00.000Z',
         updatedAt: '2026-06-20T00:00:00.000Z',
-      },
-      createdAt: '2026-06-20T00:00:00.000Z',
     } as never);
 
     const activeStreams = new Map();
