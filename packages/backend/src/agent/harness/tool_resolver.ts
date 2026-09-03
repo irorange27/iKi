@@ -3,6 +3,7 @@ import { defaultToolRegistry } from '@iki/backend/tools';
 import { LoadSkillTool } from '@iki/backend/tools/skill_tools';
 import { applyToolApprovalPolicy } from '@iki/backend/utils/tool_approval';
 import { classifyActionRisk } from '@iki/backend/utils/action_risk';
+import { listToolAllowPatterns } from '@iki/backend/db/tool_allowlist';
 import type { AgentTool } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'tool_resolver' });
@@ -32,9 +33,11 @@ const prepareToolWithGuard = (
   } else if (approvalPolicy === 'always') {
     resolved = { ...tool, needsApproval: true };
   } else if (approvalPolicy === 'trustWorkspace') {
+    const allowPatterns = listToolAllowPatterns(tool.name);
     resolved = {
       ...tool,
-      needsApproval: (input: unknown) => classifyActionRisk(tool.name, input) === 'escalate',
+      needsApproval: (input: unknown) =>
+        classifyActionRisk(tool.name, input, allowPatterns) === 'escalate',
     };
   } else if (requireApproval) {
     resolved = { ...tool, needsApproval: true };

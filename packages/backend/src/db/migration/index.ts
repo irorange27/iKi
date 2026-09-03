@@ -39,6 +39,7 @@ import { migration as migration037AddProactiveTaskProviderId } from './037_add_p
 import { migration as migration038AddAwaitersTables } from './038_add_awaiters_tables';
 import { migration as migration039AddAgentEvalLabelsTable } from './039_add_agent_eval_labels_table';
 import { migration as migration040AddClipboardSnapshotsTable } from './040_add_clipboard_snapshots_table';
+import { migration as migration041AddToolAllowlistTable } from './041_add_tool_allowlist_table';
 
 // Register all migrations here
 export const registeredMigrations = [
@@ -82,6 +83,7 @@ export const registeredMigrations = [
   migration038AddAwaitersTables,
   migration039AddAgentEvalLabelsTable,
   migration040AddClipboardSnapshotsTable,
+  migration041AddToolAllowlistTable,
   // Add more migrations here as needed
 ];
 

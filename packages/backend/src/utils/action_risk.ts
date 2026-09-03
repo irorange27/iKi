@@ -10,7 +10,16 @@ const ESCALATE_TOOLS = new Set(['delete_file', 'shell']);
  * and non-readonly shell commands escalate. Workspace containment itself is
  * still enforced by the tools' own path resolution at execution time.
  */
-export const classifyActionRisk = (toolName: string, input: unknown): ActionRisk => {
+export const classifyActionRisk = (
+  toolName: string,
+  input: unknown,
+  allowPatterns: string[] = []
+): ActionRisk => {
+  const inputText =
+    input && typeof input === 'object' ? JSON.stringify(input) : String(input ?? '');
+  for (const pattern of allowPatterns) {
+    if (pattern === '' || inputText.includes(pattern)) return 'safe';
+  }
   if (toolName === 'shell') {
     const command =
       input && typeof input === 'object' && typeof (input as Record<string, unknown>).command === 'string'
