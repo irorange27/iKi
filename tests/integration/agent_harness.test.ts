@@ -93,12 +93,6 @@ describe('Agent — tool calls', () => {
 
 });
 
-describe('Agent — handoff', () => {
-});
-
-describe('Agent — multi-step reasoning', () => {
-});
-
 describe('Agent — error resilience', () => {
   it.skipIf(skipIfNoProvider())('handles whitespace-only prompt gracefully', async () => {
     const { result, steps } = await collectRun('   ');

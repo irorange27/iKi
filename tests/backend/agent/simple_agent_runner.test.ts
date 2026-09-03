@@ -247,13 +247,12 @@ describe('SimpleAgentRunner — characterization tests', () => {
       });
 
       const steps: unknown[] = [];
-      let result_: unknown;
       for await (const step of gen) {
         steps.push(step);
       }
       // Get the return value
       const iterResult = await gen.next();
-      result_ = iterResult.value;
+      const result_: unknown = iterResult.value;
 
       // Should have received both text deltas
       const textSteps = steps.filter((s: any) => s.type === 'message_update');

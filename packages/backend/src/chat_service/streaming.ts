@@ -445,7 +445,7 @@ export const createChatStreaming = (deps: {
         let agentResult: import('@iki/backend/agent').AgentResult | undefined;
         let cancelled = false;
         let steered = false;
-        let awaitingApproval = false;
+        const awaitingApproval = false;
 
         try {
           agentResult = await traceChatTurn(

@@ -32,9 +32,12 @@ import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
 import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
 const setRunResult = (result: unknown) => {
-  runMock.mockImplementation(async function* () {
-    return result;
-  });
+  runMock.mockImplementation(
+    // eslint-disable-next-line require-yield -- mock generator resolves immediately
+    async function* () {
+      return result;
+    }
+  );
 };
 
 describe('DelegatedAgentTool', () => {

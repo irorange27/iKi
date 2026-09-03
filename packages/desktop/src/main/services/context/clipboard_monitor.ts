@@ -9,7 +9,7 @@ type ClipboardMonitorState = {
   running: boolean;
 };
 
-let state: ClipboardMonitorState = {
+const state: ClipboardMonitorState = {
   lastContent: '',
   timer: null,
   running: false,
@@ -17,6 +17,7 @@ let state: ClipboardMonitorState = {
 
 const readClipboardText = (): string => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- lazy require keeps electron out of unit tests
     const { clipboard } = require('electron');
     return clipboard.readText() || '';
   } catch {

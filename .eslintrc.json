@@ -17,6 +17,14 @@
     "ecmaVersion": "latest",
     "sourceType": "module"
   },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "alwaysTryTypes": true,
+        "project": ["tsconfig.json", "packages/*/tsconfig.json"]
+      }
+    }
+  },
   "overrides": [
     {
       "files": ["*.vue"],

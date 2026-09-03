@@ -14,3 +14,4 @@ allowBuilds:
   fs-xattr: true
   macos-alias: true
   protobufjs: false
+  unrs-resolver: false

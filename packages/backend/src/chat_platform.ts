@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-function -- default no-op bridge */
 import type { CompanionAffectHint, ConversationPreview } from './types/companion';
 import type { InterventionPolicySignal } from './chat/intervention_policy';
 

@@ -1,3 +1,4 @@
+/* eslint-disable import/export -- star barrel; name conflicts resolved by the explicit re-exports below */
 export * from './affect';
 export * from './agent_run';
 export * from './awaiters';
@@ -22,3 +23,12 @@ export * from './tasks';
 export * from './todos';
 export * from './update';
 export * from './workflow';
+
+// Explicit re-exports resolve star-star conflicts between the barrels above.
+export type {
+  ChatToolApproval,
+  ChatToolApprovalDecision,
+  ChatToolApprovalSession,
+  ChatToolApprovalState,
+} from './chat_tool_approval';
+export type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
