@@ -25,6 +25,7 @@ import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { writeThreadTodoPlan } from '../db/thread_todos';
+import { autoCompactHistory } from './token_estimator';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -712,7 +713,21 @@ export const createChatStreaming = (deps: {
         outerBatch++;
         if (outerBatch >= MAX_OUTER_AUTONOMOUS_BATCHES) break;
 
-        streamHistory = harness.getHistory() ?? streamHistory;
+        const nextHistory = harness.getHistory() ?? streamHistory;
+        const compacted = autoCompactHistory({
+          history: nextHistory,
+          maxInputTokens: preparedTurn.maxInputTokens,
+        });
+        if (compacted.compacted) {
+          chatStreamingLogger.event({
+            level: 'info',
+            event: 'chat.stream.auto_compact',
+            data: { threadId: options.threadId ?? null, droppedMessages: compacted.droppedCount },
+          });
+          streamHistory = compacted.history;
+        } else {
+          streamHistory = nextHistory;
+        }
         streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
       }
 
