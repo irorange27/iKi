@@ -115,7 +115,7 @@ const INSTALL_SUBCOMMANDS = new Set([
 const isKnownInstallSub = (cmd: string | undefined): boolean =>
   typeof cmd === 'string' && INSTALL_SUBCOMMANDS.has(cmd.trim());
 
-const isShellCommandReadonly = (rawCommand: string): boolean => {
+export const isShellCommandReadonly = (rawCommand: string): boolean => {
   const trimmed = rawCommand.trim();
   if (!trimmed) return false;
 

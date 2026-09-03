@@ -5,10 +5,13 @@ import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 
 registerStandardTools();
 
-const resolve = (approvalPolicy?: 'never' | 'trustWorkspace' | 'askRisky' | 'always') =>
+const resolve = (
+  approvalPolicy?: 'never' | 'trustWorkspace' | 'askRisky' | 'always',
+  toolNames = ['write_file', 'read_file', 'edit']
+) =>
   resolveTools({
     enableTools: true,
-    enabledToolNames: ['write_file', 'read_file', 'edit'],
+    enabledToolNames: toolNames,
     availableSkillIds: [],
     guardActive: false,
     requireApproval: false,
@@ -30,6 +33,20 @@ describe('resolveTools approvalPolicy (ADR 005)', () => {
     const tools = resolve('always');
     expect(needsApproval(tools, 'write_file')).toBe(true);
     expect(needsApproval(tools, 'read_file')).toBe(true);
+  });
+
+  it('trustWorkspace auto-approves workspace writes and readonly shell, escalates the rest', () => {
+    const tools = resolve('trustWorkspace', ['write_file', 'read_file', 'edit', 'shell', 'delete_file']);
+
+    const writeNeed = needsApproval(tools, 'write_file');
+    expect(typeof writeNeed).toBe('function');
+    expect((writeNeed as (input: unknown) => boolean)({ path: 'a.txt' })).toBe(false);
+
+    const shellNeed = needsApproval(tools, 'shell') as (input: unknown) => boolean;
+    expect(shellNeed({ command: 'ls -la' })).toBe(false);
+    expect(shellNeed({ command: 'rm -rf build' })).toBe(true);
+
+    expect((needsApproval(tools, 'delete_file') as (input: unknown) => boolean)({})).toBe(true);
   });
 
   it('defaults to the legacy guard behavior when no policy is set', () => {
