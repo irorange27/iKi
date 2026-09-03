@@ -34,15 +34,16 @@ postmortem/        ← incident write-ups
 | Tool approval UX | `packages/backend/src/agent_session/approval.ts` + renderer `modules/chat/tool_approval_service.ts` |
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
 | New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |
-| Understand the chat-turn pipeline / harness | `packages/backend/README.md` |
+| Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |
 
 ## Details live here (read on demand)
 
 - `packages/backend/README.md` — chat-turn pipeline, backend directory map, harness invariants (memory, approval, observability)
+- `docs/harness.md` — runtime concept model in current framework vocabulary (context engineering, op-loop/steering, HITL approvals, durable execution); read before renaming or moving these concepts
 - `packages/{desktop,daemon}/README.md` — shell boundary rules
 - `docs/conventions.md` — code conventions, prohibited actions, landmines, testing & coverage gates, commit governance
 - `docs/decisions/` — ADRs: why `AgentHarness` exists, why `agent_session/` is the boundary, why `@iki/core` was deleted
 - `docs/napcat-integration.md` — QQ bridge via NapCat; `postmortem/backend-bugs-2026-04.md` — bug patterns (pre-monorepo paths, see its banner)
-- `docs/design/` — 2026-04 historical design notes (stale paths, see its README); `docs/archive-agent-runner-v2.md` — archived, don't trust
+- `docs/design/` — live subsystem notes only (MCP, awaiters, proactive tasks, logging contract, ACP, affect) — see its README index
 - `README.md` — user-facing (tech stack, download); `.impeccable.md` — UI design philosophy
 - `CLAUDE.md` / `IKI.md` — pointer stubs to this file; don't add content there
