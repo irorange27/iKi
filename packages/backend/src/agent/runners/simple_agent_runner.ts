@@ -143,6 +143,21 @@ export class SimpleAgentRunner {
     this.abortController = new AbortController();
     this.cancelRequested = false;
 
+    // streamText only sees the internal controller, so without this wiring
+    // a caller's stop/supersede/steer abort would never reach the model call.
+    const externalAbort = request.abortSignal;
+    if (externalAbort) {
+      if (externalAbort.aborted) {
+        this.abortController.abort();
+      } else {
+        externalAbort.addEventListener(
+          'abort',
+          () => this.abortController.abort(),
+          { once: true },
+        );
+      }
+    }
+
     const config = loadAgentConfig({
       ...(request.config ?? {}),
       providerType: request.providerType,

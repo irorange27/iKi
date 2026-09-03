@@ -618,4 +618,44 @@ describe('SimpleAgentRunner — characterization tests', () => {
       expect(isRetryableError(econnreset)).toBe(true);
     });
   });
+
+  describe('external abort signal', () => {
+    it('aborts the signal passed to streamText when the caller signal fires', async () => {
+      let capturedSignal: AbortSignal | undefined;
+      streamTextMock.mockImplementation((config: Record<string, unknown>) => {
+        capturedSignal = config.abortSignal as AbortSignal | undefined;
+        return makeStreamTextResult();
+      });
+      setupAgentConfig();
+      setupModel();
+
+      const external = new AbortController();
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'test',
+        tools: [],
+        providerType: 'openai',
+        providerId: '',
+        model: 'gpt-4o-mini',
+        abortSignal: external.signal,
+      });
+
+      const consumed = (async () => {
+        try {
+          for await (const _step of gen) {
+            // drain; abort may surface as a thrown AbortError
+          }
+        } catch {
+          // expected when the abort lands mid-stream
+        }
+      })();
+
+      await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+      expect(capturedSignal!.aborted).toBe(false);
+      external.abort();
+      expect(capturedSignal!.aborted).toBe(true);
+      await consumed;
+    });
+  });
 });
