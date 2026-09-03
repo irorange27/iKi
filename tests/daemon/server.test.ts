@@ -879,6 +879,12 @@ describe('daemon server', () => {
       allowedTools: ['web', 'mcp:server:docs'],
     });
 
+    getChatThreadMock.mockReturnValueOnce({
+      id: 'thread_scope',
+      client_id: issued.client.id,
+      title: 'Scope',
+    });
+
     const result = await requestJson(started, '/v1/chat/send', {
       method: 'POST',
       headers: {
@@ -889,6 +895,7 @@ describe('daemon server', () => {
         providerType: 'openai',
         model: 'gpt-4.1',
         messages: [],
+        thread_id: 'thread_scope',
         tools: ['web'],
       },
     });
@@ -1049,6 +1056,11 @@ describe('daemon server', () => {
       allowedTools: [],
     });
     chatServiceMock.send.mockRejectedValueOnce(new Error('provider offline'));
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_send_fail',
+      client_id: issued.client.id,
+      title: 'Fail',
+    });
 
     const result = await requestJson(started, '/v1/chat/send', {
       method: 'POST',
@@ -1060,6 +1072,7 @@ describe('daemon server', () => {
         providerType: 'openai',
         model: 'gpt-4.1',
         messages: [],
+        thread_id: 'thread_send_fail',
       },
     });
 
@@ -1216,6 +1229,14 @@ describe('daemon server', () => {
       const started = await startTestDaemon();
       const issued = issueClient({ scopes: ['chat:write'], allowedTools: [] });
 
+      getChatThreadMock.mockReturnValue({
+        id: 'thread_rate',
+        client_id: null,
+        title: 'Rate',
+      });
+
+      chatServiceMock.send.mockResolvedValue({ success: true, answer: 'ok' });
+
       const doSend = () =>
         requestJson(started, '/v1/chat/send', {
           method: 'POST',
@@ -1227,6 +1248,7 @@ describe('daemon server', () => {
             providerType: 'openai',
             model: 'gpt-4.1',
             messages: [],
+            thread_id: 'thread_rate',
           },
         });
 
@@ -1264,6 +1286,14 @@ describe('daemon server', () => {
         name: 'Client 2',
       });
 
+      getChatThreadMock.mockReturnValue({
+        id: 'thread_rate',
+        client_id: null,
+        title: 'Rate',
+      });
+
+      chatServiceMock.send.mockResolvedValue({ success: true, answer: 'ok' });
+
       const doSend = (client: ReturnType<typeof issueClient>) =>
         requestJson(started, '/v1/chat/send', {
           method: 'POST',
@@ -1275,6 +1305,7 @@ describe('daemon server', () => {
             providerType: 'openai',
             model: 'gpt-4.1',
             messages: [],
+            thread_id: 'thread_rate',
           },
         });
 

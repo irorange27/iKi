@@ -291,12 +291,18 @@ export const createDaemonRequestHandler =
         if (!body) return;
 
         const threadId = body.threadId;
-        if (threadId) {
-          const access = getThreadOrError(threadId, client.id);
-          if (!access.thread) {
-            writeJson(res, access.status || 404, { success: false, error: access.error });
-            return;
-          }
+        if (!threadId) {
+          writeJson(res, 400, {
+            success: false,
+            error:
+              'thread_id is required for chat/send. Create a thread first via POST /v1/chat/threads.',
+          });
+          return;
+        }
+        const access = getThreadOrError(threadId, client.id);
+        if (!access.thread) {
+          writeJson(res, access.status || 404, { success: false, error: access.error });
+          return;
         }
 
         const messages = body.messages as ChatTransportMessage[];
