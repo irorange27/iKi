@@ -406,6 +406,21 @@ export const createDaemonRequestHandler =
         return;
       }
 
+      const runTrajectoryMatch = pathName.match(/^\/v1\/chat\/runs\/([^/]+)\/trajectory$/);
+      if (req.method === 'GET' && runTrajectoryMatch) {
+        if (!hasScope(client, 'chat:read')) {
+          writeJson(res, 403, { success: false, error: 'Missing chat:read scope' });
+          return;
+        }
+        const result = deps.chatService.eval.exportRunTrajectory(runTrajectoryMatch[1]);
+        if (!result.success && result.errors?.some(e => e.includes('not found'))) {
+          writeJson(res, 404, { success: false, error: result.errors[0] });
+          return;
+        }
+        writeJson(res, result.success ? 200 : 500, result);
+        return;
+      }
+
       const runActionMatch = pathName.match(/^\/v1\/chat\/runs\/([^/]+)\/(cancel|retry|resume)$/);
       if (req.method === 'POST' && runActionMatch) {
         const runId = runActionMatch[1];
