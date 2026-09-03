@@ -126,11 +126,6 @@ const editFileInputFields = {
   encoding: z.string().describe('File encoding'),
 };
 
-const listDirInputFields = {
-  path: z.string().describe('Absolute path or workspace-relative path to the directory to list'),
-  recursive: z.boolean().describe('Whether to list subdirectories recursively'),
-};
-
 const deleteFileInputFields = {
   path: z.string().describe('Absolute path or workspace-relative path to the file to delete'),
 };
@@ -232,19 +227,6 @@ const editFileInputShape = {
 
 export const EditFileInputSchema = z.object(editFileInputShape);
 export const EditFileInputSchemaUi = uiSchema(editFileInputShape);
-
-// ---------------------------------------------------------------------------
-// List directory schemas
-// ---------------------------------------------------------------------------
-
-const listDirInputShape = {
-  path: listDirInputFields.path,
-  recursive: listDirInputFields.recursive.optional().default(false),
-  description: toolCallDescriptionField,
-};
-
-export const ListDirInputSchema = z.object(listDirInputShape);
-export const ListDirInputSchemaUi = uiSchema(listDirInputShape);
 
 // ---------------------------------------------------------------------------
 // Delete file schemas
@@ -477,17 +459,6 @@ export const EditFileOutputSchema = z
       .optional(),
   })
   .passthrough();
-
-export const ListDirOutputSchema = z.array(
-  z
-    .object({
-      name: z.string().optional(),
-      isDirectory: z.boolean().optional(),
-      isFile: z.boolean().optional(),
-      path: z.string().optional(),
-    })
-    .passthrough()
-);
 
 export const DeleteFileOutputSchema = z
   .object({

@@ -85,7 +85,6 @@ const getBuiltinToolOrder = (toolName: string): number => {
   const explicitOrder: Record<string, number> = {
     web: 0,
     fetch: 1,
-    list_dir: 10,
     read_file: 11,
     edit: 12,
     write_file: 13,

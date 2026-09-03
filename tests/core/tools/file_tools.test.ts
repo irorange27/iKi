@@ -37,7 +37,6 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
 import {
   DeleteFileTool,
   EditFileTool,
-  ListDirTool,
   ReadFileTool,
   WriteFileTool,
 } from '@iki/backend/tools/file_tools';
@@ -179,7 +178,6 @@ describe('file tools workspace boundaries', () => {
   });
 
   it('publishes auto-mode metadata for all file tools by default', () => {
-    expect(new ListDirTool().toAgentTool().autoAllowed).toBe(true);
     expect(new ReadFileTool().toAgentTool().autoAllowed).toBe(true);
     expect(new EditFileTool().toAgentTool().autoAllowed).toBe(true);
     expect(new WriteFileTool().toAgentTool().autoAllowed).toBe(true);

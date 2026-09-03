@@ -121,7 +121,7 @@ describe('deriveInterventionPolicy', () => {
 
 describe('filterToolsByInterventionState', () => {
   const sampleTools = [
-    'read_file', 'write_file', 'edit', 'delete_file', 'list_dir',
+    'read_file', 'write_file', 'edit', 'delete_file',
     'shell', 'web', 'fetch', 'agent',
     'finish', 'handoff', 'plan', 'todo', 'load_skill',
     'write_todo_list', 'read_todo_list',
@@ -154,7 +154,6 @@ describe('filterToolsByInterventionState', () => {
     expect(result).not.toContain('write_todo_list');
     expect(result).not.toContain('write_proactive_task');
     expect(result).toContain('read_file');
-    expect(result).toContain('list_dir');
     expect(result).toContain('web');
     expect(result).toContain('fetch');
     expect(result).toContain('read_todo_list');

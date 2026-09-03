@@ -204,7 +204,6 @@ const {
   const defaultAllowedTools = [
     'web',
     'fetch',
-    'list_dir',
     'read_file',
     'edit',
     'write_file',
@@ -650,8 +649,7 @@ describe('daemon server', () => {
       allowed_tools: [
         'web',
         'fetch',
-        'list_dir',
-        'read_file',
+            'read_file',
         'edit',
         'write_file',
         'delete_file',

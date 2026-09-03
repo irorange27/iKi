@@ -137,7 +137,7 @@ describe('runProactiveTask', () => {
     getProactiveTaskMock.mockReturnValue(
       baseTask({
         tool_mode: 'manual',
-        tools: JSON.stringify(['web', 'fetch', 'shell', 'read_file', 'list_dir', '']),
+        tools: JSON.stringify(['web', 'fetch', 'shell', 'read_file', '']),
       })
     );
     chatServiceMock.getThread.mockReturnValue(null);
@@ -154,7 +154,7 @@ describe('runProactiveTask', () => {
 
     const toolCall = chatServiceMock.send.mock.calls[0][0];
     expect(toolCall.providerId).toBe('provider_primary');
-    expect(toolCall.tools).toEqual(['web', 'fetch', 'read_file', 'list_dir']);
+    expect(toolCall.tools).toEqual(['web', 'fetch', 'read_file']);
     expect(toolCall.threadId).toBe('thread_1');
     expect(toolCall.runConfig).toEqual({
       kind: 'proactive-task',

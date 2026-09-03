@@ -314,7 +314,6 @@ const ALWAYS_ALLOWED_TOOLS = new Set([
 const TOOL_RISK_CATEGORY: Record<string, ToolRiskCategory> = {
   // file tools
   read_file: 'readonly',
-  list_dir: 'readonly',
   write_file: 'write',
   edit: 'write',
   delete_file: 'write',

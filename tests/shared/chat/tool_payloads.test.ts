@@ -44,13 +44,13 @@ describe('parseToolInput', () => {
   it('parses delegated agent inputs from JSON', () => {
     const parsed = parseToolInput(
       'agent',
-      '{"task":"Inspect the codebase","tools":["list_dir"],"maxIterations":3}'
+      '{"task":"Inspect the codebase","tools":["read_file"],"maxIterations":3}'
     );
 
     expect(parsed.kind).toBe('agent');
     if (parsed.kind !== 'agent') throw new Error('Expected agent payload');
     expect(parsed.input.task).toBe('Inspect the codebase');
-    expect(parsed.input.tools).toEqual(['list_dir']);
+    expect(parsed.input.tools).toEqual(['read_file']);
     expect(parsed.input.maxIterations).toBe(3);
   });
 
@@ -125,14 +125,6 @@ describe('parseToolInput', () => {
 });
 
 describe('parseToolOutput', () => {
-  it('parses list_dir outputs from JSON', () => {
-    const parsed = parseToolOutput('list_dir', '[{"name":"src","isDirectory":true}]');
-
-    expect(parsed.kind).toBe('list_dir');
-    if (parsed.kind !== 'list_dir') throw new Error('Expected list_dir tool payload');
-    expect(parsed.output[0]?.name).toBe('src');
-  });
-
   it('returns unknown for unsupported tools', () => {
     const parsed = parseToolOutput('nope', { ok: true });
     expect(parsed).toEqual({ kind: 'unknown', output: { ok: true } });

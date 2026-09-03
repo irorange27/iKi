@@ -5,7 +5,6 @@ import {
   Download,
   FilePenLine,
   FileText,
-  Folder,
   ListTodo,
   Search,
   Terminal,
@@ -221,7 +220,6 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   read_file: FileText,
   edit: FilePenLine,
   write_file: FilePenLine,
-  list_dir: Folder,
   delete_file: Trash2,
   agent: Bot,
   todo: ListTodo,
@@ -306,7 +304,6 @@ export const getToolTitle = (part: unknown): string => {
       toolKey === 'read_file' ||
       toolKey === 'edit' ||
       toolKey === 'write_file' ||
-      toolKey === 'list_dir' ||
       toolKey === 'delete_file'
     ) {
       if (typeof input.path === 'string' && input.path.trim()) {
@@ -484,17 +481,11 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       (toolKey === 'read_file' ||
         toolKey === 'edit' ||
         toolKey === 'write_file' ||
-        toolKey === 'list_dir' ||
-        toolKey === 'delete_file') &&
+          toolKey === 'delete_file') &&
       typeof input.path === 'string' &&
       input.path.trim()
     ) {
       const meta: string[] = [];
-      if (toolKey === 'list_dir' && typeof input.recursive === 'boolean') {
-        meta.push(
-          translate('chat.tool.meta.recursive', { value: input.recursive ? 'true' : 'false' })
-        );
-      }
       if (typeof input.encoding === 'string' && input.encoding.trim()) {
         meta.push(
           translate('chat.tool.meta.encoding', {

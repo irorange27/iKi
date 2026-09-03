@@ -4,7 +4,7 @@ export type ProactiveTaskToolMode = 'auto' | 'manual' | 'disabled';
 
 export const DEFAULT_PROACTIVE_TASK_LIST_LIMIT = 20;
 export const MAX_PROACTIVE_TASK_LIST_LIMIT = 100;
-export const SAFE_PROACTIVE_TASK_TOOLS = ['web', 'fetch', 'read_file', 'list_dir'] as const;
+export const SAFE_PROACTIVE_TASK_TOOLS = ['web', 'fetch', 'read_file'] as const;
 export type SafeProactiveTaskTool = (typeof SAFE_PROACTIVE_TASK_TOOLS)[number];
 
 const SAFE_PROACTIVE_TASK_TOOL_SET = new Set<string>(SAFE_PROACTIVE_TASK_TOOLS);

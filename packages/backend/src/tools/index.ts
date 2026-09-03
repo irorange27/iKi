@@ -20,7 +20,6 @@ import {
   ReadFileTool,
   WriteFileTool,
   EditFileTool,
-  ListDirTool,
   DeleteFileTool,
 } from './file_tools';
 import { ShellExecutionTool } from './shell_tools';
@@ -58,7 +57,6 @@ import { HandoffTool } from './handoff_tool';
  * Register all standard system tools to the default global registry
  */
 export function registerStandardTools() {
-  defaultToolRegistry.register(new ListDirTool());
   defaultToolRegistry.register(new ReadFileTool());
   defaultToolRegistry.register(new EditFileTool());
   defaultToolRegistry.register(new WriteFileTool());

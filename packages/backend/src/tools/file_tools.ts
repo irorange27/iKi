@@ -5,7 +5,6 @@ import { BaseTool } from '@iki/backend/tools/base';
 import {
   DeleteFileInputSchema,
   EditFileInputSchema,
-  ListDirInputSchema,
   ReadFileInputSchema,
   WriteFileInputSchema,
 } from './schemas';
@@ -17,7 +16,6 @@ import {
 
 const FILE_CACHE_TTL_MS = 30_000;
 const readFileCache = new Map<string, { createdAt: number; value: unknown }>();
-const listDirCache = new Map<string, { createdAt: number; value: unknown }>();
 
 const getCached = (cache: Map<string, { createdAt: number; value: unknown }>, key: string): unknown | undefined => {
   const entry = cache.get(key);
@@ -36,44 +34,6 @@ const setCached = (cache: Map<string, { createdAt: number; value: unknown }>, ke
 
 const clearFileReadCaches = () => {
   readFileCache.clear();
-  listDirCache.clear();
-};
-
-const listDirEntries = async (
-  dir: string,
-  recursive: boolean
-): Promise<
-  Array<{
-    name: string;
-    isDirectory: boolean;
-    isFile: boolean;
-    path: string;
-  }>
-> => {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const results: Array<{
-    name: string;
-    isDirectory: boolean;
-    isFile: boolean;
-    path: string;
-  }> = [];
-
-  for (const entry of entries) {
-    const entryPath = path.join(dir, entry.name);
-    const record = {
-      name: entry.name,
-      isDirectory: entry.isDirectory(),
-      isFile: entry.isFile(),
-      path: entryPath,
-    };
-    results.push(record);
-
-    if (recursive && entry.isDirectory()) {
-      results.push(...(await listDirEntries(entryPath, true)));
-    }
-  }
-
-  return results;
 };
 
 const countOccurrences = (content: string, search: string): number => {
@@ -405,28 +365,6 @@ export class EditFileTool extends BaseTool {
       totalReplacements,
       ...(diff ? { diff } : {}),
     };
-  }
-}
-
-/**
- * Tool for listing directory contents
- */
-export class ListDirTool extends BaseTool {
-  override name = 'list_dir';
-  override type = 'function';
-  override autoAllowed = true;
-  override description = 'List the contents of a directory on the local filesystem.';
-  override needsApproval = false;
-  override paramSchema = ListDirInputSchema;
-
-  protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveReadableWorkspacePath(args.path);
-    const recursive = Boolean(args.recursive);
-    const cacheKey = JSON.stringify([absolutePath, recursive]);
-    const cached = getCached(listDirCache, cacheKey);
-    if (cached !== undefined) return cached;
-
-    return setCached(listDirCache, cacheKey, await listDirEntries(absolutePath, recursive));
   }
 }
 

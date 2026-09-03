@@ -93,13 +93,6 @@ describe('tool input schemas', () => {
     ).toBe('Patch the existing file without rewriting everything.');
 
     expect(
-      ListDirInputSchema.parse({
-        path: '.',
-        description: 'Inspect directory contents.',
-      }).description
-    ).toBe('Inspect directory contents.');
-
-    expect(
       DeleteFileInputSchema.parse({
         path: 'tmp.txt',
         description: 'Remove temporary artifact file.',

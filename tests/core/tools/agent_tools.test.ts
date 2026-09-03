@@ -27,7 +27,7 @@ vi.mock('@iki/backend/agent_session/run_tracker', () => ({
 }));
 
 import { DelegatedAgentTool } from '@iki/backend/tools/agent_tools';
-import { ListDirTool } from '@iki/backend/tools/file_tools';
+import { ReadFileTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
 import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
@@ -68,8 +68,8 @@ describe('DelegatedAgentTool', () => {
       response: 'Inspected the directory structure.',
       iterations: 2,
       toolCalls: [
-        { toolName: 'list_dir', args: {} },
-        { toolName: 'list_dir', args: {} },
+        { toolName: 'read_file', args: {} },
+        { toolName: 'read_file', args: {} },
       ],
     });
 
@@ -81,7 +81,7 @@ describe('DelegatedAgentTool', () => {
     const result = await runWithToolRuntimeContext(
       {
         availableTools: [
-          new ListDirTool().toAgentTool(),
+          new ReadFileTool().toAgentTool(),
           new ShellExecutionTool().toAgentTool(),
           new DelegatedAgentTool().toAgentTool(),
         ],
@@ -110,7 +110,7 @@ describe('DelegatedAgentTool', () => {
         maxIterations: 3,
         prompt: expect.stringContaining('<delegated_subtask>'),
         tools: expect.arrayContaining([
-          expect.objectContaining({ name: 'list_dir' }),
+          expect.objectContaining({ name: 'read_file' }),
         ]),
         config: expect.objectContaining({
           enabled: true,
@@ -120,12 +120,12 @@ describe('DelegatedAgentTool', () => {
       })
     );
     const runRequest = runMock.mock.calls[0]?.[0] as { tools: AgentToolLike[] };
-    expect(runRequest.tools.map((t: AgentToolLike) => t.name)).toEqual(['list_dir']);
+    expect(runRequest.tools.map((t: AgentToolLike) => t.name)).toEqual(['read_file']);
     expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'delegated-agent',
         parentRunId: 'run_parent_1',
-        enabledTools: ['list_dir'],
+        enabledTools: ['read_file'],
       })
     );
     expect(parentRunTracker.recordChildRun).toHaveBeenCalledWith(
@@ -135,8 +135,8 @@ describe('DelegatedAgentTool', () => {
       })
     );
     expect(createAgentRunTrackerMock.mock.results[0]?.value.recordToolCalls).toHaveBeenCalledWith([
-      { toolName: 'list_dir', args: {} },
-      { toolName: 'list_dir', args: {} },
+      { toolName: 'read_file', args: {} },
+      { toolName: 'read_file', args: {} },
     ]);
     expect(createAgentRunTrackerMock.mock.results[0]?.value.syncModelMessages).toHaveBeenCalledWith(
       [{ role: 'assistant', content: 'delegated history' }]
@@ -151,7 +151,7 @@ describe('DelegatedAgentTool', () => {
       response: 'Inspected the directory structure.',
       iterations: 2,
       toolCallCount: 2,
-      usedTools: [{ name: 'list_dir', callCount: 2 }],
+      usedTools: [{ name: 'read_file', callCount: 2 }],
       model: {
         providerType: 'openai',
         model: 'gpt-4o-mini',

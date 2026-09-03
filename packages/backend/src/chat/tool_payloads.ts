@@ -9,8 +9,6 @@ import {
   EditFileOutputSchema,
   FetchToolInputSchemaUi,
   FetchToolOutputSchema,
-  ListDirInputSchemaUi,
-  ListDirOutputSchema,
   LoadSkillInputSchemaUi,
   LoadSkillOutputSchema,
   ReadFileInputSchemaUi,
@@ -65,7 +63,6 @@ export type ShellToolInput = z.infer<typeof ShellToolInputSchemaUi>;
 export type ReadFileToolInput = z.infer<typeof ReadFileInputSchemaUi>;
 export type WriteFileToolInput = z.infer<typeof WriteFileInputSchemaUi>;
 export type EditFileToolInput = z.infer<typeof EditFileInputSchemaUi>;
-export type ListDirToolInput = z.infer<typeof ListDirInputSchemaUi>;
 export type DeleteFileToolInput = z.infer<typeof DeleteFileInputSchemaUi>;
 export type LoadSkillToolInput = z.infer<typeof LoadSkillInputSchemaUi>;
 export type ListPersonalSkillsToolInput = z.infer<typeof ListPersonalSkillsInputSchemaUi>;
@@ -93,7 +90,6 @@ export type ShellToolOutput = z.infer<typeof ShellToolOutputSchema>;
 export type ReadFileToolOutput = z.infer<typeof ReadFileOutputSchema>;
 export type WriteFileToolOutput = z.infer<typeof WriteFileOutputSchema>;
 export type EditFileToolOutput = z.infer<typeof EditFileOutputSchema>;
-export type ListDirToolOutput = z.infer<typeof ListDirOutputSchema>;
 export type DeleteFileToolOutput = z.infer<typeof DeleteFileOutputSchema>;
 export type LoadSkillToolOutput = z.infer<typeof LoadSkillOutputSchema>;
 export type ListPersonalSkillsToolOutput = z.infer<typeof ListPersonalSkillsOutputSchema>;
@@ -122,7 +118,6 @@ type ToolKind =
   | 'read_file'
   | 'write_file'
   | 'edit'
-  | 'list_dir'
   | 'delete_file'
   | 'load_skill'
   | 'list_personal_skills'
@@ -151,7 +146,6 @@ export type ParsedToolInput =
   | { kind: 'read_file'; input: ReadFileToolInput }
   | { kind: 'write_file'; input: WriteFileToolInput }
   | { kind: 'edit'; input: EditFileToolInput }
-  | { kind: 'list_dir'; input: ListDirToolInput }
   | { kind: 'delete_file'; input: DeleteFileToolInput }
   | { kind: 'load_skill'; input: LoadSkillToolInput }
   | { kind: 'list_personal_skills'; input: ListPersonalSkillsToolInput }
@@ -181,7 +175,6 @@ export type ParsedToolOutput =
   | { kind: 'read_file'; output: ReadFileToolOutput }
   | { kind: 'write_file'; output: WriteFileToolOutput }
   | { kind: 'edit'; output: EditFileToolOutput }
-  | { kind: 'list_dir'; output: ListDirToolOutput }
   | { kind: 'delete_file'; output: DeleteFileToolOutput }
   | { kind: 'load_skill'; output: LoadSkillToolOutput }
   | { kind: 'list_personal_skills'; output: ListPersonalSkillsToolOutput }
@@ -211,7 +204,6 @@ const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny
   read_file: { input: ReadFileInputSchemaUi, output: ReadFileOutputSchema },
   write_file: { input: WriteFileInputSchemaUi, output: WriteFileOutputSchema },
   edit: { input: EditFileInputSchemaUi, output: EditFileOutputSchema },
-  list_dir: { input: ListDirInputSchemaUi, output: ListDirOutputSchema },
   delete_file: { input: DeleteFileInputSchemaUi, output: DeleteFileOutputSchema },
   load_skill: { input: LoadSkillInputSchemaUi, output: LoadSkillOutputSchema },
   list_personal_skills: {
