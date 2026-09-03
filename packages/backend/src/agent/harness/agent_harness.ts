@@ -37,6 +37,7 @@ export class AgentHarness {
       guardActive: this.config_.guardActive,
       requireApproval: this.config_.requireApproval ?? this.config_.guardActive,
       autoApproveToolRequests: this.config_.autoApproveToolRequests ?? false,
+      ...(this.config_.approvalPolicy ? { approvalPolicy: this.config_.approvalPolicy } : {}),
     });
 
     const runner = createSimpleAgentRunner({

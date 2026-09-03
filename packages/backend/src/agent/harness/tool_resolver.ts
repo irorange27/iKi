@@ -6,10 +6,18 @@ import type { AgentTool } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'tool_resolver' });
 
+/**
+ * Session/turn-level approval policy (ADR 005). 'never' is a legitimate
+ * headless mode (evals, daemon automation); 'trustWorkspace' upgrades to
+ * action-risk classification once utils/action_risk.ts lands.
+ */
+export type ApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'always';
+
 const GUARD_BYPASS_TOOLS = new Set(['handoff', 'plan', 'todo']);
 
 const prepareToolWithGuard = (
   toolName: string,
+  approvalPolicy: ApprovalPolicy | undefined,
   guardActive: boolean,
   requireApproval: boolean,
   autoApproveToolRequests: boolean,
@@ -18,7 +26,11 @@ const prepareToolWithGuard = (
   if (!tool) return null;
 
   let resolved = tool;
-  if (requireApproval) {
+  if (approvalPolicy === 'never') {
+    resolved = { ...tool, needsApproval: false };
+  } else if (approvalPolicy === 'always') {
+    resolved = { ...tool, needsApproval: true };
+  } else if (requireApproval) {
     resolved = { ...tool, needsApproval: true };
   } else if (!guardActive && tool.approvalMode !== 'always') {
     resolved = { ...tool, needsApproval: false };
@@ -34,6 +46,8 @@ export const resolveTools = (params: {
   guardActive: boolean;
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
+  /** ADR 005: overrides guardActive/requireApproval when present. */
+  approvalPolicy?: ApprovalPolicy;
   skillToolFactory?: () => AgentTool;
 }): AgentTool[] => {
   if (!params.enableTools) return [];
@@ -58,6 +72,7 @@ export const resolveTools = (params: {
     }
     const registered = prepareToolWithGuard(
       toolName,
+      params.approvalPolicy,
       params.guardActive,
       params.requireApproval,
       params.autoApproveToolRequests,

@@ -3,6 +3,7 @@ import type { LanguageModel, ModelMessage } from 'ai';
 import type { AgentStep } from '@iki/backend/agent/agent_step';
 import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult } from '@iki/backend/agent/types';
 import type { AgentRunTracker } from '../../agent_session/run_tracker';
+import type { ApprovalPolicy } from './tool_resolver';
 
 // ── Harness configuration ─────────────────────────────────────────────
 
@@ -19,6 +20,8 @@ export type HarnessConfig = {
   requireApproval?: boolean;
   /** Bypass approval for tools when user has opted in globally. */
   autoApproveToolRequests?: boolean;
+  /** ADR 005: session/turn-level approval policy. Overrides guard flags. */
+  approvalPolicy?: ApprovalPolicy;
   maxIterations: number;
   maxOutputTokens?: number;
   threadId?: string;

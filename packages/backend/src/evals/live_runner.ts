@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
-import { defaultToolRegistry } from '@iki/backend/tools';
+import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
 import { gradeScenarioOutcome } from './graders';
@@ -19,7 +19,9 @@ export type LiveRunContext = {
 
 const EVAL_SYSTEM_PROMPT =
   'You are a file-editing assistant working inside a workspace directory. ' +
-  'Complete the task using your tools, then reply with a one-sentence confirmation of what changed.';
+  'You are a file-editing assistant working inside a workspace directory. ' +
+  'Complete the task using your tools, then reply with a one-sentence confirmation of what changed. ' +
+  'Keep reasoning brief.';
 
 /**
  * Runs one scenario against a REAL model in a REAL workspace: seed files,
@@ -40,9 +42,16 @@ export const runScenarioLive = async (params: {
     await fs.writeFile(abs, content, 'utf8');
   }
 
-  const tools = scenario.tools
-    .map(name => defaultToolRegistry.get(name))
-    .filter((tool): tool is NonNullable<typeof tool> => Boolean(tool));
+  // Evals run headless: the 'never' policy is the legitimate full-auto mode.
+  const tools = resolveTools({
+    enableTools: scenario.tools.length > 0,
+    enabledToolNames: scenario.tools,
+    availableSkillIds: [],
+    guardActive: false,
+    requireApproval: false,
+    autoApproveToolRequests: false,
+    approvalPolicy: 'never',
+  });
 
   const maxIterations = scenario.maxIterations ?? 6;
   const runner = createSimpleAgentRunner({
@@ -53,10 +62,11 @@ export const runScenarioLive = async (params: {
     systemPrompt: EVAL_SYSTEM_PROMPT,
     enableTools: tools.length > 0,
     maxIterations,
-    maxTokens: 500,
+    maxTokens: 2000,
   });
 
   const toolsUsed = new Set<string>();
+  const stepTypes = new Map<string, number>();
   let response = '';
   let iterations = 0;
   let modelError: string | undefined;
@@ -72,7 +82,7 @@ export const runScenarioLive = async (params: {
       enableTools: tools.length > 0,
       providerType: ctx.providerType,
       model: ctx.model,
-      maxTokens: 500,
+      maxTokens: 2000,
       temperature: 0,
       maxIterations,
       systemPrompt: EVAL_SYSTEM_PROMPT,
@@ -83,6 +93,7 @@ export const runScenarioLive = async (params: {
   await runWithToolRuntimeContext({ threadId: ctx.threadId }, async () => {
     try {
       for await (const step of gen) {
+        stepTypes.set(step.type, (stepTypes.get(step.type) ?? 0) + 1);
         if (step.type === 'tool_execution_start') {
           toolsUsed.add(step.toolName);
         }
@@ -124,6 +135,7 @@ export const runScenarioLive = async (params: {
     scenarioId: scenario.id,
     response,
     toolsUsed: [...toolsUsed],
+    stepTypes: Object.fromEntries(stepTypes),
     iterations,
     durationMs: Date.now() - started,
     ...grade,
