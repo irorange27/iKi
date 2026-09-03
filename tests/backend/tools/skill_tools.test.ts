@@ -11,7 +11,7 @@ import {
   ReadPersonalSkillTool,
   WritePersonalSkillTool,
 } from '@iki/backend/tools/skill_tools';
-import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
 describe('load skill tool', () => {
   let tempRoot = '';

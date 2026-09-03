@@ -13,7 +13,7 @@ import { createLogger } from '@iki/backend/logger';
 import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
-import { getToolRuntimeContext } from '../../tools/runtime_context';
+import { getToolRuntimeContext } from '../../utils/runtime_context';
 import {
   getProviderModelOptions,
   listModelsDevProviderModels,

@@ -5,7 +5,7 @@ import { AgentHarness } from '@iki/backend/agent/harness';
 import type { TurnEvent, TurnOutput } from '@iki/backend/agent/harness/harness_types';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { createTool } from '@iki/backend/tools';
-import { runWithToolRuntimeContext, getToolRuntimeContext } from '@iki/backend/tools/runtime_context';
+import { runWithToolRuntimeContext, getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

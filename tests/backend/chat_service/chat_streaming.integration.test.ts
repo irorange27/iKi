@@ -67,7 +67,7 @@ vi.mock('@iki/backend/chat_service/platform', () => ({
 import { createChatStreaming } from '@iki/backend/chat_service/streaming';
 import { createThreadStreamCoordinator } from '@iki/backend/chat_service/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
-import { getToolRuntimeContext } from '@iki/backend/tools/runtime_context';
+import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
 const toolName = 'streaming_context_probe';

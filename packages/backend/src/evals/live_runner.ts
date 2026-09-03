@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
-import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
 import { gradeScenarioOutcome } from './graders';
 import type { EvalScenario, ScenarioOutcome } from './types';

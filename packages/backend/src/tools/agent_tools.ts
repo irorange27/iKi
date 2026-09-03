@@ -19,7 +19,7 @@ import {
   getToolRuntimeContext,
   runWithToolRuntimeContext,
   type ToolRuntimeConversationModel,
-} from './runtime_context';
+} from '../utils/runtime_context';
 
 const AGENT_TOOL_NAME = 'agent';
 const DEFAULT_AGENT_MAX_TOKENS = 2000;

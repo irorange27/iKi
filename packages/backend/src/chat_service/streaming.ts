@@ -1,6 +1,6 @@
 import type { AgentStep } from '@iki/backend/agent';
 import { createLogger } from '@iki/backend/logger';
-import { runWithToolRuntimeContext } from '../tools/runtime_context';
+import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import {
   NO_TOOLS_SYSTEM_PROMPT,

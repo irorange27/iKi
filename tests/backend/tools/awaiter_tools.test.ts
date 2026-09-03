@@ -21,7 +21,7 @@ import {
   DeleteAwaiterTool,
   WriteAwaiterTool,
 } from '@iki/backend/tools/awaiter_tools';
-import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
 describe('awaiter tools', () => {
   beforeEach(() => {

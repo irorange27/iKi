@@ -2,7 +2,7 @@ import { createAgentRunTracker } from '../agent_session/run_tracker';
 import { AgentHarness } from '../agent/harness';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
-import { runWithToolRuntimeContext } from '../tools/runtime_context';
+import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { describeApprovalRequiredTools } from '../agent_session/approval_types';
 import {
