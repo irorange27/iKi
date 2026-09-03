@@ -23,5 +23,3 @@ export const planMemoryRetrieval = async (
   if (!trimmed) return null;
   return getDefaultMemoryRetrievalRuntime().run(trimmed);
 };
-
-export const planMemoryRetrievalWithAgent = planMemoryRetrieval;

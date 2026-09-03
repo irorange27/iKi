@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
-import { wireCoreContext } from '@iki/backend/core_wiring';
+import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
@@ -66,7 +66,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     });
 
     initializeDatabase();
-    wireCoreContext();
+    wirePlatformContext();
     applyAppLoggingConfig(getAppConfig());
     registerStandardTools();
     const mcpManager = getMcpManager();

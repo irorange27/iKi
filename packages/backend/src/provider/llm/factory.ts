@@ -1,4 +1,4 @@
-import { generateText, smoothStream, streamText, type LanguageModel, type ModelMessage } from 'ai';
+import { generateText, smoothStream, type LanguageModel, type ModelMessage } from 'ai';
 import type { JSONValue, SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
