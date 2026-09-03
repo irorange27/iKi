@@ -99,7 +99,14 @@ export const createThreadStreamCoordinator = (deps: {
     return { success: true };
   };
 
-  const steerStream = (senderId: number, message: string): { success: boolean; error?: string } => {
+  const steerStream = (
+    senderId: number,
+    threadId: string | undefined,
+    message: string,
+  ): { success: boolean; error?: string } => {
+    if (threadId && !threadStreams.get(threadId)?.has(senderId)) {
+      return { success: false, error: 'No active stream for thread' };
+    }
     const steerQueue = steerQueues.get(senderId);
     if (!steerQueue) {
       return { success: false, error: 'No active autonomous stream to steer' };

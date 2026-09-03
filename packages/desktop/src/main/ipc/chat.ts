@@ -88,8 +88,8 @@ export const registerChatIpc = (): void => {
     return chatService.stopStream(event.sender.id);
   });
 
-  ipcMain.handle('chat:steer-stream', (event, message: string) => {
-    return chatService.steerStream(event.sender.id, message);
+  ipcMain.handle('chat:steer-stream', (event, threadId: string | undefined, message: string) => {
+    return chatService.steerStream(event.sender.id, threadId, message);
   });
 
   ipcMain.handle('chat:send', async (_, options) => {

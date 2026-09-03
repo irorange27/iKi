@@ -233,6 +233,7 @@ const WebSocketSteerMessageSchema = z
   .object({
     type: z.literal('steer'),
     message: NonEmptyTrimmedStringSchema,
+    threadId: z.string().optional(),
   })
   .passthrough();
 

@@ -236,7 +236,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
         }
 
         try {
-          const result = deps.chatService.steerStream(session.target.id, parsed.message);
+          const result = deps.chatService.steerStream(session.target.id, parsed.threadId, parsed.message);
           sendDaemonPayload(ws, { type: 'steer-result', ...result });
         } catch (error) {
           logWsFailure(deps, session, {

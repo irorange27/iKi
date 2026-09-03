@@ -179,7 +179,7 @@ export interface ElectronApi {
     send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stopStream: () => Promise<ChatInvocationResult>;
-    steerStream: (message: string) => Promise<ChatInvocationResult>;
+    steerStream: (threadId: string | undefined, message: string) => Promise<ChatInvocationResult>;
     onUiChunk: (callback: (chunk: unknown) => void) => () => void;
     approveTool: (approvalId: string, approved: boolean) => Promise<ChatInvocationResult>;
     onRunStatus: (callback: (event: RunStatusEvent) => void) => () => void;

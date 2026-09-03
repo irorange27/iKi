@@ -105,7 +105,8 @@ const electronApi: ElectronApi = {
     send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),
     stream: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
-    steerStream: (message: string) => ipcRenderer.invoke('chat:steer-stream', message),
+    steerStream: (threadId: string | undefined, message: string) =>
+      ipcRenderer.invoke('chat:steer-stream', threadId, message),
     onUiChunk: (callback: (chunk: unknown) => void) => subscribe('chat:ui-chunk', callback),
     approveTool: (approvalId: string, approved: boolean) => {
       return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);

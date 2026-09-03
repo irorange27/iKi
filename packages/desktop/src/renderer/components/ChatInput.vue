@@ -566,7 +566,7 @@ const shouldShowSkillSectionLabel = (index: number) => {
 
 const handleSteer = async (message: string) => {
   try {
-    await electronAPI.chat.steerStream(message);
+    await electronAPI.chat.steerStream(props.threadId, message);
   } catch {
     // steer failed silently — the stream may have already ended
   }
