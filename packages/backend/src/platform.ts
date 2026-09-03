@@ -72,3 +72,18 @@ export const getDisplayScale = (): number => {
   if (Number.isFinite(envScale) && envScale > 0) return envScale;
   return 1;
 };
+
+/** Fetch provided by the host runtime (e.g. Electron's net stack); null = use Node fetch. */
+export type HostFetch = (
+  url: string,
+  init: RequestInit | undefined,
+  timeoutMs: number
+) => Promise<Response | null>;
+
+let hostFetch: HostFetch | null = null;
+
+export const setHostFetch = (fetch: HostFetch | null) => {
+  hostFetch = fetch;
+};
+
+export const getHostFetch = (): HostFetch | null => hostFetch;

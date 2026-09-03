@@ -9,8 +9,9 @@ import {
   initLangfuseTracing,
   shutdownLangfuseTracing,
 } from '@iki/backend/observability/langfuse';
-import { setPlatformInfo } from '@iki/backend/platform';
+import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
 import { startDaemonServer } from '@iki/daemon/server';
+import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';
 import {
   DAEMON_MODE_ARG,
@@ -32,6 +33,7 @@ const appLogger = createLogger({ module: 'app' });
 setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
 
 wirePlatformContext();
+setHostFetch(electronFetchWithTimeout);
 initLangfuseTracing();
 
 const syncLoggingConfig = () => {

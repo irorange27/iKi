@@ -1,7 +1,7 @@
 import type { AppConfig } from '../types/config';
 import { buildProxyUrl } from './proxy';
 import { getAppConfig } from '@iki/backend/config';
-import { canUseElectronNetworkStack, electronFetchWithTimeout } from './electron_fetch';
+import { getHostFetch } from '../platform';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
 const MIN_NETWORK_TIMEOUT_MS = 1000;
@@ -124,27 +124,27 @@ export const fetchWithTimeout = async (
     typeof options?.timeoutMs === 'number' ? Math.trunc(options.timeoutMs) : getNetworkTimeoutMs();
   const retries =
     typeof options?.retries === 'number' ? Math.trunc(options.retries) : getNetworkRetryAttempts();
-  const hasElectronNetwork = await canUseElectronNetworkStack();
+  const hostFetch = getHostFetch();
 
   applyProxyEnv();
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
-    if (hasElectronNetwork) {
+    if (hostFetch) {
       try {
-        const electronResponse = await electronFetchWithTimeout(url, init, timeout);
-        if (!electronResponse) {
-          throw new Error('Electron network stack is unavailable');
+        const hostResponse = await hostFetch(url, init, timeout);
+        if (!hostResponse) {
+          throw new Error('Host network stack is unavailable');
         }
 
-        if (electronResponse.ok) return electronResponse;
+        if (hostResponse.ok) return hostResponse;
 
-        if (attempt >= retries || !isRetryableStatus(electronResponse.status)) {
-          return electronResponse;
+        if (attempt >= retries || !isRetryableStatus(hostResponse.status)) {
+          return hostResponse;
         }
 
         try {
-          await electronResponse.arrayBuffer();
+          await hostResponse.arrayBuffer();
         } catch {
           // ignore
         }
