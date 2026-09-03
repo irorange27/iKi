@@ -1,11 +1,28 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { initializeMigrations } from './migration';
 import { createLogger } from '@iki/backend/logger';
 import { getUserDataPath } from '../platform';
 
-let db: Database.Database | null = null;
+export type SqliteRunResult = { changes: number; lastInsertRowid: number | bigint };
+
+export type SqliteStatement = {
+  run: (...params: unknown[]) => SqliteRunResult;
+  get: (...params: unknown[]) => unknown;
+  all: (...params: unknown[]) => unknown[];
+};
+
+export type SqliteDatabase = {
+  exec: (sql: string) => void;
+  prepare: (sql: string) => SqliteStatement;
+  transaction: <TArgs extends unknown[], TResult>(
+    fn: (...args: TArgs) => TResult
+  ) => (...args: TArgs) => TResult;
+  close: () => void;
+};
+
+let db: SqliteDatabase | null = null;
 let initialized = false;
 let initializing = false;
 let dbPathOverride: string | null = null;
@@ -18,7 +35,7 @@ const resolveDbPath = (): string => {
   return path.join(getUserDataPath(), 'iKi_v0.db');
 };
 
-const initCoreTables = (database: Database.Database) => {
+const initCoreTables = (database: SqliteDatabase) => {
   database.exec(`
     CREATE TABLE IF NOT EXISTS config (
       key TEXT PRIMARY KEY,
@@ -49,6 +66,67 @@ const initCoreTables = (database: Database.Database) => {
   `);
 };
 
+// node:sqlite rejects named-parameter objects carrying keys the statement never
+// uses (better-sqlite3 ignored them), so object params are filtered down to the
+// names actually present in the SQL text.
+const NAMED_PARAM_PATTERN = /[@:$][A-Za-z_][A-Za-z0-9_]*/g;
+
+const collectNamedParams = (sql: string): Set<string> | null => {
+  const stripped = sql
+    .replace(/'(?:[^']|'')*'/g, ' ')
+    .replace(/--.*$/gm, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const names = stripped.match(NAMED_PARAM_PATTERN);
+  if (!names || names.length === 0) return null;
+  return new Set(names.map(name => name.slice(1)));
+};
+
+const normalizeBindParams = (sql: string, params: unknown[]): unknown[] => {
+  if (params.length !== 1 || typeof params[0] !== 'object' || params[0] === null) return params;
+  const names = collectNamedParams(sql);
+  if (!names) return params;
+
+  const source = params[0] as Record<string, unknown>;
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (names.has(key) || names.has(key.replace(/^[@:$]/, ''))) filtered[key] = value;
+  }
+  return [filtered];
+};
+
+const wrapStatement = (
+  sql: string,
+  statement: {
+    run: (...params: unknown[]) => { changes: number | bigint; lastInsertRowid: number | bigint };
+    get: (...params: unknown[]) => unknown;
+    all: (...params: unknown[]) => unknown[];
+  }
+): SqliteStatement => ({
+  // Default (non-bigint) read mode always returns numbers here.
+  run: (...params: unknown[]) => statement.run(...normalizeBindParams(sql, params)) as SqliteRunResult,
+  get: (...params: unknown[]) => statement.get(...normalizeBindParams(sql, params)),
+  all: (...params: unknown[]) => statement.all(...normalizeBindParams(sql, params)),
+});
+
+const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
+  exec: sql => raw.exec(sql),
+  prepare: sql => wrapStatement(sql, raw.prepare(sql)),
+  transaction:
+    <TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult) =>
+    (...args: TArgs): TResult => {
+      raw.exec('BEGIN');
+      try {
+        const result = fn(...args);
+        raw.exec('COMMIT');
+        return result;
+      } catch (error) {
+        raw.exec('ROLLBACK');
+        throw error;
+      }
+    },
+  close: () => raw.close(),
+});
+
 export const initializeDatabase = (options?: { dbPath?: string }) => {
   if (options?.dbPath) {
     dbPathOverride = options.dbPath;
@@ -58,7 +136,7 @@ export const initializeDatabase = (options?: { dbPath?: string }) => {
 
   initializing = true;
   const dbPath = resolveDbPath();
-  db = new Database(dbPath);
+  db = wrapDatabase(new DatabaseSync(dbPath));
   initCoreTables(db);
   initialized = true;
   initializeMigrations();
@@ -66,7 +144,7 @@ export const initializeDatabase = (options?: { dbPath?: string }) => {
   return db;
 };
 
-export const getDb = (): Database.Database => {
+export const getDb = (): SqliteDatabase => {
   if (!initialized || !db) {
     return initializeDatabase();
   }

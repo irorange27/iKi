@@ -3,7 +3,6 @@ import { builtinModules, createRequire } from 'node:module';
 import path from 'node:path';
 
 export const VITE_EXTERNAL_RUNTIME_DEPS = [
-  'better-sqlite3',
   'whisper-node',
   'ffmpeg-static',
   // ponytail: otel/langfuse pulled in a process-introspection path that crashed Vite's CJS interop; load at runtime instead.
@@ -167,16 +166,6 @@ const getFfmpegBinaryName = (platform: NodeJS.Platform): string =>
   platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
 
 const getRuntimePackageRules = (platform: NodeJS.Platform): Record<string, RuntimePackageRule> => ({
-  'better-sqlite3': {
-    include: ['package.json', 'lib', 'build/Release'],
-    unpack: ['build/Release/better_sqlite3.node'],
-  },
-  bindings: {
-    include: [''],
-  },
-  'file-uri-to-path': {
-    include: [''],
-  },
   'ffmpeg-static': {
     include: ['package.json', 'index.js', getFfmpegBinaryName(platform)],
     unpack: [getFfmpegBinaryName(platform)],
