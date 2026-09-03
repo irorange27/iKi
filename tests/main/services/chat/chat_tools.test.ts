@@ -311,11 +311,6 @@ describe('resolveToolNames', () => {
   });
 
   it('retains agent when global auto-approve makes the sibling tool usable inside delegation', async () => {
-    getAppConfigMock.mockReturnValue({
-      general: {
-        autoApproveToolRequests: true,
-      },
-    } as never);
     selectToolsWithAgentMock.mockResolvedValue(['agent', 'shell']);
     registerTool({ name: 'agent', source: { kind: 'builtin' } });
     registerTool({ name: 'shell', needsApproval: true, source: { kind: 'builtin' } });
@@ -327,6 +322,7 @@ describe('resolveToolNames', () => {
           content: '自己决定要不要分一个子任务去检查本地环境。',
         },
       ],
+      autoApproveToolRequests: true,
     });
 
     expect(result.mode).toBe('auto');
@@ -334,16 +330,12 @@ describe('resolveToolNames', () => {
   });
 
   it('reports approval-gated tools as prompt-free to the auto router when global auto-approve is enabled', async () => {
-    getAppConfigMock.mockReturnValue({
-      general: {
-        autoApproveToolRequests: true,
-      },
-    } as never);
     selectToolsWithAgentMock.mockResolvedValue(['shell']);
     registerTool({ name: 'shell', needsApproval: true, source: { kind: 'builtin' } });
 
     const result = await resolveToolNames({
       inputMessages: [{ role: 'user', content: 'Run a shell command.' }],
+      autoApproveToolRequests: true,
     });
 
     expect(result.mode).toBe('auto');
@@ -361,11 +353,6 @@ describe('resolveToolNames', () => {
   });
 
   it('keeps locked-approval tools marked as approval-required even when auto-approve is enabled', async () => {
-    getAppConfigMock.mockReturnValue({
-      general: {
-        autoApproveToolRequests: true,
-      },
-    } as never);
     selectToolsWithAgentMock.mockResolvedValue(['write_personal_skill']);
     registerTool({
       name: 'write_personal_skill',
@@ -376,6 +363,7 @@ describe('resolveToolNames', () => {
 
     const result = await resolveToolNames({
       inputMessages: [{ role: 'user', content: 'Update the planner skill.' }],
+      autoApproveToolRequests: true,
     });
 
     expect(result.resolvedTools).toEqual(['write_personal_skill']);

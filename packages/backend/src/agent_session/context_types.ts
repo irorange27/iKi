@@ -1,6 +1,7 @@
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { ChatContextMode } from '@iki/backend/chat/intervention_policy';
 import type { AffectState } from '@iki/backend/affect/affect_state';
+import type { AppConfig } from '@iki/backend/types/config';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import type { ChatInputMessage } from '../chat_service/types';
@@ -61,6 +62,7 @@ export type AssembleChatContextParams = {
   affectState?: AffectState | null;
   affectContextMode?: 'default' | 'disabled';
   realtimeAffectMessage?: string;
+  memoryContextConfig?: AppConfig['memory']['context'] | null;
   onMemoryRetrieved?: (payload: {
     query: string;
     results: Array<Record<string, unknown>>;

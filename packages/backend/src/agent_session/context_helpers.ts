@@ -1,4 +1,3 @@
-import { getAppConfig } from '@iki/backend/config';
 import {
   extractTextFromModelMessageContent,
 } from '@iki/backend/agent/model_messages';
@@ -8,6 +7,7 @@ import {
   estimateTextTokens,
 } from '../chat_service/token_estimator';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
+import type { AppConfig } from '@iki/backend/types/config';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { ChatInputMessage } from '../chat_service/types';
 import type {
@@ -17,13 +17,12 @@ import type {
   ContextReportBlock,
 } from './context_types';
 
-export const getContextConfig = (): ContextConfig => {
-  const configured = getAppConfig()?.memory?.context;
-  return {
-    ...DEFAULT_APP_CONFIG.memory.context,
-    ...(configured ?? {}),
-  };
-};
+export const getContextConfig = (
+  configured?: AppConfig['memory']['context'] | null
+): ContextConfig => ({
+  ...DEFAULT_APP_CONFIG.memory.context,
+  ...(configured ?? {}),
+});
 
 export const countMessageTokens = (
   message: ChatInputMessage,

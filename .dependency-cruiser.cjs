@@ -2,9 +2,9 @@
  * Package boundary rules — see docs/design/architecture-factoring.md (P1) and
  * docs/conventions.md. Enforcement for what ADR-003 left as convention.
  *
- * Exemptions are deliberate, shrinking tech debt. P2 resolved the provider/tools
- * exemptions (leaf moves + DI at registration). Remaining:
- *   - agent_session -> config.ts (getAppConfig)          : removed in P3 (config injection)
+ * R1–R4 are fully strict: P2 resolved the provider/tools exemptions (leaf moves +
+ * DI at registration) and P3 resolved the config-injection exemptions in
+ * agent_session (getRuntimeConfig wired in chat_service/streaming.ts).
  */
 module.exports = {
   forbidden: [
@@ -45,12 +45,9 @@ module.exports = {
     },
     {
       name: 'session-reads-no-global-config',
-      comment: 'R4 (ADR-001 follow-up): config is injected into agent_session/agent; config/defaults.ts (pure constants) is fine',
+      comment: 'R4 (ADR-001, finished by P3): config is injected into agent_session/agent; config/defaults.ts (pure constants) is fine',
       severity: 'error',
-      from: {
-        path: '^packages/backend/src/(agent_session|agent)',
-        pathNot: '^packages/backend/src/agent_session/(tool_guard|turn_preparer|context_helpers)\\.ts$',
-      },
+      from: { path: '^packages/backend/src/(agent_session|agent)' },
       to: { path: '^packages/backend/src/config\\.ts$' },
     },
     {

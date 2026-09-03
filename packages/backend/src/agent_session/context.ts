@@ -36,7 +36,10 @@ export const createChatContextAssembler = (deps: {
   workspaceSystemMessage?: (threadId?: string) => string;
 }) => {
   const assemble = async (params: AssembleChatContextParams) => {
-    const contextConfig = deriveModelAwareContextConfig(getContextConfig(), params.modelCapability);
+    const contextConfig = deriveModelAwareContextConfig(
+      getContextConfig(params.memoryContextConfig),
+      params.modelCapability
+    );
     const blocks = [] as Array<ReturnType<typeof buildDroppedBlock>>;
     const benchmarkCleanContext = params.contextMode === 'benchmark_clean';
 

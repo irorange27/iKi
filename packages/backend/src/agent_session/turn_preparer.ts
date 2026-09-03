@@ -1,4 +1,3 @@
-import { getAppConfig } from '@iki/backend/config';
 import * as affectDb from '@iki/backend/db/affect_state';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { type AffectState, rehydrateAffectState } from '@iki/backend/affect/affect_state';
@@ -19,6 +18,7 @@ import type {
   InterventionPolicySignal,
 } from '@iki/backend/chat/intervention_policy';
 import type { AgentRunKind } from '@iki/backend/types/agent_run';
+import type { AppConfig } from '@iki/backend/types/config';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import { ensureModelCapability } from '@iki/backend/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './context';
@@ -77,12 +77,22 @@ export type PreparedChatTurn = {
   enableTools: boolean;
 };
 
-const getEmotionConfig = () => getAppConfig()?.memory?.emotion || null;
+/**
+ * App-config slices this module consumes, resolved by the composition root
+ * (chat_service) per turn — agent_session never reads global config itself.
+ */
+export type ChatTurnRuntimeConfig = {
+  emotion: AppConfig['memory']['emotion'] | null;
+  autoApproveToolRequests: boolean;
+  memoryContext: AppConfig['memory']['context'] | null;
+};
 
-const getStoredAffectState = (threadId: string | undefined): AffectState | null => {
+const getStoredAffectState = (
+  emotionConfig: ChatTurnRuntimeConfig['emotion'],
+  threadId: string | undefined
+): AffectState | null => {
   if (!threadId) return null;
 
-  const emotionConfig = getEmotionConfig();
   if (!emotionConfig?.enabled) return null;
 
   const record = affectDb.getAffectState(threadId);
@@ -93,9 +103,9 @@ const getStoredAffectState = (threadId: string | undefined): AffectState | null 
 
 const getAffectStateForPolicy = (
   memory: ChatMemory,
+  emotionConfig: ChatTurnRuntimeConfig['emotion'],
   threadId: string | undefined
 ): AffectState | null => {
-  const emotionConfig = getEmotionConfig();
   if (!emotionConfig?.enabled) return null;
 
   if (threadId) {
@@ -105,13 +115,13 @@ const getAffectStateForPolicy = (
     if (computed) return computed;
   }
 
-  return getStoredAffectState(threadId);
+  return getStoredAffectState(emotionConfig, threadId);
 };
 
-const shouldRequireGuardedTools = (state: AffectState | null | undefined) => {
-  const emotionConfig = getEmotionConfig();
-  return shouldGuardTools(state, emotionConfig?.toolGuard);
-};
+const shouldRequireGuardedTools = (
+  state: AffectState | null | undefined,
+  emotionConfig: ChatTurnRuntimeConfig['emotion']
+) => shouldGuardTools(state, emotionConfig?.toolGuard);
 
 const toAffectSignal = (
   state: AffectState | null,
@@ -131,6 +141,7 @@ const applyToolGuard = (
   tools: string[],
   mode: 'manual' | 'auto',
   guardActive: boolean,
+  emotionConfig: ChatTurnRuntimeConfig['emotion'],
   interventionPolicy?: InterventionPolicySignal
 ): string[] => {
   // Intervention-state-based hard blocking: remove tools whose risk category
@@ -143,7 +154,6 @@ const applyToolGuard = (
     );
   }
 
-  const emotionConfig = getEmotionConfig();
   if (!guardActive || !emotionConfig?.toolGuard) return tools;
   if (mode === 'auto' && emotionConfig.toolGuard.disableAutoTools) {
     return [];
@@ -212,7 +222,10 @@ const collectRequiredBuiltinSkillTools = (skills: SkillSummary[]): string[] => {
   return requiredTools;
 };
 
-export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
+export const createChatTurnPreparer = (deps: {
+  memory: ChatMemory;
+  getRuntimeConfig: () => ChatTurnRuntimeConfig;
+}) => {
   const contextAssembler = createChatContextAssembler({
     memory: deps.memory,
     workspaceSystemMessage: buildThreadWorkspaceSystemMessage,
@@ -238,7 +251,8 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
     const maxInputTokens = modelCapability.maxInputTokens;
     const maxOutputTokens = modelCapability.maxOutputTokens ?? undefined;
     const lastModelMessage = modelMessages[modelMessages.length - 1];
-    const emotionConfig = getEmotionConfig();
+    const runtimeConfig = deps.getRuntimeConfig();
+    const emotionConfig = runtimeConfig.emotion;
     const experimentalAffectMode = getExperimentalAffectMode(options.experimentalContext);
     const shouldAwaitRealtimeAffect = options.experimentalContext?.awaitRealtimeAffect === true;
     const lastPrompt = lastModelMessage ? getPromptFromMessage(lastModelMessage) : '';
@@ -253,7 +267,7 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
       deps.memory.preloadRealtimeEmotion?.(options.threadId, lastPrompt);
     }
 
-    const storedAffectState = getAffectStateForPolicy(deps.memory, options.threadId);
+    const storedAffectState = getAffectStateForPolicy(deps.memory, emotionConfig, options.threadId);
     const effectiveAffectState = realtimeAffectContext.state ?? storedAffectState;
     const affectSource = realtimeAffectContext.state ? 'realtime' : 'history';
     const experimentalModeActive = experimentalAffectMode !== null;
@@ -261,10 +275,9 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
       experimentalAffectMode === 'tone_only' || experimentalAffectMode === 'explicit_policy';
     const affectContextMode = experimentalAffectMode === 'no_affect' ? 'disabled' : 'default';
     const guardState = experimentalModeActive ? null : storedAffectState;
-    const guardActive = shouldRequireGuardedTools(guardState);
+    const guardActive = shouldRequireGuardedTools(guardState, emotionConfig);
     const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
-    const autoApproveToolRequests =
-      getAppConfig()?.general?.autoApproveToolRequests === true;
+    const autoApproveToolRequests = runtimeConfig.autoApproveToolRequests;
     const affectSignal = experimentalModeActive
       ? rawAffectEnabled
         ? toAffectSignal(effectiveAffectState, affectSource, false)
@@ -288,6 +301,7 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
       affectState: affectStateForRouting,
       affectContextMode,
       realtimeAffectMessage,
+      memoryContextConfig: runtimeConfig.memoryContext,
       onMemoryRetrieved: options.onMemoryRetrieved,
     });
     const interventionPolicy = {
@@ -317,12 +331,17 @@ export const createChatTurnPreparer = (deps: { memory: ChatMemory }) => {
       mcpServerIds: options.mcpServerIds,
       inputMessages: finalMessages,
       affectState: affectStateForRouting,
+      autoApproveToolRequests,
     });
     const skillRequiredTools = collectRequiredBuiltinSkillTools(usedSkills);
     const mergedResolvedTools = mergeToolNames(resolvedTools, skillRequiredTools);
-    const guardedTools = applyToolGuard(mergedResolvedTools, mode, guardActive, interventionPolicy).filter(
-      toolName => Boolean(options.threadId) || toolName !== TODO_PLANNING_TOOL_NAME
-    );
+    const guardedTools = applyToolGuard(
+      mergedResolvedTools,
+      mode,
+      guardActive,
+      emotionConfig,
+      interventionPolicy
+    ).filter(toolName => Boolean(options.threadId) || toolName !== TODO_PLANNING_TOOL_NAME);
 
     // Shell is always available; execution still requires per-command user approval.
     if (!guardedTools.includes('shell')) {

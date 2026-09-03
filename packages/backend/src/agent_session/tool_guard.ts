@@ -1,4 +1,3 @@
-import { getAppConfig } from '@iki/backend/config';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { applyToolApprovalPolicyList } from '@iki/backend/utils/tool_approval';
 import type { AffectState } from '@iki/backend/affect/affect_state';
@@ -59,21 +58,16 @@ const isMcpToolFromAllowedServer = (
   return serverId.length > 0 && allowedServerIds.has(serverId);
 };
 
-const shouldAutoApproveToolRequests = () => {
-  try {
-    return getAppConfig()?.general?.autoApproveToolRequests === true;
-  } catch {
-    return false;
-  }
-};
-
-const getRegisteredToolMetadata = () =>
+const getRegisteredToolMetadata = (autoApproveToolRequests: boolean) =>
   applyToolApprovalPolicyList(defaultToolRegistry.getToolMetadata(), {
-    autoApproveToolRequests: shouldAutoApproveToolRequests(),
+    autoApproveToolRequests,
   });
 
-const getAutoToolCatalog = (allowedMcpServerIds: Set<string> | null) =>
-  getRegisteredToolMetadata()
+const getAutoToolCatalog = (
+  autoApproveToolRequests: boolean,
+  allowedMcpServerIds: Set<string> | null
+) =>
+  getRegisteredToolMetadata(autoApproveToolRequests)
     .filter(tool => {
       if (tool.source?.kind === 'mcp') {
         return tool.autoAllowed === true && isMcpToolFromAllowedServer(tool, allowedMcpServerIds);
@@ -88,8 +82,11 @@ const getAutoToolCatalog = (allowedMcpServerIds: Set<string> | null) =>
       source: tool.source,
     }));
 
-const getAutoToolNames = (allowedMcpServerIds: Set<string> | null): string[] =>
-  getAutoToolCatalog(allowedMcpServerIds).map(tool => tool.name);
+const getAutoToolNames = (
+  autoApproveToolRequests: boolean,
+  allowedMcpServerIds: Set<string> | null
+): string[] =>
+  getAutoToolCatalog(autoApproveToolRequests, allowedMcpServerIds).map(tool => tool.name);
 
 const countComplexTodoActionMatches = (value: string): number => {
   if (!value.trim()) return 0;
@@ -161,7 +158,9 @@ export const resolveToolNames = async (params: {
   mcpServerIds?: string[];
   inputMessages?: ChatInputMessage[];
   affectState?: AffectState | null;
+  autoApproveToolRequests?: boolean;
 }): Promise<{ explicitTools: string[]; resolvedTools: string[]; mode: ToolResolveMode }> => {
+  const autoApproveToolRequests = params.autoApproveToolRequests === true;
   const hasExplicitToolsParam = Array.isArray(params.tools);
   const hasExplicitMcpServerIdsParam = Array.isArray(params.mcpServerIds);
   const explicitTools = hasExplicitToolsParam ? normalizeExplicitTools(params.tools) : [];
@@ -180,7 +179,7 @@ export const resolveToolNames = async (params: {
     };
   }
 
-  const catalog = getAutoToolCatalog(allowedMcpServerIds);
+  const catalog = getAutoToolCatalog(autoApproveToolRequests, allowedMcpServerIds);
   const hasMessages = Array.isArray(params.inputMessages) && params.inputMessages.length > 0;
   const selection =
     catalog.length > 0 && hasMessages
@@ -192,7 +191,7 @@ export const resolveToolNames = async (params: {
       : null;
   const resolvedTools =
     selection === null
-      ? getAutoToolNames(allowedMcpServerIds)
+      ? getAutoToolNames(autoApproveToolRequests, allowedMcpServerIds)
       : selection.filter(toolName => catalog.some(tool => tool.name === toolName));
 
   const filteredResolvedTools = filterOvereagerTodoSelection(

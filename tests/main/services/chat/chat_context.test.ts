@@ -131,15 +131,6 @@ beforeEach(() => {
 
 describe('chat_context assembler', () => {
   it('returns the original messages unchanged when context assembly is disabled', async () => {
-    getAppConfigMock.mockReturnValue({
-      memory: {
-        context: {
-          ...baseConfig.memory.context,
-          enabled: false,
-        },
-      },
-    });
-
     const { assembler, memory } = createAssembler();
     const messages = [
       { role: 'system', content: 'Preserved system message.' },
@@ -147,6 +138,7 @@ describe('chat_context assembler', () => {
     ] as const;
 
     const result = await assembler.assemble({
+      memoryContextConfig: { ...baseConfig.memory.context, enabled: false },
       threadId: 'thread_disabled',
       messages: [...messages],
       skillMode: 'auto',
@@ -188,6 +180,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_1',
       messages: [
         { role: 'user', content: 'u1' },
@@ -247,6 +240,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_2',
       messages: [{ role: 'user', content: 'project constraints' }],
       onMemoryRetrieved,
@@ -303,6 +297,7 @@ describe('chat_context assembler', () => {
 
     const { assembler } = createAssembler();
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       messages: [{ role: 'user', content: 'owner preferences' }],
       onMemoryRetrieved,
     });
@@ -355,6 +350,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_ordering',
       skillMode: 'auto',
       messages: [
@@ -390,6 +386,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler({ retrieveRelevantMemory });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_no_query',
       messages: [{ role: 'assistant', content: 'Waiting for a user request.' }],
     });
@@ -413,6 +410,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       messages: [{ role: 'user', content: 'What changed?' }],
     });
 
@@ -457,6 +455,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_hot_path',
       messages: [{ role: 'user', content: 'What should we do next?' }],
       includeMemory: false,
@@ -501,14 +500,7 @@ describe('chat_context assembler', () => {
   });
 
   it('clips a single oversized memory block to the configured budget', async () => {
-    getAppConfigMock.mockReturnValue({
-      memory: {
-        context: {
-          ...baseConfig.memory.context,
-          maxMemoryTokens: 10,
-        },
-      },
-    });
+    const memoryContextConfig = { ...baseConfig.memory.context, maxMemoryTokens: 10 };
 
     const onMemoryRetrieved = vi.fn();
     const { assembler } = createAssembler({
@@ -520,6 +512,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig,
       threadId: 'thread_memory_clip',
       messages: [{ role: 'user', content: 'Need memory context.' }],
       onMemoryRetrieved,
@@ -547,16 +540,6 @@ describe('chat_context assembler', () => {
   });
 
   it('never clips the latest user prompt even when older turns are clipped', async () => {
-    getAppConfigMock.mockReturnValue({
-      memory: {
-        context: {
-          ...baseConfig.memory.context,
-          recentMessageCount: 2,
-          maxMessageTokens: 5,
-        },
-      },
-    });
-
     const assembler = createChatContextAssembler({
       memory: {
         retrieveRelevantMemory: vi.fn(() => null),
@@ -567,6 +550,7 @@ describe('chat_context assembler', () => {
     const latestPrompt =
       'this is the full current user prompt and it should remain intact even when it is long';
     const result = await assembler.assemble({
+      memoryContextConfig: { ...baseConfig.memory.context, recentMessageCount: 2, maxMessageTokens: 5 },
       threadId: 'thread_3',
       messages: [
         {
@@ -592,19 +576,10 @@ describe('chat_context assembler', () => {
   });
 
   it('clips oversized rich-text recent messages into a bounded plain-text history entry', async () => {
-    getAppConfigMock.mockReturnValue({
-      memory: {
-        context: {
-          ...baseConfig.memory.context,
-          recentMessageCount: 2,
-          maxMessageTokens: 5,
-        },
-      },
-    });
-
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig: { ...baseConfig.memory.context, recentMessageCount: 2, maxMessageTokens: 5 },
       messages: [
         {
           role: 'assistant',
@@ -648,6 +623,7 @@ describe('chat_context assembler', () => {
     } as never;
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       messages: [
         assistantToolCallMessage,
         toolMessage,
@@ -667,15 +643,6 @@ describe('chat_context assembler', () => {
   });
 
   it('keeps the assistant tool call with its tool result when the recent-history window lands on that boundary', async () => {
-    getAppConfigMock.mockReturnValue({
-      memory: {
-        context: {
-          ...baseConfig.memory.context,
-          recentMessageCount: 2,
-        },
-      },
-    });
-
     const { assembler } = createAssembler();
     const assistantToolCallMessage = {
       role: 'assistant',
@@ -691,6 +658,7 @@ describe('chat_context assembler', () => {
     const latestUserMessage = { role: 'user', content: 'Use that result.' };
 
     const result = await assembler.assemble({
+      memoryContextConfig: { ...baseConfig.memory.context, recentMessageCount: 2 },
       messages: [assistantToolCallMessage, toolResultMessage, latestUserMessage],
     });
 
@@ -716,6 +684,7 @@ describe('chat_context assembler', () => {
     } as never;
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       messages: [multimodalAssistantMessage, { role: 'user', content: 'Use the latest context.' }],
     });
 
@@ -751,6 +720,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_4',
       messages: [
         { role: 'assistant', content: 'Existing assistant context.' },
@@ -801,6 +771,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler({ getAffectContextMessage });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_affect',
       realtimeAffectMessage: '  Realtime affect.  ',
       messages: [{ role: 'user', content: 'Respond.' }],
@@ -824,6 +795,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler({ getAffectContextMessage });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_no_affect',
       affectContextMode: 'disabled',
       messages: [{ role: 'user', content: 'Respond.' }],
@@ -852,6 +824,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_clean',
       contextMode: 'benchmark_clean',
       messages: [{ role: 'user', content: 'Respond.' }],
@@ -884,6 +857,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_no_skills',
       messages: [{ role: 'user', content: 'Respond.' }],
     });
@@ -900,14 +874,7 @@ describe('chat_context assembler', () => {
   });
 
   it('clips oversized skill prompts to the configured budget', async () => {
-    getAppConfigMock.mockReturnValue({
-      memory: {
-        context: {
-          ...baseConfig.memory.context,
-          maxSkillTokens: 4,
-        },
-      },
-    });
+    const memoryContextConfig = { ...baseConfig.memory.context, maxSkillTokens: 4 };
     resolveSkillsSystemPromptMock.mockResolvedValue({
       skillsSystemPrompt: 'Use the ultra detailed research and planning skill.',
       usedSkills: [
@@ -924,6 +891,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig,
       threadId: 'thread_skill_clip',
       skillMode: 'auto',
       messages: [{ role: 'user', content: 'Plan it.' }],
@@ -971,6 +939,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_summary_reuse',
       messages: [
         { role: 'user', content: 'u1' },
@@ -1022,6 +991,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_summary_stale',
       messages: [
         { role: 'user', content: 'u1' },
@@ -1074,6 +1044,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_summary_unavailable',
       messages: [
         { role: 'user', content: 'u1' },
@@ -1125,6 +1096,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_summary_regen',
       messages: [
         { role: 'user', content: 'u1' },
@@ -1180,6 +1152,7 @@ describe('chat_context assembler', () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_summary_delete',
       messages: [{ role: 'user', content: 'u1' }],
     });
@@ -1209,6 +1182,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_identity',
       messages: [{ role: 'user', content: 'What should we focus on next?' }],
     });
@@ -1241,6 +1215,7 @@ describe('chat_context assembler', () => {
     });
 
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_workspace',
       messages: [{ role: 'user', content: 'list project files' }],
     });
@@ -1282,6 +1257,7 @@ describe('chat_context assembler', () => {
 
       const { assembler } = createAssembler();
       const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
         threadId: 'thread_iki_md',
         messages: [{ role: 'user', content: 'What are the instructions?' }],
       });
@@ -1326,6 +1302,7 @@ describe('chat_context assembler', () => {
 
     const { assembler } = createAssembler();
     const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
       threadId: 'thread_no_iki',
       messages: [{ role: 'user', content: 'Who are you?' }],
     });

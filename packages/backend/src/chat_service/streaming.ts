@@ -1,4 +1,5 @@
 import type { AgentStep } from '@iki/backend/agent';
+import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -65,7 +66,21 @@ export const createChatStreaming = (deps: {
     cleanupPendingSessionsForSender: (senderId: number) => void;
   };
 }) => {
-  const turnPreparer = createChatTurnPreparer({ memory: deps.memory });
+  const turnPreparer = createChatTurnPreparer({
+    memory: deps.memory,
+    getRuntimeConfig: () => {
+      try {
+        const config = getAppConfig();
+        return {
+          emotion: config?.memory?.emotion || null,
+          autoApproveToolRequests: config?.general?.autoApproveToolRequests === true,
+          memoryContext: config?.memory?.context ?? null,
+        };
+      } catch {
+        return { emotion: null, autoApproveToolRequests: false, memoryContext: null };
+      }
+    },
+  });
   const streamingModels = createChatStreamingModels();
   const coordinator = deps.streamCoordinator;
 
