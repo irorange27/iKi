@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -33,8 +33,23 @@ import {
 
 describe('tool input schemas', () => {
   it('keeps tool schemas browser-safe for renderer payload parsing', () => {
-    const source = readFileSync(new URL('../../../packages/backend/src/tools/schemas.ts', import.meta.url), 'utf8');
-    const importSpecifiers = Array.from(source.matchAll(/from ['"]([^'"]+)['"]/g), match => match[1]);
+    // The schema surface is split across the per-domain modules in schemas/;
+    // scan the shim and every domain module so a heavy dep cannot sneak in.
+    const schemasDir = new URL('../../../packages/backend/src/tools/schemas/', import.meta.url);
+    const files = [
+      '../tools/schemas.ts',
+      ...readdirSync(schemasDir)
+        .filter(file => file.endsWith('.ts'))
+        .map(file => `schemas/${file}`),
+    ];
+    const importSpecifiers = files.flatMap(file =>
+      Array.from(
+        readFileSync(new URL(`../../../packages/backend/src/tools/${file}`, import.meta.url), 'utf8').matchAll(
+          /from ['"]([^'"]+)['"]/g
+        ),
+        match => match[1]
+      )
+    );
 
     expect(importSpecifiers.length).toBeGreaterThan(0);
     expect(
@@ -42,7 +57,8 @@ describe('tool input schemas', () => {
         specifier =>
           specifier === 'zod' ||
           specifier === '@iki/backend/tools/schemas' ||
-          specifier.startsWith('../types/')
+          specifier.startsWith('./') ||
+          specifier.startsWith('../../types/')
       )
     ).toBe(true);
   });
