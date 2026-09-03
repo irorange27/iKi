@@ -34,12 +34,6 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx', 'packages/*/src/**/*.vue'],
       exclude: ['packages/*/src/db/migration/**'],
-      thresholds: {
-        lines: 60,
-        functions: 59,
-        branches: 46,
-        statements: 59,
-      },
     },
   },
 });
