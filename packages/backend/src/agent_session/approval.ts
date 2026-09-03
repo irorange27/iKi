@@ -21,7 +21,7 @@ import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from '../ch
 import { createUiChunkEmitter } from '../chat_service/ui_stream';
 import { toModelInputMessages } from '../chat_service/ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
-import { AgentHarness } from '../agent/harness';
+import { rehydrateHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
@@ -514,7 +514,7 @@ export const createChatApproval = (deps: {
           // Create a fresh harness from the recovery context
           const approvalThreadId =
             nextApprovalContext?.threadId ?? session.recoveryContext?.threadId;
-          const harnessCfg = {
+          const approvalHarness = rehydrateHarness({
             providerType: ctx?.providerType ?? '',
             providerId: ctx?.providerId,
             model: ctx?.model ?? '',
@@ -528,8 +528,7 @@ export const createChatApproval = (deps: {
             ...(typeof ctx?.maxOutputTokens === 'number'
               ? { maxOutputTokens: ctx.maxOutputTokens }
               : {}),
-          };
-          const approvalHarness = new AgentHarness(harnessCfg);
+          });
 
           // Build history with collected approval responses
           const responses = Array.from(session.collectedApprovalResponses.values());

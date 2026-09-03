@@ -1,5 +1,5 @@
 import { createAgentRunTracker } from '../agent_session/run_tracker';
-import { AgentHarness } from '../agent/harness';
+import { startTurnHarness } from '../agent/harness';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
@@ -109,7 +109,7 @@ export const createChatSend = (deps: ChatSendDeps) => {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        const harness = new AgentHarness({
+        const harness = startTurnHarness({
           providerType: options.providerType,
           providerId: options.providerId,
           model: options.model,
@@ -121,10 +121,8 @@ export const createChatSend = (deps: ChatSendDeps) => {
           requireApproval: preparedTurn.requireApproval,
           autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
           maxIterations,
-          ...(options.threadId ? { threadId: options.threadId } : {}),
-          ...(typeof preparedTurn.maxOutputTokens === 'number'
-            ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-            : {}),
+          threadId: options.threadId,
+          maxOutputTokens: preparedTurn.maxOutputTokens,
         });
 
         // ponytail: clear stale todo plan from previous turn

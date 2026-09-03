@@ -5,7 +5,7 @@ import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '@iki/backend/agent/types';
 import type { createAgentRunTracker } from '../agent_session/run_tracker';
-import { AgentHarness } from '../agent/harness';
+import { startTurnHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { BaseTool, defaultToolRegistry } from '@iki/backend/tools/base';
@@ -304,7 +304,7 @@ export class DelegatedAgentTool extends BaseTool {
         ? Math.trunc(conversationModel.maxTokens)
         : DEFAULT_AGENT_MAX_TOKENS;
 
-    const harness = new AgentHarness({
+    const harness = startTurnHarness({
       providerType: conversationModel.providerType,
       ...(typeof conversationModel.providerId === 'string' && conversationModel.providerId.trim()
         ? { providerId: conversationModel.providerId.trim() }

@@ -13,7 +13,7 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../agent_se
 import { createApprovalRecoveryContext } from '../agent_session/approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from '../agent_session/run_tracker';
-import { AgentHarness } from '../agent/harness';
+import { rehydrateHarness, startTurnHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { createChatStreamingModels } from './models';
@@ -248,7 +248,7 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      let harness = new AgentHarness({
+      let harness = startTurnHarness({
         providerType: options.providerType,
         providerId: options.providerId,
         model: options.model,
@@ -260,10 +260,8 @@ export const createChatStreaming = (deps: {
         requireApproval: preparedTurn.requireApproval,
         autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
         maxIterations,
-        ...(options.threadId ? { threadId: options.threadId } : {}),
-        ...(typeof preparedTurn.maxOutputTokens === 'number'
-          ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-          : {}),
+        threadId: options.threadId,
+        maxOutputTokens: preparedTurn.maxOutputTokens,
       });
 
       if (!preparedTurn.prompt.trim()) {
@@ -616,7 +614,7 @@ export const createChatStreaming = (deps: {
           });
           streamState.runId = runTracker.id;
 
-          harness = new AgentHarness({
+          harness = rehydrateHarness({
             providerType: options.providerType,
             providerId: options.providerId,
             model: options.model,
@@ -626,10 +624,8 @@ export const createChatStreaming = (deps: {
             availableSkillIds: preparedTurn.selectedSkillIds,
             guardActive: preparedTurn.guardActive,
             maxIterations,
-            ...(options.threadId ? { threadId: options.threadId } : {}),
-            ...(typeof preparedTurn.maxOutputTokens === 'number'
-              ? { maxOutputTokens: preparedTurn.maxOutputTokens }
-              : {}),
+            threadId: options.threadId,
+            maxOutputTokens: preparedTurn.maxOutputTokens,
           });
 
           approvalContext = preparedTurn.enableTools

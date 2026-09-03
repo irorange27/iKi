@@ -46,7 +46,7 @@ vi.mock('@iki/backend/chat_service/ui_messages', () => ({
 }));
 
 vi.mock('@iki/backend/agent/harness', () => ({
-  AgentHarness: vi.fn(),
+  rehydrateHarness: vi.fn(),
 }));
 
 vi.mock('@iki/backend/agent_session/run_tracker', () => ({
@@ -59,9 +59,9 @@ import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { createChatApproval } from '@iki/backend/agent_session/approval';
 import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
-import { AgentHarness } from '@iki/backend/agent/harness';
+import { rehydrateHarness } from '@iki/backend/agent/harness';
 
-const AgentHarnessMock = vi.mocked(AgentHarness);
+const rehydrateHarnessMock = vi.mocked(rehydrateHarness);
 const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);
 const getAgentRunMock = vi.mocked(agentRunDb.getAgentRun);
 const getLatestAgentRunCheckpointMock = vi.mocked(agentRunDb.getLatestAgentRunCheckpoint);
@@ -83,7 +83,7 @@ const consumeChatToolApprovalSessionMock = vi.mocked(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  AgentHarnessMock.mockImplementation(function () {
+  rehydrateHarnessMock.mockImplementation(function () {
     let capturedHistory: ModelMessage[] = [];
     return {
       turn: vi.fn().mockImplementation(async function* (
@@ -284,7 +284,7 @@ describe('createChatApproval', () => {
     await approvals.approveTool({ id: 11, send: vi.fn() }, 'approval_2', true);
 
     expect(getChatMessagesMock).toHaveBeenCalledWith('thread_skill_1');
-    expect(AgentHarnessMock).toHaveBeenCalledWith(
+    expect(rehydrateHarnessMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',
