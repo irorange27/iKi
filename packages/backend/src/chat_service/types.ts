@@ -7,7 +7,7 @@ import type {
 import type { ModelMessage } from 'ai';
 import type { AffectSignal } from '@iki/backend/types/affect';
 
-export type ChatWebContents = {
+export type ChatStreamTarget = {
   id: number;
   send: (channel: string, ...args: unknown[]) => void;
 };

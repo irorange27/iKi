@@ -1,11 +1,11 @@
 import { ipcMain } from 'electron';
 
 import { toPlainData } from '@iki/backend/utils/plain_clone';
-import { chatService, type ChatWebContents } from '../services/chat/service';
+import { chatService, type ChatStreamTarget } from '../services/chat/service';
 
 let chatIpcRegistered = false;
 
-const toChatWebContents = (sender: Pick<ChatWebContents, 'id' | 'send'>): ChatWebContents => sender;
+const toChatStreamTarget = (sender: Pick<ChatStreamTarget, 'id' | 'send'>): ChatStreamTarget => sender;
 
 export const registerChatIpc = (): void => {
   if (chatIpcRegistered) return;
@@ -47,12 +47,12 @@ export const registerChatIpc = (): void => {
     chatService.retryRun(runId)
   );
   ipcMain.handle('chat:runs:retry-and-execute', async (event, runId: string) => {
-    const webContents = toChatWebContents(event.sender);
-    return await chatService.retryAndExecute(webContents, runId);
+    const target = toChatStreamTarget(event.sender);
+    return await chatService.retryAndExecute(target, runId);
   });
   ipcMain.handle('chat:runs:resume', async (event, runId: string) => {
-    const webContents = toChatWebContents(event.sender);
-    return await chatService.resumeRun(webContents, runId);
+    const target = toChatStreamTarget(event.sender);
+    return await chatService.resumeRun(target, runId);
   });
 
   // Chat/LLM Integration
@@ -97,13 +97,13 @@ export const registerChatIpc = (): void => {
   });
 
   ipcMain.handle('chat:stream', async (event, options) => {
-    const webContents = toChatWebContents(event.sender);
-    return await chatService.stream(webContents, options);
+    const target = toChatStreamTarget(event.sender);
+    return await chatService.stream(target, options);
   });
 
   ipcMain.handle('chat:approve-tool', async (event, approvalId: string, approved: boolean) => {
-    const webContents = toChatWebContents(event.sender);
-    return await chatService.approveTool(webContents, approvalId, approved);
+    const target = toChatStreamTarget(event.sender);
+    return await chatService.approveTool(target, approvalId, approved);
   });
 
   // Agent Evaluation

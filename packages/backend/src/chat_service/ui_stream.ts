@@ -8,7 +8,7 @@ import type {
 import type { AffectSignal } from '@iki/backend/types/affect';
 import { isObjectRecord } from '@iki/backend/chat/tool_parts';
 
-import type { ChatWebContents, ToolStreamEvent, UiChunkEmitter } from './types';
+import type { ChatStreamTarget, ToolStreamEvent, UiChunkEmitter } from './types';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 const getNestedToolEventField = (
@@ -164,7 +164,7 @@ const toUiChunkFromToolEvent = (event: ToolStreamEvent): ChatUiMessageChunk | nu
 };
 
 export const createUiChunkEmitter = (
-  webContents: ChatWebContents,
+  target: ChatStreamTarget,
   messageId: string = createPrefixedId('assistant')
 ): UiChunkEmitter => {
   let started = false;
@@ -174,7 +174,7 @@ export const createUiChunkEmitter = (
   const emitChunk = (
     chunk: ChatUiMessageChunk
   ) => {
-    webContents.send('chat:ui-chunk', chunk);
+    target.send('chat:ui-chunk', chunk);
   };
 
   const ensureStarted = () => {

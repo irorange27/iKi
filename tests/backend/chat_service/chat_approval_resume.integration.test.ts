@@ -216,14 +216,14 @@ describe('createChatApproval resume integration', () => {
 
     const activeStreams = new Map();
     const usage = { recordUsageEvent: vi.fn() };
-    const webContents = { id: 7, send: vi.fn() };
+    const target = { id: 7, send: vi.fn() };
     const approvals = createChatApproval({
       activeStreams,
       memory: { injectMemoryIntoMessages: vi.fn(messages => messages) } as never,
       usage,
     });
 
-    const result = await approvals.approveTool(webContents, approvedId, true);
+    const result = await approvals.approveTool(target, approvedId, true);
 
     expect(result).toEqual({ success: true, awaitingApproval: false, stopped: false });
     expect(approvalDb.answerChatToolApproval).toHaveBeenCalledWith(
@@ -251,7 +251,7 @@ describe('createChatApproval resume integration', () => {
     }));
     expect(activeStreams.has(7)).toBe(false);
 
-    const chunks = webContents.send.mock.calls
+    const chunks = target.send.mock.calls
       .filter(call => call[0] === 'chat:ui-chunk')
       .map(call => call[1]);
     expect(chunks.map(chunk => chunk.type)).toEqual(expect.arrayContaining([

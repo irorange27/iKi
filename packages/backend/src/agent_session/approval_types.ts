@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai';
 import type { AgentResult, ToolApprovalRequest } from '@iki/backend/agent';
-import type { ChatWebContents } from '../chat_service/types';
+import type { ChatStreamTarget } from '../chat_service/types';
 
 export type ApprovalRecoveryContext = {
   sessionId: string;
@@ -25,7 +25,7 @@ export type ApprovalRecoveryContext = {
 export type RegisterApprovalBatch = (
   approvalRequests: ToolApprovalRequest[],
   session: {
-    webContents: ChatWebContents;
+    target: ChatStreamTarget;
     history?: ModelMessage[];
     recoveryContext?: ApprovalRecoveryContext;
   }

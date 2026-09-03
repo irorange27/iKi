@@ -17,7 +17,7 @@ import type { ChatMemory } from '../chat_service/memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
 import { resolveChatToolMaxIterations } from '../chat_service/constants';
 import { createAgentRunTracker } from '../agent_session/run_tracker';
-import type { ActiveStreamState, ChatWebContents, ToolStreamEvent } from '../chat_service/types';
+import type { ActiveStreamState, ChatStreamTarget, ToolStreamEvent } from '../chat_service/types';
 import { createUiChunkEmitter } from '../chat_service/ui_stream';
 import { toModelInputMessages } from '../chat_service/ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
@@ -28,7 +28,7 @@ const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
 type PendingApprovalSession = {
   sessionId?: string;
-  webContents: ChatWebContents;
+  target: ChatStreamTarget;
   recoveryContext?: ApprovalRecoveryContext;
   history?: ModelMessage[];
   pendingApprovalIds: Set<string>;
@@ -104,14 +104,14 @@ export const createChatApproval = (deps: {
   const ensurePendingApprovalSession = (
     approvalId: string,
     session: {
-      webContents: ChatWebContents;
+      target: ChatStreamTarget;
       history?: ModelMessage[];
       recoveryContext?: ApprovalRecoveryContext;
     }
   ) => {
     const existing = pendingApprovalSessions.get(approvalId);
     if (existing) {
-      existing.webContents = session.webContents;
+      existing.target = session.target;
       existing.history = session.history ?? existing.history;
       existing.recoveryContext = session.recoveryContext ?? existing.recoveryContext;
       if (session.recoveryContext?.sessionId) {
@@ -124,7 +124,7 @@ export const createChatApproval = (deps: {
 
     const created: PendingApprovalSession = {
       sessionId: session.recoveryContext?.sessionId,
-      webContents: session.webContents,
+      target: session.target,
       history: session.history,
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set([approvalId]),
@@ -143,7 +143,7 @@ export const createChatApproval = (deps: {
       toolCall?: { toolName: string; args: Record<string, unknown> };
     }>,
     session: {
-      webContents: ChatWebContents;
+      target: ChatStreamTarget;
       history?: ModelMessage[];
       recoveryContext?: ApprovalRecoveryContext;
     }
@@ -194,7 +194,7 @@ export const createChatApproval = (deps: {
     }
 
     if (existingSession) {
-      existingSession.webContents = session.webContents;
+      existingSession.target = session.target;
       existingSession.history = session.history ?? existingSession.history;
       existingSession.recoveryContext = session.recoveryContext ?? existingSession.recoveryContext;
       if (session.recoveryContext?.sessionId) {
@@ -210,7 +210,7 @@ export const createChatApproval = (deps: {
 
     const pendingSession: PendingApprovalSession = {
       sessionId: session.recoveryContext?.sessionId,
-      webContents: session.webContents,
+      target: session.target,
       history: session.history,
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set(approvalIds),
@@ -226,7 +226,7 @@ export const createChatApproval = (deps: {
 
   const tryRecoverApprovalSession = async (
     approvalId: string,
-    webContents: ChatWebContents
+    target: ChatStreamTarget
   ): Promise<PendingApprovalSession | null> => {
     if (!approvalId || typeof approvalId !== 'string') return null;
     const needle = approvalId.trim();
@@ -327,7 +327,7 @@ export const createChatApproval = (deps: {
 
     const session: PendingApprovalSession = {
       sessionId: approvalSession.session_id,
-      webContents,
+      target,
       history: inputMessages,
       recoveryContext: {
         sessionId: approvalSession.session_id,
@@ -366,14 +366,14 @@ export const createChatApproval = (deps: {
   };
 
   const approveTool = async (
-    webContents: ChatWebContents,
+    target: ChatStreamTarget,
     approvalId: string,
     approved: boolean
   ) => {
     const storedApproval = chatToolApprovalDb.getChatToolApproval(approvalId);
     let session = pendingApprovalSessions.get(approvalId);
     if (!session) {
-      session = await tryRecoverApprovalSession(approvalId, webContents);
+      session = await tryRecoverApprovalSession(approvalId, target);
     }
     if (!session) {
       if (storedApproval && storedApproval.state !== 'pending') {
@@ -389,7 +389,7 @@ export const createChatApproval = (deps: {
     }
 
     // Ensure the resumed stream emits UI chunks to the window that initiated the approval.
-    session.webContents = webContents;
+    session.target = target;
 
     const approvalResponse: ToolApprovalResponse = {
       type: 'tool-approval-response',
@@ -434,7 +434,7 @@ export const createChatApproval = (deps: {
       chatToolApprovalDb.consumeChatToolApprovalSession(session.sessionId);
     }
 
-    const resumedSenderId = session.webContents.id;
+    const resumedSenderId = session.target.id;
     const existingStream = deps.activeStreams.get(resumedSenderId);
     if (existingStream) {
       existingStream.cancelled = true;
@@ -446,7 +446,7 @@ export const createChatApproval = (deps: {
       stoppedByUser: false,
       abortController: new AbortController(),
     };
-    const uiChunkEmitter = createUiChunkEmitter(session.webContents);
+    const uiChunkEmitter = createUiChunkEmitter(session.target);
     const baseApprovalContext = session.recoveryContext
       ? {
           ...session.recoveryContext,
@@ -602,7 +602,7 @@ export const createChatApproval = (deps: {
                 for (const req of step.requests) {
                   if (req.approvalId) {
                     ensurePendingApprovalSession(req.approvalId, {
-                      webContents: session.webContents,
+                      target: session.target,
                       history: approvalHarness.getHistory(),
                       recoveryContext: nextApprovalContext,
                     });
@@ -719,7 +719,7 @@ export const createChatApproval = (deps: {
       return { success: false, error: message };
     } finally {
       if (!isAwaitingApproval) {
-        cleanupPendingSessionsForWebContents(resumedSenderId);
+        cleanupPendingSessionsForSender(resumedSenderId);
       }
       if (deps.activeStreams.get(resumedSenderId) === streamState) {
         deps.activeStreams.delete(resumedSenderId);
@@ -727,16 +727,16 @@ export const createChatApproval = (deps: {
     }
   };
 
-  const cleanupPendingSessionsForWebContents = (senderId: number) => {
+  const cleanupPendingSessionsForSender = (senderId: number) => {
     for (const [key, session] of pendingApprovalSessions) {
-      if (session.webContents.id === senderId) {
+      if (session.target.id === senderId) {
         clearApprovalTimeouts(session);
         pendingApprovalSessions.delete(key);
       }
     }
   };
 
-  return { approveTool, ensurePendingApprovalSession, registerApprovalBatch, cleanupPendingSessionsForWebContents };
+  return { approveTool, ensurePendingApprovalSession, registerApprovalBatch, cleanupPendingSessionsForSender };
 };
 
 export type ChatApproval = ReturnType<typeof createChatApproval>;

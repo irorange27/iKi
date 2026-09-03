@@ -1,7 +1,7 @@
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { noopPlatformDeps } from '@iki/backend/chat_platform';
-import type { ActiveStreamState, ChatWebContents } from './types';
+import type { ActiveStreamState, ChatStreamTarget } from './types';
 import { createChatApproval } from '../agent_session/approval';
 import { createChatMemory } from './memory';
 import { createChatPersistence } from '../agent_session/persistence';
@@ -11,7 +11,7 @@ import { createChatStreaming } from './streaming';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';
 
-export type { ChatWebContents } from './types';
+export type { ChatStreamTarget } from './types';
 
 export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const deps = platformDeps ?? noopPlatformDeps;
@@ -41,12 +41,12 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     approvals: {
       ensurePendingApprovalSession: approvals.ensurePendingApprovalSession,
       registerApprovalBatch: approvals.registerApprovalBatch,
-      cleanupPendingSessionsForWebContents: approvals.cleanupPendingSessionsForWebContents,
+      cleanupPendingSessionsForSender: approvals.cleanupPendingSessionsForSender,
     },
   });
 
   const resumeRun = async (
-    webContents: ChatWebContents,
+    target: ChatStreamTarget,
     runId: string
   ): Promise<{ success: boolean; error?: string }> => {
     const run = agentRunDb.getAgentRun(runId);
@@ -59,7 +59,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     }
 
     if (run.status === 'queued') {
-      const result = await streaming.stream(webContents, {
+      const result = await streaming.stream(target, {
         providerType: run.providerType,
         providerId: run.providerId ?? undefined,
         model: run.model,
@@ -83,7 +83,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     const checkpoint = agentRunDb.getLatestAgentRunCheckpoint(runId);
     const snapshot = checkpoint?.snapshot;
 
-    const result = await streaming.stream(webContents, {
+    const result = await streaming.stream(target, {
       providerType: run.providerType,
       providerId: run.providerId ?? undefined,
       model: run.model,
@@ -114,7 +114,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   };
 
   const retryAndExecute = async (
-    webContents: ChatWebContents,
+    target: ChatStreamTarget,
     runId: string
   ): Promise<{ success: boolean; error?: string; newRunId?: string }> => {
     const retryResult = runs.retryRun(runId);
@@ -130,7 +130,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       return { success: false, error: 'Original run has no thread ID' };
     }
 
-    const result = await streaming.stream(webContents, {
+    const result = await streaming.stream(target, {
       providerType: newRun.providerType,
       providerId: newRun.providerId ?? undefined,
       model: newRun.model,

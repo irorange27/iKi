@@ -41,14 +41,14 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
     getAcpAuthMethods: vi.fn(async () => [{ id: 'agent', name: 'agent', type: 'agent' }]),
     stopStream: vi.fn((senderId: number) => ({ success: true, senderId })),
     send: vi.fn(async (options: Record<string, unknown>) => ({ success: true, options })),
-    stream: vi.fn(async (webContents: unknown, options: Record<string, unknown>) => ({
+    stream: vi.fn(async (target: unknown, options: Record<string, unknown>) => ({
       success: true,
-      webContents,
+      target,
       options,
     })),
-    approveTool: vi.fn(async (webContents: unknown, approvalId: string, approved: boolean) => ({
+    approveTool: vi.fn(async (target: unknown, approvalId: string, approved: boolean) => ({
       success: true,
-      webContents,
+      target,
       approvalId,
       approved,
     })),
@@ -221,12 +221,12 @@ describe('chat IPC', () => {
     });
     expect(await ipcHandlers.get('chat:stream')?.(event, streamPayload)).toEqual({
       success: true,
-      webContents: sender,
+      target: sender,
       options: streamPayload,
     });
     expect(await ipcHandlers.get('chat:approve-tool')?.(event, 'approval_1', true)).toEqual({
       success: true,
-      webContents: sender,
+      target: sender,
       approvalId: 'approval_1',
       approved: true,
     });

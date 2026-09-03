@@ -44,7 +44,7 @@ export type WsSession = {
   id: number;
   ws: DaemonSocket;
   client: DaemonClient;
-  webContents: { id: number; send: (channel: string, ...args: unknown[]) => void };
+  target: { id: number; send: (channel: string, ...args: unknown[]) => void };
 };
 
 const MAX_BODY_BYTES = 1024 * 1024 * 2;

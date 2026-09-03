@@ -125,9 +125,9 @@ describe('createChatStreaming integration', () => {
     const approvals = {
       ensurePendingApprovalSession: vi.fn(),
       registerApprovalBatch: vi.fn(),
-      cleanupPendingSessionsForWebContents: vi.fn(),
+      cleanupPendingSessionsForSender: vi.fn(),
     };
-    const webContents = { id: 42, send: vi.fn() };
+    const target = { id: 42, send: vi.fn() };
 
     const streaming = createChatStreaming({
       activeStreams,
@@ -137,7 +137,7 @@ describe('createChatStreaming integration', () => {
       getThreadTitle: () => 'Thread',
     });
 
-    const result = await streaming.stream(webContents, {
+    const result = await streaming.stream(target, {
       providerType: 'openai',
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
@@ -166,10 +166,10 @@ describe('createChatStreaming integration', () => {
       providerType: 'openai',
       model: 'gpt-4o-mini',
     }));
-    expect(approvals.cleanupPendingSessionsForWebContents).toHaveBeenCalledWith(42);
+    expect(approvals.cleanupPendingSessionsForSender).toHaveBeenCalledWith(42);
     expect(activeStreams.has(42)).toBe(false);
 
-    const chunks = webContents.send.mock.calls
+    const chunks = target.send.mock.calls
       .filter(call => call[0] === 'chat:ui-chunk')
       .map(call => call[1]);
     expect(chunks.map(chunk => chunk.type)).toEqual(expect.arrayContaining([

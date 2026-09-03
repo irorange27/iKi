@@ -96,7 +96,6 @@ beforeEach(() => {
         };
       }),
       cancel: vi.fn(),
-      steer: vi.fn(),
       getHistory: vi.fn(() => capturedHistory),
     };
   });
@@ -142,7 +141,7 @@ describe('createChatApproval', () => {
     });
 
     const harness = {} as never;
-    const webContents = { id: 1, send: vi.fn() };
+    const target = { id: 1, send: vi.fn() };
 
     approvals.registerApprovalBatch(
       [
@@ -157,7 +156,7 @@ describe('createChatApproval', () => {
       ],
       {
         harness,
-        webContents,
+        target,
         recoveryContext: {
           sessionId: 'assistant_1',
           threadId: 'thread_1',
@@ -454,7 +453,7 @@ describe('createChatApproval', () => {
     );
   });
 
-  it('cleans up pending approval sessions for a given webContents senderId', async () => {
+  it('cleans up pending approval sessions for a given target senderId', async () => {
     const approvals = createChatApproval({
       activeStreams: new Map(),
       memory: {
@@ -469,25 +468,25 @@ describe('createChatApproval', () => {
     const webContents1 = { id: 1, send: vi.fn() };
     const webContents2 = { id: 2, send: vi.fn() };
 
-    // Register approval sessions for two different webContents
+    // Register approval sessions for two different target
     approvals.ensurePendingApprovalSession('approval_a1', {
       harness,
-      webContents: webContents1,
+      target: webContents1,
     });
     approvals.ensurePendingApprovalSession('approval_a2', {
       harness,
-      webContents: webContents1,
+      target: webContents1,
     });
     approvals.ensurePendingApprovalSession('approval_b1', {
       harness,
-      webContents: webContents2,
+      target: webContents2,
     });
 
     // DB has no records for these approvals
     getChatToolApprovalMock.mockReturnValue(null);
 
     // Clean up sessions for senderId=1
-    approvals.cleanupPendingSessionsForWebContents(1);
+    approvals.cleanupPendingSessionsForSender(1);
 
     // Approvals for senderId=1 should be gone
     const result1 = await approvals.approveTool(webContents1, 'approval_a1', true);

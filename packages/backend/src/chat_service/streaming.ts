@@ -19,7 +19,7 @@ import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../agent_session/turn_preparer';
 import { createChatSend } from './chat_send';
 export type { ChatSendResult } from './chat_send';
-import type { ActiveStreamState, ChatWebContents, RunStatusEvent, ToolStreamEvent } from './types';
+import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent, ToolStreamEvent } from './types';
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
@@ -58,13 +58,13 @@ export const createChatStreaming = (deps: {
     ensurePendingApprovalSession: (
       approvalId: string,
       session: {
-        webContents: ChatWebContents;
+        target: ChatStreamTarget;
         history?: import('ai').ModelMessage[];
         recoveryContext?: ApprovalRecoveryContext;
       }
     ) => unknown;
     registerApprovalBatch: RegisterApprovalBatch;
-    cleanupPendingSessionsForWebContents: (senderId: number) => void;
+    cleanupPendingSessionsForSender: (senderId: number) => void;
   };
 }) => {
   const turnPreparer = createChatTurnPreparer({ memory: deps.memory });
@@ -147,15 +147,15 @@ export const createChatStreaming = (deps: {
     checkThreadRunRate,
   });
 
-  const stream = async (webContents: ChatWebContents, options: ChatTurnOptions) => {
-    const senderId = webContents.id;
+  const stream = async (target: ChatStreamTarget, options: ChatTurnOptions) => {
+    const senderId = target.id;
     const existingStream = deps.activeStreams.get(senderId);
     if (existingStream) {
       existingStream.cancelled = true;
       existingStream.abortController.abort('superseded-by-new-request');
     }
 
-    const uiChunkEmitter = createUiChunkEmitter(webContents);
+    const uiChunkEmitter = createUiChunkEmitter(target);
 
     if (options.threadId) {
       const rateCheck = checkThreadRunRate(options.threadId);
@@ -186,7 +186,7 @@ export const createChatStreaming = (deps: {
     const notifyRunStatus = () => {
       const run = runTracker?.getRun();
       if (!run) return;
-      webContents.send('chat:run-status', {
+      target.send('chat:run-status', {
         runId: run.id,
         status: run.status,
         threadId: run.threadId,
@@ -470,7 +470,7 @@ export const createChatStreaming = (deps: {
           for (const req of step.requests) {
             if (req.approvalId) {
               deps.approvals.ensurePendingApprovalSession(req.approvalId, {
-                webContents,
+                target,
                 history: harness.getHistory() ?? streamHistory,
                 recoveryContext: approvalContext,
               });
@@ -622,7 +622,7 @@ export const createChatStreaming = (deps: {
         // Check for approval requests in result
         if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
           deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
-            webContents,
+            target,
             history: harness.getHistory() ?? streamHistory,
             ...(approvalContext ? { recoveryContext: approvalContext } : {}),
           });
@@ -914,7 +914,7 @@ export const createChatStreaming = (deps: {
         getCompanion().notifyReplyComplete(threadLabel);
       }
       if (!isAwaitingApproval) {
-        deps.approvals.cleanupPendingSessionsForWebContents(senderId);
+        deps.approvals.cleanupPendingSessionsForSender(senderId);
       }
       steerQueues.delete(senderId);
       if (options.threadId) {

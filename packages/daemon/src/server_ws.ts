@@ -83,7 +83,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
 
       deps.wss.handleUpgrade(req, socket, head, ws => {
         const id = deps.nextSessionIdRef.current++;
-        const webContents = {
+        const target = {
           id,
           send: (channel: string, ...args: unknown[]) => {
             if (ws.readyState !== 1) return;
@@ -99,7 +99,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
           id,
           ws,
           client: auth.client,
-          webContents,
+          target,
         };
         deps.sessions.set(id, session);
         deps.wsSessions.set(ws, session);
@@ -169,7 +169,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
         }
 
         try {
-          const result = await deps.chatService.stream(session.webContents, {
+          const result = await deps.chatService.stream(session.target, {
             providerType: payload.providerType,
             model: payload.model,
             messages,
@@ -209,7 +209,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
 
         try {
           const result = await deps.chatService.approveTool(
-            session.webContents,
+            session.target,
             parsed.approval_id,
             parsed.approved
           );
@@ -236,7 +236,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
         }
 
         try {
-          const result = deps.chatService.steerStream(session.webContents.id, parsed.message);
+          const result = deps.chatService.steerStream(session.target.id, parsed.message);
           sendDaemonPayload(ws, { type: 'steer-result', ...result });
         } catch (error) {
           logWsFailure(deps, session, {
@@ -250,7 +250,7 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
       }
 
       try {
-        const result = deps.chatService.stopStream(session.webContents.id);
+        const result = deps.chatService.stopStream(session.target.id);
         sendDaemonPayload(ws, { type: 'stop-result', ...result });
       } catch (error) {
         logWsFailure(deps, session, {

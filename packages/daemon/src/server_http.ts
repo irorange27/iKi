@@ -354,7 +354,7 @@ export const createDaemonRequestHandler =
         }
 
         const result = await deps.chatService.approveTool(
-          session.webContents,
+          session.target,
           body.approvalId,
           body.approved
         );
@@ -433,7 +433,7 @@ export const createDaemonRequestHandler =
           if (connectionId && !Number.isNaN(connectionId)) {
             const session = deps.sessions.get(connectionId);
             if (session && session.client.id === client.id) {
-              const result = await deps.chatService.retryAndExecute(session.webContents, runId);
+              const result = await deps.chatService.retryAndExecute(session.target, runId);
               writeJson(res, 200, result);
               return;
             }
@@ -461,7 +461,7 @@ export const createDaemonRequestHandler =
             writeJson(res, 400, { success: false, error: 'Invalid connection_id' });
             return;
           }
-          const result = await deps.chatService.resumeRun(session.webContents, runId);
+          const result = await deps.chatService.resumeRun(session.target, runId);
           writeJson(res, 200, result);
           return;
         }
