@@ -124,7 +124,7 @@ export const PartialAgentConfigSchema = AgentConfigSchema.partial();
 
 export type PartialAgentConfig = z.infer<typeof PartialAgentConfigSchema>;
 
-export type ConversationRunnerStreamEvent = {
+export type ChatStreamEvent = {
   type: string;
   [key: string]: unknown;
 };

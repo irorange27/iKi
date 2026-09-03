@@ -19,20 +19,17 @@ import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../agent_session/turn_preparer';
 import { createChatSend } from './chat_send';
 export type { ChatSendResult } from './chat_send';
-import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent, ToolStreamEvent } from './types';
+import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent, ChatStreamEvent } from './types';
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
-import { createRateLimiter } from '@iki/backend/rate_limiter';
+import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { writeThreadTodoPlan } from '../db/thread_todos';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
-const THREAD_RATE_LIMIT_WINDOW_MS = 10_000;
-const THREAD_RATE_LIMIT_MAX_REQUESTS = 5;
-
 export const createChatStreaming = (deps: {
-  activeStreams: Map<number, ActiveStreamState>;
+  streamCoordinator: ThreadStreamCoordinator;
   memory: ChatMemory;
   getThreadTitle?: (threadId: string) => string | undefined;
   usage: {
@@ -69,96 +66,22 @@ export const createChatStreaming = (deps: {
 }) => {
   const turnPreparer = createChatTurnPreparer({ memory: deps.memory });
   const streamingModels = createChatStreamingModels();
-
-  const threadStreams = new Map<string, Set<number>>();
-  const steerQueues = new Map<number, string[]>();
-  const threadRunLimiter = createRateLimiter({
-    windowMs: THREAD_RATE_LIMIT_WINDOW_MS,
-    maxRequests: THREAD_RATE_LIMIT_MAX_REQUESTS,
-  });
-
-  const checkThreadRunRate = (threadId: string): { allowed: boolean; retryAfterMs?: number } => {
-    if (!threadId) return { allowed: true };
-    return threadRunLimiter.check(threadId);
-  };
-
-  const cancelThreadStreams = (threadId: string, exceptSenderId?: number) => {
-    const senderIds = threadStreams.get(threadId);
-    if (!senderIds || senderIds.size === 0) return;
-    for (const senderId of senderIds) {
-      if (senderId === exceptSenderId) continue;
-      const streamState = deps.activeStreams.get(senderId);
-      if (streamState && !streamState.cancelled) {
-        streamState.cancelled = true;
-        streamState.stoppedByUser = true;
-        streamState.abortController.abort('superseded-by-same-thread');
-      }
-    }
-  };
-
-  const trackThreadStream = (threadId: string, senderId: number) => {
-    const senderIds = threadStreams.get(threadId);
-    if (senderIds) {
-      senderIds.add(senderId);
-    } else {
-      threadStreams.set(threadId, new Set([senderId]));
-    }
-  };
-
-  const untrackThreadStream = (threadId: string, senderId: number) => {
-    const senderIds = threadStreams.get(threadId);
-    if (!senderIds) return;
-    senderIds.delete(senderId);
-    if (senderIds.size === 0) {
-      threadStreams.delete(threadId);
-    }
-  };
-
-  const stopStream = (senderId: number) => {
-    const streamState = deps.activeStreams.get(senderId);
-    if (!streamState) {
-      return { success: false, error: 'No active stream' };
-    }
-
-    streamState.cancelled = true;
-    streamState.stoppedByUser = true;
-    streamState.abortController.abort('user-stop-request');
-    steerQueues.delete(senderId);
-    return { success: true };
-  };
-
-  const steerStream = (senderId: number, message: string): { success: boolean; error?: string } => {
-    const steerQueue = steerQueues.get(senderId);
-    if (!steerQueue) {
-      return { success: false, error: 'No active autonomous stream to steer' };
-    }
-    steerQueue.push(message);
-    const streamState = deps.activeStreams.get(senderId);
-    if (streamState && !streamState.cancelled) {
-      streamState.steered = true;
-      streamState.abortController.abort('steer');
-    }
-    return { success: true };
-  };
+  const coordinator = deps.streamCoordinator;
 
   const { send } = createChatSend({
     turnPreparer,
     usage: deps.usage,
-    checkThreadRunRate,
+    checkThreadRunRate: coordinator.checkThreadRunRate,
   });
 
   const stream = async (target: ChatStreamTarget, options: ChatTurnOptions) => {
     const senderId = target.id;
-    const existingStream = deps.activeStreams.get(senderId);
-    if (existingStream) {
-      existingStream.cancelled = true;
-      existingStream.abortController.abort('superseded-by-new-request');
-    }
+    coordinator.supersedeActiveStream(senderId);
 
     const uiChunkEmitter = createUiChunkEmitter(target);
 
     if (options.threadId) {
-      const rateCheck = checkThreadRunRate(options.threadId);
+      const rateCheck = coordinator.checkThreadRunRate(options.threadId);
       if (!rateCheck.allowed) {
         const delaySec = Math.ceil((rateCheck.retryAfterMs ?? 1000) / 1000);
         uiChunkEmitter.error(`Too many requests on this thread. Retry in ${delaySec}s.`);
@@ -167,8 +90,8 @@ export const createChatStreaming = (deps: {
     }
 
     if (options.threadId) {
-      cancelThreadStreams(options.threadId, senderId);
-      trackThreadStream(options.threadId, senderId);
+      coordinator.cancelThreadStreams(options.threadId, senderId);
+      coordinator.trackThreadStream(options.threadId, senderId);
     }
 
     const streamState: ActiveStreamState = {
@@ -177,9 +100,7 @@ export const createChatStreaming = (deps: {
       abortController: new AbortController(),
     };
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
-    deps.activeStreams.set(senderId, streamState);
-    const steerQueue: string[] = [];
-    steerQueues.set(senderId, steerQueue);
+    coordinator.registerStream(senderId, streamState);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
     let turnHadToolCalls = false;
 
@@ -428,7 +349,7 @@ export const createChatStreaming = (deps: {
 
       sendConversationPreview('thinking', '');
 
-      /** Convert AgentStep to ToolStreamEvent for runTracker + UI emitter. */
+      /** Convert AgentStep to ChatStreamEvent for runTracker + UI emitter. */
       const forwardAgentStep = (step: AgentStep) => {
         // Emit text deltas via the dedicated ui chunk emitter path
         if (step.type === 'message_update') {
@@ -440,8 +361,8 @@ export const createChatStreaming = (deps: {
           return;
         }
 
-        // Convert AgentStep → ToolStreamEvent-like shape for runTracker and UI
-        let event: ToolStreamEvent | null = null;
+        // Convert AgentStep → ChatStreamEvent-like shape for runTracker and UI
+        let event: ChatStreamEvent | null = null;
 
         if (step.type === 'tool_execution_start') {
           turnHadToolCalls = true;
@@ -593,22 +514,16 @@ export const createChatStreaming = (deps: {
         if (steered) {
           streamState.steered = false;
           streamHistory = harness.getHistory();
-          if (steerQueue.length > 0) {
-            const drained: string[] = [];
-            while (steerQueue.length > 0) {
-              const msg = steerQueue.shift();
-              if (msg !== undefined) drained.push(msg);
-            }
-            if (drained.length > 0) {
-              const steerPrompt =
-                drained.length === 1
-                  ? drained[0]
-                  : drained.join('\n\n---\n\n');
-              streamHistory = [
-                ...streamHistory,
-                { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
-              ];
-            }
+          const drained = coordinator.takeSteerMessages(senderId);
+          if (drained.length > 0) {
+            const steerPrompt =
+              drained.length === 1
+                ? drained[0]
+                : drained.join('\n\n---\n\n');
+            streamHistory = [
+              ...streamHistory,
+              { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
+            ];
           }
           streamState.abortController = new AbortController();
           continue;
@@ -916,13 +831,10 @@ export const createChatStreaming = (deps: {
       if (!isAwaitingApproval) {
         deps.approvals.cleanupPendingSessionsForSender(senderId);
       }
-      steerQueues.delete(senderId);
       if (options.threadId) {
-        untrackThreadStream(options.threadId, senderId);
+        coordinator.untrackThreadStream(options.threadId, senderId);
       }
-      if (deps.activeStreams.get(senderId) === streamState) {
-        deps.activeStreams.delete(senderId);
-      }
+      coordinator.unregisterStream(senderId, streamState);
     }
   };
 
@@ -932,8 +844,8 @@ export const createChatStreaming = (deps: {
     isProviderConfigured: streamingModels.isProviderConfigured,
     send,
     stream,
-    stopStream,
-    steerStream,
+    stopStream: coordinator.stopStream,
+    steerStream: coordinator.steerStream,
   };
 };
 

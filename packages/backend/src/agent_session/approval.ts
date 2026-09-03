@@ -17,7 +17,7 @@ import type { ChatMemory } from '../chat_service/memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
 import { resolveChatToolMaxIterations } from '../chat_service/constants';
 import { createAgentRunTracker } from '../agent_session/run_tracker';
-import type { ActiveStreamState, ChatStreamTarget, ToolStreamEvent } from '../chat_service/types';
+import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from '../chat_service/types';
 import { createUiChunkEmitter } from '../chat_service/ui_stream';
 import { toModelInputMessages } from '../chat_service/ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
@@ -571,7 +571,7 @@ export const createChatApproval = (deps: {
                 responseText += step.text;
                 uiChunkEmitter.emitTextDelta(step.text);
               } else if (step.type === 'tool_execution_start') {
-                const event: ToolStreamEvent = {
+                const event: ChatStreamEvent = {
                   type: 'tool-call',
                   toolCallId: step.toolCallId,
                   toolName: step.toolName,
@@ -581,7 +581,7 @@ export const createChatApproval = (deps: {
                 uiChunkEmitter.emitToolEvent(event);
               } else if (step.type === 'tool_execution_end') {
                 if (step.outcome === 'success') {
-                  const event: ToolStreamEvent = {
+                  const event: ChatStreamEvent = {
                     type: 'tool-result',
                     toolCallId: step.toolCallId,
                     output: step.output,
@@ -589,7 +589,7 @@ export const createChatApproval = (deps: {
                   resumeRunTracker?.recordToolEvent(event);
                   uiChunkEmitter.emitToolEvent(event);
                 } else {
-                  const event: ToolStreamEvent = {
+                  const event: ChatStreamEvent = {
                     type: 'tool-error',
                     toolCallId: step.toolCallId,
                     error: step.error ?? 'Tool execution failed',

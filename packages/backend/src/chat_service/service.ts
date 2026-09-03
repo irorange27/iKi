@@ -8,6 +8,7 @@ import { createChatPersistence } from '../agent_session/persistence';
 import { createChatRuns } from './runs';
 import { createChatEval } from './eval';
 import { createChatStreaming } from './streaming';
+import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';
 
@@ -31,8 +32,9 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const persistence = createChatPersistence({ memory });
   const runs = createChatRuns({ activeStreams });
   const eval_ = createChatEval({ exportTrace: deps.exportTrace });
+  const streamCoordinator = createThreadStreamCoordinator({ activeStreams });
   const streaming = createChatStreaming({
-    activeStreams,
+    streamCoordinator,
     memory,
     getThreadTitle: (id: string) => persistence.getThread(id)?.title,
     usage: {

@@ -8,11 +8,11 @@ import type {
 import type { AffectSignal } from '@iki/backend/types/affect';
 import { isObjectRecord } from '@iki/backend/chat/tool_parts';
 
-import type { ChatStreamTarget, ToolStreamEvent, UiChunkEmitter } from './types';
+import type { ChatStreamTarget, ChatStreamEvent, UiChunkEmitter } from './types';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 const getNestedToolEventField = (
-  event: ToolStreamEvent,
+  event: ChatStreamEvent,
   field: 'toolCallId' | 'toolName'
 ): unknown => {
   if (field in event) {
@@ -25,7 +25,7 @@ const getNestedToolEventField = (
   return nestedToolCall[field];
 };
 
-const getToolCallIdFromEvent = (event: ToolStreamEvent): string => {
+const getToolCallIdFromEvent = (event: ChatStreamEvent): string => {
   const candidate =
     typeof getNestedToolEventField(event, 'toolCallId') === 'string'
       ? (getNestedToolEventField(event, 'toolCallId') as string)
@@ -37,7 +37,7 @@ const getToolCallIdFromEvent = (event: ToolStreamEvent): string => {
   return createPrefixedId('tool_call');
 };
 
-const getToolNameFromEvent = (event: ToolStreamEvent): string =>
+const getToolNameFromEvent = (event: ChatStreamEvent): string =>
   typeof getNestedToolEventField(event, 'toolName') === 'string' &&
   (getNestedToolEventField(event, 'toolName') as string).length > 0
     ? (getNestedToolEventField(event, 'toolName') as string)
@@ -65,7 +65,7 @@ const getToolDisplayTitle = (toolName: string): string | undefined => {
   return undefined;
 };
 
-const toUiChunkFromToolEvent = (event: ToolStreamEvent): ChatUiMessageChunk | null => {
+const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | null => {
   const toolCallId = getToolCallIdFromEvent(event);
   const toolName = getToolNameFromEvent(event);
   const title = getToolDisplayTitle(toolName);

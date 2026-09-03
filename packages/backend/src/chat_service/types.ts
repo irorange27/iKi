@@ -1,4 +1,4 @@
-import type { ConversationRunnerStreamEvent } from '@iki/backend/agent';
+import type { ChatStreamEvent } from '@iki/backend/agent';
 import type {
   ChatUiMessage,
   SkillUsageEntry,
@@ -28,7 +28,7 @@ export type ActiveStreamState = {
   steered?: boolean;
 };
 
-export type ToolStreamEvent = ConversationRunnerStreamEvent;
+export type { ChatStreamEvent };
 
 export type RunStatusEvent = {
   runId: string;
@@ -40,7 +40,7 @@ export type RunStatusEvent = {
 export type UiChunkEmitter = {
   messageId: string;
   emitTextDelta: (delta: string) => void;
-  emitToolEvent: (event: ToolStreamEvent) => void;
+  emitToolEvent: (event: ChatStreamEvent) => void;
   emitSkillUsage: (payload: {
     mode?: 'manual' | 'auto';
     skills: SkillUsageEntry[];

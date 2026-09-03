@@ -23,7 +23,7 @@ import {
   toIsoNow,
 } from '@iki/backend/utils/text';
 import type { AgentResult } from '@iki/backend/agent/types';
-import type { ConversationRunnerStreamEvent } from '@iki/backend/agent/types';
+import type { ChatStreamEvent } from '@iki/backend/agent/types';
 
 type CreateAgentRunTrackerParams = {
   kind: AgentRunKind;
@@ -53,7 +53,7 @@ type BlockRunParams = FinalizeRunParams & {
 type FailRunParams = AgentRunError;
 
 const getNestedToolEventField = (
-  event: ConversationRunnerStreamEvent,
+  event: ChatStreamEvent,
   field: 'toolCallId' | 'toolName'
 ): unknown => {
   if (field in event) return event[field];
@@ -62,11 +62,11 @@ const getNestedToolEventField = (
   return (nestedToolCall as Record<string, unknown>)[field];
 };
 
-const getToolNameFromEvent = (event: ConversationRunnerStreamEvent): string =>
+const getToolNameFromEvent = (event: ChatStreamEvent): string =>
   sanitizePromptMetadataText(getNestedToolEventField(event, 'toolName'), { maxChars: 80 }) ||
   'tool';
 
-const getToolCallIdFromEvent = (event: ConversationRunnerStreamEvent): string =>
+const getToolCallIdFromEvent = (event: ChatStreamEvent): string =>
   sanitizePromptMetadataText(getNestedToolEventField(event, 'toolCallId'), { maxChars: 120 }) ||
   sanitizePromptMetadataText(event.id, { maxChars: 120 }) ||
   createPrefixedId('tool_call');
@@ -98,7 +98,7 @@ export type AgentRunTracker = {
   getRun: () => AgentRun;
   syncModelMessages: (messages: unknown[]) => AgentRun;
   createCheckpoint: (reason: AgentRunCheckpointReason) => void;
-  recordToolEvent: (event: ConversationRunnerStreamEvent) => void;
+  recordToolEvent: (event: ChatStreamEvent) => void;
   recordChildRun: (params: {
     childRunId: string;
     childKind: AgentRunKind;
