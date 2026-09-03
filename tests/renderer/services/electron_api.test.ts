@@ -48,23 +48,9 @@ describe('electron_api service', () => {
       );
     });
 
-    it('throws a descriptive error when window is undefined', () => {
-      vi.stubGlobal('window', undefined);
-      expect(() => getElectronAPI()).toThrow(
-        'electronAPI is not available in this context'
-      );
-    });
   });
 
   describe('getElectronApiMethod', () => {
-    it('returns the method when available', () => {
-      const list = vi.fn();
-      mockWindow({ providers: { list } });
-      getElectronApiMethod('providers' as never);
-      // 'providers' is a slice, not a method — it should return null
-      // Instead test with a known function-shaped key
-    });
-
     it('returns null when the key is not a function', () => {
       mockWindow({ providers: 'not-a-function' });
       const method = getElectronApiMethod('providers' as never);

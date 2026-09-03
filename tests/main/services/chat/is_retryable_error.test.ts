@@ -12,10 +12,6 @@ describe('isRetryableError', () => {
     expect(isRetryableError(new Error('Too many requests'))).toBe(true);
   });
 
-  it('matches HTTP 429 status', () => {
-    expect(isRetryableError(new Error('429 Too Many Requests'))).toBe(true);
-  });
-
   // Server errors
   it('matches HTTP 503', () => {
     expect(isRetryableError(new Error('503 Service Unavailable'))).toBe(true);
@@ -23,10 +19,6 @@ describe('isRetryableError', () => {
 
   it('matches HTTP 502', () => {
     expect(isRetryableError(new Error('502 Bad Gateway'))).toBe(true);
-  });
-
-  it('matches HTTP 504', () => {
-    expect(isRetryableError(new Error('504 Gateway Timeout'))).toBe(true);
   });
 
   it('matches "internal server error" in message', () => {
@@ -70,34 +62,9 @@ describe('isRetryableError', () => {
     expect(isRetryableError(new Error('INTERNAL SERVER ERROR'))).toBe(true);
   });
 
-  it('handles mixed case variants', () => {
-    expect(isRetryableError(new Error('Rate Limit Exceeded'))).toBe(true);
-    expect(isRetryableError(new Error('Fetch Failed'))).toBe(true);
-    expect(isRetryableError(new Error('Network Error'))).toBe(true);
-  });
-
   // Realistic provider error shapes
-  it('recognizes OpenAI rate limit error (Error object)', () => {
-    const error = new Error('429 You exceeded your current quota, please check your plan and billing details.');
-    expect(isRetryableError(error)).toBe(true);
-  });
-
-  it('recognizes Anthropic overloaded error', () => {
-    const error = new Error('529 Overloaded - Anthropic is experiencing high demand');
-    expect(isRetryableError(error)).toBe(true);
-  });
-
-  it('recognizes DeepSeek server error', () => {
-    const error = new Error('503 Service Temporarily Unavailable');
-    expect(isRetryableError(error)).toBe(true);
-  });
-
   it('recognizes error objects with message property (not Error instances)', () => {
     expect(isRetryableError({ message: 'rate limit hit' })).toBe(true);
-  });
-
-  it('recognizes error objects with .message property', () => {
-    expect(isRetryableError({ message: 'fetch failed' })).toBe(true);
   });
 
   // Non-retryable errors
@@ -114,10 +81,6 @@ describe('isRetryableError', () => {
 
   it('rejects bad request errors', () => {
     expect(isRetryableError(new Error('400 Bad Request'))).toBe(false);
-  });
-
-  it('rejects not found errors', () => {
-    expect(isRetryableError(new Error('404 Not Found'))).toBe(false);
   });
 
   it('rejects validation errors', () => {

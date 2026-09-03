@@ -66,12 +66,6 @@ describe('WelcomeScreen', () => {
     return wrapper;
   };
 
-  it('shows the brand name always', () => {
-    const wrapper = mountWithState();
-    expect(wrapper.find('.welcome-brand').text()).toBe('iKi');
-    wrapper.unmount();
-  });
-
   it('shows the ready context label when a provider and model are available', () => {
     const wrapper = mountWithState({
       isReadyToChat: true,

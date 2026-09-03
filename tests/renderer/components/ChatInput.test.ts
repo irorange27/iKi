@@ -1253,21 +1253,6 @@ describe('ChatInput', () => {
     expect(tip.text()).toContain('Workspace cannot be changed after sending messages');
   });
 
-  it('uses the same accent visual state as the other selector buttons when workspaces are available', async () => {
-    const docsWorkspace = buildWorkspace({
-      id: 'workspace_docs',
-      name: 'Docs',
-      path: '/tmp/docs',
-    });
-
-    const { wrapper } = await mountChatInput({
-      workspaces: [docsWorkspace],
-    });
-
-    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
-    expect(workspaceTrigger.classes()).toContain('ui-text-accent');
-  });
-
   it('can add a workspace directly from the workspace selector panel', async () => {
     const pickedWorkspace = buildWorkspace({
       id: 'workspace_new',

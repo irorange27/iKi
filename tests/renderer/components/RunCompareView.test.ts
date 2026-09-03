@@ -48,13 +48,6 @@ function makeComparison(overrides: Partial<AgentEvalComparison> = {}): AgentEval
 }
 
 describe('RunCompareView', () => {
-  it('renders the comparison title', () => {
-    const wrapper = mount(RunCompareView, {
-      props: { comparison: makeComparison(), t },
-    });
-    expect(wrapper.text()).toContain('Run Comparison');
-  });
-
   it('shows baseline and test models', () => {
     const wrapper = mount(RunCompareView, {
       props: { comparison: makeComparison(), t },

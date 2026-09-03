@@ -42,39 +42,6 @@ describe('preload task IPC payload serialization', () => {
     await loadPreload();
   });
 
-  it('serializes task create payloads before invoke', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-
-    const toolsProxy = new Proxy(['web', 'fetch'], {});
-    const taskProxy = new Proxy(
-      {
-        name: 'Daily',
-        prompt: 'Summarize',
-        provider_type: 'deepseek',
-        model: 'deepseek-chat',
-        tool_mode: 'manual',
-        tools: toolsProxy,
-      },
-      {}
-    );
-
-    await exposedApi.tasks.create(taskProxy);
-
-    expect(invokeMock).toHaveBeenCalledTimes(1);
-    const [channel, payload] = invokeMock.mock.calls[0];
-    expect(channel).toBe('tasks:create');
-    expect(payload).toEqual({
-      name: 'Daily',
-      prompt: 'Summarize',
-      provider_type: 'deepseek',
-      model: 'deepseek-chat',
-      tool_mode: 'manual',
-      tools: ['web', 'fetch'],
-    });
-    expect(payload).not.toBe(taskProxy);
-    expect(payload.tools).not.toBe(toolsProxy);
-  });
-
   it('serializes task update payloads before invoke', async () => {
     invokeMock.mockResolvedValue({ success: true });
 

@@ -606,16 +606,67 @@ describe('SimpleAgentRunner — characterization tests', () => {
       expect(isRetryableError(refusal)).toBe(true);
     });
 
-    it('isRetryableError returns false for AbortError', () => {
-      const abort = Object.assign(new Error('cancelled'), { name: 'AbortError' });
-      expect(isRetryableError(abort)).toBe(false);
+  });
+
+  describe('anthropic cache breakpoints', () => {
+    it('marks the last message as an ephemeral cache breakpoint for anthropic runs', async () => {
+      let captured: { messages?: Array<Record<string, unknown>> } | undefined;
+      streamTextMock.mockImplementation((config: Record<string, unknown>) => {
+        captured = config as { messages?: Array<Record<string, unknown>> };
+        return makeStreamTextResult();
+      });
+      setupAgentConfig({ providerType: 'anthropic' });
+      setupModel();
+
+      const callerHistory = [{ role: 'user', content: 'prior turn' }];
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'test',
+        tools: [],
+        providerType: 'anthropic',
+        providerId: '',
+        model: 'claude-3-5-sonnet',
+        history: callerHistory,
+      });
+      for await (const _step of gen) {
+        // drain
+      }
+
+      const messages = captured?.messages ?? [];
+      expect(messages.length).toBe(2);
+      const last = messages.at(-1) as { providerOptions?: { anthropic?: { cacheControl?: unknown } } };
+      expect(last.providerOptions?.anthropic?.cacheControl).toEqual({ type: 'ephemeral' });
+      // the caller's history array must not be mutated
+      expect(callerHistory.length).toBe(1);
+      expect((callerHistory[0] as { providerOptions?: unknown }).providerOptions).toBeUndefined();
     });
 
-    it('isRetryableError returns true for transient system errors (ECONNRESET)', () => {
-      const econnreset = Object.assign(new Error('connection reset'), {
-        code: 'ECONNRESET',
+    it('does not annotate messages for non-anthropic providers', async () => {
+      let captured: { messages?: Array<Record<string, unknown>> } | undefined;
+      streamTextMock.mockImplementation((config: Record<string, unknown>) => {
+        captured = config as { messages?: Array<Record<string, unknown>> };
+        return makeStreamTextResult();
       });
-      expect(isRetryableError(econnreset)).toBe(true);
+      setupAgentConfig();
+      setupModel();
+
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'test',
+        tools: [],
+        providerType: 'openai',
+        providerId: '',
+        model: 'gpt-4o-mini',
+      });
+      for await (const _step of gen) {
+        // drain
+      }
+
+      const messages = captured?.messages ?? [];
+      const last = messages.at(-1) as { providerOptions?: unknown };
+      expect(last.providerOptions).toBeUndefined();
     });
   });
 

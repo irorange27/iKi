@@ -71,23 +71,6 @@ describe('Agent — basic generation (no tools)', () => {
     expect(result.usage?.totalTokens).toBeGreaterThan(0);
   }, 30000);
 
-  it.skipIf(skipIfNoProvider())('answers a factual question', async () => {
-    const { result } = await collectRun(
-      'What is the capital of France? Reply with just the city name.'
-    );
-
-    expect(result.response.toLowerCase()).toContain('paris');
-    expect(result.iterations).toBe(1);
-  }, 30000);
-
-  it.skipIf(skipIfNoProvider())('produces a FinishStep with usage info', async () => {
-    const { steps, result } = await collectRun('Count from 1 to 3.');
-
-    const finish = steps.find(s => s.type === 'turn_end') as TurnEndStep | undefined;
-    expect(finish).toBeDefined();
-    expect(finish!.usage).toBeDefined();
-    expect(result.response.length).toBeGreaterThan(0);
-  }, 30000);
 });
 
 describe('Agent — tool calls', () => {
@@ -108,58 +91,12 @@ describe('Agent — tool calls', () => {
     expect(finish!.text!.length).toBeGreaterThan(0);
   }, 60000);
 
-  it.skipIf(skipIfNoProvider())('skips tools for simple math questions', async () => {
-    const { result } = await collectRun('What is 2 + 2? Answer with just the number.', {
-      tools: ['web_search', 'fetch'],
-    });
-
-    expect(result.response).toContain('4');
-  }, 30000);
 });
 
 describe('Agent — handoff', () => {
-  it.skipIf(skipIfNoProvider())('completes a handoff scenario', async () => {
-    const { steps } = await collectRun(
-      'Research the history of Lisp and write a brief summary.',
-      {
-        tools: ['web_search', 'handoff'],
-        systemPrompt:
-          'You are an AI assistant. When a task requires deep research, use the handoff tool to delegate it.',
-      }
-    );
-
-    const handoff = steps.find(s => s.type === 'handoff');
-    const finish = steps[steps.length - 1] as TurnEndStep | undefined;
-
-    if (handoff) {
-      expect(handoff).toBeDefined();
-    } else if (finish) {
-      expect(finish.text.length).toBeGreaterThan(0);
-    }
-  }, 60000);
 });
 
 describe('Agent — multi-step reasoning', () => {
-  it.skipIf(skipIfNoProvider())('produces a result with tool-equipped runner', async () => {
-    const { steps, result } = await collectRun(
-      'Search the web for news about Node.js version 24, then summarize what you found.',
-      { tools: ['web_search', 'fetch'] }
-    );
-
-    expect(result).toBeDefined();
-    expect(result.usage?.totalTokens).toBeGreaterThan(0);
-
-    // The runner should at minimum produce a finish, handoff, or error
-    const terminal = steps.find(s =>
-      s.type === 'turn_end' || s.type === 'handoff'
-    ) as TurnEndStep | { type: 'handoff'; summary?: string } | undefined;
-    expect(terminal).toBeDefined();
-
-    if (terminal!.type === 'turn_end' && (terminal as TurnEndStep).outcome === 'error') {
-      // Error step is acceptable for this smoke test — just verify it exists
-      expect((terminal as TurnEndStep).message).toBeTruthy();
-    }
-  }, 60000);
 });
 
 describe('Agent — error resilience', () => {

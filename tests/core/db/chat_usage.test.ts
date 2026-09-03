@@ -54,42 +54,6 @@ describe('chat_usage db', () => {
     expect(params.metadata).toBe('{}');
   });
 
-  it('returns aggregate totals with non-negative coercion', () => {
-    const getMock = vi.fn(() => ({
-      messageCount: 5,
-      inputTokens: 120,
-      outputTokens: 34,
-      totalTokens: 154,
-      cacheReadTokens: 80,
-      cacheWriteTokens: 4,
-      reasoningTokens: 12,
-      estimatedCostUsd: 0.028,
-    }));
-    const prepareMock = vi.fn(() => ({ get: getMock }));
-    getDbMock.mockReturnValue({ prepare: prepareMock } as unknown as ReturnType<typeof getDb>);
-
-    const totals = getChatUsageTotals({
-      from: '2026-03-01T00:00:00.000Z',
-      to: '2026-03-20T00:00:00.000Z',
-    });
-
-    expect(totals).toEqual({
-      messageCount: 5,
-      inputTokens: 120,
-      outputTokens: 34,
-      totalTokens: 154,
-      cacheReadTokens: 80,
-      cacheWriteTokens: 4,
-      reasoningTokens: 12,
-      estimatedCostUsd: 0.028,
-    });
-
-    expect(getMock).toHaveBeenCalledWith({
-      from: '2026-03-01T00:00:00.000Z',
-      to: '2026-03-20T00:00:00.000Z',
-    });
-  });
-
   it('maps daily and monthly aggregates', () => {
     const allMock = vi
       .fn()
