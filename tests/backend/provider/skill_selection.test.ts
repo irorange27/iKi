@@ -8,23 +8,9 @@ vi.mock('@iki/backend/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
 }));
 
-vi.mock('@iki/backend/tools/skills', () => ({
-  formatSkillMetadataForPrompt: vi.fn(
-    (skill: { id: string; name?: string; description?: string; source?: string }) => {
-      const sanitize = (v: string | undefined) =>
-        (v || '').replace(/\0/g, '').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      return JSON.stringify({
-        id: (skill.id || '').replace(/\0/g, ''),
-        name: sanitize(skill.name),
-        description: sanitize(skill.description),
-        source: skill.source || '',
-      });
-    }
-  ),
-}));
-
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { createSimplePromptTextGenerator } from '@iki/backend/runtimes/prompt_text_generator';
+import { formatSkillMetadataForPrompt } from '@iki/backend/tools/skills';
 import { selectSkillsWithAgent } from '@iki/backend/provider/skill_selection';
 
 const getToolModelMock = vi.mocked(getToolModel);
@@ -43,6 +29,7 @@ describe('selectSkillsWithAgent', () => {
       availableSkills: [
         { id: 'codex:.system/openai-docs', name: 'openai-docs', description: 'OpenAI docs' },
       ],
+      formatCatalogItem: formatSkillMetadataForPrompt,
     });
 
     expect(skills).toEqual([]);
@@ -63,6 +50,7 @@ describe('selectSkillsWithAgent', () => {
         { id: 'codex:.system/openai-docs', name: 'openai-docs', description: 'OpenAI docs' },
         { id: 'user:my-skill', name: 'my-skill', description: 'Custom' },
       ],
+      formatCatalogItem: formatSkillMetadataForPrompt,
     });
 
     expect(skills).toEqual(['codex:.system/openai-docs']);
@@ -77,6 +65,7 @@ describe('selectSkillsWithAgent', () => {
     const skills = await selectSkillsWithAgent({
       messages: [{ role: 'user', content: 'Use my custom workflow.' }],
       availableSkills: [{ id: 'user:my-skill', name: 'my-skill', description: 'Custom' }],
+      formatCatalogItem: formatSkillMetadataForPrompt,
     });
 
     expect(skills).toEqual(['user:my-skill']);
@@ -91,6 +80,7 @@ describe('selectSkillsWithAgent', () => {
     const skills = await selectSkillsWithAgent({
       messages: [{ role: 'user', content: 'Please follow my style guide.' }],
       availableSkills: [{ id: 'user:my-skill', name: 'my-skill', description: 'Custom' }],
+      formatCatalogItem: formatSkillMetadataForPrompt,
     });
 
     expect(skills).toEqual(['user:my-skill']);
@@ -104,6 +94,7 @@ describe('selectSkillsWithAgent', () => {
     await selectSkillsWithAgent({
       messages: [{ role: 'user', content: 'Help me respond carefully.' }],
       availableSkills: [{ id: 'user:my-skill', name: 'my-skill', description: 'Custom' }],
+      formatCatalogItem: formatSkillMetadataForPrompt,
       affectState: {
         label: 'sadness',
         confidence: 0.71,
@@ -138,6 +129,7 @@ describe('selectSkillsWithAgent', () => {
           source: 'user',
         },
       ],
+      formatCatalogItem: formatSkillMetadataForPrompt,
     });
 
     const prompt = generate.mock.calls[0]?.[0] || '';

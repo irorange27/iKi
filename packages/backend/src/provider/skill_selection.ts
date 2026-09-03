@@ -5,7 +5,6 @@ import {
   type SelectionMessage,
 } from './catalog_selection';
 import { buildAffectDecisionMessage, type AffectState } from '@iki/backend/affect/affect_state';
-import { formatSkillMetadataForPrompt } from '../tools/skills';
 
 export type SkillSelectionMessage = SelectionMessage;
 
@@ -15,6 +14,14 @@ export type SkillCatalogItem = {
   description: string;
   source?: string;
 };
+
+/** Formats one already-normalized catalog entry for the router prompt; injected by the caller. */
+export type SkillCatalogFormatter = (parts: {
+  id: string;
+  name: string;
+  description: string;
+  source?: string;
+}) => string;
 
 const MAX_INPUT_CHARS = 4500;
 const MAX_MESSAGES = 16;
@@ -105,11 +112,14 @@ const parseSkillIds = (raw: string, availableSkills: SkillCatalogItem[]): string
   return [];
 };
 
-const buildSkillCatalogText = (skills: SkillCatalogItem[]) => {
+const buildSkillCatalogText = (
+  formatCatalogItem: SkillCatalogFormatter,
+  skills: SkillCatalogItem[]
+) => {
   if (!skills.length) return '';
   const sliced = skills.slice(0, MAX_CATALOG_ITEMS);
   const lines = sliced.map(skill =>
-    `- ${formatSkillMetadataForPrompt({
+    `- ${formatCatalogItem({
       id: skill.id,
       name: normalizeWhitespace(skill.name || ''),
       description: normalizeWhitespace(skill.description || ''),
@@ -122,6 +132,7 @@ const buildSkillCatalogText = (skills: SkillCatalogItem[]) => {
 export const selectSkillsWithAgent = async (params: {
   messages: SkillSelectionMessage[];
   availableSkills: SkillCatalogItem[];
+  formatCatalogItem: SkillCatalogFormatter;
   affectState?: AffectState | null;
 }): Promise<string[]> => {
   const affectMessage = params.affectState ? buildAffectDecisionMessage(params.affectState) : '';
@@ -129,7 +140,7 @@ export const selectSkillsWithAgent = async (params: {
   return selectCatalogWithAgent({
     messages: params.messages,
     availableCatalog: params.availableSkills,
-    buildCatalogText: buildSkillCatalogText,
+    buildCatalogText: skills => buildSkillCatalogText(params.formatCatalogItem, skills),
     buildPrompt: (catalogText, transcript) =>
       'Skill catalog (choose only from these exact ids):\n' +
       `${catalogText}\n\n` +

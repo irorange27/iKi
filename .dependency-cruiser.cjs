@@ -2,9 +2,8 @@
  * Package boundary rules — see docs/design/architecture-factoring.md (P1) and
  * docs/conventions.md. Enforcement for what ADR-003 left as convention.
  *
- * `pathNot` exemptions are deliberate, shrinking tech debt:
- *   - provider -> tools/{skills,retry,runtime_context}  : removed in P2 (leaf moves)
- *   - tools/agent_tools -> agent_session, provider       : removed in P2 (DI at registration)
+ * Exemptions are deliberate, shrinking tech debt. P2 resolved the provider/tools
+ * exemptions (leaf moves + DI at registration). Remaining:
  *   - agent_session -> config.ts (getAppConfig)          : removed in P3 (config injection)
  */
 module.exports = {
@@ -28,10 +27,7 @@ module.exports = {
       comment: 'R1: provider/ wires models; it must not reach up into tools/session/orchestration',
       severity: 'error',
       from: { path: '^packages/backend/src/provider' },
-      to: {
-        path: '^packages/backend/src/(tools|agent_session|chat_service)',
-        pathNot: '^packages/backend/src/tools/skills\\.ts$',
-      },
+      to: { path: '^packages/backend/src/(tools|agent_session|chat_service)' },
     },
     {
       name: 'tools-below-session',

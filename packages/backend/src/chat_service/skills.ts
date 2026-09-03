@@ -3,6 +3,7 @@ import type { AffectState } from '@iki/backend/affect/affect_state';
 import { createLogger } from '@iki/backend/logger';
 import {
   buildSkillsMetadataSystemPrompt,
+  formatSkillMetadataForPrompt,
   listSkills,
   normalizeSkillIds,
 } from '@iki/backend/tools/skills';
@@ -95,6 +96,7 @@ export const resolveSkillsSystemPrompt = async (params: {
         ? await selectSkillsWithAgent({
             messages: toLlmChatMessages(params.inputMessages),
             availableSkills: availableSkillCatalog,
+            formatCatalogItem: formatSkillMetadataForPrompt,
             affectState: params.affectState,
           })
         : [];
