@@ -70,8 +70,8 @@ vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: createOpenAICompatibleMock,
 }));
 
-vi.mock('vercel-minimax-ai-provider', () => ({
-  createMinimax: createMinimaxMock,
+vi.mock('@ai-sdk/minimax', () => ({
+  createMiniMax: createMinimaxMock,
 }));
 
 vi.mock('@iki/backend/db/providers', () => ({
