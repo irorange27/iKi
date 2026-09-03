@@ -50,7 +50,7 @@ vi.mock('@iki/backend/agent_session/turn_preparer', () => ({
   }),
 }));
 
-vi.mock('@iki/backend/chat_service/platform', () => ({
+vi.mock('@iki/backend/thread_session/platform', () => ({
   getCompanion: () => ({
     setChatPolicy: vi.fn(),
     setAffect: vi.fn(),
@@ -64,8 +64,8 @@ vi.mock('@iki/backend/chat_service/platform', () => ({
   }),
 }));
 
-import { createChatStreaming } from '@iki/backend/chat_service/streaming';
-import { createThreadStreamCoordinator } from '@iki/backend/chat_service/thread_stream_coordinator';
+import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
+import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';

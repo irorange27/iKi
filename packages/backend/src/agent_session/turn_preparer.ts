@@ -22,12 +22,12 @@ import type { AppConfig } from '@iki/backend/types/config';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import { ensureModelCapability } from '@iki/backend/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './context';
-import type { ChatMemory } from '../chat_service/memory';
-import type { ChatInputMessage, ChatTransportMessage } from '../chat_service/types';
+import type { ChatMemory } from '../thread_session/memory';
+import type { ChatInputMessage, ChatTransportMessage } from '../thread_session/types';
 import { persistThreadRuntimeHints } from './thread_hints';
 import { resolveToolNames } from './tool_guard';
-import { getPromptFromMessage, toModelInputMessages } from '../chat_service/ui_messages';
-import { TODO_PLANNING_TOOL_NAME } from '../chat_service/todo_planning';
+import { getPromptFromMessage, toModelInputMessages } from '../thread_session/ui_messages';
+import { TODO_PLANNING_TOOL_NAME } from '../thread_session/todo_planning';
 
 export type ChatTurnOptions = {
   providerType: string;
@@ -79,7 +79,7 @@ export type PreparedChatTurn = {
 
 /**
  * App-config slices this module consumes, resolved by the composition root
- * (chat_service) per turn — agent_session never reads global config itself.
+ * (thread_session) per turn — agent_session never reads global config itself.
  */
 export type ChatTurnRuntimeConfig = {
   emotion: AppConfig['memory']['emotion'] | null;

@@ -40,7 +40,7 @@ import { getChatThread } from '@iki/backend/db/chat_thread';
 import * as memoryDb from '@iki/backend/db/memory';
 import * as emotionDb from '@iki/backend/db/emotion';
 import { analyzeEmotionWithAgent } from '@iki/backend/provider/emotion_model';
-import { createChatMemory } from '@iki/backend/chat_service/memory';
+import { createChatMemory } from '@iki/backend/thread_session/memory';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const getChatThreadMock = vi.mocked(getChatThread);

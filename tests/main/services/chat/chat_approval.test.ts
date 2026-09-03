@@ -29,7 +29,7 @@ vi.mock('@iki/backend/provider/llm/factory', () => ({
   resolveModelCapability: vi.fn(async () => null),
 }));
 
-vi.mock('@iki/backend/chat_service/ui_messages', () => ({
+vi.mock('@iki/backend/thread_session/ui_messages', () => ({
   createUiChunkEmitter: vi.fn(() => ({
     messageId: 'assistant_resume',
     emitTextDelta: vi.fn(),

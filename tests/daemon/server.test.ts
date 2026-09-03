@@ -374,7 +374,7 @@ vi.mock('@iki/backend/platform', () => ({
   setPlatformInfo: setPlatformInfoMock,
 }));
 
-vi.mock('@iki/backend/chat_service', () => ({
+vi.mock('@iki/backend/thread_session', () => ({
   createChatService: createChatServiceMock,
 }));
 

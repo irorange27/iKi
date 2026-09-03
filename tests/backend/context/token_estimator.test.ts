@@ -4,7 +4,7 @@ import {
   clipTextToTokenBudget,
   estimateMessageTokens,
   estimateTextTokens,
-} from '@iki/backend/chat_service/token_estimator';
+} from '@iki/backend/thread_session/token_estimator';
 
 describe('token_estimator', () => {
   it('counts tokens with BPE tokenizer (gpt-tokenizer)', () => {

@@ -56,11 +56,11 @@ vi.mock('@iki/backend/agent_session/thread_summary', () => ({
   generateThreadSummary: generateThreadSummaryMock,
 }));
 
-vi.mock('@iki/backend/chat_service/skills', () => ({
+vi.mock('@iki/backend/thread_session/skills', () => ({
   resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
 }));
 
-vi.mock('@iki/backend/chat_service/platform', () => ({
+vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,
   retrieveRelevantContinuity: retrieveRelevantContinuityMock,
   getClipboardContextMessage: () => undefined,

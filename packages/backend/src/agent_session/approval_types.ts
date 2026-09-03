@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai';
 import type { AgentResult, ToolApprovalRequest } from '@iki/backend/agent';
-import type { ChatStreamTarget } from '../chat_service/types';
+import type { ChatStreamTarget } from '../thread_session/types';
 
 export type ApprovalRecoveryContext = {
   sessionId: string;

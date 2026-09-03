@@ -4,7 +4,7 @@ import type { AffectState } from '@iki/backend/affect/affect_state';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { SkillSummary } from '@iki/backend/types/skill';
-import type { ChatInputMessage } from '../chat_service/types';
+import type { ChatInputMessage } from '../thread_session/types';
 import type { EffectiveContextConfig } from './context_budget';
 
 export type ContextBlockKind =

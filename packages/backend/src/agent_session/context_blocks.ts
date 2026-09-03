@@ -5,11 +5,11 @@ import type { AffectState } from '@iki/backend/affect/affect_state';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import { resolveSkillsSystemPrompt } from '../chat_service/skills';
-import { getClipboardContextMessage, getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../chat_service/platform';
-import { getPromptFromMessage } from '../chat_service/ui_messages';
+import { resolveSkillsSystemPrompt } from '../thread_session/skills';
+import { getClipboardContextMessage, getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../thread_session/platform';
+import { getPromptFromMessage } from '../thread_session/ui_messages';
 import type { ContinuityMemoryPreview } from '@iki/backend/chat_platform';
-import type { ChatMemory } from '../chat_service/memory';
+import type { ChatMemory } from '../thread_session/memory';
 import type {
   AssembleChatContextParams,
   ClipboardContext,
@@ -24,7 +24,7 @@ import {
   clipTextToTokenBudget,
   estimateTextTokens,
 } from './context_helpers';
-import type { ChatInputMessage } from '../chat_service/types';
+import type { ChatInputMessage } from '../thread_session/types';
 
 const AGENT_INSTRUCTIONS_FILENAME = 'IKI.md';
 

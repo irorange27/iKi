@@ -15,7 +15,7 @@ import {
   buildRunTrajectory,
   exportRunTrajectory,
   validateAtifTrajectory,
-} from '@iki/backend/chat_service/atif_export';
+} from '@iki/backend/thread_session/atif_export';
 
 const fixtureRun = (): AgentRun => ({
   id: 'run_1',

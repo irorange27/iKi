@@ -8,7 +8,7 @@ vi.mock('@iki/backend/db/chat_usage', () => ({
 }));
 
 import * as chatUsageDb from '@iki/backend/db/chat_usage';
-import { createChatUsage } from '@iki/backend/chat_service/usage';
+import { createChatUsage } from '@iki/backend/thread_session/usage';
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -14,7 +14,7 @@ import { createDaemonLogger } from '@iki/backend/daemon_logs';
 import { initializeDatabase } from '@iki/backend/db/database';
 import { applyAppLoggingConfig, withLogContext } from '@iki/backend/logger';
 import { getUserDataPath, setPlatformInfo } from '@iki/backend/platform';
-import { createChatService } from '@iki/backend/chat_service';
+import { createChatService } from '@iki/backend/thread_session';
 import { createNapCatReverseBridge } from './napcat_adapter';
 import { readOrCreateBootstrapToken } from './bootstrap_token';
 import { createDaemonRequestHandler } from './server_http';

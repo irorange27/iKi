@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { autoCompactHistory } from '@iki/backend/chat_service/token_estimator';
+import { autoCompactHistory } from '@iki/backend/thread_session/token_estimator';
 
 const msg = (text: string) => ({ role: 'user' as const, content: text });
 

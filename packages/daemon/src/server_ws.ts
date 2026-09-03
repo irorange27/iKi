@@ -1,7 +1,7 @@
 import http from 'node:http';
 
-import type { ChatService } from '@iki/backend/chat_service';
-import type { ChatTransportMessage } from '@iki/backend/chat_service';
+import type { ChatService } from '@iki/backend/thread_session';
+import type { ChatTransportMessage } from '@iki/backend/thread_session';
 import { logDaemonHandlerFailure, type DaemonServerLogger } from './server_logging';
 import {
   readRequestedMcpServerIds,

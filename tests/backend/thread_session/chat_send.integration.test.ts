@@ -40,7 +40,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
 }));
 
-import { createChatSend } from '@iki/backend/chat_service/chat_send';
+import { createChatSend } from '@iki/backend/thread_session/chat_send';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';

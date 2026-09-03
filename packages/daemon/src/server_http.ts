@@ -3,8 +3,8 @@ import http from 'node:http';
 import * as memoryDb from '@iki/backend/db/memory';
 import { createAppClient } from '@iki/backend/db/app_clients';
 import type { McpManager } from '@iki/backend/mcp';
-import type { ChatTransportMessage } from '@iki/backend/chat_service';
-import type { ChatService } from '@iki/backend/chat_service';
+import type { ChatTransportMessage } from '@iki/backend/thread_session';
+import type { ChatService } from '@iki/backend/thread_session';
 import type { NapCatBridgeStatusInfo } from '@iki/backend/types/config';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {

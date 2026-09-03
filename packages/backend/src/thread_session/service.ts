@@ -7,7 +7,7 @@ import { createChatMemory } from './memory';
 import { createChatPersistence } from '../agent_session/persistence';
 import { createChatRuns } from './runs';
 import { createChatEval } from './eval';
-import { createChatStreaming } from './streaming';
+import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';

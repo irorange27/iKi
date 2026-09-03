@@ -5,11 +5,11 @@ import {
   clipTextToTokenBudget,
   estimateMessageTokens,
   estimateTextTokens,
-} from '../chat_service/token_estimator';
+} from '../thread_session/token_estimator';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import type { ChatInputMessage } from '../chat_service/types';
+import type { ChatInputMessage } from '../thread_session/types';
 import type {
   AssembleChatContextResult,
   ContextBlockKind,

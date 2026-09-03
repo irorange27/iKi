@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createThreadStreamCoordinator } from '@iki/backend/chat_service/thread_stream_coordinator';
-import type { ActiveStreamState } from '@iki/backend/chat_service/types';
+import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
+import type { ActiveStreamState } from '@iki/backend/thread_session/types';
 
 const makeStreamState = (): ActiveStreamState => ({
   cancelled: false,

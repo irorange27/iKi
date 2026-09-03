@@ -2,9 +2,9 @@ import type http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
-import type { ChatService } from '@iki/backend/chat_service';
+import type { ChatService } from '@iki/backend/thread_session';
 import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
-import type { ChatTransportMessage } from '@iki/backend/chat_service';
+import type { ChatTransportMessage } from '@iki/backend/thread_session';
 import { getAppConfig } from '@iki/backend/config';
 import { createDaemonLogger, recordNapCatMessagePreview } from '@iki/backend/daemon_logs';
 import { getProviders } from '@iki/backend/db/providers';

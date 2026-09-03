@@ -22,7 +22,7 @@ vi.mock('node:fs', () => ({
   },
 }));
 
-import { createChatEval } from '@iki/backend/chat_service/eval';
+import { createChatEval } from '@iki/backend/thread_session/eval';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as agentEvalDb from '@iki/backend/db/agent_eval';
 
