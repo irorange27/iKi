@@ -1,8 +1,5 @@
 import * as llmFactory from '../provider/llm/factory';
-import * as deepseekProvider from '../provider/llm/deepseek';
-import * as kimiProvider from '../provider/llm/kimi';
-import * as minimaxProvider from '../provider/llm/minimax';
-import * as openaiProvider from '../provider/llm/openai';
+import { getProviderModels } from '../provider/llm/model_discovery';
 import { createLogger } from '@iki/backend/logger';
 import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import type {
@@ -114,24 +111,7 @@ export const createChatStreamingModels = () => {
         );
       }
 
-      if (providerType === 'deepseek') {
-        return await toDescriptors(providerType, providerId, await deepseekProvider.getDeepSeekModels());
-      }
-      if (providerType === 'openai') {
-        return await toDescriptors(providerType, providerId, await openaiProvider.getOpenAIModels());
-      }
-      if (providerType === 'kimi') {
-        return await toDescriptors(providerType, providerId, await kimiProvider.getKimiModels());
-      }
-      if (providerType === 'minimax') {
-        return await toDescriptors(providerType, providerId, await minimaxProvider.getMinimaxModels());
-      }
-
-      return await toDescriptors(
-        providerType,
-        providerId,
-        await llmFactory.fetchModelsFromDev(providerType)
-      );
+      return await toDescriptors(providerType, providerId, await getProviderModels(providerType));
     } catch (error: unknown) {
       chatStreamingLogger.error(`Failed to get models for ${providerType}`, error);
       return [];

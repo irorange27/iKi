@@ -42,12 +42,12 @@ renderer composables (useChatComposerSend → electronAPI.chat.stream)
   → renderer ui_stream_controller → pure ui_stream_reducer → @ai-sdk/vue Chat store (ChatMessageStore)
 ```
 
-Loops: **inner** = AI SDK `stopWhen` above (1 step if tools disabled). **Outer** = streaming.ts runs one `harness.turn` per batch and continues **only in autonomous mode**, capped at `MAX_OUTER_AUTONOMOUS_BATCHES = 50`, checkpointing every 5 batches; handoff chains are separately capped at `MAX_HANDOFF_CHAIN = 5`. Both caps are live code.
+Loops: **inner** = AI SDK `stopWhen` above (1 step if tools disabled). **Outer** = streaming.ts runs one `harness.turn` per batch and continues **only in autonomous mode**, capped at `MAX_OUTER_AUTONOMOUS_BATCHES = 50`, syncing history into the run row (`working.modelMessages`) every batch via `syncModelMessages`; handoff chains are separately capped at `MAX_HANDOFF_CHAIN = 5`. Both caps are live code.
 
 ## Invariants
 
 - **Memory:** retrieval is off on the chat path (`includeMemory: false`); full retrieval only on approval recovery. Writes split: short-memory sync after persistence, long/emotion async fire-and-forget.
-- **Two observability stacks, don't unify:** `AgentRunTracker` → SQLite `agent_runs` / `agent_run_steps` / `agent_run_checkpoints` (can-I-resume-this-turn); Langfuse → why-did-the-model-do-that (`traceChatTurn` maps `threadId` to the trace `sessionId`).
+- **Two observability stacks, don't unify:** `AgentRunTracker` → SQLite `agent_runs` + append-only `agent_run_steps` (can-I-resume-this-turn; the run row's `working` state is the resume source — `agent_run_checkpoints` is historical only, see ADR 004 phase 3); Langfuse → why-did-the-model-do-that (`traceChatTurn` maps `threadId` to the trace `sessionId`). Eval exports run trajectories as ATIF (`chat_service/atif_export.ts`).
 - **`AgentHarness` has five construction sites** (streaming ×2, chat_send, approval recovery, subagent) — changes to "always pass X to the harness" must touch all five. Approval resume (live or recovered) always builds a fresh harness rehydrated from durable state (run row + approval rows) — that rebuild IS the resume mechanism, matching Codex's rollout replay (ADR 004).
 - **Subagent** (`tools/agent_tools.ts`) skips context assembly/compaction but records a child run via `agent_session/run_tracker`.
 - **MCP tools** register into `defaultToolRegistry` (`mcp/manager.ts`); the harness picks the per-turn toolset (`agent/harness/tool_resolver.ts`). `resolveToolsForClient` in the daemon is per-client filtering, not the merge point.
@@ -57,4 +57,4 @@ Loops: **inner** = AI SDK `stopWhen` above (1 step if tools disabled). **Outer**
 - Don't import `electron` here. If you need a host capability (window, dialog, clipboard), accept it via a platform interface defined in `chat_platform.ts` / `platform.ts`.
 - Don't reach into `packages/desktop` or `packages/daemon`. Dependency direction is one-way.
 
-See repo root [AGENTS.md](../../AGENTS.md) for orientation and the doc map.
+See repo root [AGENTS.md](../../AGENTS.md) for orientation and the doc map; [docs/harness.md](../../docs/harness.md) for the runtime concept model (context engineering, steering, durable execution).

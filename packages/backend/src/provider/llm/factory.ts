@@ -4,7 +4,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { createMinimax } from 'vercel-minimax-ai-provider';
+import { createMiniMax } from '@ai-sdk/minimax';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -421,7 +421,7 @@ const STATIC_PROVIDER_MODEL_FACTORIES: Record<string, (config: ProviderConfig, m
     return client(modelId);
   },
   minimax: (config, modelId) => {
-    const model = createMinimax({
+    const model = createMiniMax({
       apiKey: config.apiKey,
       baseURL: config.baseURL || 'https://api.minimax.io/anthropic/v1',
     })(modelId);
