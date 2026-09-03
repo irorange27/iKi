@@ -27,7 +27,7 @@ vi.mock('@iki/backend/agent_session/run_tracker', () => ({
 }));
 
 import { DelegatedAgentTool } from '@iki/backend/tools/agent_tools';
-import { ReadFileTool } from '@iki/backend/tools/file_tools';
+import { ReadFileTool, WriteFileTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
 import { runWithToolRuntimeContext } from '@iki/backend/tools/runtime_context';
 
@@ -156,6 +156,60 @@ describe('DelegatedAgentTool', () => {
         model: 'gpt-4o-mini',
       },
     });
+  });
+
+  it('explorer subagent type restricts the delegated tools to the read-only set', async () => {
+    setRunResult({
+      response: 'Inspected the directory structure.',
+      iterations: 0,
+      toolCalls: [],
+    });
+
+    const result = await runWithToolRuntimeContext(
+      {
+        availableTools: [
+          new ReadFileTool().toAgentTool(),
+          new WriteFileTool().toAgentTool(),
+          new ShellExecutionTool().toAgentTool(),
+        ],
+        runId: 'run_parent_1',
+        runTracker: { id: 'run_parent_1', recordChildRun: vi.fn() },
+        conversationModel: { providerType: 'openai', model: 'gpt-4o-mini' },
+      },
+      async () =>
+        await new DelegatedAgentTool().execute({
+          task: 'Research the workspace layout.',
+          subagent_type: 'explorer',
+        })
+    );
+
+    const runRequest = runMock.mock.calls[0]?.[0] as { tools: Array<{ name: string }> };
+    expect(runRequest.tools.map(t => t.name)).toEqual(['read_file']);
+    expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          metadata: expect.objectContaining({ subagent_type: 'explorer' }),
+        }),
+      })
+    );
+  });
+
+  it('rejects explicit tools outside the explorer policy', async () => {
+    await expect(
+      runWithToolRuntimeContext(
+        {
+          availableTools: [new ReadFileTool().toAgentTool(), new ShellExecutionTool().toAgentTool()],
+          runId: 'run_parent_1',
+          conversationModel: { providerType: 'openai', model: 'gpt-4o-mini' },
+        },
+        async () =>
+          await new DelegatedAgentTool().execute({
+            task: 'Research.',
+            subagent_type: 'explorer',
+            tools: ['shell'],
+          })
+      )
+    ).rejects.toThrow(/not available to the 'explorer' subagent type/);
   });
 
   it('rejects explicit approval-gated delegated tools', async () => {

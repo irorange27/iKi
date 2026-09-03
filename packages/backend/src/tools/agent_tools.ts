@@ -56,6 +56,35 @@ const isApprovalFreeTool = (tool: Pick<AgentTool, 'needsApproval' | 'approvalMod
   tool.approvalMode !== 'always' &&
   (tool.needsApproval === false || tool.needsApproval === undefined);
 
+const EXPLORER_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'read_file',
+  'web',
+  'fetch',
+  'load_skill',
+  'list_personal_skills',
+  'read_personal_skill',
+]);
+
+const SUBAGENT_TYPE_POLICY: Record<
+  'general' | 'explorer',
+  { prompt: string; allowedTools: ReadonlySet<string> | null }
+> = {
+  general: {
+    prompt: '',
+    allowedTools: null,
+  },
+  explorer: {
+    prompt:
+      'You are a read-only research agent. You cannot create, modify, or delete anything; report findings instead of attempting changes.',
+    allowedTools: EXPLORER_TOOL_NAMES,
+  },
+};
+
+type SubagentType = keyof typeof SUBAGENT_TYPE_POLICY;
+
+const resolveSubagentType = (value: unknown): SubagentType =>
+  typeof value === 'string' && value in SUBAGENT_TYPE_POLICY ? (value as SubagentType) : 'general';
+
 const formatToolNameList = (toolNames: string[]): string =>
   toolNames.slice(0, MAX_TOOL_NAMES_IN_ERROR).join(', ');
 
@@ -124,7 +153,11 @@ const resolveRuntimeTools = (): AgentTool[] => {
   return defaultToolRegistry.getAll();
 };
 
-const resolveDelegableTools = (requestedTools: string[] | undefined): AgentTool[] => {
+const resolveDelegableTools = (
+  requestedTools: string[] | undefined,
+  subagentType: SubagentType
+): AgentTool[] => {
+  const policy = SUBAGENT_TYPE_POLICY[subagentType];
   const toolMap = new Map<string, AgentTool>();
   for (const tool of resolveRuntimeTools()) {
     if (!tool || typeof tool.name !== 'string' || !tool.name.trim()) continue;
@@ -150,6 +183,12 @@ const resolveDelegableTools = (requestedTools: string[] | undefined): AgentTool[
         );
       }
 
+      if (policy.allowedTools && !policy.allowedTools.has(toolName)) {
+        throw new Error(
+          `Tool "${toolName}" is not available to the '${subagentType}' subagent type. Allowed tools: ${formatToolNameList(Array.from(policy.allowedTools))}`
+        );
+      }
+
       if (!isApprovalFreeTool(tool)) {
         throw new Error(
           `Tool "${toolName}" requires approval and cannot be used inside the delegated agent tool.`
@@ -163,7 +202,10 @@ const resolveDelegableTools = (requestedTools: string[] | undefined): AgentTool[
   }
 
   return Array.from(toolMap.values()).filter(
-    tool => tool.name !== AGENT_TOOL_NAME && isApprovalFreeTool(tool)
+    tool =>
+      tool.name !== AGENT_TOOL_NAME &&
+      isApprovalFreeTool(tool) &&
+      (!policy.allowedTools || policy.allowedTools.has(tool.name))
   );
 };
 
@@ -197,7 +239,7 @@ export class DelegatedAgentTool extends BaseTool {
   override autoAllowed = true;
   override needsApproval = false;
   override description =
-    'Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn\'s approval-free tools and cannot recursively spawn more agents.';
+    'Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn\'s approval-free tools and cannot recursively spawn more agents. Pick subagent_type deliberately: explorer is a read-only research agent (safe for investigation), general carries the full approval-free tool set.';
   override paramSchema = AgentToolInputSchema;
   override outputSchema = zodSchemaToJsonSchema(AgentToolOutputSchema, {
     title: 'agent_output',
@@ -211,7 +253,8 @@ export class DelegatedAgentTool extends BaseTool {
     }
 
     const conversationModel = resolveConversationModel();
-    const delegatedTools = resolveDelegableTools(args.tools);
+    const subagentType = resolveSubagentType(args.subagent_type);
+    const delegatedTools = resolveDelegableTools(args.tools, subagentType);
     const delegatedToolNames = delegatedTools.map(tool => tool.name);
 
     // Create scratchpad directory for intermediate subagent findings
@@ -219,7 +262,8 @@ export class DelegatedAgentTool extends BaseTool {
     const scratchpadPath = path.join(scratchpadBase, `agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
     await fs.mkdir(scratchpadPath, { recursive: true });
 
-    const systemPrompt = `${SUBAGENT_SYSTEM_PROMPT_BASE}\nScratchpad directory: ${scratchpadPath}`;
+    const typePrompt = SUBAGENT_TYPE_POLICY[subagentType].prompt;
+    const systemPrompt = `${SUBAGENT_SYSTEM_PROMPT_BASE}${typePrompt ? `\n${typePrompt}\n` : ''}\nScratchpad directory: ${scratchpadPath}`;
     const prompt = buildDelegationPrompt(args, delegatedToolNames, scratchpadPath);
 
     const resolvedMaxIterations = Math.max(
@@ -262,6 +306,7 @@ export class DelegatedAgentTool extends BaseTool {
         prompt,
         metadata: {
           source: 'delegated-agent',
+          subagent_type: subagentType,
           requestedToolNames: delegatedToolNames,
           maxIterations: resolvedMaxIterations,
           scratchpadPath,
@@ -280,6 +325,7 @@ export class DelegatedAgentTool extends BaseTool {
       summary: `Delegated agent subtask: ${args.task}`,
       input: {
         toolName: AGENT_TOOL_NAME,
+        subagent_type: subagentType,
         delegatedTools: delegatedToolNames,
         scratchpadPath,
       },

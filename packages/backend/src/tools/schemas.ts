@@ -304,6 +304,13 @@ const agentToolInputShape = {
       'Optional exact output contract for the parent agent, for example findings bullets, a shortlist, a comparison summary, or recommended next files.'
     )
     .optional(),
+  subagent_type: z
+    .enum(['general', 'explorer'])
+    .optional()
+    .default('general')
+    .describe(
+      "general (default): full approval-free tool set for open-ended subtasks. explorer: read-only research agent — reads files, searches the web, and loads skills; it cannot create, modify, or delete anything. Use explorer for investigation subtasks so nothing can be changed by accident."
+    ),
   tools: z
     .array(z.string().trim().min(1))
     .max(MAX_AGENT_TOOL_SELECTION)
