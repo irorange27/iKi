@@ -1,7 +1,6 @@
 import { getDb } from './database';
 import type {
   AgentRun,
-  AgentRunCheckpoint,
   AgentRunError,
   AgentRunInput,
   AgentRunOutput,
@@ -44,15 +43,6 @@ type AgentRunStepRow = {
   output_json?: string | null;
   started_at: string;
   finished_at?: string | null;
-};
-
-type AgentRunCheckpointRow = {
-  id: string;
-  run_id: string;
-  step_index: number;
-  reason: AgentRunCheckpoint['reason'];
-  snapshot_json: string;
-  created_at: string;
 };
 
 const parseJsonValue = <T>(value: unknown, fallback: T): T => {
@@ -164,33 +154,6 @@ const mapAgentRunStepRow = (row: AgentRunStepRow): AgentRunStep => ({
   finishedAt: row.finished_at ?? null,
 });
 
-const mapAgentRunCheckpointRow = (row: AgentRunCheckpointRow): AgentRunCheckpoint => ({
-  id: row.id,
-  runId: row.run_id,
-  stepIndex: Math.max(0, Math.trunc(row.step_index)),
-  reason: row.reason,
-  snapshot: mapAgentRunRow(
-    parseJsonValue<AgentRunRow>(
-      row.snapshot_json,
-      {
-        id: row.run_id,
-        kind: 'chat-turn',
-        status: 'failed',
-        root_run_id: row.run_id,
-        provider_type: '',
-        model: '',
-        system_prompt: '',
-        enabled_tools: '[]',
-        available_skill_ids: '[]',
-        input_json: '{}',
-        working_json: '{"modelMessages":[],"accumulatedText":"","pendingApprovalIds":[],"lastStepIndex":0}',
-        created_at: row.created_at,
-        updated_at: row.created_at,
-      }
-    )
-  ),
-  createdAt: row.created_at,
-});
 
 const normalizeRunIds = (runIds: string[]): string[] => {
   const normalized: string[] = [];
@@ -483,93 +446,8 @@ const listAgentRunStepsByRunIds = (runIds: string[]): Map<string, AgentRunStep[]
   return stepsByRunId;
 };
 
-export const createAgentRunCheckpoint = (
-  checkpoint: Omit<AgentRunCheckpoint, 'createdAt'> & { createdAt?: string }
-): AgentRunCheckpoint => {
-  const createdAt = checkpoint.createdAt || toIsoNow();
-  getDb()
-    .prepare(
-      `
-        INSERT INTO agent_run_checkpoints (
-          id, run_id, step_index, reason, snapshot_json, created_at
-        ) VALUES (
-          @id, @run_id, @step_index, @reason, @snapshot_json, @created_at
-        )
-      `
-    )
-    .run({
-      id: checkpoint.id,
-      run_id: checkpoint.runId,
-      step_index: checkpoint.stepIndex,
-      reason: checkpoint.reason,
-      snapshot_json: JSON.stringify({
-        id: checkpoint.snapshot.id,
-        kind: checkpoint.snapshot.kind,
-        status: checkpoint.snapshot.status,
-        thread_id: checkpoint.snapshot.threadId ?? null,
-        parent_run_id: checkpoint.snapshot.parentRunId ?? null,
-        root_run_id: checkpoint.snapshot.rootRunId,
-        provider_type: checkpoint.snapshot.providerType,
-        provider_id: checkpoint.snapshot.providerId ?? null,
-        model: checkpoint.snapshot.model,
-        system_prompt: checkpoint.snapshot.systemPrompt,
-        enabled_tools: JSON.stringify(checkpoint.snapshot.enabledTools),
-        available_skill_ids: JSON.stringify(checkpoint.snapshot.availableSkillIds),
-        input_json: JSON.stringify(checkpoint.snapshot.input ?? {}),
-        working_json: JSON.stringify(checkpoint.snapshot.working),
-        output_json: checkpoint.snapshot.output ? JSON.stringify(checkpoint.snapshot.output) : null,
-        error_json: checkpoint.snapshot.error ? JSON.stringify(checkpoint.snapshot.error) : null,
-        created_at: checkpoint.snapshot.createdAt,
-        updated_at: checkpoint.snapshot.updatedAt,
-      }),
-      created_at: createdAt,
-    });
 
-  return {
-    ...checkpoint,
-    createdAt,
-  };
-};
 
-export const getLatestAgentRunCheckpoint = (runId: string): AgentRunCheckpoint | null => {
-  const row = getDb()
-    .prepare(
-      `
-        SELECT * FROM agent_run_checkpoints
-        WHERE run_id = ?
-        ORDER BY step_index DESC, created_at DESC
-        LIMIT 1
-      `
-    )
-    .get(runId) as AgentRunCheckpointRow | undefined;
-
-  return row ? mapAgentRunCheckpointRow(row) : null;
-};
-
-const getLatestAgentRunCheckpointsByRunIds = (
-  runIds: string[]
-): Map<string, AgentRunCheckpoint> => {
-  const clause = buildInClause(runIds);
-  if (!clause) return new Map();
-
-  const rows = getDb()
-    .prepare(
-      `
-        SELECT * FROM agent_run_checkpoints
-        WHERE run_id IN (${clause.placeholders})
-        ORDER BY run_id ASC, step_index DESC, created_at DESC
-      `
-    )
-    .all(...clause.values) as AgentRunCheckpointRow[];
-
-  const checkpointsByRunId = new Map<string, AgentRunCheckpoint>();
-  for (const row of rows) {
-    if (checkpointsByRunId.has(row.run_id)) continue;
-    checkpointsByRunId.set(row.run_id, mapAgentRunCheckpointRow(row));
-  }
-
-  return checkpointsByRunId;
-};
 
 export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
   const normalizedRunId = normalizeWhitespace(runId);
@@ -581,7 +459,6 @@ export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
   return {
     run,
     steps: listAgentRunSteps(normalizedRunId),
-    latestCheckpoint: getLatestAgentRunCheckpoint(normalizedRunId),
     children: listAgentRunsByParentRunId(normalizedRunId),
   };
 };
@@ -694,7 +571,6 @@ export const getAgentRunTree = (rootRunId: string): AgentRunTree => {
   const runs = listAgentRunsByRootRunId(normalizedRootRunId);
   const runIds = runs.map(run => run.id);
   const stepsByRunId = listAgentRunStepsByRunIds(runIds);
-  const checkpointsByRunId = getLatestAgentRunCheckpointsByRunIds(runIds);
   const childrenByParentRunId = new Map<string, AgentRun[]>();
 
   for (const run of runs) {
@@ -713,7 +589,6 @@ export const getAgentRunTree = (rootRunId: string): AgentRunTree => {
     traces: runs.map(run => ({
       run,
       steps: stepsByRunId.get(run.id) ?? [],
-      latestCheckpoint: checkpointsByRunId.get(run.id) ?? null,
       children: childrenByParentRunId.get(run.id) ?? [],
     })),
   };
