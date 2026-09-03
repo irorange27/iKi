@@ -19,6 +19,7 @@ import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../agent_session/turn_preparer';
 import { createChatSend } from './chat_send';
+import { buildFreshHandoffSystemMessage, buildHandoffResumeContext } from './handoff_resume';
 export type { ChatSendResult } from './chat_send';
 import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent, ChatStreamEvent } from './types';
 import type { ConversationPreview } from '@iki/backend/types/companion';
@@ -185,69 +186,14 @@ export const createChatStreaming = (deps: {
 
       if (options.runConfig?.kind === 'handoff-resume' && options.runConfig?.parentRunId) {
         const parentRun = agentRunDb.getAgentRun(options.runConfig.parentRunId);
-        const resumedMessages = Array.isArray(parentRun?.working?.modelMessages)
-          ? (parentRun!.working!.modelMessages as import('ai').ModelMessage[])
-          : [];
-        if (resumedMessages.length > 0) {
-          let handoffSummary = '';
-          let handoffNextSteps = '';
-          let handoffReason = '';
-
-          for (let i = resumedMessages.length - 1; i >= 0; i--) {
-            const msg = resumedMessages[i] as Record<string, unknown>;
-            if (msg.role !== 'assistant') continue;
-            const content = msg.content;
-            if (!Array.isArray(content)) continue;
-            for (const part of content) {
-              if (
-                typeof part === 'object' &&
-                part !== null &&
-                (part as Record<string, unknown>).type === 'tool-call' &&
-                (part as Record<string, unknown>).toolName === 'handoff'
-              ) {
-                const args = (part as Record<string, unknown>).args as Record<string, unknown> | undefined;
-                if (args) {
-                  handoffSummary = typeof args.summary === 'string' ? args.summary : '';
-                  handoffNextSteps = typeof args.next_steps === 'string' ? args.next_steps : '';
-                  handoffReason = typeof args.reason === 'string' ? args.reason : '';
-                }
-                break;
-              }
-            }
-            if (handoffSummary || handoffNextSteps) break;
-          }
-
-          const handoffContextParts: string[] = [
-            'You are resuming work from a previous agent run.',
-          ];
-          if (handoffSummary) {
-            handoffContextParts.push(`\nSummary of previous work:\n${handoffSummary}`);
-          }
-          if (handoffNextSteps) {
-            handoffContextParts.push(`\nNext steps to complete:\n${handoffNextSteps}`);
-          }
-          if (handoffReason) {
-            handoffContextParts.push(`\nReason for handoff: ${handoffReason}`);
-          }
-          handoffContextParts.push('\nThe conversation history from the previous run is below. Continue the work based on what was done before.');
-
-          streamHistory = [
-            {
-              role: 'system' as const,
-              content: `[HANDOFF CONTEXT] ${handoffContextParts.join('')}`,
-            },
-            ...resumedMessages,
-            ...(preparedTurn.history.length > 0
-              ? [
-                  {
-                    role: 'system' as const,
-                    content: `[CURRENT THREAD] The following messages are from the current conversation thread:`,
-                  } as import('ai').ModelMessage,
-                  ...preparedTurn.history,
-                ]
-              : []),
-          ];
-          streamPrompt = preparedTurn.prompt || 'Continue the work from where the previous agent left off.';
+        const handoffResume = buildHandoffResumeContext({
+          parentRun,
+          preparedHistory: preparedTurn.history,
+          preparedPrompt: preparedTurn.prompt,
+        });
+        if (handoffResume) {
+          streamHistory = handoffResume.history;
+          streamPrompt = handoffResume.prompt;
         }
       }
 
@@ -707,17 +653,7 @@ export const createChatStreaming = (deps: {
           streamHistory = [
             {
               role: 'system',
-              content: [
-                '[HANDOFF CONTEXT] You are a fresh agent instance continuing work handed off from a previous agent.',
-                '',
-                `Summary of completed work:\n${streamResult.handoff.summary}`,
-                '',
-                `Next steps to complete:\n${streamResult.handoff.nextSteps}`,
-                '',
-                `Reason for handoff: ${streamResult.handoff.reason}`,
-                '',
-                'You have a clean context window. Start working on the next steps immediately.',
-              ].join('\n'),
+              content: buildFreshHandoffSystemMessage(streamResult.handoff),
             },
           ];
           streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
