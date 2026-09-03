@@ -28,7 +28,7 @@
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx,json,css,scss,md,vue}\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,js,jsx,json,css,scss,md,vue}\"",
     "test": "vitest run",
-    "test:smoke:memory": "vitest run --run tests/core/memory/embedding.test.ts tests/core/memory/memory_db_crud.test.ts tests/core/memory/memory_search_embeddings.test.ts tests/core/memory/auto_summarize.test.ts tests/core/runtimes/memory_retrieval_runtime.test.ts tests/renderer/components/SettingsMemorySection.test.ts tests/main/chat_memory_scope.test.ts tests/main/services/chat/chat_context.test.ts tests/main/services/chat/chat_streaming.test.ts tests/main/services/chat/chat_approval.test.ts tests/main/ipc/data_access_modules.test.ts tests/daemon/server.test.ts tests/main/services/life/life_reflection.test.ts",
+    "test:smoke:memory": "vitest run --run tests/backend/memory/embedding.test.ts tests/backend/memory/memory_db_crud.test.ts tests/backend/memory/memory_search_embeddings.test.ts tests/backend/memory/auto_summarize.test.ts tests/backend/runtimes/memory_retrieval_runtime.test.ts tests/renderer/components/SettingsMemorySection.test.ts tests/main/chat_memory_scope.test.ts tests/main/services/chat/chat_context.test.ts tests/main/services/chat/chat_streaming.test.ts tests/main/services/chat/chat_approval.test.ts tests/main/ipc/data_access_modules.test.ts tests/daemon/server.test.ts tests/main/services/life/life_reflection.test.ts",
     "test:coverage": "vitest run --coverage",
     "test:renderer": "vitest run tests/renderer",
     "test:watch": "vitest",
