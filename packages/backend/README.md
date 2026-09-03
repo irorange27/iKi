@@ -48,7 +48,7 @@ Loops: **inner** = AI SDK `stopWhen` above (1 step if tools disabled). **Outer**
 
 - **Memory:** retrieval is off on the chat path (`includeMemory: false`); full retrieval only on approval recovery. Writes split: short-memory sync after persistence, long/emotion async fire-and-forget.
 - **Two observability stacks, don't unify:** `AgentRunTracker` → SQLite `agent_runs` / `agent_run_steps` / `agent_run_checkpoints` (can-I-resume-this-turn); Langfuse → why-did-the-model-do-that (`traceChatTurn` maps `threadId` to the trace `sessionId`).
-- **`AgentHarness` has five construction sites** (streaming ×2, chat_send, approval recovery, subagent) — changes to "always pass X to the harness" must touch all five.
+- **`AgentHarness` has five construction sites** (streaming ×2, chat_send, approval recovery, subagent) — changes to "always pass X to the harness" must touch all five. Approval resume (live or recovered) always builds a fresh harness rehydrated from durable state (run row + approval rows) — that rebuild IS the resume mechanism, matching Codex's rollout replay (ADR 004).
 - **Subagent** (`tools/agent_tools.ts`) skips context assembly/compaction but records a child run via `agent_session/run_tracker`.
 - **MCP tools** register into `defaultToolRegistry` (`mcp/manager.ts`); the harness picks the per-turn toolset (`agent/harness/tool_resolver.ts`). `resolveToolsForClient` in the daemon is per-client filtering, not the merge point.
 
