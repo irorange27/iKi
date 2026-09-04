@@ -1,7 +1,10 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 
-import { createChatUiStreamController } from '../modules/chat/ui_stream_controller';
+import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import type { ElectronApi } from '@iki/backend/types/electron_api';
+import { createLogger } from '../logger';
+import type { ChatInstance } from '../modules/chat/chat_instance';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import {
@@ -9,19 +12,19 @@ import {
   upsertTextIntoMessageParts,
   extractTextFromMessage,
 } from '../modules/chat/ui_message_text';
-import type { ElectronApi } from '@iki/backend/types/electron_api';
-import { createLogger } from '../logger';
 import type { ChatThread } from './useChatThreads';
 import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import type { SubmitTurnParams, SubmitTurnResult } from './useChatComposerSend';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
 export const useChatStreaming = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
+  chatInstance: ChatInstance;
   messageStore: ChatMessageStore;
   persistence: UiMessagePersistence;
   createMessageId: () => string;
@@ -68,50 +71,50 @@ export const useChatStreaming = (deps: {
     });
   };
 
-  const streamController = createChatUiStreamController({
-    messageStore: deps.messageStore,
-    electronAPI: deps.electronAPI,
-    persistence: deps.persistence,
-    createMessageId: deps.createMessageId,
-    scrollToBottom: deps.scrollToBottom,
-    getCurrentThreadId: deps.getCurrentThreadId,
-    onAssistantMessagePersisted: deps.onAssistantMessagePersisted,
-  });
+  const stopActiveStreamIfNeeded = async (targetThreadId?: string) => {
+    const boundThreadId = deps.chatInstance.transport.getBoundThreadId();
+    if (!boundThreadId) return;
+    if (targetThreadId && boundThreadId === targetThreadId) return;
+
+    try {
+      deps.chatInstance.transport.detachActiveStream();
+      await deps.electronAPI.chat.stopStream();
+    } catch (error) {
+      chatStreamingLogger.event({
+        level: 'warn',
+        event: 'chat.stream.stop',
+        outcome: 'failed',
+        error,
+      });
+    }
+  };
 
   const resetEditing = () => {
     editingUserMessageId.value = null;
   };
 
-  const resetStreamState = () => {
-    streamController.resetTransientState();
-  };
-
   const selectThread = async (threadId: string) => {
-    await streamController.stopActiveStreamIfNeeded(threadId);
+    await stopActiveStreamIfNeeded(threadId);
     await deps.selectThread(threadId);
     resetEditing();
-    resetStreamState();
   };
 
   const handleThreadDeleted = async (threadId: string) => {
-    await streamController.stopActiveStreamIfNeeded();
+    await stopActiveStreamIfNeeded();
     await deps.handleThreadDeleted(threadId);
     resetEditing();
-    resetStreamState();
   };
 
   const handleNewChat = async () => {
-    await streamController.stopActiveStreamIfNeeded();
+    await stopActiveStreamIfNeeded();
     await deps.handleNewChat();
     resetEditing();
-    resetStreamState();
   };
 
   const handleClearCurrentThread = async () => {
-    await streamController.stopActiveStreamIfNeeded();
+    await stopActiveStreamIfNeeded();
     await deps.clearCurrentThread();
     resetEditing();
-    resetStreamState();
   };
 
   const beginEditMessage = async (
@@ -119,18 +122,24 @@ export const useChatStreaming = (deps: {
     setDraftMessage: (text: string) => Promise<void>
   ) => {
     if (!message || message.role !== 'user' || typeof message.id !== 'string') return;
-    await streamController.stopActiveStreamIfNeeded();
+    await stopActiveStreamIfNeeded();
     editingUserMessageId.value = message.id;
     const text = extractTextFromMessage(message);
     await setDraftMessage(text);
     deps.scrollToBottom();
   };
 
-  const cancelEditing = async (clearDraftMessage: () => Promise<void>) => {
+  const cancelEditing = (clearDraftMessage: () => Promise<void>) => {
     editingUserMessageId.value = null;
-    await clearDraftMessage();
+    return clearDraftMessage();
   };
 
+  /**
+   * Prepares thread/workspace/model state and builds the user message (and
+   * persists it). The message is *not* appended to the store here — the
+   * Chat's `sendMessage` owns that, then hands the whole history to the
+   * transport.
+   */
   const prepareMessageSend = async (
     payload: PrepareMessageSendPayload
   ): Promise<PreparedMessageSend | null> => {
@@ -148,7 +157,6 @@ export const useChatStreaming = (deps: {
         });
         return null;
       }
-      resetStreamState();
       resetEditing();
     }
 
@@ -195,7 +203,7 @@ export const useChatStreaming = (deps: {
     deps.showWelcome.value = false;
 
     if (pendingEditMessageId && deps.currentThread.value) {
-      await streamController.stopActiveStreamIfNeeded();
+      await stopActiveStreamIfNeeded();
 
       const messageIndex = deps.messageStore.findIndexById(pendingEditMessageId);
 
@@ -227,16 +235,12 @@ export const useChatStreaming = (deps: {
           );
           await truncateConversationAfterIndex(messageIndex);
 
-          streamController.beginTurn({
-            threadId: deps.currentThread.value.id,
-            parentId: updatedUserMessage.id,
-          });
-
           editingUserMessageId.value = null;
           deps.scrollToBottom();
           return {
             threadId: deps.currentThread.value.id,
-            messagesSnapshot: deps.messageStore.snapshot(),
+            editedMessageId: updatedUserMessage.id,
+            userMessage: updatedUserMessage,
           };
         }
       }
@@ -259,27 +263,54 @@ export const useChatStreaming = (deps: {
         : {}),
     };
 
-    deps.messageStore.append(userMessage);
     const threadId = deps.currentThread.value.id;
-    streamController.beginTurn({
-      threadId,
-      parentId: userMessage.id,
-    });
     await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
 
     deps.scrollToBottom();
     return {
       threadId,
-      messagesSnapshot: deps.messageStore.snapshot(),
+      userMessage,
     };
   };
 
+  /**
+   * Submits the prepared turn through the Chat: `sendMessage` appends the
+   * user message, streams the response via the IPC transport into the SDK's
+   * UIMessage accumulation, and resolves when the turn settles.
+   */
+  const submitTurn = async (params: SubmitTurnParams): Promise<SubmitTurnResult> => {
+    const { preparedMessageSend, body } = params;
+    try {
+      const message = preparedMessageSend.editedMessageId
+        ? { ...preparedMessageSend.userMessage, messageId: preparedMessageSend.editedMessageId }
+        : preparedMessageSend.userMessage;
+
+      await deps.chatInstance.chat.sendMessage(message, { body });
+
+      const chat = deps.chatInstance.chat;
+      if (chat.status === 'error') {
+        return { ok: false, error: chat.error?.message || 'Chat stream failed' };
+      }
+      return { ok: true };
+    } catch (error) {
+      chatStreamingLogger.event({
+        level: 'error',
+        event: 'chat.send',
+        outcome: 'failed',
+        error,
+      });
+      return { ok: false, error: getErrorMessage(error) };
+    }
+  };
+
   return {
-    streamController,
+    chatInstance: deps.chatInstance,
     editingUserMessageId,
-    isApprovalProcessing: streamController.isApprovalProcessing,
-    handleToolApproval: streamController.handleToolApproval,
+    isApprovalProcessing: deps.chatInstance.isApprovalProcessing,
+    handleToolApproval: deps.chatInstance.handleToolApproval,
     prepareMessageSend,
+    submitTurn,
+    stopActiveStreamIfNeeded,
     beginEditMessage,
     cancelEditing,
     selectThread,

@@ -11,6 +11,7 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
+import { createPrefixedId } from '../utils/id';
 import type { ChatToolApprovalDecision } from '@iki/backend/types/chat_tool_approval';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from '../thread_session/memory';
@@ -439,17 +440,22 @@ export const createChatApproval = (deps: {
       existingStream.abortController.abort('resume-after-tool-approval');
     }
 
+    // Continue the interrupted stream's message id: the resumed `start` chunk
+    // then addresses the same assistant message instead of opening a second one
+    // (idempotent accumulation on AI SDK clients keys on this id).
+    const resumeMessageId =
+      session.recoveryContext?.sessionId ?? createPrefixedId('assistant');
     const streamState: ActiveStreamState = {
       cancelled: false,
       stoppedByUser: false,
       abortController: new AbortController(),
     };
-    const uiChunkEmitter = createUiChunkEmitter(session.target);
+    const uiChunkEmitter = createUiChunkEmitter(session.target, resumeMessageId);
     const baseApprovalContext = session.recoveryContext
       ? {
           ...session.recoveryContext,
-          sessionId: uiChunkEmitter.messageId,
-          assistantMessageId: uiChunkEmitter.messageId,
+          sessionId: resumeMessageId,
+          assistantMessageId: resumeMessageId,
         }
       : undefined;
     const resumeRunTracker = baseApprovalContext

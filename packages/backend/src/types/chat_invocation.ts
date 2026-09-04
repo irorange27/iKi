@@ -23,4 +23,7 @@ export type ChatInvocationOptions = {
 export type ChatInvocationResult = {
   success?: boolean;
   error?: string;
+  /** Approval resume: the decision was recorded but sibling approvals remain. */
+  awaitingApproval?: boolean;
+  waitingForApprovals?: string[];
 };

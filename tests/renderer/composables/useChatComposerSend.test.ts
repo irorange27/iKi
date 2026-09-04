@@ -86,22 +86,19 @@ const createHarness = (options?: {
     options?.prepareMessageSend ??
     vi.fn(async () => ({
       threadId: 'thread_1',
-      messagesSnapshot: [
-        {
-          id: 'user_1',
-          role: 'user',
-          parts: [{ type: 'text', text: message.value }],
-        },
-      ],
+      userMessage: {
+        id: 'user_1',
+        role: 'user',
+        parts: [{ type: 'text', text: message.value }],
+      },
     }));
   const stopVoiceInput = vi.fn();
-  const stream = vi.fn(async () => ({ success: true }));
+  const submitTurn = vi.fn(async () => ({ ok: true }));
   const stopStream = vi.fn(async () => options?.stopStreamResult ?? { success: true });
 
   const state = useChatComposerSend({
     electronAPI: {
       chat: {
-        stream,
         stopStream,
       },
     } as never,
@@ -118,6 +115,7 @@ const createHarness = (options?: {
     prepareFailedMessage: 'Prepare failed',
     stopFailedMessage: 'Stop failed',
     prepareMessageSend,
+    submitTurn,
     resolveSendRequest: options?.resolveSendRequest,
     ensureProviderReady,
     resolveSelectedMcpServerIds,
@@ -130,7 +128,7 @@ const createHarness = (options?: {
     resolveSelectedMcpServerIds,
     prepareMessageSend,
     stopVoiceInput,
-    stream,
+    submitTurn,
     stopStream,
     state,
   };
@@ -148,7 +146,7 @@ describe('useChatComposerSend', () => {
     await harness.state.sendMessage();
 
     expect(harness.prepareMessageSend).not.toHaveBeenCalled();
-    expect(harness.stream).not.toHaveBeenCalled();
+    expect(harness.submitTurn).not.toHaveBeenCalled();
     expect(harness.state.composerFeedback.value).toBe('Please configure OpenAI first.');
 
     harness.message.value = 'Need help now';
@@ -225,11 +223,12 @@ describe('useChatComposerSend', () => {
         },
       })
     );
-    expect(harness.stream).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(harness.submitTurn).toHaveBeenCalledWith({
+      preparedMessageSend: expect.objectContaining({ threadId: 'thread_1' }),
+      body: expect.objectContaining({
         skillMode: 'manual',
         skillIds: ['codex:frontend-dev'],
-      })
-    );
+      }),
+    });
   });
 });

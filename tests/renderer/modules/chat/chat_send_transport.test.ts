@@ -27,7 +27,7 @@ const buildProvider = (
 });
 
 describe('chat_send_transport', () => {
-  it('builds the same IPC stream payload shape used by the composer send path', () => {
+  it('builds the invocation body (messages injected by the transport at send time)', () => {
     const provider = buildProvider({
       id: 'openai',
       name: 'OpenAI',
@@ -45,16 +45,7 @@ describe('chat_send_transport', () => {
           maxOutputTokens: 16384,
         },
       },
-      preparedMessageSend: {
-        threadId: 'thread_1',
-        messagesSnapshot: [
-          {
-            id: 'user_1',
-            role: 'user',
-            parts: [{ type: 'text', text: 'Hello' }],
-          },
-        ],
-      },
+      threadId: 'thread_1',
       isAutoToolMode: false,
       selectedTools: ['web'],
       resolvedMcpServerIds: ['docs_server'],
@@ -71,13 +62,6 @@ describe('chat_send_transport', () => {
         maxInputTokens: 128000,
         maxOutputTokens: 16384,
       },
-      messages: [
-        {
-          id: 'user_1',
-          role: 'user',
-          parts: [{ type: 'text', text: 'Hello' }],
-        },
-      ],
       tools: ['web'],
       mcpServerIds: ['docs_server'],
       skillMode: 'manual',
@@ -86,7 +70,7 @@ describe('chat_send_transport', () => {
     });
   });
 
-  it('returns null when the prepared send snapshot has no transportable messages', () => {
+  it('returns null without a thread id', () => {
     const provider = buildProvider({
       id: 'openai',
       name: 'OpenAI',
@@ -99,10 +83,7 @@ describe('chat_send_transport', () => {
           provider,
           model: 'gpt-4.1',
         },
-        preparedMessageSend: {
-          threadId: 'thread_1',
-          messagesSnapshot: [],
-        },
+        threadId: '',
         isAutoToolMode: true,
         selectedTools: ['web'],
         resolvedMcpServerIds: [],

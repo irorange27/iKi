@@ -170,6 +170,12 @@ export const createUiChunkEmitter = (
   let started = false;
   let textStarted = false;
   let terminated = false;
+  let textSegmentIndex = 0;
+  // Tool call ids that already have a tool part on the wire. The AI SDK
+  // stream processor attaches outputs/errors/denials/approvals onto an
+  // existing tool part and fails otherwise — the old hand-rolled renderer
+  // created parts on demand instead, so keep that tolerance here.
+  const seededToolCallIds = new Set<string>();
 
   const emitChunk = (
     chunk: ChatUiMessageChunk
@@ -183,17 +189,39 @@ export const createUiChunkEmitter = (
     started = true;
   };
 
+  // Text is segmented around tool events so the SDK's id-keyed accumulation
+  // renders a multi-step turn interleaved (text → tool → text) instead of
+  // merging every segment into the first text part.
+  const getTextSegmentId = (index: number): string => `${messageId}-t${index}`;
+
   const ensureTextStarted = () => {
     ensureStarted();
-    if (textStarted || terminated) return;
-    emitChunk({ type: 'text-start', id: messageId });
-    textStarted = true;
+    if (terminated) return;
+    if (!textStarted) {
+      emitChunk({ type: 'text-start', id: getTextSegmentId(textSegmentIndex) });
+      textStarted = true;
+    }
   };
 
   const closeText = () => {
     if (!textStarted || terminated) return;
-    emitChunk({ type: 'text-end', id: messageId });
+    emitChunk({ type: 'text-end', id: getTextSegmentId(textSegmentIndex) });
     textStarted = false;
+    textSegmentIndex += 1;
+  };
+
+  const ensureToolPartSeeded = (toolCallId: string, toolName: string, input: unknown) => {
+    if (seededToolCallIds.has(toolCallId)) return;
+    const title = getToolDisplayTitle(toolName);
+    emitChunk({
+      type: 'tool-input-available',
+      toolCallId,
+      toolName,
+      input,
+      dynamic: true,
+      ...(title ? { title } : {}),
+    });
+    seededToolCallIds.add(toolCallId);
   };
 
   return {
@@ -201,19 +229,39 @@ export const createUiChunkEmitter = (
     emitTextDelta: delta => {
       if (!delta || terminated) return;
       ensureTextStarted();
-      emitChunk({ type: 'text-delta', id: messageId, delta });
+      emitChunk({ type: 'text-delta', id: getTextSegmentId(textSegmentIndex), delta });
     },
     emitToolEvent: event => {
       if (terminated) return;
       ensureStarted();
+      closeText();
+      const toolCallId = getToolCallIdFromEvent(event);
+      if (
+        event.type === 'tool-result' ||
+        event.type === 'tool-error' ||
+        event.type === 'tool-output-denied' ||
+        event.type === 'tool-approval-request'
+      ) {
+        const toolName = getToolNameFromEvent(event);
+        const input = isObjectRecord(event.toolCall)
+          ? (isObjectRecord(event.toolCall.args) ? event.toolCall.args : event.toolCall.input)
+          : undefined;
+        ensureToolPartSeeded(toolCallId, toolName, input ?? {});
+      }
       const uiChunk = toUiChunkFromToolEvent(event);
-      if (uiChunk) emitChunk(uiChunk);
+      if (uiChunk) {
+        if (uiChunk.type === 'tool-input-start' || uiChunk.type === 'tool-input-available') {
+          seededToolCallIds.add(uiChunk.toolCallId);
+        }
+        emitChunk(uiChunk);
+      }
     },
     emitSkillUsage: (payload: { mode?: 'manual' | 'auto'; skills: SkillUsageEntry[] }) => {
       if (terminated) return;
       ensureStarted();
       emitChunk({
         type: 'data-skill-usage',
+        id: 'skill-usage',
         data: {
           ...(payload.mode === 'auto' || payload.mode === 'manual' ? { mode: payload.mode } : {}),
           skills: Array.isArray(payload.skills) ? payload.skills : [],
@@ -225,6 +273,7 @@ export const createUiChunkEmitter = (
       ensureStarted();
       emitChunk({
         type: 'data-memory-retrieval',
+        id: 'memory-retrieval',
         data: {
           query: payload?.query ?? '',
           results: Array.isArray(payload?.results) ? payload.results : [],
@@ -251,6 +300,7 @@ export const createUiChunkEmitter = (
       };
       emitChunk({
         type: 'data-affect-signal',
+        id: 'affect-signal',
         data,
       });
     },
@@ -289,6 +339,7 @@ export const createUiChunkEmitter = (
       };
       emitChunk({
         type: 'data-token-usage',
+        id: 'token-usage',
         data,
       });
     },
@@ -296,16 +347,14 @@ export const createUiChunkEmitter = (
       if (terminated) return;
       ensureStarted();
       closeText();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      emitChunk({ type: 'finish', messageId } as any);
+      emitChunk({ type: 'finish' });
       terminated = true;
     },
     abort: () => {
       if (terminated) return;
       ensureStarted();
       closeText();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      emitChunk({ type: 'abort', messageId } as any);
+      emitChunk({ type: 'abort' });
       terminated = true;
     },
     error: errorText => {

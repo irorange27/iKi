@@ -188,6 +188,7 @@ import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
+import type { SubmitTurnParams, SubmitTurnResult } from '../composables/useChatComposerSend';
 import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatComposerSelectors from './ChatComposerSelectors.vue';
@@ -226,6 +227,7 @@ const props = defineProps<{
   selectedWorkspaceId?: string | null;
   workspaceLocked?: boolean;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
+  submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
   todoPlan?: TaskPlan | null;
 }>();
@@ -383,6 +385,7 @@ const {
   prepareFailedMessage: t('chat.input.prepareFailed'),
   stopFailedMessage: t('chat.input.stopFailed'),
   prepareMessageSend: props.prepareMessageSend,
+  submitTurn: props.submitTurn,
   resolveSendRequest: resolveSlashCommandSend,
   canResolveEmptyDraft: () => activeInvocation.value !== null,
   ensureProviderReady,

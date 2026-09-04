@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue';
 import type { FileUIPart } from 'ai';
 
-import type { ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
@@ -42,6 +42,13 @@ export type ResolvedComposerSendRequest =
       feedback?: string;
     };
 
+export type SubmitTurnParams = {
+  preparedMessageSend: PreparedMessageSend;
+  body: NonNullable<ReturnType<typeof createChatComposerStreamPayload>>;
+};
+
+export type SubmitTurnResult = { ok: boolean; error?: string };
+
 export const useChatComposerSend = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   message: Ref<string>;
@@ -57,6 +64,7 @@ export const useChatComposerSend = (deps: {
   prepareFailedMessage: string;
   stopFailedMessage: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
+  submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   resolveSendRequest?: (draft: string) => Promise<ResolvedComposerSendRequest>;
   canResolveEmptyDraft?: () => boolean;
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
@@ -233,9 +241,9 @@ export const useChatComposerSend = (deps: {
     isStopping.value = false;
 
     try {
-      const streamPayload = createChatComposerStreamPayload({
+      const body = createChatComposerStreamPayload({
         providerReady: readyProvider,
-        preparedMessageSend,
+        threadId: preparedMessageSend.threadId,
         isAutoToolMode: deps.isAutoToolMode.value,
         selectedTools: deps.selectedTools.value,
         resolvedMcpServerIds,
@@ -246,12 +254,12 @@ export const useChatComposerSend = (deps: {
           : {}),
       });
 
-      if (!streamPayload) {
+      if (!body) {
         chatComposerSendLogger.event({
           level: 'warn',
           event: 'chat.send',
           outcome: 'skipped',
-          message: 'No valid messages to send.',
+          message: 'No valid thread to send to.',
         });
         deps.message.value = previousMessage;
         setComposerFeedback(deps.prepareFailedMessage);
@@ -259,9 +267,9 @@ export const useChatComposerSend = (deps: {
         return;
       }
 
-      const streamResult = await deps.electronAPI.chat.stream(streamPayload);
-      if (streamResult?.success === false) {
-        throw new Error(streamResult.error || 'Stream failed');
+      const submitResult = await deps.submitTurn({ preparedMessageSend, body });
+      if (!submitResult.ok) {
+        throw new Error(submitResult.error || 'Stream failed');
       }
 
       isLoading.value = false;

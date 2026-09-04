@@ -241,11 +241,12 @@ const mountChatInput = async (options?: {
     promptAppId?: string;
   }) => Promise<{
     threadId: string;
-    messagesSnapshot: unknown[];
+    userMessage: unknown;
   } | null>;
   props?: Record<string, unknown>;
 }) => {
-  const { api, stream, onProvidersUpdated, removeProviderListener } = createElectronApi(options);
+  const { api, onProvidersUpdated, removeProviderListener } = createElectronApi(options);
+  const submitTurn = vi.fn(async () => ({ ok: true }) as { ok: boolean; error?: string });
   setElectronApi(api);
   vi.resetModules();
 
@@ -262,21 +263,18 @@ const mountChatInput = async (options?: {
         return await options.prepareMessageSend(payload);
       }
 
-      const baseMessages = Array.isArray(options?.messages) ? options.messages : [];
+      const threadId =
+        options?.thread?.id ||
+        (typeof options?.props?.threadId === 'string'
+          ? options.props.threadId
+          : 'thread_prepared');
       return {
-        threadId:
-          options?.thread?.id ||
-          (typeof options?.props?.threadId === 'string'
-            ? options.props.threadId
-            : 'thread_prepared'),
-        messagesSnapshot: [
-          ...baseMessages,
-          {
-            id: `user_${baseMessages.length + 1}`,
-            role: 'user',
-            parts: [{ type: 'text', text: payload.content }],
-          },
-        ],
+        threadId,
+        userMessage: {
+          id: 'user_1',
+          role: 'user',
+          parts: [{ type: 'text', text: payload.content }],
+        },
       };
     }
   );
@@ -289,6 +287,7 @@ const mountChatInput = async (options?: {
     props: {
       ...mountProps,
       prepareMessageSend,
+      submitTurn,
     },
     global: {
       stubs: {
@@ -304,7 +303,7 @@ const mountChatInput = async (options?: {
   return {
     wrapper,
     api,
-    stream,
+    submitTurn,
     prepareMessageSend,
     onProvidersUpdated,
     removeProviderListener,
@@ -408,7 +407,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1","gpt-4o"]',
     });
 
-    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
+    const { wrapper, submitTurn, prepareMessageSend } = await mountChatInput({
       providers: [deepseek, openai],
       thread: {
         id: 'thread_1',
@@ -433,12 +432,14 @@ describe('ChatInput', () => {
       })
     );
 
-    expect(stream).toHaveBeenCalledWith(
+    expect(submitTurn).toHaveBeenCalledWith(
       expect.objectContaining({
+        body: expect.objectContaining({
         providerType: 'openai',
         providerId: 'openai',
         model: 'gpt-4o',
-      })
+        }),
+      }),
     );
   });
 
@@ -496,7 +497,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
+    const { wrapper, submitTurn, prepareMessageSend } = await mountChatInput({
       providers: [provider],
       messages: [
         {
@@ -521,9 +522,10 @@ describe('ChatInput', () => {
       })
     );
 
-    expect(stream).toHaveBeenCalledTimes(1);
-    expect(stream).toHaveBeenCalledWith(
+    expect(submitTurn).toHaveBeenCalledTimes(1);
+    expect(submitTurn).toHaveBeenCalledWith(
       expect.objectContaining({
+        body: expect.objectContaining({
         providerType: 'openai',
         providerId: 'openai',
         model: 'gpt-4.1',
@@ -531,11 +533,14 @@ describe('ChatInput', () => {
         mcpServerIds: [],
         skillMode: 'auto',
         skillIds: undefined,
-      })
+        }),
+      }),
     );
 
-    const streamPayload = stream.mock.calls[0]?.[0];
-    expect(streamPayload.messages.at(-1)).toMatchObject({
+    const submitCall = submitTurn.mock.calls[0]?.[0] as
+      | { preparedMessageSend?: { userMessage?: { role?: string; parts?: unknown[] } } }
+      | undefined;
+    expect(submitCall?.preparedMessageSend?.userMessage).toMatchObject({
       role: 'user',
       parts: [{ type: 'text', text: 'Need help with the repo' }],
     });
@@ -589,7 +594,7 @@ describe('ChatInput', () => {
       path: '/Users/nina/.codex/minimax-skills/skills/frontend-dev/SKILL.md',
     });
 
-    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+    const { wrapper, prepareMessageSend, submitTurn } = await mountChatInput({
       providers: [provider],
       skills: [frontendSkill],
     });
@@ -622,11 +627,13 @@ describe('ChatInput', () => {
         content: 'build a landing page',
       })
     );
-    expect(stream).toHaveBeenCalledWith(
+    expect(submitTurn).toHaveBeenCalledWith(
       expect.objectContaining({
+        body: expect.objectContaining({
         skillMode: 'manual',
         skillIds: ['codex:frontend-dev'],
-      })
+        }),
+      }),
     );
   });
 
@@ -725,7 +732,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+    const { wrapper, prepareMessageSend, submitTurn } = await mountChatInput({
       providers: [provider],
     });
 
@@ -735,7 +742,7 @@ describe('ChatInput', () => {
 
     expect(wrapper.emitted('new-chat-requested')).toEqual([[]]);
     expect(prepareMessageSend).not.toHaveBeenCalled();
-    expect(stream).not.toHaveBeenCalled();
+    expect(submitTurn).not.toHaveBeenCalled();
     expect(wrapper.find('.composer-feedback-message').text()).toContain('Started a new chat');
   });
 
@@ -747,7 +754,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+    const { wrapper, prepareMessageSend, submitTurn } = await mountChatInput({
       providers: [provider],
     });
 
@@ -757,7 +764,7 @@ describe('ChatInput', () => {
 
     expect(wrapper.emitted('clear-thread-requested')).toEqual([[]]);
     expect(prepareMessageSend).not.toHaveBeenCalled();
-    expect(stream).not.toHaveBeenCalled();
+    expect(submitTurn).not.toHaveBeenCalled();
     expect(wrapper.find('.composer-feedback-message').text()).toContain(
       'Cleared the current thread context'
     );
@@ -772,7 +779,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+    const { wrapper, prepareMessageSend, submitTurn } = await mountChatInput({
       providers: [provider],
     });
 
@@ -790,7 +797,7 @@ describe('ChatInput', () => {
 
     expect(wrapper.emitted('clear-thread-requested')).toEqual([[]]);
     expect(prepareMessageSend).not.toHaveBeenCalled();
-    expect(stream).not.toHaveBeenCalled();
+    expect(submitTurn).not.toHaveBeenCalled();
     expect(wrapper.find('.composer-feedback-message').text()).toContain(
       'Cleared the current thread context'
     );
@@ -828,7 +835,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+    const { wrapper, prepareMessageSend, submitTurn } = await mountChatInput({
       providers: [provider],
       props: {
         isIncognito: false,
@@ -841,7 +848,7 @@ describe('ChatInput', () => {
 
     expect(wrapper.emitted('incognito-changed')).toEqual([[true]]);
     expect(prepareMessageSend).not.toHaveBeenCalled();
-    expect(stream).not.toHaveBeenCalled();
+    expect(submitTurn).not.toHaveBeenCalled();
     expect(wrapper.find('.composer-feedback-message').text()).toContain(
       'Incognito mode is now enabled'
     );
@@ -893,7 +900,7 @@ describe('ChatInput', () => {
       prompt_template: 'Summarize carefully:\n{{input}}',
     });
 
-    const { wrapper, prepareMessageSend, stream } = await mountChatInput({
+    const { wrapper, prepareMessageSend, submitTurn } = await mountChatInput({
       providers: [provider],
       promptApps: [summarizePrompt],
     });
@@ -908,15 +915,15 @@ describe('ChatInput', () => {
         promptAppId: 'prompt_summarize',
       })
     );
-    expect(stream).toHaveBeenCalledWith(
+    expect(submitTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: [
-          expect.objectContaining({
+        preparedMessageSend: expect.objectContaining({
+          userMessage: expect.objectContaining({
             role: 'user',
             parts: [{ type: 'text', text: 'Summarize carefully:\nRelease notes draft' }],
           }),
-        ],
-      })
+        }),
+      }),
     );
   });
 
@@ -928,7 +935,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, stream } = await mountChatInput({
+    const { wrapper, submitTurn } = await mountChatInput({
       providers: [provider],
       modelCatalogByProviderId: {
         openai: [
@@ -965,8 +972,9 @@ describe('ChatInput', () => {
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    expect(stream).toHaveBeenCalledWith(
+    expect(submitTurn).toHaveBeenCalledWith(
       expect.objectContaining({
+        body: expect.objectContaining({
         providerType: 'openai',
         providerId: 'openai',
         model: 'gpt-4.1',
@@ -975,7 +983,8 @@ describe('ChatInput', () => {
           maxInputTokens: 128000,
           maxOutputTokens: 16384,
         },
-      })
+        }),
+      }),
     );
   });
 
@@ -987,7 +996,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, stream } = await mountChatInput({
+    const { wrapper, submitTurn } = await mountChatInput({
       providers: [provider],
       props: {
         latestTokenUsage: {
@@ -1013,8 +1022,9 @@ describe('ChatInput', () => {
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    expect(stream).toHaveBeenCalledWith(
+    expect(submitTurn).toHaveBeenCalledWith(
       expect.objectContaining({
+        body: expect.objectContaining({
         providerType: 'openai',
         providerId: 'openai',
         model: 'gpt-4.1',
@@ -1022,7 +1032,8 @@ describe('ChatInput', () => {
           contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
           maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
         },
-      })
+        }),
+      }),
     );
   });
 
@@ -1034,7 +1045,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
+    const { wrapper, submitTurn, prepareMessageSend } = await mountChatInput({
       providers: [provider],
     });
 
@@ -1055,7 +1066,7 @@ describe('ChatInput', () => {
         providerId: 'openai',
       })
     );
-    expect(stream).toHaveBeenCalledTimes(1);
+    expect(submitTurn).toHaveBeenCalledTimes(1);
     expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
   });
 
@@ -1067,7 +1078,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, api, stream, prepareMessageSend } = await mountChatInput({
+    const { wrapper, api, submitTurn, prepareMessageSend } = await mountChatInput({
       providers: [provider],
       thread: {
         id: 'thread_1',
@@ -1099,11 +1110,13 @@ describe('ChatInput', () => {
       })
     );
 
-    expect(stream).toHaveBeenCalledWith(
+    expect(submitTurn).toHaveBeenCalledWith(
       expect.objectContaining({
+        body: expect.objectContaining({
         tools: ['web', 'mcp_lookup'],
         mcpServerIds: ['docs_server'],
-      })
+        }),
+      }),
     );
   });
 
@@ -1292,10 +1305,10 @@ describe('ChatInput', () => {
     });
     const deferred = createDeferred<{
       threadId: string;
-      messagesSnapshot: unknown[];
+      userMessage: unknown;
     }>();
 
-    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
+    const { wrapper, submitTurn, prepareMessageSend } = await mountChatInput({
       providers: [provider],
       prepareMessageSend: () => deferred.promise,
       props: {
@@ -1308,21 +1321,19 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(prepareMessageSend).toHaveBeenCalledTimes(1);
-    expect(stream).not.toHaveBeenCalled();
+    expect(submitTurn).not.toHaveBeenCalled();
 
     deferred.resolve({
       threadId: 'thread_1',
-      messagesSnapshot: [
-        {
-          id: 'user_1',
-          role: 'user',
-          parts: [{ type: 'text', text: 'Wait until prepared' }],
-        },
-      ],
+      userMessage: {
+        id: 'user_1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Wait until prepared' }],
+      },
     });
     await flushPromises();
 
-    expect(stream).toHaveBeenCalledTimes(1);
+    expect(submitTurn).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces inline feedback and aborts send when provider verification throws', async () => {
@@ -1334,7 +1345,7 @@ describe('ChatInput', () => {
     });
     const configuredError = new Error('ipc failed');
 
-    const { wrapper, stream, prepareMessageSend } = await mountChatInput({
+    const { wrapper, submitTurn, prepareMessageSend } = await mountChatInput({
       providers: [provider],
       configuredError,
     });
@@ -1344,7 +1355,7 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(prepareMessageSend).not.toHaveBeenCalled();
-    expect(stream).not.toHaveBeenCalled();
+    expect(submitTurn).not.toHaveBeenCalled();
     expect(loggerEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'error',

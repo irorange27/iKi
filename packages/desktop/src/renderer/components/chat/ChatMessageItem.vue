@@ -14,7 +14,6 @@
           :message="message"
           :message-index="messageIndex"
           :active-assistant-message-id="activeAssistantMessageId"
-          :stream-render-tick="streamRenderTick"
           :approval-processing="approvalProcessing"
           :get-mcp-server-label="getMcpServerLabel"
           @approve-tool="emit('approve-tool', $event)"
@@ -126,7 +125,6 @@ const props = defineProps<{
   message: ChatUiMessage;
   messageIndex: number;
   activeAssistantMessageId: string | null;
-  streamRenderTick: number;
   approvalProcessing: (part: unknown) => boolean;
   getMcpServerLabel: (part: unknown) => string;
 }>();

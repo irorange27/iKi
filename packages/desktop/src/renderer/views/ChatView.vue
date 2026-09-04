@@ -59,8 +59,7 @@
               :key="m.id ? m.id : index"
               :message="m"
               :message-index="index"
-              :active-assistant-message-id="streamController.activeAssistantMessageId.value"
-              :stream-render-tick="streamController.streamRenderTick.value"
+              :active-assistant-message-id="chatInstance.activeAssistantMessageId.value"
               :approval-processing="isApprovalProcessing"
               :get-mcp-server-label="getMcpServerLabel"
               @approve-tool="handleToolApprovalEvent"
@@ -93,6 +92,7 @@
           :latest-token-usage="latestAssistantTokenUsage"
           :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
+          :submit-turn="submitTurn"
           @incognito-changed="handleIncognitoChanged"
           @model-selected="handleModelSelected"
           @new-chat-requested="handleNewChat"
@@ -111,7 +111,6 @@
 </template>
 
 <script setup lang="ts">
-import { Chat } from '@ai-sdk/vue';
 import { computed, ref, nextTick } from 'vue';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
@@ -121,8 +120,7 @@ import RunPanel from '../components/RunPanel.vue';
 import { FolderOpen, X } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 import { getTokenUsageSummary } from '../modules/chat/ui_message_references';
-import { createUiMessagePersistence } from '../modules/chat/ui_message_persistence';
-import { createChatMessageStore } from '../modules/chat/chat_message_store';
+import { createChatInstance } from '../modules/chat/chat_instance';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';
@@ -180,19 +178,28 @@ const persistDraftModelSelection = async (selection: {
   await configStore.saveConfig();
 };
 
-// Create Chat instance for message management (without API endpoint for Electron)
-const chat = new Chat<ChatUiMessage>({});
+// Chat runtime: SDK-owned message state + IPC transport (P6). Persistence,
+// the message-store view and the approval controller hang off the same
+// instance. `currentThread` and the thread callbacks are declared below —
+// referenced lazily from closures.
+const chatInstance = createChatInstance({
+  electronAPI,
+  generateId: () => createPrefixedId('msg'),
+  getCurrentThreadId: () => currentThread.value?.id || null,
+  onAssistantMessagePersisted: params => handleAssistantMessagePersisted(params),
+  onStreamActivity: () => scrollToBottom(),
+});
+const chat = chatInstance.chat;
+const persistence = chatInstance.persistence;
+const messageStore = chatInstance.messageStore;
 const chatMessages = computed<ChatUiMessage[]>(() => chat.messages);
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
 const showRunPanel = ref(false);
 
-const persistence = createUiMessagePersistence({ electronAPI });
-const messageStore = createChatMessageStore(chat);
-const { handleMarkdownClick } = useMarkdownCopy();
-
 const createMessageId = () => createPrefixedId('msg');
+const { handleMarkdownClick } = useMarkdownCopy();
 const { loadToolSources, getMcpServerLabel } = useToolMetadata({
   electronAPI,
 });
@@ -301,9 +308,13 @@ const { activeTodoPlan, handleChatChunk } = useChatThreadTodoPlan({
   electronAPI,
   threadId: computed(() => currentThread.value?.id || null),
 });
+// The transport is the single tap point for routed ui chunks (the todo-plan
+// projection mirrors them; stale chunks never reach it).
+chatInstance.transport.onChunk(handleChatChunk);
 
 const streaming = useChatStreaming({
   electronAPI,
+  chatInstance,
   messageStore,
   persistence,
   createMessageId,
@@ -322,11 +333,11 @@ const streaming = useChatStreaming({
   handleNewChat: handleNewChatBase,
 });
 
-const streamController = streaming.streamController;
 const editingUserMessageId = streaming.editingUserMessageId;
-const isApprovalProcessing = streaming.isApprovalProcessing;
-const handleToolApproval = streaming.handleToolApproval;
+const isApprovalProcessing = chatInstance.isApprovalProcessing;
+const handleToolApproval = chatInstance.handleToolApproval;
 const prepareMessageSend = streaming.prepareMessageSend;
+const submitTurn = streaming.submitTurn;
 const selectThread = streaming.selectThread;
 const handleThreadDeleted = streaming.handleThreadDeleted;
 const handleNewChat = streaming.handleNewChat;
@@ -368,8 +379,6 @@ useChatViewLifecycle({
   refreshThreads,
   loadToolSources,
   electronAPI,
-  streamController,
-  handleChatChunk,
   handleTaskPush,
   handleAwaiterPush,
 });

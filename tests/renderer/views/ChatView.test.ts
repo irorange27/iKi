@@ -14,7 +14,9 @@ const {
   selectedToolsRef,
   showWelcomeRef,
   editingUserMessageIdRef,
-  streamController,
+  chatInstance,
+  createChatInstanceMock,
+  submitTurnMock,
   setDraftMessageMock,
   replaceDraftMessageAndSendMock,
   handleToolApprovalMock,
@@ -40,21 +42,11 @@ const {
   useChatViewLifecycleMock,
   useConfigStoreMock,
   getTokenUsageSummaryMock,
-  createUiMessagePersistenceMock,
-  createChatMessageStoreMock,
   handleMarkdownClickMock,
 } = vi.hoisted(() => {
   const makeRef = <T>(value: T) => ({ value, __v_isRef: true as const });
 
   const chatMessagesRef = makeRef<UIMessage[]>([]);
-  const chatState = {
-    get messages() {
-      return chatMessagesRef.value;
-    },
-    set messages(value: UIMessage[]) {
-      chatMessagesRef.value = value;
-    },
-  };
 
   const currentThreadRef = makeRef<{
     id: string;
@@ -69,17 +61,42 @@ const {
   const showWelcomeRef = makeRef(false);
   const editingUserMessageIdRef = makeRef<string | null>(null);
 
-  const streamController = {
-    activeAssistantMessageId: makeRef<string | null>(null),
-    streamRenderTick: makeRef(0),
-    activeAssistantParentId: makeRef<string | null>(null),
-    activeStreamThreadId: makeRef<string | null>(null),
-    handleUiChunk: vi.fn(async () => undefined),
+  const chatState = {
+    get messages() {
+      return chatMessagesRef.value;
+    },
+    set messages(value: UIMessage[]) {
+      chatMessagesRef.value = value;
+    },
   };
+
+  const chatInstance = {
+    chat: chatState,
+    transport: {
+      getBoundThreadId: vi.fn(() => null),
+      detachActiveStream: vi.fn(),
+      expectFollowUpStream: vi.fn(),
+      disarmFollowUpStream: vi.fn(),
+      onChunk: vi.fn(() => () => undefined),
+    },
+    messageStore: {
+      get messages() {
+        return chatState.messages;
+      },
+    },
+    status: makeRef('ready' as const),
+    error: makeRef<Error | undefined>(undefined),
+    activeAssistantMessageId: makeRef<string | null>(null),
+    isApprovalProcessing: vi.fn(() => false),
+    handleToolApproval: vi.fn(async () => undefined),
+  };
+  const handleToolApprovalMock = chatInstance.handleToolApproval;
+
+  const createChatInstanceMock = vi.fn(() => chatInstance);
+  const submitTurnMock = vi.fn(async () => ({ ok: true }));
 
   const setDraftMessageMock = vi.fn(async () => undefined);
   const replaceDraftMessageAndSendMock = vi.fn(async () => undefined);
-  const handleToolApprovalMock = vi.fn(async () => undefined);
   const prepareMessageSendMock = vi.fn(async () => null);
   const selectThreadMock = vi.fn(async () => undefined);
   const handleThreadDeletedMock = vi.fn(async () => undefined);
@@ -114,12 +131,6 @@ const {
   const useChatViewLifecycleMock = vi.fn();
   const useConfigStoreMock = vi.fn(() => configStoreState);
   const getTokenUsageSummaryMock = vi.fn();
-  const createUiMessagePersistenceMock = vi.fn(() => ({ resetPersistedMessageIds: vi.fn() }));
-  const createChatMessageStoreMock = vi.fn(() => ({
-    get messages() {
-      return chatState.messages;
-    },
-  }));
 
   return {
     chatState,
@@ -130,7 +141,9 @@ const {
     selectedToolsRef,
     showWelcomeRef,
     editingUserMessageIdRef,
-    streamController,
+    chatInstance,
+    createChatInstanceMock,
+    submitTurnMock,
     setDraftMessageMock,
     replaceDraftMessageAndSendMock,
     handleToolApprovalMock,
@@ -156,20 +169,12 @@ const {
     useChatViewLifecycleMock,
     useConfigStoreMock,
     getTokenUsageSummaryMock,
-    createUiMessagePersistenceMock,
-    createChatMessageStoreMock,
     handleMarkdownClickMock,
   };
 });
 
-vi.mock('@ai-sdk/vue', () => ({
-  Chat: function Chat() {
-    return {
-      get messages() {
-        return chatState.messages;
-      },
-    };
-  },
+vi.mock('../../../packages/desktop/src/renderer/modules/chat/chat_instance', () => ({
+  createChatInstance: createChatInstanceMock,
 }));
 
 vi.mock('../../../packages/desktop/src/renderer/composables/useChatThreads', () => ({
@@ -204,14 +209,6 @@ vi.mock('../../../packages/desktop/src/renderer/composables/useMarkdownCopy', ()
 
 vi.mock('../../../packages/desktop/src/renderer/modules/chat/ui_message_references', () => ({
   getTokenUsageSummary: getTokenUsageSummaryMock,
-}));
-
-vi.mock('../../../packages/desktop/src/renderer/modules/chat/ui_message_persistence', () => ({
-  createUiMessagePersistence: createUiMessagePersistenceMock,
-}));
-
-vi.mock('../../../packages/desktop/src/renderer/modules/chat/chat_message_store', () => ({
-  createChatMessageStore: createChatMessageStoreMock,
 }));
 
 const SidebarStub = defineComponent({
@@ -252,6 +249,7 @@ const ChatInputStub = defineComponent({
     latestTokenUsage: { type: Object, default: null },
     todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
+    submitTurn: { type: Function, default: null },
   },
   emits: [
     'incognito-changed',
@@ -316,10 +314,7 @@ describe('ChatView', () => {
     selectedToolsRef.value = [];
     showWelcomeRef.value = false;
     editingUserMessageIdRef.value = null;
-    streamController.activeAssistantMessageId.value = null;
-    streamController.streamRenderTick.value = 0;
-    streamController.activeAssistantParentId.value = null;
-    streamController.activeStreamThreadId.value = null;
+    chatInstance.activeAssistantMessageId.value = null;
 
     setDraftMessageMock.mockReset();
     replaceDraftMessageAndSendMock.mockReset();
@@ -345,8 +340,15 @@ describe('ChatView', () => {
     useToolMetadataMock.mockReset();
     useChatViewLifecycleMock.mockReset();
     getTokenUsageSummaryMock.mockReset();
-    createUiMessagePersistenceMock.mockClear();
-    createChatMessageStoreMock.mockClear();
+    createChatInstanceMock.mockClear();
+    submitTurnMock.mockReset();
+    chatInstance.transport.getBoundThreadId.mockReturnValue(null);
+    chatInstance.transport.detachActiveStream.mockClear();
+    chatInstance.transport.expectFollowUpStream.mockClear();
+    chatInstance.transport.disarmFollowUpStream.mockClear();
+    chatInstance.isApprovalProcessing.mockClear();
+    chatInstance.handleToolApproval.mockClear();
+    chatInstance.activeAssistantMessageId.value = null;
     handleMarkdownClickMock.mockReset();
 
     useChatThreadsMock.mockImplementation(() => ({
@@ -374,11 +376,12 @@ describe('ChatView', () => {
     }));
 
     useChatStreamingMock.mockImplementation(() => ({
-      streamController,
+      chatInstance,
       editingUserMessageId: editingUserMessageIdRef,
       isApprovalProcessing: () => false,
       handleToolApproval: handleToolApprovalMock,
       prepareMessageSend: prepareMessageSendMock,
+      submitTurn: submitTurnMock,
       beginEditMessage: beginEditMessageMock,
       cancelEditing: cancelEditingMock,
       selectThread: selectThreadMock,

@@ -2,7 +2,8 @@ import type { UIMessage } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import { createChatMessageStore } from '../../../packages/desktop/src/renderer/modules/chat/chat_message_store';
+import { createChatInstance } from '../../../packages/desktop/src/renderer/modules/chat/chat_instance';
+import { createUiMessagePersistence } from '../../../packages/desktop/src/renderer/modules/chat/ui_message_persistence';
 import { useChatStreaming } from '../../../packages/desktop/src/renderer/composables/useChatStreaming';
 import type { ChatThread } from '@iki/backend/types/chat';
 
@@ -39,19 +40,14 @@ const createHarness = (options?: {
   currentModel?: string;
   initialMessages?: UIMessage[];
 }) => {
-  const messages = [...(options?.initialMessages ?? [])];
-  const messageStore = createChatMessageStore({ messages });
   const currentThread = ref<ChatThread | null>(options?.currentThread ?? null);
   const currentModel = ref(options?.currentModel ?? options?.currentThread?.model ?? 'gpt-4.1');
   const selectedTools = ref<string[]>([]);
   const showWelcome = ref(true);
 
-  const upsertUiMessage = vi.fn(async () => undefined);
-  const truncateConversationAfterIndex = vi.fn(
-    async (params: { messageStore: typeof messageStore; messageIndex: number }) => {
-      params.messageStore.truncateAfterIndex(params.messageIndex);
-    }
-  );
+  const messageCreated = vi.fn(async (input: { id: string }) => ({ id: input.id }));
+  const messageUpdated = vi.fn(async () => undefined);
+  const stream = vi.fn(async () => ({ success: true }));
   const stopStream = vi.fn(async () => ({ success: true }));
   const updateThread = vi.fn(async () => ({ success: true }));
   const createNewThread = vi.fn(async (model?: string) => {
@@ -82,20 +78,39 @@ const createHarness = (options?: {
   const scrollToBottom = vi.fn();
   const ensureWorkspaceForCurrentThread = vi.fn(async () => currentThread.value);
 
-  const state = useChatStreaming({
-    electronAPI: {
-      chat: {
-        stopStream,
-        threads: {
-          update: updateThread,
-        },
+  const electronAPI = {
+    chat: {
+      onUiChunk: vi.fn(() => () => undefined),
+      stream,
+      stopStream,
+      approveTool: vi.fn(async () => ({ success: true })),
+      messages: {
+        create: messageCreated,
+        update: messageUpdated,
+        delete: vi.fn(async () => undefined),
       },
-    } as never,
+      threads: {
+        update: updateThread,
+      },
+    },
+  } as never;
+
+  const persistence = createUiMessagePersistence({ electronAPI });
+
+  const chatInstance = createChatInstance({
+    electronAPI,
+    generateId: () => `msg_${Math.random().toString(36).slice(2, 8)}`,
+    getCurrentThreadId: () => currentThread.value?.id ?? null,
+    onAssistantMessagePersisted,
+  });
+  const messageStore = chatInstance.messageStore;
+  (options?.initialMessages ?? []).forEach(message => messageStore.append(message as never));
+
+  const state = useChatStreaming({
+    electronAPI,
+    chatInstance,
     messageStore,
-    persistence: {
-      upsertUiMessage,
-      truncateConversationAfterIndex,
-    } as never,
+    persistence,
     createMessageId: () => `msg_${messageStore.messages.length + 1}`,
     scrollToBottom,
     getCurrentThreadId: () => currentThread.value?.id ?? null,
@@ -114,13 +129,14 @@ const createHarness = (options?: {
 
   return {
     state,
+    chatInstance,
     messageStore,
     currentThread,
     currentModel,
     selectedTools,
     showWelcome,
-    upsertUiMessage,
-    truncateConversationAfterIndex,
+    messageCreated,
+    messageUpdated,
     stopStream,
     updateThread,
     createNewThread,
@@ -140,29 +156,26 @@ describe('useChatStreaming', () => {
       role: 'user',
       parts: [{ type: 'text', text: 'Original draft' }],
     };
-    const { state, stopStream, selectThread } = createHarness({
+    const { state, chatInstance, stopStream, selectThread } = createHarness({
       currentThread: createStoredThread({ id: 'thread_1' }),
       initialMessages: [userMessage],
     });
 
-    await state.beginEditMessage(
-      userMessage,
-      vi.fn(async () => undefined)
+    // Bind the transport to thread_1 as an in-flight turn would.
+    await chatInstance.chat.sendMessage(
+      { ...userMessage },
+      { body: { threadId: 'thread_1' } }
     );
-    state.streamController.beginTurn({
-      threadId: 'thread_1',
-      parentId: 'user_1',
-    });
     await flushMicrotasks();
 
+    await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
     await state.selectThread('thread_2');
     await flushMicrotasks();
 
-    expect(stopStream).toHaveBeenCalledTimes(1);
+    // One stop from beginEditMessage, one from the thread switch.
+    expect(stopStream).toHaveBeenCalledTimes(2);
     expect(selectThread).toHaveBeenCalledWith('thread_2');
     expect(state.editingUserMessageId.value).toBeNull();
-    expect(state.streamController.activeStreamThreadId.value).toBeNull();
-    expect(state.streamController.activeAssistantParentId.value).toBeNull();
   });
 
   it('stops the active stream before clearing the current thread and resets transient edit state', async () => {
@@ -171,26 +184,25 @@ describe('useChatStreaming', () => {
       role: 'user',
       parts: [{ type: 'text', text: 'Original draft' }],
     };
-    const { state, stopStream, clearCurrentThread } = createHarness({
+    const { state, chatInstance, stopStream, clearCurrentThread } = createHarness({
       currentThread: createStoredThread({ id: 'thread_1' }),
       initialMessages: [userMessage],
     });
 
-    await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
-    state.streamController.beginTurn({
-      threadId: 'thread_1',
-      parentId: 'user_1',
-    });
+    await chatInstance.chat.sendMessage(
+      { ...userMessage },
+      { body: { threadId: 'thread_1' } }
+    );
     await flushMicrotasks();
 
+    await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
     await state.handleClearCurrentThread();
     await flushMicrotasks();
 
-    expect(stopStream).toHaveBeenCalledTimes(1);
+    // One stop from beginEditMessage, one from clearing the thread.
+    expect(stopStream).toHaveBeenCalledTimes(2);
     expect(clearCurrentThread).toHaveBeenCalledTimes(1);
     expect(state.editingUserMessageId.value).toBeNull();
-    expect(state.streamController.activeStreamThreadId.value).toBeNull();
-    expect(state.streamController.activeAssistantParentId.value).toBeNull();
   });
 
   it('replaces the edited user message and truncates later conversation before resend', async () => {
@@ -210,15 +222,12 @@ describe('useChatStreaming', () => {
       parts: [{ type: 'text', text: 'Follow-up' }],
     };
 
-    const { state, messageStore, truncateConversationAfterIndex, upsertUiMessage } = createHarness({
+    const { state, chatInstance, messageCreated } = createHarness({
       currentThread: createStoredThread({ id: 'thread_1', model: 'gpt-4.1' }),
       initialMessages: [userMessage, assistantMessage, trailingUserMessage],
     });
 
-    await state.beginEditMessage(
-      userMessage,
-      vi.fn(async () => undefined)
-    );
+    await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
 
     const result = await state.prepareMessageSend({
       content: 'Updated question',
@@ -226,28 +235,24 @@ describe('useChatStreaming', () => {
     });
     await flushMicrotasks();
 
-    expect(truncateConversationAfterIndex).toHaveBeenCalledWith(
-      expect.objectContaining({
-        messageIndex: 0,
-      })
+    // The real persistence truncate drops everything after the edited message.
+    expect(chatInstance.messageStore.messages).toHaveLength(1);
+    expect(getTextPart(chatInstance.messageStore.messages[0] as UIMessage)).toBe(
+      'Updated question'
     );
-    expect(upsertUiMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        threadId: 'thread_1',
-        source: 'user-message-edit',
-      })
+    expect(messageCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user_1', thread_id: 'thread_1' })
     );
     expect(state.editingUserMessageId.value).toBeNull();
-    expect(messageStore.messages).toHaveLength(1);
-    expect(getTextPart(messageStore.messages[0] as UIMessage)).toBe('Updated question');
-    expect(result).toEqual({
+    expect(getTextPart(result?.userMessage as UIMessage)).toBe('Updated question');
+    expect(result).toMatchObject({
       threadId: 'thread_1',
-      messagesSnapshot: [messageStore.messages[0]],
+      editedMessageId: 'user_1',
     });
   });
 
-  it('creates the first thread on send and persists the appended user message', async () => {
-    const { state, messageStore, createNewThread, selectedTools, showWelcome, upsertUiMessage } =
+  it('creates the first thread on send and persists the built user message', async () => {
+    const { state, chatInstance, createNewThread, selectedTools, showWelcome, messageCreated } =
       createHarness({
         currentThread: null,
         currentModel: 'gpt-4.1',
@@ -263,25 +268,24 @@ describe('useChatStreaming', () => {
     expect(createNewThread).toHaveBeenCalledWith('gpt-4.1');
     expect(selectedTools.value).toEqual(['web']);
     expect(showWelcome.value).toBe(false);
-    expect(upsertUiMessage).toHaveBeenCalledWith(
+    expect(messageCreated).toHaveBeenCalledWith(
       expect.objectContaining({
-        threadId: 'thread_new',
-        source: 'user-message',
+        thread_id: 'thread_new',
       })
     );
-    expect(messageStore.messages).toHaveLength(1);
-    expect(getTextPart(messageStore.messages[0] as UIMessage)).toBe('Hello from a fresh composer');
+    // The user message lands in the store via chat.sendMessage, not here.
+    expect(chatInstance.messageStore.messages).toHaveLength(0);
+    expect(getTextPart(result?.userMessage as UIMessage)).toBe('Hello from a fresh composer');
     expect(result?.threadId).toBe('thread_new');
-    expect(result?.messagesSnapshot).toHaveLength(1);
   });
 
   it('persists composer invocation tokens alongside the user text when a message is sent', async () => {
-    const { state, messageStore, upsertUiMessage } = createHarness({
+    const { state } = createHarness({
       currentThread: createStoredThread({ id: 'thread_1', model: 'gpt-4.1' }),
       currentModel: 'gpt-4.1',
     });
 
-    await state.prepareMessageSend({
+    const result = await state.prepareMessageSend({
       content: 'Build a landing page',
       model: 'gpt-4.1',
       composerInvocations: {
@@ -303,8 +307,7 @@ describe('useChatStreaming', () => {
     });
     await flushMicrotasks();
 
-    expect(messageStore.messages).toHaveLength(1);
-    expect(messageStore.messages[0]?.parts).toEqual([
+    expect(result?.userMessage.parts).toEqual([
       {
         type: 'data-composer-invocation',
         data: {
@@ -326,17 +329,6 @@ describe('useChatStreaming', () => {
       },
       { type: 'text', text: 'Build a landing page', state: 'done' },
     ]);
-    expect(upsertUiMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.objectContaining({
-          parts: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'data-composer-invocation',
-            }),
-          ]),
-        }),
-      })
-    );
   });
 
   it('stores the starting prompt app on an empty thread before the first turn is persisted', async () => {

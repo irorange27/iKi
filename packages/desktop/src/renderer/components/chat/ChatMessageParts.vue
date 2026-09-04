@@ -72,7 +72,6 @@ const props = defineProps<{
   message: ChatUiMessage;
   messageIndex: number;
   activeAssistantMessageId: string | null;
-  streamRenderTick: number;
   approvalProcessing: (part: unknown) => boolean;
   getMcpServerLabel: (part: unknown) => string;
 }>();
@@ -100,15 +99,13 @@ const getPartRenderKey = (part: unknown, partIndex: number): string => {
   const messageId = props.message.id || String(props.messageIndex);
   const partType = getPartType(part);
   if (isTextPart(part)) {
-    return `${messageId}-${partType}-${partIndex}-${part.text.length}-${props.streamRenderTick}`;
+    return `${messageId}-${partType}-${partIndex}-${part.text.length}`;
   }
   return `${messageId}-${partType}-${partIndex}`;
 };
 
-const getTextPartContent = (part: unknown): string => {
-  void props.streamRenderTick;
-  return isTextPart(part) ? part.text : '';
-};
+const getTextPartContent = (part: unknown): string =>
+  isTextPart(part) ? part.text : '';
 
 const isStreamingTextPart = (part: unknown): boolean => {
   if (!isTextPart(part)) return false;

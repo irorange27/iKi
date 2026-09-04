@@ -1,6 +1,5 @@
 import { onMounted, onUnmounted } from 'vue';
 
-import type { ChatUiStreamController } from '../modules/chat/ui_stream_controller';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 
@@ -39,12 +38,9 @@ export const useChatViewLifecycle = (deps: {
   refreshThreads: () => Promise<void>;
   loadToolSources: () => Promise<void>;
   electronAPI: Pick<ElectronApi, 'chat' | 'tasks' | 'awaiters'>;
-  streamController: Pick<ChatUiStreamController, 'handleUiChunk'>;
-  handleChatChunk?: (chunk: unknown) => Promise<void> | void;
   handleTaskPush: (payload: unknown) => Promise<void> | void;
   handleAwaiterPush: (payload: unknown) => Promise<void> | void;
 }) => {
-  let removeChatChunkListener: () => void = () => undefined;
   let removeTaskPushListener: () => void = () => undefined;
   let removeAwaiterPushListener: () => void = () => undefined;
 
@@ -55,12 +51,6 @@ export const useChatViewLifecycle = (deps: {
 
     await deps.refreshThreads();
     await deps.loadToolSources();
-
-    removeChatChunkListener();
-    removeChatChunkListener = deps.electronAPI.chat.onUiChunk((chunk: unknown) => {
-      runSafe(() => deps.streamController.handleUiChunk(chunk));
-      runSafe(() => deps.handleChatChunk?.(chunk));
-    });
 
     try {
       removeTaskPushListener();
@@ -84,7 +74,6 @@ export const useChatViewLifecycle = (deps: {
   });
 
   onUnmounted(() => {
-    removeChatChunkListener();
     try {
       removeTaskPushListener();
     } catch {

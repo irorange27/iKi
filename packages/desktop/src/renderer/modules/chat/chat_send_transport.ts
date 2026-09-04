@@ -2,27 +2,29 @@ import type { ChatInvocationOptions } from '@iki/backend/types/electron_api';
 import { clonePlainData } from '@iki/backend/utils/clone';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
 
-import type { PreparedMessageSend } from './chat_prepare_send';
-
 export type ComposerReadyProvider = {
   provider: Provider;
   model: string;
   modelCapability?: ModelCapabilitySnapshot | null;
 };
 
+/**
+ * Invocation options minus `messages`: the Chat transport injects the
+ * conversation history from the chat state at send time.
+ */
+export type ChatComposerInvocationBody = Omit<ChatInvocationOptions, 'messages'>;
+
 export const createChatComposerStreamPayload = (params: {
   providerReady: ComposerReadyProvider;
-  preparedMessageSend: PreparedMessageSend;
+  threadId: string;
   isAutoToolMode: boolean;
   selectedTools: string[];
   resolvedMcpServerIds: string[];
   isAutoSkillMode: boolean;
   selectedSkillIds: string[];
   autonomous?: { maxIterations: number; continuePrompt?: string };
-}): ChatInvocationOptions | null => {
-  const transportMessages = clonePlainData(params.preparedMessageSend.messagesSnapshot);
-
-  if (!Array.isArray(transportMessages) || transportMessages.length === 0) {
+}): ChatComposerInvocationBody | null => {
+  if (!params.threadId) {
     return null;
   }
 
@@ -36,7 +38,6 @@ export const createChatComposerStreamPayload = (params: {
       typeof params.providerReady.modelCapability.maxOutputTokens === 'number')
       ? { modelCapability: clonePlainData(params.providerReady.modelCapability) }
       : {}),
-    messages: transportMessages,
     tools: params.isAutoToolMode
       ? undefined
       : params.selectedTools.length > 0
@@ -45,7 +46,7 @@ export const createChatComposerStreamPayload = (params: {
     mcpServerIds: clonePlainData(params.resolvedMcpServerIds),
     skillMode: params.isAutoSkillMode ? 'auto' : 'manual',
     skillIds: params.isAutoSkillMode ? undefined : clonePlainData(params.selectedSkillIds),
-    threadId: params.preparedMessageSend.threadId,
+    threadId: params.threadId,
     ...(params.autonomous ? { autonomous: params.autonomous } : {}),
   };
 };

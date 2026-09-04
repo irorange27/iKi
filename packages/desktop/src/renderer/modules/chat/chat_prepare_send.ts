@@ -16,5 +16,8 @@ export type PrepareMessageSendPayload = {
 
 export type PreparedMessageSend = {
   threadId: string;
-  messagesSnapshot: ChatUiMessage[];
+  /** Built (and persisted) user message; the Chat appends it on send. */
+  userMessage: ChatUiMessage;
+  /** Set when an existing user message was edited in place. */
+  editedMessageId?: string;
 };
