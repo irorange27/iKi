@@ -128,7 +128,11 @@ beforeEach(() => {
 describe('createChatApproval', () => {
   it('persists approval batches with structured recovery context', () => {
     const approvals = createChatApproval({
-      activeStreams: new Map(),
+      streams: {
+        peek: vi.fn(() => undefined),
+        attach: vi.fn(),
+        detach: vi.fn(),
+      },
       memory: {
         injectMemoryIntoMessages: vi.fn(messages => messages),
       } as never,
@@ -269,7 +273,11 @@ describe('createChatApproval', () => {
     ]);
 
     const approvals = createChatApproval({
-      activeStreams: new Map(),
+      streams: {
+        peek: vi.fn(() => undefined),
+        attach: vi.fn(),
+        detach: vi.fn(),
+      },
       memory: {
         injectMemoryIntoMessages: vi.fn(messages => messages),
       } as never,
@@ -295,7 +303,11 @@ describe('createChatApproval', () => {
 
   it('cleans up pending approval sessions for a given target senderId', async () => {
     const approvals = createChatApproval({
-      activeStreams: new Map(),
+      streams: {
+        peek: vi.fn(() => undefined),
+        attach: vi.fn(),
+        detach: vi.fn(),
+      },
       memory: {
         injectMemoryIntoMessages: vi.fn(messages => messages),
       } as never,

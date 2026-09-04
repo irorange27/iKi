@@ -121,7 +121,7 @@ describe('createChatStreaming integration', () => {
       enableTools: true,
     });
 
-    const activeStreams = new Map();
+    const streamCoordinator = createThreadStreamCoordinator();
     const usage = { recordUsageEvent: vi.fn() };
     const approvals = {
       ensurePendingApprovalSession: vi.fn(),
@@ -131,7 +131,7 @@ describe('createChatStreaming integration', () => {
     const target = { id: 42, send: vi.fn() };
 
     const streaming = createChatStreaming({
-      streamCoordinator: createThreadStreamCoordinator({ activeStreams }),
+      streamCoordinator,
       memory: {} as never,
       usage,
       approvals,
@@ -168,7 +168,7 @@ describe('createChatStreaming integration', () => {
       model: 'gpt-4o-mini',
     }));
     expect(approvals.cleanupPendingSessionsForSender).toHaveBeenCalledWith(42);
-    expect(activeStreams.has(42)).toBe(false);
+    expect(streamCoordinator.peekStream(42)).toBeUndefined();
 
     const chunks = target.send.mock.calls
       .filter(call => call[0] === 'chat:ui-chunk')

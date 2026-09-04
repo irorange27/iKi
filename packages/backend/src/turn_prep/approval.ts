@@ -55,7 +55,12 @@ const getRunMaxIterations = (run: AgentRun | null | undefined): number | undefin
 };
 
 export const createChatApproval = (deps: {
-  activeStreams: Map<number, ActiveStreamState>;
+  /** Session-less stream registry access (owned by the stream coordinator). */
+  streams: {
+    peek: (senderId: number) => ActiveStreamState | undefined;
+    attach: (senderId: number, streamState: ActiveStreamState) => void;
+    detach: (senderId: number, streamState: ActiveStreamState) => void;
+  };
   memory: ChatMemory;
   usage: {
     recordUsageEvent: (params: {
@@ -434,7 +439,7 @@ export const createChatApproval = (deps: {
     }
 
     const resumedSenderId = session.target.id;
-    const existingStream = deps.activeStreams.get(resumedSenderId);
+    const existingStream = deps.streams.peek(resumedSenderId);
     if (existingStream) {
       existingStream.cancelled = true;
       existingStream.abortController.abort('resume-after-tool-approval');
@@ -499,7 +504,7 @@ export const createChatApproval = (deps: {
           ...(resumeRunTracker ? { runId: resumeRunTracker.id } : {}),
         }
       : undefined;
-    deps.activeStreams.set(resumedSenderId, streamState);
+    deps.streams.attach(resumedSenderId, streamState);
     let resolvedHistory: ModelMessage[] | undefined = session.history;
     let isAwaitingApproval = false;
 
@@ -724,9 +729,7 @@ export const createChatApproval = (deps: {
       if (!isAwaitingApproval) {
         cleanupPendingSessionsForSender(resumedSenderId);
       }
-      if (deps.activeStreams.get(resumedSenderId) === streamState) {
-        deps.activeStreams.delete(resumedSenderId);
-      }
+      deps.streams.detach(resumedSenderId, streamState);
     }
   };
 

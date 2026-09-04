@@ -8,8 +8,7 @@ const THREAD_RATE_LIMIT_MAX_REQUESTS = 5;
  * Per-thread coordination record (ADR 004 / ADR 005 phase B): the thread is
  * the session key. Membership, the steer queue, and the active stream
  * reference live here — not in sender-keyed maps. Sender ids remain
- * transport-scoped handles; `deps.activeStreams` stays the sender-keyed
- * transport registry shared with approval resume and run cancellation.
+ * transport-scoped handles.
  */
 class ThreadSession {
   readonly threadId: string | null;
@@ -24,17 +23,19 @@ class ThreadSession {
 }
 
 /**
- * Owns stream coordination state: which senders stream which thread,
- * per-thread rate limiting, per-thread steer queues, and the
- * stop/steer/supersede operations over the shared activeStreams map.
+ * Owns all stream coordination state: the sender-keyed transport registry,
+ * which senders stream which thread, per-thread rate limiting, per-thread
+ * steer queues, and the stop/steer/supersede/abort operations over them.
+ *
+ * Approval resume attaches session-less streams via attachStream — they are
+ * stoppable and run-cancellable but deliberately not steerable.
  *
  * Stop remains connection-domain by decision (ADR 004 phase 2): supersede
  * guarantees at most one active stream per connection, so the connection's
  * active stream is the current thread.
  */
-export const createThreadStreamCoordinator = (deps: {
-  activeStreams: Map<number, ActiveStreamState>;
-}) => {
+export const createThreadStreamCoordinator = () => {
+  const activeStreams = new Map<number, ActiveStreamState>();
   const sessionsByThread = new Map<string, ThreadSession>();
   const sessionBySender = new Map<number, ThreadSession>();
   const threadRunLimiter = createRateLimiter({
@@ -71,7 +72,7 @@ export const createThreadStreamCoordinator = (deps: {
     if (!session || session.senderIds.size === 0) return;
     for (const senderId of session.senderIds) {
       if (senderId === exceptSenderId) continue;
-      const streamState = deps.activeStreams.get(senderId);
+      const streamState = activeStreams.get(senderId);
       if (streamState && !streamState.cancelled) {
         streamState.cancelled = true;
         streamState.stoppedByUser = true;
@@ -81,7 +82,7 @@ export const createThreadStreamCoordinator = (deps: {
   };
 
   const supersedeActiveStream = (senderId: number) => {
-    const streamState = deps.activeStreams.get(senderId);
+    const streamState = activeStreams.get(senderId);
     if (streamState) {
       streamState.cancelled = true;
       streamState.abortController.abort('superseded-by-new-request');
@@ -106,7 +107,7 @@ export const createThreadStreamCoordinator = (deps: {
   };
 
   const registerStream = (senderId: number, streamState: ActiveStreamState) => {
-    deps.activeStreams.set(senderId, streamState);
+    activeStreams.set(senderId, streamState);
     const session = sessionBySender.get(senderId) ?? sessionForSender(senderId);
     session.senderIds.add(senderId);
     session.steerQueue = [];
@@ -125,8 +126,8 @@ export const createThreadStreamCoordinator = (deps: {
         sessionBySender.delete(senderId);
       }
     }
-    if (deps.activeStreams.get(senderId) === streamState) {
-      deps.activeStreams.delete(senderId);
+    if (activeStreams.get(senderId) === streamState) {
+      activeStreams.delete(senderId);
     }
   };
 
@@ -138,7 +139,7 @@ export const createThreadStreamCoordinator = (deps: {
   };
 
   const stopStream = (senderId: number) => {
-    const streamState = deps.activeStreams.get(senderId);
+    const streamState = activeStreams.get(senderId);
     if (!streamState) {
       return { success: false, error: 'No active stream' };
     }
@@ -155,7 +156,7 @@ export const createThreadStreamCoordinator = (deps: {
 
   /** Abort the active stream running `runId` (run cancellation; not user-stop). */
   const abortStreamByRunId = (runId: string): boolean => {
-    for (const [, streamState] of deps.activeStreams) {
+    for (const [, streamState] of activeStreams) {
       if (streamState.runId === runId && !streamState.cancelled) {
         streamState.cancelled = true;
         streamState.abortController.abort('run-cancelled');
@@ -178,12 +179,29 @@ export const createThreadStreamCoordinator = (deps: {
       return { success: false, error: 'No active autonomous stream to steer' };
     }
     queue.push(message);
-    const streamState = deps.activeStreams.get(senderId);
+    const streamState = activeStreams.get(senderId);
     if (streamState && !streamState.cancelled) {
       streamState.steered = true;
       streamState.abortController.abort('steer');
     }
     return { success: true };
+  };
+
+  // Session-less registry access for approval resume: the resumed stream is
+  // stoppable and run-cancellable but gets no session, so it is not steerable
+  // and does not participate in thread membership.
+
+  const peekStream = (senderId: number): ActiveStreamState | undefined =>
+    activeStreams.get(senderId);
+
+  const attachStream = (senderId: number, streamState: ActiveStreamState): void => {
+    activeStreams.set(senderId, streamState);
+  };
+
+  const detachStream = (senderId: number, streamState: ActiveStreamState): void => {
+    if (activeStreams.get(senderId) === streamState) {
+      activeStreams.delete(senderId);
+    }
   };
 
   return {
@@ -198,6 +216,9 @@ export const createThreadStreamCoordinator = (deps: {
     stopStream,
     steerStream,
     abortStreamByRunId,
+    peekStream,
+    attachStream,
+    detachStream,
   };
 };
 

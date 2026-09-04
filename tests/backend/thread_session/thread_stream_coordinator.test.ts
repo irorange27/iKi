@@ -11,8 +11,7 @@ const makeStreamState = (): ActiveStreamState => ({
 
 describe('createThreadStreamCoordinator', () => {
   it('steer requires the thread to belong to the sender', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+    const coordinator = createThreadStreamCoordinator();
 
     const streamState = makeStreamState();
     coordinator.registerStream(42, streamState);
@@ -30,8 +29,7 @@ describe('createThreadStreamCoordinator', () => {
   });
 
   it('steer without a thread targets the sender active stream', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+    const coordinator = createThreadStreamCoordinator();
 
     const streamState = makeStreamState();
     coordinator.registerStream(42, streamState);
@@ -43,8 +41,7 @@ describe('createThreadStreamCoordinator', () => {
   });
 
   it('stop cancels the stream and closes its steer queue', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+    const coordinator = createThreadStreamCoordinator();
 
     const streamState = makeStreamState();
     coordinator.registerStream(42, streamState);
@@ -58,12 +55,11 @@ describe('createThreadStreamCoordinator', () => {
       error: 'No active autonomous stream to steer',
     });
     coordinator.unregisterStream(42, streamState);
-    expect(activeStreams.has(42)).toBe(false);
+    expect(coordinator.peekStream(42)).toBeUndefined();
   });
 
   it('cancelThreadStreams aborts every other sender on the thread', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+    const coordinator = createThreadStreamCoordinator();
 
     const first = makeStreamState();
     const second = makeStreamState();
@@ -79,8 +75,7 @@ describe('createThreadStreamCoordinator', () => {
   });
 
   it('unregisterStream keeps a newer stream registration for the same sender', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+    const coordinator = createThreadStreamCoordinator();
 
     const stale = makeStreamState();
     const current = makeStreamState();
@@ -88,15 +83,14 @@ describe('createThreadStreamCoordinator', () => {
     coordinator.registerStream(42, current);
 
     coordinator.unregisterStream(42, stale);
-    expect(activeStreams.get(42)).toBe(current);
+    expect(coordinator.peekStream(42)).toBe(current);
 
     coordinator.unregisterStream(42, current);
-    expect(activeStreams.has(42)).toBe(false);
+    expect(coordinator.peekStream(42)).toBeUndefined();
   });
 
   it('abortStreamByRunId aborts only the first live stream running that run', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+    const coordinator = createThreadStreamCoordinator();
 
     const first = makeStreamState();
     first.runId = 'run-1';
@@ -115,26 +109,24 @@ describe('createThreadStreamCoordinator', () => {
     expect(coordinator.abortStreamByRunId('run-404')).toBe(false);
   });
 
-  it('run cancellation reaches streams registered outside the coordinator', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+  it('run cancellation reaches streams attached outside the coordinator session', () => {
+    const coordinator = createThreadStreamCoordinator();
 
-    // Approval resume registers its stream directly into the shared map
-    // without a coordinator session — run cancellation must still find it.
+    // Approval resume attaches its stream without a session — run
+    // cancellation must still find it.
     const resumed = makeStreamState();
     resumed.runId = 'run-9';
-    activeStreams.set(7, resumed);
+    coordinator.attachStream(7, resumed);
 
     expect(coordinator.abortStreamByRunId('run-9')).toBe(true);
     expect(resumed.cancelled).toBe(true);
   });
 
-  it('a stream registered without a session cannot be steered but can be stopped', () => {
-    const activeStreams = new Map<number, ActiveStreamState>();
-    const coordinator = createThreadStreamCoordinator({ activeStreams });
+  it('a stream attached without a session cannot be steered but can be stopped', () => {
+    const coordinator = createThreadStreamCoordinator();
 
     const resumed = makeStreamState();
-    activeStreams.set(7, resumed);
+    coordinator.attachStream(7, resumed);
 
     expect(coordinator.steerStream(7, undefined, 'x')).toEqual({
       success: false,
@@ -142,5 +134,22 @@ describe('createThreadStreamCoordinator', () => {
     });
     expect(coordinator.stopStream(7)).toEqual({ success: true });
     expect(resumed.cancelled).toBe(true);
+  });
+
+  it('detachStream only removes the stream it attached', () => {
+    const coordinator = createThreadStreamCoordinator();
+
+    const resumed = makeStreamState();
+    coordinator.attachStream(7, resumed);
+
+    // A superseding stream took the sender's slot: the stale detach is a no-op.
+    const replacement = makeStreamState();
+    coordinator.attachStream(7, replacement);
+
+    coordinator.detachStream(7, resumed);
+    expect(coordinator.peekStream(7)).toBe(replacement);
+
+    coordinator.detachStream(7, replacement);
+    expect(coordinator.peekStream(7)).toBeUndefined();
   });
 });

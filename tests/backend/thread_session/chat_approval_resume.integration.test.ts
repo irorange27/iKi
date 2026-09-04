@@ -63,6 +63,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
 import * as approvalDb from '@iki/backend/db/chat_tool_approval';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatApproval } from '@iki/backend/turn_prep/approval';
+import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { AgentHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
@@ -206,11 +207,15 @@ describe('createChatApproval resume integration', () => {
         updatedAt: '2026-06-20T00:00:00.000Z',
     } as never);
 
-    const activeStreams = new Map();
+    const streamCoordinator = createThreadStreamCoordinator();
     const usage = { recordUsageEvent: vi.fn() };
     const target = { id: 7, send: vi.fn() };
     const approvals = createChatApproval({
-      activeStreams,
+      streams: {
+        peek: streamCoordinator.peekStream,
+        attach: streamCoordinator.attachStream,
+        detach: streamCoordinator.detachStream,
+      },
       memory: { injectMemoryIntoMessages: vi.fn(messages => messages) } as never,
       usage,
     });
@@ -241,7 +246,7 @@ describe('createChatApproval resume integration', () => {
       providerType: 'openai',
       model: 'gpt-4o-mini',
     }));
-    expect(activeStreams.has(7)).toBe(false);
+    expect(streamCoordinator.peekStream(7)).toBeUndefined();
 
     const chunks = target.send.mock.calls
       .filter(call => call[0] === 'chat:ui-chunk')
