@@ -165,11 +165,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import type { Workspace } from '@iki/backend/types/chat';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
+import { useSelectorPanel } from '../composables/useSelectorPanel';
 
 const props = defineProps<{
   selectedWorkspaceId?: string | null;
@@ -184,15 +185,22 @@ const getVisibleWorkspaces = getElectronApiSliceMethod('workspaces', 'getVisible
 const getWorkspace = getElectronApiSliceMethod('workspaces', 'get');
 const pickWorkspaceDirectoryFromApi = getElectronApiSliceMethod('workspaces', 'pickDirectory');
 const { t } = useI18n();
-const SELECTOR_CLOSE_DELAY_MS = 320;
 
-const showWorkspaceSelector = ref(false);
+const {
+  isOpen: showWorkspaceSelector,
+  openPanel: openSelectorPanel,
+  closePanel: closeSelectorPanel,
+  scheduleClosePanel: scheduleSelectorClose,
+} = useSelectorPanel({
+  onClose: () => {
+    isWorkspaceTriggerHovered.value = false;
+  },
+});
 const isWorkspaceTriggerHovered = ref(false);
 const loadingWorkspaces = ref(false);
 const isPickingDirectory = ref(false);
 const workspaceLoadError = ref('');
 const availableWorkspaces = ref<Workspace[]>([]);
-const workspaceSelectorCloseTimer = ref<number | null>(null);
 
 const normalizeWorkspaceId = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
@@ -326,28 +334,19 @@ const loadWorkspaces = async () => {
 const openWorkspaceSelector = () => {
   isWorkspaceTriggerHovered.value = true;
   if (isLocked.value) return;
-  if (workspaceSelectorCloseTimer.value !== null) {
-    window.clearTimeout(workspaceSelectorCloseTimer.value);
-    workspaceSelectorCloseTimer.value = null;
-  }
-  showWorkspaceSelector.value = true;
+  openSelectorPanel();
 };
 
 const scheduleCloseWorkspaceSelector = () => {
-  if (workspaceSelectorCloseTimer.value !== null) {
-    window.clearTimeout(workspaceSelectorCloseTimer.value);
-  }
-  workspaceSelectorCloseTimer.value = window.setTimeout(() => {
-    isWorkspaceTriggerHovered.value = false;
-    showWorkspaceSelector.value = false;
-    workspaceSelectorCloseTimer.value = null;
-  }, SELECTOR_CLOSE_DELAY_MS);
+  scheduleSelectorClose();
 };
 
 const toggleWorkspaceSelector = () => {
   if (isLocked.value) return;
-  showWorkspaceSelector.value = !showWorkspaceSelector.value;
   if (showWorkspaceSelector.value) {
+    closeSelectorPanel();
+  } else {
+    openSelectorPanel();
     void loadWorkspaces();
   }
 };
@@ -355,7 +354,7 @@ const toggleWorkspaceSelector = () => {
 const selectWorkspace = (workspaceId: string | null) => {
   if (isLocked.value) return;
   emit('update:selectedWorkspaceId', normalizeWorkspaceId(workspaceId));
-  showWorkspaceSelector.value = false;
+  closeSelectorPanel();
 };
 
 const pickWorkspaceDirectory = async () => {
@@ -370,7 +369,7 @@ const pickWorkspaceDirectory = async () => {
     await loadWorkspaces();
     if (workspace?.id) {
       emit('update:selectedWorkspaceId', workspace.id);
-      showWorkspaceSelector.value = false;
+      closeSelectorPanel();
     }
   } catch (error) {
     workspaceLoadError.value = t('chat.workspace.addFailed', {
@@ -387,23 +386,12 @@ watch(selectedWorkspaceId, () => {
 
 watch(isLocked, locked => {
   if (!locked) return;
-  showWorkspaceSelector.value = false;
+  closeSelectorPanel();
   isWorkspaceTriggerHovered.value = false;
-  if (workspaceSelectorCloseTimer.value !== null) {
-    window.clearTimeout(workspaceSelectorCloseTimer.value);
-    workspaceSelectorCloseTimer.value = null;
-  }
 });
 
 onMounted(() => {
   void loadWorkspaces();
-});
-
-onUnmounted(() => {
-  if (workspaceSelectorCloseTimer.value !== null) {
-    window.clearTimeout(workspaceSelectorCloseTimer.value);
-    workspaceSelectorCloseTimer.value = null;
-  }
 });
 </script>
 

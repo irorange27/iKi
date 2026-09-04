@@ -2,6 +2,7 @@ import { computed, reactive, type ComputedRef, type Ref } from 'vue';
 
 import { DEFAULT_THEME_PRESET_ID, THEME_QUICK_STARTS } from '@iki/theme/registry';
 import { translate } from '../i18n';
+import { confirmAction } from './useConfirm';
 import {
   applySimpleThemeSeed,
   buildThemePresetVariant,
@@ -39,18 +40,6 @@ const quickStarts = THEME_QUICK_STARTS;
 
 const createInitialSimpleSeed = (): SimpleThemeSeed => ({ ...quickStarts[0].dark });
 const createInitialAdvancedSeed = (): AdvancedThemeSeed => applySimpleThemeSeed(createInitialSimpleSeed(), 'dark').advanced;
-
-const resolveDeleteConfirmation = (): boolean => {
-  if (
-    typeof window !== 'undefined' &&
-    typeof window.confirm === 'function' &&
-    !window.confirm(translate('settings.theme.error.deleteConfirm'))
-  ) {
-    return false;
-  }
-
-  return true;
-};
 
 export const useThemeEditor = ({
   config,
@@ -253,8 +242,15 @@ export const useThemeEditor = ({
     }
   };
 
-  const deleteCustomTheme = (presetId: string) => {
-    if (!resolveDeleteConfirmation()) return;
+  const deleteCustomTheme = async (presetId: string) => {
+    if (
+      !(await confirmAction({
+        message: translate('settings.theme.error.deleteConfirm'),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
 
     const nextPresets = { ...config.value.themes.base46Presets };
     delete nextPresets[presetId];

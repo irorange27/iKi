@@ -311,3 +311,4 @@ const {
 </script>
 
 <style scoped src="../settings_shared.css"></style>
+<style scoped src="../settings_memory.css"></style>

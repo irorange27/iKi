@@ -5,7 +5,7 @@
       :class="{ 'ui-text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
       :title="triggerTitle"
       :aria-label="triggerTitle"
-      @click="showSkillSelector = !showSkillSelector"
+      @click="toggleSkillSelector"
       @mouseenter="openSkillSelector"
       @mouseleave="scheduleCloseSkillSelector"
     >
@@ -101,11 +101,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
+import { useSelectorPanel } from '../composables/useSelectorPanel';
 
 const props = defineProps<{
   skillIds: string[];
@@ -121,12 +122,15 @@ const listSkills = getElectronApiSliceMethod('skills', 'list');
 const skillSelectorLogger = createLogger({ module: 'skill_selector' });
 const { t } = useI18n();
 
-const showSkillSelector = ref(false);
+const {
+  isOpen: showSkillSelector,
+  openPanel: openSkillSelector,
+  scheduleClosePanel: scheduleCloseSkillSelector,
+  togglePanel: toggleSkillSelector,
+} = useSelectorPanel();
 const availableSkills = ref<SkillSummary[]>([]);
-const skillSelectorCloseTimer = ref<number | null>(null);
-const isAutoSkillMode = computed(() => props.mode === 'auto');
 const selectedSkillIds = computed(() => props.skillIds);
-const SELECTOR_CLOSE_DELAY_MS = 320;
+const isAutoSkillMode = computed(() => props.mode === 'auto');
 
 const triggerTitle = computed(() => {
   if (isAutoSkillMode.value) {
@@ -199,33 +203,8 @@ const clearAllSkills = () => {
   emit('update:skillIds', []);
 };
 
-const openSkillSelector = () => {
-  if (skillSelectorCloseTimer.value !== null) {
-    window.clearTimeout(skillSelectorCloseTimer.value);
-    skillSelectorCloseTimer.value = null;
-  }
-  showSkillSelector.value = true;
-};
-
-const scheduleCloseSkillSelector = () => {
-  if (skillSelectorCloseTimer.value !== null) {
-    window.clearTimeout(skillSelectorCloseTimer.value);
-  }
-  skillSelectorCloseTimer.value = window.setTimeout(() => {
-    showSkillSelector.value = false;
-    skillSelectorCloseTimer.value = null;
-  }, SELECTOR_CLOSE_DELAY_MS);
-};
-
 onMounted(() => {
   void loadAvailableSkills();
-});
-
-onUnmounted(() => {
-  if (skillSelectorCloseTimer.value !== null) {
-    window.clearTimeout(skillSelectorCloseTimer.value);
-    skillSelectorCloseTimer.value = null;
-  }
 });
 </script>
 

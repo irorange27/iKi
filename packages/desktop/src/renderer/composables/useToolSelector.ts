@@ -1,9 +1,10 @@
-import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue';
+import { computed, onMounted, ref, type Ref } from 'vue';
 
 import type { McpServerSummary } from '@iki/backend/types/mcp';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
+import { useSelectorPanel } from './useSelectorPanel';
 
 interface ToolSummary {
   name: string;
@@ -25,8 +26,6 @@ type McpServerEntry = {
   statusToneClass: string;
   selectable: boolean;
 };
-
-const SELECTOR_CLOSE_DELAY_MS = 320;
 
 const normalizeStringArray = (input: unknown): string[] => {
   if (!Array.isArray(input)) return [];
@@ -123,10 +122,14 @@ export const useToolSelector = (params: {
   const toolSelectorLogger = createLogger({ module: 'tool_selector' });
   const { t } = useI18n();
 
-  const showToolSelector = ref(false);
+  const { isOpen: showToolSelector, openPanel: openToolSelector, scheduleClosePanel: scheduleCloseToolSelector } =
+    useSelectorPanel({
+      onOpen: () => {
+        void Promise.all([loadAvailableTools(), loadAvailableMcpServers()]);
+      },
+    });
   const availableTools = ref<ToolSummary[]>([]);
   const availableMcpServers = ref<McpServerSummary[]>([]);
-  const toolSelectorCloseTimer = ref<number | null>(null);
   const lastLoadedAt = ref(0);
   const mcpServersLoading = ref(false);
   const isMcpSectionExpanded = ref(false);
@@ -385,34 +388,8 @@ export const useToolSelector = (params: {
     isMcpSectionExpanded.value = !isMcpSectionExpanded.value;
   };
 
-  const openToolSelector = () => {
-    if (toolSelectorCloseTimer.value !== null) {
-      window.clearTimeout(toolSelectorCloseTimer.value);
-      toolSelectorCloseTimer.value = null;
-    }
-    showToolSelector.value = true;
-    void Promise.all([loadAvailableTools(), loadAvailableMcpServers()]);
-  };
-
-  const scheduleCloseToolSelector = () => {
-    if (toolSelectorCloseTimer.value !== null) {
-      window.clearTimeout(toolSelectorCloseTimer.value);
-    }
-    toolSelectorCloseTimer.value = window.setTimeout(() => {
-      showToolSelector.value = false;
-      toolSelectorCloseTimer.value = null;
-    }, SELECTOR_CLOSE_DELAY_MS);
-  };
-
   onMounted(() => {
     void Promise.all([loadAvailableTools(), loadAvailableMcpServers()]);
-  });
-
-  onUnmounted(() => {
-    if (toolSelectorCloseTimer.value !== null) {
-      window.clearTimeout(toolSelectorCloseTimer.value);
-      toolSelectorCloseTimer.value = null;
-    }
   });
 
   return {

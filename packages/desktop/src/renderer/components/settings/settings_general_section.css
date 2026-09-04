@@ -204,7 +204,7 @@
 
 .update-status-meta {
   font-size: 0.84em;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .update-status-actions {

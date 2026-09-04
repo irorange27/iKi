@@ -10,16 +10,12 @@
   transition: all 0.2s;
 }
 
-.config-section {
-  max-width: 600px;
-}
-
 .provider-config-group {
   margin-bottom: 32px;
 }
 
-.providers-section {
-  max-width: none !important;
+.config-section.providers-section {
+  max-width: none;
   flex: 1 1 0;
   min-height: 0;
   display: flex;

@@ -8,6 +8,7 @@
       @close="closeSettings"
     />
     <ChatView v-else />
+    <ConfirmDialog />
   </div>
 </template>
 
@@ -16,6 +17,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import SettingsView from './views/SettingsView.vue';
 import ChatView from './views/ChatView.vue';
 import CompanionView from './views/CompanionView.vue';
+import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useAppConfig } from './composables/useAppConfig';
 import { useAppLocale } from './composables/useAppLocale';
 import { createSidebar } from './composables/useSidebar';

@@ -147,5 +147,5 @@ const {
 } = useProvidersSettings();
 </script>
 
+<style scoped src="./providers_settings.css"></style>
 <style scoped src="./settings_shared.css"></style>
-<style src="./providers_settings.css"></style>

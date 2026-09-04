@@ -31,7 +31,8 @@ const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>>
   sidebarState.expand();
   sidebarState.setWidth(240);
 
-  const Sidebar = (await import('../../../packages/desktop/src/renderer/components/Sidebar.vue')).default;
+  const Sidebar = (await import('../../../packages/desktop/src/renderer/components/Sidebar.vue'))
+    .default;
   const wrapper = mount(Sidebar, {
     global: {
       stubs: {
@@ -43,6 +44,7 @@ const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>>
         Settings2: true,
         MessageSquareShare: true,
         Check: true,
+        X: true,
       },
     },
   });
@@ -58,19 +60,23 @@ const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>>
   };
 };
 
+const { confirmActionMock } = vi.hoisted(() => ({
+  confirmActionMock: vi.fn(),
+}));
+
+vi.mock('../../../packages/desktop/src/renderer/composables/useConfirm', () => ({
+  confirmAction: confirmActionMock,
+}));
+
 describe('Sidebar', () => {
   const queryMenu = () => document.body.querySelector('.sidebar-menu');
 
   beforeEach(() => {
-    Object.defineProperty(window, 'confirm', {
-      configurable: true,
-      value: vi.fn(() => true),
-    });
+    confirmActionMock.mockImplementation(async () => true);
   });
 
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
-    Reflect.deleteProperty(window, 'confirm');
     document.body.innerHTML = '';
     vi.restoreAllMocks();
   });
@@ -192,7 +198,12 @@ describe('Sidebar', () => {
     await wrapper.find('.chat-delete-btn').trigger('click');
     await flushPromises();
 
-    expect(window.confirm).toHaveBeenCalledWith('Delete "Delete Me"?\nThis cannot be undone.');
+    expect(confirmActionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Delete "Delete Me"?\nThis cannot be undone.',
+        danger: true,
+      })
+    );
     expect(del).toHaveBeenCalledWith('thread_delete');
     expect(wrapper.emitted('thread-deleted')).toEqual([['thread_delete']]);
     expect(wrapper.findAll('.chat-item')).toHaveLength(0);
@@ -209,5 +220,66 @@ describe('Sidebar', () => {
     (settingsButton as HTMLButtonElement).click();
 
     expect(openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters threads by title from the search box and restores the list on close', async () => {
+    const { wrapper } = await mountSidebar({
+      threads: [
+        {
+          id: 'thread_refactor',
+          title: 'Refactor backend loop',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          metadata: '{}',
+        },
+        {
+          id: 'thread_design',
+          title: 'Design review',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          metadata: '{}',
+        },
+      ],
+    });
+
+    const searchButton = wrapper.findAll('.sidebar-tool-btn')[1];
+    await searchButton.trigger('click');
+
+    const input = wrapper.find('.sidebar-search-input');
+    expect(input.exists()).toBe(true);
+    await input.setValue('refactor');
+
+    const items = wrapper.findAll('.chat-item');
+    expect(items).toHaveLength(1);
+    expect(items[0].text()).toContain('Refactor backend loop');
+
+    await input.setValue('nothing-matches');
+    expect(wrapper.findAll('.chat-item')).toHaveLength(0);
+    expect(wrapper.text()).toContain('No matching chats');
+
+    await input.trigger('keydown.escape');
+    expect(wrapper.find('.sidebar-search-input').exists()).toBe(false);
+    expect(wrapper.findAll('.chat-item')).toHaveLength(2);
+  });
+
+  it('clears the query from the inline clear button without closing the search box', async () => {
+    const { wrapper } = await mountSidebar({
+      threads: [
+        {
+          id: 'thread_keep',
+          title: 'Keep me visible',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          metadata: '{}',
+        },
+      ],
+    });
+
+    await wrapper.findAll('.sidebar-tool-btn')[1].trigger('click');
+    await wrapper.find('.sidebar-search-input').setValue('hidden-query');
+    expect(wrapper.findAll('.chat-item')).toHaveLength(0);
+
+    await wrapper.find('.sidebar-search-clear').trigger('click');
+
+    expect((wrapper.find('.sidebar-search-input').element as HTMLInputElement).value).toBe('');
+    expect(wrapper.findAll('.chat-item')).toHaveLength(1);
+    expect(wrapper.find('.sidebar-search-input').exists()).toBe(true);
   });
 });

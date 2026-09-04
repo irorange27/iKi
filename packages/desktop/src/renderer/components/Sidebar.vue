@@ -26,7 +26,13 @@
         <PanelLeftDashed :size="18" />
       </button>
 
-      <button class="sidebar-tool-btn icon-btn" :aria-label="t('chat.sidebar.search')">
+      <button
+        class="sidebar-tool-btn icon-btn"
+        :class="{ 'sidebar-tool-btn-active': isSearchOpen }"
+        :aria-label="t('chat.sidebar.search')"
+        :aria-expanded="isSearchOpen"
+        @click="toggleSearch"
+      >
         <Search :size="18" />
       </button>
 
@@ -40,62 +46,91 @@
     </div>
 
     <div v-if="sidebar.isExpanded.value" class="flex flex-1 min-h-0 pr-2">
-      <!-- Chat History -->
-      <div class="flex-1 px-3 py-2 min-w-48 overflow-y-scroll custom-scrollbar overscroll-contain">
-        <div
-          v-for="chat in desktopThreads"
-          :key="chat.id"
-          class="chat-item-row group relative mb-1"
-        >
-          <button
-            class="chat-item w-full truncate rounded-lg px-3 py-2.5 pr-10 text-left text-sm focus:outline-none"
-            :class="{ 'chat-item-active': currentThreadId === chat.id }"
-            :title="chat.title"
-            @click="selectThread(chat.id)"
-          >
-            <span class="chat-item-title">{{ chat.title }}</span>
-          </button>
-          <button
-            class="chat-delete-btn"
-            :class="{ 'chat-delete-btn-visible': deletingThreadIds[chat.id] }"
-            :disabled="!!deletingThreadIds[chat.id]"
-            :aria-label="t('chat.sidebar.deleteChat')"
-            @click="handleDeleteThread(chat, $event)"
-          >
-            <Trash2 :size="14" />
-          </button>
-        </div>
-
-        <section v-if="shouldShowExternalSection" class="sidebar-section">
-          <div v-if="desktopThreads.length > 0" class="sidebar-section-divider"></div>
-          <div class="sidebar-section-header">
-            <span>{{ t('chat.sidebar.externalChats') }}</span>
-            <span class="sidebar-section-count">{{ externalThreads.length }}</span>
+      <div class="flex min-w-0 flex-1 flex-col">
+        <div v-if="isSearchOpen" class="sidebar-search flex-shrink-0 px-3 pt-2">
+          <div class="sidebar-search-box">
+            <Search :size="14" class="sidebar-search-icon" />
+            <input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              class="sidebar-search-input"
+              type="text"
+              :placeholder="t('chat.sidebar.searchPlaceholder')"
+              @keydown.escape.stop="closeSearch"
+            />
+            <button
+              v-if="searchQuery"
+              class="sidebar-search-clear"
+              :aria-label="t('chat.sidebar.clearSearch')"
+              @click="clearSearch"
+            >
+              <X :size="14" />
+            </button>
           </div>
-
+        </div>
+        <!-- Chat History -->
+        <div
+          class="flex-1 px-3 py-2 min-w-48 overflow-y-scroll custom-scrollbar overscroll-contain"
+        >
           <div
-            v-for="chat in externalThreads"
+            v-for="chat in desktopThreads"
             :key="chat.id"
-            class="chat-item-row chat-item-row-external mb-1"
+            class="chat-item-row group relative mb-1"
           >
             <button
-              class="chat-item chat-item-external w-full rounded-lg px-3 py-2.5 text-left text-sm focus:outline-none"
+              class="chat-item w-full truncate rounded-lg px-3 py-2.5 pr-10 text-left text-sm focus:outline-none"
               :class="{ 'chat-item-active': currentThreadId === chat.id }"
               :title="chat.title"
               @click="selectThread(chat.id)"
             >
               <span class="chat-item-title">{{ chat.title }}</span>
-              <span class="chat-item-meta">
-                <span v-if="getThreadOrigin(chat).sourceLabel" class="chat-item-badge">
-                  {{ getThreadOrigin(chat).sourceLabel }}
-                </span>
-                <span v-if="getThreadOrigin(chat).channelLabel" class="chat-item-channel">
-                  {{ getThreadOrigin(chat).channelLabel }}
-                </span>
-              </span>
+            </button>
+            <button
+              class="chat-delete-btn"
+              :class="{ 'chat-delete-btn-visible': deletingThreadIds[chat.id] }"
+              :disabled="!!deletingThreadIds[chat.id]"
+              :aria-label="t('chat.sidebar.deleteChat')"
+              @click="handleDeleteThread(chat, $event)"
+            >
+              <Trash2 :size="14" />
             </button>
           </div>
-        </section>
+
+          <section v-if="shouldShowExternalSection" class="sidebar-section">
+            <div v-if="desktopThreads.length > 0" class="sidebar-section-divider"></div>
+            <div class="sidebar-section-header">
+              <span>{{ t('chat.sidebar.externalChats') }}</span>
+              <span class="sidebar-section-count">{{ externalThreads.length }}</span>
+            </div>
+
+            <div
+              v-for="chat in externalThreads"
+              :key="chat.id"
+              class="chat-item-row chat-item-row-external mb-1"
+            >
+              <button
+                class="chat-item chat-item-external w-full rounded-lg px-3 py-2.5 text-left text-sm focus:outline-none"
+                :class="{ 'chat-item-active': currentThreadId === chat.id }"
+                :title="chat.title"
+                @click="selectThread(chat.id)"
+              >
+                <span class="chat-item-title">{{ chat.title }}</span>
+                <span class="chat-item-meta">
+                  <span v-if="getThreadOrigin(chat).sourceLabel" class="chat-item-badge">
+                    {{ getThreadOrigin(chat).sourceLabel }}
+                  </span>
+                  <span v-if="getThreadOrigin(chat).channelLabel" class="chat-item-channel">
+                    {{ getThreadOrigin(chat).channelLabel }}
+                  </span>
+                </span>
+              </button>
+            </div>
+          </section>
+
+          <div v-if="hasNoSearchResults" class="sidebar-no-results">
+            {{ t('chat.sidebar.noResults') }}
+          </div>
+        </div>
       </div>
       <!-- draggable handle -->
       <div
@@ -177,7 +212,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   Check,
   MessageSquareShare,
@@ -187,10 +222,12 @@ import {
   Settings2,
   SquarePen,
   Trash2,
+  X,
 } from 'lucide-vue-next';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { useSidebar } from '../composables/useSidebar';
+import { confirmAction } from '../composables/useConfirm';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
 import { getElectronApiMethod, getElectronApiSlice } from '../services/electron_api';
 
@@ -212,6 +249,9 @@ interface ChatThread {
 const chatThreads = ref<ChatThread[]>([]);
 const currentThreadId = ref<string | null>(null);
 const deletingThreadIds = ref<Record<string, boolean>>({});
+const isSearchOpen = ref(false);
+const searchQuery = ref('');
+const searchInputRef = ref<HTMLInputElement | null>(null);
 const isMenuOpen = ref(false);
 const menuAnchorRef = ref<HTMLElement | null>(null);
 const menuRef = ref<HTMLElement | null>(null);
@@ -250,6 +290,25 @@ const selectThread = (threadId: string) => {
   emit('thread-selected', threadId);
 };
 
+const toggleSearch = () => {
+  if (isSearchOpen.value) {
+    closeSearch();
+    return;
+  }
+  isSearchOpen.value = true;
+  nextTick(() => searchInputRef.value?.focus());
+};
+
+const clearSearch = () => {
+  searchQuery.value = '';
+  searchInputRef.value?.focus();
+};
+
+const closeSearch = () => {
+  isSearchOpen.value = false;
+  searchQuery.value = '';
+};
+
 // Handle new chat button
 const handleNewChat = () => {
   currentThreadId.value = null;
@@ -262,7 +321,10 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
 
   if (deletingThreadIds.value[thread.id]) return;
 
-  const confirmed = window.confirm(t('chat.sidebar.deleteConfirm', { title: thread.title }));
+  const confirmed = await confirmAction({
+    message: t('chat.sidebar.deleteConfirm', { title: thread.title }),
+    danger: true,
+  });
   if (!confirmed) return;
 
   deletingThreadIds.value[thread.id] = true;
@@ -298,10 +360,24 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
   }
 };
 
+const matchesSearch = (thread: ChatThread) => {
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return true;
+  return thread.title.toLowerCase().includes(query);
+};
+
 const desktopThreads = computed(() =>
-  chatThreads.value.filter(thread => !isExternalThread(thread))
+  chatThreads.value.filter(thread => !isExternalThread(thread) && matchesSearch(thread))
 );
-const externalThreads = computed(() => chatThreads.value.filter(isExternalThread));
+const externalThreads = computed(() =>
+  chatThreads.value.filter(thread => isExternalThread(thread) && matchesSearch(thread))
+);
+const hasNoSearchResults = computed(
+  () =>
+    isSearchOpen.value &&
+    searchQuery.value.trim() !== '' &&
+    chatThreads.value.every(thread => !matchesSearch(thread))
+);
 const isCurrentThreadExternal = computed(() => {
   const threadId = typeof currentThreadId.value === 'string' ? currentThreadId.value : '';
   if (!threadId) return false;

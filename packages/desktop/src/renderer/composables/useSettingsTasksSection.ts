@@ -1,6 +1,7 @@
 import { computed, onUnmounted, ref, toRaw, watch, type Ref } from 'vue';
 
 import { useI18n } from '../i18n';
+import { confirmAction } from './useConfirm';
 import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
 import type { ChatThread } from '@iki/backend/types/chat';
@@ -313,7 +314,10 @@ export const useSettingsTasksSection = (params: {
   };
 
   const deleteTask = async (task: ProactiveTask) => {
-    const confirmed = window.confirm(t('settings.tasks.confirmDelete', { name: task.name }));
+    const confirmed = await confirmAction({
+      message: t('settings.tasks.confirmDelete', { name: task.name }),
+      danger: true,
+    });
     if (!confirmed) return;
     try {
       const result = await electronAPI.tasks.delete(task.id);

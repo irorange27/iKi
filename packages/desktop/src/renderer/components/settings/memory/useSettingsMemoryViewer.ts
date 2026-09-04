@@ -2,6 +2,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { useI18n } from '../../../i18n';
+import { confirmAction } from '../../../composables/useConfirm';
 import { useConfigStore } from '../../../store/config';
 import type { ChatThread } from '@iki/backend/types/chat';
 import type {
@@ -301,7 +302,9 @@ export const useSettingsMemoryViewer = (active: Readonly<Ref<boolean>>) => {
 
   const deleteLongMemoryEntry = async (entry: LongMemoryEntry) => {
     if (!entry?.id) return;
-    if (!window.confirm(t('settings.memory.confirmDelete'))) return;
+    if (!(await confirmAction({ message: t('settings.memory.confirmDelete'), danger: true }))) {
+      return;
+    }
 
     memoryMutationLoading.value = true;
     memoryMutationError.value = '';

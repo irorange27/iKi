@@ -534,17 +534,17 @@ const t = (_key: string) => {
 
 .run-status--completed {
   color: var(--status-success-color);
-  background: rgba(var(--status-success-rgb, 76 175 80), 0.12);
+  background: color-mix(in srgb, var(--status-success-color) 12%, transparent);
 }
 
 .run-status--failed {
   color: var(--status-danger-color);
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.12);
+  background: color-mix(in srgb, var(--status-danger-color) 12%, transparent);
 }
 
 .run-status--cancelled {
   color: var(--text-muted);
-  background: rgba(var(--text-secondary-rgb, 158 158 158), 0.1);
+  background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
 }
 
 .run-item-meta {
@@ -570,7 +570,7 @@ const t = (_key: string) => {
   margin-bottom: 4px;
   padding: 4px 8px;
   border-radius: 6px;
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.06);
+  background: color-mix(in srgb, var(--status-danger-color) 6%, transparent);
 }
 
 .run-item-actions {
@@ -603,11 +603,11 @@ const t = (_key: string) => {
 
 .run-action-cancel {
   color: var(--status-danger-color);
-  border-color: rgba(var(--status-danger-rgb, 244 67 54), 0.25);
+  border-color: color-mix(in srgb, var(--status-danger-color) 25%, transparent);
 }
 
 .run-action-cancel:hover:not(:disabled) {
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.08);
+  background: color-mix(in srgb, var(--status-danger-color) 8%, transparent);
 }
 
 .run-action-resume {
@@ -630,11 +630,11 @@ const t = (_key: string) => {
 
 .run-action-export {
   color: var(--text-secondary);
-  border-color: rgba(var(--text-secondary-rgb, 158 158 158), 0.25);
+  border-color: color-mix(in srgb, var(--text-secondary) 25%, transparent);
 }
 
 .run-action-export:hover:not(:disabled) {
-  background: rgba(var(--text-secondary-rgb, 158 158 158), 0.08);
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
 }
 
 .run-action-baseline {
@@ -648,11 +648,11 @@ const t = (_key: string) => {
 
 .run-action-compare {
   color: var(--status-success-color);
-  border-color: rgba(var(--status-success-rgb, 76 175 80), 0.25);
+  border-color: color-mix(in srgb, var(--status-success-color) 25%, transparent);
 }
 
 .run-action-compare:hover:not(:disabled) {
-  background: rgba(var(--status-success-rgb, 76 175 80), 0.08);
+  background: color-mix(in srgb, var(--status-success-color) 8%, transparent);
 }
 
 /* Step detail */
@@ -711,12 +711,12 @@ const t = (_key: string) => {
 
 .step-status--completed {
   color: var(--status-success-color);
-  background: rgba(var(--status-success-rgb, 76 175 80), 0.1);
+  background: color-mix(in srgb, var(--status-success-color) 10%, transparent);
 }
 
 .step-status--failed {
   color: var(--status-danger-color);
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.1);
+  background: color-mix(in srgb, var(--status-danger-color) 10%, transparent);
 }
 
 .step-summary {
@@ -746,12 +746,12 @@ const t = (_key: string) => {
 
 .label-chip--correct {
   color: var(--status-success-color);
-  background: rgba(var(--status-success-rgb, 76 175 80), 0.12);
+  background: color-mix(in srgb, var(--status-success-color) 12%, transparent);
 }
 
 .label-chip--incorrect {
   color: var(--status-danger-color);
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.12);
+  background: color-mix(in srgb, var(--status-danger-color) 12%, transparent);
 }
 
 .label-chip--partial {

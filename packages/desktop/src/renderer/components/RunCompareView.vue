@@ -211,7 +211,7 @@ const mismatchCount = computed(() =>
 }
 
 .compare-row--mismatch {
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.04);
+  background: color-mix(in srgb, var(--status-danger-color) 4%, transparent);
 }
 
 .compare-col {
@@ -264,7 +264,7 @@ const mismatchCount = computed(() =>
 
 .cmp-status--completed {
   color: var(--status-success-color);
-  background: rgba(var(--status-success-rgb, 76 175 80), 0.1);
+  background: color-mix(in srgb, var(--status-success-color) 10%, transparent);
 }
 
 .cmp-status--started {
@@ -274,7 +274,7 @@ const mismatchCount = computed(() =>
 
 .cmp-status--failed {
   color: var(--status-danger-color);
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.1);
+  background: color-mix(in srgb, var(--status-danger-color) 10%, transparent);
 }
 
 .compare-step-summary {
@@ -315,11 +315,11 @@ const mismatchCount = computed(() =>
 
 .match-badge--pass {
   color: var(--status-success-color);
-  background: rgba(var(--status-success-rgb, 76 175 80), 0.12);
+  background: color-mix(in srgb, var(--status-success-color) 12%, transparent);
 }
 
 .match-badge--fail {
   color: var(--status-danger-color);
-  background: rgba(var(--status-danger-rgb, 244 67 54), 0.12);
+  background: color-mix(in srgb, var(--status-danger-color) 12%, transparent);
 }
 </style>

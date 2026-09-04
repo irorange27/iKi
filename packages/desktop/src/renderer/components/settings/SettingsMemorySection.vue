@@ -43,4 +43,3 @@ const { t } = useI18n();
 </script>
 
 <style scoped src="./settings_shared.css"></style>
-<style src="./settings_memory.css"></style>

@@ -2,6 +2,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { useI18n } from '../i18n';
+import { confirmAction } from './useConfirm';
 import { getElectronApiSliceMethod } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
 import type { AppConfig } from '@iki/backend/types/config';
@@ -309,7 +310,14 @@ export const useMcpSettings = (onConfigChange: () => void) => {
 
   const deleteServer = async (server: McpServerSummary) => {
     if (!deleteMcpServer) return;
-    if (!window.confirm(t('settings.mcp.confirmDelete', { name: server.name }))) return;
+    if (
+      !(await confirmAction({
+        message: t('settings.mcp.confirmDelete', { name: server.name }),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     actionLoading.value = true;
     actionError.value = '';
     try {

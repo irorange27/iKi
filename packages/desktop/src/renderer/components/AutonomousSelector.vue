@@ -5,7 +5,7 @@
       :class="{ 'ui-text-accent': isActive }"
       :title="t('chat.autonomous.triggerTitle')"
       :aria-label="t('chat.autonomous.triggerTitle')"
-      @click="showPanel = !showPanel"
+      @click="togglePanel"
       @mouseenter="openPanel"
       @mouseleave="scheduleClosePanel"
     >
@@ -91,7 +91,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
+
+import { useI18n } from '../i18n';
+import { useSelectorPanel } from '../composables/useSelectorPanel';
 
 const props = defineProps<{
   active: boolean;
@@ -103,42 +106,13 @@ const emit = defineEmits<{
   (event: 'update:maxIterations', value: number): void;
 }>();
 
-const showPanel = ref(false);
-let closeTimer: ReturnType<typeof setTimeout> | null = null;
+const { t } = useI18n();
+
+const { isOpen: showPanel, openPanel, scheduleClosePanel, togglePanel } = useSelectorPanel();
 
 const isActive = computed(() => props.active);
 
 const toggleActive = () => {
   emit('update:active', !isActive.value);
-};
-
-const openPanel = () => {
-  if (closeTimer) {
-    clearTimeout(closeTimer);
-    closeTimer = null;
-  }
-  showPanel.value = true;
-};
-
-const scheduleClosePanel = () => {
-  closeTimer = setTimeout(() => {
-    showPanel.value = false;
-  }, 200);
-};
-
-const t = (_key: string) => {
-  // Minimal inline i18n
-  const strings: Record<string, string> = {
-    'chat.autonomous.triggerTitle': 'Autonomous agent mode',
-    'chat.autonomous.title': 'Autonomous Mode',
-    'chat.autonomous.description':
-      'Let the agent keep working across multiple steps without waiting for your input.',
-    'chat.autonomous.enabled': 'Enabled',
-    'chat.autonomous.disabled': 'Disabled',
-    'chat.autonomous.activeDescription':
-      'Agent will self-drive for up to the configured number of iterations.',
-    'chat.autonomous.maxIterations': 'Max iterations:',
-  };
-  return strings[_key] || _key;
 };
 </script>
