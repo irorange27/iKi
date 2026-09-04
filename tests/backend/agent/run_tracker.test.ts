@@ -9,7 +9,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
 }));
 
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
 
 const createAgentRunMock = vi.mocked(agentRunDb.createAgentRun);
 const updateAgentRunMock = vi.mocked(agentRunDb.updateAgentRun);

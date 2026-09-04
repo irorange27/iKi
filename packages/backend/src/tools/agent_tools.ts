@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import type { AgentResult, AgentTool } from '@iki/backend/agent/types';
-import type { createAgentRunTracker } from '../agent_session/run_tracker';
+import type { createAgentRunTracker } from '../turn_prep/run_tracker';
 import { startTurnHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import type { ToolModelConfig } from '../provider/tool_model';
@@ -30,7 +30,7 @@ type DelegatedAgentRunTrackerParams = Parameters<typeof createAgentRunTracker>[0
 
 /**
  * Backend pieces the delegated-agent tool needs at execution time, injected at
- * registration (registerStandardTools) so tools/ stays below agent_session/provider.
+ * registration (registerStandardTools) so tools/ stays below turn_prep/provider.
  */
 export type DelegatedAgentRuntime = {
   createRunTracker: (params: DelegatedAgentRunTrackerParams) => DelegatedAgentRunTracker;

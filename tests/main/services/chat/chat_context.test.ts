@@ -52,7 +52,7 @@ vi.mock('@iki/backend/db/memory', () => ({
   extractTextFromMessageJson: extractTextFromMessageJsonMock,
 }));
 
-vi.mock('@iki/backend/agent_session/thread_summary', () => ({
+vi.mock('@iki/backend/turn_prep/thread_summary', () => ({
   generateThreadSummary: generateThreadSummaryMock,
 }));
 
@@ -66,7 +66,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   getClipboardContextMessage: () => undefined,
 }));
 
-import { createChatContextAssembler } from '@iki/backend/agent_session/context';
+import { createChatContextAssembler } from '@iki/backend/turn_prep/context';
 
 const baseConfig = {
   memory: {

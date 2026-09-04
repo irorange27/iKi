@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
-import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';

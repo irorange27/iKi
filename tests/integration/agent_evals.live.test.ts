@@ -26,7 +26,7 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
 import type { EvalScenario } from '@iki/backend/evals/types';
 import { runScenarioLive } from '@iki/backend/evals/live_runner';
 import { registerStandardTools } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { getIntegrationTestContext, hasProviderConfig } from './setup';
 

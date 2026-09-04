@@ -16,7 +16,6 @@ vi.mock('@iki/backend/db/chat_message', () => ({
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
   getAgentRun: vi.fn(),
-  getLatestAgentRunCheckpoint: vi.fn(),
 }));
 
 vi.mock('@iki/backend/tools', () => ({
@@ -49,7 +48,7 @@ vi.mock('@iki/backend/agent/harness', () => ({
   rehydrateHarness: vi.fn(),
 }));
 
-vi.mock('@iki/backend/agent_session/run_tracker', () => ({
+vi.mock('@iki/backend/turn_prep/run_tracker', () => ({
   createAgentRunTracker: vi.fn(),
 }));
 
@@ -57,14 +56,13 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { createChatApproval } from '@iki/backend/agent_session/approval';
-import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { createChatApproval } from '@iki/backend/turn_prep/approval';
+import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
 import { rehydrateHarness } from '@iki/backend/agent/harness';
 
 const rehydrateHarnessMock = vi.mocked(rehydrateHarness);
 const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);
 const getAgentRunMock = vi.mocked(agentRunDb.getAgentRun);
-const getLatestAgentRunCheckpointMock = vi.mocked(agentRunDb.getLatestAgentRunCheckpoint);
 const getChatMessagesMock = vi.mocked(chatMessageDb.getChatMessages);
 const defaultToolRegistryGetMock = vi.mocked(defaultToolRegistry.get);
 const upsertChatToolApprovalSessionMock = vi.mocked(
@@ -100,7 +98,6 @@ beforeEach(() => {
     };
   });
   getAgentRunMock.mockReturnValue(null);
-  getLatestAgentRunCheckpointMock.mockReturnValue(null);
   createAgentRunTrackerMock.mockImplementation(() => {
     let status = 'running';
     return {

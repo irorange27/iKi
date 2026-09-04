@@ -16,7 +16,7 @@ import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from '../thread_session/memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
 import { resolveChatToolMaxIterations } from '../thread_session/constants';
-import { createAgentRunTracker } from '../agent_session/run_tracker';
+import { createAgentRunTracker } from '../turn_prep/run_tracker';
 import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from '../thread_session/types';
 import { createUiChunkEmitter } from '../thread_session/ui_stream';
 import { toModelInputMessages } from '../thread_session/ui_messages';

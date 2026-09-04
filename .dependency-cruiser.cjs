@@ -4,7 +4,7 @@
  *
  * R1–R4 are fully strict: P2 resolved the provider/tools exemptions (leaf moves +
  * DI at registration) and P3 resolved the config-injection exemptions in
- * agent_session (getRuntimeConfig wired in thread_session/session_loop.ts).
+ * turn_prep (getRuntimeConfig wired in thread_session/session_loop.ts).
  */
 module.exports = {
   forbidden: [
@@ -27,27 +27,27 @@ module.exports = {
       comment: 'R1: provider/ wires models; it must not reach up into tools/session/orchestration',
       severity: 'error',
       from: { path: '^packages/backend/src/provider' },
-      to: { path: '^packages/backend/src/(tools|agent_session|thread_session)' },
+      to: { path: '^packages/backend/src/(tools|turn_prep|thread_session)' },
     },
     {
       name: 'tools-below-session',
-      comment: 'R2: concrete tools stay below agent_session/provider/thread_session (type-only DI contracts are not counted)',
+      comment: 'R2: concrete tools stay below turn_prep/provider/thread_session (type-only DI contracts are not counted)',
       severity: 'error',
       from: { path: '^packages/backend/src/tools' },
-      to: { path: '^packages/backend/src/(agent_session|provider|thread_session)' },
+      to: { path: '^packages/backend/src/(turn_prep|provider|thread_session)' },
     },
     {
       name: 'agent-below-session-and-orchestration',
-      comment: 'R3 (loop+harness only; agent_session -> thread_session shared-module debt is deferred, see factoring doc)',
+      comment: 'R3 (loop+harness only; turn_prep -> thread_session shared-module debt is deferred, see factoring doc)',
       severity: 'error',
       from: { path: '^packages/backend/src/agent/' },
-      to: { path: '^packages/backend/src/(agent_session|thread_session)' },
+      to: { path: '^packages/backend/src/(turn_prep|thread_session)' },
     },
     {
       name: 'session-reads-no-global-config',
-      comment: 'R4 (ADR-001, finished by P3): config is injected into agent_session/agent; config/defaults.ts (pure constants) is fine',
+      comment: 'R4 (ADR-001, finished by P3): config is injected into turn_prep/agent; config/defaults.ts (pure constants) is fine',
       severity: 'error',
-      from: { path: '^packages/backend/src/(agent_session|agent)' },
+      from: { path: '^packages/backend/src/(turn_prep|agent)' },
       to: { path: '^packages/backend/src/config\\.ts$' },
     },
     {

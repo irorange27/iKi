@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveModelAwareContextConfig } from '@iki/backend/agent_session/context_budget';
+import { deriveModelAwareContextConfig } from '@iki/backend/turn_prep/context_budget';
 
 const baseConfig = {
   enabled: true,

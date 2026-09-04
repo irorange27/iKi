@@ -9,15 +9,15 @@ import {
   resolveChatToolMaxIterations,
 } from './constants';
 import type { ChatMemory } from './memory';
-import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../agent_session/approval_types';
-import { createApprovalRecoveryContext } from '../agent_session/approval_types';
+import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../turn_prep/approval_types';
+import { createApprovalRecoveryContext } from '../turn_prep/approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { createAgentRunTracker } from '../agent_session/run_tracker';
+import { createAgentRunTracker } from '../turn_prep/run_tracker';
 import { rehydrateHarness, startTurnHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { createChatStreamingModels } from './models';
-import { createChatTurnPreparer, type ChatTurnOptions } from '../agent_session/turn_preparer';
+import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { createChatSend } from './chat_send';
 import { buildFreshHandoffSystemMessage, buildHandoffResumeContext } from './handoff_resume';
 export type { ChatSendResult } from './chat_send';

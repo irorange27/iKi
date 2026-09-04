@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { registerStandardTools } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 

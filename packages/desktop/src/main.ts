@@ -10,7 +10,7 @@ import {
   shutdownLangfuseTracing,
 } from '@iki/backend/observability/langfuse';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
-import { createAgentRunTracker } from '@iki/backend/agent_session/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { startDaemonServer } from '@iki/daemon/server';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';

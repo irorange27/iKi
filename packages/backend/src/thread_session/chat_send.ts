@@ -1,17 +1,17 @@
-import { createAgentRunTracker } from '../agent_session/run_tracker';
+import { createAgentRunTracker } from '../turn_prep/run_tracker';
 import { startTurnHarness } from '../agent/harness';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import { describeApprovalRequiredTools } from '../agent_session/approval_types';
+import { describeApprovalRequiredTools } from '../turn_prep/approval_types';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
   resolveChatToolMaxIterations,
 } from './constants';
-import type { ChatTurnOptions } from '../agent_session/turn_preparer';
-import type { createChatTurnPreparer } from '../agent_session/turn_preparer';
+import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
+import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
 import { writeThreadTodoPlan } from '../db/thread_todos';
 
 const logger = createLogger({ module: 'chat_send' });

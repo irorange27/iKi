@@ -79,7 +79,7 @@ export type PreparedChatTurn = {
 
 /**
  * App-config slices this module consumes, resolved by the composition root
- * (thread_session) per turn — agent_session never reads global config itself.
+ * (thread_session) per turn — turn_prep never reads global config itself.
  */
 export type ChatTurnRuntimeConfig = {
   emotion: AppConfig['memory']['emotion'] | null;
