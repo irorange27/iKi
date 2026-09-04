@@ -93,4 +93,54 @@ describe('createThreadStreamCoordinator', () => {
     coordinator.unregisterStream(42, current);
     expect(activeStreams.has(42)).toBe(false);
   });
+
+  it('abortStreamByRunId aborts only the first live stream running that run', () => {
+    const activeStreams = new Map<number, ActiveStreamState>();
+    const coordinator = createThreadStreamCoordinator({ activeStreams });
+
+    const first = makeStreamState();
+    first.runId = 'run-1';
+    const second = makeStreamState();
+    second.runId = 'run-2';
+    coordinator.registerStream(1, first);
+    coordinator.registerStream(2, second);
+
+    expect(coordinator.abortStreamByRunId('run-1')).toBe(true);
+    expect(first.cancelled).toBe(true);
+    expect(first.stoppedByUser).toBe(false);
+    expect(second.cancelled).toBe(false);
+
+    // Already-cancelled streams are skipped, unknown runs find nothing.
+    expect(coordinator.abortStreamByRunId('run-1')).toBe(false);
+    expect(coordinator.abortStreamByRunId('run-404')).toBe(false);
+  });
+
+  it('run cancellation reaches streams registered outside the coordinator', () => {
+    const activeStreams = new Map<number, ActiveStreamState>();
+    const coordinator = createThreadStreamCoordinator({ activeStreams });
+
+    // Approval resume registers its stream directly into the shared map
+    // without a coordinator session — run cancellation must still find it.
+    const resumed = makeStreamState();
+    resumed.runId = 'run-9';
+    activeStreams.set(7, resumed);
+
+    expect(coordinator.abortStreamByRunId('run-9')).toBe(true);
+    expect(resumed.cancelled).toBe(true);
+  });
+
+  it('a stream registered without a session cannot be steered but can be stopped', () => {
+    const activeStreams = new Map<number, ActiveStreamState>();
+    const coordinator = createThreadStreamCoordinator({ activeStreams });
+
+    const resumed = makeStreamState();
+    activeStreams.set(7, resumed);
+
+    expect(coordinator.steerStream(7, undefined, 'x')).toEqual({
+      success: false,
+      error: 'No active autonomous stream to steer',
+    });
+    expect(coordinator.stopStream(7)).toEqual({ success: true });
+    expect(resumed.cancelled).toBe(true);
+  });
 });

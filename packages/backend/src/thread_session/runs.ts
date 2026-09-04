@@ -3,7 +3,8 @@ import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 type ChatRunsDeps = {
-  activeStreams: Map<number, import('./types').ActiveStreamState>;
+  /** Aborts the active stream running a run id (owned by the stream coordinator). */
+  abortActiveStream: (runId: string) => void;
 };
 
 export const createChatRuns = (deps: ChatRunsDeps) => ({
@@ -31,13 +32,7 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
         : { text: '', finishReason: 'cancelled' },
     });
 
-    for (const [, streamState] of deps.activeStreams) {
-      if (streamState.runId === runId && !streamState.cancelled) {
-        streamState.cancelled = true;
-        streamState.abortController.abort('run-cancelled');
-        break;
-      }
-    }
+    deps.abortActiveStream(runId);
 
     return { success: true };
   },

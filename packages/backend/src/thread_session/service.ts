@@ -30,9 +30,9 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     },
   });
   const persistence = createChatPersistence({ memory });
-  const runs = createChatRuns({ activeStreams });
-  const eval_ = createChatEval({ exportTrace: deps.exportTrace });
   const streamCoordinator = createThreadStreamCoordinator({ activeStreams });
+  const runs = createChatRuns({ abortActiveStream: streamCoordinator.abortStreamByRunId });
+  const eval_ = createChatEval({ exportTrace: deps.exportTrace });
   const streaming = createChatStreaming({
     streamCoordinator,
     memory,

@@ -153,6 +153,18 @@ export const createThreadStreamCoordinator = (deps: {
     return { success: true };
   };
 
+  /** Abort the active stream running `runId` (run cancellation; not user-stop). */
+  const abortStreamByRunId = (runId: string): boolean => {
+    for (const [, streamState] of deps.activeStreams) {
+      if (streamState.runId === runId && !streamState.cancelled) {
+        streamState.cancelled = true;
+        streamState.abortController.abort('run-cancelled');
+        return true;
+      }
+    }
+    return false;
+  };
+
   const steerStream = (
     senderId: number,
     threadId: string | undefined,
@@ -185,6 +197,7 @@ export const createThreadStreamCoordinator = (deps: {
     takeSteerMessages,
     stopStream,
     steerStream,
+    abortStreamByRunId,
   };
 };
 
