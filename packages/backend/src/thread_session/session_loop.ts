@@ -1,7 +1,5 @@
-import type { AgentStep } from '@iki/backend/agent';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
-import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
@@ -13,21 +11,17 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../turn_pre
 import { createApprovalRecoveryContext } from '../turn_prep/approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from '../turn_prep/run_tracker';
-import { rehydrateHarness, startTurnHarness } from '../agent/harness';
-import type { TurnOutput } from '../agent/harness/harness_types';
-import { traceChatTurn } from '@iki/backend/observability/langfuse';
+import { startTurnHarness } from '../agent/harness';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { createChatSend } from './chat_send';
-import { buildFreshHandoffSystemMessage, buildHandoffResumeContext } from './handoff_resume';
+import { buildHandoffResumeContext } from './handoff_resume';
 export type { ChatSendResult } from './chat_send';
-import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent, ChatStreamEvent } from './types';
-import type { ConversationPreview } from '@iki/backend/types/companion';
+import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
-import { writeThreadTodoPlan } from '../db/thread_todos';
-import { autoCompactHistory } from './token_estimator';
+import { runOuterLoop, type OuterLoopState } from './outer_loop';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -118,11 +112,13 @@ export const createChatStreaming = (deps: {
     };
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
     coordinator.registerStream(senderId, streamState);
-    let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
-    let turnHadToolCalls = false;
 
+    // Mutable loop state; runOuterLoop drives it across batches while this
+    // scope owns setup, finalization, and cleanup. Declared before the try so
+    // catch/finally and notifyRunStatus always read the latest run.
+    let state: OuterLoopState | null = null;
     const notifyRunStatus = () => {
-      const run = runTracker?.getRun();
+      const run = state?.runTracker?.getRun();
       if (!run) return;
       target.send('chat:run-status', {
         runId: run.id,
@@ -131,9 +127,6 @@ export const createChatStreaming = (deps: {
         timestamp: run.updatedAt,
       } satisfies RunStatusEvent);
     };
-
-    let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let isAwaitingApproval = false;
 
     try {
       const preparedTurn = await turnPreparer.prepareChatTurn({
@@ -156,7 +149,6 @@ export const createChatStreaming = (deps: {
             id: skill.id,
             name: skill.name,
             ...(skill.description ? { description: skill.description } : {}),
-            ...(skill.source ? { source: skill.source } : {}),
           })),
         });
       }
@@ -197,7 +189,7 @@ export const createChatStreaming = (deps: {
         }
       }
 
-      runTracker = createAgentRunTracker({
+      const runTracker = createAgentRunTracker({
         kind: options.runConfig?.kind ?? 'chat-turn',
         threadId: options.threadId,
         parentRunId: options.runConfig?.parentRunId,
@@ -230,7 +222,7 @@ export const createChatStreaming = (deps: {
       });
       streamState.runId = runTracker.id;
 
-      let approvalContext = preparedTurn.enableTools
+      const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
             threadId: options.threadId,
             sessionId: uiChunkEmitter.messageId,
@@ -248,7 +240,7 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      let harness = startTurnHarness({
+      const harness = startTurnHarness({
         providerType: options.providerType,
         providerId: options.providerId,
         model: options.model,
@@ -270,413 +262,33 @@ export const createChatStreaming = (deps: {
 
       getCompanion().beginThinking(companionThinkingKey);
 
-      const MAX_OUTER_AUTONOMOUS_BATCHES = 50;
-      const MAX_HANDOFF_CHAIN = 5;
-      let outerBatch = 0;
-      let handoffChain = 0;
-      type StreamResult = {
-        awaitingApproval: boolean;
-        cancelled?: boolean;
-        finished?: boolean;
-        partialFailure?: boolean;
-        response?: string;
-        usage?: import('@iki/backend/agent').AgentResult['usage'];
-        handoff?: { summary: string; nextSteps: string; reason: string };
+      const loopState: OuterLoopState = {
+        harness,
+        runTracker,
+        approvalContext,
+        streamHistory,
+        streamPrompt,
+        accumulatedResponse: '',
+        outerBatch: 0,
+        handoffChain: 0,
+        turnHadToolCalls: false,
+        isAwaitingApproval: false,
       };
-      let streamResult: StreamResult | undefined;
-      let accumulatedResponse = '';
-      let previewText = '';
-      let lastPreviewText = '';
+      state = loopState;
 
-      const sendConversationPreview = (kind: ConversationPreview['kind'], text: string, toolName?: string) => {
-        if (!options.threadId) return;
-        getCompanion().setConversationPreview({
-          threadId: options.threadId,
-          kind,
-          text: text.slice(-200),
-          ...(toolName ? { toolName } : {}),
-        });
-      };
-
-      const debouncedTextPreview = (text: string) => {
-        lastPreviewText = text;
-        if (previewDebounceTimer) return;
-        previewDebounceTimer = setTimeout(() => {
-          previewDebounceTimer = null;
-          sendConversationPreview('responding', lastPreviewText);
-        }, 300);
-      };
-
-      sendConversationPreview('thinking', '');
-
-      /** Convert AgentStep to ChatStreamEvent for runTracker + UI emitter. */
-      const forwardAgentStep = (step: AgentStep) => {
-        // Emit text deltas via the dedicated ui chunk emitter path
-        if (step.type === 'message_update') {
-          uiChunkEmitter.emitTextDelta(step.text);
-          if (step.kind === 'text') {
-            previewText = previewText + step.text;
-            debouncedTextPreview(previewText);
-          }
-          return;
-        }
-
-        // Convert AgentStep → ChatStreamEvent-like shape for runTracker and UI
-        let event: ChatStreamEvent | null = null;
-
-        if (step.type === 'tool_execution_start') {
-          turnHadToolCalls = true;
-          sendConversationPreview('tool', previewText || ' ', step.toolName);
-          event = {
-            type: 'tool-call',
-            toolCallId: step.toolCallId,
-            toolName: step.toolName,
-            input: step.input,
-          };
-        } else if (step.type === 'tool_execution_end') {
-          if (step.outcome === 'success') {
-            event = {
-              type: 'tool-result',
-              toolCallId: step.toolCallId,
-              output: step.output,
-            };
-          } else {
-            event = {
-              type: 'tool-error',
-              toolCallId: step.toolCallId,
-              error: step.error ?? 'Tool execution failed',
-            };
-          }
-        } else if (step.type === 'approval_request') {
-          for (const req of step.requests) {
-            if (req.approvalId) {
-              deps.approvals.ensurePendingApprovalSession(req.approvalId, {
-                target,
-                history: harness.getHistory() ?? streamHistory,
-                recoveryContext: approvalContext,
-              });
-            }
-          }
-          for (const req of step.requests) {
-            if (req.approvalId) {
-              uiChunkEmitter.emitToolEvent({
-                type: 'tool-approval-request',
-                approvalId: req.approvalId,
-                toolCallId: req.toolCallId || '',
-                ...(req.toolCall
-                  ? {
-                      toolCall: {
-                        toolName: req.toolCall.toolName,
-                        toolCallId: req.toolCallId || '',
-                        args: req.toolCall.args ?? {},
-                      },
-                    }
-                  : {}),
-              });
-            }
-          }
-          return;
-        } else if (step.type === 'handoff') {
-          event = {
-            type: 'tool-call',
-            toolCallId: `handoff-${outerBatch}`,
-            toolName: 'handoff',
-            input: {
-              summary: step.summary,
-              nextSteps: step.nextSteps,
-              reason: step.reason,
-            },
-          };
-        }
-
-        if (event) {
-          runTracker?.recordToolEvent(event);
-          uiChunkEmitter.emitToolEvent(event);
-        }
-      };
-
-      // ponytail: clear stale todo plan from previous turn before starting fresh
-      writeThreadTodoPlan({ threadId: options.threadId, items: [] });
-
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        // Run agent via harness — for-await consumes TurnEvent stream
-        let agentResult: import('@iki/backend/agent').AgentResult | undefined;
-        let cancelled = false;
-        let steered = false;
-        const awaitingApproval = false;
-
-        try {
-          agentResult = await traceChatTurn(
-            {
-              threadId: options.threadId,
-              prompt: streamPrompt,
-              provider: options.providerType,
-              model: options.model,
-            },
-            () =>
-              runWithToolRuntimeContext(
-                {
-                  runId: runTracker.id,
-                  runTracker,
-                  threadId: options.threadId,
-                  conversationModel: {
-                    providerType: options.providerType,
-                    providerId: options.providerId,
-                    model: options.model,
-                  },
-                },
-                async () => {
-                  for await (const event of harness.turn({
-                    prompt: streamPrompt,
-                    history: streamHistory,
-                    runTracker,
-                    abortSignal: streamState.abortController.signal,
-                  })) {
-                    if (event.event === 'step') {
-                      forwardAgentStep(event.step);
-                      continue;
-                    }
-
-                    if (event.event === 'done') {
-                      const output = event.output;
-                      return {
-                        response: output.text,
-                        toolCalls: output.toolCalls,
-                        toolApprovalRequests: output.toolApprovalRequests,
-                        usage: output.usage,
-                        iterations: 0,
-                        requiresApproval: output.requiresApproval,
-                      } as import('@iki/backend/agent').AgentResult;
-                    }
-                  }
-                  return undefined;
-                }
-              ),
-            result => result?.response
-          );
-        } catch (error) {
-          if (
-            (streamState.steered ?? false) ||
-            streamState.cancelled ||
-            (error instanceof Error && error.name === 'AbortError')
-          ) {
-            if ((streamState.steered ?? false) && !streamState.cancelled) {
-              steered = true;
-            } else {
-              cancelled = true;
-            }
-          } else {
-            throw error;
-          }
-        }
-
-        if (steered) {
-          streamState.steered = false;
-          streamHistory = harness.getHistory();
-          const drained = coordinator.takeSteerMessages(senderId);
-          if (drained.length > 0) {
-            const steerPrompt =
-              drained.length === 1
-                ? drained[0]
-                : drained.join('\n\n---\n\n');
-            streamHistory = [
-              ...streamHistory,
-              { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
-            ];
-          }
-          streamState.abortController = new AbortController();
-          continue;
-        }
-
-        if (cancelled) {
-          streamResult = { awaitingApproval: false, cancelled: true };
-          break;
-        }
-
-        // Check for approval requests in result
-        if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
-          deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
-            target,
-            history: harness.getHistory() ?? streamHistory,
-            ...(approvalContext ? { recoveryContext: approvalContext } : {}),
-          });
-          streamResult = {
-            awaitingApproval: true,
-            response: agentResult.response,
-            usage: agentResult.usage,
-          };
-          isAwaitingApproval = true;
-          break;
-        }
-
-        // Build stream result from agent result
-        const handoff = agentResult?.toolCalls?.find(
-          tc => tc.toolName === 'handoff'
-        );
-        const terminalToolName = handoff ? 'handoff' : undefined;
-
-        streamResult = {
-          awaitingApproval: false,
-          ...(agentResult?.response?.trim()
-            ? { response: agentResult.response }
-            : {}),
-          usage: agentResult?.usage,
-          ...(terminalToolName === 'handoff' && handoff
-            ? {
-                handoff: {
-                  summary:
-                    typeof (handoff.args as Record<string, unknown>)?.summary === 'string'
-                      ? (handoff.args as Record<string, unknown>).summary as string
-                      : '',
-                  nextSteps:
-                    typeof (handoff.args as Record<string, unknown>)?.next_steps === 'string'
-                      ? (handoff.args as Record<string, unknown>).next_steps as string
-                      : '',
-                  reason:
-                    typeof (handoff.args as Record<string, unknown>)?.reason === 'string'
-                      ? (handoff.args as Record<string, unknown>).reason as string
-                      : 'other',
-                },
-              }
-            : {}),
-          ...(terminalToolName ? { finished: true } : {}),
-        };
-
-        if (streamResult.response) {
-          accumulatedResponse = accumulatedResponse
-            ? accumulatedResponse + '\n\n' + streamResult.response
-            : streamResult.response;
-        }
-
-        if (accumulatedResponse) {
-          sendConversationPreview('responding', accumulatedResponse);
-        }
-        previewText = '';
-
-        runTracker.syncModelMessages(harness.getHistory() ?? streamHistory);
-
-        if (streamResult.cancelled) break;
-        if (streamResult.awaitingApproval) break;
-        if (streamResult.partialFailure) break;
-        if (streamResult.finished) break;
-
-        if (streamResult.handoff) {
-          const handoffText =
-            (streamResult.response ? streamResult.response + '\n\n' : '') +
-            `[Handoff #${handoffChain + 1}] ${streamResult.handoff.summary}`;
-          accumulatedResponse = accumulatedResponse
-            ? accumulatedResponse + '\n\n---\n\n' + handoffText
-            : handoffText;
-
-          runTracker.markCompleted({
-            text: handoffText.trim() || undefined,
-            usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-            finishReason: 'handoff',
-          });
-          notifyRunStatus();
-
-          handoffChain++;
-          if (handoffChain >= MAX_HANDOFF_CHAIN || !autonomousMode) break;
-
-          const parentRunId = runTracker.id;
-          const rootRunId = runTracker.getRun().rootRunId;
-
-          runTracker = createAgentRunTracker({
-            kind: 'handoff-resume',
-            threadId: options.threadId,
-            parentRunId,
-            rootRunId,
-            providerType: options.providerType,
-            providerId: options.providerId,
-            model: options.model,
-            systemPrompt,
-            enabledTools: guardedTools,
-            availableSkillIds: preparedTurn.selectedSkillIds,
-            input: {
-              prompt: streamResult.handoff.nextSteps || streamResult.handoff.summary,
-              messages: [],
-              metadata: {
-                source: 'handoff',
-                parentRunId,
-                summary: streamResult.handoff.summary,
-                nextSteps: streamResult.handoff.nextSteps,
-                reason: streamResult.handoff.reason,
-                handoffChain,
-              },
-            },
-            working: {
-              modelMessages: [],
-              accumulatedText: '',
-              pendingApprovalIds: [],
-              lastStepIndex: 0,
-            },
-          });
-          streamState.runId = runTracker.id;
-
-          harness = rehydrateHarness({
-            providerType: options.providerType,
-            providerId: options.providerId,
-            model: options.model,
-            systemPrompt,
-            enableTools: preparedTurn.enableTools,
-            enabledToolNames: guardedTools,
-            availableSkillIds: preparedTurn.selectedSkillIds,
-            guardActive: preparedTurn.guardActive,
-            maxIterations,
-            threadId: options.threadId,
-            maxOutputTokens: preparedTurn.maxOutputTokens,
-          });
-
-          approvalContext = preparedTurn.enableTools
-            ? createApprovalRecoveryContext({
-                threadId: options.threadId,
-                sessionId: uiChunkEmitter.messageId,
-                runId: runTracker.id,
-                providerType: options.providerType,
-                providerId: options.providerId,
-                model: options.model,
-                systemPrompt,
-                maxInputTokens: preparedTurn.maxInputTokens,
-                maxOutputTokens: preparedTurn.maxOutputTokens,
-                maxIterations,
-                enabledTools: guardedTools,
-                availableSkillIds: preparedTurn.selectedSkillIds,
-                ...(autonomousMode ? { autonomous: options.autonomous } : {}),
-              })
-            : undefined;
-
-          streamHistory = [
-            {
-              role: 'system',
-              content: buildFreshHandoffSystemMessage(streamResult.handoff),
-            },
-          ];
-          streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
-          continue;
-        }
-        if (!autonomousMode) break;
-
-        outerBatch++;
-        if (outerBatch >= MAX_OUTER_AUTONOMOUS_BATCHES) break;
-
-        const nextHistory = harness.getHistory() ?? streamHistory;
-        const compacted = autoCompactHistory({
-          history: nextHistory,
-          maxInputTokens: preparedTurn.maxInputTokens,
-        });
-        if (compacted.compacted) {
-          chatStreamingLogger.event({
-            level: 'info',
-            event: 'chat.stream.auto_compact',
-            data: { threadId: options.threadId ?? null, droppedMessages: compacted.droppedCount },
-          });
-          streamHistory = compacted.history;
-        } else {
-          streamHistory = nextHistory;
-        }
-        streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
-      }
+      const streamResult = await runOuterLoop(loopState, {
+        target,
+        options,
+        preparedTurn,
+        maxIterations,
+        autonomousMode: Boolean(autonomousMode),
+        systemPrompt,
+        streamState,
+        uiChunkEmitter,
+        notifyRunStatus,
+        drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
+        approvals: deps.approvals,
+      });
 
       if (!streamResult) {
         throw new Error('Unreachable: stream loop produced no result');
@@ -693,26 +305,26 @@ export const createChatStreaming = (deps: {
           metadata: {
             awaitingApproval: streamResult.awaitingApproval,
             contextTokens: preparedTurn.report.totalEstimatedTokens,
-            ...(outerBatch > 0 ? { autonomousBatches: outerBatch + 1 } : {}),
+            ...(loopState.outerBatch > 0 ? { autonomousBatches: loopState.outerBatch + 1 } : {}),
           },
         });
       }
 
-      const finalResponse = accumulatedResponse || streamResult.response;
+      const finalResponse = loopState.accumulatedResponse || streamResult.response;
 
       if (streamResult.cancelled) {
-        runTracker.markCancelled({
+        loopState.runTracker.markCancelled({
           ...(finalResponse ? { text: finalResponse } : {}),
         });
         notifyRunStatus();
       } else if (streamResult.partialFailure) {
-        runTracker.markFailed({
+        loopState.runTracker.markFailed({
           message: 'Autonomous iteration failed; partial progress saved.',
           retryable: true,
         });
         notifyRunStatus();
       } else if (streamResult.awaitingApproval) {
-        runTracker.markBlocked({
+        loopState.runTracker.markBlocked({
           ...(finalResponse ? { text: finalResponse } : {}),
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
         });
@@ -721,14 +333,14 @@ export const createChatStreaming = (deps: {
         const handoffResponse =
           (finalResponse ? finalResponse + '\n\n' : '') +
           `[Handoff] ${streamResult.handoff.summary}\n\nNext steps: ${streamResult.handoff.nextSteps}`;
-        runTracker.markCompleted({
+        loopState.runTracker.markCompleted({
           text: handoffResponse.trim() || undefined,
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
           finishReason: 'handoff',
         });
         notifyRunStatus();
       } else {
-        runTracker.markCompleted({
+        loopState.runTracker.markCompleted({
           ...(finalResponse ? { text: finalResponse } : {}),
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
           finishReason: streamResult.finished ? 'completed' : 'completed',
@@ -747,8 +359,8 @@ export const createChatStreaming = (deps: {
     } catch (error: unknown) {
       if (streamState.cancelled) {
         uiChunkEmitter.abort();
-        if (runTracker && runTracker.getRun().status === 'running') {
-          runTracker.markCancelled();
+        if (state?.runTracker && state.runTracker.getRun().status === 'running') {
+          state.runTracker.markCancelled();
           notifyRunStatus();
         }
         return { success: true, stopped: streamState.stoppedByUser };
@@ -768,25 +380,21 @@ export const createChatStreaming = (deps: {
           user_facing_error: message,
         },
       });
-      if (runTracker && runTracker.getRun().status === 'running') {
-        runTracker.markFailed({ message });
+      if (state?.runTracker && state.runTracker.getRun().status === 'running') {
+        state.runTracker.markFailed({ message });
         notifyRunStatus();
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {
-      if (previewDebounceTimer) {
-        clearTimeout(previewDebounceTimer);
-        previewDebounceTimer = null;
-      }
       getCompanion().clearConversationPreview();
       getCompanion().endThinking(companionThinkingKey);
-      if (turnHadToolCalls && !streamState.cancelled) {
+      if (state?.turnHadToolCalls && !streamState.cancelled) {
         const threadLabel =
           options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
         getCompanion().notifyReplyComplete(threadLabel);
       }
-      if (!isAwaitingApproval) {
+      if (!state?.isAwaitingApproval) {
         deps.approvals.cleanupPendingSessionsForSender(senderId);
       }
       if (options.threadId) {
