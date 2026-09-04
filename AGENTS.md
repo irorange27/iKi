@@ -28,10 +28,10 @@ postmortem/        ← incident write-ups
 
 | You want to… | Start here |
 |---|---|
-| Add/modify a tool | `packages/backend/src/tools/` + `tools/schemas.ts` + register in `tools/index.ts` |
+| Add/modify a tool | `packages/backend/src/tools/` + `tools/schemas/` + register in `tools/index.ts` |
 | Change prompt assembly | `packages/backend/src/turn_prep/context.ts`, `context_blocks.ts` |
 | LLM-call surface / add a provider | `packages/backend/src/provider/llm/factory.ts` |
-| Tool approval UX | `packages/backend/src/turn_prep/approval.ts` + renderer `modules/chat/tool_approval_service.ts` |
+| Tool approval UX | `packages/backend/src/turn_prep/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
 | New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |
 | Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |

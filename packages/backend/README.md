@@ -13,7 +13,7 @@ Both `packages/desktop` and `packages/daemon` import this package — keep it sh
 | `thread_session/` | the public service surface used by IPC and daemon: `session_loop.ts` (supersede/rate-limit, outer autonomous loop, ui-chunk emission), `chat_send.ts`, plus per-concern submodules (memory, usage, runs, models, skills, ui_stream) |
 | `tools/` | built-in tool implementations + Zod schemas; `index.ts` registers `defaultToolRegistry` |
 | `provider/llm/` | provider-specific model factories (`factory.ts` is the entry) |
-| `db/` | better-sqlite3 connection + migrations + per-table modules |
+| `db/` | `node:sqlite` (built-in) connection + migrations + per-table modules |
 | `mcp/` | MCP server client; server tools register into `defaultToolRegistry` (`manager.ts`), and the harness resolves the per-turn toolset (`agent/harness/tool_resolver.ts`) |
 | `runtimes/` | auxiliary prompt-text generators (titles, summaries) |
 | `observability/` | Langfuse tracing init + helpers |
@@ -39,7 +39,7 @@ renderer composables (useChatComposerSend → electronAPI.chat.stream)
        └─ inner loop = AI SDK stopWhen: stepCountIs(remaining), budget DEFAULT_CHAT_TOOL_MAX_ITERATIONS = 200
   → provider/llm/factory.ts   branches: acp / openai / anthropic(+compatible) / deepseek / minimax / isResponseApi / openai-compatible fallback
   → forwardAgentStep → uiChunkEmitter (thread_session/ui_stream.ts) → target.send('chat:ui-chunk')
-  → renderer ui_stream_controller → pure ui_stream_reducer → @ai-sdk/vue Chat store (ChatMessageStore)
+  → renderer ipc_chat_transport → Chat (AbstractChat; SDK `processUIMessageStream` accumulates into `chat_instance`'s reactive state) → ChatMessageStore view
 ```
 
 Loops: **inner** = AI SDK `stopWhen` above (1 step if tools disabled). **Outer** = session_loop.ts runs one `harness.turn` per batch and continues **only in autonomous mode**, capped at `MAX_OUTER_AUTONOMOUS_BATCHES = 50`, syncing history into the run row (`working.modelMessages`) every batch via `syncModelMessages`; handoff chains are separately capped at `MAX_HANDOFF_CHAIN = 5`. Both caps are live code.
@@ -48,7 +48,7 @@ Loops: **inner** = AI SDK `stopWhen` above (1 step if tools disabled). **Outer**
 
 - **Memory:** retrieval is off on the chat path (`includeMemory: false`); full retrieval only on approval recovery. Writes split: short-memory sync after persistence, long/emotion async fire-and-forget.
 - **Two observability stacks, don't unify:** `AgentRunTracker` → SQLite `agent_runs` + append-only `agent_run_steps` (can-I-resume-this-turn; the run row's `working` state is the resume source — `agent_run_checkpoints` is historical only, see ADR 004 phase 3); Langfuse → why-did-the-model-do-that (`traceChatTurn` maps `threadId` to the trace `sessionId`). Eval exports run trajectories as ATIF (`thread_session/atif_export.ts`).
-- **`AgentHarness` construction goes through `agent/harness/assembly.ts`** (`startTurnHarness` for fresh turns, `rehydrateHarness` for durable-state resume) — five call sites (session_loop ×2, chat_send, approval recovery, subagent); new always-pass config fields land in `assembly.ts`, not at the call sites. Approval resume (live or recovered) always builds a fresh harness rehydrated from durable state (run row + approval rows) — that rebuild IS the resume mechanism, matching Codex's rollout replay (ADR 004).
+- **`AgentHarness` construction goes through `agent/harness/assembly.ts`** (`startTurnHarness` for fresh turns, `rehydrateHarness` for durable-state resume) — five call sites (session_loop, outer_loop, chat_send, approval recovery, subagent); new always-pass config fields land in `assembly.ts`, not at the call sites. Approval resume (live or recovered) always builds a fresh harness rehydrated from durable state (run row + approval rows) — that rebuild IS the resume mechanism, matching Codex's rollout replay (ADR 004).
 - **Subagent** (`tools/agent_tools.ts`) skips context assembly/compaction but records a child run via `turn_prep/run_tracker`.
 - **MCP tools** register into `defaultToolRegistry` (`mcp/manager.ts`); the harness picks the per-turn toolset (`agent/harness/tool_resolver.ts`). `resolveToolsForClient` in the daemon is per-client filtering, not the merge point.
 
