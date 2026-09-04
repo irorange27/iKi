@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import * as currentAgentApi from '@iki/backend/agent';
 
 describe('core agent public surface', () => {
-  it('exports types, schemas, config, and plan but not implementation runners', () => {
+  it('exports types, schemas, and config but not implementation runners', () => {
     expect(currentAgentApi).toHaveProperty('AgentConfigSchema');
     expect(currentAgentApi).toHaveProperty('AgentToolSchema');
     expect(currentAgentApi).not.toHaveProperty('createPlanThenExecutePrepareStep');

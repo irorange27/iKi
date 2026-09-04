@@ -15,7 +15,6 @@
     "./logging": "./src/logging/index.ts",
     "./logging/*": "./src/logging/*.ts",
     "./agent": "./src/agent/index.ts",
-    "./agent/plan": "./src/agent/plan/index.ts",
     "./agent/*": "./src/agent/*.ts",
     "./mcp": "./src/mcp/index.ts",
     "./*": "./src/*.ts"

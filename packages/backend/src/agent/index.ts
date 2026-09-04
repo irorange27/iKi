@@ -33,9 +33,6 @@ export {
   PartialAgentConfigSchema,
 } from './types';
 
-// Export plan data types
-export type { Plan, PlanStep } from './plan';
-
 // Export model message utilities
 export {
   extractTextFromModelMessageContent,
