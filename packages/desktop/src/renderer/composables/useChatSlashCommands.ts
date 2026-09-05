@@ -18,12 +18,13 @@ import {
   toSkillComposerInvocationToken,
   type PromptAppSlashCommand,
 } from '@iki/backend/chat/slash_commands';
+import { normalizePersonality, PERSONALITY_IDS } from '@iki/backend/chat/personality';
 import type { ResolvedComposerSendRequest } from './useChatComposerSend';
 import { createLogger } from '../logger';
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
 
-type BuiltInSlashCommandId = 'new' | 'clear' | 'incognito' | 'init' | 'help';
+type BuiltInSlashCommandId = 'new' | 'clear' | 'incognito' | 'init' | 'help' | 'personality';
 
 type BuiltInSlashCommand = {
   id: `builtin:${BuiltInSlashCommandId}`;
@@ -120,10 +121,12 @@ export const useChatSlashCommands = (deps: {
   inputRef: Ref<ComposerTextControl | null>;
   threadId: Ref<string | undefined>;
   currentIncognito: Ref<boolean>;
+  currentPersonality: Ref<string>;
   selectedSkillIds: Ref<string[]>;
   onRequestNewChat: () => void;
   onRequestClearThread: () => void;
   onRequestIncognitoChange: (nextValue: boolean) => void;
+  onRequestPersonalityChange: (nextValue: string) => void;
   t: (key: string, params?: Record<string, unknown>) => string;
 }) => {
   const enabledPromptApps = ref<PromptApp[]>([]);
@@ -173,6 +176,13 @@ export const useChatSlashCommands = (deps: {
       shortcut: 'help',
       name: deps.t('chat.input.slash.help.name'),
       description: deps.t('chat.input.slash.help.description'),
+    },
+    {
+      id: 'builtin:personality',
+      kind: 'builtin',
+      shortcut: 'personality',
+      name: deps.t('chat.input.slash.personality.name'),
+      description: deps.t('chat.input.slash.personality.description'),
     },
   ]);
 
@@ -475,6 +485,27 @@ export const useChatSlashCommands = (deps: {
               : deps.currentIncognito.value
                 ? deps.t('chat.input.slash.incognito.disabled')
                 : deps.t('chat.input.slash.incognito.enabled'),
+      };
+    }
+
+    if (command.shortcut === 'personality') {
+      const current = deps.currentPersonality.value || 'default';
+      const requested = normalizePersonality(normalizedArgumentText);
+      if (!requested) {
+        return {
+          kind: 'skip',
+          feedback: deps.t('chat.input.slash.personality.usage', {
+            options: PERSONALITY_IDS.join(', '),
+            current,
+          }),
+        };
+      }
+
+      deps.message.value = '';
+      deps.onRequestPersonalityChange(requested);
+      return {
+        kind: 'skip',
+        feedback: deps.t('chat.input.slash.personality.executed', { value: requested }),
       };
     }
 

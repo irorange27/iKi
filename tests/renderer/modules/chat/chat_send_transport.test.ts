@@ -92,4 +92,30 @@ describe('chat_send_transport', () => {
       })
     ).toBeNull();
   });
+
+  it('includes a normalized reasoning effort only when one is selected', () => {
+    const provider = buildProvider({
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+    });
+    const base = {
+      providerReady: { provider, model: 'gpt-5.2' },
+      threadId: 'thread_1',
+      isAutoToolMode: true,
+      selectedTools: [],
+      resolvedMcpServerIds: [],
+      isAutoSkillMode: true,
+      selectedSkillIds: [],
+    };
+
+    const withEffort = createChatComposerStreamPayload({
+      ...base,
+      reasoningEffort: '  HIGH ',
+    });
+    expect(withEffort?.reasoningEffort).toBe('high');
+
+    const withoutEffort = createChatComposerStreamPayload({ ...base, reasoningEffort: '' });
+    expect(withoutEffort).not.toHaveProperty('reasoningEffort');
+  });
 });

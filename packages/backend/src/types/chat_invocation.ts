@@ -6,6 +6,10 @@ export type ChatInvocationOptions = {
   providerId?: string;
   model: string;
   modelCapability?: ModelCapabilitySnapshot;
+  /** Per-thread reasoning effort override ('low' | 'medium' | 'high'); empty/omitted = provider default. */
+  reasoningEffort?: string;
+  /** Per-thread agent personality ('default' | 'concise' | 'friendly'). */
+  personality?: string;
   messages: unknown[];
   tools?: string[];
   mcpServerIds?: string[];

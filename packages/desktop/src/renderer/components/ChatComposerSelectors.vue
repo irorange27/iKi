@@ -3,6 +3,7 @@
     <WorkspaceSelector
       :selected-workspace-id="props.selectedWorkspaceId ?? null"
       :locked="props.workspaceLocked"
+      :thread-id="props.threadId ?? null"
       @update:selected-workspace-id="emit('update:selectedWorkspaceId', $event)"
     />
     <SkillSelector
@@ -25,6 +26,10 @@
       @update:active="emit('update:autonomousActive', $event)"
       @update:max-iterations="emit('update:autonomousMaxIterations', $event)"
     />
+    <ReasoningSelector
+      :model-value="props.reasoningEffort ?? ''"
+      @update:model-value="emit('update:reasoningEffort', $event)"
+    />
     <ChatModelSelector
       :available-providers="props.availableProviders"
       :selected-provider="props.selectedProvider"
@@ -38,6 +43,7 @@
 import type { Provider } from '@iki/backend/types/provider';
 import AutonomousSelector from './AutonomousSelector.vue';
 import ChatModelSelector from './ChatModelSelector.vue';
+import ReasoningSelector from './ReasoningSelector.vue';
 import SkillSelector from './SkillSelector.vue';
 import ToolSelector from './ToolSelector.vue';
 import WorkspaceSelector from './WorkspaceSelector.vue';
@@ -45,6 +51,7 @@ import WorkspaceSelector from './WorkspaceSelector.vue';
 const props = defineProps<{
   selectedWorkspaceId?: string | null;
   workspaceLocked?: boolean;
+  threadId?: string | null;
   selectedSkillIds: string[];
   skillMode: 'manual' | 'auto';
   selectedTools: string[];
@@ -52,6 +59,7 @@ const props = defineProps<{
   toolMode: 'manual' | 'auto';
   autonomousActive: boolean;
   autonomousMaxIterations: number;
+  reasoningEffort?: string;
   availableProviders: Provider[];
   selectedProvider: Provider | null;
   selectedModel: string;
@@ -66,6 +74,7 @@ const emit = defineEmits<{
   (event: 'update:toolMode', value: 'manual' | 'auto'): void;
   (event: 'update:autonomousActive', value: boolean): void;
   (event: 'update:autonomousMaxIterations', value: number): void;
+  (event: 'update:reasoningEffort', value: string): void;
   (event: 'selectProviderModel', payload: { provider: Provider; model: string }): void;
 }>();
 </script>

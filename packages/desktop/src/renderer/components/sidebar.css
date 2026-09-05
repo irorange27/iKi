@@ -35,6 +35,75 @@
   height: 24px;
 }
 
+.sidebar-tool-btn-active,
+.sidebar-tool-btn-active:hover {
+  background-color: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.sidebar-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  padding: 4px 8px;
+  transition: border-color 0.2s;
+}
+
+.sidebar-search-box:focus-within {
+  border-color: var(--accent-color);
+}
+
+.sidebar-search-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.sidebar-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 2px 0;
+  outline: none;
+}
+
+.sidebar-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.sidebar-search-clear {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.sidebar-search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-no-results {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 12px 4px;
+  text-align: center;
+}
+
 .resize-handle {
   -webkit-app-region: no-drag;
 }
@@ -143,6 +212,39 @@
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.sidebar-section-toggle {
+  width: 100%;
+  margin-top: 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  transition: color 0.2s;
+}
+
+.sidebar-section-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.sidebar-section-toggle-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-section-chevron {
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.sidebar-section-chevron.is-collapsed {
+  transform: rotate(-90deg);
 }
 
 .sidebar-section-count {

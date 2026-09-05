@@ -72,32 +72,53 @@
         <div
           class="flex-1 px-3 py-2 min-w-48 overflow-y-scroll custom-scrollbar overscroll-contain"
         >
-          <div
-            v-for="chat in desktopThreads"
-            :key="chat.id"
-            class="chat-item-row group relative mb-1"
-          >
+          <template v-for="section in threadSections" :key="section.key">
             <button
-              class="chat-item w-full truncate rounded-lg px-3 py-2.5 pr-10 text-left text-sm focus:outline-none"
-              :class="{ 'chat-item-active': currentThreadId === chat.id }"
-              :title="chat.title"
-              @click="selectThread(chat.id)"
+              v-if="section.name !== null"
+              type="button"
+              class="sidebar-section-header sidebar-section-toggle"
+              :aria-expanded="!collapsedGroups[section.key]"
+              @click="toggleGroupCollapsed(section.key)"
             >
-              <span class="chat-item-title">{{ chat.title }}</span>
+              <span class="sidebar-section-toggle-lead">
+                <ChevronDown
+                  :size="12"
+                  class="sidebar-section-chevron"
+                  :class="{ 'is-collapsed': collapsedGroups[section.key] }"
+                />
+                {{ section.name }}
+              </span>
+              <span class="sidebar-section-count">{{ section.threads.length }}</span>
             </button>
-            <button
-              class="chat-delete-btn"
-              :class="{ 'chat-delete-btn-visible': deletingThreadIds[chat.id] }"
-              :disabled="!!deletingThreadIds[chat.id]"
-              :aria-label="t('chat.sidebar.deleteChat')"
-              @click="handleDeleteThread(chat, $event)"
-            >
-              <Trash2 :size="14" />
-            </button>
-          </div>
+            <template v-if="section.name === null || !collapsedGroups[section.key]">
+              <div
+                v-for="chat in section.threads"
+                :key="chat.id"
+                class="chat-item-row group relative mb-1"
+              >
+                <button
+                  class="chat-item w-full truncate rounded-lg px-3 py-2.5 pr-10 text-left text-sm focus:outline-none"
+                  :class="{ 'chat-item-active': currentThreadId === chat.id }"
+                  :title="chat.title"
+                  @click="selectThread(chat.id)"
+                >
+                  <span class="chat-item-title">{{ chat.title }}</span>
+                </button>
+                <button
+                  class="chat-delete-btn"
+                  :class="{ 'chat-delete-btn-visible': deletingThreadIds[chat.id] }"
+                  :disabled="!!deletingThreadIds[chat.id]"
+                  :aria-label="t('chat.sidebar.deleteChat')"
+                  @click="handleDeleteThread(chat, $event)"
+                >
+                  <Trash2 :size="14" />
+                </button>
+              </div>
+            </template>
+          </template>
 
           <section v-if="shouldShowExternalSection" class="sidebar-section">
-            <div v-if="desktopThreads.length > 0" class="sidebar-section-divider"></div>
+            <div v-if="threadSections.length > 0" class="sidebar-section-divider"></div>
             <div class="sidebar-section-header">
               <span>{{ t('chat.sidebar.externalChats') }}</span>
               <span class="sidebar-section-count">{{ externalThreads.length }}</span>
@@ -215,6 +236,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   Check,
+  ChevronDown,
   MessageSquareShare,
   MoreHorizontal,
   PanelLeftDashed,
@@ -233,8 +255,6 @@ import { getElectronApiMethod, getElectronApiSlice } from '../services/electron_
 
 const sidebar = useSidebar();
 const { t } = useI18n();
-const chatApi = getElectronApiSlice('chat');
-const openSettingsWindow = getElectronApiMethod('openSettings');
 const sidebarLogger = createLogger({ module: 'sidebar' });
 
 interface ChatThread {
@@ -243,12 +263,25 @@ interface ChatThread {
   model?: string;
   updated_at: string;
   client_id?: string;
+  workspace_id?: string;
   metadata: string;
 }
 
+interface WorkspaceInfo {
+  id: string;
+  name: string;
+  path: string;
+}
+
+const chatApi = getElectronApiSlice('chat');
+const workspacesApi = getElectronApiSlice('workspaces');
+const openSettingsWindow = getElectronApiMethod('openSettings');
+
 const chatThreads = ref<ChatThread[]>([]);
+const workspaces = ref<WorkspaceInfo[]>([]);
 const currentThreadId = ref<string | null>(null);
 const deletingThreadIds = ref<Record<string, boolean>>({});
+const collapsedGroups = ref<Record<string, boolean>>({});
 const isSearchOpen = ref(false);
 const searchQuery = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
@@ -270,6 +303,19 @@ const emit = defineEmits<{
 
 // Load chat threads from database
 const loadChatThreads = async () => {
+  if (workspacesApi?.list) {
+    try {
+      const list = await workspacesApi.list();
+      workspaces.value = Array.isArray(list) ? (list as WorkspaceInfo[]) : [];
+    } catch (error) {
+      sidebarLogger.event({
+        level: 'warn',
+        event: 'chat.workspaces.load',
+        outcome: 'failed',
+        error,
+      });
+    }
+  }
   if (!chatApi?.threads?.list) return;
   try {
     const threads = await chatApi.threads.list();
@@ -366,17 +412,80 @@ const matchesSearch = (thread: ChatThread) => {
   return thread.title.toLowerCase().includes(query);
 };
 
-const desktopThreads = computed(() =>
-  chatThreads.value.filter(thread => !isExternalThread(thread) && matchesSearch(thread))
-);
-const externalThreads = computed(() =>
-  chatThreads.value.filter(thread => isExternalThread(thread) && matchesSearch(thread))
-);
+const getThreadWorkspaceId = (thread: ChatThread): string =>
+  typeof thread.workspace_id === 'string' ? thread.workspace_id : '';
+
+const workspaceNameById = computed(() => {
+  const names = new Map<string, string>();
+  for (const workspace of workspaces.value) {
+    const name =
+      typeof workspace.name === 'string' && workspace.name.trim()
+        ? workspace.name.trim()
+        : (workspace.path.split(/[\\/]/).filter(Boolean).pop() ?? workspace.id);
+    names.set(workspace.id, name);
+  }
+  return names;
+});
+
+const getWorkspaceDisplayName = (workspaceId: string): string =>
+  workspaceNameById.value.get(workspaceId) ?? workspaceId;
+
+type SidebarThreadSection = {
+  key: string;
+  /** null for the default ungrouped section (no header rendered). */
+  name: string | null;
+  threads: ChatThread[];
+};
+
+const threadSections = computed<SidebarThreadSection[]>(() => {
+  const visibleDesktopThreads = chatThreads.value.filter(
+    thread => !isExternalThread(thread) && matchesSearch(thread)
+  );
+  const sections: SidebarThreadSection[] = [];
+
+  const ungrouped = visibleDesktopThreads.filter(thread => !getThreadWorkspaceId(thread));
+  sections.push({ key: 'default', name: null, threads: ungrouped });
+
+  const byWorkspace = new Map<string, ChatThread[]>();
+  for (const thread of visibleDesktopThreads) {
+    const workspaceId = getThreadWorkspaceId(thread);
+    if (!workspaceId) continue;
+    const group = byWorkspace.get(workspaceId);
+    if (group) {
+      group.push(thread);
+    } else {
+      byWorkspace.set(workspaceId, [thread]);
+    }
+  }
+
+  const workspaceIds = [...byWorkspace.keys()].sort((a, b) =>
+    getWorkspaceDisplayName(a).localeCompare(getWorkspaceDisplayName(b))
+  );
+  for (const workspaceId of workspaceIds) {
+    sections.push({
+      key: `workspace:${workspaceId}`,
+      name: getWorkspaceDisplayName(workspaceId),
+      threads: byWorkspace.get(workspaceId)!,
+    });
+  }
+
+  return sections;
+});
+
+const toggleGroupCollapsed = (key: string) => {
+  collapsedGroups.value = {
+    ...collapsedGroups.value,
+    [key]: !collapsedGroups.value[key],
+  };
+};
 const hasNoSearchResults = computed(
   () =>
     isSearchOpen.value &&
     searchQuery.value.trim() !== '' &&
     chatThreads.value.every(thread => !matchesSearch(thread))
+);
+const externalThreads = computed(() =>
+  chatThreads.value.filter(thread => isExternalThread(thread) && matchesSearch(thread))
 );
 const isCurrentThreadExternal = computed(() => {
   const threadId = typeof currentThreadId.value === 'string' ? currentThreadId.value : '';

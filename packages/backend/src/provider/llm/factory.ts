@@ -285,6 +285,7 @@ const shouldOmitTemperatureForModelCall = (params: {
   modelId: string;
   providerId?: string | null;
   temperature?: number;
+  reasoningEffort?: string;
 }): boolean => {
   if (typeof params.temperature !== 'number') return false;
 
@@ -301,7 +302,9 @@ const shouldOmitTemperatureForModelCall = (params: {
   }
 
   const providerOptions = storedContext?.modelOptions?.providerOptions;
-  const reasoningEffort = normalizeOptionalLowercaseString(providerOptions?.reasoningEffort);
+  const reasoningEffort =
+    normalizeOptionalLowercaseString(params.reasoningEffort) ??
+    normalizeOptionalLowercaseString(providerOptions?.reasoningEffort);
   if (reasoningEffort === 'none') {
     return false;
   }
@@ -311,6 +314,24 @@ const shouldOmitTemperatureForModelCall = (params: {
     storedContext?.modelOptions?.supportsReasoning === true ||
     reasoningEffort !== null
   );
+};
+
+const mergeReasoningEffortOverride = (
+  providerType: string,
+  callSettings: { providerOptions?: SharedV3ProviderOptions },
+  reasoningEffort: string
+): { providerOptions?: SharedV3ProviderOptions } => {
+  const providerOptions = { ...(callSettings.providerOptions ?? {}) };
+  const perProvider = {
+    ...((providerOptions[providerType] as Record<string, JSONValue> | undefined) ?? {}),
+    reasoningEffort,
+  };
+  return {
+    providerOptions: {
+      ...providerOptions,
+      [providerType]: perProvider,
+    },
+  };
 };
 
 export const getModelCallSettings = (
@@ -343,8 +364,14 @@ export const getModelGenerationSettings = (params: {
   modelId: string;
   providerId?: string | null;
   temperature?: number;
+  /** Per-call reasoning effort override; wins over stored provider model options. */
+  reasoningEffort?: string;
 }): { providerOptions?: SharedV3ProviderOptions; temperature?: number } => {
-  const callSettings = getModelCallSettings(params.providerType, params.modelId, params.providerId);
+  const storedCallSettings = getModelCallSettings(params.providerType, params.modelId, params.providerId);
+  const reasoningEffort = normalizeOptionalLowercaseString(params.reasoningEffort);
+  const callSettings = reasoningEffort
+    ? mergeReasoningEffortOverride(params.providerType, storedCallSettings, reasoningEffort)
+    : storedCallSettings;
 
   if (shouldOmitTemperatureForModelCall(params)) {
     return callSettings;

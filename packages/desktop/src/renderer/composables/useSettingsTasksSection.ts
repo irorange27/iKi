@@ -5,6 +5,7 @@ import { confirmAction } from './useConfirm';
 import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
 import type { ChatThread } from '@iki/backend/types/chat';
+import type { ReviewQueueItem } from '@iki/backend/types/agent_run';
 import type {
   ProactiveTask,
   ProactiveTaskToolMode,
@@ -177,8 +178,38 @@ export const useSettingsTasksSection = (params: {
   };
 
   const refreshTasks = async () => {
-    await Promise.all([loadProactiveTasks(), loadTaskThreads()]);
+    await Promise.all([loadProactiveTasks(), loadTaskThreads(), loadReviewQueue()]);
   };
+
+  const REVIEW_QUEUE_LIMIT = 20;
+  const reviewQueue = ref<ReviewQueueItem[]>([]);
+  const reviewQueueLoading = ref(false);
+
+  const loadReviewQueue = async () => {
+    const listReviewQueue = electronAPI.chat?.runs?.reviewQueue;
+    if (typeof listReviewQueue !== 'function') {
+      reviewQueue.value = [];
+      return;
+    }
+    reviewQueueLoading.value = true;
+    try {
+      const items = await listReviewQueue(REVIEW_QUEUE_LIMIT);
+      reviewQueue.value = Array.isArray(items) ? (items as ReviewQueueItem[]) : [];
+    } catch (error) {
+      tasksSectionLogger.event({
+        level: 'warn',
+        event: 'settings.tasks.review_queue.load',
+        outcome: 'failed',
+        error,
+      });
+      reviewQueue.value = [];
+    } finally {
+      reviewQueueLoading.value = false;
+    }
+  };
+
+  const formatReviewItemTitle = (item: ReviewQueueItem): string =>
+    item.taskName || item.threadTitle || item.runId;
 
   const toggleTaskTool = (tool: SafeProactiveTaskTool, checked: boolean) => {
     const existing = taskForm.value.tools;
@@ -477,11 +508,14 @@ export const useSettingsTasksSection = (params: {
     SAFE_TASK_TOOLS,
     createProactiveTask,
     deleteTask,
+    formatReviewItemTitle,
     formatTaskSchedule,
     formatTaskStatus,
     formatTaskToolStrategy,
     proactiveTasks,
     refreshTasks,
+    reviewQueue,
+    reviewQueueLoading,
     runTaskNow,
     taskCreateError,
     taskCreateLoading,

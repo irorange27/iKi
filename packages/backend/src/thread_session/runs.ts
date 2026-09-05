@@ -1,5 +1,12 @@
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import type { AgentRunStatus } from '@iki/backend/types/agent_run';
+import * as chatThreadDb from '@iki/backend/db/chat_thread';
+import * as tasksDb from '@iki/backend/db/tasks';
+import type {
+  AgentRun,
+  AgentRunKind,
+  AgentRunStatus,
+  ReviewQueueItem,
+} from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 type ChatRunsDeps = {
@@ -7,11 +14,49 @@ type ChatRunsDeps = {
   abortActiveStream: (runId: string) => void;
 };
 
+const REVIEW_QUEUE_KINDS: AgentRunKind[] = ['proactive-task', 'awaiter-wake'];
+const SUMMARY_MAX_CHARS = 280;
+
+const buildReviewQueueItem = (run: AgentRun): ReviewQueueItem => {
+  const thread = run.threadId ? chatThreadDb.getChatThread(run.threadId) : null;
+  const metadata = (run.input?.metadata ?? {}) as Record<string, unknown>;
+  const taskId = typeof metadata.taskId === 'string' ? metadata.taskId : '';
+  const task = taskId ? tasksDb.getProactiveTask(taskId) : null;
+  const summarySource = run.output?.text || run.working?.accumulatedText || '';
+  const truncated =
+    summarySource.length > SUMMARY_MAX_CHARS
+      ? `${summarySource.slice(0, SUMMARY_MAX_CHARS).trimEnd()}…`
+      : summarySource;
+
+  return {
+    runId: run.id,
+    kind: run.kind,
+    status: run.status,
+    threadId: run.threadId,
+    threadTitle: thread?.title || undefined,
+    taskName: task?.name || taskId || undefined,
+    startedAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    summary: truncated,
+    error: run.error?.message,
+  };
+};
+
+export const listReviewQueue = (limit = 20): ReviewQueueItem[] =>
+  agentRunDb
+    .listAgentRunsByKinds(REVIEW_QUEUE_KINDS, {
+      statuses: ['completed', 'failed'],
+      limit,
+    })
+    .map(buildReviewQueueItem);
+
 export const createChatRuns = (deps: ChatRunsDeps) => ({
   listRuns: (threadId: string) => agentRunDb.listAgentRunsByThread(threadId),
 
   listRunsByStatus: (statuses: AgentRunStatus[], opts?: { clientId?: string; limit?: number }) =>
     agentRunDb.listAgentRunsByStatus(statuses, opts),
+
+  listReviewQueue: (limit?: number) => listReviewQueue(limit),
 
   getRunTrace: (runId: string) => agentRunDb.getAgentRunTrace(runId),
 

@@ -34,7 +34,7 @@ import type {
 import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
-import type { AgentRun, AgentEvalComparison, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, RegressionAssessment } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentEvalComparison, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, RegressionAssessment, ReviewQueueItem } from '@iki/backend/types/agent_run';
 import type { CompanionSnapshot } from './companion';
 import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
 export type { ChatInvocationOptions, ChatInvocationResult };
@@ -209,6 +209,7 @@ export interface ElectronApi {
       retryAndExecute: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
       resume: (runId: string) => Promise<{ success: boolean; error?: string }>;
       listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) => Promise<AgentRun[]>;
+      reviewQueue: (limit?: number) => Promise<ReviewQueueItem[]>;
       eval: {
         exportTrace: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
         exportRunTrajectory: (
@@ -266,6 +267,14 @@ export interface ElectronApi {
       path?: string;
       error?: string;
     }>;
+    createThreadWorktree: (
+      threadId: string,
+      repoWorkspaceId?: string | null
+    ) => Promise<import('./worktree').ThreadWorktreeResult>;
+    removeThreadWorktree: (
+      threadId: string,
+      options?: { force?: boolean }
+    ) => Promise<import('./worktree').ThreadWorktreeRemovalResult>;
   };
   promptApps: {
     list: () => Promise<PromptApp[]>;

@@ -14,6 +14,20 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 
+/** A finished background run (proactive task / awaiter wake) surfaced for review. */
+export type ReviewQueueItem = {
+  runId: string;
+  kind: AgentRunKind;
+  status: AgentRunStatus;
+  threadId?: string | null;
+  threadTitle?: string;
+  taskName?: string;
+  startedAt: string;
+  updatedAt: string;
+  summary: string;
+  error?: string;
+};
+
 export type AgentRunStepType =
   | 'model'
   | 'tool-call'

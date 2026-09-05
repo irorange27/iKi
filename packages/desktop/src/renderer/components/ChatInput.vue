@@ -97,6 +97,7 @@
 
         <template #toolbar-left>
           <ChatComposerSelectors
+            :thread-id="props.threadId ?? null"
             :selected-workspace-id="props.selectedWorkspaceId ?? null"
             :workspace-locked="props.workspaceLocked"
             v-model:selected-skill-ids="selectedSkillIds"
@@ -106,10 +107,12 @@
             v-model:tool-mode="toolMode"
             v-model:autonomous-active="isAutonomousMode"
             v-model:autonomous-max-iterations="autonomousMaxIterations"
+            :reasoning-effort="props.reasoningEffort ?? ''"
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
             :selected-model="selectedModel"
             @update:selected-workspace-id="handleWorkspaceChanged"
+            @update:reasoning-effort="handleReasoningEffortChanged"
             @select-provider-model="handleProviderModelSelect"
           />
         </template>
@@ -217,6 +220,8 @@ const emit = defineEmits<{
   (event: 'new-chat-requested'): void;
   (event: 'clear-thread-requested'): void;
   (event: 'workspace-changed', value: string | null): void;
+  (event: 'reasoning-effort-changed', value: string): void;
+  (event: 'personality-changed', value: string): void;
 }>();
 
 const props = defineProps<{
@@ -226,6 +231,8 @@ const props = defineProps<{
   isIncognito?: boolean;
   selectedWorkspaceId?: string | null;
   workspaceLocked?: boolean;
+  reasoningEffort?: string;
+  personality?: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
   submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
@@ -332,10 +339,12 @@ const {
   inputRef,
   threadId: computed(() => props.threadId),
   currentIncognito: computed(() => Boolean(props.isIncognito)),
+  currentPersonality: computed(() => props.personality ?? ''),
   selectedSkillIds,
   onRequestNewChat: () => emit('new-chat-requested'),
   onRequestClearThread: () => emit('clear-thread-requested'),
   onRequestIncognitoChange: (nextValue: boolean) => emit('incognito-changed', nextValue),
+  onRequestPersonalityChange: (nextValue: string) => emit('personality-changed', nextValue),
   t,
 });
 
@@ -382,6 +391,8 @@ const {
   isAutoSkillMode,
   isAutonomousMode,
   autonomousMaxIterations,
+  reasoningEffort: computed(() => props.reasoningEffort ?? ''),
+  personality: computed(() => props.personality ?? ''),
   prepareFailedMessage: t('chat.input.prepareFailed'),
   stopFailedMessage: t('chat.input.stopFailed'),
   prepareMessageSend: props.prepareMessageSend,
@@ -533,6 +544,10 @@ const handleProviderModelSelect = (payload: { provider: Provider; model: string 
 const handleWorkspaceChanged = (workspaceId: string | null) => {
   if (props.workspaceLocked) return;
   emit('workspace-changed', workspaceId);
+};
+
+const handleReasoningEffortChanged = (effort: string) => {
+  emit('reasoning-effort-changed', effort);
 };
 
 const handleComposerKeydown = (event: KeyboardEvent) => {

@@ -153,6 +153,33 @@
     </div>
 
     <div class="settings-card">
+      <div class="card-title">{{ t('settings.tasks.review.title') }}</div>
+      <p class="card-help">{{ t('settings.tasks.review.description') }}</p>
+
+      <div v-if="reviewQueueLoading" class="tasks-empty">
+        {{ t('settings.tasks.loading') }}
+      </div>
+      <div v-else-if="reviewQueue.length === 0" class="tasks-empty">
+        {{ t('settings.tasks.review.empty') }}
+      </div>
+      <div v-else class="tasks-list">
+        <div v-for="item in reviewQueue" :key="item.runId" class="task-item task-review-item">
+          <div class="task-item-header">
+            <div class="task-item-title">
+              <span class="task-name">{{ formatReviewItemTitle(item) }}</span>
+              <span class="task-status" :class="`status-${item.status === 'failed' ? 'error' : 'success'}`">
+                {{ item.status === 'failed' ? t('settings.tasks.status.error') : t('settings.tasks.status.success') }}
+              </span>
+            </div>
+            <span class="task-review-time">{{ formatTimestamp(item.updatedAt) }}</span>
+          </div>
+          <p v-if="item.summary" class="task-review-summary">{{ item.summary }}</p>
+          <p v-if="item.error" class="tasks-error">{{ item.error }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
       <div class="card-title">{{ t('settings.tasks.existingTitle') }}</div>
 
       <div v-if="tasksLoading" class="tasks-empty">{{ t('settings.tasks.loading') }}</div>
@@ -277,11 +304,14 @@ const {
   SAFE_TASK_TOOLS,
   createProactiveTask,
   deleteTask,
+  formatReviewItemTitle,
   formatTaskSchedule,
   formatTaskStatus,
   formatTaskToolStrategy,
   proactiveTasks,
   refreshTasks,
+  reviewQueue,
+  reviewQueueLoading,
   runTaskNow,
   taskCreateError,
   taskCreateLoading,

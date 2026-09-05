@@ -539,6 +539,7 @@ export const createChatApproval = (deps: {
             ...(typeof ctx?.maxOutputTokens === 'number'
               ? { maxOutputTokens: ctx.maxOutputTokens }
               : {}),
+            ...(ctx?.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
           });
 
           // Build history with collected approval responses

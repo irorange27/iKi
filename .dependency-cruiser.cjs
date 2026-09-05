@@ -52,13 +52,13 @@ module.exports = {
     },
     {
       name: 'renderer-backend-whitelist',
-      comment: 'R5 (ADR-003): renderer imports only pure types/utils/constants/logging, chat codecs, network/proxy, config/defaults',
+      comment: 'R5 (ADR-003): renderer imports only pure types/utils/constants/logging, chat codecs, network/proxy, config/defaults, worktree id conventions',
       severity: 'error',
       from: { path: '^packages/desktop/src/renderer' },
       to: {
         path: '^packages/backend/src',
         pathNot:
-          '^packages/backend/src/(types|utils|constants|logging|chat|i18n)/|^packages/backend/src/config/defaults\\.ts$|^packages/backend/src/network/proxy\\.ts$',
+          '^packages/backend/src/(types|utils|constants|logging|chat|i18n)/|^packages/backend/src/config/defaults\\.ts$|^packages/backend/src/network/proxy\\.ts$|^packages/backend/src/workspaces/worktree_ids\\.ts$',
       },
     },
     {

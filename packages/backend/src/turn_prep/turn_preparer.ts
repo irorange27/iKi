@@ -33,6 +33,10 @@ export type ChatTurnOptions = {
   providerType: string;
   providerId?: string;
   model: string;
+  /** Per-thread reasoning effort override ('low' | 'medium' | 'high'); empty/omitted = provider default. */
+  reasoningEffort?: string;
+  /** Per-thread agent personality ('default' | 'concise' | 'friendly'). */
+  personality?: string;
   modelCapability?: {
     contextWindow?: number | null;
     maxInputTokens?: number | null;

@@ -299,6 +299,64 @@
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
 
+.tool-diff-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tool-diff-stat {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-diff-stat-add {
+  color: var(--success-color);
+}
+
+.tool-diff-stat-del {
+  color: var(--danger-color);
+}
+
+.tool-diff {
+  margin-top: 6px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.tool-diff-line {
+  padding: 0 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+}
+
+.tool-diff-line-add {
+  background: color-mix(in srgb, var(--success-color) 14%, transparent);
+  color: var(--text-primary);
+}
+
+.tool-diff-line-del {
+  background: color-mix(in srgb, var(--danger-color) 14%, transparent);
+  color: var(--text-primary);
+}
+
+.tool-diff-line-hunk,
+.tool-diff-line-meta {
+  color: var(--text-muted);
+}
+
 .tool-approval-header {
   display: flex;
   align-items: center;

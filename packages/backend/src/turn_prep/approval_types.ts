@@ -14,6 +14,8 @@ export type ApprovalRecoveryContext = {
   maxInputTokens?: number;
   maxOutputTokens?: number;
   maxIterations?: number;
+  /** Reasoning-effort override to keep across approval-resumed turns. */
+  reasoningEffort?: string;
   enabledTools: string[];
   availableSkillIds?: string[];
   autonomous?: {
@@ -73,6 +75,7 @@ export const createApprovalRecoveryContext = (params: {
   maxInputTokens?: number;
   maxOutputTokens?: number;
   maxIterations: number;
+  reasoningEffort?: string;
   enabledTools: string[];
   availableSkillIds: string[];
   autonomous?: {
@@ -106,6 +109,7 @@ export const createApprovalRecoveryContext = (params: {
     maxIterations: params.maxIterations,
     enabledTools: [...params.enabledTools],
     availableSkillIds: [...params.availableSkillIds],
+    ...(params.reasoningEffort ? { reasoningEffort: params.reasoningEffort } : {}),
     ...(params.autonomous ? { autonomous: { ...params.autonomous } } : {}),
   };
 };

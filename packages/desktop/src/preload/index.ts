@@ -149,6 +149,7 @@ const electronApi: ElectronApi = {
       resume: (runId: string) => ipcRenderer.invoke('chat:runs:resume', runId),
       listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) =>
         ipcRenderer.invoke('chat:runs:list-by-status', statuses, opts),
+      reviewQueue: (limit?: number) => ipcRenderer.invoke('chat:runs:review-queue', limit),
       eval: {
         exportTrace: (runId: string) => ipcRenderer.invoke('chat:eval:export-trace', runId),
         exportRunTrajectory: (runId: string) =>
@@ -205,6 +206,10 @@ const electronApi: ElectronApi = {
     toggleVisibility: (id: string) => ipcRenderer.invoke('workspaces:toggleVisibility', id),
     initAgentInstructions: (threadId: string) =>
       ipcRenderer.invoke('workspaces:init-agent-instructions', threadId),
+    createThreadWorktree: (threadId: string, repoWorkspaceId?: string | null) =>
+      ipcRenderer.invoke('workspaces:create-thread-worktree', threadId, repoWorkspaceId ?? null),
+    removeThreadWorktree: (threadId: string, options?: { force?: boolean }) =>
+      ipcRenderer.invoke('workspaces:remove-thread-worktree', threadId, options ?? {}),
   },
   promptApps: {
     list: () => ipcRenderer.invoke('promptApps:list'),

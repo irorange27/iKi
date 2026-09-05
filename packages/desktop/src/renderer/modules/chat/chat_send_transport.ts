@@ -22,16 +22,25 @@ export const createChatComposerStreamPayload = (params: {
   resolvedMcpServerIds: string[];
   isAutoSkillMode: boolean;
   selectedSkillIds: string[];
+  /** Thread-level reasoning effort; empty string = provider default (omitted from payload). */
+  reasoningEffort?: string;
+  /** Thread-level agent personality; empty string = default (omitted from payload). */
+  personality?: string;
   autonomous?: { maxIterations: number; continuePrompt?: string };
 }): ChatComposerInvocationBody | null => {
   if (!params.threadId) {
     return null;
   }
 
+  const reasoningEffort = params.reasoningEffort?.trim().toLowerCase();
+  const personality = params.personality?.trim().toLowerCase();
+
   return {
     providerType: params.providerReady.provider.type,
     providerId: params.providerReady.provider.id,
     model: params.providerReady.model,
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+    ...(personality ? { personality } : {}),
     ...(params.providerReady.modelCapability &&
     (typeof params.providerReady.modelCapability.maxInputTokens === 'number' ||
       typeof params.providerReady.modelCapability.contextWindow === 'number' ||

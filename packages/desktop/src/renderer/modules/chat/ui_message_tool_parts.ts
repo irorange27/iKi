@@ -628,6 +628,76 @@ export const getWebSearchCitations = (part: unknown): WebSearchCitation[] => {
 export const hasWebSearchCitations = (part: unknown): boolean =>
   getWebSearchCitations(part).length > 0;
 
+export type ToolDiffLine = {
+  kind: 'meta' | 'hunk' | 'add' | 'del' | 'context';
+  text: string;
+};
+
+const parseUnifiedDiffLine = (line: string): ToolDiffLine => {
+  if (line.startsWith('@@')) return { kind: 'hunk', text: line };
+  if (line.startsWith('---') || line.startsWith('+++')) return { kind: 'meta', text: line };
+  if (line.startsWith('+')) return { kind: 'add', text: line };
+  if (line.startsWith('-')) return { kind: 'del', text: line };
+  return { kind: 'context', text: line };
+};
+
+const diffCache = new WeakMap<object, string>();
+
+const getToolDiff = (part: unknown): string => {
+  if (!isToolResultPart(part) || !isObjectRecord(part)) return '';
+  const cached = diffCache.get(part);
+  if (cached !== undefined) return cached;
+
+  const parsedOutput = getParsedToolOutput(part);
+  const diff =
+    parsedOutput.kind === 'edit' && typeof parsedOutput.output.diff === 'string'
+      ? parsedOutput.output.diff.trim()
+      : '';
+  diffCache.set(part, diff);
+  return diff;
+};
+
+export const hasToolDiff = (part: unknown): boolean => getToolDiff(part) !== '';
+
+const diffLinesCache = new WeakMap<object, ToolDiffLine[]>();
+
+export const getToolDiffLines = (part: unknown): ToolDiffLine[] => {
+  const diff = getToolDiff(part);
+  if (!diff || !isObjectRecord(part)) return [];
+  const cached = diffLinesCache.get(part);
+  if (cached) return cached;
+
+  const lines = diff.split('\n').map(parseUnifiedDiffLine);
+  diffLinesCache.set(part, lines);
+  return lines;
+};
+
+export type ToolDiffStat = { additions: number; deletions: number };
+
+const diffStatCache = new WeakMap<object, ToolDiffStat>();
+
+export const getToolDiffStat = (part: unknown): ToolDiffStat => {
+  if (!isObjectRecord(part)) return { additions: 0, deletions: 0 };
+  const cached = diffStatCache.get(part);
+  if (cached) return cached;
+
+  const stat: ToolDiffStat = { additions: 0, deletions: 0 };
+  for (const line of getToolDiffLines(part)) {
+    if (line.kind === 'add') stat.additions += 1;
+    else if (line.kind === 'del') stat.deletions += 1;
+  }
+  diffStatCache.set(part, stat);
+  return stat;
+};
+
+// Output for the raw-JSON section: hide `diff` when it is rendered as a dedicated view.
+export const getToolOutputForDisplay = (part: unknown): unknown => {
+  const output = getToolOutput(part);
+  if (!hasToolDiff(part) || !isObjectRecord(output)) return output;
+  const { diff: _diff, ...rest } = output;
+  return rest;
+};
+
 export const hasDisplayValue = (value: unknown): boolean => {
   if (value === null || value === undefined) return false;
   if (typeof value === 'string') return value.trim().length > 0;

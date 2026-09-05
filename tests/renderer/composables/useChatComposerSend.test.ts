@@ -112,6 +112,8 @@ const createHarness = (options?: {
     isAutoSkillMode,
     isAutonomousMode: ref(false),
     autonomousMaxIterations: ref(10),
+    reasoningEffort: ref(''),
+    personality: ref(''),
     prepareFailedMessage: 'Prepare failed',
     stopFailedMessage: 'Stop failed',
     prepareMessageSend,

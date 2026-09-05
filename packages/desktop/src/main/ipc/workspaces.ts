@@ -4,6 +4,10 @@ import { dialog, ipcMain } from 'electron';
 
 import * as workspaceDb from '@iki/backend/db/workspaces';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
+import {
+  createThreadWorktree,
+  removeThreadWorktree,
+} from '@iki/backend/workspaces/git_worktree';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 const AGENT_INSTRUCTIONS_FILE = 'IKI.md';
@@ -125,4 +129,16 @@ export const registerWorkspacesIpc = (): void => {
       };
     }
   });
+
+  ipcMain.handle(
+    'workspaces:create-thread-worktree',
+    async (_event, threadId: string, repoWorkspaceId?: string | null) =>
+      await createThreadWorktree(threadId, repoWorkspaceId ?? null)
+  );
+
+  ipcMain.handle(
+    'workspaces:remove-thread-worktree',
+    async (_event, threadId: string, options?: { force?: boolean }) =>
+      await removeThreadWorktree(threadId, options ?? {})
+  );
 };

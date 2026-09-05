@@ -131,9 +131,26 @@
           {{ getToolInputDisplayMetaText(part) }}
         </div>
       </div>
-      <div v-if="hasDisplayValue(getToolOutput(part))" class="tool-card-section">
+      <div v-if="hasToolDiff(part)" class="tool-card-section">
+        <div class="tool-card-section-title tool-diff-title">
+          <span>{{ t('chat.tool.diff') }}</span>
+          <span class="tool-diff-stat" aria-hidden="true">
+            <span class="tool-diff-stat-add">+{{ getToolDiffStat(part).additions }}</span>
+            <span class="tool-diff-stat-del">−{{ getToolDiffStat(part).deletions }}</span>
+          </span>
+        </div>
+        <div class="tool-diff">
+          <div
+            v-for="(line, lineIndex) in getToolDiffLines(part)"
+            :key="lineIndex"
+            class="tool-diff-line"
+            :class="`tool-diff-line-${line.kind}`"
+          >{{ line.text }}</div>
+        </div>
+      </div>
+      <div v-if="hasDisplayValue(getToolOutputForDisplay(part))" class="tool-card-section">
         <div class="tool-card-section-title">{{ t('chat.tool.output') }}</div>
-        <pre class="tool-json-output">{{ formatJson(getToolOutput(part)) }}</pre>
+        <pre class="tool-json-output">{{ formatJson(getToolOutputForDisplay(part)) }}</pre>
       </div>
     </div>
     <div v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
@@ -249,6 +266,8 @@ import {
   canToggleToolCollapse,
   formatJson,
   getToolCallIdFromPart,
+  getToolDiffLines,
+  getToolDiffStat,
   getToolDurationLabel,
   getToolIconComponent,
   getToolInput,
@@ -257,12 +276,14 @@ import {
   getToolInputDisplayValue,
   getToolName,
   getToolOutput,
+  getToolOutputForDisplay,
   getToolStateKind,
   getToolStateLabel,
   getToolStatePillClass,
   getToolTitle,
   getWebSearchCitations,
   hasDisplayValue,
+  hasToolDiff,
   hasWebSearchCitations,
   isApprovalRequestedPart,
   isTranscriptHiddenToolPart,

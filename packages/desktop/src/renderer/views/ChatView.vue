@@ -89,6 +89,8 @@
           :is-incognito="isIncognito"
           :selected-workspace-id="selectedWorkspaceId"
           :workspace-locked="isWorkspaceLocked"
+          :reasoning-effort="currentReasoningEffort"
+          :personality="currentPersonality"
           :latest-token-usage="latestAssistantTokenUsage"
           :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
@@ -98,6 +100,8 @@
           @new-chat-requested="handleNewChat"
           @clear-thread-requested="handleClearCurrentThread"
           @workspace-changed="handleWorkspaceChanged"
+          @reasoning-effort-changed="handleReasoningEffortChanged"
+          @personality-changed="handlePersonalityChanged"
         />
       </div>
     </div>
@@ -266,6 +270,8 @@ const {
   currentThread,
   currentModel,
   currentProviderId,
+  currentReasoningEffort,
+  currentPersonality,
   isIncognito,
   selectedWorkspaceId,
   selectedTools,
@@ -280,6 +286,8 @@ const {
   handleModelSelected,
   setIncognito,
   setWorkspace,
+  setReasoningEffort,
+  setPersonality,
   ensureWorkspaceForCurrentThread,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
@@ -302,6 +310,14 @@ const handleIncognitoChanged = async (nextValue: boolean) => {
 
 const handleWorkspaceChanged = async (nextValue: string | null) => {
   await setWorkspace(nextValue);
+};
+
+const handleReasoningEffortChanged = async (nextValue: string) => {
+  await setReasoningEffort(nextValue);
+};
+
+const handlePersonalityChanged = async (nextValue: string) => {
+  await setPersonality(nextValue);
 };
 
 const { activeTodoPlan, handleChatChunk } = useChatThreadTodoPlan({

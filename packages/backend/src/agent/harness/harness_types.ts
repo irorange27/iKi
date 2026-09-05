@@ -24,6 +24,8 @@ export type HarnessConfig = {
   approvalPolicy?: ApprovalPolicy;
   maxIterations: number;
   maxOutputTokens?: number;
+  /** Reasoning-effort override forwarded to the provider call (e.g. 'low' | 'medium' | 'high'). */
+  reasoningEffort?: string;
   threadId?: string;
   /** Inject a custom model (FauxModelProvider in tests). */
   modelFactory?: (providerType: string, modelId: string, providerId: string) => LanguageModel;

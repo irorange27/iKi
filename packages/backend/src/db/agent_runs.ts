@@ -284,6 +284,48 @@ export const listAgentRunsByStatus = (
   return rows.map(mapAgentRunRow);
 };
 
+export const listAgentRunsByKinds = (
+  kinds: AgentRun['kind'][],
+  opts?: { clientId?: string; limit?: number; statuses?: AgentRun['status'][] }
+): AgentRun[] => {
+  const normalizedKinds = kinds.map(kind => normalizeWhitespace(kind)).filter(Boolean);
+  if (normalizedKinds.length === 0) return [];
+
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = {};
+
+  const kindPlaceholders: string[] = [];
+  normalizedKinds.forEach((kind, index) => {
+    kindPlaceholders.push(`@kind_${index}`);
+    params[`kind_${index}`] = kind;
+  });
+  conditions.push(`kind IN (${kindPlaceholders.join(', ')})`);
+
+  if (opts?.statuses?.length) {
+    const statusPlaceholders: string[] = [];
+    opts.statuses.forEach((status, index) => {
+      statusPlaceholders.push(`@run_status_${index}`);
+      params[`run_status_${index}`] = normalizeWhitespace(status);
+    });
+    conditions.push(`status IN (${statusPlaceholders.join(', ')})`);
+  }
+
+  if (opts?.clientId) {
+    conditions.push('thread_id IN (SELECT id FROM chat_threads WHERE client_id = @client_id)');
+    params.client_id = normalizeWhitespace(opts.clientId);
+  }
+
+  const limitClause =
+    typeof opts?.limit === 'number' && opts.limit > 0 ? ` LIMIT ${Math.trunc(opts.limit)}` : '';
+
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM agent_runs WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC${limitClause}`
+    )
+    .all(params) as AgentRunRow[];
+  return rows.map(mapAgentRunRow);
+};
+
 export const listAgentRunsByParentRunId = (parentRunId: string): AgentRun[] => {
   const normalizedParentRunId = normalizeWhitespace(parentRunId);
   if (!normalizedParentRunId) return [];

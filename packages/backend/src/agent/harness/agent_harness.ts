@@ -69,6 +69,7 @@ export class AgentHarness {
       model: this.config_.model,
       history: input.history ?? this.history,
       ...(this.config_.threadId ? { threadId: this.config_.threadId } : {}),
+      ...(this.config_.reasoningEffort ? { reasoningEffort: this.config_.reasoningEffort } : {}),
       ...(this.config_.maxOutputTokens
         ? { maxTokens: this.config_.maxOutputTokens }
         : {}),

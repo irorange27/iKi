@@ -45,6 +45,21 @@
   gap: 12px;
 }
 
+.task-review-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.task-review-summary {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .task-name {
   max-width: 520px;
 }

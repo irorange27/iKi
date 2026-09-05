@@ -12,6 +12,7 @@ import {
 } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
+import { getPersonalityStylePrompt } from '../chat/personality';
 import { writeThreadTodoPlan } from '../db/thread_todos';
 
 const logger = createLogger({ module: 'chat_send' });
@@ -69,9 +70,12 @@ export const createChatSend = (deps: ChatSendDeps) => {
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
-      const systemPrompt = preparedTurn.enableTools
-        ? TOOL_AGENT_SYSTEM_PROMPT
-        : NO_TOOLS_SYSTEM_PROMPT;
+      const systemPrompt = [
+        preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
+        getPersonalityStylePrompt(options.personality),
+      ]
+        .filter(part => part.trim().length > 0)
+        .join('\n\n');
 
       runTracker = createAgentRunTracker({
         kind: options.runConfig?.kind ?? 'chat-turn',
@@ -123,6 +127,7 @@ export const createChatSend = (deps: ChatSendDeps) => {
           maxIterations,
           threadId: options.threadId,
           maxOutputTokens: preparedTurn.maxOutputTokens,
+          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         });
 
         // ponytail: clear stale todo plan from previous turn

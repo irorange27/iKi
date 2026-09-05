@@ -160,6 +160,29 @@
           </div>
         </button>
       </div>
+
+      <div
+        v-if="!isLocked && selectedWorkspaceId"
+        class="workspace-selector-worktree"
+      >
+        <button
+          class="selector-action-btn workspace-selector-worktree-btn"
+          :disabled="worktreeBusy || !threadId"
+          :title="t('chat.workspace.worktreeHint')"
+          @click.stop="isWorktreeActive ? handleRemoveWorktree() : handleCreateWorktree()"
+        >
+          {{
+            worktreeBusy
+              ? t('chat.workspace.worktreeBusy')
+              : isWorktreeActive
+                ? t('chat.workspace.worktreeRemove')
+                : t('chat.workspace.worktreeCreate')
+          }}
+        </button>
+        <div v-if="worktreeStatus" class="workspace-selector-worktree-status ui-text-muted">
+          {{ worktreeStatus }}
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -168,13 +191,16 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import type { Workspace } from '@iki/backend/types/chat';
 import { getErrorMessage } from '@iki/backend/utils/errors';
+import { THREAD_WORKTREE_WORKSPACE_PREFIX } from '@iki/backend/workspaces/worktree_ids';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
 import { useSelectorPanel } from '../composables/useSelectorPanel';
+import { confirmAction } from '../composables/useConfirm';
 
 const props = defineProps<{
   selectedWorkspaceId?: string | null;
   locked?: boolean;
+  threadId?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -184,6 +210,8 @@ const emit = defineEmits<{
 const getVisibleWorkspaces = getElectronApiSliceMethod('workspaces', 'getVisible');
 const getWorkspace = getElectronApiSliceMethod('workspaces', 'get');
 const pickWorkspaceDirectoryFromApi = getElectronApiSliceMethod('workspaces', 'pickDirectory');
+const createThreadWorktreeApi = getElectronApiSliceMethod('workspaces', 'createThreadWorktree');
+const removeThreadWorktreeApi = getElectronApiSliceMethod('workspaces', 'removeThreadWorktree');
 const { t } = useI18n();
 
 const {
@@ -380,6 +408,95 @@ const pickWorkspaceDirectory = async () => {
   }
 };
 
+const isWorktreeWorkspaceId = (value: string | null): boolean =>
+  typeof value === 'string' && value.startsWith(THREAD_WORKTREE_WORKSPACE_PREFIX);
+const isWorktreeActive = computed(() => isWorktreeWorkspaceId(selectedWorkspaceId.value));
+const worktreeBusy = ref(false);
+const worktreeStatus = ref('');
+
+const normalizeWorktreeResult = (value: unknown): { workspaceId?: string } | null => {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (record.ok !== true) return null;
+  const workspace = record.workspace as Partial<Workspace> | undefined;
+  return workspace && typeof workspace.id === 'string' ? { workspaceId: workspace.id } : {};
+};
+
+const handleCreateWorktree = async () => {
+  if (isLocked.value || worktreeBusy.value || !props.threadId) return;
+  worktreeBusy.value = true;
+  worktreeStatus.value = '';
+
+  try {
+    const result = normalizeWorktreeResult(
+      createThreadWorktreeApi ? await createThreadWorktreeApi(props.threadId, selectedWorkspaceId.value) : null
+    );
+    if (!result) {
+      worktreeStatus.value = t('chat.workspace.worktreeFailed', { error: 'Unknown error' });
+      return;
+    }
+    await loadWorkspaces();
+    if (result.workspaceId) {
+      emit('update:selectedWorkspaceId', result.workspaceId);
+      closeSelectorPanel();
+    }
+  } catch (error) {
+    worktreeStatus.value = t('chat.workspace.worktreeFailed', {
+      error: getErrorMessage(error),
+    });
+  } finally {
+    worktreeBusy.value = false;
+  }
+};
+
+const handleRemoveWorktree = async () => {
+  if (isLocked.value || worktreeBusy.value || !props.threadId || !isWorktreeActive.value) return;
+  worktreeBusy.value = true;
+  worktreeStatus.value = '';
+
+  const attempt = async (force: boolean) => {
+    if (!removeThreadWorktreeApi) return { ok: false, error: 'unavailable' };
+    return ((await removeThreadWorktreeApi(props.threadId ?? '', { force })) ?? {
+      ok: false,
+      error: 'Unknown error',
+    }) as { ok: boolean; error?: string; removed?: boolean };
+  };
+
+  try {
+    let result = await attempt(false);
+    if (!result.ok) {
+      const forceConfirmed = await confirmAction({
+        message: t('chat.workspace.worktreeForcePrompt'),
+        danger: true,
+      });
+      if (!forceConfirmed) {
+        worktreeStatus.value = t('chat.workspace.worktreeFailed', {
+          error: result.error ?? 'Unknown error',
+        });
+        return;
+      }
+      result = await attempt(true);
+    }
+
+    if (!result.ok) {
+      worktreeStatus.value = t('chat.workspace.worktreeFailed', {
+        error: result.error ?? 'Unknown error',
+      });
+      return;
+    }
+
+    await loadWorkspaces();
+    emit('update:selectedWorkspaceId', null);
+    closeSelectorPanel();
+  } catch (error) {
+    worktreeStatus.value = t('chat.workspace.worktreeFailed', {
+      error: getErrorMessage(error),
+    });
+  } finally {
+    worktreeBusy.value = false;
+  }
+};
+
 watch(selectedWorkspaceId, () => {
   void loadWorkspaces();
 });
@@ -455,6 +572,25 @@ onMounted(() => {
 
 .workspace-selector-add {
   white-space: nowrap;
+}
+
+.workspace-selector-worktree {
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workspace-selector-worktree-btn {
+  align-self: flex-start;
+}
+
+.workspace-selector-worktree-status {
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 button:disabled {

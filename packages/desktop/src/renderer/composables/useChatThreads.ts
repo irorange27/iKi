@@ -16,6 +16,7 @@ import {
   parseJsonRecord,
   parseThreadLlmSelectionState,
 } from '@iki/backend/chat/thread_runtime_hints';
+import { normalizePersonality } from '@iki/backend/chat/personality';
 
 export type ChatThread = StoredChatThread;
 
@@ -72,6 +73,8 @@ export const useChatThreads = (deps: {
   const currentThread = ref<ChatThread | null>(null);
   const currentModel = ref<string>(readPreferredDraftSelection().model);
   const currentProviderId = ref<string | null>(readPreferredDraftSelection().providerId);
+  const currentReasoningEffort = ref<string>('');
+  const currentPersonality = ref<string>('');
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
   const selectedTools = ref<string[]>([]);
@@ -95,6 +98,16 @@ export const useChatThreads = (deps: {
 
   const syncWorkspaceState = (thread: ChatThread | null) => {
     selectedWorkspaceId.value = normalizeWorkspaceId(thread?.workspace_id);
+  };
+
+  const syncReasoningEffortState = (thread: ChatThread | null) => {
+    currentReasoningEffort.value =
+      typeof thread?.reasoning_effort === 'string' ? thread.reasoning_effort.trim().toLowerCase() : '';
+  };
+
+  const syncPersonalityState = (thread: ChatThread | null) => {
+    const metadata = thread ? parseJsonRecord(thread.metadata) : {};
+    currentPersonality.value = normalizePersonality(metadata.personality) ?? '';
   };
 
   const restoreDraftComposerSelection = () => {
@@ -294,10 +307,13 @@ export const useChatThreads = (deps: {
   const createNewThread = async (model?: string) => {
     try {
       const draftProviderId = currentProviderId.value;
+      const draftEffort = currentReasoningEffort.value;
+      const draftPersonality = currentPersonality.value;
       const thread = await deps.electronAPI.chat.threads.create({
         title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
         model: model || null,
-        metadata: JSON.stringify({}),
+        reasoning_effort: draftEffort || null,
+        metadata: JSON.stringify(draftPersonality ? { personality: draftPersonality } : {}),
         is_incognito: isIncognito.value ? 1 : 0,
         workspace_id: selectedWorkspaceId.value,
       });
@@ -309,6 +325,8 @@ export const useChatThreads = (deps: {
       }
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
+      syncReasoningEffortState(thread);
+      syncPersonalityState(thread);
       deps.messageStore.clear();
       deps.persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
@@ -393,6 +411,8 @@ export const useChatThreads = (deps: {
       syncProviderState(thread);
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
+      syncReasoningEffortState(thread);
+      syncPersonalityState(thread);
       showWelcome.value = false;
       await loadThreadMessages(threadId);
 
@@ -417,6 +437,8 @@ export const useChatThreads = (deps: {
 
     currentThread.value = null;
     isIncognito.value = false;
+    currentReasoningEffort.value = '';
+    currentPersonality.value = '';
     selectedWorkspaceId.value = null;
     deps.messageStore.clear();
     deps.persistence.resetPersistedMessageIds();
@@ -452,6 +474,8 @@ export const useChatThreads = (deps: {
       syncProviderState(recreatedThread);
       syncIncognitoState(recreatedThread);
       syncWorkspaceState(recreatedThread);
+      syncReasoningEffortState(recreatedThread);
+      syncPersonalityState(recreatedThread);
       deps.messageStore.clear();
       deps.persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
@@ -606,6 +630,77 @@ export const useChatThreads = (deps: {
     }
   };
 
+  const setReasoningEffort = async (nextValue: string | null) => {
+    const normalizedValue =
+      typeof nextValue === 'string' ? nextValue.trim().toLowerCase() : '';
+    const previousValue = currentReasoningEffort.value;
+    const activeThread = currentThread.value;
+
+    currentReasoningEffort.value = normalizedValue;
+    if (activeThread) {
+      currentThread.value = {
+        ...activeThread,
+        reasoning_effort: normalizedValue || undefined,
+      };
+    }
+
+    if (!activeThread) return;
+
+    try {
+      await deps.electronAPI.chat.threads.update(activeThread.id, {
+        reasoning_effort: normalizedValue || null,
+      });
+    } catch (error) {
+      chatThreadsLogger.event({
+        level: 'warn',
+        event: 'chat.thread.reasoning_effort_update',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: activeThread.id,
+        },
+      });
+      currentReasoningEffort.value = previousValue;
+      if (currentThread.value?.id === activeThread.id) {
+        currentThread.value = {
+          ...currentThread.value,
+          reasoning_effort: previousValue || undefined,
+        };
+      }
+    }
+  };
+
+  const setPersonality = async (nextValue: string) => {
+    const normalizedValue = normalizePersonality(nextValue) ?? '';
+    const activeThread = currentThread.value;
+    if (!activeThread || currentPersonality.value === normalizedValue) return;
+
+    const metadata = parseJsonRecord(activeThread.metadata);
+    const previousMetadata = activeThread.metadata;
+    const nextMetadata = JSON.stringify({ ...metadata, personality: normalizedValue });
+
+    currentPersonality.value = normalizedValue;
+    currentThread.value = { ...activeThread, metadata: nextMetadata };
+
+    try {
+      await deps.electronAPI.chat.threads.update(activeThread.id, { metadata: nextMetadata });
+    } catch (error) {
+      chatThreadsLogger.event({
+        level: 'warn',
+        event: 'chat.thread.personality_update',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: activeThread.id,
+        },
+      });
+      if (currentThread.value?.id === activeThread.id) {
+        currentThread.value = { ...currentThread.value, metadata: previousMetadata };
+        syncPersonalityState(currentThread.value);
+      }
+    }
+  };
+
   const ensureWorkspaceForCurrentThread = async () => {
     const activeThread = currentThread.value;
     if (!activeThread) return null;
@@ -678,6 +773,8 @@ export const useChatThreads = (deps: {
     currentThread,
     currentModel,
     currentProviderId,
+    currentReasoningEffort,
+    currentPersonality,
     isIncognito,
     selectedWorkspaceId,
     selectedTools,
@@ -695,6 +792,8 @@ export const useChatThreads = (deps: {
     handleModelSelected,
     setIncognito,
     setWorkspace,
+    setReasoningEffort,
+    setPersonality,
     ensureWorkspaceForCurrentThread,
     handleAssistantMessagePersisted,
     handleTaskPush,

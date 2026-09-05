@@ -431,6 +431,7 @@ export const runOuterLoop = async (
           maxIterations: deps.maxIterations,
           threadId: options.threadId,
           maxOutputTokens: preparedTurn.maxOutputTokens,
+          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         });
 
         state.approvalContext = preparedTurn.enableTools
@@ -447,6 +448,7 @@ export const runOuterLoop = async (
               maxIterations: deps.maxIterations,
               enabledTools: preparedTurn.guardedTools,
               availableSkillIds: preparedTurn.selectedSkillIds,
+              ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
               ...(deps.autonomousMode ? { autonomous: options.autonomous } : {}),
             })
           : undefined;

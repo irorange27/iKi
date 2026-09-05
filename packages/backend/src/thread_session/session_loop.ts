@@ -20,6 +20,7 @@ export type { ChatSendResult } from './chat_send';
 import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
+import { getPersonalityStylePrompt } from '../chat/personality';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { runOuterLoop, type OuterLoopState } from './outer_loop';
 
@@ -169,9 +170,12 @@ export const createChatStreaming = (deps: {
         getCompanion().setAffect(null);
       }
 
-      const systemPrompt = preparedTurn.enableTools
-        ? TOOL_AGENT_SYSTEM_PROMPT
-        : NO_TOOLS_SYSTEM_PROMPT;
+      const systemPrompt = [
+        preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
+        getPersonalityStylePrompt(options.personality),
+      ]
+        .filter(part => part.trim().length > 0)
+        .join('\n\n');
 
       let streamHistory = preparedTurn.history;
       let streamPrompt = preparedTurn.prompt;
@@ -236,6 +240,7 @@ export const createChatStreaming = (deps: {
             maxIterations,
             enabledTools: guardedTools,
             availableSkillIds: preparedTurn.selectedSkillIds,
+            ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
             ...(autonomousMode ? { autonomous: options.autonomous } : {}),
           })
         : undefined;
@@ -254,6 +259,7 @@ export const createChatStreaming = (deps: {
         maxIterations,
         threadId: options.threadId,
         maxOutputTokens: preparedTurn.maxOutputTokens,
+        ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
       });
 
       if (!preparedTurn.prompt.trim()) {

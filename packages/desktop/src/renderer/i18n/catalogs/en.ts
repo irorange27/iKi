@@ -61,6 +61,14 @@ export const en = defineCatalog({
   'chat.autonomous.activeDescription':
     'Agent will self-drive for up to the configured number of iterations.',
   'chat.autonomous.maxIterations': 'Max iterations:',
+  'chat.reasoning.triggerTitle': 'Reasoning effort',
+  'chat.reasoning.title': 'Reasoning Effort',
+  'chat.reasoning.description':
+    'How much thinking effort the model spends before answering. Default uses the provider setting.',
+  'chat.reasoning.default': 'Default',
+  'chat.reasoning.low': 'Low',
+  'chat.reasoning.medium': 'Medium',
+  'chat.reasoning.high': 'High',
   'chat.newChat': 'New Chat',
   'chat.messagesCount': ({ count }) => `${asCount(count)} messages`,
   'chat.welcome.settings': 'Settings',
@@ -149,6 +157,12 @@ export const en = defineCatalog({
   'chat.input.slash.init.exists': 'IKI.md already exists.',
   'chat.input.slash.init.noWorkspace': 'Select a workspace first before using /init.',
   'chat.input.slash.init.failed': ({ error }) => `Failed to create IKI.md: ${error}`,
+  'chat.input.slash.personality.name': 'Personality',
+  'chat.input.slash.personality.description':
+    'Set the agent communication style: /personality default|concise|friendly.',
+  'chat.input.slash.personality.executed': ({ value }) => `Personality set to ${value}.`,
+  'chat.input.slash.personality.usage': ({ options, current }) =>
+    `Usage: /personality <${options}>. Current: ${current}.`,
   'chat.input.slash.skillsSection': 'Skills',
   'chat.input.slash.skill.needsRequest': ({ skill }) =>
     `Add a request for ${asText(skill)} before sending.`,
@@ -189,6 +203,14 @@ export const en = defineCatalog({
   'chat.workspace.loading': 'Loading workspaces...',
   'chat.workspace.loadFailed': ({ error }) => `Failed to load workspaces: ${asText(error)}`,
   'chat.workspace.addFailed': ({ error }) => `Failed to add workspace: ${asText(error)}`,
+  'chat.workspace.worktreeCreate': 'Isolate in worktree',
+  'chat.workspace.worktreeRemove': 'Remove worktree',
+  'chat.workspace.worktreeBusy': 'Working…',
+  'chat.workspace.worktreeHint':
+    'Creates an isolated git worktree on its own branch, so agent edits never touch your checkout.',
+  'chat.workspace.worktreeFailed': ({ error }) => `Worktree operation failed: ${asText(error)}`,
+  'chat.workspace.worktreeForcePrompt':
+    'The worktree has uncommitted changes. Discard them and remove the worktree anyway?',
   'chat.workspace.noneVisible': 'No visible workspaces available.',
   'chat.workspace.hiddenFromGlobal': 'Hidden from global list',
   'chat.workspace.selected': 'Selected workspace',
@@ -266,6 +288,7 @@ export const en = defineCatalog({
   'chat.tool.mcpServer': ({ name }) => `MCP Server: ${asText(name)}`,
   'chat.tool.references': 'References',
   'chat.tool.output': 'Output',
+  'chat.tool.diff': 'Changes',
   'chat.tool.callId': 'Call ID',
   'chat.tool.arguments': 'Arguments',
   'chat.tool.expandDetails': 'Expand tool details',
@@ -989,6 +1012,10 @@ export const en = defineCatalog({
   'settings.tasks.create': 'Create Task',
   'settings.tasks.creating': 'Creating...',
   'settings.tasks.existingTitle': 'Existing Tasks',
+  'settings.tasks.review.title': 'Recent Run Results',
+  'settings.tasks.review.description':
+    'Latest completed background runs (scheduled tasks and waiters). Review what the agent did on its own.',
+  'settings.tasks.review.empty': 'No background runs yet.',
   'settings.tasks.loading': 'Loading...',
   'settings.tasks.empty': 'No tasks yet.',
   'settings.tasks.runNow': 'Run now',

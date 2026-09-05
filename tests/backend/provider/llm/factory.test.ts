@@ -841,6 +841,61 @@ describe('llm factory', () => {
     });
   });
 
+  it('merges a per-call reasoning effort override over stored provider options', () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_openai',
+        type: 'openai',
+        enabled: true,
+        api_key: 'sk-test',
+        base_url: '',
+        models: JSON.stringify(['gpt-5.4']),
+        model_options: JSON.stringify({
+          'gpt-5.4': {
+            providerOptions: {
+              reasoningEffort: 'low',
+              parallelToolCalls: true,
+            },
+          },
+        }),
+      },
+    ]);
+
+    expect(
+      getModelGenerationSettings({
+        providerType: 'openai',
+        modelId: 'gpt-5.4',
+        temperature: 0.2,
+        reasoningEffort: 'high',
+      })
+    ).toEqual({
+      providerOptions: {
+        openai: {
+          parallelToolCalls: true,
+          reasoningEffort: 'high',
+        },
+      },
+    });
+
+    // An explicit 'none' override keeps temperature and disables effort.
+    expect(
+      getModelGenerationSettings({
+        providerType: 'openai',
+        modelId: 'gpt-5.4',
+        temperature: 0.2,
+        reasoningEffort: 'none',
+      })
+    ).toEqual({
+      providerOptions: {
+        openai: {
+          parallelToolCalls: true,
+          reasoningEffort: 'none',
+        },
+      },
+      temperature: 0.2,
+    });
+  });
+
   it('merges stored provider model options over models.dev capability metadata', async () => {
     fetchWithTimeoutMock.mockResolvedValue(
       new Response(

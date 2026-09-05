@@ -122,6 +122,8 @@ export interface AgentRunnerRequest {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  /** Reasoning-effort override (e.g. 'low' | 'medium' | 'high') merged into providerOptions. */
+  reasoningEffort?: string;
 
   /** Maximum tool-calling iterations before forced stop. */
   maxIterations?: number;
@@ -245,6 +247,7 @@ export class SimpleAgentRunner {
             modelId: config.model,
             providerId: config.providerId,
             temperature: config.temperature,
+            reasoningEffort: request.reasoningEffort,
           }),
           maxOutputTokens: config.maxTokens,
           stopWhen: stepCountIs(

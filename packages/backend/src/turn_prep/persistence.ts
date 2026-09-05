@@ -9,6 +9,7 @@ import type { ChatMessage, ChatThread } from '@iki/backend/types/chat';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
+import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktree';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { onMessagePersisted as onContinuityMessagePersisted } from '../thread_session/platform';
 import type { ChatMemory } from '../thread_session/memory';
@@ -121,7 +122,11 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     const currentWorkspaceId = normalizedString(existingThread?.workspace_id);
     const workspaceChanged = hasWorkspaceUpdate && nextWorkspaceId !== currentWorkspaceId;
 
-    if (workspaceChanged) {
+    // Assigning the thread's own sanctioned worktree must pass even mid-thread;
+    // the guard only protects arbitrary workspace switches after messages exist.
+    const guardedWorkspaceChange = workspaceChanged && !isThreadWorktreeWorkspaceId(nextWorkspaceId);
+
+    if (guardedWorkspaceChange) {
       const messageCount = chatMessageDb.countChatMessagesByThread(id);
       if (messageCount > 0) {
         chatPersistenceLogger.event({

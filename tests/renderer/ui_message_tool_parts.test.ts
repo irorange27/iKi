@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getToolDiffLines,
+  getToolDiffStat,
+  getToolOutputForDisplay,
   getToolTitle,
+  hasToolDiff,
   isToolCollapsed,
 } from '../../packages/desktop/src/renderer/modules/chat/ui_message_tool_parts';
 
@@ -65,5 +69,74 @@ describe('ui_message_tool_parts', () => {
         },
       })
     ).toBe(true);
+  });
+
+  it('parses edit-tool diffs into classified lines with an add/delete stat', () => {
+    const part = {
+      type: 'tool-result',
+      toolCallId: 'call_edit',
+      toolName: 'edit',
+      state: 'output-available',
+      input: { path: 'src/a.ts', edits: [] },
+      output: {
+        path: 'src/a.ts',
+        success: true,
+        changed: true,
+        diff: [
+          '--- a/src/a.ts',
+          '+++ b/src/a.ts',
+          '@@ -1,3 +1,3 @@',
+          ' const a = 1;',
+          '-const b = 2;',
+          '+const b = 3;',
+          '+const c = 4;',
+        ].join('\n'),
+      },
+    };
+
+    expect(hasToolDiff(part)).toBe(true);
+
+    const lines = getToolDiffLines(part);
+    expect(lines.map(line => line.kind)).toEqual([
+      'meta',
+      'meta',
+      'hunk',
+      'context',
+      'del',
+      'add',
+      'add',
+    ]);
+
+    expect(getToolDiffStat(part)).toEqual({ additions: 2, deletions: 1 });
+  });
+
+  it('hides the diff field from the raw output view while keeping other fields', () => {
+    const part = {
+      type: 'tool-result',
+      toolCallId: 'call_edit_display',
+      toolName: 'edit',
+      state: 'output-available',
+      input: { path: 'src/a.ts', edits: [] },
+      output: {
+        path: 'src/a.ts',
+        success: true,
+        changed: true,
+        diff: '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,1 @@\n-a\n+b',
+      },
+    };
+
+    const display = getToolOutputForDisplay(part) as Record<string, unknown>;
+    expect(display).toEqual({ path: 'src/a.ts', success: true, changed: true });
+
+    const shellPart = {
+      type: 'tool-result',
+      toolCallId: 'call_shell_display',
+      toolName: 'shell',
+      state: 'output-available',
+      input: { command: 'pwd' },
+      output: { stdout: '/tmp' },
+    };
+    expect(getToolOutputForDisplay(shellPart)).toEqual({ stdout: '/tmp' });
+    expect(hasToolDiff(shellPart)).toBe(false);
   });
 });

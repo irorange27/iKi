@@ -12,10 +12,14 @@ const setElectronApi = (api: unknown) => {
   });
 };
 
-const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>> }) => {
+const mountSidebar = async (options?: {
+  threads?: Array<Record<string, unknown>>;
+  workspaces?: Array<Record<string, unknown>>;
+}) => {
   const list = vi.fn(async () => options?.threads ?? []);
   const del = vi.fn(async () => ({ success: true }));
   const openSettings = vi.fn();
+  const listWorkspaces = vi.fn(async () => options?.workspaces ?? []);
 
   setElectronApi({
     chat: {
@@ -23,6 +27,9 @@ const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>>
         list,
         delete: del,
       },
+    },
+    workspaces: {
+      list: listWorkspaces,
     },
     openSettings,
   });
@@ -45,6 +52,7 @@ const mountSidebar = async (options?: { threads?: Array<Record<string, unknown>>
         MessageSquareShare: true,
         Check: true,
         X: true,
+        ChevronDown: true,
       },
     },
   });
@@ -281,5 +289,65 @@ describe('Sidebar', () => {
     expect((wrapper.find('.sidebar-search-input').element as HTMLInputElement).value).toBe('');
     expect(wrapper.findAll('.chat-item')).toHaveLength(1);
     expect(wrapper.find('.sidebar-search-input').exists()).toBe(true);
+  });
+
+  it('groups desktop threads under collapsible workspace sections', async () => {
+    const { wrapper } = await mountSidebar({
+      threads: [
+        {
+          id: 'thread_loose',
+          title: 'Loose thread',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          metadata: '{}',
+        },
+        {
+          id: 'thread_iki_a',
+          title: 'iKi fix sidebar',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          workspace_id: 'ws_iki',
+          metadata: '{}',
+        },
+        {
+          id: 'thread_iki_b',
+          title: 'iKi refactor loop',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          workspace_id: 'ws_iki',
+          metadata: '{}',
+        },
+        {
+          id: 'thread_alpha',
+          title: 'Alpha task',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          workspace_id: 'ws_alpha',
+          metadata: '{}',
+        },
+      ],
+      workspaces: [
+        { id: 'ws_iki', name: 'iKi', path: '/dev/iki' },
+        { id: 'ws_alpha', name: 'Alpha', path: '/dev/alpha' },
+      ],
+    });
+
+    const headers = wrapper.findAll('.sidebar-section-toggle');
+    expect(headers.map(header => header.find('.sidebar-section-toggle-lead').text())).toEqual([
+      'Alpha',
+      'iKi',
+    ]);
+    expect(headers.map(header => header.attributes('aria-expanded'))).toEqual([
+      'true',
+      'true',
+    ]);
+    expect(wrapper.findAll('.chat-item')).toHaveLength(4);
+    expect(wrapper.text()).toContain('Loose thread');
+
+    await headers[1]!.trigger('click');
+    const itemsAfterCollapse = wrapper.findAll('.chat-item');
+    expect(itemsAfterCollapse).toHaveLength(2);
+    expect(wrapper.text()).not.toContain('iKi fix sidebar');
+
+    const collapsedHeader = wrapper.findAll('.sidebar-section-toggle')[1]!;
+    expect(collapsedHeader.attributes('aria-expanded')).toBe('false');
+    await collapsedHeader.trigger('click');
+    expect(wrapper.findAll('.chat-item')).toHaveLength(4);
   });
 });

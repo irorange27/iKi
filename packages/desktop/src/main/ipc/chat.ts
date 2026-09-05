@@ -40,6 +40,9 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:runs:list-by-status', (_, statuses: string[], opts?: { clientId?: string; limit?: number }) =>
     toPlainData(chatService.listRunsByStatus(statuses as import('@iki/backend/types/agent_run').AgentRunStatus[], opts))
   );
+  ipcMain.handle('chat:runs:review-queue', (_, limit?: number) =>
+    toPlainData(chatService.listReviewQueue(limit))
+  );
   ipcMain.handle('chat:runs:cancel', (_, runId: string) =>
     chatService.cancelRun(runId)
   );
