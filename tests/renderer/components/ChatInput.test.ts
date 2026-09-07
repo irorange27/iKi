@@ -337,6 +337,7 @@ const mountChatInput = async (options?: {
 
 describe('ChatInput', () => {
   afterEach(() => {
+    document.body.innerHTML = '';
     Reflect.deleteProperty(window, 'electronAPI');
     vi.restoreAllMocks();
   });

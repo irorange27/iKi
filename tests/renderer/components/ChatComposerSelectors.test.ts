@@ -5,20 +5,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { createPinia } from 'pinia';
 
-import type { Provider } from '@iki/backend/types/provider';
 import ChatComposerSelectors from '../../../packages/desktop/src/renderer/components/ChatComposerSelectors.vue';
-
-const provider: Provider = {
-  id: 'openai',
-  name: 'OpenAI',
-  type: 'openai',
-  api_key: '',
-  models: '["gpt-4.1"]',
-  enabled: true,
-  created_at: '2026-03-21T00:00:00.000Z',
-  updated_at: '2026-03-21T00:00:00.000Z',
-  available_models: '[]',
-};
 
 // Workspace selection lives in the thread session store now, so the cluster
 // only forwards the locked flag; the store-connected internals are stubbed out.
@@ -99,34 +86,6 @@ const ToolSelectorStub = defineComponent({
   `,
 });
 
-const ChatModelSelectorStub = defineComponent({
-  name: 'ChatModelSelector',
-  props: {
-    availableProviders: {
-      type: Array<Provider>,
-      default: () => [],
-    },
-    selectedProvider: {
-      type: Object as () => Provider | null,
-      default: null,
-    },
-    selectedModel: {
-      type: String,
-      default: '',
-    },
-  },
-  emits: ['select'],
-  template: `
-    <button
-      class="chat-model-selector-stub"
-      :data-provider-count="availableProviders.length"
-      :data-selected-provider-id="selectedProvider?.id ?? ''"
-      :data-selected-model="selectedModel"
-      @click="$emit('select', { provider: availableProviders[0], model: 'gpt-4.1' })"
-    />
-  `,
-});
-
 const mountComponent = () =>
   mount(ChatComposerSelectors, {
     props: {
@@ -137,9 +96,6 @@ const mountComponent = () =>
       selectedTools: ['search'],
       selectedMcpServerIds: ['repo_server'],
       toolMode: 'auto',
-      availableProviders: [provider],
-      selectedProvider: provider,
-      selectedModel: 'gpt-4o',
     },
     global: {
       plugins: [createPinia()],
@@ -148,7 +104,6 @@ const mountComponent = () =>
         ReasoningSelector: ReasoningSelectorStub,
         SkillSelector: SkillSelectorStub,
         ToolSelector: ToolSelectorStub,
-        ChatModelSelector: ChatModelSelectorStub,
       },
     },
   });
@@ -169,10 +124,6 @@ describe('ChatComposerSelectors', () => {
     expect(toolSelector.attributes('data-mcp-server-ids')).toBe('repo_server');
     expect(toolSelector.attributes('data-mode')).toBe('auto');
 
-    const modelSelector = wrapper.find('.chat-model-selector-stub');
-    expect(modelSelector.attributes('data-provider-count')).toBe('1');
-    expect(modelSelector.attributes('data-selected-provider-id')).toBe('openai');
-    expect(modelSelector.attributes('data-selected-model')).toBe('gpt-4o');
   });
 
   it('re-emits child selector intent without owning the underlying state machine', async () => {
@@ -183,15 +134,11 @@ describe('ChatComposerSelectors', () => {
     await wrapper.find('.tools-btn').trigger('click');
     await wrapper.find('.mcp-btn').trigger('click');
     await wrapper.find('.tool-mode-btn').trigger('click');
-    await wrapper.find('.chat-model-selector-stub').trigger('click');
 
     expect(wrapper.emitted('update:selectedSkillIds')).toEqual([[['skill_docs']]]);
     expect(wrapper.emitted('update:skillMode')).toEqual([['manual']]);
     expect(wrapper.emitted('update:selectedTools')).toEqual([[['web']]]);
     expect(wrapper.emitted('update:selectedMcpServerIds')).toEqual([[['docs_server']]]);
     expect(wrapper.emitted('update:toolMode')).toEqual([['manual']]);
-    expect(wrapper.emitted('selectProviderModel')).toEqual([
-      [{ provider, model: 'gpt-4.1' }],
-    ]);
   });
 });

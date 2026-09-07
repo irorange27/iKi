@@ -22,19 +22,11 @@
       @update:max-iterations="emit('update:autonomousMaxIterations', $event)"
     />
     <ReasoningSelector />
-    <ChatModelSelector
-      :available-providers="props.availableProviders"
-      :selected-provider="props.selectedProvider"
-      :selected-model="props.selectedModel"
-      @select="emit('selectProviderModel', $event)"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { Provider } from '@iki/backend/types/provider';
 import AutonomousSelector from './AutonomousSelector.vue';
-import ChatModelSelector from './ChatModelSelector.vue';
 import ReasoningSelector from './ReasoningSelector.vue';
 import SkillSelector from './SkillSelector.vue';
 import ToolSelector from './ToolSelector.vue';
@@ -50,9 +42,6 @@ const props = defineProps<{
   toolMode: 'manual' | 'auto';
   autonomousActive: boolean;
   autonomousMaxIterations: number;
-  availableProviders: Provider[];
-  selectedProvider: Provider | null;
-  selectedModel: string;
 }>();
 
 const emit = defineEmits<{
@@ -63,7 +52,6 @@ const emit = defineEmits<{
   (event: 'update:toolMode', value: 'manual' | 'auto'): void;
   (event: 'update:autonomousActive', value: boolean): void;
   (event: 'update:autonomousMaxIterations', value: number): void;
-  (event: 'selectProviderModel', payload: { provider: Provider; model: string }): void;
 }>();
 </script>
 

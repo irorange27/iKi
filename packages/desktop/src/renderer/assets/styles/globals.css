@@ -155,6 +155,67 @@
     color: var(--text-primary);
   }
 
+  /* Codex-style context row above the input: borderless text chips */
+  .composer-context-row {
+    flex: 1 1 100%;
+    width: 100%;
+    gap: 2px;
+    padding: 0 2px;
+  }
+
+  .composer-context-row .composer-chip {
+    height: 26px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 0 8px;
+    align-self: center;
+  }
+
+  .composer-context-row .composer-chip:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .composer-context-row .composer-chip--active {
+    background: transparent;
+    color: var(--accent-color);
+    border: none;
+  }
+
+  .composer-context-row .composer-chip--active:hover {
+    color: var(--accent-color);
+  }
+
+  /* Permission mode chip in the composer bottom bar */
+  .composer-permission-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 0.15s,
+      color 0.15s;
+  }
+
+  .composer-permission-chip:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .composer-permission-chip--auto {
+    color: var(--accent-color);
+  }
+
   .composer-chip {
     display: inline-flex;
     align-items: center;

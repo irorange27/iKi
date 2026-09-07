@@ -21,6 +21,20 @@
         @drop-images="handleDropImages"
       >
         <template #input-context>
+          <ChatComposerSelectors
+            class="composer-context-row"
+            :thread-id="props.threadId ?? null"
+            :workspace-locked="props.workspaceLocked"
+            :show-workspace="isWorkThread"
+            v-model:selected-skill-ids="selectedSkillIds"
+            v-model:skill-mode="skillMode"
+            v-model:selected-tools="selectedTools"
+            v-model:selected-mcp-server-ids="selectedMcpServerIds"
+            v-model:tool-mode="toolMode"
+            v-model:autonomous-active="isAutonomousMode"
+            v-model:autonomous-max-iterations="autonomousMaxIterations"
+            @update:selected-mcp-server-ids="selectedMcpServerIds = $event"
+          />
           <div
             v-if="inlineComposerTokens.length > 0"
             class="composer-inline-tokens"
@@ -96,25 +110,33 @@
         </template>
 
         <template #toolbar-left>
-          <ChatComposerSelectors
-            :thread-id="props.threadId ?? null"
-            :workspace-locked="props.workspaceLocked"
-            :show-workspace="isWorkThread"
-            v-model:selected-skill-ids="selectedSkillIds"
-            v-model:skill-mode="skillMode"
-            v-model:selected-tools="selectedTools"
-            v-model:selected-mcp-server-ids="selectedMcpServerIds"
-            v-model:tool-mode="toolMode"
-            v-model:autonomous-active="isAutonomousMode"
-            v-model:autonomous-max-iterations="autonomousMaxIterations"
-            :available-providers="availableProviders"
-            :selected-provider="selectedProvider"
-            :selected-model="selectedModel"
-            @select-provider-model="handleProviderModelSelect"
-          />
+          <button
+            class="composer-permission-chip"
+            :class="{ 'composer-permission-chip--auto': autoApproveEnabled }"
+            :title="t(autoApproveEnabled
+              ? 'chat.input.permission.autoTitle'
+              : 'chat.input.permission.askTitle')"
+            @click="toggleAutoApprove"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+              />
+            </svg>
+            <span>{{ autoApproveEnabled ? t('chat.input.permission.auto') : t('chat.input.permission.ask') }}</span>
+          </button>
         </template>
 
         <template #toolbar-right>
+          <ChatModelSelector
+            :available-providers="availableProviders"
+            :selected-provider="selectedProvider"
+            :selected-model="selectedModel"
+            @select="handleProviderModelSelect"
+          />
           <ChatComposerActions
             :context-usage="composerContextUsage"
             :is-incognito="isIncognito"
@@ -191,6 +213,7 @@ import type {
 import type { SubmitTurnParams, SubmitTurnResult } from '../composables/useChatComposerSend';
 import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
+import ChatModelSelector from './ChatModelSelector.vue';
 import ChatComposerSelectors from './ChatComposerSelectors.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
 import ChatSteerBar from './ChatSteerBar.vue';
@@ -207,6 +230,7 @@ import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import { useRunStatus } from '../composables/useRunStatus';
 import { useThreadSessionStore } from '../store/thread_session';
+import { useConfigStore } from '../store/config';
 import { storeToRefs } from 'pinia';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 import { useI18n } from '../i18n';
@@ -215,6 +239,12 @@ import { getElectronAPI } from '../services/electron_api';
 const electronAPI = getElectronAPI();
 const { t } = useI18n();
 const threadSession = useThreadSessionStore();
+const configStore = useConfigStore();
+const autoApproveEnabled = computed(() => configStore.config?.general?.autoApproveToolRequests === true);
+
+const toggleAutoApprove = () => {
+  configStore.updateGeneral('autoApproveToolRequests', !autoApproveEnabled.value);
+};
 const {
   currentThread,
   isIncognito,
