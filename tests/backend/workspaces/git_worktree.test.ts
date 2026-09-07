@@ -132,4 +132,46 @@ describe('git_worktree', () => {
     expect(fs.existsSync(worktreePath)).toBe(false);
     expect(workspaceDb.getWorkspace('workspace_wt_thread_wt_1')).toBeNull();
   });
+
+  it('merges the worktree branch back into the main checkout', async () => {
+    // Fresh thread + worktree; agent commits a change on the branch.
+    createThread('thread_merge');
+    chatDb.updateChatThread('thread_merge', { workspace_id: 'ws_repo' });
+    const created = await gitWorktree.createThreadWorktree('thread_merge', 'ws_repo');
+    expect(created.ok).toBe(true);
+
+    const worktreePath = path.join(dataDir, 'thread-worktrees', 'thread_merge');
+    fs.writeFileSync(path.join(worktreePath, 'feature.txt'), 'agent work');
+    await execFileAsync('git', ['add', '.'], { cwd: worktreePath });
+    await execFileAsync('git', ['-c', 'user.email=a@b', '-c', 'user.name=a', 'commit', '-m', 'agent change'], { cwd: worktreePath });
+
+    const result = await gitWorktree.mergeThreadWorktree('thread_merge');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.branch).toBe('iki/thread_merge');
+
+    // The main checkout now contains the agent's file.
+    expect(fs.existsSync(path.join(repoDir, 'feature.txt'))).toBe(true);
+  });
+
+  it('refuses to merge when the main checkout is dirty', async () => {
+    createThread('thread_merge_dirty');
+    chatDb.updateChatThread('thread_merge_dirty', { workspace_id: 'ws_repo' });
+    await gitWorktree.createThreadWorktree('thread_merge_dirty', 'ws_repo');
+    const worktreePath = path.join(dataDir, 'thread-worktrees', 'thread_merge_dirty');
+    fs.writeFileSync(path.join(worktreePath, 'w.txt'), 'w');
+    await execFileAsync('git', ['add', '.'], { cwd: worktreePath });
+    await execFileAsync('git', ['-c', 'user.email=a@b', '-c', 'user.name=a', 'commit', '-m', 'w'], { cwd: worktreePath });
+
+    // Dirty the main checkout.
+    fs.writeFileSync(path.join(repoDir, 'user-note.txt'), 'user work in progress');
+
+    const result = await gitWorktree.mergeThreadWorktree('thread_merge_dirty');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('uncommitted changes');
+    // The agent's work did NOT land in the main checkout.
+    expect(fs.existsSync(path.join(repoDir, 'w.txt'))).toBe(false);
+    fs.rmSync(path.join(repoDir, 'user-note.txt'));
+  });
 });

@@ -18,6 +18,9 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:threads:create', (_, thread) => chatService.createThread(thread));
   ipcMain.handle('chat:threads:clear', (_, id, thread) => chatService.clearThread(id, thread));
   ipcMain.handle('chat:threads:update', (_, id, thread) => chatService.updateThread(id, thread));
+  ipcMain.handle('chat:threads:export-markdown', (_, threadId: string) =>
+    chatService.exportThreadMarkdown(threadId)
+  );
   ipcMain.handle('chat:threads:delete', (_, id) => chatService.deleteThread(id));
 
   // Chat Message Management
@@ -33,6 +36,9 @@ export const registerChatIpc = (): void => {
   );
   ipcMain.handle('chat:runs:trace:get', (_, runId: string) =>
     toPlainData(chatService.getRunTrace(runId))
+  );
+  ipcMain.handle('chat:runs:trajectory:get', (_, runId: string) =>
+    toPlainData(chatService.getRunTrajectory(runId))
   );
   ipcMain.handle('chat:runs:tree:get', (_, rootRunId: string) =>
     toPlainData(chatService.getRunTree(rootRunId))
@@ -125,13 +131,6 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:eval:delete-label', (_, labelId: string) => {
     return chatService.eval.deleteLabel(labelId);
   });
-  ipcMain.handle('chat:eval:compare-runs', (_, baselineRunId: string, testRunId: string) => {
-    return chatService.eval.compareRuns(baselineRunId, testRunId);
-  });
-  ipcMain.handle('chat:eval:assess-regression', (_, baselineRunId: string, testRunId: string) => {
-    return chatService.eval.assessRegression(baselineRunId, testRunId);
-  });
-
   ipcMain.handle('chat:usage:summary', (_, period) => {
     return chatService.getUsageSummary(period);
   });

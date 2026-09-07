@@ -4,6 +4,7 @@
       ref="sidebarRef"
       @thread-selected="selectThread"
       @new-chat="handleNewChat"
+      @new-work="handleNewWork"
       @thread-deleted="handleThreadDeleted"
     />
 
@@ -84,24 +85,13 @@
         <ChatInput
           ref="chatInputRef"
           :thread-id="currentThread?.id || ''"
-          :active-model="currentModel"
-          :active-provider-id="currentProviderId"
-          :is-incognito="isIncognito"
-          :selected-workspace-id="selectedWorkspaceId"
           :workspace-locked="isWorkspaceLocked"
-          :reasoning-effort="currentReasoningEffort"
-          :personality="currentPersonality"
           :latest-token-usage="latestAssistantTokenUsage"
           :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
           :submit-turn="submitTurn"
-          @incognito-changed="handleIncognitoChanged"
-          @model-selected="handleModelSelected"
           @new-chat-requested="handleNewChat"
           @clear-thread-requested="handleClearCurrentThread"
-          @workspace-changed="handleWorkspaceChanged"
-          @reasoning-effort-changed="handleReasoningEffortChanged"
-          @personality-changed="handlePersonalityChanged"
         />
       </div>
     </div>
@@ -116,6 +106,7 @@
 
 <script setup lang="ts">
 import { computed, ref, nextTick } from 'vue';
+import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
@@ -128,8 +119,8 @@ import { createChatInstance } from '../modules/chat/chat_instance';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';
+import { useThreadSessionStore } from '../store/thread_session';
 import { useMarkdownCopy } from '../composables/useMarkdownCopy';
-import { useChatThreads } from '../composables/useChatThreads';
 import { useChatStreaming } from '../composables/useChatStreaming';
 import { useChatThreadTodoPlan } from '../composables/useChatThreadTodoPlan';
 import { useToolMetadata } from '../composables/useToolMetadata';
@@ -152,9 +143,10 @@ const electronAPI = getElectronAPI();
 const { t } = useI18n();
 
 const configStore = useConfigStore();
-const preferredDraftModel = computed(() => configStore.config.chat.composer.preferredModel);
+const threadSession = useThreadSessionStore();
+const preferredDraftModel = computed(() => configStore.config?.chat?.composer?.preferredModel);
 const preferredDraftProviderId = computed(
-  () => configStore.config.chat.composer.preferredProviderId
+  () => configStore.config?.chat?.composer?.preferredProviderId
 );
 
 const persistDraftModelSelection = async (selection: {
@@ -276,24 +268,28 @@ const {
   selectedWorkspaceId,
   selectedTools,
   showWelcome,
+} = storeToRefs(threadSession);
+const {
   dismissWelcome,
   refreshThreads,
   createNewThread,
-  selectThread: selectThreadBase,
-  handleThreadDeleted: handleThreadDeletedBase,
-  handleNewChat: handleNewChatBase,
-  clearCurrentThread: clearCurrentThreadBase,
   handleModelSelected,
-  setIncognito,
-  setWorkspace,
-  setReasoningEffort,
-  setPersonality,
   ensureWorkspaceForCurrentThread,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
   handleTaskPush,
   handleAwaiterPush,
-} = useChatThreads({
+} = threadSession;
+const selectThreadBase = threadSession.selectThread;
+const handleThreadDeletedBase = threadSession.handleThreadDeleted;
+const handleNewChatBase = threadSession.handleNewChat;
+const clearCurrentThreadBase = threadSession.clearCurrentThread;
+
+const handleNewWork = async (workspaceId: string) => {
+  await threadSession.createNewThread({ mode: 'work', workspaceId });
+};
+
+threadSession.initRuntime({
   electronAPI,
   messageStore,
   persistence,
@@ -303,22 +299,6 @@ const {
   preferredDraftProviderId,
   persistDraftModelSelection,
 });
-
-const handleIncognitoChanged = async (nextValue: boolean) => {
-  await setIncognito(nextValue);
-};
-
-const handleWorkspaceChanged = async (nextValue: string | null) => {
-  await setWorkspace(nextValue);
-};
-
-const handleReasoningEffortChanged = async (nextValue: string) => {
-  await setReasoningEffort(nextValue);
-};
-
-const handlePersonalityChanged = async (nextValue: string) => {
-  await setPersonality(nextValue);
-};
 
 const { activeTodoPlan, handleChatChunk } = useChatThreadTodoPlan({
   electronAPI,

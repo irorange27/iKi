@@ -42,7 +42,7 @@ describe('SkillSelector', () => {
     });
 
     await flushPromises();
-    expect(emptyWrapper.find('.composer-selector-trigger').attributes('title')).toBe('Choose skills');
+    expect(emptyWrapper.find('.composer-chip').attributes('title')).toBe('Choose skills');
 
     const autoWrapper = mount(SkillSelector, {
       props: {
@@ -52,7 +52,7 @@ describe('SkillSelector', () => {
     });
 
     await flushPromises();
-    expect(autoWrapper.find('.composer-selector-trigger').attributes('title')).toBe('Skills: auto');
+    expect(autoWrapper.find('.composer-chip').attributes('title')).toBe('Skills: auto');
 
     const selectedWrapper = mount(SkillSelector, {
       props: {
@@ -62,7 +62,7 @@ describe('SkillSelector', () => {
     });
 
     await flushPromises();
-    expect(selectedWrapper.find('.composer-selector-trigger').attributes('title')).toBe(
+    expect(selectedWrapper.find('.composer-chip').attributes('title')).toBe(
       'Skills: 1 selected'
     );
   });

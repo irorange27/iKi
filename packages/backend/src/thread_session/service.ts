@@ -11,6 +11,7 @@ import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';
+import { buildThreadMarkdown, parseStoredMessageForExport } from '../chat/thread_markdown_export';
 
 export type { ChatStreamTarget } from './types';
 
@@ -52,8 +53,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const resumeRun = async (
     target: ChatStreamTarget,
     runId: string
-  ): Promise<{ success: boolean; error?: string }> => {
-    const run = agentRunDb.getAgentRun(runId);
+  ): Promise<{ success: boolean; error?: string }> => {    const run = agentRunDb.getAgentRun(runId);
     if (!run) return { success: false, error: 'Run not found' };
     if (run.status !== 'blocked' && run.status !== 'queued') {
       return { success: false, error: `Cannot resume a run with status ${run.status}` };
@@ -153,6 +153,31 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     return { success: true, newRunId: retryResult.newRunId, ...(result as Record<string, unknown>) };
   };
 
+  const exportThreadMarkdown = async (
+    threadId: string
+  ): Promise<{ success: boolean; filePath?: string; error?: string }> => {
+    if (!deps.exportThreadMarkdown) {
+      return { success: false, error: 'Thread export is not available in this host.' };
+    }
+
+    const thread = persistence.getThread(threadId);
+    if (!thread) return { success: false, error: 'Thread not found' };
+
+    const rows = persistence.listMessages(threadId);
+    const messages = rows
+      .map(row => parseStoredMessageForExport(row.message))
+      .filter((message): message is NonNullable<typeof message> => message !== null);
+
+    const content = buildThreadMarkdown({
+      title: thread.title || threadId,
+      model: typeof thread.model === 'string' ? thread.model : undefined,
+      exportedAt: new Date().toISOString(),
+      messages,
+    });
+
+    return await deps.exportThreadMarkdown({ threadId, title: thread.title || threadId, content });
+  };
+
   return {
     ...persistence,
     ...runs,
@@ -162,6 +187,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     approveTool: approvals.approveTool,
     resumeRun,
     retryAndExecute,
+    exportThreadMarkdown,
   };
 };
 

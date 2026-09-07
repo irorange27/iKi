@@ -370,7 +370,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
 }
 
 .message-text.markdown-content :deep(code) {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -412,7 +412,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
   gap: 6px;
   font-size: 13px;
   color: var(--text-secondary);
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
   text-transform: lowercase;
 }
 

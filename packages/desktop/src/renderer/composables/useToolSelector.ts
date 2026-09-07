@@ -4,7 +4,6 @@ import type { McpServerSummary } from '@iki/backend/types/mcp';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
-import { useSelectorPanel } from './useSelectorPanel';
 
 interface ToolSummary {
   name: string;
@@ -122,12 +121,10 @@ export const useToolSelector = (params: {
   const toolSelectorLogger = createLogger({ module: 'tool_selector' });
   const { t } = useI18n();
 
-  const { isOpen: showToolSelector, openPanel: openToolSelector, scheduleClosePanel: scheduleCloseToolSelector } =
-    useSelectorPanel({
-      onOpen: () => {
-        void Promise.all([loadAvailableTools(), loadAvailableMcpServers()]);
-      },
-    });
+  const showToolSelector = ref(false);
+  const openToolSelector = () => {
+    void Promise.all([loadAvailableTools(), loadAvailableMcpServers()]);
+  };
   const availableTools = ref<ToolSummary[]>([]);
   const availableMcpServers = ref<McpServerSummary[]>([]);
   const lastLoadedAt = ref(0);
@@ -404,7 +401,6 @@ export const useToolSelector = (params: {
     mcpServersLoading,
     openToolSelector,
     refreshMcpServers,
-    scheduleCloseToolSelector,
     selectAllBuiltinTools,
     selectAllMcpServers,
     selectedMcpServerIds,

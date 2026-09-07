@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import * as chatThreadDb from '../db/chat_thread';
 import * as workspaceDb from '../db/workspaces';
-import type { Workspace } from '@iki/backend/types/chat';
 import type {
+  ThreadWorktreeMergeResult,
   ThreadWorktreeRemovalResult,
   ThreadWorktreeResult,
 } from '@iki/backend/types/worktree';
@@ -214,4 +214,78 @@ export const removeThreadWorktree = async (
 
   workspaceDb.deleteWorkspace(workspaceId);
   return { ok: true, removed: true };
+};
+
+/**
+ * Merge the thread's worktree branch back into the repo's checked-out branch
+ * (Codex-style "check out the agent's changes locally"):
+ * 1. the user's main checkout must be clean (uncommitted changes abort);
+ * 2. `git merge` runs in the main checkout;
+ * 3. on conflicts the merge is aborted so the main checkout stays untouched;
+ * 4. the worktree itself is left in place — removeThreadWorktree cleans up.
+ */
+export const mergeThreadWorktree = async (
+  threadId: string
+): Promise<ThreadWorktreeMergeResult> => {
+  const normalizedThreadId = typeof threadId === 'string' ? threadId.trim() : '';
+  if (!normalizedThreadId) {
+    return { ok: false, error: 'A thread is required to merge a worktree.' };
+  }
+
+  const workspaceId = toWorktreeWorkspaceId(normalizedThreadId);
+  const workspace = workspaceDb.getWorkspace(workspaceId);
+  if (!workspace) {
+    return { ok: false, error: 'This thread has no isolated worktree.' };
+  }
+
+  // Resolve the main checkout from inside the worktree (git knows its parent).
+  let mainWorktreePath: string;
+  try {
+    const gitCommonDir = await runGit(
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      workspace.path
+    );
+    mainWorktreePath = path.dirname(gitCommonDir);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not locate the main checkout.',
+    };
+  }
+
+  const branch = getWorktreeBranch(normalizedThreadId);
+
+  // The merge target must be clean — merging into a dirty checkout could mix
+  // the user's uncommitted work with the agent's changes.
+  try {
+    const dirty = await runGit(['status', '--porcelain'], mainWorktreePath);
+    if (dirty.trim()) {
+      return {
+        ok: false,
+        error:
+          'Your main checkout has uncommitted changes. Commit or stash them before merging the worktree branch.',
+      };
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not inspect the main checkout.',
+    };
+  }
+
+  try {
+    await runGit(['merge', branch], mainWorktreePath);
+  } catch (error) {
+    // Conflicts or a failed merge: abort so the main checkout stays untouched.
+    await runGit(['merge', '--abort'], mainWorktreePath).catch((): undefined => undefined);
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? `Merge failed (conflicts were aborted): ${error.message}`
+          : 'Merge failed.',
+    };
+  }
+
+  return { ok: true, branch, repoPath: mainWorktreePath, merged: true };
 };

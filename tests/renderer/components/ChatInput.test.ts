@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
+import { useThreadSessionStore } from '../../../packages/desktop/src/renderer/store/thread_session';
 
 const { loggerEventMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
@@ -206,6 +208,13 @@ const createElectronApi = (options?: {
   };
 };
 
+// Panel content renders through a reka body portal — query document-wide.
+const findInPortal = (selector: string) => {
+  const match = Array.from(document.querySelectorAll(selector)).at(-1);
+  if (!match) throw new Error(`Element not found in portal: ${selector}`);
+  return new DOMWrapper(match as Element);
+};
+
 const mountChatInput = async (options?: {
   providers?: Provider[];
   modelCatalogByProviderId?: Record<
@@ -232,6 +241,14 @@ const mountChatInput = async (options?: {
     prompt_app_id?: string;
   } | null;
   messages?: unknown[];
+  session?: Partial<{
+    currentModel: string;
+    currentProviderId: string | null;
+    isIncognito: boolean;
+    selectedWorkspaceId: string | null;
+    currentReasoningEffort: string;
+    currentPersonality: string;
+  }>;
   prepareMessageSend?: (payload: {
     content: string;
     model?: string;
@@ -283,6 +300,12 @@ const mountChatInput = async (options?: {
   delete mountProps.chat;
 
   const ChatInput = (await import('../../../packages/desktop/src/renderer/components/ChatInput.vue')).default;
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const threadSession = useThreadSessionStore();
+  if (options?.session) {
+    Object.assign(threadSession, options.session);
+  }
   const wrapper = mount(ChatInput, {
     props: {
       ...mountProps,
@@ -290,6 +313,7 @@ const mountChatInput = async (options?: {
       submitTurn,
     },
     global: {
+      plugins: [pinia],
       stubs: {
         LobeIcon: true,
         SkillSelector: true,
@@ -307,6 +331,7 @@ const mountChatInput = async (options?: {
     prepareMessageSend,
     onProvidersUpdated,
     removeProviderListener,
+    threadSession,
   };
 };
 
@@ -369,7 +394,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1","gpt-4o"]',
     });
 
-    const { wrapper } = await mountChatInput({
+    const { wrapper, threadSession } = await mountChatInput({
       providers: [deepseek, openai],
     });
 
@@ -390,7 +415,7 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(wrapper.find('.model-selector-panel').exists()).toBe(false);
-    expect(wrapper.emitted('model-selected')).toEqual([[{ provider: openai, model: 'gpt-4o' }]]);
+    expect(threadSession.currentModel).toBe('gpt-4o');
   });
 
   it('aligns the composer selection with the active thread model before send', async () => {
@@ -414,9 +439,12 @@ describe('ChatInput', () => {
         title: 'Existing thread',
         model: 'gpt-4o',
       },
+      session: {
+        currentModel: 'gpt-4o',
+        currentProviderId: 'openai',
+      },
       props: {
         threadId: 'thread_1',
-        activeModel: 'gpt-4o',
       },
     });
 
@@ -835,18 +863,15 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, prepareMessageSend, submitTurn } = await mountChatInput({
+    const { wrapper, threadSession, prepareMessageSend, submitTurn } = await mountChatInput({
       providers: [provider],
-      props: {
-        isIncognito: false,
-      },
     });
 
     await wrapper.find('.chat-input-field').setValue('/incognito on');
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    expect(wrapper.emitted('incognito-changed')).toEqual([[true]]);
+    expect(threadSession.isIncognito).toBe(true);
     expect(prepareMessageSend).not.toHaveBeenCalled();
     expect(submitTurn).not.toHaveBeenCalled();
     expect(wrapper.find('.composer-feedback-message').text()).toContain(
@@ -1120,9 +1145,9 @@ describe('ChatInput', () => {
     );
   });
 
-  it('reflects incognito state and emits explicit toggle requests', async () => {
-    const { wrapper } = await mountChatInput({
-      props: {
+  it('reflects incognito state and applies explicit toggle requests to the session store', async () => {
+    const { wrapper, threadSession } = await mountChatInput({
+      session: {
         isIncognito: false,
       },
     });
@@ -1134,9 +1159,9 @@ describe('ChatInput', () => {
     await modeButton.trigger('click');
     await flushPromises();
 
-    expect(wrapper.emitted('incognito-changed')).toEqual([[true]]);
+    expect(threadSession.isIncognito).toBe(true);
 
-    await wrapper.setProps({ isIncognito: true });
+    threadSession.isIncognito = true;
     await flushPromises();
 
     expect(modeButton.classes()).toContain('is-incognito');
@@ -1146,10 +1171,10 @@ describe('ChatInput', () => {
     await modeButton.trigger('click');
     await flushPromises();
 
-    expect(wrapper.emitted('incognito-changed')).toEqual([[true], [false]]);
+    expect(threadSession.isIncognito).toBe(false);
   });
 
-  it('shows the selected workspace and emits explicit workspace change requests', async () => {
+  it('shows the selected workspace and applies explicit workspace changes to the session store', async () => {
     const docsWorkspace = buildWorkspace({
       id: 'workspace_docs',
       name: 'Docs',
@@ -1161,9 +1186,10 @@ describe('ChatInput', () => {
       path: '/tmp/app',
     });
 
-    const { wrapper } = await mountChatInput({
+    const { wrapper, threadSession } = await mountChatInput({
       workspaces: [docsWorkspace, appWorkspace],
-      props: {
+      session: {
+        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_docs' },
         selectedWorkspaceId: 'workspace_docs',
       },
     });
@@ -1171,13 +1197,14 @@ describe('ChatInput', () => {
     const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
     expect(workspaceTrigger.exists()).toBe(true);
     expect(workspaceTrigger.attributes('title')).toContain('Docs');
-    expect(workspaceTrigger.classes()).toContain('w-10');
     expect(workspaceTrigger.find('.selector-badge').text()).toBe('1');
 
     await workspaceTrigger.trigger('click');
     await flushPromises();
 
-    const workspaceItems = wrapper.findAll('.selector-item');
+    const workspaceItems = Array.from(document.querySelectorAll('.selector-item')).map(
+      element => new DOMWrapper(element as Element)
+    );
     const appOption = workspaceItems.find(option => option.text().includes('App'));
     expect(appOption).toBeDefined();
     if (!appOption) {
@@ -1187,7 +1214,7 @@ describe('ChatInput', () => {
     await appOption.trigger('click');
     await flushPromises();
 
-    expect(wrapper.emitted('workspace-changed')).toEqual([['workspace_app']]);
+    expect(threadSession.selectedWorkspaceId).toBe('workspace_app');
   });
 
   it('marks temporary workspaces with a T badge on the composer trigger', async () => {
@@ -1201,7 +1228,8 @@ describe('ChatInput', () => {
 
     const { wrapper } = await mountChatInput({
       workspaces: [tempWorkspace],
-      props: {
+      session: {
+        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_thread_1' },
         selectedWorkspaceId: 'workspace_thread_1',
       },
     });
@@ -1220,8 +1248,11 @@ describe('ChatInput', () => {
 
     const { wrapper } = await mountChatInput({
       workspaces: [docsWorkspace],
-      props: {
+      session: {
+        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_docs' },
         selectedWorkspaceId: 'workspace_docs',
+      },
+      props: {
         workspaceLocked: true,
       },
     });
@@ -1248,8 +1279,11 @@ describe('ChatInput', () => {
 
     const { wrapper } = await mountChatInput({
       workspaces: [tempWorkspace],
-      props: {
+      session: {
+        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_thread_1' },
         selectedWorkspaceId: 'workspace_thread_1',
+      },
+      props: {
         workspaceLocked: true,
       },
     });
@@ -1273,16 +1307,19 @@ describe('ChatInput', () => {
       path: '/tmp/repo',
     });
 
-    const { wrapper, api } = await mountChatInput({
+    const { wrapper, api, threadSession } = await mountChatInput({
       workspaces: [],
       pickedWorkspace,
+      session: {
+        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}' },
+      },
     });
 
     await wrapper.find('.workspace-selector-trigger').trigger('click');
     await flushPromises();
 
-    const addFolderButton = wrapper
-      .findAll('button')
+    const addFolderButton = Array.from(document.querySelectorAll('button'))
+      .map(element => new DOMWrapper(element))
       .find(button => button.text().includes('Add Folder'));
     expect(addFolderButton).toBeDefined();
     if (!addFolderButton) {
@@ -1293,7 +1330,7 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(api.workspaces.pickDirectory).toHaveBeenCalledTimes(1);
-    expect(wrapper.emitted('workspace-changed')).toEqual([['workspace_new']]);
+    expect(threadSession.selectedWorkspaceId).toBe('workspace_new');
   });
 
   it('waits for the send-preparation promise before starting IPC streaming', async () => {

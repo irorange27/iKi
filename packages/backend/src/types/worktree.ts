@@ -13,3 +13,13 @@ export type ThreadWorktreeResult =
 export type ThreadWorktreeRemovalResult =
   | { ok: true; removed: boolean }
   | { ok: false; error: string };
+
+export type ThreadWorktreeMergeResult =
+  | {
+      ok: true;
+      branch: string;
+      repoPath: string;
+      /** The worktree remains in place; call removeThreadWorktree to clean up. */
+      merged: boolean;
+    }
+  | { ok: false; error: string };

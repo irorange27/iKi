@@ -3,7 +3,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
-import { useChatThreads } from '../../../packages/desktop/src/renderer/composables/useChatThreads';
+import { createPinia, setActivePinia, storeToRefs } from 'pinia';
+import { useThreadSessionStore } from '../../../packages/desktop/src/renderer/store/thread_session';
 import { setLocale } from '../../../packages/desktop/src/renderer/i18n';
 import type { ChatThread } from '@iki/backend/types/chat';
 
@@ -125,7 +126,9 @@ const createHarness = (
   };
   const scrollToBottom = vi.fn();
 
-  const state = useChatThreads({
+  setActivePinia(createPinia());
+  const store = useThreadSessionStore();
+  store.initRuntime({
     electronAPI: {
       chat: {
         threads: {
@@ -158,6 +161,30 @@ const createHarness = (
     persistDraftModelSelection,
   });
 
+  const state = {
+    ...storeToRefs(store),
+    initRuntime: store.initRuntime,
+    dismissWelcome: store.dismissWelcome,
+    getCurrentThreadId: store.getCurrentThreadId,
+    refreshThreads: store.refreshThreads,
+    createNewThread: store.createNewThread,
+    selectThread: store.selectThread,
+    handleThreadDeleted: store.handleThreadDeleted,
+    updateThreadTitle: store.updateThreadTitle,
+    updateThreadTitleById: store.updateThreadTitleById,
+    handleNewChat: store.handleNewChat,
+    clearCurrentThread: store.clearCurrentThread,
+    handleModelSelected: store.handleModelSelected,
+    setIncognito: store.setIncognito,
+    setWorkspace: store.setWorkspace,
+    setReasoningEffort: store.setReasoningEffort,
+    setPersonality: store.setPersonality,
+    ensureWorkspaceForCurrentThread: store.ensureWorkspaceForCurrentThread,
+    handleAssistantMessagePersisted: store.handleAssistantMessagePersisted,
+    handleTaskPush: store.handleTaskPush,
+    handleAwaiterPush: store.handleAwaiterPush,
+  };
+
   return {
     state,
     createThread,
@@ -177,7 +204,7 @@ const createHarness = (
   };
 };
 
-describe('useChatThreads', () => {
+describe('threadSession store', () => {
   afterEach(() => {
     setLocale('en');
   });
@@ -190,12 +217,13 @@ describe('useChatThreads', () => {
     expect(state.isIncognito.value).toBe(true);
     expect(updateThread).not.toHaveBeenCalled();
 
-    const createdThread = await state.createNewThread('gpt-4.1');
+    const createdThread = await state.createNewThread({ model: 'gpt-4.1', mode: 'chat' });
 
     expect(createThread).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4.1',
         is_incognito: 1,
+        metadata: expect.stringContaining('"mode":"chat"'),
       })
     );
     expect(createdThread?.is_incognito).toBe(1);
@@ -209,7 +237,7 @@ describe('useChatThreads', () => {
     expect(state.isIncognito.value).toBe(false);
   });
 
-  it('keeps draft workspace state before thread creation and persists it into the new thread', async () => {
+  it('keeps chat threads workspace-free while work threads bind the picked folder', async () => {
     const { state, createThread, updateThread } = createHarness();
 
     await state.setWorkspace('workspace_alpha');
@@ -217,25 +245,33 @@ describe('useChatThreads', () => {
     expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
     expect(updateThread).not.toHaveBeenCalled();
 
-    const createdThread = await state.createNewThread('gpt-4.1');
+    const createdThread = await state.createNewThread({ model: 'gpt-4.1', mode: 'chat' });
 
     expect(createThread).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4.1',
-        workspace_id: 'workspace_alpha',
+        workspace_id: null,
+        metadata: expect.stringContaining('"mode":"chat"'),
       })
     );
-    expect(createdThread?.workspace_id).toBe('workspace_alpha');
-    expect(state.currentThread.value?.workspace_id).toBe('workspace_alpha');
-    expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
-
-    await state.setWorkspace(null);
-
-    expect(updateThread).toHaveBeenCalledWith(createdThread?.id, {
-      workspace_id: null,
-    });
-    expect(state.currentThread.value?.workspace_id).toBeUndefined();
+    // Chats have no workspace concept: the binding is dropped on the created row
+    // and the local draft is resynced from the thread.
+    expect(createdThread?.workspace_id).toBeUndefined();
     expect(state.selectedWorkspaceId.value).toBeNull();
+
+    const workThread = await state.createNewThread({
+      model: 'gpt-4.1',
+      mode: 'work',
+      workspaceId: 'workspace_alpha',
+    });
+
+    expect(createThread).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        workspace_id: 'workspace_alpha',
+        metadata: expect.stringContaining('"mode":"work"'),
+      })
+    );
+    expect(workThread?.workspace_id).toBe('workspace_alpha');
   });
 
   it('syncs the composer incognito state from the selected thread', async () => {
@@ -562,7 +598,9 @@ describe('useChatThreads', () => {
 
     const sidebarRef = { refresh: vi.fn(), setCurrentThread: vi.fn() };
 
-    const state = useChatThreads({
+    setActivePinia(createPinia());
+    const store = useThreadSessionStore();
+    store.initRuntime({
       electronAPI: {
         chat: {
           threads: { create: vi.fn(), clear: vi.fn(), update: updateThread, get: getThread, delete: vi.fn() },
@@ -573,11 +611,16 @@ describe('useChatThreads', () => {
       } as never,
       messageStore: messageStore as never,
       persistence: { resetPersistedMessageIds: vi.fn() } as never,
-      sidebarRef: ref(sidebarRef),
+      sidebarRef: ref(sidebarRef) as never,
       scrollToBottom: vi.fn(),
       preferredDraftModel: ref(''),
       preferredDraftProviderId: ref(null),
     });
+    const state = {
+      ...storeToRefs(store),
+      selectThread: store.selectThread,
+      handleModelSelected: store.handleModelSelected,
+    };
 
     // Start selecting thread A — its message load will block
     const aSelectPromise = state.selectThread('thread_A');
@@ -621,7 +664,9 @@ describe('useChatThreads', () => {
     const threadsById = new Map([[thread.id, thread]]);
     const getThread = vi.fn(async (id: string) => threadsById.get(id) ?? null);
 
-    const state = useChatThreads({
+    setActivePinia(createPinia());
+    const store = useThreadSessionStore();
+    store.initRuntime({
       electronAPI: {
         chat: {
           threads: { create: vi.fn(), clear: vi.fn(), update: updateThread, get: getThread, delete: vi.fn() },
@@ -632,11 +677,16 @@ describe('useChatThreads', () => {
       } as never,
       messageStore: { append: vi.fn(), clear: vi.fn(), hasId: vi.fn(() => false), setAll: vi.fn() } as never,
       persistence: { resetPersistedMessageIds: vi.fn() } as never,
-      sidebarRef: ref({ refresh: vi.fn(), setCurrentThread: vi.fn() }),
+      sidebarRef: ref({ refresh: vi.fn(), setCurrentThread: vi.fn() }) as never,
       scrollToBottom: vi.fn(),
       preferredDraftModel: ref(''),
       preferredDraftProviderId: ref(null),
     });
+    const state = {
+      ...storeToRefs(store),
+      selectThread: store.selectThread,
+      handleModelSelected: store.handleModelSelected,
+    };
 
     await state.selectThread('thread_rollback');
     expect(state.currentThread.value?.model).toBe('gpt-4o');

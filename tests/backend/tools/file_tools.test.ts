@@ -352,7 +352,7 @@ describe('file tools workspace boundaries', () => {
     });
   });
 
-  it('auto-creates a temporary workspace when no workspace is selected for the active thread', async () => {
+  it('auto-creates a temporary workspace for work threads with no workspace selected', async () => {
     const tempWorkspaceRoot = path.join(
       process.env.IKI_USER_DATA_PATH as string,
       'thread-workspaces',
@@ -363,6 +363,7 @@ describe('file tools workspace boundaries', () => {
       id: 'thread_1',
       workspace_id: null,
       title: 'Ad hoc thread',
+      metadata: '{"mode":"work"}',
     });
     getWorkspaceMock.mockImplementation((id: string) =>
       id === tempWorkspaceId

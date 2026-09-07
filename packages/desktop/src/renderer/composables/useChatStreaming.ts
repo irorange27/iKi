@@ -12,7 +12,7 @@ import {
   upsertTextIntoMessageParts,
   extractTextFromMessage,
 } from '../modules/chat/ui_message_text';
-import type { ChatThread } from './useChatThreads';
+import type { ChatThread } from '../store/thread_session';
 import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
@@ -38,7 +38,7 @@ export const useChatStreaming = (deps: {
   currentModel: Ref<string>;
   selectedTools: Ref<string[]>;
   showWelcome: Ref<boolean>;
-  createNewThread: (model?: string) => Promise<ChatThread | null>;
+  createNewThread: (options?: { model?: string }) => Promise<ChatThread | null>;
   clearCurrentThread: () => Promise<ChatThread | null>;
   ensureWorkspaceForCurrentThread: () => Promise<ChatThread | null>;
   selectThread: (threadId: string) => Promise<void>;
@@ -147,7 +147,7 @@ export const useChatStreaming = (deps: {
     const pendingEditMessageId = editingUserMessageId.value;
 
     if (!deps.currentThread.value) {
-      const thread = await deps.createNewThread(model || deps.currentModel.value);
+      const thread = await deps.createNewThread({ model: model || deps.currentModel.value });
       if (!thread) {
         chatStreamingLogger.event({
           level: 'error',

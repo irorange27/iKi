@@ -4,6 +4,8 @@ import type { UIMessage } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { useThreadSessionStore } from '../../../packages/desktop/src/renderer/store/thread_session';
 
 const {
   chatState,
@@ -35,7 +37,6 @@ const {
   openSkillReferenceMock,
   getMcpServerLabelMock,
   configStoreState,
-  useChatThreadsMock,
   useChatStreamingMock,
   useChatThreadTodoPlanMock,
   useToolMetadataMock,
@@ -124,7 +125,6 @@ const {
     },
   };
 
-  const useChatThreadsMock = vi.fn();
   const useChatStreamingMock = vi.fn();
   const useChatThreadTodoPlanMock = vi.fn();
   const useToolMetadataMock = vi.fn();
@@ -162,8 +162,7 @@ const {
     openSkillReferenceMock,
     getMcpServerLabelMock,
     configStoreState,
-    useChatThreadsMock,
-    useChatStreamingMock,
+      useChatStreamingMock,
     useChatThreadTodoPlanMock,
     useToolMetadataMock,
     useChatViewLifecycleMock,
@@ -175,10 +174,6 @@ const {
 
 vi.mock('../../../packages/desktop/src/renderer/modules/chat/chat_instance', () => ({
   createChatInstance: createChatInstanceMock,
-}));
-
-vi.mock('../../../packages/desktop/src/renderer/composables/useChatThreads', () => ({
-  useChatThreads: useChatThreadsMock,
 }));
 
 vi.mock('../../../packages/desktop/src/renderer/composables/useChatStreaming', () => ({
@@ -287,9 +282,20 @@ const mountChatView = async () => {
     value: {},
   });
 
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const threadSession = useThreadSessionStore();
+  threadSession.currentThread = currentThreadRef.value as never;
+  threadSession.currentModel = currentModelRef.value;
+  threadSession.isIncognito = isIncognitoRef.value;
+  threadSession.selectedWorkspaceId = selectedWorkspaceIdRef.value;
+  threadSession.selectedTools = [...selectedToolsRef.value];
+  threadSession.showWelcome = showWelcomeRef.value;
+
   const ChatView = (await import('../../../packages/desktop/src/renderer/views/ChatView.vue')).default;
   const wrapper = mount(ChatView, {
     global: {
+      plugins: [pinia],
       stubs: {
         Sidebar: SidebarStub,
         WelcomeScreen: WelcomeScreenStub,
@@ -334,7 +340,6 @@ describe('ChatView', () => {
     loadToolSourcesMock.mockReset();
     openSkillReferenceMock.mockReset();
     getMcpServerLabelMock.mockReset();
-    useChatThreadsMock.mockReset();
     useChatStreamingMock.mockReset();
     useChatThreadTodoPlanMock.mockReset();
     useToolMetadataMock.mockReset();
@@ -350,30 +355,6 @@ describe('ChatView', () => {
     chatInstance.handleToolApproval.mockClear();
     chatInstance.activeAssistantMessageId.value = null;
     handleMarkdownClickMock.mockReset();
-
-    useChatThreadsMock.mockImplementation(() => ({
-      currentThread: currentThreadRef,
-      currentModel: currentModelRef,
-      isIncognito: isIncognitoRef,
-      selectedWorkspaceId: selectedWorkspaceIdRef,
-      selectedTools: selectedToolsRef,
-      showWelcome: showWelcomeRef,
-      dismissWelcome: vi.fn(),
-      refreshThreads: refreshThreadsMock,
-      createNewThread: createNewThreadMock,
-      clearCurrentThread: vi.fn(async () => undefined),
-      selectThread: vi.fn(async () => undefined),
-      handleThreadDeleted: vi.fn(async () => undefined),
-      handleNewChat: vi.fn(async () => undefined),
-      handleModelSelected: vi.fn(),
-      setIncognito: setIncognitoMock,
-      setWorkspace: setWorkspaceMock,
-      ensureWorkspaceForCurrentThread: vi.fn(async () => currentThreadRef.value),
-      getCurrentThreadId: () => currentThreadRef.value?.id ?? null,
-      handleAssistantMessagePersisted: vi.fn(async () => undefined),
-      handleTaskPush: vi.fn(async () => undefined),
-      handleAwaiterPush: vi.fn(async () => undefined),
-    }));
 
     useChatStreamingMock.mockImplementation(() => ({
       chatInstance,

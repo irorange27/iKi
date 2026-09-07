@@ -74,9 +74,7 @@
   border: 1px solid var(--border-color);
   border-radius: 999px;
   padding: 2px 8px;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
 }
 
 .tool-card-server {
@@ -235,9 +233,7 @@
 }
 
 .tool-call-id-value {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
@@ -296,7 +292,7 @@
   overflow-x: auto;
   white-space: pre;
   color: var(--text-secondary);
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .tool-diff-title {
@@ -332,7 +328,7 @@
   padding: 6px 0;
   font-size: 12px;
   line-height: 1.55;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .tool-diff-line {
@@ -400,7 +396,7 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
   overflow-x: auto;
   white-space: pre;
 }

@@ -1,6 +1,26 @@
 :root {
   color-scheme: dark;
   --font-size: 15px;
+  /* Mono stack for code/diffs/tool output. Components must use this token,
+     not a hardcoded family list (see docs/conventions.md style boundaries). */
+  --font-mono: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+
+  /*
+   * z-index ladder — the only legal values for new overlays:
+   *   1–19   local stacking inside a component (badges, hover handles)
+   *   50     floating panels anchored to the composer (selector panels, tips)
+   *   60     menus and popovers above panels (sidebar menu, model dropdown)
+   *   100    fixed app chrome (collapsed sidebar toolbar, run compare sheet)
+   *   1000   modal dialogs (confirm, provider/theme editors)
+   *   1100   full-screen overlays (image viewer, settings splash)
+   * Never introduce values outside the ladder; extend the ladder deliberately.
+   */
+  --z-panel: 50;
+  --z-menu: 60;
+  --z-chrome: 100;
+  --z-modal: 1000;
+  --z-overlay: 1100;
+
   --chat-content-padding: 24px;
   --chat-composer-padding: 10px;
   --chat-bubble-padding-x: 16px;

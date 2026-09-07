@@ -36,7 +36,7 @@ const { t } = useI18n();
 .image-viewer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-overlay);
   display: flex;
   align-items: center;
   justify-content: center;

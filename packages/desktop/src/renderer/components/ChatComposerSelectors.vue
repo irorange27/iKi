@@ -1,11 +1,6 @@
 <template>
   <div class="composer-toolbar-left flex items-center">
-    <WorkspaceSelector
-      :selected-workspace-id="props.selectedWorkspaceId ?? null"
-      :locked="props.workspaceLocked"
-      :thread-id="props.threadId ?? null"
-      @update:selected-workspace-id="emit('update:selectedWorkspaceId', $event)"
-    />
+    <WorkspaceSelector v-if="props.showWorkspace" :locked="props.workspaceLocked" />
     <SkillSelector
       :skill-ids="props.selectedSkillIds"
       :mode="props.skillMode"
@@ -26,10 +21,7 @@
       @update:active="emit('update:autonomousActive', $event)"
       @update:max-iterations="emit('update:autonomousMaxIterations', $event)"
     />
-    <ReasoningSelector
-      :model-value="props.reasoningEffort ?? ''"
-      @update:model-value="emit('update:reasoningEffort', $event)"
-    />
+    <ReasoningSelector />
     <ChatModelSelector
       :available-providers="props.availableProviders"
       :selected-provider="props.selectedProvider"
@@ -49,9 +41,8 @@ import ToolSelector from './ToolSelector.vue';
 import WorkspaceSelector from './WorkspaceSelector.vue';
 
 const props = defineProps<{
-  selectedWorkspaceId?: string | null;
   workspaceLocked?: boolean;
-  threadId?: string | null;
+  showWorkspace?: boolean;
   selectedSkillIds: string[];
   skillMode: 'manual' | 'auto';
   selectedTools: string[];
@@ -59,14 +50,12 @@ const props = defineProps<{
   toolMode: 'manual' | 'auto';
   autonomousActive: boolean;
   autonomousMaxIterations: number;
-  reasoningEffort?: string;
   availableProviders: Provider[];
   selectedProvider: Provider | null;
   selectedModel: string;
 }>();
 
 const emit = defineEmits<{
-  (event: 'update:selectedWorkspaceId', value: string | null): void;
   (event: 'update:selectedSkillIds', value: string[]): void;
   (event: 'update:skillMode', value: 'manual' | 'auto'): void;
   (event: 'update:selectedTools', value: string[]): void;
@@ -74,7 +63,6 @@ const emit = defineEmits<{
   (event: 'update:toolMode', value: 'manual' | 'auto'): void;
   (event: 'update:autonomousActive', value: boolean): void;
   (event: 'update:autonomousMaxIterations', value: number): void;
-  (event: 'update:reasoningEffort', value: string): void;
   (event: 'selectProviderModel', payload: { provider: Provider; model: string }): void;
 }>();
 </script>

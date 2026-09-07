@@ -62,6 +62,7 @@ describe('thread workspace helpers', () => {
       id: 'thread_1',
       title: 'Scratch Thread',
       workspace_id: null,
+      metadata: '{"mode":"work"}',
     };
     const expectedWorkspacePath = path.join(userDataPath, 'thread-workspaces', 'thread_1');
     const expectedWorkspaceId = 'workspace_thread_thread_1';
@@ -124,6 +125,7 @@ describe('thread workspace helpers', () => {
       id: 'thread_2',
       title: 'Existing Thread',
       workspace_id: null,
+      metadata: '{"mode":"work"}',
     });
     getWorkspaceByPathMock.mockReturnValue(existingWorkspace);
     getWorkspaceMock.mockImplementation((id: string) =>

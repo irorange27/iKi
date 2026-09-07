@@ -98,8 +98,8 @@
         <template #toolbar-left>
           <ChatComposerSelectors
             :thread-id="props.threadId ?? null"
-            :selected-workspace-id="props.selectedWorkspaceId ?? null"
             :workspace-locked="props.workspaceLocked"
+            :show-workspace="isWorkThread"
             v-model:selected-skill-ids="selectedSkillIds"
             v-model:skill-mode="skillMode"
             v-model:selected-tools="selectedTools"
@@ -107,12 +107,9 @@
             v-model:tool-mode="toolMode"
             v-model:autonomous-active="isAutonomousMode"
             v-model:autonomous-max-iterations="autonomousMaxIterations"
-            :reasoning-effort="props.reasoningEffort ?? ''"
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
             :selected-model="selectedModel"
-            @update:selected-workspace-id="handleWorkspaceChanged"
-            @update:reasoning-effort="handleReasoningEffortChanged"
             @select-provider-model="handleProviderModelSelect"
           />
         </template>
@@ -120,7 +117,7 @@
         <template #toolbar-right>
           <ChatComposerActions
             :context-usage="composerContextUsage"
-            :is-incognito="props.isIncognito ?? false"
+            :is-incognito="isIncognito"
             :is-preparing-send="isPreparingSend"
             :is-loading="isLoading"
             :is-stopping="isStopping"
@@ -209,30 +206,35 @@ import {
 import { useSpeechInput } from '../composables/useSpeechInput';
 import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import { useRunStatus } from '../composables/useRunStatus';
+import { useThreadSessionStore } from '../store/thread_session';
+import { storeToRefs } from 'pinia';
+import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 import { useI18n } from '../i18n';
 import { getElectronAPI } from '../services/electron_api';
 
 const electronAPI = getElectronAPI();
 const { t } = useI18n();
+const threadSession = useThreadSessionStore();
+const {
+  currentThread,
+  isIncognito,
+  currentModel: threadModel,
+  currentProviderId,
+  currentReasoningEffort,
+  currentPersonality,
+} = storeToRefs(threadSession);
+
+// Plain chats have no workspace concept — the selector only makes sense for
+// work threads bound to a project folder.
+const isWorkThread = computed(() => resolveThreadWorkMode(currentThread.value) === 'work');
 const emit = defineEmits<{
-  (event: 'incognito-changed', value: boolean): void;
-  (event: 'model-selected', payload: { model: string; provider: Provider }): void;
   (event: 'new-chat-requested'): void;
   (event: 'clear-thread-requested'): void;
-  (event: 'workspace-changed', value: string | null): void;
-  (event: 'reasoning-effort-changed', value: string): void;
-  (event: 'personality-changed', value: string): void;
 }>();
 
 const props = defineProps<{
   threadId?: string;
-  activeModel?: string;
-  activeProviderId?: string | null;
-  isIncognito?: boolean;
-  selectedWorkspaceId?: string | null;
   workspaceLocked?: boolean;
-  reasoningEffort?: string;
-  personality?: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
   submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
@@ -338,13 +340,13 @@ const {
   message,
   inputRef,
   threadId: computed(() => props.threadId),
-  currentIncognito: computed(() => Boolean(props.isIncognito)),
-  currentPersonality: computed(() => props.personality ?? ''),
+  currentIncognito: isIncognito,
+  currentPersonality,
   selectedSkillIds,
   onRequestNewChat: () => emit('new-chat-requested'),
   onRequestClearThread: () => emit('clear-thread-requested'),
-  onRequestIncognitoChange: (nextValue: boolean) => emit('incognito-changed', nextValue),
-  onRequestPersonalityChange: (nextValue: string) => emit('personality-changed', nextValue),
+  onRequestIncognitoChange: (nextValue: boolean) => void threadSession.setIncognito(nextValue),
+  onRequestPersonalityChange: (nextValue: string) => void threadSession.setPersonality(nextValue),
   t,
 });
 
@@ -391,8 +393,8 @@ const {
   isAutoSkillMode,
   isAutonomousMode,
   autonomousMaxIterations,
-  reasoningEffort: computed(() => props.reasoningEffort ?? ''),
-  personality: computed(() => props.personality ?? ''),
+  reasoningEffort: currentReasoningEffort,
+  personality: currentPersonality,
   prepareFailedMessage: t('chat.input.prepareFailed'),
   stopFailedMessage: t('chat.input.stopFailed'),
   prepareMessageSend: props.prepareMessageSend,
@@ -526,8 +528,8 @@ const composerContextUsage = computed(() => {
 useChatComposerLifecycle({
   electronAPI,
   threadId: toRef(() => props.threadId),
-  activeModel: toRef(() => props.activeModel),
-  activeProviderId: toRef(() => props.activeProviderId),
+  activeModel: threadModel,
+  activeProviderId: currentProviderId,
   isBusy,
   loadAvailableProviders,
   syncPreferredModel,
@@ -538,16 +540,16 @@ useChatComposerLifecycle({
 const handleProviderModelSelect = (payload: { provider: Provider; model: string }) => {
   dismissComposerFeedback();
   selectProviderModel(payload);
-  emit('model-selected', payload);
+  threadSession.handleModelSelected(payload);
 };
 
 const handleWorkspaceChanged = (workspaceId: string | null) => {
   if (props.workspaceLocked) return;
-  emit('workspace-changed', workspaceId);
+  void threadSession.setWorkspace(workspaceId);
 };
 
 const handleReasoningEffortChanged = (effort: string) => {
-  emit('reasoning-effort-changed', effort);
+  void threadSession.setReasoningEffort(effort);
 };
 
 const handleComposerKeydown = (event: KeyboardEvent) => {
@@ -592,7 +594,7 @@ const handleSteer = async (message: string) => {
 
 const toggleIncognitoMode = () => {
   if (isBusy.value || isStopping.value) return;
-  emit('incognito-changed', !props.isIncognito);
+  void threadSession.setIncognito(!isIncognito.value);
 };
 
 defineExpose({

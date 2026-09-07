@@ -5,6 +5,7 @@ import * as chatThreadDb from '../db/chat_thread';
 import * as workspaceDb from '../db/workspaces';
 import type { Workspace } from '@iki/backend/types/chat';
 import { getUserDataPath } from '../platform';
+import { resolveThreadWorkMode } from './thread_mode';
 
 export type ThreadWorkspaceSelection = {
   threadId: string;
@@ -47,6 +48,11 @@ const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
     const existingWorkspace = workspaceDb.getWorkspace(configuredWorkspaceId);
     if (existingWorkspace) return existingWorkspace;
   }
+
+  // Chat/worktree-style threads have no project workspace: plain chats never
+  // get an auto-created scratch dir — filesystem/shell tools report that a
+  // workspace must be chosen instead.
+  if (!thread || resolveThreadWorkMode(thread) !== 'work') return null;
 
   const workspacePath = getThreadWorkspacePath(threadId);
   fs.mkdirSync(workspacePath, { recursive: true });

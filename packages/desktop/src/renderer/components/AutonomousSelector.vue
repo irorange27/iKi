@@ -1,15 +1,13 @@
 <template>
-  <div class="relative" @mouseenter="openPanel" @mouseleave="scheduleClosePanel">
+  <PopoverRoot v-model:open="showPanel">
+    <PopoverTrigger as-child>
     <button
-      class="composer-control-btn composer-selector-trigger ui-text-secondary relative flex h-10 w-10 items-center justify-center rounded-[14px]"
-      :class="{ 'ui-text-accent': isActive }"
+      class="composer-chip composer-chip--reveal"
+      :class="{ 'composer-chip--active': isActive }"
       :title="t('chat.autonomous.triggerTitle')"
       :aria-label="t('chat.autonomous.triggerTitle')"
-      @click="togglePanel"
-      @mouseenter="openPanel"
-      @mouseleave="scheduleClosePanel"
     >
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -17,14 +15,16 @@
           d="M13 10V3L4 14h7v7l9-11h-7z"
         />
       </svg>
-      <span v-if="isActive" class="selector-badge">A</span>
+      <span class="composer-chip-label">{{ t('chat.autonomous.chip') }}</span>
     </button>
+    </PopoverTrigger>
 
-    <div
-      v-if="showPanel"
+    <PopoverPortal>
+    <PopoverContent
       class="selector-panel"
-      @mouseenter="openPanel"
-      @mouseleave="scheduleClosePanel"
+      side="top"
+      align="start"
+      :side-offset="8"
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between">
@@ -86,15 +86,16 @@
           </button>
         </div>
       </div>
-    </div>
-  </div>
+    </PopoverContent>
+    </PopoverPortal>
+  </PopoverRoot>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import { useI18n } from '../i18n';
-import { useSelectorPanel } from '../composables/useSelectorPanel';
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
 
 const props = defineProps<{
   active: boolean;
@@ -108,7 +109,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const { isOpen: showPanel, openPanel, scheduleClosePanel, togglePanel } = useSelectorPanel();
+const showPanel = ref(false);
 
 const isActive = computed(() => props.active);
 

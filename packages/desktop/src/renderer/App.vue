@@ -127,7 +127,7 @@ html.companion-shell-mode .app-container {
   right: 0;
   height: 20px;
   -webkit-app-region: drag;
-  z-index: 9999;
+  z-index: var(--z-chrome);
 }
 
 /* 可交互元素需要排除拖拽 */

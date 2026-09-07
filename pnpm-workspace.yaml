@@ -15,3 +15,4 @@ allowBuilds:
   macos-alias: true
   protobufjs: false
   unrs-resolver: false
+  vue-demi: true

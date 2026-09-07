@@ -3,6 +3,7 @@
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { createPinia } from 'pinia';
 
 import type { Provider } from '@iki/backend/types/provider';
 import ChatComposerSelectors from '../../../packages/desktop/src/renderer/components/ChatComposerSelectors.vue';
@@ -19,27 +20,27 @@ const provider: Provider = {
   available_models: '[]',
 };
 
+// Workspace selection lives in the thread session store now, so the cluster
+// only forwards the locked flag; the store-connected internals are stubbed out.
 const WorkspaceSelectorStub = defineComponent({
   name: 'WorkspaceSelector',
   props: {
-    selectedWorkspaceId: {
-      type: String,
-      default: null,
-    },
     locked: {
       type: Boolean,
       default: false,
     },
   },
-  emits: ['update:selectedWorkspaceId'],
   template: `
-    <button
+    <div
       class="workspace-selector-stub"
-      :data-workspace-id="selectedWorkspaceId"
       :data-locked="String(locked)"
-      @click="$emit('update:selectedWorkspaceId', 'workspace_next')"
     />
   `,
+});
+
+const ReasoningSelectorStub = defineComponent({
+  name: 'ReasoningSelector',
+  template: `<div class="reasoning-selector-stub" />`,
 });
 
 const SkillSelectorStub = defineComponent({
@@ -129,8 +130,8 @@ const ChatModelSelectorStub = defineComponent({
 const mountComponent = () =>
   mount(ChatComposerSelectors, {
     props: {
-      selectedWorkspaceId: 'workspace_docs',
       workspaceLocked: true,
+      showWorkspace: true,
       selectedSkillIds: ['skill_repo'],
       skillMode: 'auto',
       selectedTools: ['search'],
@@ -141,8 +142,10 @@ const mountComponent = () =>
       selectedModel: 'gpt-4o',
     },
     global: {
+      plugins: [createPinia()],
       stubs: {
         WorkspaceSelector: WorkspaceSelectorStub,
+        ReasoningSelector: ReasoningSelectorStub,
         SkillSelector: SkillSelectorStub,
         ToolSelector: ToolSelectorStub,
         ChatModelSelector: ChatModelSelectorStub,
@@ -155,7 +158,6 @@ describe('ChatComposerSelectors', () => {
     const wrapper = mountComponent();
 
     const workspaceSelector = wrapper.find('.workspace-selector-stub');
-    expect(workspaceSelector.attributes('data-workspace-id')).toBe('workspace_docs');
     expect(workspaceSelector.attributes('data-locked')).toBe('true');
 
     const skillSelector = wrapper.find('.skill-selector-stub');
@@ -176,7 +178,6 @@ describe('ChatComposerSelectors', () => {
   it('re-emits child selector intent without owning the underlying state machine', async () => {
     const wrapper = mountComponent();
 
-    await wrapper.find('.workspace-selector-stub').trigger('click');
     await wrapper.find('.skill-ids-btn').trigger('click');
     await wrapper.find('.skill-mode-btn').trigger('click');
     await wrapper.find('.tools-btn').trigger('click');
@@ -184,7 +185,6 @@ describe('ChatComposerSelectors', () => {
     await wrapper.find('.tool-mode-btn').trigger('click');
     await wrapper.find('.chat-model-selector-stub').trigger('click');
 
-    expect(wrapper.emitted('update:selectedWorkspaceId')).toEqual([['workspace_next']]);
     expect(wrapper.emitted('update:selectedSkillIds')).toEqual([[['skill_docs']]]);
     expect(wrapper.emitted('update:skillMode')).toEqual([['manual']]);
     expect(wrapper.emitted('update:selectedTools')).toEqual([[['web']]]);

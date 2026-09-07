@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 
 import ToolSelector from '../../../packages/desktop/src/renderer/components/ToolSelector.vue';
 
@@ -12,16 +12,28 @@ const setElectronApi = (api: unknown) => {
   });
 };
 
+// Panel content renders through a reka body portal, so buttons may live
+// outside the mounted subtree — query the document and wrap for trigger().
 const findButtonByText = (wrapper: ReturnType<typeof mount>, text: string) => {
-  const match = wrapper
-    .findAll('button')
-    .find(button => button.text().replace(/\s+/g, ' ').includes(text));
+  const candidates: HTMLElement[] = [
+    ...Array.from(wrapper.element.querySelectorAll('button')),
+    ...Array.from(document.querySelectorAll('button')),
+  ];
+  const match = candidates.find(button =>
+    (button.textContent ?? '').replace(/\s+/g, ' ').includes(text)
+  );
 
   if (!match) {
     throw new Error(`Button not found: ${text}`);
   }
 
-  return match;
+  return new DOMWrapper(match);
+};
+
+const findInPortal = (selector: string) => {
+  const match = document.querySelector(selector);
+  if (!match) throw new Error(`Element not found in portal: ${selector}`);
+  return new DOMWrapper(match as Element);
 };
 
 describe('ToolSelector', () => {
@@ -60,6 +72,7 @@ describe('ToolSelector', () => {
   });
 
   afterEach(() => {
+    document.body.innerHTML = '';
     Reflect.deleteProperty(window, 'electronAPI');
   });
 
@@ -73,9 +86,11 @@ describe('ToolSelector', () => {
     });
 
     await flushPromises();
-    expect(wrapper.find('.composer-selector-trigger').attributes('title')).toBe('Choose tools');
-    await wrapper.find('.composer-selector-trigger').trigger('click');
+    expect(wrapper.find('.composer-chip').attributes('title')).toBe('Choose tools');
+    await wrapper.find('.composer-chip').trigger('click');
     await flushPromises();
+
+    console.log('DBG has-button:', document.body.innerHTML.includes('Web Search'), 'buttons:', document.querySelectorAll('button').length);
 
     await findButtonByText(wrapper, 'Web Search').trigger('click');
 
@@ -93,10 +108,10 @@ describe('ToolSelector', () => {
     });
 
     await flushPromises();
-    await wrapper.find('.composer-selector-trigger').trigger('click');
+    await wrapper.find('.composer-chip').trigger('click');
     await flushPromises();
 
-    await wrapper.find('.selector-section-toggle').trigger('click');
+    await findInPortal('.selector-section-toggle').trigger('click');
     await flushPromises();
     await findButtonByText(wrapper, 'Docs Server').trigger('click');
 
@@ -114,7 +129,7 @@ describe('ToolSelector', () => {
     });
 
     await flushPromises();
-    expect(autoWrapper.find('.composer-selector-trigger').attributes('title')).toBe('Tools: auto');
+    expect(autoWrapper.find('.composer-chip').attributes('title')).toBe('Tools: auto');
 
     const selectedWrapper = mount(ToolSelector, {
       props: {
@@ -125,7 +140,7 @@ describe('ToolSelector', () => {
     });
 
     await flushPromises();
-    expect(selectedWrapper.find('.composer-selector-trigger').attributes('title')).toBe(
+    expect(selectedWrapper.find('.composer-chip').attributes('title')).toBe(
       'Tools: 2 selected'
     );
   });

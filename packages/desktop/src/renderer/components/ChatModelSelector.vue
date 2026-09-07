@@ -347,7 +347,7 @@ onUnmounted(() => {
   position: absolute;
   left: 0;
   bottom: calc(100% + 10px);
-  z-index: 60;
+  z-index: var(--z-menu);
   width: min(380px, calc(100vw - 32px));
   overflow: hidden;
   border-radius: 16px;

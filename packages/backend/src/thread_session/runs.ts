@@ -8,6 +8,7 @@ import type {
   ReviewQueueItem,
 } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { buildRunTrajectory, type AtifTrajectory } from './atif_export';
 
 type ChatRunsDeps = {
   /** Aborts the active stream running a run id (owned by the stream coordinator). */
@@ -59,6 +60,13 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
   listReviewQueue: (limit?: number) => listReviewQueue(limit),
 
   getRunTrace: (runId: string) => agentRunDb.getAgentRunTrace(runId),
+
+  /** Structured ATIF trajectory (same data the file export writes, returned inline for UI rendering). */
+  getRunTrajectory: (runId: string): AtifTrajectory | null => {
+    const trace = agentRunDb.getAgentRunTrace(runId);
+    if (!trace) return null;
+    return buildRunTrajectory(trace.run, trace.steps);
+  },
 
   getRunTree: (rootRunId: string) => agentRunDb.getAgentRunTree(rootRunId),
 

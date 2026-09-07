@@ -1,24 +1,26 @@
 <template>
-  <Teleport to="body">
-    <div
-      v-if="dialog.visible.value"
-      class="confirm-dialog-backdrop"
-      @click.self="dialog.dismiss()"
-    >
-      <div
+  <DialogRoot
+    :open="dialog.visible.value"
+    @update:open="value => { if (!value) dialog.dismiss(); }"
+  >
+    <DialogPortal>
+      <DialogOverlay class="confirm-dialog-backdrop" />
+      <DialogContent
         class="confirm-dialog"
         role="alertdialog"
-        aria-modal="true"
         :aria-label="dialog.options.value?.title ?? dialog.options.value?.message"
+        :aria-describedby="undefined"
       >
-        <p v-if="dialog.options.value?.title" class="confirm-dialog-title ui-text-primary">
+        <DialogTitle v-if="dialog.options.value?.title" class="confirm-dialog-title ui-text-primary">
           {{ dialog.options.value.title }}
-        </p>
-        <p class="confirm-dialog-message">{{ dialog.options.value?.message }}</p>
+        </DialogTitle>
+        <DialogDescription class="confirm-dialog-message">{{ dialog.options.value?.message }}</DialogDescription>
         <div class="confirm-dialog-actions">
-          <button class="confirm-dialog-btn" type="button" @click="dialog.dismiss()">
-            {{ dialog.options.value?.cancelLabel ?? t('common.cancel') }}
-          </button>
+          <DialogClose as-child>
+            <button class="confirm-dialog-btn" type="button">
+              {{ dialog.options.value?.cancelLabel ?? t('common.cancel') }}
+            </button>
+          </DialogClose>
           <button
             class="confirm-dialog-btn confirm-dialog-btn-primary"
             :class="{ 'confirm-dialog-btn-danger': dialog.options.value?.danger }"
@@ -28,39 +30,27 @@
             {{ dialog.options.value?.confirmLabel ?? t('common.confirm') }}
           </button>
         </div>
-      </div>
-    </div>
-  </Teleport>
+      </DialogContent>
+    </DialogPortal>
+  </DialogRoot>
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, watch } from 'vue';
+import {
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogOverlay,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
+} from 'reka-ui';
 
 import { useI18n } from '../../i18n';
 import { useConfirmDialog } from '../../composables/useConfirm';
 
 const dialog = useConfirmDialog();
 const { t } = useI18n();
-
-const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') dialog.dismiss();
-};
-
-watch(
-  dialog.visible,
-  visible => {
-    if (visible) {
-      window.addEventListener('keydown', handleKeydown);
-    } else {
-      window.removeEventListener('keydown', handleKeydown);
-    }
-  },
-  { immediate: true }
-);
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown);
-});
 </script>
 
 <style scoped>
@@ -70,16 +60,17 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  z-index: var(--z-modal);
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
 }
 
 .confirm-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-modal);
   width: 100%;
   max-width: 380px;
   border: 1px solid var(--border-color);

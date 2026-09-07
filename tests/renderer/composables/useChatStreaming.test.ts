@@ -50,11 +50,11 @@ const createHarness = (options?: {
   const stream = vi.fn(async () => ({ success: true }));
   const stopStream = vi.fn(async () => ({ success: true }));
   const updateThread = vi.fn(async () => ({ success: true }));
-  const createNewThread = vi.fn(async (model?: string) => {
+  const createNewThread = vi.fn(async (options?: { model?: string }) => {
     const thread = createStoredThread({
       id: 'thread_new',
       title: 'New Chat',
-      model: model ?? currentModel.value,
+      model: options?.model ?? currentModel.value,
     });
     currentThread.value = thread;
     currentModel.value = thread.model ?? '';
@@ -265,7 +265,7 @@ describe('useChatStreaming', () => {
     });
     await flushMicrotasks();
 
-    expect(createNewThread).toHaveBeenCalledWith('gpt-4.1');
+    expect(createNewThread).toHaveBeenCalledWith({ model: 'gpt-4.1' });
     expect(selectedTools.value).toEqual(['web']);
     expect(showWelcome.value).toBe(false);
     expect(messageCreated).toHaveBeenCalledWith(

@@ -17,7 +17,7 @@
   right: 4px;
   height: 20px;
   -webkit-app-region: drag;
-  z-index: 9999;
+  z-index: var(--z-chrome);
 }
 
 ::-webkit-scrollbar {
@@ -193,9 +193,7 @@
 .theme-json-editor {
   min-height: 320px;
   line-height: 1.45;
-  font-family:
-    'SF Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, 'Liberation Mono',
-    monospace;
+  font-family: var(--font-mono);
 }
 
 .success-text {

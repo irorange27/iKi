@@ -34,7 +34,7 @@ import type {
 import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
-import type { AgentRun, AgentEvalComparison, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, RegressionAssessment, ReviewQueueItem } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, ReviewQueueItem } from '@iki/backend/types/agent_run';
 import type { CompanionSnapshot } from './companion';
 import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
 export type { ChatInvocationOptions, ChatInvocationResult };
@@ -191,6 +191,9 @@ export interface ElectronApi {
       create: (thread: ChatThreadInput) => Promise<ChatThread>;
       clear: (id: string, thread: ChatThreadInput) => Promise<ChatThread | null>;
       update: (id: string, thread: ChatThreadInput) => Promise<unknown>;
+      exportMarkdown: (
+        threadId: string
+      ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
       delete: (id: string) => Promise<unknown>;
     };
     messages: {
@@ -203,6 +206,7 @@ export interface ElectronApi {
     runs: {
       list: (threadId: string) => Promise<AgentRun[]>;
       getTrace: (runId: string) => Promise<AgentRunTrace | null>;
+      trajectory: (runId: string) => Promise<import('@iki/backend/types/atif').AtifTrajectory | null>;
       getTree: (rootRunId: string) => Promise<AgentRunTree>;
       cancel: (runId: string) => Promise<{ success: boolean; error?: string }>;
       retry: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
@@ -214,12 +218,10 @@ export interface ElectronApi {
         exportTrace: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
         exportRunTrajectory: (
           runId: string
-        ) => Promise<import('@iki/backend/thread_session/atif_export').AtifTrajectoryExportResult>;
+        ) => Promise<import('@iki/backend/types/atif').AtifTrajectoryExportResult>;
         addLabel: (input: { runId: string; stepId?: string | null; label: string; note?: string | null }) => Promise<AgentEvalLabel>;
         listLabels: (runId: string) => Promise<AgentEvalLabel[]>;
         deleteLabel: (labelId: string) => Promise<{ success: boolean }>;
-        compareRuns: (baselineRunId: string, testRunId: string) => Promise<AgentEvalComparison | null>;
-        assessRegression: (baselineRunId: string, testRunId: string) => Promise<RegressionAssessment | null>;
       };
     };
     usage: {
@@ -275,6 +277,9 @@ export interface ElectronApi {
       threadId: string,
       options?: { force?: boolean }
     ) => Promise<import('./worktree').ThreadWorktreeRemovalResult>;
+    mergeThreadWorktree: (
+      threadId: string
+    ) => Promise<import('./worktree').ThreadWorktreeMergeResult>;
   };
   promptApps: {
     list: () => Promise<PromptApp[]>;

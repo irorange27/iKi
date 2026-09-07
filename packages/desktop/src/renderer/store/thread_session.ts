@@ -1,4 +1,6 @@
+import { defineStore } from 'pinia';
 import { ref, watch, type Ref } from 'vue';
+
 import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
 
 import { toUiMessages } from '../modules/chat/ui_message_convert';
@@ -17,6 +19,7 @@ import {
   parseThreadLlmSelectionState,
 } from '@iki/backend/chat/thread_runtime_hints';
 import { normalizePersonality } from '@iki/backend/chat/personality';
+import type { ThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 
 export type ChatThread = StoredChatThread;
 
@@ -30,9 +33,26 @@ type DraftComposerSelection = {
   providerId: string | null;
 };
 
+/**
+ * Non-serializable runtime collaborators, injected once by the chat view.
+ * Everything else lives in pinia state so composer components can read/write
+ * thread-scoped preferences directly instead of prop-drilling through
+ * ChatView -> ChatInput -> selectors.
+ */
+type ThreadSessionRuntime = {
+  electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
+  messageStore: ChatMessageStore;
+  persistence: UiMessagePersistence;
+  sidebarRef: Ref<SidebarController | null>;
+  scrollToBottom: () => void;
+  preferredDraftModel?: Pick<Ref<string | null | undefined>, 'value'>;
+  preferredDraftProviderId?: Pick<Ref<string | null | undefined>, 'value'>;
+  persistDraftModelSelection?: (selection: DraftComposerSelection) => Promise<void> | void;
+};
+
 const TITLE_REGEN_INTERVAL = 2;
-const chatThreadsLogger = createLogger({ module: 'chat_threads' });
-  const TITLE_FORCE_REGEN_LIMIT = 5;
+const TITLE_FORCE_REGEN_LIMIT = 5;
+const threadSessionLogger = createLogger({ module: 'thread_session_store' });
 const DEFAULT_THREAD_TITLES = new Set([
   translateWithLocale('en', 'chat.thread.newTitle'),
   translateWithLocale('zh-CN', 'chat.thread.newTitle'),
@@ -55,34 +75,55 @@ const normalizeProviderId = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-export const useChatThreads = (deps: {
-  electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
-  messageStore: ChatMessageStore;
-  persistence: UiMessagePersistence;
-  sidebarRef: Ref<SidebarController | null>;
-  scrollToBottom: () => void;
-  preferredDraftModel?: Pick<Ref<string | null | undefined>, 'value'>;
-  preferredDraftProviderId?: Pick<Ref<string | null | undefined>, 'value'>;
-  persistDraftModelSelection?: (selection: DraftComposerSelection) => Promise<void> | void;
-}) => {
-  const readPreferredDraftSelection = (): DraftComposerSelection => ({
-    model: normalizeModelId(deps.preferredDraftModel?.value),
-    providerId: normalizeProviderId(deps.preferredDraftProviderId?.value),
-  });
-
+export const useThreadSessionStore = defineStore('threadSession', () => {
+  // ── State ────────────────────────────────────────────────────────────
   const currentThread = ref<ChatThread | null>(null);
-  const currentModel = ref<string>(readPreferredDraftSelection().model);
-  const currentProviderId = ref<string | null>(readPreferredDraftSelection().providerId);
-  const currentReasoningEffort = ref<string>('');
-  const currentPersonality = ref<string>('');
+  const currentModel = ref('');
+  const currentProviderId = ref<string | null>(null);
+  const currentReasoningEffort = ref('');
+  const currentPersonality = ref('');
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
   const selectedTools = ref<string[]>([]);
-  const WELCOME_SEEN_KEY = 'iki-welcome-seen';
-  const showWelcome = ref(!localStorage.getItem(WELCOME_SEEN_KEY));
+  const showWelcome = ref(!localStorage.getItem('iki-welcome-seen'));
+
+  // ── Runtime (injected once) ─────────────────────────────────────────
+  let runtime: ThreadSessionRuntime | null = null;
+  const initRuntime = (deps: ThreadSessionRuntime) => {
+    runtime = deps;
+    // Registered here (not in setup) because the watched sources live on the
+    // injected refs; a plain closure variable is not reactive on its own.
+    watch(
+      () =>
+        [
+          deps.preferredDraftModel?.value,
+          deps.preferredDraftProviderId?.value,
+          currentThread.value?.id ?? null,
+        ] as const,
+      ([, , activeThreadId]) => {
+        if (activeThreadId) return;
+        restoreDraftComposerSelection();
+      },
+      { immediate: true }
+    );
+  };
+
+  const requireRuntime = (): ThreadSessionRuntime => {
+    if (!runtime) {
+      throw new Error('Thread session runtime not initialized; call initRuntime first.');
+    }
+    return runtime;
+  };
+
+  // ── Draft selection helpers ─────────────────────────────────────────
+  const readPreferredDraftSelection = (): DraftComposerSelection => ({
+    model: normalizeModelId(runtime?.preferredDraftModel?.value),
+    providerId: normalizeProviderId(runtime?.preferredDraftProviderId?.value),
+  });
+
   const dismissWelcome = () => {
     showWelcome.value = false;
-    localStorage.setItem(WELCOME_SEEN_KEY, '1');
+    localStorage.setItem('iki-welcome-seen', '1');
   };
 
   const getCurrentThreadId = () => currentThread.value?.id || null;
@@ -118,15 +159,15 @@ export const useChatThreads = (deps: {
   };
 
   const persistDraftComposerSelection = async (selection: DraftComposerSelection) => {
-    if (!deps.persistDraftModelSelection) return;
+    if (!runtime?.persistDraftModelSelection) return;
 
     try {
-      await deps.persistDraftModelSelection({
+      await runtime.persistDraftModelSelection({
         model: normalizeModelId(selection.model),
         providerId: normalizeProviderId(selection.providerId),
       });
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'warn',
         event: 'chat.composer_selection.persist',
         outcome: 'failed',
@@ -138,8 +179,8 @@ export const useChatThreads = (deps: {
   watch(
     () =>
       [
-        deps.preferredDraftModel?.value,
-        deps.preferredDraftProviderId?.value,
+        runtime?.preferredDraftModel?.value,
+        runtime?.preferredDraftProviderId?.value,
         currentThread.value?.id ?? null,
       ] as const,
     ([, , activeThreadId]) => {
@@ -150,8 +191,8 @@ export const useChatThreads = (deps: {
   );
 
   const refreshThreads = async () => {
-    if (deps.sidebarRef.value?.refresh) {
-      await deps.sidebarRef.value.refresh();
+    if (runtime?.sidebarRef.value?.refresh) {
+      await runtime.sidebarRef.value.refresh();
     }
   };
 
@@ -178,17 +219,18 @@ export const useChatThreads = (deps: {
   });
 
   const updateThreadTitle = async (title: string) => {
+    const { electronAPI } = requireRuntime();
     if (!currentThread.value) return;
     if (currentThread.value.title === title) return;
 
     try {
-      await deps.electronAPI.chat.threads.update(currentThread.value.id, { title });
+      await electronAPI.chat.threads.update(currentThread.value.id, { title });
       if (currentThread.value) {
         currentThread.value.title = title;
       }
       await refreshThreads();
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.title_update',
         outcome: 'failed',
@@ -201,6 +243,7 @@ export const useChatThreads = (deps: {
   };
 
   const updateThreadTitleById = async (threadId: string, title: string) => {
+    const { electronAPI } = requireRuntime();
     if (!threadId || !title.trim()) return;
 
     if (currentThread.value?.id === threadId) {
@@ -209,10 +252,10 @@ export const useChatThreads = (deps: {
     }
 
     try {
-      await deps.electronAPI.chat.threads.update(threadId, { title });
+      await electronAPI.chat.threads.update(threadId, { title });
       await refreshThreads();
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.title_update',
         outcome: 'failed',
@@ -268,16 +311,17 @@ export const useChatThreads = (deps: {
   };
 
   const generateThreadTitle = async (messages: ChatUiMessage[]): Promise<string | null> => {
+    const { electronAPI } = requireRuntime();
     try {
       const conversationContent = getConversationContentForTitle(messages);
       if (!conversationContent.trim()) {
         return getFallbackThreadTitle(messages);
       }
 
-      const title = await deps.electronAPI.toolModel.generateTitle(conversationContent);
+      const title = await electronAPI.toolModel.generateTitle(conversationContent);
       return title || getFallbackThreadTitle(messages);
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.title_generate',
         outcome: 'failed',
@@ -304,18 +348,27 @@ export const useChatThreads = (deps: {
     }
   };
 
-  const createNewThread = async (model?: string) => {
+  const createNewThread = async (options?: {
+    model?: string;
+    mode?: ThreadWorkMode;
+    workspaceId?: string | null;
+  }) => {
+    const { electronAPI, messageStore, persistence, sidebarRef } = requireRuntime();
+    const mode: ThreadWorkMode = options?.mode === 'work' ? 'work' : 'chat';
+    const model = options?.model;
     try {
       const draftProviderId = currentProviderId.value;
       const draftEffort = currentReasoningEffort.value;
       const draftPersonality = currentPersonality.value;
-      const thread = await deps.electronAPI.chat.threads.create({
+      const metadata: Record<string, unknown> = { mode };
+      if (draftPersonality) metadata.personality = draftPersonality;
+      const thread = await electronAPI.chat.threads.create({
         title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
         model: model || null,
         reasoning_effort: draftEffort || null,
-        metadata: JSON.stringify(draftPersonality ? { personality: draftPersonality } : {}),
+        metadata: JSON.stringify(metadata),
         is_incognito: isIncognito.value ? 1 : 0,
-        workspace_id: selectedWorkspaceId.value,
+        workspace_id: mode === 'work' ? options?.workspaceId ?? null : null,
       });
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
@@ -327,21 +380,21 @@ export const useChatThreads = (deps: {
       syncWorkspaceState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
-      deps.messageStore.clear();
-      deps.persistence.resetPersistedMessageIds();
+      messageStore.clear();
+      persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
       showWelcome.value = false;
 
-      if (deps.sidebarRef.value?.refresh) {
-        await deps.sidebarRef.value.refresh();
+      if (sidebarRef.value?.refresh) {
+        await sidebarRef.value.refresh();
       }
-      if (deps.sidebarRef.value?.setCurrentThread) {
-        deps.sidebarRef.value.setCurrentThread(thread.id);
+      if (sidebarRef.value?.setCurrentThread) {
+        sidebarRef.value.setCurrentThread(thread.id);
       }
 
       return thread;
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.create',
         outcome: 'failed',
@@ -352,8 +405,9 @@ export const useChatThreads = (deps: {
   };
 
   const loadThreadMessages = async (threadId: string) => {
+    const { electronAPI, messageStore, persistence, scrollToBottom } = requireRuntime();
     try {
-      const dbMessages = await deps.electronAPI.chat.messages.list(threadId);
+      const dbMessages = await electronAPI.chat.messages.list(threadId);
 
       // Discard if the active thread changed while loading
       if (currentThread.value?.id !== threadId) return;
@@ -367,14 +421,14 @@ export const useChatThreads = (deps: {
               typeof message.message === 'string'
           )
         : [];
-      deps.persistence.resetPersistedMessageIds(rows.map(row => row.id));
+      persistence.resetPersistedMessageIds(rows.map(row => row.id));
 
       const chatMessages = rows.map(row => parseStoredUiMessage(row));
-      deps.messageStore.setAll(chatMessages);
+      messageStore.setAll(chatMessages);
       resetToolUiStateMap();
-      deps.scrollToBottom();
+      scrollToBottom();
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.messages_load',
         outcome: 'failed',
@@ -387,14 +441,15 @@ export const useChatThreads = (deps: {
   };
 
   const selectThread = async (threadId: string) => {
+    const { electronAPI, sidebarRef } = requireRuntime();
     try {
       if (currentThread.value?.id === threadId) {
         return;
       }
 
-      const thread = await deps.electronAPI.chat.threads.get(threadId);
+      const thread = await electronAPI.chat.threads.get(threadId);
       if (!thread) {
-        chatThreadsLogger.event({
+        threadSessionLogger.event({
           level: 'warn',
           event: 'chat.thread.select',
           outcome: 'skipped',
@@ -416,11 +471,11 @@ export const useChatThreads = (deps: {
       showWelcome.value = false;
       await loadThreadMessages(threadId);
 
-      if (deps.sidebarRef.value?.setCurrentThread) {
-        deps.sidebarRef.value.setCurrentThread(threadId);
+      if (sidebarRef.value?.setCurrentThread) {
+        sidebarRef.value.setCurrentThread(threadId);
       }
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.select',
         outcome: 'failed',
@@ -433,6 +488,7 @@ export const useChatThreads = (deps: {
   };
 
   const handleThreadDeleted = async (threadId: string) => {
+    const { messageStore, persistence, sidebarRef } = requireRuntime();
     if (currentThread.value?.id !== threadId) return;
 
     currentThread.value = null;
@@ -440,27 +496,28 @@ export const useChatThreads = (deps: {
     currentReasoningEffort.value = '';
     currentPersonality.value = '';
     selectedWorkspaceId.value = null;
-    deps.messageStore.clear();
-    deps.persistence.resetPersistedMessageIds();
+    messageStore.clear();
+    persistence.resetPersistedMessageIds();
     resetToolUiStateMap();
     showWelcome.value = true;
     restoreDraftComposerSelection();
 
-    if (deps.sidebarRef.value?.setCurrentThread) {
-      deps.sidebarRef.value.setCurrentThread(null);
+    if (sidebarRef.value?.setCurrentThread) {
+      sidebarRef.value.setCurrentThread(null);
     }
   };
 
   const handleNewChat = async () => {
-    await createNewThread(currentModel.value);
+    await createNewThread({ model: currentModel.value, mode: 'chat' });
   };
 
   const clearCurrentThread = async () => {
+    const { electronAPI, messageStore, persistence, sidebarRef } = requireRuntime();
     const activeThread = currentThread.value;
     if (!activeThread) return null;
 
     try {
-      const recreatedThread = await deps.electronAPI.chat.threads.clear(
+      const recreatedThread = await electronAPI.chat.threads.clear(
         activeThread.id,
         buildClearedThreadInput(activeThread)
       );
@@ -476,19 +533,19 @@ export const useChatThreads = (deps: {
       syncWorkspaceState(recreatedThread);
       syncReasoningEffortState(recreatedThread);
       syncPersonalityState(recreatedThread);
-      deps.messageStore.clear();
-      deps.persistence.resetPersistedMessageIds();
+      messageStore.clear();
+      persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
       showWelcome.value = false;
 
       await refreshThreads();
-      if (deps.sidebarRef.value?.setCurrentThread) {
-        deps.sidebarRef.value.setCurrentThread(recreatedThread.id);
+      if (sidebarRef.value?.setCurrentThread) {
+        sidebarRef.value.setCurrentThread(recreatedThread.id);
       }
 
       return recreatedThread;
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.clear',
         outcome: 'failed',
@@ -517,6 +574,7 @@ export const useChatThreads = (deps: {
       const llm = isObjectRecord(metadata.llm) ? metadata.llm : {};
       const previousMetadata = currentThread.value.metadata;
       const previousThreadModel = currentThread.value.model;
+      const threadId = currentThread.value.id;
       const updatedMetadata = {
         ...metadata,
         llm: {
@@ -528,15 +586,14 @@ export const useChatThreads = (deps: {
         },
       };
       const nextMetadata = JSON.stringify(updatedMetadata);
-      const threadId = currentThread.value.id;
       currentThread.value = { ...currentThread.value, metadata: nextMetadata, model: data.model };
-      void deps.electronAPI.chat.threads
-        .update(threadId, {
+      void requireRuntime()
+        .electronAPI.chat.threads.update(threadId, {
           model: data.model,
           metadata: nextMetadata,
         })
         .catch(error => {
-          chatThreadsLogger.event({
+          threadSessionLogger.event({
             level: 'warn',
             event: 'chat.thread.model_selection_update',
             outcome: 'failed',
@@ -556,7 +613,11 @@ export const useChatThreads = (deps: {
           }
           if (currentThread.value?.id === threadId) {
             if (currentThread.value.model === data.model) {
-              currentThread.value = { ...currentThread.value, metadata: previousMetadata, model: previousThreadModel };
+              currentThread.value = {
+                ...currentThread.value,
+                metadata: previousMetadata,
+                model: previousThreadModel,
+              };
             }
           }
         });
@@ -574,13 +635,14 @@ export const useChatThreads = (deps: {
     }
 
     if (!activeThread) return;
+    const { electronAPI } = requireRuntime();
 
     try {
-      await deps.electronAPI.chat.threads.update(activeThread.id, {
+      await electronAPI.chat.threads.update(activeThread.id, {
         is_incognito: normalizedValue ? 1 : 0,
       });
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'error',
         event: 'chat.thread.incognito_update',
         outcome: 'failed',
@@ -607,14 +669,15 @@ export const useChatThreads = (deps: {
     }
 
     if (!activeThread) return;
+    const { electronAPI } = requireRuntime();
 
     try {
-      await deps.electronAPI.chat.threads.update(activeThread.id, {
+      await electronAPI.chat.threads.update(activeThread.id, {
         workspace_id: normalizedValue,
       });
     } catch (error) {
-      chatThreadsLogger.event({
-        level: 'error',
+      threadSessionLogger.event({
+        level: 'warn',
         event: 'chat.thread.workspace_update',
         outcome: 'failed',
         error,
@@ -645,13 +708,14 @@ export const useChatThreads = (deps: {
     }
 
     if (!activeThread) return;
+    const { electronAPI } = requireRuntime();
 
     try {
-      await deps.electronAPI.chat.threads.update(activeThread.id, {
+      await electronAPI.chat.threads.update(activeThread.id, {
         reasoning_effort: normalizedValue || null,
       });
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'warn',
         event: 'chat.thread.reasoning_effort_update',
         outcome: 'failed',
@@ -674,6 +738,7 @@ export const useChatThreads = (deps: {
     const normalizedValue = normalizePersonality(nextValue) ?? '';
     const activeThread = currentThread.value;
     if (!activeThread || currentPersonality.value === normalizedValue) return;
+    const { electronAPI } = requireRuntime();
 
     const metadata = parseJsonRecord(activeThread.metadata);
     const previousMetadata = activeThread.metadata;
@@ -683,9 +748,9 @@ export const useChatThreads = (deps: {
     currentThread.value = { ...activeThread, metadata: nextMetadata };
 
     try {
-      await deps.electronAPI.chat.threads.update(activeThread.id, { metadata: nextMetadata });
+      await electronAPI.chat.threads.update(activeThread.id, { metadata: nextMetadata });
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'warn',
         event: 'chat.thread.personality_update',
         outcome: 'failed',
@@ -702,12 +767,13 @@ export const useChatThreads = (deps: {
   };
 
   const ensureWorkspaceForCurrentThread = async () => {
+    const { electronAPI } = requireRuntime();
     const activeThread = currentThread.value;
     if (!activeThread) return null;
     if (normalizeWorkspaceId(activeThread.workspace_id)) return activeThread;
 
     try {
-      const refreshedThread = await deps.electronAPI.chat.threads.get(activeThread.id);
+      const refreshedThread = await electronAPI.chat.threads.get(activeThread.id);
       if (!refreshedThread) return activeThread;
 
       currentThread.value = refreshedThread;
@@ -715,9 +781,11 @@ export const useChatThreads = (deps: {
       syncProviderState(refreshedThread);
       syncIncognitoState(refreshedThread);
       syncWorkspaceState(refreshedThread);
+      syncReasoningEffortState(refreshedThread);
+      syncPersonalityState(refreshedThread);
       return refreshedThread;
     } catch (error) {
-      chatThreadsLogger.event({
+      threadSessionLogger.event({
         level: 'warn',
         event: 'chat.thread.workspace_refresh',
         outcome: 'failed',
@@ -730,15 +798,8 @@ export const useChatThreads = (deps: {
     }
   };
 
-  const handleTaskPush = async (payload: unknown) => {
-    await handleThreadResultPush(payload, 'task-result');
-  };
-
-  const handleAwaiterPush = async (payload: unknown) => {
-    await handleThreadResultPush(payload, 'awaiter-result');
-  };
-
   const handleThreadResultPush = async (payload: unknown, expectedType: string) => {
+    const { messageStore, scrollToBottom } = requireRuntime();
     if (!isObjectRecord(payload)) return;
     if (payload.type !== expectedType) return;
     const threadId = typeof payload.threadId === 'string' ? payload.threadId : '';
@@ -755,7 +816,7 @@ export const useChatThreads = (deps: {
 
     const messageId =
       typeof (message as { id?: unknown }).id === 'string' ? (message as { id: string }).id : '';
-    if (messageId && deps.messageStore.hasId(messageId)) return;
+    if (messageId && messageStore.hasId(messageId)) return;
 
     const [normalizedMessage] = toUiMessages([message]);
     if (!normalizedMessage) {
@@ -764,12 +825,21 @@ export const useChatThreads = (deps: {
       return;
     }
 
-    deps.messageStore.append(normalizedMessage);
-    deps.scrollToBottom();
+    messageStore.append(normalizedMessage);
+    scrollToBottom();
     void refreshThreads();
   };
 
+  const handleTaskPush = async (payload: unknown) => {
+    await handleThreadResultPush(payload, 'task-result');
+  };
+
+  const handleAwaiterPush = async (payload: unknown) => {
+    await handleThreadResultPush(payload, 'awaiter-result');
+  };
+
   return {
+    // state
     currentThread,
     currentModel,
     currentProviderId,
@@ -779,6 +849,9 @@ export const useChatThreads = (deps: {
     selectedWorkspaceId,
     selectedTools,
     showWelcome,
+    // runtime
+    initRuntime,
+    // actions
     dismissWelcome,
     getCurrentThreadId,
     refreshThreads,
@@ -799,4 +872,4 @@ export const useChatThreads = (deps: {
     handleTaskPush,
     handleAwaiterPush,
   };
-};
+});

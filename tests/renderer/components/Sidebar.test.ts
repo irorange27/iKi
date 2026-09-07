@@ -85,6 +85,7 @@ describe('Sidebar', () => {
 
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
+    localStorage.clear();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
   });
@@ -183,7 +184,7 @@ describe('Sidebar', () => {
 
     expect(queryMenu()).toBeNull();
 
-    await wrapper.find('.sidebar-menu-anchor').trigger('mouseenter');
+    await wrapper.find('.sidebar-menu-btn').trigger('click');
     await flushPromises();
 
     expect(queryMenu()).not.toBeNull();
@@ -248,8 +249,11 @@ describe('Sidebar', () => {
       ],
     });
 
-    const searchButton = wrapper.findAll('.sidebar-tool-btn')[1];
-    await searchButton.trigger('click');
+    const searchButton = wrapper
+      .findAll('.sidebar-action-item')
+      .find(button => button.text() === 'Search');
+    expect(searchButton).toBeDefined();
+    await searchButton!.trigger('click');
 
     const input = wrapper.find('.sidebar-search-input');
     expect(input.exists()).toBe(true);
@@ -280,7 +284,10 @@ describe('Sidebar', () => {
       ],
     });
 
-    await wrapper.findAll('.sidebar-tool-btn')[1].trigger('click');
+    const searchAction = wrapper
+      .findAll('.sidebar-action-item')
+      .find(button => button.text() === 'Search');
+    await searchAction!.trigger('click');
     await wrapper.find('.sidebar-search-input').setValue('hidden-query');
     expect(wrapper.findAll('.chat-item')).toHaveLength(0);
 
@@ -328,6 +335,11 @@ describe('Sidebar', () => {
       ],
     });
 
+    const projectsTab = wrapper
+      .findAll('.sidebar-group-tab')
+      .find(button => button.text().includes('Projects'));
+    await projectsTab!.trigger('click');
+
     const headers = wrapper.findAll('.sidebar-section-toggle');
     expect(headers.map(header => header.find('.sidebar-section-toggle-lead').text())).toEqual([
       'Alpha',
@@ -337,17 +349,83 @@ describe('Sidebar', () => {
       'true',
       'true',
     ]);
-    expect(wrapper.findAll('.chat-item')).toHaveLength(4);
-    expect(wrapper.text()).toContain('Loose thread');
+    // Projects view hides plain chats — loose threads live in the recent view.
+    expect(wrapper.findAll('.chat-item')).toHaveLength(3);
+    expect(wrapper.text()).not.toContain('Loose thread');
 
     await headers[1]!.trigger('click');
     const itemsAfterCollapse = wrapper.findAll('.chat-item');
-    expect(itemsAfterCollapse).toHaveLength(2);
+    expect(itemsAfterCollapse).toHaveLength(1);
     expect(wrapper.text()).not.toContain('iKi fix sidebar');
 
     const collapsedHeader = wrapper.findAll('.sidebar-section-toggle')[1]!;
     expect(collapsedHeader.attributes('aria-expanded')).toBe('false');
     await collapsedHeader.trigger('click');
-    expect(wrapper.findAll('.chat-item')).toHaveLength(4);
+    expect(wrapper.findAll('.chat-item')).toHaveLength(3);
+  });
+
+  it('shows relative timestamps and caps the default list with a show-more toggle', async () => {
+    const now = Date.now();
+    const threads = Array.from({ length: 12 }, (_, index) => ({
+      id: `thread_${index}`,
+      title: `Thread ${index}`,
+      updated_at: new Date(now - index * 60_000).toISOString(),
+      metadata: '{}',
+    }));
+
+    const { wrapper } = await mountSidebar({ threads });
+
+    expect(wrapper.findAll('.chat-item-time')).toHaveLength(10);
+    expect(wrapper.text()).toContain('Just now');
+    expect(wrapper.text()).toContain('1m ago');
+
+    const showMore = wrapper.find('.sidebar-show-more');
+    expect(showMore.text()).toBe('Show more (2)');
+
+    await showMore.trigger('click');
+    expect(wrapper.findAll('.chat-item')).toHaveLength(12);
+    expect(wrapper.find('.sidebar-show-more').text()).toBe('Show less');
+  });
+
+  it('switches between the recent flat list and the projects-only view', async () => {
+    const workThread = {
+      id: 'thread_work',
+      title: 'Work thread',
+      updated_at: '2026-03-22T00:00:00.000Z',
+      workspace_id: 'ws_iki',
+      metadata: '{"mode":"work"}',
+    };
+    const chatThread = {
+      id: 'thread_chat',
+      title: 'Plain chat',
+      updated_at: '2026-03-22T00:00:00.000Z',
+      metadata: '{}',
+    };
+
+    const { wrapper } = await mountSidebar({
+      threads: [workThread, chatThread],
+      workspaces: [{ id: 'ws_iki', name: 'iKi', path: '/dev/iki', is_temporary: 0 }],
+    });
+
+    // Default recent mode: everything flat, no project headers.
+    expect(wrapper.findAll('.chat-item')).toHaveLength(2);
+    expect(wrapper.find('.sidebar-section-toggle').exists()).toBe(false);
+
+    const projectsTab = wrapper
+      .findAll('.sidebar-group-tab')
+      .find(button => button.text().includes('Projects'));
+    expect(projectsTab).toBeDefined();
+    await projectsTab!.trigger('click');
+
+    // Projects mode: work thread grouped under iKi, plain chat hidden.
+    expect(wrapper.findAll('.sidebar-section-toggle')).toHaveLength(1);
+    expect(wrapper.text()).toContain('Work thread');
+    expect(wrapper.text()).not.toContain('Plain chat');
+
+    const recentTab = wrapper
+      .findAll('.sidebar-group-tab')
+      .find(button => button.text().includes('Recent'));
+    await recentTab!.trigger('click');
+    expect(wrapper.findAll('.chat-item')).toHaveLength(2);
   });
 });

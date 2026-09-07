@@ -75,109 +75,24 @@
           >
             {{ t('chat.eval.export') }}
           </button>
-          <button
-            v-if="baselineRunId !== run.id"
-            class="run-action-btn run-action-baseline"
-            @click="baselineRunId = run.id"
-          >
-            {{ t('chat.eval.selectBaseline') }}
-          </button>
-          <button
-            v-if="baselineRunId && baselineRunId !== run.id"
-            class="run-action-btn run-action-compare"
-            @click="handleCompare(baselineRunId, run.id)"
-          >
-            {{ t('chat.eval.compare') }}
-          </button>
         </div>
 
-        <!-- Expanded detail: steps + labels -->
-        <div v-if="expandedRunId === run.id" class="run-detail">
-          <div v-if="detailLoading" class="run-detail-loading ui-text-muted">
-            {{ t('chat.runs.loading') }}
-          </div>
-          <div
-            v-for="step in detailSteps"
-            :key="step.id"
-            class="run-detail-step"
-          >
-            <div class="step-header">
-              <span class="step-index">#{{ step.stepIndex }}</span>
-              <span class="step-type">{{ step.type }}</span>
-              <span class="step-status" :class="`step-status--${step.status}`">{{ step.status }}</span>
-            </div>
-            <div class="step-summary">{{ step.summary }}</div>
-
-            <!-- Labels for this step -->
-            <div class="step-labels">
-              <span
-                v-for="label in getStepLabels(step.stepIndex)"
-                :key="label.id"
-                class="step-label-chip"
-                :class="`label-chip--${label.label}`"
-              >
-                {{ t(`chat.eval.label.${label.label}`) }}
-                <button
-                  class="label-chip-delete"
-                  @click="handleDeleteLabel(label.id)"
-                >&times;</button>
-              </span>
-            </div>
-
-            <!-- Label buttons -->
-            <div class="step-label-actions">
-              <button
-                class="step-label-btn"
-                :class="{ active: hasLabel(step.stepIndex, 'correct') }"
-                @click="handleLabel(run.id, step.id, step.stepIndex, 'correct')"
-              >{{ t('chat.eval.label.correct') }}</button>
-              <button
-                class="step-label-btn"
-                :class="{ active: hasLabel(step.stepIndex, 'incorrect') }"
-                @click="handleLabel(run.id, step.id, step.stepIndex, 'incorrect')"
-              >{{ t('chat.eval.label.incorrect') }}</button>
-              <button
-                class="step-label-btn"
-                :class="{ active: hasLabel(step.stepIndex, 'partial') }"
-                @click="handleLabel(run.id, step.id, step.stepIndex, 'partial')"
-              >{{ t('chat.eval.label.partial') }}</button>
-            </div>
-
-            <!-- Note input -->
-            <textarea
-              v-if="noteInputs[step.stepIndex] !== undefined || getStepLabels(step.stepIndex).some(l => l.label === 'note')"
-              class="step-note-input"
-              :placeholder="t('chat.eval.label.note')"
-              :value="noteInputs[step.stepIndex] ?? getStepLabels(step.stepIndex).find(l => l.label === 'note')?.note ?? ''"
-              @input="handleNoteInput(step.stepIndex, ($event.target as HTMLTextAreaElement).value)"
-              @blur="handleNoteBlur(run.id, step.id, step.stepIndex)"
-              rows="2"
-            />
-            <button
-              v-else
-              class="step-note-toggle"
-              @click="noteInputs[step.stepIndex] = ''"
-            >+ {{ t('chat.eval.label.note') }}</button>
-          </div>
-        </div>
+        <!-- Expanded detail: full ATIF trajectory + eval labels -->
+        <RunTraceDetail
+          v-if="expandedRunId === run.id"
+          :run="run"
+          :electronAPI="electronAPI"
+        />
       </div>
     </div>
-
-    <!-- Comparison modal -->
-    <RunCompareView
-      v-if="comparisonData"
-      :comparison="comparisonData"
-      :t="t"
-      @close="comparisonData = null"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
-import type { AgentEvalComparison, AgentEvalLabel, AgentEvalLabelType, AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
+import { onMounted, ref, watch } from 'vue';
+import type { AgentRun } from '@iki/backend/types/agent_run';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
-import RunCompareView from './RunCompareView.vue';
+import RunTraceDetail from './run/RunTraceDetail.vue';
 
 const props = defineProps<{
   visible: boolean;
@@ -194,13 +109,6 @@ const loading = ref(false);
 const actionLoading = ref<string | null>(null);
 
 const expandedRunId = ref<string | null>(null);
-const detailSteps = ref<AgentRunStep[]>([]);
-const detailLoading = ref(false);
-const detailLabels = ref<AgentEvalLabel[]>([]);
-
-const baselineRunId = ref<string | null>(null);
-const comparisonData = ref<AgentEvalComparison | null>(null);
-const noteInputs = reactive<Record<number, string>>({});
 
 const loadRuns = async () => {
   if (!props.threadId) {
@@ -218,116 +126,13 @@ const loadRuns = async () => {
   }
 };
 
-const loadTrace = async (runId: string) => {
-  detailLoading.value = true;
-  try {
-    const trace = await props.electronAPI.chat.runs.getTrace(runId);
-    detailSteps.value = trace?.steps ?? [];
-    const labels = await props.electronAPI.chat.runs.eval.listLabels(runId);
-    detailLabels.value = labels;
-  } catch {
-    detailSteps.value = [];
-    detailLabels.value = [];
-  } finally {
-    detailLoading.value = false;
-  }
-};
-
-const toggleDetail = async (runId: string) => {
-  if (expandedRunId.value === runId) {
-    expandedRunId.value = null;
-  } else {
-    expandedRunId.value = runId;
-    await loadTrace(runId);
-  }
-};
-
-const getStepLabels = (stepIndex: number): AgentEvalLabel[] => {
-  const steps = detailSteps.value;
-  const step = steps.find(s => s.stepIndex === stepIndex);
-  if (!step) return [];
-  return detailLabels.value.filter(l => l.stepId === step.id || l.stepId === null);
-};
-
-const hasLabel = (stepIndex: number, labelType: AgentEvalLabelType): boolean => {
-  return getStepLabels(stepIndex).some(l => l.label === labelType);
-};
-
-const handleLabel = async (runId: string, stepId: string, stepIndex: number, labelType: string) => {
-  try {
-    const existing = detailLabels.value.filter(l => l.stepId === stepId && l.label === labelType);
-    if (existing.length > 0) {
-      for (const label of existing) {
-        await props.electronAPI.chat.runs.eval.deleteLabel(label.id);
-      }
-      detailLabels.value = detailLabels.value.filter(l => !existing.includes(l as AgentEvalLabel));
-    } else {
-      const label = await props.electronAPI.chat.runs.eval.addLabel({
-        runId,
-        stepId,
-        label: labelType,
-      });
-      detailLabels.value = [...detailLabels.value, label];
-    }
-  } catch {
-    // ignore
-  }
-};
-
-const handleDeleteLabel = async (labelId: string) => {
-  try {
-    await props.electronAPI.chat.runs.eval.deleteLabel(labelId);
-    detailLabels.value = detailLabels.value.filter(l => l.id !== labelId);
-  } catch {
-    // ignore
-  }
-};
-
-const handleNoteInput = (stepIndex: number, value: string) => {
-  noteInputs[stepIndex] = value;
-};
-
-const handleNoteBlur = async (runId: string, stepId: string, stepIndex: number) => {
-  const text = noteInputs[stepIndex];
-  if (text === undefined) return;
-
-  try {
-    const existing = detailLabels.value.filter(l => l.stepId === stepId && l.label === 'note');
-    if (existing.length > 0) {
-      // update existing note
-      for (const label of existing) {
-        await props.electronAPI.chat.runs.eval.deleteLabel(label.id);
-      }
-    }
-    if (text.trim()) {
-      const label = await props.electronAPI.chat.runs.eval.addLabel({
-        runId,
-        stepId,
-        label: 'note',
-        note: text,
-      });
-      detailLabels.value = [...detailLabels.value.filter(l => !existing.includes(l as AgentEvalLabel)), label];
-    } else {
-      detailLabels.value = detailLabels.value.filter(l => !existing.includes(l as AgentEvalLabel));
-    }
-  } catch {
-    // ignore
-  }
-  delete noteInputs[stepIndex];
+const toggleDetail = (runId: string) => {
+  expandedRunId.value = expandedRunId.value === runId ? null : runId;
 };
 
 const handleExport = async (runId: string) => {
   try {
     await props.electronAPI.chat.runs.eval.exportTrace(runId);
-  } catch {
-    // ignore
-  }
-};
-
-const handleCompare = async (baselineId: string, testId: string) => {
-  try {
-    const result = await props.electronAPI.chat.runs.eval.compareRuns(baselineId, testId);
-    comparisonData.value = result;
   } catch {
     // ignore
   }
@@ -398,18 +203,10 @@ const t = (_key: string) => {
     'chat.runs.resume': 'Resume',
     'chat.runs.retry': 'Retry',
     'chat.eval.export': 'Export',
-    'chat.eval.compare': 'Compare',
-    'chat.eval.selectBaseline': 'Set as Baseline',
     'chat.eval.label.correct': 'Correct',
     'chat.eval.label.incorrect': 'Incorrect',
     'chat.eval.label.partial': 'Partial',
     'chat.eval.label.note': 'Note',
-    'chat.eval.regression.pass': 'Pass',
-    'chat.eval.regression.fail': 'Fail',
-    'chat.eval.regression.pending': 'Pending',
-    'chat.eval.compare.same': 'Same',
-    'chat.eval.compare.different': 'Different',
-    'chat.eval.compare.missing': 'Missing',
     'common.close': 'Close',
   };
   return strings[_key] || _key;
@@ -637,204 +434,6 @@ const t = (_key: string) => {
   background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
 }
 
-.run-action-baseline {
-  color: var(--accent-color);
-  border-color: rgba(var(--accent-rgb), 0.2);
-}
 
-.run-action-baseline:hover:not(:disabled) {
-  background: rgba(var(--accent-rgb), 0.06);
-}
 
-.run-action-compare {
-  color: var(--status-success-color);
-  border-color: color-mix(in srgb, var(--status-success-color) 25%, transparent);
-}
-
-.run-action-compare:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--status-success-color) 8%, transparent);
-}
-
-/* Step detail */
-.run-detail {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-color);
-}
-
-.run-detail-loading {
-  font-size: 11px;
-  padding: 8px 0;
-  text-align: center;
-}
-
-.run-detail-step {
-  padding: 6px 8px;
-  margin-bottom: 6px;
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.step-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-}
-
-.step-index {
-  font-size: 10px;
-  font-weight: 650;
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.step-type {
-  font-size: 10px;
-  font-weight: 550;
-  color: var(--text-primary);
-}
-
-.step-status {
-  font-size: 9px;
-  font-weight: 600;
-  padding: 0 5px;
-  border-radius: 999px;
-  margin-left: auto;
-}
-
-.step-status--started {
-  color: var(--accent-color);
-  background: rgba(var(--accent-rgb), 0.1);
-}
-
-.step-status--completed {
-  color: var(--status-success-color);
-  background: color-mix(in srgb, var(--status-success-color) 10%, transparent);
-}
-
-.step-status--failed {
-  color: var(--status-danger-color);
-  background: color-mix(in srgb, var(--status-danger-color) 10%, transparent);
-}
-
-.step-summary {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-  line-height: 1.4;
-  word-break: break-word;
-}
-
-.step-labels {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
-}
-
-.step-label-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 9px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-
-.label-chip--correct {
-  color: var(--status-success-color);
-  background: color-mix(in srgb, var(--status-success-color) 12%, transparent);
-}
-
-.label-chip--incorrect {
-  color: var(--status-danger-color);
-  background: color-mix(in srgb, var(--status-danger-color) 12%, transparent);
-}
-
-.label-chip--partial {
-  color: var(--warning-color);
-  background: rgba(var(--warning-rgb, 255 193 7), 0.12);
-}
-
-.label-chip--note {
-  color: var(--accent-color);
-  background: rgba(var(--accent-rgb), 0.1);
-}
-
-.label-chip-delete {
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font-size: 10px;
-  padding: 0;
-  line-height: 1;
-  color: inherit;
-  opacity: 0.6;
-}
-
-.label-chip-delete:hover {
-  opacity: 1;
-}
-
-.step-label-actions {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-
-.step-label-btn {
-  padding: 1px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  background: transparent;
-  font-size: 9px;
-  font-weight: 550;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: all 0.18s ease;
-}
-
-.step-label-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.step-label-btn.active {
-  color: var(--text-primary);
-  border-color: var(--accent-color);
-  background: rgba(var(--accent-rgb), 0.08);
-}
-
-.step-note-toggle {
-  border: 0;
-  background: none;
-  font-size: 9px;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-}
-
-.step-note-toggle:hover {
-  color: var(--text-primary);
-}
-
-.step-note-input {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 10px;
-  font-family: inherit;
-  padding: 4px 8px;
-  resize: vertical;
-}
-
-.step-note-input::placeholder {
-  color: var(--text-muted);
-}
 </style>

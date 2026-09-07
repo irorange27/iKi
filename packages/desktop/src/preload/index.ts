@@ -124,8 +124,10 @@ const electronApi: ElectronApi = {
       create: (thread: ChatThreadInput) => ipcRenderer.invoke('chat:threads:create', thread),
       clear: (id: string, thread: ChatThreadInput) =>
         ipcRenderer.invoke('chat:threads:clear', id, thread),
-      update: (id: string, thread: ChatThreadInput) =>
-        ipcRenderer.invoke('chat:threads:update', id, thread),
+    update: (id: string, thread: ChatThreadInput) =>
+      ipcRenderer.invoke('chat:threads:update', id, thread),
+    exportMarkdown: (threadId: string) =>
+      ipcRenderer.invoke('chat:threads:export-markdown', threadId),
       delete: (id: string) => ipcRenderer.invoke('chat:threads:delete', id),
     },
     messages: {
@@ -143,6 +145,7 @@ const electronApi: ElectronApi = {
         ipcRenderer.invoke('chat:runs:trace:get', runId),
       getTree: (rootRunId: string): Promise<AgentRunTree> =>
         ipcRenderer.invoke('chat:runs:tree:get', rootRunId),
+      trajectory: (runId: string) => ipcRenderer.invoke('chat:runs:trajectory:get', runId),
       cancel: (runId: string) => ipcRenderer.invoke('chat:runs:cancel', runId),
       retry: (runId: string) => ipcRenderer.invoke('chat:runs:retry', runId),
       retryAndExecute: (runId: string) => ipcRenderer.invoke('chat:runs:retry-and-execute', runId),
@@ -157,10 +160,6 @@ const electronApi: ElectronApi = {
         addLabel: (input) => ipcRenderer.invoke('chat:eval:add-label', input),
         listLabels: (runId: string) => ipcRenderer.invoke('chat:eval:list-labels', runId),
         deleteLabel: (labelId: string) => ipcRenderer.invoke('chat:eval:delete-label', labelId),
-        compareRuns: (baselineRunId: string, testRunId: string) =>
-          ipcRenderer.invoke('chat:eval:compare-runs', baselineRunId, testRunId),
-        assessRegression: (baselineRunId: string, testRunId: string) =>
-          ipcRenderer.invoke('chat:eval:assess-regression', baselineRunId, testRunId),
       },
     },
     usage: {
@@ -210,6 +209,8 @@ const electronApi: ElectronApi = {
       ipcRenderer.invoke('workspaces:create-thread-worktree', threadId, repoWorkspaceId ?? null),
     removeThreadWorktree: (threadId: string, options?: { force?: boolean }) =>
       ipcRenderer.invoke('workspaces:remove-thread-worktree', threadId, options ?? {}),
+    mergeThreadWorktree: (threadId: string) =>
+      ipcRenderer.invoke('workspaces:merge-thread-worktree', threadId),
   },
   promptApps: {
     list: () => ipcRenderer.invoke('promptApps:list'),

@@ -1,18 +1,19 @@
 <template>
-  <div class="relative" @mouseenter="openToolSelector" @mouseleave="scheduleCloseToolSelector">
+  <PopoverRoot
+    v-model:open="showToolSelector"
+    @update:open="value => { if (value) void openToolSelector(); }"
+  >
+    <PopoverTrigger as-child>
     <button
-      class="composer-control-btn composer-selector-trigger ui-text-secondary relative flex h-10 w-10 items-center justify-center rounded-[14px]"
+      class="composer-chip composer-chip--reveal"
       :class="{
-        'ui-text-accent':
+        'composer-chip--active':
           isAutoToolMode || selectedTools.length > 0 || selectedMcpServerIds.length > 0,
       }"
       :title="triggerTitle"
       :aria-label="triggerTitle"
-      @click="showToolSelector = !showToolSelector"
-      @mouseenter="openToolSelector"
-      @mouseleave="scheduleCloseToolSelector"
     >
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -20,19 +21,22 @@
           d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
         />
       </svg>
+      <span class="composer-chip-label">{{ t('chat.tools.title') }}</span>
       <span
-        v-if="isAutoToolMode || selectedTools.length > 0 || selectedMcpServerIds.length > 0"
-        class="selector-badge"
+        v-if="!isAutoToolMode && selectedTools.length + selectedMcpServerIds.length > 0"
+        class="composer-chip-count"
       >
-        {{ isAutoToolMode ? 'A' : selectedTools.length + selectedMcpServerIds.length }}
+        {{ selectedTools.length + selectedMcpServerIds.length }}
       </span>
     </button>
+    </PopoverTrigger>
 
-    <div
-      v-if="showToolSelector"
+    <PopoverPortal>
+    <PopoverContent
       class="selector-panel"
-      @mouseenter="openToolSelector"
-      @mouseleave="scheduleCloseToolSelector"
+      side="top"
+      align="start"
+      :side-offset="8"
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between">
@@ -222,14 +226,16 @@
           </template>
         </div>
       </div>
-    </div>
-  </div>
+    </PopoverContent>
+    </PopoverPortal>
+  </PopoverRoot>
 </template>
 
 <script setup lang="ts">
 import { toRef } from 'vue';
 
 import { useToolSelector } from '../composables/useToolSelector';
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
 
 const props = defineProps<{
   tools: string[];
@@ -254,7 +260,6 @@ const {
   mcpServersLoading,
   openToolSelector,
   refreshMcpServers,
-  scheduleCloseToolSelector,
   selectAllBuiltinTools,
   selectAllMcpServers,
   selectedMcpServerIds,

@@ -1,15 +1,13 @@
 <template>
-  <div class="relative" @mouseenter="openSkillSelector" @mouseleave="scheduleCloseSkillSelector">
+  <PopoverRoot v-model:open="showSkillSelector" @update:open="value => { if (value) void loadAvailableSkills(); }">
+  <PopoverTrigger as-child>
     <button
-      class="composer-control-btn composer-selector-trigger ui-text-secondary relative flex h-10 w-10 items-center justify-center rounded-[14px]"
-      :class="{ 'ui-text-accent': isAutoSkillMode || selectedSkillIds.length > 0 }"
+      class="composer-chip composer-chip--reveal"
+      :class="{ 'composer-chip--active': isAutoSkillMode || selectedSkillIds.length > 0 }"
       :title="triggerTitle"
       :aria-label="triggerTitle"
-      @click="toggleSkillSelector"
-      @mouseenter="openSkillSelector"
-      @mouseleave="scheduleCloseSkillSelector"
     >
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -17,16 +15,21 @@
           d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
         />
       </svg>
-      <span v-if="isAutoSkillMode || selectedSkillIds.length > 0" class="selector-badge">
-        {{ isAutoSkillMode ? 'A' : selectedSkillIds.length }}
+      <span class="composer-chip-label">{{ t('chat.skills.title') }}</span>
+      <span
+        v-if="!isAutoSkillMode && selectedSkillIds.length > 0"
+        class="composer-chip-count"
+      >
+        {{ selectedSkillIds.length }}
       </span>
     </button>
-
-    <div
-      v-if="showSkillSelector"
+  </PopoverTrigger>
+  <PopoverPortal>
+    <PopoverContent
+      side="top"
+      align="start"
+      :side-offset="8"
       class="selector-panel"
-      @mouseenter="openSkillSelector"
-      @mouseleave="scheduleCloseSkillSelector"
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between">
@@ -96,18 +99,18 @@
           </div>
         </button>
       </div>
-    </div>
-  </div>
+    </PopoverContent>
+  </PopoverPortal>
+</PopoverRoot>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import { createLogger } from '../logger';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
-import { useSelectorPanel } from '../composables/useSelectorPanel';
-
 const props = defineProps<{
   skillIds: string[];
   mode: 'manual' | 'auto';
@@ -122,12 +125,7 @@ const listSkills = getElectronApiSliceMethod('skills', 'list');
 const skillSelectorLogger = createLogger({ module: 'skill_selector' });
 const { t } = useI18n();
 
-const {
-  isOpen: showSkillSelector,
-  openPanel: openSkillSelector,
-  scheduleClosePanel: scheduleCloseSkillSelector,
-  togglePanel: toggleSkillSelector,
-} = useSelectorPanel();
+const showSkillSelector = ref(false);
 const availableSkills = ref<SkillSummary[]>([]);
 const selectedSkillIds = computed(() => props.skillIds);
 const isAutoSkillMode = computed(() => props.mode === 'auto');
@@ -203,9 +201,6 @@ const clearAllSkills = () => {
   emit('update:skillIds', []);
 };
 
-onMounted(() => {
-  void loadAvailableSkills();
-});
 </script>
 
 <style scoped>

@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
+import type {
+  AtifMetrics,
+  AtifObservation,
+  AtifStep,
+  AtifToolCall,
+  AtifTrajectory,
+  AtifTrajectoryExportResult,
+} from '@iki/backend/types/atif';
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 
 /**
@@ -73,8 +81,7 @@ export const AtifTrajectorySchema = z.object({
   extra: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type AtifTrajectory = z.infer<typeof AtifTrajectorySchema>;
-type AtifStep = AtifTrajectory['steps'][number];
+export type { AtifStep, AtifTrajectory, AtifTrajectoryExportResult };
 
 const stepInput = (step: AgentRunStep): Record<string, unknown> =>
   step.input && typeof step.input === 'object' ? (step.input as Record<string, unknown>) : {};
@@ -306,12 +313,6 @@ export const validateAtifTrajectory = (trajectory: AtifTrajectory): string[] => 
   });
 
   return errors;
-};
-
-export type AtifTrajectoryExportResult = {
-  success: boolean;
-  trajectory?: AtifTrajectory;
-  errors?: string[];
 };
 
 export const exportRunTrajectory = (runId: string): AtifTrajectoryExportResult => {

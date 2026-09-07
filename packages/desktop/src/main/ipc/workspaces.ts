@@ -6,6 +6,7 @@ import * as workspaceDb from '@iki/backend/db/workspaces';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import {
   createThreadWorktree,
+  mergeThreadWorktree,
   removeThreadWorktree,
 } from '@iki/backend/workspaces/git_worktree';
 import { createPrefixedId } from '@iki/backend/utils/id';
@@ -134,6 +135,10 @@ export const registerWorkspacesIpc = (): void => {
     'workspaces:create-thread-worktree',
     async (_event, threadId: string, repoWorkspaceId?: string | null) =>
       await createThreadWorktree(threadId, repoWorkspaceId ?? null)
+  );
+
+  ipcMain.handle('workspaces:merge-thread-worktree', async (_event, threadId: string) =>
+    await mergeThreadWorktree(threadId)
   );
 
   ipcMain.handle(

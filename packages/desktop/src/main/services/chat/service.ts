@@ -23,6 +23,25 @@ export type { ChatStreamTarget, ChatService } from '@iki/backend/thread_session'
 
 const platformDeps: ChatServicePlatformDeps = {
   companion: companionService,
+  exportThreadMarkdown: async ({ threadId, title, content }) => {
+    const safeTitle = (title || threadId).replace(/[^a-zA-Z0-9\u4e00-\u9fff-_ ]+/g, '_').slice(0, 60);
+    const result = await dialog.showSaveDialog({
+      title: 'Export Thread as Markdown',
+      defaultPath: `${safeTitle || 'thread'}.md`,
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, error: 'cancelled' };
+    }
+
+    try {
+      fs.writeFileSync(result.filePath, content, 'utf-8');
+      return { success: true, filePath: result.filePath };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  },
   exportTrace: async (runId: string) => {
     const trace = agentRunDb.getAgentRunTrace(runId);
     if (!trace) return { success: false, error: 'Run not found' };

@@ -1,20 +1,19 @@
 <template>
+  <PopoverRoot v-model:open="showWorkspaceSelector">
   <div
     class="workspace-selector-root relative"
     @mouseenter="openWorkspaceSelector"
     @mouseleave="scheduleCloseWorkspaceSelector"
   >
+    <PopoverTrigger as-child>
     <button
-      class="workspace-selector-trigger composer-control-btn composer-selector-trigger ui-text-secondary relative flex h-10 w-10 items-center justify-center rounded-[14px]"
-      :class="{ 'ui-text-accent': isWorkspaceSelectorActive }"
+      class="composer-chip workspace-selector-trigger"
+      :class="{ 'composer-chip--active': hasWorkspaceSelection }"
       :title="triggerTitle"
       :aria-label="triggerTitle"
       :disabled="isLocked"
-      @click="toggleWorkspaceSelector"
-      @mouseenter="openWorkspaceSelector"
-      @mouseleave="scheduleCloseWorkspaceSelector"
     >
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="h-3.5 w-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -22,10 +21,14 @@
           d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
         />
       </svg>
+      <span class="composer-chip-label">
+        {{ selectedWorkspace?.name ?? t('chat.workspace.choose') }}
+      </span>
       <span v-if="workspaceBadgeLabel" class="selector-badge workspace-selector-badge">
         {{ workspaceBadgeLabel }}
       </span>
     </button>
+    </PopoverTrigger>
 
     <div v-if="showWorkspaceTip" class="workspace-selector-tip" role="tooltip">
       <div class="workspace-selector-tip-title ui-text-primary">
@@ -45,11 +48,12 @@
       </div>
     </div>
 
-    <div
-      v-if="showWorkspaceSelector"
+    <PopoverPortal>
+    <PopoverContent
       class="selector-panel workspace-selector-panel"
-      @mouseenter="openWorkspaceSelector"
-      @mouseleave="scheduleCloseWorkspaceSelector"
+      side="top"
+      align="start"
+      :side-offset="8"
     >
       <div class="selector-panel-header">
         <div class="flex items-center justify-between gap-3">
@@ -165,65 +169,85 @@
         v-if="!isLocked && selectedWorkspaceId"
         class="workspace-selector-worktree"
       >
-        <button
-          class="selector-action-btn workspace-selector-worktree-btn"
-          :disabled="worktreeBusy || !threadId"
-          :title="t('chat.workspace.worktreeHint')"
-          @click.stop="isWorktreeActive ? handleRemoveWorktree() : handleCreateWorktree()"
-        >
-          {{
-            worktreeBusy
-              ? t('chat.workspace.worktreeBusy')
-              : isWorktreeActive
-                ? t('chat.workspace.worktreeRemove')
-                : t('chat.workspace.worktreeCreate')
-          }}
-        </button>
+        <div class="workspace-selector-worktree-actions">
+          <button
+            class="selector-action-btn workspace-selector-worktree-btn"
+            :disabled="worktreeBusy || !threadId"
+            :title="t('chat.workspace.worktreeHint')"
+            @click.stop="isWorktreeActive ? handleRemoveWorktree() : handleCreateWorktree()"
+          >
+            {{
+              worktreeBusy
+                ? t('chat.workspace.worktreeBusy')
+                : isWorktreeActive
+                  ? t('chat.workspace.worktreeRemove')
+                  : t('chat.workspace.worktreeCreate')
+            }}
+          </button>
+          <button
+            v-if="isWorktreeActive"
+            class="selector-action-btn workspace-selector-worktree-btn"
+            :disabled="worktreeBusy || !threadId"
+            :title="t('chat.workspace.worktreeMergeTitle')"
+            @click.stop="handleMergeWorktree()"
+          >
+            {{ t('chat.workspace.worktreeMerge') }}
+          </button>
+        </div>
         <div v-if="worktreeStatus" class="workspace-selector-worktree-status ui-text-muted">
           {{ worktreeStatus }}
         </div>
       </div>
-    </div>
+    </PopoverContent>
+    </PopoverPortal>
   </div>
+  </PopoverRoot>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
+import { storeToRefs } from 'pinia';
 import type { Workspace } from '@iki/backend/types/chat';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { THREAD_WORKTREE_WORKSPACE_PREFIX } from '@iki/backend/workspaces/worktree_ids';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
-import { useSelectorPanel } from '../composables/useSelectorPanel';
 import { confirmAction } from '../composables/useConfirm';
+import { useThreadSessionStore } from '../store/thread_session';
 
 const props = defineProps<{
-  selectedWorkspaceId?: string | null;
   locked?: boolean;
-  threadId?: string | null;
 }>();
 
-const emit = defineEmits<{
-  (event: 'update:selectedWorkspaceId', value: string | null): void;
-}>();
+const threadSession = useThreadSessionStore();
+const { selectedWorkspaceId: sessionSelectedWorkspaceId } = storeToRefs(threadSession);
 
 const getVisibleWorkspaces = getElectronApiSliceMethod('workspaces', 'getVisible');
 const getWorkspace = getElectronApiSliceMethod('workspaces', 'get');
 const pickWorkspaceDirectoryFromApi = getElectronApiSliceMethod('workspaces', 'pickDirectory');
 const createThreadWorktreeApi = getElectronApiSliceMethod('workspaces', 'createThreadWorktree');
 const removeThreadWorktreeApi = getElectronApiSliceMethod('workspaces', 'removeThreadWorktree');
+const mergeThreadWorktreeApi = getElectronApiSliceMethod('workspaces', 'mergeThreadWorktree');
 const { t } = useI18n();
 
-const {
-  isOpen: showWorkspaceSelector,
-  openPanel: openSelectorPanel,
-  closePanel: closeSelectorPanel,
-  scheduleClosePanel: scheduleSelectorClose,
-} = useSelectorPanel({
-  onClose: () => {
-    isWorkspaceTriggerHovered.value = false;
-  },
-});
+const selectedWorkspaceId = sessionSelectedWorkspaceId;
+const threadId = computed(() => threadSession.getCurrentThreadId());
+
+const showWorkspaceSelector = ref(false);
+
+const openSelectorPanel = () => {
+  showWorkspaceSelector.value = true;
+};
+
+const closeSelectorPanel = () => {
+  showWorkspaceSelector.value = false;
+  isWorkspaceTriggerHovered.value = false;
+};
+
+const scheduleSelectorClose = () => {
+  // Popover handles outside-click/ESC closing natively.
+};
 const isWorkspaceTriggerHovered = ref(false);
 const loadingWorkspaces = ref(false);
 const isPickingDirectory = ref(false);
@@ -269,7 +293,6 @@ const normalizeWorkspaces = (value: unknown): Workspace[] => {
   return normalized;
 };
 
-const selectedWorkspaceId = computed(() => normalizeWorkspaceId(props.selectedWorkspaceId));
 const isLocked = computed(() => props.locked === true);
 const selectedWorkspace = computed(
   () =>
@@ -381,7 +404,7 @@ const toggleWorkspaceSelector = () => {
 
 const selectWorkspace = (workspaceId: string | null) => {
   if (isLocked.value) return;
-  emit('update:selectedWorkspaceId', normalizeWorkspaceId(workspaceId));
+  void threadSession.setWorkspace(normalizeWorkspaceId(workspaceId));
   closeSelectorPanel();
 };
 
@@ -396,7 +419,7 @@ const pickWorkspaceDirectory = async () => {
     );
     await loadWorkspaces();
     if (workspace?.id) {
-      emit('update:selectedWorkspaceId', workspace.id);
+      void threadSession.setWorkspace(workspace.id);
       closeSelectorPanel();
     }
   } catch (error) {
@@ -423,13 +446,13 @@ const normalizeWorktreeResult = (value: unknown): { workspaceId?: string } | nul
 };
 
 const handleCreateWorktree = async () => {
-  if (isLocked.value || worktreeBusy.value || !props.threadId) return;
+  if (isLocked.value || worktreeBusy.value || threadId.value) return;
   worktreeBusy.value = true;
   worktreeStatus.value = '';
 
   try {
     const result = normalizeWorktreeResult(
-      createThreadWorktreeApi ? await createThreadWorktreeApi(props.threadId, selectedWorkspaceId.value) : null
+      createThreadWorktreeApi ? await createThreadWorktreeApi(threadId.value, selectedWorkspaceId.value) : null
     );
     if (!result) {
       worktreeStatus.value = t('chat.workspace.worktreeFailed', { error: 'Unknown error' });
@@ -437,7 +460,7 @@ const handleCreateWorktree = async () => {
     }
     await loadWorkspaces();
     if (result.workspaceId) {
-      emit('update:selectedWorkspaceId', result.workspaceId);
+      void threadSession.setWorkspace(result.workspaceId);
       closeSelectorPanel();
     }
   } catch (error) {
@@ -449,14 +472,40 @@ const handleCreateWorktree = async () => {
   }
 };
 
+const handleMergeWorktree = async () => {
+  if (isLocked.value || worktreeBusy.value || !threadId.value || !isWorktreeActive.value) return;
+  worktreeBusy.value = true;
+  worktreeStatus.value = '';
+
+  try {
+    const result = (mergeThreadWorktreeApi
+      ? await mergeThreadWorktreeApi(threadId.value)
+      : { ok: false, error: 'unavailable' }) as { ok: boolean; error?: string };
+    if (!result.ok) {
+      worktreeStatus.value = t('chat.workspace.worktreeMergeFailed', {
+        error: result.error ?? 'Unknown error',
+      });
+      return;
+    }
+    worktreeStatus.value = t('chat.workspace.worktreeMerged');
+    await loadWorkspaces();
+  } catch (error) {
+    worktreeStatus.value = t('chat.workspace.worktreeFailed', {
+      error: getErrorMessage(error),
+    });
+  } finally {
+    worktreeBusy.value = false;
+  }
+};
+
 const handleRemoveWorktree = async () => {
-  if (isLocked.value || worktreeBusy.value || !props.threadId || !isWorktreeActive.value) return;
+  if (isLocked.value || worktreeBusy.value || threadId.value || !isWorktreeActive.value) return;
   worktreeBusy.value = true;
   worktreeStatus.value = '';
 
   const attempt = async (force: boolean) => {
     if (!removeThreadWorktreeApi) return { ok: false, error: 'unavailable' };
-    return ((await removeThreadWorktreeApi(props.threadId ?? '', { force })) ?? {
+    return ((await removeThreadWorktreeApi(threadId.value, { force })) ?? {
       ok: false,
       error: 'Unknown error',
     }) as { ok: boolean; error?: string; removed?: boolean };
@@ -486,7 +535,7 @@ const handleRemoveWorktree = async () => {
     }
 
     await loadWorkspaces();
-    emit('update:selectedWorkspaceId', null);
+    void threadSession.setWorkspace(null);
     closeSelectorPanel();
   } catch (error) {
     worktreeStatus.value = t('chat.workspace.worktreeFailed', {
@@ -521,7 +570,7 @@ onMounted(() => {
   position: absolute;
   left: 0;
   bottom: 100%;
-  z-index: 55;
+  z-index: var(--z-panel);
   margin-bottom: 8px;
   width: min(320px, calc(100vw - 32px));
   border-radius: 14px;
@@ -580,6 +629,12 @@ onMounted(() => {
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.workspace-selector-worktree-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
