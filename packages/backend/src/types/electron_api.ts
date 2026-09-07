@@ -352,6 +352,9 @@ export interface ElectronApi {
     disable: () => Promise<WindowActionResult>;
   };
   openSettings: (section?: string) => void;
+  /** Focus the main window and switch its chat view to the given thread. */
+  focusThread: (threadId: string) => void;
+  onFocusThread: (callback: (threadId: string) => void) => void;
   closeWindow: () => void;
   setWindowShadow: (enabled: boolean) => void;
 }

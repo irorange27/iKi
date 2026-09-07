@@ -171,7 +171,17 @@
                 {{ item.status === 'failed' ? t('settings.tasks.status.error') : t('settings.tasks.status.success') }}
               </span>
             </div>
-            <span class="task-review-time">{{ formatTimestamp(item.updatedAt) }}</span>
+            <div class="task-review-actions">
+              <span class="task-review-time">{{ formatTimestamp(item.updatedAt) }}</span>
+              <button
+                v-if="item.threadId"
+                class="task-review-open-btn"
+                :title="t('settings.tasks.review.openThread')"
+                @click="openReviewThread(item.threadId)"
+              >
+                {{ t('settings.tasks.review.openThread') }}
+              </button>
+            </div>
           </div>
           <p v-if="item.summary" class="task-review-summary">{{ item.summary }}</p>
           <p v-if="item.error" class="tasks-error">{{ item.error }}</p>
@@ -289,6 +299,8 @@
 <script setup lang="ts">
 import { toRef } from 'vue';
 
+import { getElectronAPI } from '../../services/electron_api';
+
 import SettingsSelect from './SettingsSelect.vue';
 import { formatTimestamp } from './settings_formatters';
 import {
@@ -300,6 +312,12 @@ const props = defineProps<{
   active: boolean;
   providers: TaskProviderModels[];
 }>();
+const electronAPI = getElectronAPI();
+
+const openReviewThread = (threadId: string) => {
+  electronAPI.focusThread?.(threadId);
+};
+
 const {
   SAFE_TASK_TOOLS,
   createProactiveTask,

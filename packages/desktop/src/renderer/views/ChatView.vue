@@ -378,6 +378,12 @@ useChatViewLifecycle({
   handleTaskPush,
   handleAwaiterPush,
 });
+
+// Cross-window jumps (e.g. the settings automations review queue) ask the
+// main window to open a specific thread.
+electronAPI.onFocusThread?.(threadId => {
+  void selectThread(threadId);
+});
 </script>
 
 <style scoped>

@@ -489,6 +489,20 @@ const handleMergeWorktree = async () => {
     }
     worktreeStatus.value = t('chat.workspace.worktreeMerged');
     await loadWorkspaces();
+
+    const cleanup = await confirmAction({
+      message: t('chat.workspace.worktreeCleanupPrompt'),
+      danger: true,
+    });
+    if (cleanup && removeThreadWorktreeApi) {
+      const removed = (await removeThreadWorktreeApi(threadId.value, { force: true })) as {
+        ok: boolean;
+      };
+      if (removed.ok) {
+        worktreeStatus.value = t('chat.workspace.worktreeRemoved');
+        await loadWorkspaces();
+      }
+    }
   } catch (error) {
     worktreeStatus.value = t('chat.workspace.worktreeFailed', {
       error: getErrorMessage(error),

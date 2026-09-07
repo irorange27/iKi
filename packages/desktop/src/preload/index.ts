@@ -295,6 +295,8 @@ const electronApi: ElectronApi = {
     disable: () => ipcRenderer.invoke('companion:disable'),
   },
   openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
+  focusThread: (threadId: string) => ipcRenderer.send('chat:focus-thread', threadId),
+  onFocusThread: (callback: (threadId: string) => void) => subscribe('chat:thread-activate', callback),
   closeWindow: () => ipcRenderer.send('close-window'),
   setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
 };

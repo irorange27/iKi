@@ -219,6 +219,9 @@ export const en = defineCatalog({
     'Merge the worktree branch into your checked-out branch (requires a clean main checkout).',
   'chat.workspace.worktreeMerged':
     'Merged into your main checkout. The worktree stays until you remove it.',
+  'chat.workspace.worktreeCleanupPrompt':
+    'Merged. Remove the isolated worktree and its branch now?',
+  'chat.workspace.worktreeRemoved': 'Worktree removed.',
   'chat.workspace.worktreeBusy': 'Working…',
   'chat.workspace.worktreeHint':
     'Creates an isolated git worktree on its own branch, so agent edits never touch your checkout.',
@@ -1031,6 +1034,7 @@ export const en = defineCatalog({
   'settings.tasks.review.description':
     'Latest completed background runs (scheduled tasks and waiters). Review what the agent did on its own.',
   'settings.tasks.review.empty': 'No background runs yet.',
+  'settings.tasks.review.openThread': 'Open thread',
   'settings.tasks.loading': 'Loading...',
   'settings.tasks.empty': 'No tasks yet.',
   'settings.tasks.runNow': 'Run now',

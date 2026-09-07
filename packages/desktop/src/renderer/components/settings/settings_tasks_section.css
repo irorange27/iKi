@@ -45,10 +45,34 @@
   gap: 12px;
 }
 
-.task-review-time {
+.task-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+.task-review-time {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.task-review-open-btn {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.task-review-open-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .task-review-summary {
