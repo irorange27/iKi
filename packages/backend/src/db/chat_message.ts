@@ -18,6 +18,17 @@ export const countChatMessagesByThread = (threadId: string): number => {
   return typeof row?.count === 'number' ? row.count : 0;
 };
 
+export const searchMessageRows = (likePattern: string, limit: number): ChatMessage[] => {
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : 50;
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM chat_messages WHERE message LIKE ? ESCAPE '\\'
+       ORDER BY timestamp DESC, id ASC LIMIT ${safeLimit}`
+    )
+    .all(likePattern) as ChatMessage[];
+  return rows;
+};
+
 export const getChatMessage = (id: string): ChatMessage | null => {
   const row = getDb().prepare('SELECT * FROM chat_messages WHERE id = ?').get(id) as
     | ChatMessage

@@ -261,6 +261,21 @@
   color: var(--text-primary);
 }
 
+.chat-message-match {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-message-match-snippet {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-no-results {
   color: var(--text-muted);
   font-size: 12px;

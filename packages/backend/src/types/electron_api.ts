@@ -195,6 +195,10 @@ export interface ElectronApi {
         threadId: string
       ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
       delete: (id: string) => Promise<unknown>;
+      searchContent: (
+        query: string,
+        limit?: number
+      ) => Promise<import('../chat/thread_content_search').ThreadContentMatch[]>;
     };
     messages: {
       list: (threadId: string) => Promise<ChatMessage[]>;

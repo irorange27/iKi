@@ -225,9 +225,35 @@
           </div>
         </section>
 
-        <div v-if="hasNoSearchResults" class="sidebar-no-results">
-          {{ t('chat.sidebar.noResults') }}
-        </div>
+        <template v-if="isSearchOpen && searchQuery.trim()">
+          <div
+            v-if="contentMatches.length > 0"
+            class="sidebar-section"
+          >
+            <div class="sidebar-section-divider"></div>
+            <div class="sidebar-section-header">
+              <span>{{ t('chat.sidebar.messageMatches') }}</span>
+              <span class="sidebar-section-count">{{ contentMatches.length }}</span>
+            </div>
+            <button
+              v-for="match in contentMatches"
+              :key="match.messageId"
+              class="chat-item chat-message-match w-full rounded-lg px-3 py-2 text-left text-[13px] leading-5 focus:outline-none"
+              :title="match.snippet"
+              @click="selectThread(match.threadId)"
+            >
+              <span class="chat-item-title">{{ match.threadTitle }}</span>
+              <span class="chat-message-match-snippet">{{ match.snippet }}</span>
+            </button>
+          </div>
+
+          <div
+            v-if="threadSections.every(section => section.threads.length === 0) && contentMatches.length === 0"
+            class="sidebar-no-results"
+          >
+            {{ t('chat.sidebar.noResults') }}
+          </div>
+        </template>
       </div>
 
       <!-- Sidebar Footer -->
@@ -300,7 +326,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   AlarmClock,
   Check,
@@ -330,6 +356,7 @@ import {
   DropdownMenuTrigger,
 } from 'reka-ui';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
+import type { ThreadContentMatch } from '@iki/backend/chat/thread_content_search';
 import { useSidebar } from '../composables/useSidebar';
 import { confirmAction } from '../composables/useConfirm';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
@@ -381,6 +408,8 @@ const setGroupMode = (mode: 'time' | 'projects') => {
 const isSearchOpen = ref(false);
 const searchQuery = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
+const contentMatches = ref<ThreadContentMatch[]>([]);
+let contentSearchTimer: ReturnType<typeof setTimeout> | null = null;
 const menuPosition = ref({
   left: 0,
   bottom: 0,
@@ -441,8 +470,21 @@ const toggleSearch = () => {
 
 const clearSearch = () => {
   searchQuery.value = '';
+  contentMatches.value = [];
   searchInputRef.value?.focus();
 };
+
+watch(searchQuery, query => {
+  if (contentSearchTimer) clearTimeout(contentSearchTimer);
+  if (!query.trim()) {
+    contentMatches.value = [];
+    return;
+  }
+  contentSearchTimer = setTimeout(() => {
+    contentSearchTimer = null;
+    void runContentSearch(query);
+  }, 280);
+});
 
 const closeSearch = () => {
   isSearchOpen.value = false;
@@ -542,6 +584,28 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
       ...deletingThreadIds.value,
       [thread.id]: false,
     };
+  }
+};
+
+const runContentSearch = async (query: string) => {
+  const searchContent = chatApi?.threads?.searchContent;
+  if (typeof searchContent !== 'function' || !query.trim()) {
+    contentMatches.value = [];
+    return;
+  }
+  try {
+    const matches = (await searchContent(query.trim())) as ThreadContentMatch[];
+    contentMatches.value = Array.isArray(matches)
+      ? matches.filter(match => !isExternalThread(match as never))
+      : [];
+  } catch (error) {
+    sidebarLogger.event({
+      level: 'warn',
+      event: 'chat.search.content',
+      outcome: 'failed',
+      error,
+    });
+    contentMatches.value = [];
   }
 };
 
@@ -683,12 +747,6 @@ const toggleGroupCollapsed = (key: string) => {
     [key]: !collapsedGroups.value[key],
   };
 };
-const hasNoSearchResults = computed(
-  () =>
-    isSearchOpen.value &&
-    searchQuery.value.trim() !== '' &&
-    chatThreads.value.every(thread => !matchesSearch(thread))
-);
 const externalThreads = computed(() =>
   chatThreads.value.filter(thread => isExternalThread(thread) && matchesSearch(thread))
 );

@@ -134,4 +134,8 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:usage:summary', (_, period) => {
     return chatService.getUsageSummary(period);
   });
+
+  ipcMain.handle('chat:threads:search-content', (_, query: string, limit?: number) =>
+    toPlainData(chatService.searchThreadContent(query, limit))
+  );
 };

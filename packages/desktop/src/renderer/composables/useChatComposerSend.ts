@@ -70,6 +70,8 @@ export const useChatComposerSend = (deps: {
   resolveSendRequest?: (draft: string) => Promise<ResolvedComposerSendRequest>;
   canResolveEmptyDraft?: () => boolean;
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
+  /** Work threads: return a feedback message when the project workspace is missing; null = ok. */
+  ensureWorkspaceForWork?: () => string | null;
   resolveSelectedMcpServerIds: () => Promise<string[]>;
   stopVoiceInput: () => void;
   attachedImages?: Ref<FileUIPart[]>;
@@ -190,6 +192,12 @@ export const useChatComposerSend = (deps: {
       model: providerReady.model,
       modelCapability: providerReady.modelCapability ?? null,
     };
+    const workspaceMissing = deps.ensureWorkspaceForWork?.();
+    if (workspaceMissing) {
+      setComposerFeedback(workspaceMissing);
+      return;
+    }
+
     const resolvedMcpServerIds = await deps.resolveSelectedMcpServerIds();
     deps.selectedMcpServerIds.value = resolvedMcpServerIds;
     isPreparingSend.value = true;

@@ -129,6 +129,8 @@ const electronApi: ElectronApi = {
     exportMarkdown: (threadId: string) =>
       ipcRenderer.invoke('chat:threads:export-markdown', threadId),
       delete: (id: string) => ipcRenderer.invoke('chat:threads:delete', id),
+    searchContent: (query: string, limit?: number) =>
+      ipcRenderer.invoke('chat:threads:search-content', query, limit),
     },
     messages: {
       list: (threadId: string) => ipcRenderer.invoke('chat:messages:list', threadId),

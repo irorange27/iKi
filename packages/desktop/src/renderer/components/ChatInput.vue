@@ -222,6 +222,7 @@ const {
   currentProviderId,
   currentReasoningEffort,
   currentPersonality,
+  selectedWorkspaceId: sessionSelectedWorkspaceId,
 } = storeToRefs(threadSession);
 
 // Plain chats have no workspace concept — the selector only makes sense for
@@ -395,6 +396,11 @@ const {
   autonomousMaxIterations,
   reasoningEffort: currentReasoningEffort,
   personality: currentPersonality,
+  ensureWorkspaceForWork: () => {
+    if (!isWorkThread.value) return null;
+    if (sessionSelectedWorkspaceId.value) return null;
+    return t('chat.input.workNeedsWorkspace');
+  },
   prepareFailedMessage: t('chat.input.prepareFailed'),
   stopFailedMessage: t('chat.input.stopFailed'),
   prepareMessageSend: props.prepareMessageSend,
