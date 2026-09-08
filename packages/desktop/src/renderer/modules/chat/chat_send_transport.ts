@@ -26,6 +26,8 @@ export const createChatComposerStreamPayload = (params: {
   reasoningEffort?: string;
   /** Thread-level agent personality; empty string = default (omitted from payload). */
   personality?: string;
+  /** Session-level tool approval policy; empty = global default (omitted). */
+  approvalPolicy?: string;
   autonomous?: { maxIterations: number; continuePrompt?: string };
 }): ChatComposerInvocationBody | null => {
   if (!params.threadId) {
@@ -34,6 +36,7 @@ export const createChatComposerStreamPayload = (params: {
 
   const reasoningEffort = params.reasoningEffort?.trim().toLowerCase();
   const personality = params.personality?.trim().toLowerCase();
+  const approvalPolicy = params.approvalPolicy?.trim().toLowerCase();
 
   return {
     providerType: params.providerReady.provider.type,
@@ -41,6 +44,7 @@ export const createChatComposerStreamPayload = (params: {
     model: params.providerReady.model,
     ...(reasoningEffort ? { reasoningEffort } : {}),
     ...(personality ? { personality } : {}),
+    ...(approvalPolicy ? { approvalPolicy } : {}),
     ...(params.providerReady.modelCapability &&
     (typeof params.providerReady.modelCapability.maxInputTokens === 'number' ||
       typeof params.providerReady.modelCapability.contextWindow === 'number' ||

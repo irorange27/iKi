@@ -114,6 +114,7 @@ const createHarness = (options?: {
     autonomousMaxIterations: ref(10),
     reasoningEffort: ref(''),
     personality: ref(''),
+    approvalPolicy: ref(''),
     prepareFailedMessage: 'Prepare failed',
     stopFailedMessage: 'Stop failed',
     prepareMessageSend,

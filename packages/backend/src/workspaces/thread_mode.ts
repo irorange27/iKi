@@ -11,6 +11,26 @@ import { THREAD_WORKTREE_WORKSPACE_PREFIX } from './worktree_ids';
 
 export type ThreadWorkMode = 'chat' | 'work';
 
+/** Session-level tool approval policy (ADR 005), user-selectable per thread. */
+export type ThreadApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'always';
+
+export const THREAD_APPROVAL_POLICY_KEY = 'approvalPolicy';
+
+export const THREAD_APPROVAL_POLICIES: readonly ThreadApprovalPolicy[] = [
+  'never',
+  'trustWorkspace',
+  'askRisky',
+  'always',
+];
+
+export const parseApprovalPolicy = (value: unknown): ThreadApprovalPolicy | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().toLowerCase();
+  return (THREAD_APPROVAL_POLICIES as readonly string[]).includes(trimmed)
+    ? (trimmed as ThreadApprovalPolicy)
+    : null;
+};
+
 /** Scratch workspaces auto-created per thread carry this id prefix. */
 export const THREAD_SCRATCH_WORKSPACE_PREFIX = 'workspace_thread_';
 

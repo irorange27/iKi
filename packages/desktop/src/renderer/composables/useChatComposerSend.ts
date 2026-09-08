@@ -63,6 +63,7 @@ export const useChatComposerSend = (deps: {
   autonomousMaxIterations: Ref<number>;
   reasoningEffort: Ref<string>;
   personality: Ref<string>;
+  approvalPolicy: Ref<string>;
   prepareFailedMessage: string;
   stopFailedMessage: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
@@ -261,6 +262,7 @@ export const useChatComposerSend = (deps: {
         selectedSkillIds: effectiveSelectedSkillIds,
         reasoningEffort: deps.reasoningEffort.value,
         personality: deps.personality.value,
+        approvalPolicy: deps.approvalPolicy.value,
         ...(deps.isAutonomousMode.value
           ? { autonomous: { maxIterations: deps.autonomousMaxIterations.value } }
           : {}),

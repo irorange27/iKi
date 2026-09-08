@@ -37,6 +37,8 @@ export type ChatTurnOptions = {
   reasoningEffort?: string;
   /** Per-thread agent personality ('default' | 'concise' | 'friendly'). */
   personality?: string;
+  /** Session-level tool approval policy; validated downstream. */
+  approvalPolicy?: string;
   modelCapability?: {
     contextWindow?: number | null;
     maxInputTokens?: number | null;

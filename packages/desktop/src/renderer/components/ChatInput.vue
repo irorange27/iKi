@@ -110,24 +110,61 @@
         </template>
 
         <template #toolbar-left>
-          <button
-            class="composer-permission-chip"
-            :class="{ 'composer-permission-chip--auto': autoApproveEnabled }"
-            :title="t(autoApproveEnabled
-              ? 'chat.input.permission.autoTitle'
-              : 'chat.input.permission.askTitle')"
-            @click="toggleAutoApprove"
-          >
-            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-              />
-            </svg>
-            <span>{{ autoApproveEnabled ? t('chat.input.permission.auto') : t('chat.input.permission.ask') }}</span>
-          </button>
+          <PopoverRoot v-model:open="permissionPanelOpen">
+            <PopoverTrigger as-child>
+              <button
+                class="composer-permission-chip"
+                :class="{ 'composer-permission-chip--auto': approvalPolicy === 'never' }"
+                :title="t('chat.input.permission.title')"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                  />
+                </svg>
+                <span>{{ permissionChipLabel }}</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverPortal>
+              <PopoverContent
+                class="permission-panel"
+                side="top"
+                align="start"
+                :side-offset="8"
+              >
+                <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
+                <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
+                  <button
+                    v-for="option in permissionOptions"
+                    :key="option.value"
+                    class="permission-option"
+                    :class="{ 'permission-option--selected': approvalPolicy === option.value }"
+                    role="radio"
+                    :aria-checked="approvalPolicy === option.value"
+                    @click="selectApprovalPolicy(option.value)"
+                  >
+                    <span class="permission-option-icon" aria-hidden="true">{{ option.icon }}</span>
+                    <span class="permission-option-copy">
+                      <span class="permission-option-name">{{ option.name }}</span>
+                      <span class="permission-option-desc">{{ option.description }}</span>
+                    </span>
+                    <svg
+                      v-if="approvalPolicy === option.value"
+                      class="permission-option-check h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                </div>
+              </PopoverContent>
+            </PopoverPortal>
+          </PopoverRoot>
         </template>
 
         <template #toolbar-right>
@@ -231,6 +268,11 @@ import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import { useRunStatus } from '../composables/useRunStatus';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useConfigStore } from '../store/config';
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
+import {
+  parseApprovalPolicy,
+  type ThreadApprovalPolicy,
+} from '@iki/backend/workspaces/thread_mode';
 import { storeToRefs } from 'pinia';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 import { useI18n } from '../i18n';
@@ -241,9 +283,48 @@ const { t } = useI18n();
 const threadSession = useThreadSessionStore();
 const configStore = useConfigStore();
 const autoApproveEnabled = computed(() => configStore.config?.general?.autoApproveToolRequests === true);
+const approvalPolicy = computed(() => props.approvalPolicy ?? '');
+const permissionPanelOpen = ref(false);
 
-const toggleAutoApprove = () => {
-  configStore.updateGeneral('autoApproveToolRequests', !autoApproveEnabled.value);
+const permissionOptions = computed(() => [
+  {
+    value: '',
+    icon: '⚙',
+    name: t('chat.input.permission.defaultName'),
+    description: t('chat.input.permission.defaultDesc'),
+  },
+  {
+    value: 'always',
+    icon: '🖐',
+    name: t('chat.input.permission.alwaysName'),
+    description: t('chat.input.permission.alwaysDesc'),
+  },
+  {
+    value: 'trustWorkspace',
+    icon: '🛡',
+    name: t('chat.input.permission.trustName'),
+    description: t('chat.input.permission.trustDesc'),
+  },
+  {
+    value: 'never',
+    icon: '⚡',
+    name: t('chat.input.permission.fullName'),
+    description: t('chat.input.permission.fullDesc'),
+  },
+]);
+
+const permissionChipLabel = computed(() => {
+  if (approvalPolicy.value === 'never') return t('chat.input.permission.fullChip');
+  if (approvalPolicy.value === 'trustWorkspace') return t('chat.input.permission.trustChip');
+  if (approvalPolicy.value === 'always') return t('chat.input.permission.alwaysChip');
+  return autoApproveEnabled.value
+    ? t('chat.input.permission.auto')
+    : t('chat.input.permission.ask');
+});
+
+const selectApprovalPolicy = (value: string) => {
+  void threadSession.setApprovalPolicy(parseApprovalPolicy(value) ?? '');
+  permissionPanelOpen.value = false;
 };
 const {
   currentThread,
@@ -266,6 +347,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   threadId?: string;
   workspaceLocked?: boolean;
+  approvalPolicy?: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
   submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
@@ -426,6 +508,7 @@ const {
   autonomousMaxIterations,
   reasoningEffort: currentReasoningEffort,
   personality: currentPersonality,
+  approvalPolicy: computed(() => props.approvalPolicy ?? ''),
   ensureWorkspaceForWork: () => {
     if (!isWorkThread.value) return null;
     if (sessionSelectedWorkspaceId.value) return null;

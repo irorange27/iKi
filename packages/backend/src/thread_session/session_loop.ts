@@ -21,6 +21,7 @@ import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './type
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import { getPersonalityStylePrompt } from '../chat/personality';
+import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { runOuterLoop, type OuterLoopState } from './outer_loop';
 
@@ -170,6 +171,8 @@ export const createChatStreaming = (deps: {
         getCompanion().setAffect(null);
       }
 
+      const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
+
       const systemPrompt = [
         preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
         getPersonalityStylePrompt(options.personality),
@@ -241,6 +244,7 @@ export const createChatStreaming = (deps: {
             enabledTools: guardedTools,
             availableSkillIds: preparedTurn.selectedSkillIds,
             ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
+            ...(approvalPolicy ? { approvalPolicy } : {}),
             ...(autonomousMode ? { autonomous: options.autonomous } : {}),
           })
         : undefined;
@@ -260,6 +264,7 @@ export const createChatStreaming = (deps: {
         threadId: options.threadId,
         maxOutputTokens: preparedTurn.maxOutputTokens,
         ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
+        ...(approvalPolicy ? { approvalPolicy } : {}),
       });
 
       if (!preparedTurn.prompt.trim()) {

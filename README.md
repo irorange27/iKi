@@ -35,7 +35,7 @@ On first launch, add a provider (OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Oll
 | Shell | Electron 39, Node.js 24 |
 | UI | Vue 3 + Pinia + Tailwind CSS 4 |
 | Build | Vite, electron-forge |
-| Data | better-sqlite3 |
+| Data | `node:sqlite` (Node.js built-in) |
 | AI SDK | Vercel AI SDK (`ai`), `@ai-sdk/*` |
 | Testing | Vitest, happy-dom, vue-tsc |
 | CI | GitHub Actions |

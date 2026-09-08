@@ -264,6 +264,7 @@ const {
   currentProviderId,
   currentReasoningEffort,
   currentPersonality,
+  currentApprovalPolicy,
   isIncognito,
   selectedWorkspaceId,
   selectedTools,

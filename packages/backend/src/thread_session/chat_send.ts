@@ -13,6 +13,7 @@ import {
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
 import { getPersonalityStylePrompt } from '../chat/personality';
+import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
 
 const logger = createLogger({ module: 'chat_send' });
@@ -70,6 +71,8 @@ export const createChatSend = (deps: ChatSendDeps) => {
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
       const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
+      const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
+
       const systemPrompt = [
         preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
         getPersonalityStylePrompt(options.personality),
@@ -128,6 +131,7 @@ export const createChatSend = (deps: ChatSendDeps) => {
           threadId: options.threadId,
           maxOutputTokens: preparedTurn.maxOutputTokens,
           ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
+          ...(approvalPolicy ? { approvalPolicy } : {}),
         });
 
         // ponytail: clear stale todo plan from previous turn

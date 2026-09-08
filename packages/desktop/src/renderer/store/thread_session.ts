@@ -19,6 +19,11 @@ import {
   parseThreadLlmSelectionState,
 } from '@iki/backend/chat/thread_runtime_hints';
 import { normalizePersonality } from '@iki/backend/chat/personality';
+import {
+  parseApprovalPolicy,
+  THREAD_APPROVAL_POLICY_KEY,
+  type ThreadApprovalPolicy,
+} from '@iki/backend/workspaces/thread_mode';
 import type { ThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 
 export type ChatThread = StoredChatThread;
@@ -82,6 +87,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const currentProviderId = ref<string | null>(null);
   const currentReasoningEffort = ref('');
   const currentPersonality = ref('');
+  const currentApprovalPolicy = ref<ThreadApprovalPolicy | ''>('');
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
   const selectedTools = ref<string[]>([]);
@@ -149,6 +155,11 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const syncPersonalityState = (thread: ChatThread | null) => {
     const metadata = thread ? parseJsonRecord(thread.metadata) : {};
     currentPersonality.value = normalizePersonality(metadata.personality) ?? '';
+  };
+
+  const syncApprovalPolicyState = (thread: ChatThread | null) => {
+    const metadata = thread ? parseJsonRecord(thread.metadata) : {};
+    currentApprovalPolicy.value = parseApprovalPolicy(metadata[THREAD_APPROVAL_POLICY_KEY]) ?? '';
   };
 
   const restoreDraftComposerSelection = () => {
@@ -468,6 +479,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncWorkspaceState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
+      syncApprovalPolicyState(thread);
       showWelcome.value = false;
       await loadThreadMessages(threadId);
 
@@ -495,6 +507,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     isIncognito.value = false;
     currentReasoningEffort.value = '';
     currentPersonality.value = '';
+    currentApprovalPolicy.value = '';
     selectedWorkspaceId.value = null;
     messageStore.clear();
     persistence.resetPersistedMessageIds();
@@ -766,6 +779,46 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     }
   };
 
+  const setApprovalPolicy = async (nextValue: string) => {
+    const normalizedValue = parseApprovalPolicy(nextValue);
+    const activeThread = currentThread.value;
+    if (!activeThread) return;
+    const previousValue = parseApprovalPolicy(
+      parseJsonRecord(activeThread.metadata)[THREAD_APPROVAL_POLICY_KEY]
+    );
+    if (previousValue === normalizedValue) return;
+
+    const metadata = parseJsonRecord(activeThread.metadata);
+    const previousMetadata = activeThread.metadata;
+    const nextMetadata = JSON.stringify({
+      ...metadata,
+      [THREAD_APPROVAL_POLICY_KEY]: normalizedValue ?? '',
+    });
+
+    currentApprovalPolicy.value = normalizedValue ?? '';
+    currentThread.value = { ...activeThread, metadata: nextMetadata };
+
+    try {
+      await requireRuntime().electronAPI.chat.threads.update(activeThread.id, {
+        metadata: nextMetadata,
+      });
+    } catch (error) {
+      threadSessionLogger.event({
+        level: 'warn',
+        event: 'chat.thread.approval_policy_update',
+        outcome: 'failed',
+        error,
+        entity: {
+          thread_id: activeThread.id,
+        },
+      });
+      if (currentThread.value?.id === activeThread.id) {
+        currentThread.value = { ...currentThread.value, metadata: previousMetadata };
+        syncApprovalPolicyState(currentThread.value);
+      }
+    }
+  };
+
   const ensureWorkspaceForCurrentThread = async () => {
     const { electronAPI } = requireRuntime();
     const activeThread = currentThread.value;
@@ -845,6 +898,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     currentProviderId,
     currentReasoningEffort,
     currentPersonality,
+    currentApprovalPolicy,
     isIncognito,
     selectedWorkspaceId,
     selectedTools,
@@ -867,6 +921,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     setWorkspace,
     setReasoningEffort,
     setPersonality,
+    setApprovalPolicy,
     ensureWorkspaceForCurrentThread,
     handleAssistantMessagePersisted,
     handleTaskPush,

@@ -10,6 +10,8 @@ export type ChatInvocationOptions = {
   reasoningEffort?: string;
   /** Per-thread agent personality ('default' | 'concise' | 'friendly'). */
   personality?: string;
+  /** Session-level tool approval policy; overrides the global auto-approve switch. */
+  approvalPolicy?: string;
   messages: unknown[];
   tools?: string[];
   mcpServerIds?: string[];
