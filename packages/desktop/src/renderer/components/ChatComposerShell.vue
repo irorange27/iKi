@@ -51,7 +51,7 @@
         </button>
       </div>
 
-      <div class="composer-toolbar border-t border-color">
+      <div class="composer-toolbar">
         <div class="composer-toolbar-slot composer-toolbar-slot-left">
           <slot name="toolbar-left" />
         </div>
@@ -303,9 +303,8 @@ onMounted(() => {
   align-items: flex-end;
   justify-content: space-between;
   gap: 8px 14px;
-  padding: 8px 12px 10px;
+  padding: 6px 12px 10px;
   border-radius: 0 0 12px 12px;
-  border-top-color: var(--chat-composer-toolbar-border-color);
   background: var(--chat-composer-toolbar-background);
 }
 
