@@ -3,7 +3,7 @@ import { startTurnHarness } from '../agent/harness';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getStreamErrorMessage } from '@iki/backend/utils/errors';
 import { describeApprovalRequiredTools } from '../turn_prep/approval_types';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
@@ -241,7 +241,7 @@ export const createChatSend = (deps: ChatSendDeps) => {
         ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
       };
     } catch (error: unknown) {
-      const message = getErrorMessage(error);
+      const message = getStreamErrorMessage(error);
       if (runTracker && runTracker.getRun().status === 'running') {
         runTracker.markFailed({ message });
       }

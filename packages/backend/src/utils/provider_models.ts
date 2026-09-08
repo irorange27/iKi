@@ -99,6 +99,17 @@ export type ModelCapabilityLimits = Pick<
 
 export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 128_000;
 
+/**
+ * Hard per-request output caps enforced by provider APIs. A stored model
+ * override above the cap (e.g. copying the context window into max output
+ * tokens) makes every request fail with HTTP 400, so clamp it during
+ * capability resolution. Values are documented API limits, not context sizes.
+ */
+const PROVIDER_MAX_OUTPUT_TOKEN_CAPS: Partial<Record<string, number>> = {
+  // DeepSeek rejects max_tokens outside [1, 393216].
+  deepseek: 393_216,
+};
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -482,6 +493,11 @@ export const ensureModelCapability = (
     maxInputTokens: overrides?.maxInputTokens ?? capability?.maxInputTokens,
     maxOutputTokens: overrides?.maxOutputTokens ?? capability?.maxOutputTokens,
   });
+
+  const outputCap = PROVIDER_MAX_OUTPUT_TOKEN_CAPS[providerType.trim().toLowerCase()];
+  if (outputCap && normalizedLimits.maxOutputTokens !== null) {
+    normalizedLimits.maxOutputTokens = Math.min(normalizedLimits.maxOutputTokens, outputCap);
+  }
 
   if (capability) {
     return {

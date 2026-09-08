@@ -244,4 +244,49 @@ describe('provider_models helpers', () => {
       source: 'default',
     });
   });
+
+  it('clamps deepseek max output tokens to the API hard cap', () => {
+    const clamped = ensureModelCapability('deepseek', 'deepseek-v4.1-flash', {
+      providerType: 'deepseek',
+      providerKey: 'deepseek',
+      modelId: 'deepseek-v4.1-flash',
+      displayName: 'DeepSeek V4.1 Flash',
+      contextWindow: 1_000_000,
+      maxInputTokens: 1_000_000,
+      maxOutputTokens: 1_000_000,
+      supportsToolCalls: true,
+      supportsReasoning: true,
+      source: 'provider',
+    });
+    expect(clamped.maxOutputTokens).toBe(393_216);
+    expect(clamped.contextWindow).toBe(1_000_000);
+
+    const uncappedProvider = ensureModelCapability('deepseek', 'deepseek-v4.1-flash', {
+      providerType: 'deepseek',
+      providerKey: 'deepseek',
+      modelId: 'deepseek-v4.1-flash',
+      displayName: 'DeepSeek V4.1 Flash',
+      contextWindow: 1_000_000,
+      maxInputTokens: 1_000_000,
+      maxOutputTokens: 8_192,
+      supportsToolCalls: true,
+      supportsReasoning: true,
+      source: 'provider',
+    });
+    expect(uncappedProvider.maxOutputTokens).toBe(8_192);
+
+    const otherProvider = ensureModelCapability('openai', 'gpt-x', {
+      providerType: 'openai',
+      providerKey: 'openai',
+      modelId: 'gpt-x',
+      displayName: 'GPT X',
+      contextWindow: 1_000_000,
+      maxInputTokens: 1_000_000,
+      maxOutputTokens: 1_000_000,
+      supportsToolCalls: true,
+      supportsReasoning: null,
+      source: 'provider',
+    });
+    expect(otherProvider.maxOutputTokens).toBe(1_000_000);
+  });
 });

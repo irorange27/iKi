@@ -4,6 +4,30 @@ export const getErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
+const MAX_ERROR_CAUSE_DEPTH = 5;
+
+/**
+ * Message for stream failures. AI SDK wrappers like NoOutputGeneratedError
+ * hide the provider's own detail ("Invalid max_tokens value...", rate limits)
+ * behind a generic top-level message; walk the cause chain and prefer the
+ * first API-call error, which carries the provider response.
+ */
+export const getStreamErrorMessage = (error: unknown): string => {
+  const fallback = getErrorMessage(error);
+  let current: unknown = error;
+
+  for (let depth = 0; depth < MAX_ERROR_CAUSE_DEPTH; depth += 1) {
+    if (!(current instanceof Error)) break;
+    const candidate = current as Error & { statusCode?: unknown };
+    if (candidate.name === 'AI_APICallError' || typeof candidate.statusCode === 'number') {
+      return candidate.message || fallback;
+    }
+    current = candidate.cause;
+  }
+
+  return fallback;
+};
+
 const REFUSAL_PATTERNS = [
   /\bI (?:am unable to|cannot|can't|won't|am not able to) (?:assist|comply|generate|create|write|provide|help|fulfil|engage|participate|do that)\b/i,
   /\b(?:content policy|safety guidelines?|acceptable use|against my (?:guidelines|policies|terms)|terms of service)\b/i,

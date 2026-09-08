@@ -1,6 +1,6 @@
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getStreamErrorMessage } from '@iki/backend/utils/errors';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
@@ -377,7 +377,7 @@ export const createChatStreaming = (deps: {
         return { success: true, stopped: streamState.stoppedByUser };
       }
 
-      const message = getErrorMessage(error);
+      const message = getStreamErrorMessage(error);
       chatStreamingLogger.event({
         level: 'error',
         event: 'chat.stream',
