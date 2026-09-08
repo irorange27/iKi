@@ -40,14 +40,14 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
 }));
 
-import { createChatSend } from '@iki/backend/thread_session/chat_send';
+import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
-const toolName = 'chat_send_context_probe';
+const toolName = 'message_send_context_probe';
 
-describe('createChatSend integration', () => {
+describe('createMessageSend integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -80,7 +80,7 @@ describe('createChatSend integration', () => {
       fauxText('done'),
     ]));
 
-    const send = createChatSend({
+    const send = createMessageSend({
       checkThreadRunRate: () => ({ allowed: true }),
       usage: { recordUsageEvent: vi.fn() },
       turnPreparer: {

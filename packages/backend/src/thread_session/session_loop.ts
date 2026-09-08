@@ -14,9 +14,9 @@ import { createAgentRunTracker } from '../turn_prep/run_tracker';
 import { startTurnHarness } from '../agent/harness';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
-import { createChatSend } from './chat_send';
+import { createMessageSend } from './message_send';
 import { buildHandoffResumeContext } from './handoff_resume';
-export type { ChatSendResult } from './chat_send';
+export type { MessageSendResult } from './message_send';
 import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
@@ -81,7 +81,7 @@ export const createChatStreaming = (deps: {
   const streamingModels = createChatStreamingModels();
   const coordinator = deps.streamCoordinator;
 
-  const { send } = createChatSend({
+  const { send } = createMessageSend({
     turnPreparer,
     usage: deps.usage,
     checkThreadRunRate: coordinator.checkThreadRunRate,

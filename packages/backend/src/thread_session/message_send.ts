@@ -16,9 +16,9 @@ import { getPersonalityStylePrompt } from '../chat/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
 
-const logger = createLogger({ module: 'chat_send' });
+const logger = createLogger({ module: 'message_send' });
 
-export type ChatSendResult =
+export type MessageSendResult =
   | {
       success: true;
       text: string;
@@ -30,7 +30,7 @@ export type ChatSendResult =
       runId?: string;
     };
 
-export type ChatSendDeps = {
+export type MessageSendDeps = {
   turnPreparer: ReturnType<typeof createChatTurnPreparer>;
   usage: {
     recordUsageEvent: (params: {
@@ -54,8 +54,8 @@ export type ChatSendDeps = {
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
 };
 
-export const createChatSend = (deps: ChatSendDeps) => {
-  const send = async (options: ChatTurnOptions): Promise<ChatSendResult> => {
+export const createMessageSend = (deps: MessageSendDeps) => {
+  const send = async (options: ChatTurnOptions): Promise<MessageSendResult> => {
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
@@ -256,4 +256,4 @@ export const createChatSend = (deps: ChatSendDeps) => {
   return { send };
 };
 
-export type ChatSend = ReturnType<typeof createChatSend>;
+export type MessageSend = ReturnType<typeof createMessageSend>;
