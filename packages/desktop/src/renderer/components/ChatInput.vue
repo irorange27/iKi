@@ -117,14 +117,7 @@
                 :class="{ 'composer-permission-chip--auto': approvalPolicy === 'never' }"
                 :title="t('chat.input.permission.title')"
               >
-                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                  />
-                </svg>
+                <ShieldCheck class="h-3.5 w-3.5" />
                 <span>{{ permissionChipLabel }}</span>
               </button>
             </PopoverTrigger>
@@ -146,20 +139,17 @@
                   :aria-checked="approvalPolicy === option.value"
                   @click="selectApprovalPolicy(option.value)"
                 >
-                  <span class="permission-option-icon" aria-hidden="true">{{ option.icon }}</span>
+                  <span class="permission-option-icon" aria-hidden="true">
+                    <component :is="option.icon" class="h-4 w-4" />
+                  </span>
                   <span class="permission-option-copy">
                     <span class="permission-option-name">{{ option.name }}</span>
                     <span class="permission-option-desc">{{ option.description }}</span>
                   </span>
-                  <svg
+                  <Check
                     v-if="approvalPolicy === option.value"
                     class="permission-option-check h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
+                  />
                 </button>
               </div>
             </PopoverContent>
@@ -234,7 +224,9 @@
 
 <script setup lang="ts">
 import { computed, ref, toRef, watchEffect } from 'vue';
+import type { Component } from 'vue';
 import type { FileUIPart } from 'ai';
+import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
 import type { Provider } from '@iki/backend/types/provider';
 import type { TaskPlan } from '@iki/backend/types/task_plan';
 import {
@@ -284,28 +276,30 @@ const autoApproveEnabled = computed(() => configStore.config?.general?.autoAppro
 const approvalPolicy = computed(() => props.approvalPolicy ?? '');
 const permissionPanelOpen = ref(false);
 
-const permissionOptions = computed(() => [
+const permissionOptions = computed<
+  { value: string; icon: Component; name: string; description: string }[]
+>(() => [
   {
     value: '',
-    icon: '⚙',
+    icon: Settings,
     name: t('chat.input.permission.defaultName'),
     description: t('chat.input.permission.defaultDesc'),
   },
   {
     value: 'always',
-    icon: '🖐',
+    icon: Hand,
     name: t('chat.input.permission.alwaysName'),
     description: t('chat.input.permission.alwaysDesc'),
   },
   {
     value: 'trustWorkspace',
-    icon: '🛡',
+    icon: ShieldCheck,
     name: t('chat.input.permission.trustName'),
     description: t('chat.input.permission.trustDesc'),
   },
   {
     value: 'never',
-    icon: '⚡',
+    icon: Zap,
     name: t('chat.input.permission.fullName'),
     description: t('chat.input.permission.fullDesc'),
   },

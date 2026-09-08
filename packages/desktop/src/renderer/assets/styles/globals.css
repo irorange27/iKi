@@ -227,9 +227,16 @@
   }
 
   .permission-option-icon {
+    display: inline-flex;
     flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
     width: 20px;
-    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .permission-option--selected .permission-option-icon {
+    color: var(--accent-color);
   }
 
   .permission-option-copy {

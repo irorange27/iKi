@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
@@ -303,6 +304,16 @@ const mountChatInput = async (options?: {
   const pinia = createPinia();
   setActivePinia(pinia);
   const threadSession = useThreadSessionStore();
+  // Workspace/permission actions persist through the runtime; without it the
+  // store throws after the click handlers resolve and vitest reports
+  // unhandled rejections even though the assertions pass.
+  threadSession.initRuntime({
+    electronAPI: api as never,
+    messageStore: { setMessages: vi.fn(), getMessages: vi.fn(async () => []) } as never,
+    persistence: { resetPersistedMessageIds: vi.fn() } as never,
+    sidebarRef: ref(null),
+    scrollToBottom: vi.fn(),
+  });
   if (options?.session) {
     Object.assign(threadSession, options.session);
   }
