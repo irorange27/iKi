@@ -109,7 +109,7 @@
           </div>
         </template>
 
-        <template #toolbar-left>
+        <template #toolbar-right>
           <PopoverRoot v-model:open="permissionPanelOpen">
             <PopoverTrigger as-child>
               <button
@@ -129,45 +129,43 @@
               </button>
             </PopoverTrigger>
             <PopoverPortal>
-              <PopoverContent
-                class="permission-panel"
-                side="top"
-                align="start"
-                :side-offset="8"
-              >
-                <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
-                <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
-                  <button
-                    v-for="option in permissionOptions"
-                    :key="option.value"
-                    class="permission-option"
-                    :class="{ 'permission-option--selected': approvalPolicy === option.value }"
-                    role="radio"
-                    :aria-checked="approvalPolicy === option.value"
-                    @click="selectApprovalPolicy(option.value)"
+            <PopoverContent
+              class="permission-panel"
+              side="top"
+              align="start"
+              :side-offset="8"
+            >
+              <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
+              <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
+                <button
+                  v-for="option in permissionOptions"
+                  :key="option.value"
+                  class="permission-option"
+                  :class="{ 'permission-option--selected': approvalPolicy === option.value }"
+                  role="radio"
+                  :aria-checked="approvalPolicy === option.value"
+                  @click="selectApprovalPolicy(option.value)"
+                >
+                  <span class="permission-option-icon" aria-hidden="true">{{ option.icon }}</span>
+                  <span class="permission-option-copy">
+                    <span class="permission-option-name">{{ option.name }}</span>
+                    <span class="permission-option-desc">{{ option.description }}</span>
+                  </span>
+                  <svg
+                    v-if="approvalPolicy === option.value"
+                    class="permission-option-check h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <span class="permission-option-icon" aria-hidden="true">{{ option.icon }}</span>
-                    <span class="permission-option-copy">
-                      <span class="permission-option-name">{{ option.name }}</span>
-                      <span class="permission-option-desc">{{ option.description }}</span>
-                    </span>
-                    <svg
-                      v-if="approvalPolicy === option.value"
-                      class="permission-option-check h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </button>
-                </div>
-              </PopoverContent>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+              </div>
+            </PopoverContent>
+          
             </PopoverPortal>
           </PopoverRoot>
-        </template>
-
-        <template #toolbar-right>
           <ChatModelSelector
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
