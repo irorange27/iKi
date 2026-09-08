@@ -318,8 +318,9 @@ onMounted(() => {
 }
 
 .composer-toolbar-slot-right {
-  flex: 0 1 auto;
-  margin-left: auto;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-end;
 }
 
 .placeholder-muted::placeholder {
