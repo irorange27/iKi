@@ -77,7 +77,7 @@ pnpm run commit           # Interactive semantic commit
 python3 scripts/generate-icon.py  # Regenerate app icon (requires Pillow)
 ```
 
-- DevTools auto-open: set `IKI_AUTO_OPEN_DEVTOOLS=true`
+- DevTools auto-open: on by default in dev (`pnpm run start` / `app:dev`); set `IKI_AUTO_OPEN_DEVTOOLS=false` to disable. Packaged builds never auto-open.
 - Daemon binds to `127.0.0.1` by default
 
 ## Commit Governance
