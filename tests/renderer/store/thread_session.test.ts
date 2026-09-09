@@ -274,6 +274,65 @@ describe('threadSession store', () => {
     expect(workThread?.workspace_id).toBe('workspace_alpha');
   });
 
+  it('creates the new chat under the selected project instead of dropping the binding', async () => {
+    const projectThread = createStoredThread({
+      id: 'thread_project',
+      title: 'Project thread',
+      workspace_id: 'workspace_docs',
+      metadata: '{"mode":"work"}',
+    });
+    const { state, createThread } = createHarness([projectThread]);
+
+    await state.selectThread(projectThread.id);
+    expect(state.selectedWorkspaceId.value).toBe('workspace_docs');
+
+    const nextThread = await state.handleNewChat();
+
+    expect(createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace_id: 'workspace_docs',
+        metadata: expect.stringContaining('"mode":"work"'),
+      })
+    );
+    expect(nextThread?.workspace_id).toBe('workspace_docs');
+    expect(state.selectedWorkspaceId.value).toBe('workspace_docs');
+  });
+
+  it('keeps new chats workspace-free when the current thread has no project or a thread-private one', async () => {
+    const plainThread = createStoredThread({
+      id: 'thread_plain',
+      title: 'Plain thread',
+    });
+    const scratchThread = createStoredThread({
+      id: 'thread_scratch',
+      title: 'Scratch thread',
+      workspace_id: 'workspace_thread_thread_scratch',
+    });
+    const { state, createThread } = createHarness([plainThread, scratchThread]);
+
+    await state.selectThread(plainThread.id);
+    await state.handleNewChat();
+
+    expect(createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace_id: null,
+        metadata: expect.stringContaining('"mode":"chat"'),
+      })
+    );
+
+    await state.selectThread(scratchThread.id);
+    expect(state.selectedWorkspaceId.value).toBe('workspace_thread_thread_scratch');
+
+    await state.handleNewChat();
+
+    expect(createThread).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        workspace_id: null,
+        metadata: expect.stringContaining('"mode":"chat"'),
+      })
+    );
+  });
+
   it('syncs the composer incognito state from the selected thread', async () => {
     const privateThread = createStoredThread({
       id: 'thread_private',

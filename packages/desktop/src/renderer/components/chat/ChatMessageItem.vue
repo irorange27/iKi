@@ -1,5 +1,9 @@
 <template>
-  <div class="message-wrapper" :class="message.role">
+  <div
+    class="message-wrapper"
+    :class="[message.role, { 'turn-highlighted': isTurnHighlighted }]"
+    :data-message-id="message.id || undefined"
+  >
     <div
       class="message-shell"
       @mouseenter="showActions"
@@ -111,9 +115,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
-import { Copy, MoreHorizontal, Pencil, RotateCcw } from 'lucide-vue-next';
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import { computed, onBeforeUnmount, ref } from 'vue';import { Copy, MoreHorizontal, Pencil, RotateCcw } from 'lucide-vue-next';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import { copyTextToClipboard } from '../../composables/useMarkdownCopy';
 import { useI18n } from '../../i18n';
 import { extractTextFromMessage } from '../../modules/chat/ui_message_text';
@@ -125,9 +128,13 @@ const props = defineProps<{
   message: ChatUiMessage;
   messageIndex: number;
   activeAssistantMessageId: string | null;
+  /** Message ids of the turn currently hovered in the turn rail. */
+  turnHighlightIds?: Set<string> | null;
   approvalProcessing: (part: unknown) => boolean;
   getMcpServerLabel: (part: unknown) => string;
 }>();
+
+const isTurnHighlighted = computed(() => props.turnHighlightIds?.has(props.message.id) ?? false);
 
 const emit = defineEmits<{
   (
@@ -254,6 +261,24 @@ onBeforeUnmount(() => {
 <style scoped>
 .message-wrapper {
   margin-bottom: var(--chat-message-gap, 18px);
+}
+
+/* Turn-rail hover: tint the hovered turn so the rail line maps to it. */
+.message-wrapper.turn-highlighted {
+  position: relative;
+  background: color-mix(in srgb, var(--accent-color) 5%, transparent);
+  border-radius: 14px;
+}
+
+.message-wrapper.turn-highlighted::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-color);
 }
 
 .message-wrapper.user {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, watch, type Ref } from 'vue';
 
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 
 import { toUiMessages } from '../modules/chat/ui_message_convert';
 import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
@@ -17,13 +17,15 @@ import type { UiMessagePersistence } from '../modules/chat/ui_message_persistenc
 import {
   parseJsonRecord,
   parseThreadLlmSelectionState,
-} from '@iki/backend/chat/thread_runtime_hints';
-import { normalizePersonality } from '@iki/backend/chat/personality';
+} from '@iki/backend/message/thread_runtime_hints';
+import { normalizePersonality } from '@iki/backend/message/personality';
 import {
   parseApprovalPolicy,
   THREAD_APPROVAL_POLICY_KEY,
+  THREAD_SCRATCH_WORKSPACE_PREFIX,
   type ThreadApprovalPolicy,
 } from '@iki/backend/workspaces/thread_mode';
+import { THREAD_WORKTREE_WORKSPACE_PREFIX } from '@iki/backend/workspaces/worktree_ids';
 import type { ThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 
 export type ChatThread = StoredChatThread;
@@ -68,6 +70,11 @@ const normalizeWorkspaceId = (value: unknown): string | null => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 };
+
+/** Scratch/worktree workspaces are thread-private — they never carry over. */
+const isThreadPrivateWorkspaceId = (workspaceId: string): boolean =>
+  workspaceId.startsWith(THREAD_SCRATCH_WORKSPACE_PREFIX) ||
+  workspaceId.startsWith(THREAD_WORKTREE_WORKSPACE_PREFIX);
 
 const normalizeModelId = (value: unknown): string => {
   if (typeof value !== 'string') return '';
@@ -521,7 +528,15 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const handleNewChat = async () => {
-    await createNewThread({ model: currentModel.value, mode: 'chat' });
+    // With a project selected, "new chat" opens the next session under that
+    // project (work binding); without one it stays a plain workspace-free chat.
+    const workspaceId = normalizeWorkspaceId(selectedWorkspaceId.value);
+    const inheritProject = workspaceId !== null && !isThreadPrivateWorkspaceId(workspaceId);
+    return createNewThread({
+      model: currentModel.value,
+      mode: inheritProject ? 'work' : 'chat',
+      workspaceId: inheritProject ? workspaceId : null,
+    });
   };
 
   const clearCurrentThread = async () => {
