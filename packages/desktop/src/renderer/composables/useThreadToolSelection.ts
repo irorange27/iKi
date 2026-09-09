@@ -4,7 +4,7 @@ import {
   normalizeStringArray,
   parseThreadToolNames,
   parseThreadToolSelectionState,
-} from '@iki/backend/chat/thread_runtime_hints';
+} from '@iki/backend/message/thread_runtime_hints';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 

@@ -2,11 +2,11 @@ import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { createLogger } from '@iki/backend/logger';
 import type { ChatThread } from '@iki/backend/types/chat';
 import type { AffectSignal } from '@iki/backend/types/affect';
-import type { InterventionPolicySignal } from '@iki/backend/chat/intervention_policy';
+import type { InterventionPolicySignal } from '@iki/backend/message/intervention_policy';
 import {
   buildThreadRuntimeMetadata,
   normalizeStringArray,
-} from '@iki/backend/chat/thread_runtime_hints';
+} from '@iki/backend/message/thread_runtime_hints';
 
 const chatThreadHintsLogger = createLogger({ module: 'chat_thread_hints' });
 

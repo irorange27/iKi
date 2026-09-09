@@ -16,7 +16,7 @@ import type {
   ChatAffectExperimentMode,
   ChatExperimentalContext,
   InterventionPolicySignal,
-} from '@iki/backend/chat/intervention_policy';
+} from '@iki/backend/message/intervention_policy';
 import type { AgentRunKind } from '@iki/backend/types/agent_run';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { SkillSummary } from '@iki/backend/types/skill';

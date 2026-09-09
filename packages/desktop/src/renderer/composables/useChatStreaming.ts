@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import type { ChatInstance } from '../modules/chat/chat_instance';
@@ -43,7 +43,7 @@ export const useChatStreaming = (deps: {
   ensureWorkspaceForCurrentThread: () => Promise<ChatThread | null>;
   selectThread: (threadId: string) => Promise<void>;
   handleThreadDeleted: (threadId: string) => Promise<void>;
-  handleNewChat: () => Promise<void>;
+  handleNewChat: () => Promise<ChatThread | null>;
 }) => {
   const editingUserMessageId = ref<string | null>(null);
 

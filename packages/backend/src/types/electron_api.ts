@@ -198,7 +198,7 @@ export interface ElectronApi {
       searchContent: (
         query: string,
         limit?: number
-      ) => Promise<import('../chat/thread_content_search').ThreadContentMatch[]>;
+      ) => Promise<import('../message/thread_content_search').ThreadContentMatch[]>;
     };
     messages: {
       list: (threadId: string) => Promise<ChatMessage[]>;

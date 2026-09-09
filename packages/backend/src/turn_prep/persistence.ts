@@ -13,7 +13,7 @@ import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktre
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { onMessagePersisted as onContinuityMessagePersisted } from '../thread_session/platform';
 import type { ChatMemory } from '../thread_session/memory';
-import { sanitizeUiMessageJsonForStorage } from '@iki/backend/chat/ui_message_codec';
+import { sanitizeUiMessageJsonForStorage } from '@iki/backend/message/ui_message_codec';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 

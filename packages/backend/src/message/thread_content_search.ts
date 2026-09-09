@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import * as chatMessageDb from '../db/chat_message';
 import * as chatThreadDb from '../db/chat_thread';
-import { extractTextFromMessageParts, isObjectRecord } from '../chat/message_parts';
+import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
 
 /**
  * Content-level thread search (Codex-style ⌘K search): scans the persisted

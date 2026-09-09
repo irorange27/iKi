@@ -4,7 +4,7 @@ import type { ChatInvocationOptions, ElectronApi } from '@iki/backend/types/elec
 import { clonePlainData } from '@iki/backend/utils/clone';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { createLogger } from '../../logger';
-import type { ChatUiMessage, ChatUiMessageChunk } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage, ChatUiMessageChunk } from '@iki/backend/message/message_parts';
 
 const transportLogger = createLogger({ module: 'ipc_chat_transport' });
 

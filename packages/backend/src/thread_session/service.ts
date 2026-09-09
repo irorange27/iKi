@@ -11,8 +11,8 @@ import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';
-import { buildThreadMarkdown, parseStoredMessageForExport } from '../chat/thread_markdown_export';
-import { searchThreadContent } from '../chat/thread_content_search';
+import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
+import { searchThreadContent } from '../message/thread_content_search';
 
 export type { ChatStreamTarget } from './types';
 

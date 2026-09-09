@@ -12,7 +12,7 @@ import type {
 } from '@iki/backend/types/companion';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { Provider } from '@iki/backend/types/provider';
-import type { InterventionPolicySignal } from '@iki/backend/chat/intervention_policy';
+import type { InterventionPolicySignal } from '@iki/backend/message/intervention_policy';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 type CompanionWindowTarget = {

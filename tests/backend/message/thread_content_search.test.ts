@@ -18,7 +18,7 @@ const chatDb = await import('@iki/backend/db/chat_thread');
 const messageDb = await import('@iki/backend/db/chat_message');
 const database = await import('@iki/backend/db/database');
 
-const { searchThreadContent } = await import('@iki/backend/chat/thread_content_search');
+const { searchThreadContent } = await import('@iki/backend/message/thread_content_search');
 
 let dataDir = '';
 

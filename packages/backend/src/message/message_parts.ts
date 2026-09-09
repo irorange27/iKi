@@ -87,6 +87,13 @@ export type TokenUsagePartData = {
   model?: string;
   providerType?: string;
   providerId?: string;
+  /** Turn perf metrics (undefined on messages produced before instrumentation). */
+  llmMs?: number;
+  toolMs?: number;
+  firstTokenMs?: number;
+  firstTokenSamples?: number;
+  steps?: number;
+  toolCalls?: number;
 };
 
 export type ChatUiDataTypes = {
@@ -102,6 +109,7 @@ export type ChatUiMessage = UIMessage<unknown, ChatUiDataTypes>;
 export type ChatUiMessageChunk = UIMessageChunk<unknown, ChatUiDataTypes>;
 export type UiMessagePart = ChatUiMessage['parts'][number];
 export type TextPart = Extract<UiMessagePart, { type: 'text' }>;
+export type ReasoningPart = Extract<UiMessagePart, { type: 'reasoning' }>;
 export type MemoryPart = Extract<UiMessagePart, { type: 'data-memory-retrieval' }>;
 export type SkillUsagePart = Extract<UiMessagePart, { type: 'data-skill-usage' }>;
 export type ComposerInvocationPart = Extract<UiMessagePart, { type: 'data-composer-invocation' }>;
@@ -166,6 +174,12 @@ type LegacyTokenUsagePart = {
   model?: string;
   providerType?: string;
   providerId?: string;
+  llmMs?: number;
+  toolMs?: number;
+  firstTokenMs?: number;
+  firstTokenSamples?: number;
+  steps?: number;
+  toolCalls?: number;
 };
 
 type LegacyChatUiMetadataPart =
@@ -313,6 +327,9 @@ export const createTokenUsagePart = (data: TokenUsagePartData): TokenUsagePart =
 
 export const isTextPart = (part: unknown): part is TextPart =>
   isObjectRecord(part) && part.type === 'text' && typeof part.text === 'string';
+
+export const isReasoningPart = (part: unknown): part is ReasoningPart =>
+  isObjectRecord(part) && part.type === 'reasoning' && typeof part.text === 'string';
 
 export const isDataPart = (part: unknown): boolean =>
   isObjectRecord(part) && typeof part.type === 'string' && part.type.startsWith('data-');

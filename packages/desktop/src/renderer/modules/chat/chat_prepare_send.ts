@@ -1,5 +1,5 @@
 import type { FileUIPart } from 'ai';
-import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/message/message_parts';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
 
 export type PrepareMessageSendPayload = {

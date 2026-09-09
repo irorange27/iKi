@@ -356,7 +356,7 @@ import {
   DropdownMenuTrigger,
 } from 'reka-ui';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
-import type { ThreadContentMatch } from '@iki/backend/chat/thread_content_search';
+import type { ThreadContentMatch } from '@iki/backend/message/thread_content_search';
 import { useSidebar } from '../composables/useSidebar';
 import { confirmAction } from '../composables/useConfirm';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';

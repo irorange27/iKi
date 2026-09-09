@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 
-import { getApprovalId } from '@iki/backend/chat/tool_parts';
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import { getApprovalId } from '@iki/backend/message/tool_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../../logger';
 import type { AbstractChat } from 'ai';

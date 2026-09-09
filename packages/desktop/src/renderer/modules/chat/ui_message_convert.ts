@@ -1,5 +1,5 @@
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
-import { normalizeUiMessage } from '@iki/backend/chat/ui_message_codec';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import { normalizeUiMessage } from '@iki/backend/message/ui_message_codec';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 const makeUiMessageId = () => createPrefixedId('ui', { randomLength: 6 });

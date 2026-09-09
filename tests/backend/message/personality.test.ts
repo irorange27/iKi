@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getPersonalityStylePrompt,
   normalizePersonality,
-} from '../../../packages/backend/src/chat/personality';
+} from '../../../packages/backend/src/message/personality';
 
 describe('personality', () => {
   it('normalizes known personality ids and rejects unknown ones', () => {

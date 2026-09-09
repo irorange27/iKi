@@ -7,13 +7,13 @@ import type {
   DynamicToolPart,
   TextPart,
   UiMessagePart,
-} from '@iki/backend/chat/message_parts';
-import { isChatUiMetadataPart } from '@iki/backend/chat/message_parts';
+} from '@iki/backend/message/message_parts';
+import { isChatUiMetadataPart } from '@iki/backend/message/message_parts';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './types';
 import { createPrefixedId } from '@iki/backend/utils/id';
-import { normalizeToolPartForValidation } from '@iki/backend/chat/tool_parts';
-import { isObjectRecord } from '@iki/backend/chat/tool_parts';
+import { normalizeToolPartForValidation } from '@iki/backend/message/tool_parts';
+import { isObjectRecord } from '@iki/backend/message/tool_parts';
 
 const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMessage[] =>
   messages.flatMap((message, messageIndex) => {

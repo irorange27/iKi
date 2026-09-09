@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildThreadMarkdown,
   parseStoredMessageForExport,
-} from '../../../packages/backend/src/chat/thread_markdown_export';
+} from '../../../packages/backend/src/message/thread_markdown_export';
 
 describe('thread_markdown_export', () => {
   it('renders a header and only user/assistant text messages', () => {

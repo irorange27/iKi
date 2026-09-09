@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue';
 import type { FileUIPart } from 'ai';
 
-import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/message/message_parts';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';

@@ -1,8 +1,8 @@
 import { computed, ref } from 'vue';
 import { AbstractChat, type ChatState, type ChatStatus } from 'ai';
 
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
-import { isDynamicToolPart } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import { isDynamicToolPart } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../../logger';

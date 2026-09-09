@@ -1,4 +1,4 @@
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 
 export type ChatMessageStore = ReturnType<typeof createChatMessageStore>;
 

@@ -11,7 +11,7 @@ import {
   type MemoryEmbeddingFingerprint,
   type MemoryEmbeddingRuntime,
 } from '../memory/embedding';
-import { extractTextFromMessageParts } from '../chat/message_parts';
+import { extractTextFromMessageParts } from '../message/message_parts';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { toIsoNow } from '@iki/backend/utils/text';
 
