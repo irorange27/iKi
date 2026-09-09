@@ -34,6 +34,23 @@ const createMessage = (): UIMessage =>
     ],
   }) as unknown as UIMessage;
 
+const createReasoningMessage = (state: string): UIMessage =>
+  ({
+    id: 'assistant_reasoning',
+    role: 'assistant',
+    parts: [
+      {
+        type: 'reasoning',
+        state,
+        text: 'We need answer in Chinese. User asks about safety in Northern Italy.\nSecond line has more detail.',
+      },
+      {
+        type: 'text',
+        text: 'Answer body.',
+      },
+    ],
+  }) as unknown as UIMessage;
+
 describe('ChatMessageParts', () => {
   it('hides data parts from the rendered message body', () => {
     const wrapper = mount(ChatMessageParts, {
@@ -54,6 +71,48 @@ describe('ChatMessageParts', () => {
     expect(wrapper.text()).not.toContain('affect-signal');
     expect(wrapper.text()).not.toContain('sadness');
     expect(wrapper.find('.tool-fallback-content').exists()).toBe(false);
+  });
+
+  it('collapses consecutive tool calls into one quiet group', () => {
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: {
+          id: 'assistant_tools',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'read_file',
+              toolCallId: 'call_1',
+              state: 'output-available',
+              input: { path: 'src/a.ts' },
+              output: 'a',
+            },
+            {
+              type: 'dynamic-tool',
+              toolName: 'read_file',
+              toolCallId: 'call_2',
+              state: 'output-available',
+              input: { path: 'src/b.ts' },
+              output: 'b',
+            },
+            { type: 'text', text: 'Both files read.' },
+          ],
+        } as unknown as UIMessage,
+        messageIndex: 0,
+        activeAssistantMessageId: null,
+        streamRenderTick: 0,
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    // Settled tool calls group into a single summary; no per-call cards.
+    expect(wrapper.findAll('.tool-call-group')).toHaveLength(1);
+    expect(wrapper.find('.tool-call-group-rows').exists()).toBe(false);
+    expect(wrapper.find('.tool-result-content').exists()).toBe(false);
+    expect(wrapper.find('.tool-call-content').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Both files read.');
   });
 
   it('renders composer invocation tokens inside the message body', () => {
@@ -100,5 +159,46 @@ describe('ChatMessageParts', () => {
     expect(wrapper.text()).toContain('music');
     expect(wrapper.text()).toContain('Build a landing page and matching soundtrack.');
     expect(wrapper.findAll('.message-part')).toHaveLength(2);
+  });
+
+  it('collapses finished reasoning behind a one-line preview and expands on click', async () => {
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: createReasoningMessage('done'),
+        messageIndex: 0,
+        activeAssistantMessageId: null,
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    const reasoning = wrapper.find('details.message-reasoning');
+    expect(reasoning.attributes('open')).toBeUndefined();
+    expect(wrapper.find('.message-reasoning-preview').text()).toContain(
+      'We need answer in Chinese'
+    );
+    expect(wrapper.find('.message-reasoning-preview').text()).not.toContain('Second line');
+    expect(wrapper.find('.message-reasoning-body').text()).toContain('Second line has more detail.');
+
+    await wrapper.find('.message-reasoning-summary').trigger('click');
+
+    expect(wrapper.find('details.message-reasoning').attributes('open')).toBeDefined();
+    expect(wrapper.find('.message-reasoning-preview').exists()).toBe(false);
+  });
+
+  it('keeps a streaming reasoning part expanded by default', () => {
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: createReasoningMessage('streaming'),
+        messageIndex: 0,
+        activeAssistantMessageId: 'assistant_reasoning',
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    expect(wrapper.find('details.message-reasoning').attributes('open')).toBeDefined();
+    expect(wrapper.find('.message-reasoning-preview').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Second line has more detail.');
   });
 });

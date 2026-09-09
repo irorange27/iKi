@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 
-import { getToolName } from '../modules/chat/ui_message_tool_parts';
+import { getToolName } from '../modules/chat/ui_message_tool_calls';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 

@@ -2,7 +2,7 @@
   <section
     class="todo-plan"
     :class="{ 'is-collapsed': isCollapsed }"
-    :aria-label="t('chat.tool.executionPlan')"
+    :aria-label="t('toolCall.executionPlan')"
   >
     <div class="todo-plan-summary">
       <div class="todo-plan-summary-main">
@@ -15,7 +15,7 @@
         type="button"
         class="todo-plan-toggle"
         :aria-expanded="isCollapsed ? 'false' : 'true'"
-        :aria-label="isCollapsed ? t('chat.tool.expandDetails') : t('chat.tool.collapseDetails')"
+        :aria-label="isCollapsed ? t('toolCall.expandDetails') : t('toolCall.collapseDetails')"
         @click="isCollapsed = !isCollapsed"
       >
         <ChevronDown :size="14" class="todo-plan-toggle-icon" :class="{ 'is-collapsed': isCollapsed }" />

@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 
-import type { ChatUiMessageChunk } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessageChunk } from '@iki/backend/message/message_parts';
 
 export type ToolUiState = {
   collapsed?: boolean;
@@ -47,6 +47,17 @@ export const updateToolUiState = (
 
 export const resetToolUiStateMap = () => {
   toolUiStateMap.value = {};
+};
+
+// Group-level collapse (keyed by a stable group id, same `collapsed` field as
+// per-call state). Whether a group defaults to open is derived from the call
+// states at render time; this only stores the user's manual override.
+export const getToolCallGroupCollapsedOverride = (
+  groupKey: string
+): boolean | undefined => getToolUiState(groupKey)?.collapsed;
+
+export const setToolCallGroupCollapsed = (groupKey: string, collapsed: boolean): void => {
+  updateToolUiState(groupKey, { collapsed });
 };
 
 const getChunkToolCallId = (chunk: ChatUiMessageChunk): string =>
