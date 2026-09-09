@@ -3,19 +3,19 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 import type { ChatService } from '@iki/backend/thread_session';
-import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
+import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 import type { ChatTransportMessage } from '@iki/backend/thread_session';
 import { getAppConfig } from '@iki/backend/config';
 import { createDaemonLogger, recordNapCatMessagePreview } from '@iki/backend/daemon_logs';
 import { getProviders } from '@iki/backend/db/providers';
-import { createComposerInvocationPart, type ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
-import { parseSlashCommandDraft } from '@iki/backend/chat/slash_commands';
+import { createComposerInvocationPart, type ComposerInvocationPartData } from '@iki/backend/message/message_parts';
+import { parseSlashCommandDraft } from '@iki/backend/message/slash_commands';
 import type { ChatThread } from '@iki/backend/types/chat';
 import type { NapCatBridgeHeartbeatInfo, NapCatBridgeStatusInfo } from '@iki/backend/types/config';
 import { parseModelList } from '@iki/backend/utils/provider_models';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { renderMarkdownToPlainText } from '@iki/backend/utils/plain_text_markdown';
-import type { ParsedUiMessage } from '@iki/backend/chat/ui_message_codec';
+import type { ParsedUiMessage } from '@iki/backend/message/ui_message_codec';
 import { registerBridgeThreadSender } from '@iki/backend/bridge_dispatch';
 import { resolveNapCatInboundSlashCommand } from './napcat_slash_commands';
 

@@ -3,7 +3,7 @@ import type {
   ChatUiMessage,
   SkillUsageEntry,
   TokenUsagePartData,
-} from '@iki/backend/chat/message_parts';
+} from '@iki/backend/message/message_parts';
 import type { ModelMessage } from 'ai';
 import type { AffectSignal } from '@iki/backend/types/affect';
 
@@ -40,6 +40,7 @@ export type RunStatusEvent = {
 export type UiChunkEmitter = {
   messageId: string;
   emitTextDelta: (delta: string) => void;
+  emitReasoningDelta: (delta: string) => void;
   emitToolEvent: (event: ChatStreamEvent) => void;
   emitSkillUsage: (payload: {
     mode?: 'manual' | 'auto';

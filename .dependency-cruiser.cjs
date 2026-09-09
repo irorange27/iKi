@@ -58,7 +58,7 @@ module.exports = {
       to: {
         path: '^packages/backend/src',
         pathNot:
-          '^packages/backend/src/(types|utils|constants|logging|chat|i18n)/|^packages/backend/src/config/defaults\\.ts$|^packages/backend/src/network/proxy\\.ts$|^packages/backend/src/workspaces/worktree_ids\\.ts$|^packages/backend/src/workspaces/thread_mode\\.ts$',
+          '^packages/backend/src/(types|utils|constants|logging|message|i18n)/|^packages/backend/src/config/defaults\\.ts$|^packages/backend/src/network/proxy\\.ts$|^packages/backend/src/workspaces/worktree_ids\\.ts$|^packages/backend/src/workspaces/thread_mode\\.ts$',
       },
     },
     {

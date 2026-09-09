@@ -1,6 +1,6 @@
 import * as promptAppDb from '@iki/backend/db/prompt_apps';
 import { listSkills } from '@iki/backend/tools/skills';
-import type { ComposerInvocationPartData } from '@iki/backend/chat/message_parts';
+import type { ComposerInvocationPartData } from '@iki/backend/message/message_parts';
 import {
   applyPromptAppSlashCommandTemplate,
   extractPromptAppSlashCommands,
@@ -9,7 +9,7 @@ import {
   parseSlashCommandDraft,
   toPromptAppComposerInvocationToken,
   toSkillComposerInvocationToken,
-} from '@iki/backend/chat/slash_commands';
+} from '@iki/backend/message/slash_commands';
 import { normalizeAppLocale, type SupportedLocale } from '@iki/backend/i18n/locale';
 
 type NapCatSlashFeedbackKey =

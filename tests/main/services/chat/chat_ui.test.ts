@@ -3,9 +3,33 @@ import { describe, expect, it } from 'vitest';
 import {
   parseStoredUiMessageRow,
   sanitizeUiMessageJsonForStorage,
-} from '@iki/backend/chat/ui_message_codec';
+} from '@iki/backend/message/ui_message_codec';
 
 describe('chat_ui message serialization', () => {
+  it('keeps reasoning parts across storage and reload', () => {
+    const raw = JSON.stringify({
+      role: 'assistant',
+      parts: [
+        { type: 'reasoning', text: 'We need answer in Chinese first.', state: 'done' },
+        { type: 'reasoning', text: 'Streaming reasoning must persist too.', state: 'streaming' },
+        { type: 'text', text: 'Final answer.' },
+      ],
+    });
+
+    const sanitized = sanitizeUiMessageJsonForStorage(raw);
+    const parsed = parseStoredUiMessageRow({ id: 'msg_reasoning', message: sanitized });
+
+    expect(parsed.parts).toEqual([
+      { type: 'reasoning', text: 'We need answer in Chinese first.', state: 'done' },
+      {
+        type: 'reasoning',
+        text: 'Streaming reasoning must persist too.',
+        state: 'streaming',
+      },
+      { type: 'text', text: 'Final answer.' },
+    ]);
+  });
+
   it('preserves skill and memory citation parts for persistence and reload', () => {
     const raw = JSON.stringify({
       role: 'assistant',

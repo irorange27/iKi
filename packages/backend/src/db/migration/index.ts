@@ -6,10 +6,11 @@ import {
   type Migration,
 } from './runner';
 import { migration as baseline } from './001_baseline';
+import { migration as renameChatToolApprovals } from './002_rename_chat_tool_approvals';
 
 // Forward-only migrations after the baseline. Add new ones above 001 in name
 // order (002_*, 003_*, …) — runMigrations sorts by name.
-export const registeredMigrations: Migration[] = [baseline];
+export const registeredMigrations: Migration[] = [baseline, renameChatToolApprovals];
 
 export const initializeMigrations = () => {
   // Databases created before the migration squash already carry the full

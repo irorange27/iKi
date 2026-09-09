@@ -1,8 +1,8 @@
-export type ChatToolApprovalDecision = 'approved' | 'rejected';
+export type ToolCallApprovalDecision = 'approved' | 'rejected';
 
-export type ChatToolApprovalState = 'pending' | 'answered' | 'consumed';
+export type ToolCallApprovalState = 'pending' | 'answered' | 'consumed';
 
-export interface ChatToolApprovalSession {
+export interface ToolCallApprovalSession {
   session_id: string;
   thread_id: string;
   assistant_message_id: string;
@@ -20,14 +20,14 @@ export interface ChatToolApprovalSession {
   updated_at: string;
 }
 
-export interface ChatToolApproval {
+export interface ToolCallApproval {
   approval_id: string;
   session_id: string;
   tool_call_id?: string | null;
   tool_name?: string | null;
   tool_args?: string | null; // JSON string
-  state: ChatToolApprovalState;
-  decision?: ChatToolApprovalDecision | null;
+  state: ToolCallApprovalState;
+  decision?: ToolCallApprovalDecision | null;
   decision_reason?: string | null;
   responded_at?: string | null;
   created_at: string;
