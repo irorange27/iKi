@@ -4,7 +4,7 @@ import { getStreamErrorMessage } from '@iki/backend/utils/errors';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
-  resolveChatToolMaxIterations,
+  resolveToolCallMaxIterations,
 } from './constants';
 import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../turn_prep/approval_types';
@@ -20,7 +20,7 @@ export type { MessageSendResult } from './message_send';
 import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
-import { getPersonalityStylePrompt } from '../chat/personality';
+import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { runOuterLoop, type OuterLoopState } from './outer_loop';
@@ -140,7 +140,7 @@ export const createChatStreaming = (deps: {
           });
         },
       });
-      const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
+      const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
       const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
       const guardedTools = preparedTurn.guardedTools;
 
@@ -318,6 +318,19 @@ export const createChatStreaming = (deps: {
             contextTokens: preparedTurn.report.totalEstimatedTokens,
             ...(loopState.outerBatch > 0 ? { autonomousBatches: loopState.outerBatch + 1 } : {}),
           },
+        });
+
+        // Attach the turn's usage + perf metrics to the assistant message so
+        // the renderer can aggregate session stats (and persist them with the
+        // message). Must run before finish()/abort() terminates the emitter.
+        uiChunkEmitter.emitTokenUsage({
+          ...(streamResult.usage ?? {}),
+          maxInputTokens: preparedTurn.maxInputTokens,
+          maxOutputTokens: preparedTurn.maxOutputTokens,
+          model: options.model,
+          providerType: options.providerType,
+          ...(options.providerId ? { providerId: options.providerId } : {}),
+          ...(streamResult.perf ?? {}),
         });
       }
 

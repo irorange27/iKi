@@ -633,6 +633,12 @@ const composerContextUsage = computed(() => {
     model: selectedModel.value || latestUsage?.model || '',
     providerType: selectedProvider.value?.type || latestUsage?.providerType || '',
     providerId: selectedProvider.value?.id || latestUsage?.providerId || '',
+    llmMs: latestUsage?.llmMs ?? null,
+    toolMs: latestUsage?.toolMs ?? null,
+    firstTokenMs: latestUsage?.firstTokenMs ?? null,
+    firstTokenSamples: latestUsage?.firstTokenSamples ?? null,
+    steps: latestUsage?.steps ?? null,
+    toolCalls: latestUsage?.toolCalls ?? null,
   });
 });
 

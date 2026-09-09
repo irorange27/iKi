@@ -43,6 +43,7 @@ const {
   useChatViewLifecycleMock,
   useConfigStoreMock,
   getTokenUsageSummaryMock,
+  buildSessionPerfStatsMock,
   handleMarkdownClickMock,
 } = vi.hoisted(() => {
   const makeRef = <T>(value: T) => ({ value, __v_isRef: true as const });
@@ -131,6 +132,7 @@ const {
   const useChatViewLifecycleMock = vi.fn();
   const useConfigStoreMock = vi.fn(() => configStoreState);
   const getTokenUsageSummaryMock = vi.fn();
+  const buildSessionPerfStatsMock = vi.fn();
 
   return {
     chatState,
@@ -168,6 +170,7 @@ const {
     useChatViewLifecycleMock,
     useConfigStoreMock,
     getTokenUsageSummaryMock,
+    buildSessionPerfStatsMock,
     handleMarkdownClickMock,
   };
 });
@@ -204,6 +207,7 @@ vi.mock('../../../packages/desktop/src/renderer/composables/useMarkdownCopy', ()
 
 vi.mock('../../../packages/desktop/src/renderer/modules/chat/ui_message_references', () => ({
   getTokenUsageSummary: getTokenUsageSummaryMock,
+  buildSessionPerfStats: buildSessionPerfStatsMock,
 }));
 
 const SidebarStub = defineComponent({
@@ -345,6 +349,7 @@ describe('ChatView', () => {
     useToolMetadataMock.mockReset();
     useChatViewLifecycleMock.mockReset();
     getTokenUsageSummaryMock.mockReset();
+    buildSessionPerfStatsMock.mockReset();
     createChatInstanceMock.mockClear();
     submitTurnMock.mockReset();
     chatInstance.transport.getBoundThreadId.mockReturnValue(null);
@@ -385,6 +390,7 @@ describe('ChatView', () => {
     }));
 
     getTokenUsageSummaryMock.mockImplementation(() => null);
+    buildSessionPerfStatsMock.mockImplementation(() => null);
   });
 
   afterEach(() => {

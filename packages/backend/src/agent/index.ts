@@ -8,6 +8,7 @@ export type {
   AgentTool,
   AgentResult,
   AgentUsage,
+  AgentTurnPerf,
   ToolApprovalRequest,
   PartialAgentConfig,
 } from './types';
@@ -30,7 +31,9 @@ export {
   AgentConfigSchema,
   AgentToolSchema,
   AgentResultSchema,
+  AgentTurnPerfSchema,
   PartialAgentConfigSchema,
+  addTurnPerf,
 } from './types';
 
 // Export model message utilities

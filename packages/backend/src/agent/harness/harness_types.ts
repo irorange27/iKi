@@ -1,7 +1,7 @@
 import type { LanguageModel, ModelMessage } from 'ai';
 
 import type { AgentStep } from '@iki/backend/agent/agent_step';
-import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult } from '@iki/backend/agent/types';
+import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult, AgentTurnPerf } from '@iki/backend/agent/types';
 import type { AgentRunTracker } from '../../turn_prep/run_tracker';
 import type { ApprovalPolicy } from './tool_resolver';
 
@@ -46,6 +46,8 @@ export type TurnInput = {
 export type TurnOutput = {
   text: string;
   usage?: AgentUsage;
+  /** Wall-clock perf metrics measured by the runner (llm/tool time, TTFT, steps). */
+  perf?: AgentTurnPerf;
   toolCalls?: AgentResult['toolCalls'];
   requiresApproval: boolean;
   toolApprovalRequests?: ToolApprovalRequest[];

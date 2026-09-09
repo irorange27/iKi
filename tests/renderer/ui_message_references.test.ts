@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
 
 import {
+  buildSessionPerfStats,
   getAffectReferenceSummary,
   buildTokenUsageIndicator,
   formatTokenCount,
@@ -278,6 +279,12 @@ describe('ui_message_references', () => {
             model: 'gpt-5-mini',
             providerType: 'openai',
             providerId: 'provider_openai',
+            llmMs: 2100,
+            toolMs: 300,
+            firstTokenMs: 10800,
+            firstTokenSamples: 2,
+            steps: 4,
+            toolCalls: 3,
           },
         },
       ],
@@ -296,6 +303,12 @@ describe('ui_message_references', () => {
       model: 'gpt-5-mini',
       providerType: 'openai',
       providerId: 'provider_openai',
+      llmMs: 2100,
+      toolMs: 300,
+      firstTokenMs: 10800,
+      firstTokenSamples: 2,
+      steps: 4,
+      toolCalls: 3,
     });
   });
 
@@ -396,6 +409,12 @@ describe('ui_message_references', () => {
         model: 'gpt-5-mini',
         providerType: 'openai',
         providerId: '',
+        llmMs: null,
+        toolMs: null,
+        firstTokenMs: null,
+        firstTokenSamples: null,
+        steps: null,
+        toolCalls: null,
       }
     );
 
@@ -428,6 +447,12 @@ describe('ui_message_references', () => {
       model: 'gpt-unknown',
       providerType: 'openai',
       providerId: '',
+      llmMs: null,
+      toolMs: null,
+      firstTokenMs: null,
+      firstTokenSamples: null,
+      steps: null,
+      toolCalls: null,
     });
 
     expect(indicator).toEqual(
@@ -490,7 +515,101 @@ describe('ui_message_references', () => {
         model: '',
         providerType: '',
         providerId: '',
+        llmMs: null,
+        toolMs: null,
+        firstTokenMs: null,
+        firstTokenSamples: null,
+        steps: null,
+        toolCalls: null,
       })
     ).toBeNull();
+  });
+});
+
+describe('buildSessionPerfStats', () => {
+  const usagePart = (data: Record<string, unknown>) => ({ type: 'data-token-usage', data });
+
+  it('returns null when no assistant message carries usage data', () => {
+    expect(
+      buildSessionPerfStats([
+        { role: 'user', parts: [{ type: 'text', text: 'hi' }] },
+        { role: 'assistant', parts: [{ type: 'text', text: 'hello' }] },
+      ])
+    ).toBeNull();
+  });
+
+  it('aggregates token and perf sums across turns and derives rates', () => {
+    const stats = buildSessionPerfStats([
+      { role: 'user', parts: [] },
+      {
+        role: 'assistant',
+        parts: [
+          usagePart({
+            inputTokens: 500,
+            outputTokens: 100,
+            totalTokens: 600,
+            cacheReadTokens: 400,
+            steps: 3,
+            toolCalls: 2,
+            llmMs: 2000,
+            toolMs: 500,
+            firstTokenMs: 9000,
+            firstTokenSamples: 3,
+            model: 'gpt-5-mini',
+          }),
+        ],
+      },
+      {
+        role: 'assistant',
+        parts: [
+          usagePart({
+            inputTokens: 300,
+            outputTokens: 50,
+            totalTokens: 350,
+            cacheReadTokens: 200,
+            steps: 2,
+            llmMs: 1000,
+            firstTokenMs: 3000,
+            firstTokenSamples: 1,
+          }),
+        ],
+      },
+      // Pre-instrumentation message without a usage part contributes nothing.
+      { role: 'assistant', parts: [{ type: 'text', text: 'legacy' }] },
+    ]);
+
+    expect(stats).toEqual({
+      rounds: 2,
+      steps: 5,
+      toolCalls: 2,
+      llmMs: 3000,
+      toolMs: 500,
+      avgFirstTokenMs: 3000,
+      tokensPerSecond: 50,
+      cacheHitPercent: 75,
+      inputTokens: 800,
+      outputTokens: 150,
+      totalTokens: 950,
+      cacheReadTokens: 600,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      estimatedCostUsd: 0,
+      model: 'gpt-5-mini',
+    });
+  });
+
+  it('keeps derived rates null when only token data exists', () => {
+    const stats = buildSessionPerfStats([
+      {
+        role: 'assistant',
+        parts: [usagePart({ inputTokens: 100, outputTokens: 10, totalTokens: 110 })],
+      },
+    ]);
+
+    expect(stats).not.toBeNull();
+    expect(stats?.rounds).toBe(1);
+    expect(stats?.avgFirstTokenMs).toBeNull();
+    expect(stats?.tokensPerSecond).toBeNull();
+    expect(stats?.cacheHitPercent).toBe(0);
   });
 });

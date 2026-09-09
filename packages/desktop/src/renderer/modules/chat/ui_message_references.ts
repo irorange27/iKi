@@ -1,7 +1,7 @@
 import type {
   ChatUiMessage,
   SkillUsageEntry,
-} from '@iki/backend/chat/message_parts';
+} from '@iki/backend/message/message_parts';
 import { isAffectLabel, type AffectLabel } from '@iki/backend/types/affect';
 import { normalizeModelCapabilityLimits } from '@iki/backend/utils/provider_models';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
@@ -17,7 +17,7 @@ import {
   isObjectRecord,
   isSkillUsagePart,
   isTokenUsagePart,
-} from '@iki/backend/chat/message_parts';
+} from '@iki/backend/message/message_parts';
 import {
   getParsedToolOutput,
   getToolCallIdFromPart,
@@ -25,7 +25,7 @@ import {
   isTranscriptHiddenToolPart,
   isToolPart,
   normalizeToolNameKey,
-} from './ui_message_tool_parts';
+} from './ui_message_tool_calls';
 
 export type ToolReferenceSummary = {
   callCount: number;
@@ -96,6 +96,13 @@ export type TokenUsageSummary = {
   model: string;
   providerType: string;
   providerId: string;
+  /** Turn perf metrics — null on messages produced before instrumentation. */
+  llmMs: number | null;
+  toolMs: number | null;
+  firstTokenMs: number | null;
+  firstTokenSamples: number | null;
+  steps: number | null;
+  toolCalls: number | null;
 };
 
 export type ContextUsageIndicator = {
@@ -105,6 +112,26 @@ export type ContextUsageIndicator = {
   percentLabel: string;
   tokenLabel: string;
   tooltip: string;
+};
+
+/** Session-cumulative perf stats aggregated across a thread's assistant messages. */
+export type SessionPerfStats = {
+  rounds: number;
+  steps: number;
+  toolCalls: number;
+  llmMs: number;
+  toolMs: number;
+  avgFirstTokenMs: number | null;
+  tokensPerSecond: number | null;
+  cacheHitPercent: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  estimatedCostUsd: number;
+  model: string;
 };
 
 const getMessageParts = (message: unknown): unknown[] =>
@@ -433,6 +460,12 @@ export const getTokenUsageSummary = (
       model: '',
       providerType: '',
       providerId: '',
+      llmMs: null,
+      toolMs: null,
+      firstTokenMs: null,
+      firstTokenSamples: null,
+      steps: null,
+      toolCalls: null,
     };
   }
 
@@ -453,6 +486,12 @@ export const getTokenUsageSummary = (
       typeof usageData?.providerType === 'string' ? normalizeWhitespace(usageData.providerType) : '',
     providerId:
       typeof usageData?.providerId === 'string' ? normalizeWhitespace(usageData.providerId) : '',
+    llmMs: toScore(usageData?.llmMs),
+    toolMs: toScore(usageData?.toolMs),
+    firstTokenMs: toScore(usageData?.firstTokenMs),
+    firstTokenSamples: toScore(usageData?.firstTokenSamples),
+    steps: toScore(usageData?.steps),
+    toolCalls: toScore(usageData?.toolCalls),
   };
 };
 
@@ -461,6 +500,77 @@ export const formatTokenCount = (tokens: number | null): string => {
   return translate('chat.contextUsage.tokenCount', {
     value: Math.max(0, Math.trunc(tokens)).toLocaleString(),
   });
+};
+
+const hasUsageData = (summary: TokenUsageSummary): boolean =>
+  summary.inputTokens !== null ||
+  summary.outputTokens !== null ||
+  summary.llmMs !== null ||
+  summary.steps !== null ||
+  summary.toolCalls !== null;
+
+/**
+ * Aggregate a thread's assistant messages into session-cumulative perf stats.
+ * Returns null when no message carries a token-usage part (e.g. a thread
+ * created before per-turn usage emission existed).
+ */
+export const buildSessionPerfStats = (
+  messages: readonly unknown[]
+): SessionPerfStats | null => {
+  const stats: SessionPerfStats = {
+    rounds: 0,
+    steps: 0,
+    toolCalls: 0,
+    llmMs: 0,
+    toolMs: 0,
+    avgFirstTokenMs: null,
+    tokensPerSecond: null,
+    cacheHitPercent: null,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    estimatedCostUsd: 0,
+    model: '',
+  };
+
+  let firstTokenMsSum = 0;
+  let firstTokenSamples = 0;
+
+  for (const message of messages) {
+    if (!isObjectRecord(message) || message.role !== 'assistant') continue;
+    const summary = getTokenUsageSummary(message);
+    if (!hasUsageData(summary)) continue;
+
+    stats.rounds += 1;
+    stats.steps += summary.steps ?? 0;
+    stats.toolCalls += summary.toolCalls ?? 0;
+    stats.llmMs += summary.llmMs ?? 0;
+    stats.toolMs += summary.toolMs ?? 0;
+    stats.inputTokens += summary.inputTokens ?? 0;
+    stats.outputTokens += summary.outputTokens ?? 0;
+    stats.totalTokens += summary.totalTokens ?? 0;
+    stats.cacheReadTokens += summary.cacheReadTokens ?? 0;
+    stats.cacheWriteTokens += summary.cacheWriteTokens ?? 0;
+    stats.reasoningTokens += summary.reasoningTokens ?? 0;
+    stats.estimatedCostUsd += summary.estimatedCostUsd ?? 0;
+    if (summary.model) stats.model = summary.model;
+    if (summary.firstTokenMs !== null) firstTokenMsSum += summary.firstTokenMs;
+    if (summary.firstTokenSamples !== null) firstTokenSamples += summary.firstTokenSamples;
+  }
+
+  if (stats.rounds === 0) return null;
+
+  stats.avgFirstTokenMs =
+    firstTokenSamples > 0 ? firstTokenMsSum / firstTokenSamples : null;
+  stats.tokensPerSecond =
+    stats.llmMs > 0 ? stats.outputTokens / (stats.llmMs / 1000) : null;
+  stats.cacheHitPercent =
+    stats.inputTokens > 0 ? (stats.cacheReadTokens / stats.inputTokens) * 100 : null;
+
+  return stats;
 };
 
 export const buildTokenUsageIndicator = (

@@ -106,12 +106,46 @@ export const AgentUsageSchema = z.object({
 
 export type AgentUsage = z.infer<typeof AgentUsageSchema>;
 
+/**
+ * Wall-clock perf metrics for one harness turn, measured in the agent runner
+ * around the model stream. `llmMs` excludes tool execution; `firstTokenMs` is
+ * the sum of per-step first-token latencies (`firstTokenSamples` = rounds the
+ * latency was observed for, i.e. the divisor for the average).
+ */
+export const AgentTurnPerfSchema = z.object({
+  llmMs: z.number().nonnegative().default(0),
+  toolMs: z.number().nonnegative().default(0),
+  firstTokenMs: z.number().nonnegative().default(0),
+  firstTokenSamples: z.number().int().nonnegative().default(0),
+  toolCalls: z.number().int().nonnegative().default(0),
+  steps: z.number().int().nonnegative().default(0),
+});
+
+export type AgentTurnPerf = z.infer<typeof AgentTurnPerfSchema>;
+
+export const addTurnPerf = (
+  a: AgentTurnPerf | undefined,
+  b: AgentTurnPerf | undefined
+): AgentTurnPerf | undefined => {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    llmMs: a.llmMs + b.llmMs,
+    toolMs: a.toolMs + b.toolMs,
+    firstTokenMs: a.firstTokenMs + b.firstTokenMs,
+    firstTokenSamples: a.firstTokenSamples + b.firstTokenSamples,
+    toolCalls: a.toolCalls + b.toolCalls,
+    steps: a.steps + b.steps,
+  };
+};
+
 // Agent Result Schema
 export const AgentResultSchema = z.object({
   response: z.string(),
   toolCalls: z.array(ToolCallSchema).optional(),
   toolApprovalRequests: z.array(ToolApprovalRequestSchema).optional(),
   usage: AgentUsageSchema.optional(),
+  perf: AgentTurnPerfSchema.optional(),
   iterations: z.number().int().nonnegative(),
   requiresApproval: z.boolean().optional(),
   contextWarning: z.boolean().optional(),

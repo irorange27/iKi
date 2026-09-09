@@ -4,9 +4,9 @@ import type {
   ChatUiMessageChunk,
   SkillUsageEntry,
   TokenUsagePartData,
-} from '@iki/backend/chat/message_parts';
+} from '@iki/backend/message/message_parts';
 import type { AffectSignal } from '@iki/backend/types/affect';
-import { isObjectRecord } from '@iki/backend/chat/tool_parts';
+import { isObjectRecord } from '@iki/backend/message/tool_parts';
 
 import type { ChatStreamTarget, ChatStreamEvent, UiChunkEmitter } from './types';
 import { createPrefixedId } from '@iki/backend/utils/id';
@@ -169,6 +169,7 @@ export const createUiChunkEmitter = (
 ): UiChunkEmitter => {
   let started = false;
   let textStarted = false;
+  let reasoningStarted = false;
   let terminated = false;
   let textSegmentIndex = 0;
   // Tool call ids that already have a tool part on the wire. The AI SDK
@@ -210,6 +211,23 @@ export const createUiChunkEmitter = (
     textSegmentIndex += 1;
   };
 
+  // Reasoning streams into its own SDK-accumulated reasoning part so the UI
+  // can render it as a live "thinking" block instead of inline answer text.
+  const ensureReasoningStarted = () => {
+    ensureStarted();
+    if (terminated) return;
+    if (!reasoningStarted) {
+      emitChunk({ type: 'reasoning-start', id: `${messageId}-r` });
+      reasoningStarted = true;
+    }
+  };
+
+  const closeReasoning = () => {
+    if (!reasoningStarted || terminated) return;
+    emitChunk({ type: 'reasoning-end', id: `${messageId}-r` });
+    reasoningStarted = false;
+  };
+
   const ensureToolPartSeeded = (toolCallId: string, toolName: string, input: unknown) => {
     if (seededToolCallIds.has(toolCallId)) return;
     const title = getToolDisplayTitle(toolName);
@@ -231,10 +249,16 @@ export const createUiChunkEmitter = (
       ensureTextStarted();
       emitChunk({ type: 'text-delta', id: getTextSegmentId(textSegmentIndex), delta });
     },
+    emitReasoningDelta: delta => {
+      if (!delta || terminated) return;
+      ensureReasoningStarted();
+      emitChunk({ type: 'reasoning-delta', id: `${messageId}-r`, delta });
+    },
     emitToolEvent: event => {
       if (terminated) return;
       ensureStarted();
       closeText();
+      closeReasoning();
       const toolCallId = getToolCallIdFromEvent(event);
       if (
         event.type === 'tool-result' ||
@@ -336,6 +360,16 @@ export const createUiChunkEmitter = (
           ? { providerType: payload.providerType }
           : {}),
         ...(typeof payload?.providerId === 'string' ? { providerId: payload.providerId } : {}),
+        ...(typeof payload?.llmMs === 'number' ? { llmMs: payload.llmMs } : {}),
+        ...(typeof payload?.toolMs === 'number' ? { toolMs: payload.toolMs } : {}),
+        ...(typeof payload?.firstTokenMs === 'number'
+          ? { firstTokenMs: payload.firstTokenMs }
+          : {}),
+        ...(typeof payload?.firstTokenSamples === 'number'
+          ? { firstTokenSamples: payload.firstTokenSamples }
+          : {}),
+        ...(typeof payload?.steps === 'number' ? { steps: payload.steps } : {}),
+        ...(typeof payload?.toolCalls === 'number' ? { toolCalls: payload.toolCalls } : {}),
       };
       emitChunk({
         type: 'data-token-usage',
@@ -347,6 +381,7 @@ export const createUiChunkEmitter = (
       if (terminated) return;
       ensureStarted();
       closeText();
+      closeReasoning();
       emitChunk({ type: 'finish' });
       terminated = true;
     },
@@ -354,6 +389,7 @@ export const createUiChunkEmitter = (
       if (terminated) return;
       ensureStarted();
       closeText();
+      closeReasoning();
       emitChunk({ type: 'abort' });
       terminated = true;
     },
@@ -361,6 +397,7 @@ export const createUiChunkEmitter = (
       if (terminated) return;
       ensureStarted();
       closeText();
+      closeReasoning();
       emitChunk({ type: 'error', errorText });
     },
   };

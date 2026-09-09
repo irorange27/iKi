@@ -184,5 +184,23 @@ describe('createChatStreaming integration', () => {
       toolName,
       input: {},
     });
+
+    // Turn usage + perf metrics ride along as a data part before finish, so
+    // the renderer can aggregate session stats (and persist them per message).
+    const usageChunks = chunks.filter(chunk => chunk.type === 'data-token-usage');
+    expect(usageChunks).toHaveLength(1);
+    const usageChunk = usageChunks[0]!;
+    expect(usageChunk.data).toMatchObject({
+      model: 'gpt-4o-mini',
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      steps: 2,
+      toolCalls: 1,
+    });
+    expect(typeof usageChunk.data.llmMs).toBe('number');
+    expect(typeof usageChunk.data.toolMs).toBe('number');
+    expect(chunks.findIndex(chunk => chunk.type === 'finish')).toBeGreaterThan(
+      chunks.indexOf(usageChunk)
+    );
   });
 });

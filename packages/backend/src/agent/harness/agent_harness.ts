@@ -111,6 +111,7 @@ export class AgentHarness {
     const output: TurnOutput = {
       text: agentResult?.response ?? '',
       usage: agentResult?.usage,
+      ...(agentResult?.perf ? { perf: agentResult.perf } : {}),
       requiresApproval: agentResult?.requiresApproval ?? false,
       ...(agentResult?.toolCalls
         ? { toolCalls: agentResult.toolCalls }

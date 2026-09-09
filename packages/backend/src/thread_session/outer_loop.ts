@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
-import type { AgentStep } from '@iki/backend/agent';
+import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/agent';
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
@@ -28,6 +28,8 @@ export type OuterLoopStreamResult = {
   partialFailure?: boolean;
   response?: string;
   usage?: import('@iki/backend/agent').AgentResult['usage'];
+  /** Perf metrics accumulated across all outer batches of the turn. */
+  perf?: AgentTurnPerf;
   handoff?: { summary: string; nextSteps: string; reason: string };
 };
 
@@ -91,6 +93,7 @@ export const runOuterLoop = async (
   let previewText = '';
   let lastPreviewText = '';
   let streamResult: OuterLoopStreamResult | undefined;
+  let accumulatedPerf: AgentTurnPerf | undefined;
 
   const sendConversationPreview = (kind: ConversationPreview['kind'], text: string, toolName?: string) => {
     if (!options.threadId) return;
@@ -113,6 +116,12 @@ export const runOuterLoop = async (
 
   /** Convert AgentStep to ChatStreamEvent for runTracker + UI emitter. */
   const forwardAgentStep = (step: AgentStep) => {
+    // Reasoning streams into its own reasoning part (live "thinking" block);
+    // only `kind: 'text'` deltas belong to the answer text.
+    if (step.type === 'message_update' && step.kind === 'reasoning') {
+      uiChunkEmitter.emitReasoningDelta(step.text);
+      return;
+    }
     // Emit text deltas via the dedicated ui chunk emitter path
     if (step.type === 'message_update') {
       uiChunkEmitter.emitTextDelta(step.text);
@@ -250,6 +259,7 @@ export const runOuterLoop = async (
                       toolCalls: output.toolCalls,
                       toolApprovalRequests: output.toolApprovalRequests,
                       usage: output.usage,
+                      ...(output.perf ? { perf: output.perf } : {}),
                       iterations: 0,
                       requiresApproval: output.requiresApproval,
                     } as import('@iki/backend/agent').AgentResult;
@@ -299,6 +309,10 @@ export const runOuterLoop = async (
         break;
       }
 
+      if (agentResult?.perf) {
+        accumulatedPerf = addTurnPerf(accumulatedPerf, agentResult.perf);
+      }
+
       // Check for approval requests in result
       if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
         deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
@@ -310,6 +324,7 @@ export const runOuterLoop = async (
           awaitingApproval: true,
           response: agentResult.response,
           usage: agentResult.usage,
+          perf: accumulatedPerf,
         };
         state.isAwaitingApproval = true;
         break;
@@ -327,6 +342,7 @@ export const runOuterLoop = async (
           ? { response: agentResult.response }
           : {}),
         usage: agentResult?.usage,
+        perf: accumulatedPerf,
         ...(terminalToolName === 'handoff' && handoff
           ? {
               handoff: {

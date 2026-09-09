@@ -37,11 +37,12 @@
       </div>
 
       <!-- Main Area -->
-      <div
-        class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 overflow-y-auto"
-        :class="showWelcomeScreen ? 'chat-main-area-welcome' : 'items-center justify-center'"
-        ref="messagesContainer"
-      >
+      <div class="chat-main-wrap relative flex min-h-0 min-w-0 flex-1">
+        <div
+          class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 overflow-y-auto"
+          :class="showWelcomeScreen ? 'chat-main-area-welcome' : 'items-center justify-center'"
+          ref="messagesContainer"
+        >
         <WelcomeScreen
           v-if="showWelcomeScreen"
           :active-model="currentModel"
@@ -61,6 +62,7 @@
               :message="m"
               :message-index="index"
               :active-assistant-message-id="chatInstance.activeAssistantMessageId.value"
+              :turn-highlight-ids="turnHighlightIds"
               :approval-processing="isApprovalProcessing"
               :get-mcp-server-label="getMcpServerLabel"
               @approve-tool="handleToolApprovalEvent"
@@ -68,6 +70,27 @@
               @edit-user-message="beginEditMessage"
             />
           </div>
+        </div>
+        </div>
+
+        <!-- Fixed turn rail: one thin line per turn, pinned to the left edge
+             and vertically centered regardless of scroll. All lines share the
+             same length; hovering one lengthens/tints it AND highlights the
+             corresponding turn in the conversation. Click jumps to it. -->
+        <div v-if="turnMarkers.length > 0" class="turn-rail">
+          <button
+            v-for="messageId in turnMarkers"
+            :key="messageId"
+            class="turn-rail-mark"
+            type="button"
+            :aria-label="t('chat.turnPreview.jump')"
+            :title="t('chat.turnPreview.jump')"
+            @click="jumpToTurn(messageId)"
+            @mouseenter="showTurnPreviewFromRail($event, messageId)"
+            @mouseleave="scheduleTurnPreviewHide"
+          >
+            <span></span>
+          </button>
         </div>
       </div>
 
@@ -93,6 +116,7 @@
           @new-chat-requested="handleNewChat"
           @clear-thread-requested="handleClearCurrentThread"
         />
+        <ChatSessionStatsBar :stats="sessionPerfStats" />
       </div>
     </div>
     <RunPanel
@@ -101,22 +125,32 @@
       :electronAPI="electronAPI"
       @close="showRunPanel = false"
     />
+    <TurnPreviewCard
+      :anchor="turnPreview?.anchor ?? null"
+      :messages="turnPreview?.messages ?? null"
+      @activate="activateTurnPreview"
+      @mouse-enter="cancelTurnPreviewHide"
+      @mouse-leave="scheduleTurnPreviewHide"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick } from 'vue';
+import { computed, ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
+import ChatSessionStatsBar from '../components/chat/ChatSessionStatsBar.vue';
+import TurnPreviewCard from '../components/chat/TurnPreviewCard.vue';
 import RunPanel from '../components/RunPanel.vue';
 import { FolderOpen, X } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
-import { getTokenUsageSummary } from '../modules/chat/ui_message_references';
+import { buildSessionPerfStats, getTokenUsageSummary } from '../modules/chat/ui_message_references';
 import { createChatInstance } from '../modules/chat/chat_instance';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { extractTextFromMessageParts } from '@iki/backend/message/message_parts';
 import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';
 import { useThreadSessionStore } from '../store/thread_session';
@@ -126,7 +160,7 @@ import { useChatThreadTodoPlan } from '../composables/useChatThreadTodoPlan';
 import { useToolMetadata } from '../composables/useToolMetadata';
 import { getThreadOriginInfo } from '../modules/chat/thread_origin';
 import { getElectronAPI } from '../services/electron_api';
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 
 type ChatInputExpose = {
   setDraftMessage: (
@@ -194,6 +228,26 @@ const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
 const showRunPanel = ref(false);
 
+// The AI SDK appends usage parts to a message in place, which does not
+// invalidate computeds that only iterate `chat.messages`. Bump a counter when
+// a usage chunk has been applied so session stats and the context indicator
+// refresh within the same turn. The tap fires before the SDK consumes the
+// chunk, hence the deferred bump; the status->ready watch is the guaranteed
+// end-of-turn pass.
+const usageChunkTick = ref(0);
+chatInstance.transport.onChunk(chunk => {
+  if (chunk.type !== 'data-token-usage') return;
+  setTimeout(() => {
+    usageChunkTick.value += 1;
+  }, 0);
+});
+watch(
+  chatInstance.status,
+  status => {
+    if (status === 'ready') usageChunkTick.value += 1;
+  }
+);
+
 const createMessageId = () => createPrefixedId('msg');
 const { handleMarkdownClick } = useMarkdownCopy();
 const { loadToolSources, getMcpServerLabel } = useToolMetadata({
@@ -201,6 +255,9 @@ const { loadToolSources, getMcpServerLabel } = useToolMetadata({
 });
 
 const latestAssistantTokenUsage = computed(() => {
+  // Dependency on the usage-chunk tick: live usage parts mutate a message in
+  // place and would otherwise not re-run this scan.
+  void usageChunkTick.value;
   const messages = Array.isArray(chat.messages) ? [...chat.messages] : [];
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -212,6 +269,13 @@ const latestAssistantTokenUsage = computed(() => {
   }
 
   return null;
+});
+
+// Session-cumulative perf stats for the bar under the composer. Message
+// parts carry per-turn usage, so this survives reloads for free.
+const sessionPerfStats = computed(() => {
+  void usageChunkTick.value;
+  return buildSessionPerfStats(Array.isArray(chat.messages) ? chat.messages : []);
 });
 
 const showMessageCount = computed(() => chatMessages.value.length > 0);
@@ -258,6 +322,136 @@ const scrollToBottom = () => {
   });
 };
 
+// ── Fixed turn rail (Codex-style outline scrubber) ─────────────────────
+// A strip pinned to the conversation's left edge carries one lines-marker per
+// user message, stacked as a vertically centered column regardless of scroll.
+// Hovering a marker previews the turn; clicking the marker or the preview card
+// smooth-scrolls back to the turn's first message. The rail only appears once
+// the conversation actually overflows.
+const TURN_PREVIEW_HIDE_DELAY_MS = 220;
+const TURN_RAIL_MIN_OVERFLOW_PX = 80;
+// A rail over a short conversation is noise — it earns its place once there
+// are enough turns to navigate between (and the thread actually overflows).
+const TURN_RAIL_MIN_TURNS = 5;
+
+const turnPreview = ref<{
+  messageId: string;
+  anchor: { top: number; left: number };
+  messages: ChatUiMessage[];
+} | null>(null);
+const turnMarkers = ref<Array<string>>([]);
+const turnHighlightIds = ref<Set<string> | null>(null);
+let turnPreviewHideTimer: ReturnType<typeof setTimeout> | null = null;
+let railResizeObserver: ResizeObserver | null = null;
+let observedRailContent: HTMLElement | null = null;
+
+const cancelTurnPreviewHide = () => {
+  if (turnPreviewHideTimer) {
+    clearTimeout(turnPreviewHideTimer);
+    turnPreviewHideTimer = null;
+  }
+};
+
+const hideTurnPreview = () => {
+  cancelTurnPreviewHide();
+  turnPreview.value = null;
+  turnHighlightIds.value = null;
+};
+
+const scheduleTurnPreviewHide = () => {
+  cancelTurnPreviewHide();
+  turnPreviewHideTimer = setTimeout(() => {
+    turnPreviewHideTimer = null;
+    hideTurnPreview();
+  }, TURN_PREVIEW_HIDE_DELAY_MS);
+};
+
+const buildTurnMessages = (messageId: string): ChatUiMessage[] => {
+  const startIndex = chatMessages.value.findIndex(message => message.id === messageId);
+  if (startIndex < 0) return [];
+  const turnMessages: ChatUiMessage[] = [];
+  for (let index = startIndex; index < chatMessages.value.length; index += 1) {
+    const message = chatMessages.value[index];
+    if (index > startIndex && message.role === 'user') break;
+    turnMessages.push(message);
+  }
+  return turnMessages;
+};
+
+const showTurnPreviewFromRail = (event: MouseEvent, messageId: string) => {
+  cancelTurnPreviewHide();
+  const turnMessages = buildTurnMessages(messageId);
+  if (!turnMessages.some(message => extractTextFromMessageParts(message.parts).trim())) {
+    return;
+  }
+  const target = event.currentTarget as HTMLElement | null;
+  if (!target) return;
+  const rect = target.getBoundingClientRect();
+  turnPreview.value = {
+    messageId,
+    anchor: { top: rect.top - 6, left: rect.right + 6 },
+    messages: turnMessages,
+  };
+  turnHighlightIds.value = new Set(turnMessages.map(message => message.id));
+};
+
+const scrollToMessage = (messageId: string) => {
+  if (!messagesContainer.value) return;
+  messagesContainer.value
+    .querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+const jumpToTurn = (messageId: string) => {
+  hideTurnPreview();
+  scrollToMessage(messageId);
+};
+
+const activateTurnPreview = () => {
+  const messageId = turnPreview.value?.messageId;
+  hideTurnPreview();
+  if (messageId) scrollToMessage(messageId);
+};
+
+const attachRailResizeObserver = (content: HTMLElement | null) => {
+  if (!content) {
+    railResizeObserver?.disconnect();
+    observedRailContent = null;
+    return;
+  }
+  if (observedRailContent === content) return;
+  railResizeObserver?.disconnect();
+  observedRailContent = content;
+  railResizeObserver?.observe(content);
+};
+
+const measureTurnMarkers = () => {
+  const container = messagesContainer.value;
+  const content = container?.querySelector<HTMLElement>('.messages-container') ?? null;
+  attachRailResizeObserver(content);
+  if (
+    !container ||
+    !content ||
+    container.scrollHeight <= container.clientHeight + TURN_RAIL_MIN_OVERFLOW_PX
+  ) {
+    turnMarkers.value = [];
+    return;
+  }
+  const markerIds: Array<string> = [];
+  content
+    .querySelectorAll<HTMLElement>('.message-wrapper.user[data-message-id]')
+    .forEach(node => {
+      const messageId = node.dataset.messageId;
+      if (messageId) markerIds.push(messageId);
+    });
+  turnMarkers.value = markerIds.length >= TURN_RAIL_MIN_TURNS ? markerIds : [];
+};
+
+onBeforeUnmount(() => {
+  railResizeObserver?.disconnect();
+  railResizeObserver = null;
+});
+
 const {
   currentThread,
   currentModel,
@@ -282,6 +476,18 @@ const {
   handleAwaiterPush,
 } = threadSession;
 const selectThreadBase = threadSession.selectThread;
+
+onMounted(() => {
+  railResizeObserver = new ResizeObserver(() => measureTurnMarkers());
+  nextTick(measureTurnMarkers);
+});
+
+watch(
+  () => [chatMessages.value.length, currentThread.value?.id],
+  () => {
+    nextTick(measureTurnMarkers);
+  }
+);
 const handleThreadDeletedBase = threadSession.handleThreadDeleted;
 const handleNewChatBase = threadSession.handleNewChat;
 const clearCurrentThreadBase = threadSession.clearCurrentThread;
@@ -413,6 +619,64 @@ electronAPI.onFocusThread?.(threadId => {
   max-width: 860px;
   min-width: 0;
   margin: 0 auto;
+}
+
+.chat-main-wrap {
+  min-width: 0;
+}
+
+.turn-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.turn-rail-mark {
+  pointer-events: auto;
+  flex: 0 0 auto;
+  display: block;
+  padding: 3px 3px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.turn-rail-mark span {
+  display: block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-secondary);
+  transition:
+    width 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.turn-rail-mark:hover,
+.turn-rail-mark:focus-visible {
+  opacity: 1;
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.turn-rail-mark:hover span,
+.turn-rail-mark:focus-visible span {
+  width: 20px;
+  background: var(--accent-color);
 }
 
 .thread-origin-chip {
