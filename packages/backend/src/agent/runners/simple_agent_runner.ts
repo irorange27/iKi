@@ -21,6 +21,7 @@ import {
   injectReasoningContentIntoMessages,
 } from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
+import { parseToolInputFromText } from '@iki/backend/message/tool_parts';
 import {
   appendResponseMessages,
   appendUserPromptToHistory,
@@ -35,6 +36,7 @@ import {
   loadAgentConfig,
   validateAgentConfig,
 } from '../ai_sdk_config';
+import { addTurnPerf } from '../types';
 import type {
   AgentStep,
   MessageUpdateStep,
@@ -45,7 +47,13 @@ import type {
   TurnEndStep,
   SourceInfo,
 } from '@iki/backend/agent/agent_step';
-import type { AgentResult, AgentTool, AgentUsage, PartialAgentConfig } from '@iki/backend/agent/types';
+import type {
+  AgentResult,
+  AgentTool,
+  AgentTurnPerf,
+  AgentUsage,
+  PartialAgentConfig,
+} from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'simple_agent_runner' });
 
@@ -208,6 +216,7 @@ export class SimpleAgentRunner {
     this.history = this.buildTurnHistory(request.history, request.prompt);
     let history = this.history;
     let cumulativeUsage: AgentUsage = { ...EMPTY_USAGE };
+    let cumulativePerf: AgentTurnPerf | undefined;
     let allText = '';
     let totalSteps = 0;
 
@@ -276,7 +285,30 @@ export class SimpleAgentRunner {
           toolCall?: { toolName: string; toolCallId?: string; input?: unknown; args?: unknown };
         }> = [];
         const collectedSources: SourceInfo[] = [];
-        const pendingToolStarts = new Map<string, { toolName: string; input: Record<string, unknown> }>();
+        const pendingToolStarts = new Map<
+          string,
+          { toolName: string; input: Record<string, unknown>; inputText?: string }
+        >();
+        // Call ids whose tool_execution_start has already been yielded — the
+        // start must fire exactly once regardless of which part completes it.
+        const startedExecutions = new Set<string>();
+
+        // Perf instrumentation: wall-clock around the stream consumption.
+        // llmMs is derived as (total − tool) so provider streaming time and
+        // inter-step overhead both count as model time, not tool time.
+        const attemptStartedAt = Date.now();
+        let stepStartedAt: number | null = null;
+        let firstDeltaAt: number | null = null;
+        const attemptFirstTokenSamples: number[] = [];
+        const attemptToolStarts = new Map<string, number>();
+        let attemptToolMs = 0;
+        let attemptToolCalls = 0;
+        const closeToolTiming = (toolCallId: string) => {
+          const startedAt = attemptToolStarts.get(toolCallId);
+          if (startedAt === undefined) return;
+          attemptToolMs += Math.max(0, Date.now() - startedAt);
+          attemptToolStarts.delete(toolCallId);
+        };
 
         for await (const part of result.fullStream) {
           if (this.cancelRequested) {
@@ -284,6 +316,10 @@ export class SimpleAgentRunner {
           }
 
           if (part.type === 'text-delta' && part.text) {
+            if (stepStartedAt !== null && firstDeltaAt === null) {
+              firstDeltaAt = Date.now() - stepStartedAt;
+              attemptFirstTokenSamples.push(firstDeltaAt);
+            }
             streamedText += part.text;
             yield { type: 'message_update', text: part.text, kind: 'text' } satisfies MessageUpdateStep;
             continue;
@@ -299,6 +335,26 @@ export class SimpleAgentRunner {
               toolName,
               input: (part.input ?? {}) as Record<string, unknown>,
             });
+            // Providers that stream tool input emit tool-input-end BEFORE the
+            // final tool-call part; providers that deliver the call in one
+            // chunk never emit tool-input-end at all. Emitting the execution
+            // start here (guarded so it fires exactly once per call) keeps
+            // toolName/input reaching the UI stream in both orders.
+            if (
+              toolName &&
+              !TERMINAL_TOOL_NAMES.has(toolName) &&
+              !startedExecutions.has(part.toolCallId)
+            ) {
+              startedExecutions.add(part.toolCallId);
+              attemptToolStarts.set(part.toolCallId, Date.now());
+              attemptToolCalls += 1;
+              yield {
+                type: 'tool_execution_start',
+                toolCallId: part.toolCallId,
+                toolName,
+                input: (part.input ?? {}) as Record<string, unknown>,
+              } satisfies ToolExecutionStartStep;
+            }
             continue;
           }
 
@@ -324,6 +380,7 @@ export class SimpleAgentRunner {
           }
 
           if (part.type === 'tool-output-denied') {
+            closeToolTiming((part as { toolCallId: string }).toolCallId);
             yield {
               type: 'tool_execution_end',
               toolCallId: (part as { toolCallId: string }).toolCallId,
@@ -333,23 +390,53 @@ export class SimpleAgentRunner {
             continue;
           }
 
-          if (part.type === 'tool-input-end') {
+          if (part.type === 'tool-input-start') {
+            // Some providers finish a tool call without a preceding tool-call
+            // part; remember the name as soon as it appears so the execution
+            // start (emitted at tool-input-end or tool-call) carries it.
+            if (part.id && typeof part.toolName === 'string' && part.toolName) {
+              if (!pendingToolStarts.has(part.id)) {
+                pendingToolStarts.set(part.id, { toolName: part.toolName, input: {} });
+              }
+            }
+            continue;
+          }
+
+          if (part.type === 'tool-input-delta') {
+            // Reassemble streamed input so the execution start can carry the
+            // full args even when tool-call has not arrived yet.
             if (part.id) {
               const pending = pendingToolStarts.get(part.id);
               if (pending) {
+                pending.inputText = (pending.inputText ?? '') + String(part.delta ?? '');
+                pending.input = (parseToolInputFromText(pending.inputText) ??
+                  {}) as Record<string, unknown>;
+              }
+            }
+            continue;
+          }
+
+          if (part.type === 'tool-input-end') {
+            if (part.id) {
+              const pending = pendingToolStarts.get(part.id);
+              if (pending && !startedExecutions.has(part.id)) {
+                startedExecutions.add(part.id);
+                attemptToolStarts.set(part.id, Date.now());
+                attemptToolCalls += 1;
                 yield {
                   type: 'tool_execution_start',
                   toolCallId: part.id,
                   toolName: pending.toolName,
                   input: pending.input,
                 } satisfies ToolExecutionStartStep;
-                pendingToolStarts.delete(part.id);
               }
+              pendingToolStarts.delete(part.id);
             }
             continue;
           }
 
           if (part.type === 'tool-result') {
+            closeToolTiming(part.toolCallId);
             yield {
               type: 'tool_execution_end',
               toolCallId: part.toolCallId,
@@ -360,6 +447,7 @@ export class SimpleAgentRunner {
           }
 
           if (part.type === 'tool-error') {
+            closeToolTiming(part.toolCallId);
             yield {
               type: 'tool_execution_end',
               toolCallId: part.toolCallId,
@@ -385,11 +473,21 @@ export class SimpleAgentRunner {
           }
 
           if (part.type === 'reasoning-delta' && part.text) {
+            if (stepStartedAt !== null && firstDeltaAt === null) {
+              firstDeltaAt = Date.now() - stepStartedAt;
+              attemptFirstTokenSamples.push(firstDeltaAt);
+            }
             yield {
               type: 'message_update',
               text: part.text,
               kind: 'reasoning',
             } satisfies MessageUpdateStep;
+            continue;
+          }
+
+          if (part.type === 'start-step') {
+            stepStartedAt = Date.now();
+            firstDeltaAt = null;
             continue;
           }
 
@@ -404,20 +502,18 @@ export class SimpleAgentRunner {
 
           // Markers and internal events — intentionally skipped.
           // text-start / text-end: text stream lifecycle markers (no data).
-          // tool-input-start / tool-input-delta: intermediate streaming states;
-          //   the complete input arrives in tool-input-end which is handled above.
+          // tool-input-start: handled above (name capture for execution start).
+          // tool-input-delta: handled above (streamed input reassembly).
           // reasoning-start / reasoning-end: reasoning lifecycle markers (no data).
-          // start-step / finish-step: step boundary markers (no actionable data).
+          // finish-step: step boundary marker (no actionable data; timing for
+          //   step starts is handled above).
           // stream-start / response-metadata: lifecycle markers (no data).
           // raw: provider-internal events, not meaningful for consumers.
           if (
             part.type === 'text-start' ||
             part.type === 'text-end' ||
-            part.type === 'tool-input-start' ||
-            part.type === 'tool-input-delta' ||
             part.type === 'reasoning-start' ||
             part.type === 'reasoning-end' ||
-            part.type === 'start-step' ||
             part.type === 'finish-step' ||
             part.type === 'raw' ||
             part.type === 'finish'
@@ -509,6 +605,15 @@ export class SimpleAgentRunner {
         history = this.history;
         totalSteps += steps.length;
 
+        cumulativePerf = addTurnPerf(cumulativePerf, {
+          llmMs: Math.max(0, Math.max(0, Date.now() - attemptStartedAt) - attemptToolMs),
+          toolMs: attemptToolMs,
+          firstTokenMs: attemptFirstTokenSamples.reduce((sum, ms) => sum + ms, 0),
+          firstTokenSamples: attemptFirstTokenSamples.length,
+          toolCalls: attemptToolCalls,
+          steps: steps.length,
+        });
+
         allText = allText ? allText + streamedText : streamedText;
 
         // Check for approval requests from both sources:
@@ -542,6 +647,7 @@ export class SimpleAgentRunner {
             response: allText || streamedText,
             toolApprovalRequests: mergedApprovalRequests,
             usage: cumulativeUsage,
+            ...(cumulativePerf ? { perf: cumulativePerf } : {}),
             iterations: totalSteps,
             requiresApproval: true,
           };
@@ -610,6 +716,7 @@ export class SimpleAgentRunner {
             ? { toolCalls: allToolCalls }
             : {}),
           usage: cumulativeUsage,
+          ...(cumulativePerf ? { perf: cumulativePerf } : {}),
           iterations: totalSteps,
         };
       } catch (error) {

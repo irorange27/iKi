@@ -599,6 +599,182 @@ describe('SimpleAgentRunner — characterization tests', () => {
     });
   });
 
+  describe('turn perf metrics', () => {
+    it('carries the tool name when tool-call arrives after tool-input-end (streamed-input order)', async () => {
+      // Real AI SDK streamed-input order: tool-input-end lands BEFORE the
+      // final tool-call part. The execution start must still carry the real
+      // tool name and the reassembled input.
+      const result = makeStreamTextResult({
+        fullStreamParts: [
+          { type: 'start-step' },
+          { type: 'tool-input-start', id: 'tc-1', toolName: 'shell' },
+          { type: 'tool-input-delta', id: 'tc-1', delta: '{"command":' },
+          { type: 'tool-input-delta', id: 'tc-1', delta: '"ls"}' },
+          { type: 'tool-input-end', id: 'tc-1' },
+          { type: 'tool-call', toolCallId: 'tc-1', toolName: 'shell', input: { command: 'ls' } },
+          { type: 'tool-result', toolCallId: 'tc-1', output: 'files' },
+          { type: 'finish-step' },
+          { type: 'start-step' },
+          { type: 'text-delta', text: 'done' },
+          { type: 'finish-step' },
+          { type: 'finish', finishReason: 'stop' },
+        ],
+        steps: [{ toolCalls: [{}] }, { text: 'done' }],
+        responseMessages: [{ role: 'assistant', content: 'done' }],
+        contentParts: [{ type: 'text', text: 'done' }],
+      });
+      setupAll(result, { enableTools: true });
+
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true, enableTools: true },
+        prompt: 'test',
+        tools: [{ name: 'shell', description: 'Run shell', handler: async () => 'files' }],
+        providerType: 'openai',
+        providerId: '',
+        model: 'gpt-4o-mini',
+      });
+
+      const steps: unknown[] = [];
+      let next = await gen.next();
+      while (!next.done) {
+        steps.push(next.value);
+        next = await gen.next();
+      }
+      const agentResult = next.value as { perf?: Record<string, number> };
+
+      const startStep = steps.find((s: any) => s.type === 'tool_execution_start') as any;
+      expect(startStep).toBeDefined();
+      expect(startStep.toolName).toBe('shell');
+      expect(startStep.input).toEqual({ command: 'ls' });
+      expect(agentResult?.perf).toMatchObject({ steps: 2, toolCalls: 1 });
+    });
+
+    it('emits exactly one execution start when tool-call arrives before tool-input-end', async () => {
+      const result = makeStreamTextResult({
+        fullStreamParts: [
+          { type: 'start-step' },
+          { type: 'tool-call', toolCallId: 'tc-1', toolName: 'read', input: { path: 'a.ts' } },
+          { type: 'tool-input-end', id: 'tc-1' },
+          { type: 'tool-result', toolCallId: 'tc-1', output: 'contents' },
+          { type: 'finish-step' },
+          { type: 'finish', finishReason: 'stop' },
+        ],
+        steps: [{ toolCalls: [{}] }],
+        responseMessages: [{ role: 'assistant', content: 'done' }],
+        contentParts: [{ type: 'text', text: 'done' }],
+      });
+      setupAll(result, { enableTools: true });
+
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true, enableTools: true },
+        prompt: 'test',
+        tools: [{ name: 'read', description: 'Read a file', handler: async () => 'contents' }],
+        providerType: 'openai',
+        providerId: '',
+        model: 'gpt-4o-mini',
+      });
+
+      const steps: unknown[] = [];
+      let next = await gen.next();
+      while (!next.done) {
+        steps.push(next.value);
+        next = await gen.next();
+      }
+
+      const startSteps = steps.filter((s: any) => s.type === 'tool_execution_start');
+      expect(startSteps).toHaveLength(1);
+      expect((startSteps[0] as any).toolName).toBe('read');
+    });
+
+    it('collects steps, tool calls, and first-token samples from the stream', async () => {
+      const result = makeStreamTextResult({
+        fullStreamParts: [
+          { type: 'start-step' },
+          { type: 'text-delta', text: 'Checking' },
+          { type: 'tool-call', toolCallId: 'tc-1', toolName: 'read', input: {} },
+          { type: 'tool-input-end', id: 'tc-1' },
+          { type: 'tool-result', toolCallId: 'tc-1', output: 'contents' },
+          { type: 'finish-step' },
+          { type: 'start-step' },
+          { type: 'reasoning-delta', text: 'hmm' },
+          { type: 'text-delta', text: ' done' },
+          { type: 'finish-step' },
+          { type: 'finish', finishReason: 'stop' },
+        ],
+        steps: [{ toolCalls: [{}] }, { text: 'done' }],
+        responseMessages: [{ role: 'assistant', content: 'Checking done' }],
+        contentParts: [{ type: 'text', text: 'Checking done' }],
+      });
+      setupAll(result, { enableTools: true });
+
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true, enableTools: true },
+        prompt: 'test',
+        tools: [
+          { name: 'read', description: 'Read a file', handler: async () => 'contents' },
+        ],
+        providerType: 'openai',
+        providerId: '',
+        model: 'gpt-4o-mini',
+      });
+
+      // A for-await loop would exhaust the generator and discard the return
+      // value, so drive it manually and read the final result.
+      let next = await gen.next();
+      while (!next.done) {
+        next = await gen.next();
+      }
+      const agentResult = next.value as { perf?: Record<string, number> };
+
+      expect(agentResult?.perf).toBeDefined();
+      expect(agentResult.perf).toMatchObject({
+        steps: 2,
+        toolCalls: 1,
+        firstTokenSamples: 2,
+      });
+      expect(agentResult.perf!.llmMs).toBeGreaterThanOrEqual(0);
+      expect(agentResult.perf!.toolMs).toBeGreaterThanOrEqual(0);
+      expect(agentResult.perf!.firstTokenMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('reports a text-only turn with no tool timing', async () => {
+      const result = makeStreamTextResult({
+        fullStreamParts: [
+          { type: 'start-step' },
+          { type: 'text-delta', text: 'Hello' },
+          { type: 'finish-step' },
+          { type: 'finish', finishReason: 'stop' },
+        ],
+      });
+      setupAll(result, { enableTools: true });
+
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true, enableTools: true },
+        prompt: 'test',
+        providerType: 'openai',
+        providerId: '',
+        model: 'gpt-4o-mini',
+      });
+
+      let next = await gen.next();
+      while (!next.done) {
+        next = await gen.next();
+      }
+      const agentResult = next.value as { perf?: Record<string, number> };
+
+      expect(agentResult?.perf).toMatchObject({
+        steps: 1,
+        toolCalls: 0,
+        firstTokenSamples: 1,
+        toolMs: 0,
+      });
+    });
+  });
+
   describe('RefusalError and retryability', () => {
     it('isRetryableError returns true for RefusalError', () => {
       const refusal = new RefusalError('Content blocked', 'content-filter');
