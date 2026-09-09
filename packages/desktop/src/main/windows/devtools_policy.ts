@@ -19,7 +19,7 @@ export const parseBooleanEnv = (value: string | undefined): boolean | null => {
 export const shouldAutoOpenDevTools = (context: DevToolsPolicyContext): boolean => {
   if (context.isPackaged) return false;
   const parsed = parseBooleanEnv(context.autoOpenEnv);
-  return parsed ?? false;
+  return parsed ?? true;
 };
 
 export const maybeOpenDevTools = (

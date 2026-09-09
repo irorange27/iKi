@@ -26,11 +26,20 @@ describe('devtools policy', () => {
     expect(parseBooleanEnv('open')).toBeNull();
   });
 
-  it('keeps auto-open disabled by default in development', () => {
+  it('auto-opens devtools by default in development', () => {
     expect(
       shouldAutoOpenDevTools({
         isPackaged: false,
         autoOpenEnv: undefined,
+      })
+    ).toBe(true);
+  });
+
+  it('supports explicit opt-out in development', () => {
+    expect(
+      shouldAutoOpenDevTools({
+        isPackaged: false,
+        autoOpenEnv: 'false',
       })
     ).toBe(false);
   });
