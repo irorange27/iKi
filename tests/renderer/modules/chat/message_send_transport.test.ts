@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createChatComposerStreamPayload } from '../../../../packages/desktop/src/renderer/modules/chat/chat_send_transport';
+import { createChatComposerStreamPayload } from '../../../../packages/desktop/src/renderer/modules/chat/message_send_transport';
 import type { Provider } from '@iki/backend/types/provider';
 
 const buildProvider = (
@@ -26,7 +26,7 @@ const buildProvider = (
   acp_model_mapping: overrides.acp_model_mapping,
 });
 
-describe('chat_send_transport', () => {
+describe('message_send_transport', () => {
   it('builds the invocation body (messages injected by the transport at send time)', () => {
     const provider = buildProvider({
       id: 'openai',

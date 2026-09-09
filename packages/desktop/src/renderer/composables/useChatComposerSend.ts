@@ -7,7 +7,7 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { createLogger } from '../logger';
-import { createChatComposerStreamPayload } from '../modules/chat/chat_send_transport';
+import { createChatComposerStreamPayload } from '../modules/chat/message_send_transport';
 import type {
   PreparedMessageSend,
   PrepareMessageSendPayload,
