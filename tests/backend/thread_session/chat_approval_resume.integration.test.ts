@@ -14,14 +14,14 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-vi.mock('@iki/backend/db/chat_tool_approval', () => ({
-  getChatToolApproval: vi.fn(),
-  getChatToolApprovalSession: vi.fn(),
-  getActiveChatToolApprovalsBySession: vi.fn(),
-  answerChatToolApproval: vi.fn(),
-  consumeChatToolApprovalSession: vi.fn(),
-  upsertChatToolApprovalSession: vi.fn(),
-  upsertChatToolApprovals: vi.fn(),
+vi.mock('@iki/backend/db/tool_call_approval', () => ({
+  getToolCallApproval: vi.fn(),
+  getToolCallApprovalSession: vi.fn(),
+  getActiveToolCallApprovalsBySession: vi.fn(),
+  answerToolCallApproval: vi.fn(),
+  consumeToolCallApprovalSession: vi.fn(),
+  upsertToolCallApprovalSession: vi.fn(),
+  upsertToolCallApprovals: vi.fn(),
 }));
 
 vi.mock('@iki/backend/db/chat_message', () => ({
@@ -60,7 +60,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
 }));
 
-import * as approvalDb from '@iki/backend/db/chat_tool_approval';
+import * as approvalDb from '@iki/backend/db/tool_call_approval';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatApproval } from '@iki/backend/turn_prep/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -162,8 +162,8 @@ describe('createChatApproval resume integration', () => {
     expect(blockedHarness.getHistory().at(-1)).toMatchObject({ role: 'assistant' });
 
     createModelMock.mockReturnValue(new FauxModelProvider([fauxText('approval resumed')], 'gpt-4o-mini'));
-    vi.mocked(approvalDb.getChatToolApproval).mockReturnValue(approvedRecord as never);
-    vi.mocked(approvalDb.getChatToolApprovalSession).mockReturnValue({
+    vi.mocked(approvalDb.getToolCallApproval).mockReturnValue(approvedRecord as never);
+    vi.mocked(approvalDb.getToolCallApprovalSession).mockReturnValue({
       session_id: 'assistant_1',
       thread_id: 'thread_1',
       assistant_message_id: 'assistant_1',
@@ -180,7 +180,7 @@ describe('createChatApproval resume integration', () => {
       created_at: '2026-06-20T00:00:00.000Z',
       updated_at: '2026-06-20T00:00:00.000Z',
     } as never);
-    vi.mocked(approvalDb.getActiveChatToolApprovalsBySession).mockReturnValue([approvedRecord] as never);
+    vi.mocked(approvalDb.getActiveToolCallApprovalsBySession).mockReturnValue([approvedRecord] as never);
     vi.mocked(agentRunDb.getAgentRun).mockReturnValue({
         id: 'run_blocked_1',
         kind: 'chat-turn',
@@ -223,12 +223,12 @@ describe('createChatApproval resume integration', () => {
     const result = await approvals.approveTool(target, approvedId, true);
 
     expect(result).toEqual({ success: true, awaitingApproval: false, stopped: false });
-    expect(approvalDb.answerChatToolApproval).toHaveBeenCalledWith(
+    expect(approvalDb.answerToolCallApproval).toHaveBeenCalledWith(
       approvedId,
       'approved',
       'User approved tool execution.'
     );
-    expect(approvalDb.consumeChatToolApprovalSession).toHaveBeenCalledWith('assistant_1');
+    expect(approvalDb.consumeToolCallApprovalSession).toHaveBeenCalledWith('assistant_1');
     expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
     expect(observedContext).toMatchObject({
       threadId: 'thread_1',

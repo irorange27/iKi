@@ -8,11 +8,11 @@ import { describeApprovalRequiredTools } from '../turn_prep/approval_types';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
-  resolveChatToolMaxIterations,
+  resolveToolCallMaxIterations,
 } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
-import { getPersonalityStylePrompt } from '../chat/personality';
+import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
 
@@ -70,7 +70,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       }
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
-      const maxIterations = resolveChatToolMaxIterations(options.maxIterations);
+      const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
       const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
 
       const systemPrompt = [

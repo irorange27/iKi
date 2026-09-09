@@ -4,7 +4,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import type { UIMessage } from 'ai';
 
-import ChatToolPart from '../../../packages/desktop/src/renderer/components/chat/ChatToolPart.vue';
+import ToolCallPart from '../../../packages/desktop/src/renderer/components/chat/ToolCallPart.vue';
 import {
   resetToolUiStateMap,
   updateToolUiState,
@@ -17,7 +17,7 @@ const createMessage = (): UIMessage =>
     parts: [],
   }) as unknown as UIMessage;
 
-describe('ChatToolPart', () => {
+describe('ToolCallPart', () => {
   afterEach(() => {
     resetToolUiStateMap();
   });
@@ -34,7 +34,7 @@ describe('ChatToolPart', () => {
       },
     };
 
-    const wrapper = mount(ChatToolPart, {
+    const wrapper = mount(ToolCallPart, {
       props: {
         approvalProcessing: false,
         mcpServerLabel: '',
@@ -53,7 +53,7 @@ describe('ChatToolPart', () => {
   });
 
   it('starts completed tool results collapsed and toggles details on demand', async () => {
-    const wrapper = mount(ChatToolPart, {
+    const wrapper = mount(ToolCallPart, {
       props: {
         approvalProcessing: false,
         mcpServerLabel: '',
@@ -100,7 +100,7 @@ describe('ChatToolPart', () => {
   it('renders deduplicated web citations from tool output when expanded', () => {
     updateToolUiState('call_web', { collapsed: false });
 
-    const wrapper = mount(ChatToolPart, {
+    const wrapper = mount(ToolCallPart, {
       props: {
         approvalProcessing: false,
         mcpServerLabel: 'Docs Server',
@@ -135,7 +135,7 @@ describe('ChatToolPart', () => {
   });
 
   it('hides thread-scoped todo tool parts from the transcript', () => {
-    const wrapper = mount(ChatToolPart, {
+    const wrapper = mount(ToolCallPart, {
       props: {
         approvalProcessing: false,
         mcpServerLabel: '',

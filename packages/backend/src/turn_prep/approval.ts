@@ -8,20 +8,20 @@ import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
 import { cloneModelMessages } from '../agent/harness';
 import type { AgentRun } from '@iki/backend/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
+import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { createPrefixedId } from '../utils/id';
-import type { ChatToolApprovalDecision } from '@iki/backend/types/chat_tool_approval';
+import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from '../thread_session/memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
-import { resolveChatToolMaxIterations } from '../thread_session/constants';
+import { resolveToolCallMaxIterations } from '../thread_session/constants';
 import { createAgentRunTracker } from '../turn_prep/run_tracker';
 import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from '../thread_session/types';
 import { createUiChunkEmitter } from '../thread_session/ui_stream';
 import { toModelInputMessages } from '../thread_session/ui_messages';
-import { parseStoredUiMessageRow } from '@iki/backend/chat/ui_message_codec';
+import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 import { rehydrateHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 
@@ -162,7 +162,7 @@ export const createChatApproval = (deps: {
 
     if (session.recoveryContext) {
       const recoveryContext = session.recoveryContext;
-      chatToolApprovalDb.upsertChatToolApprovalSession({
+      toolCallApprovalDb.upsertToolCallApprovalSession({
         session_id: recoveryContext.sessionId,
         thread_id: recoveryContext.threadId,
         assistant_message_id: recoveryContext.assistantMessageId,
@@ -178,7 +178,7 @@ export const createChatApproval = (deps: {
         available_skill_ids: JSON.stringify(recoveryContext.availableSkillIds),
       });
 
-      chatToolApprovalDb.upsertChatToolApprovals(
+      toolCallApprovalDb.upsertToolCallApprovals(
         approvalRequests.map(request => ({
           approval_id: request.approvalId,
           session_id: recoveryContext.sessionId,
@@ -238,17 +238,17 @@ export const createChatApproval = (deps: {
     const needle = approvalId.trim();
     if (!needle) return null;
 
-    const approvalRecord = chatToolApprovalDb.getChatToolApproval(needle);
+    const approvalRecord = toolCallApprovalDb.getToolCallApproval(needle);
     if (!approvalRecord || approvalRecord.state === 'consumed') {
       return null;
     }
 
-    const approvalSession = chatToolApprovalDb.getChatToolApprovalSession(
+    const approvalSession = toolCallApprovalDb.getToolCallApprovalSession(
       approvalRecord.session_id
     );
     if (!approvalSession) return null;
 
-    const activeApprovals = chatToolApprovalDb.getActiveChatToolApprovalsBySession(
+    const activeApprovals = toolCallApprovalDb.getActiveToolCallApprovalsBySession(
       approvalSession.session_id
     );
     if (activeApprovals.length === 0) {
@@ -308,7 +308,7 @@ export const createChatApproval = (deps: {
               .filter(Boolean)
           )
         );
-    const maxIterations = resolveChatToolMaxIterations(
+    const maxIterations = resolveToolCallMaxIterations(
       getRunMaxIterations(runSnapshot) ?? approvalSession.max_iterations ?? undefined
     );
 
@@ -374,7 +374,7 @@ export const createChatApproval = (deps: {
     approvalId: string,
     approved: boolean
   ) => {
-    const storedApproval = chatToolApprovalDb.getChatToolApproval(approvalId);
+    const storedApproval = toolCallApprovalDb.getToolCallApproval(approvalId);
     let session = pendingApprovalSessions.get(approvalId);
     if (!session) {
       session = await tryRecoverApprovalSession(approvalId, target);
@@ -415,8 +415,8 @@ export const createChatApproval = (deps: {
     }
 
     session.collectedApprovalResponses.set(approvalId, approvalResponse);
-    const decision: ChatToolApprovalDecision = approved ? 'approved' : 'rejected';
-    chatToolApprovalDb.answerChatToolApproval(approvalId, decision, approvalResponse.reason);
+    const decision: ToolCallApprovalDecision = approved ? 'approved' : 'rejected';
+    toolCallApprovalDb.answerToolCallApproval(approvalId, decision, approvalResponse.reason);
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
       id => !session.collectedApprovalResponses.has(id)
@@ -435,7 +435,7 @@ export const createChatApproval = (deps: {
       pendingApprovalSessions.delete(pendingId);
     }
     if (session.sessionId) {
-      chatToolApprovalDb.consumeChatToolApprovalSession(session.sessionId);
+      toolCallApprovalDb.consumeToolCallApprovalSession(session.sessionId);
     }
 
     const resumedSenderId = session.target.id;
@@ -577,8 +577,12 @@ export const createChatApproval = (deps: {
             if (turnEvent.event === 'step') {
               const step = turnEvent.step;
               if (step.type === 'message_update') {
-                responseText += step.text;
-                uiChunkEmitter.emitTextDelta(step.text);
+                if (step.kind === 'reasoning') {
+                  uiChunkEmitter.emitReasoningDelta(step.text);
+                } else {
+                  responseText += step.text;
+                  uiChunkEmitter.emitTextDelta(step.text);
+                }
               } else if (step.type === 'tool_execution_start') {
                 const event: ChatStreamEvent = {
                   type: 'tool-call',

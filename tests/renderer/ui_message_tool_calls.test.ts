@@ -4,12 +4,13 @@ import {
   getToolDiffLines,
   getToolDiffStat,
   getToolOutputForDisplay,
+  getToolTerminalView,
   getToolTitle,
   hasToolDiff,
   isToolCollapsed,
-} from '../../packages/desktop/src/renderer/modules/chat/ui_message_tool_parts';
+} from '../../packages/desktop/src/renderer/modules/chat/ui_message_tool_calls';
 
-describe('ui_message_tool_parts', () => {
+describe('ui_message_tool_calls', () => {
   it('uses tool input description as the card title when present', () => {
     const title = getToolTitle({
       type: 'dynamic-tool',
@@ -138,5 +139,47 @@ describe('ui_message_tool_parts', () => {
     };
     expect(getToolOutputForDisplay(shellPart)).toEqual({ stdout: '/tmp' });
     expect(hasToolDiff(shellPart)).toBe(false);
+  });
+});
+
+describe('getToolTerminalView', () => {
+  const shellPart = (overrides: Record<string, unknown> = {}) => ({
+    type: 'dynamic-tool',
+    toolName: 'shell',
+    toolCallId: 'call_sh',
+    state: 'output-available',
+    input: { command: 'whoami' },
+    output: { stdout: 'nina\n', exitCode: 0 },
+    ...overrides,
+  });
+
+  it('builds a terminal view from a settled shell call', () => {
+    expect(getToolTerminalView(shellPart())).toEqual({
+      command: 'whoami',
+      stdout: 'nina\n',
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  it('returns null for non-shell tools and unsettled calls', () => {
+    expect(
+      getToolTerminalView({
+        type: 'dynamic-tool',
+        toolName: 'read_file',
+        toolCallId: 'call_1',
+        state: 'output-available',
+        input: { path: 'a.ts' },
+        output: { content: 'x' },
+      })
+    ).toBeNull();
+    expect(getToolTerminalView({ type: 'dynamic-tool', state: 'input-streaming' })).toBeNull();
+  });
+
+  it('keeps stderr and non-zero exit codes visible', () => {
+    const view = getToolTerminalView(
+      shellPart({ output: { stdout: '', stderr: 'boom', exitCode: 2 } })
+    );
+    expect(view).toMatchObject({ stdout: '', stderr: 'boom', exitCode: 2 });
   });
 });

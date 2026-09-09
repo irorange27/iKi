@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/db/chat_tool_approval', () => ({
-  upsertChatToolApprovalSession: vi.fn(),
-  upsertChatToolApprovals: vi.fn(),
-  getChatToolApproval: vi.fn(),
-  getChatToolApprovalSession: vi.fn(),
-  getActiveChatToolApprovalsBySession: vi.fn(),
-  answerChatToolApproval: vi.fn(),
-  consumeChatToolApprovalSession: vi.fn(),
+vi.mock('@iki/backend/db/tool_call_approval', () => ({
+  upsertToolCallApprovalSession: vi.fn(),
+  upsertToolCallApprovals: vi.fn(),
+  getToolCallApproval: vi.fn(),
+  getToolCallApprovalSession: vi.fn(),
+  getActiveToolCallApprovalsBySession: vi.fn(),
+  answerToolCallApproval: vi.fn(),
+  consumeToolCallApprovalSession: vi.fn(),
 }));
 
 vi.mock('@iki/backend/db/chat_message', () => ({
@@ -32,6 +32,7 @@ vi.mock('@iki/backend/thread_session/ui_messages', () => ({
   createUiChunkEmitter: vi.fn(() => ({
     messageId: 'assistant_resume',
     emitTextDelta: vi.fn(),
+    emitReasoningDelta: vi.fn(),
     emitToolEvent: vi.fn(),
     emitMemoryRetrieval: vi.fn(),
     emitAffectSignal: vi.fn(),
@@ -53,7 +54,7 @@ vi.mock('@iki/backend/turn_prep/run_tracker', () => ({
 }));
 
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import * as chatToolApprovalDb from '@iki/backend/db/chat_tool_approval';
+import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { createChatApproval } from '@iki/backend/turn_prep/approval';
@@ -65,18 +66,18 @@ const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);
 const getAgentRunMock = vi.mocked(agentRunDb.getAgentRun);
 const getChatMessagesMock = vi.mocked(chatMessageDb.getChatMessages);
 const defaultToolRegistryGetMock = vi.mocked(defaultToolRegistry.get);
-const upsertChatToolApprovalSessionMock = vi.mocked(
-  chatToolApprovalDb.upsertChatToolApprovalSession
+const upsertToolCallApprovalSessionMock = vi.mocked(
+  toolCallApprovalDb.upsertToolCallApprovalSession
 );
-const upsertChatToolApprovalsMock = vi.mocked(chatToolApprovalDb.upsertChatToolApprovals);
-const getChatToolApprovalMock = vi.mocked(chatToolApprovalDb.getChatToolApproval);
-const getChatToolApprovalSessionMock = vi.mocked(chatToolApprovalDb.getChatToolApprovalSession);
-const getActiveChatToolApprovalsBySessionMock = vi.mocked(
-  chatToolApprovalDb.getActiveChatToolApprovalsBySession
+const upsertToolCallApprovalsMock = vi.mocked(toolCallApprovalDb.upsertToolCallApprovals);
+const getToolCallApprovalMock = vi.mocked(toolCallApprovalDb.getToolCallApproval);
+const getToolCallApprovalSessionMock = vi.mocked(toolCallApprovalDb.getToolCallApprovalSession);
+const getActiveToolCallApprovalsBySessionMock = vi.mocked(
+  toolCallApprovalDb.getActiveToolCallApprovalsBySession
 );
-const answerChatToolApprovalMock = vi.mocked(chatToolApprovalDb.answerChatToolApproval);
-const consumeChatToolApprovalSessionMock = vi.mocked(
-  chatToolApprovalDb.consumeChatToolApprovalSession
+const answerToolCallApprovalMock = vi.mocked(toolCallApprovalDb.answerToolCallApproval);
+const consumeToolCallApprovalSessionMock = vi.mocked(
+  toolCallApprovalDb.consumeToolCallApprovalSession
 );
 
 beforeEach(() => {
@@ -176,7 +177,7 @@ describe('createChatApproval', () => {
       }
     );
 
-    expect(upsertChatToolApprovalSessionMock).toHaveBeenCalledWith({
+    expect(upsertToolCallApprovalSessionMock).toHaveBeenCalledWith({
       session_id: 'assistant_1',
       thread_id: 'thread_1',
       assistant_message_id: 'assistant_1',
@@ -191,7 +192,7 @@ describe('createChatApproval', () => {
       enabled_tools: '["web"]',
       available_skill_ids: '[]',
     });
-    expect(upsertChatToolApprovalsMock).toHaveBeenCalledWith([
+    expect(upsertToolCallApprovalsMock).toHaveBeenCalledWith([
       {
         approval_id: 'approval_1',
         session_id: 'assistant_1',
@@ -211,7 +212,7 @@ describe('createChatApproval', () => {
       handler: vi.fn(),
     } as never);
 
-    getChatToolApprovalMock.mockReturnValue({
+    getToolCallApprovalMock.mockReturnValue({
       approval_id: 'approval_2',
       session_id: 'assistant_skill_1',
       tool_call_id: 'call_2',
@@ -224,7 +225,7 @@ describe('createChatApproval', () => {
       created_at: '2026-03-19T00:00:00.000Z',
       updated_at: '2026-03-19T00:00:00.000Z',
     });
-    getChatToolApprovalSessionMock.mockReturnValue({
+    getToolCallApprovalSessionMock.mockReturnValue({
       session_id: 'assistant_skill_1',
       thread_id: 'thread_skill_1',
       assistant_message_id: 'assistant_skill_1',
@@ -238,7 +239,7 @@ describe('createChatApproval', () => {
       created_at: '2026-03-19T00:00:00.000Z',
       updated_at: '2026-03-19T00:00:00.000Z',
     });
-    getActiveChatToolApprovalsBySessionMock.mockReturnValue([
+    getActiveToolCallApprovalsBySessionMock.mockReturnValue([
       {
         approval_id: 'approval_2',
         session_id: 'assistant_skill_1',
@@ -335,7 +336,7 @@ describe('createChatApproval', () => {
     });
 
     // DB has no records for these approvals
-    getChatToolApprovalMock.mockReturnValue(null);
+    getToolCallApprovalMock.mockReturnValue(null);
 
     // Clean up sessions for senderId=1
     approvals.cleanupPendingSessionsForSender(1);

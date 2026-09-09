@@ -4,7 +4,7 @@ export * from './agent_run';
 export * from './awaiters';
 export * from './chat';
 export * from './chat_invocation';
-export * from './chat_tool_approval';
+export * from './tool_call_approval';
 export * from './chat_usage';
 export * from './companion';
 export * from './config';
@@ -26,9 +26,9 @@ export * from './workflow';
 
 // Explicit re-exports resolve star-star conflicts between the barrels above.
 export type {
-  ChatToolApproval,
-  ChatToolApprovalDecision,
-  ChatToolApprovalSession,
-  ChatToolApprovalState,
-} from './chat_tool_approval';
+  ToolCallApproval,
+  ToolCallApprovalDecision,
+  ToolCallApprovalSession,
+  ToolCallApprovalState,
+} from './tool_call_approval';
 export type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';

@@ -5,7 +5,7 @@ export * from './app_clients';
 export * from './awaiters';
 export * from './chat_message';
 export * from './chat_thread';
-export * from './chat_tool_approval';
+export * from './tool_call_approval';
 export * from './chat_usage';
 export * from './clipboard';
 export * from './continuity';

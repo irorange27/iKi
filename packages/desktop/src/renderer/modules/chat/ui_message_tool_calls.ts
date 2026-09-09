@@ -22,14 +22,14 @@ import {
   isToolPart,
   isToolResultPart,
   normalizeToolNameKey,
-} from '@iki/backend/chat/tool_parts';
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+} from '@iki/backend/message/tool_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import {
   parseToolInput,
   parseToolOutput,
   type ParsedToolInput,
   type ParsedToolOutput,
-} from '@iki/backend/chat/tool_payloads';
+} from '@iki/backend/message/tool_payloads';
 import { translate } from '../../i18n';
 import { getToolUiState, updateToolUiState } from './tool_ui_state';
 
@@ -45,7 +45,7 @@ export {
   isToolResultPart,
   normalizeToolNameKey,
   parseToolInputFromText,
-} from '@iki/backend/chat/tool_parts';
+} from '@iki/backend/message/tool_parts';
 
 export type WebSearchCitation = {
   title: string;
@@ -54,14 +54,14 @@ export type WebSearchCitation = {
 };
 
 const TOOL_STATE_LABEL_KEYS: Record<string, Parameters<typeof translate>[0]> = {
-  'input-streaming': 'chat.tool.state.running',
-  'input-available': 'chat.tool.state.queued',
-  'approval-requested': 'chat.tool.state.awaitingApproval',
-  'approval-responded': 'chat.tool.state.approved',
-  'output-available': 'chat.tool.state.completed',
-  'output-error': 'chat.tool.state.failed',
-  'output-denied': 'chat.tool.state.denied',
-  done: 'chat.tool.state.done',
+  'input-streaming': 'toolCall.state.running',
+  'input-available': 'toolCall.state.queued',
+  'approval-requested': 'toolCall.state.awaitingApproval',
+  'approval-responded': 'toolCall.state.approved',
+  'output-available': 'toolCall.state.completed',
+  'output-error': 'toolCall.state.failed',
+  'output-denied': 'toolCall.state.denied',
+  done: 'toolCall.state.done',
 };
 
 export const getToolStateLabel = (part: unknown): string => {
@@ -163,7 +163,7 @@ export const getParsedToolInput = (part: unknown): ParsedToolInput =>
 export const getParsedToolOutput = (part: unknown): ParsedToolOutput =>
   getParsedToolPayload(part).output;
 
-const getToolDurationMs = (part: unknown): number | null => {
+export const getToolDurationMs = (part: unknown): number | null => {
   const toolCallId = getToolCallIdFromPart(part);
   const uiState = toolCallId ? getToolUiState(toolCallId) : undefined;
 
@@ -188,7 +188,7 @@ const getToolDurationMs = (part: unknown): number | null => {
   return null;
 };
 
-const formatDurationMs = (ms: number): string => {
+export const formatDurationMs = (ms: number): string => {
   if (!Number.isFinite(ms) || ms < 0) return '';
   const secondsTotal = ms / 1000;
 
@@ -378,7 +378,7 @@ export const getToolTitle = (part: unknown): string => {
     }
 
     if (toolKey === 'todo') {
-      return translate('chat.tool.executionPlan');
+      return translate('toolCall.executionPlan');
     }
   }
 
@@ -408,14 +408,14 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
     if (toolKey === 'shell' && typeof input.command === 'string' && input.command.trim()) {
       const meta: string[] = [];
       if (typeof input.cwd === 'string' && input.cwd.trim()) {
-        meta.push(translate('chat.tool.meta.cwd', { value: normalizeSingleLineText(input.cwd) }));
+        meta.push(translate('toolCall.meta.cwd', { value: normalizeSingleLineText(input.cwd) }));
       }
       if (typeof input.timeout === 'number' && Number.isFinite(input.timeout)) {
-        meta.push(translate('chat.tool.meta.timeout', { value: Math.trunc(input.timeout) }));
+        meta.push(translate('toolCall.meta.timeout', { value: Math.trunc(input.timeout) }));
       }
 
       return {
-        title: translate('chat.tool.command'),
+        title: translate('toolCall.command'),
         value: input.command.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -425,11 +425,11 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
     if (toolKey === 'web' && typeof input.query === 'string' && input.query.trim()) {
       const meta: string[] = [];
       if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-        meta.push(translate('chat.tool.meta.limit', { value: Math.trunc(input.limit) }));
+        meta.push(translate('toolCall.meta.limit', { value: Math.trunc(input.limit) }));
       }
 
       return {
-        title: translate('chat.tool.query'),
+        title: translate('toolCall.query'),
         value: input.query.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -439,11 +439,11 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
     if (toolKey === 'fetch' && typeof input.url === 'string' && input.url.trim()) {
       const meta: string[] = [];
       if (typeof input.maxChars === 'number' && Number.isFinite(input.maxChars)) {
-        meta.push(translate('chat.tool.meta.maxChars', { value: Math.trunc(input.maxChars) }));
+        meta.push(translate('toolCall.meta.maxChars', { value: Math.trunc(input.maxChars) }));
       }
 
       return {
-        title: translate('chat.tool.url'),
+        title: translate('toolCall.url'),
         value: input.url.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -454,7 +454,7 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       const meta: string[] = [];
       if (Array.isArray(input.tools) && input.tools.length > 0) {
         meta.push(
-          translate('chat.tool.meta.tools', {
+          translate('toolCall.meta.tools', {
             value: input.tools
               .filter((tool): tool is string => typeof tool === 'string' && tool.trim().length > 0)
               .join(', '),
@@ -463,14 +463,14 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       }
       if (typeof input.maxIterations === 'number' && Number.isFinite(input.maxIterations)) {
         meta.push(
-          translate('chat.tool.meta.maxIterations', {
+          translate('toolCall.meta.maxIterations', {
             value: Math.trunc(input.maxIterations),
           })
         );
       }
 
       return {
-        title: translate('chat.tool.task'),
+        title: translate('toolCall.task'),
         value: input.task.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -488,14 +488,14 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       const meta: string[] = [];
       if (typeof input.encoding === 'string' && input.encoding.trim()) {
         meta.push(
-          translate('chat.tool.meta.encoding', {
+          translate('toolCall.meta.encoding', {
             value: normalizeSingleLineText(input.encoding),
           })
         );
       }
 
       return {
-        title: translate('chat.tool.path'),
+        title: translate('toolCall.path'),
         value: input.path.trim(),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
@@ -506,12 +506,12 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       const query = typeof input.query === 'string' ? input.query.trim() : '';
       const meta: string[] = [];
       if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-        meta.push(translate('chat.tool.meta.limit', { value: Math.trunc(input.limit) }));
+        meta.push(translate('toolCall.meta.limit', { value: Math.trunc(input.limit) }));
       }
 
       return {
-        title: translate('chat.tool.query'),
-        value: query || translate('chat.tool.allTodoLists'),
+        title: translate('toolCall.query'),
+        value: query || translate('toolCall.allTodoLists'),
         metaText: meta.length > 0 ? meta.join(' · ') : undefined,
         isPrimary: true,
       };
@@ -525,7 +525,7 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
         (typeof input.id === 'string' && input.id.trim()))
     ) {
       return {
-        title: translate('chat.tool.todoList'),
+        title: translate('toolCall.todoList'),
         value:
           (typeof input.title === 'string' && input.title.trim()) ||
           (typeof input.id === 'string' && input.id.trim()) ||
@@ -536,7 +536,7 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
   }
 
   return {
-    title: translate('chat.tool.input'),
+    title: translate('toolCall.input'),
     value: input,
     isPrimary: false,
   };
@@ -696,6 +696,34 @@ export const getToolOutputForDisplay = (part: unknown): unknown => {
   if (!hasToolDiff(part) || !isObjectRecord(output)) return output;
   const { diff: _diff, ...rest } = output;
   return rest;
+};
+
+export type ToolTerminalView = {
+  command: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+};
+
+/**
+ * Terminal-style view for shell calls: `$ command` plus captured output.
+ * Returns null for anything that is not a settled shell invocation.
+ */
+export const getToolTerminalView = (part: unknown): ToolTerminalView | null => {
+  const input = getParsedToolInput(part);
+  const output = getParsedToolOutput(part);
+  if (input.kind !== 'shell' || output.kind !== 'shell') return null;
+
+  const command = input.input?.command;
+  if (typeof command !== 'string' || !command.trim()) return null;
+
+  const out = output.output ?? {};
+  return {
+    command,
+    stdout: typeof out.stdout === 'string' ? out.stdout : '',
+    stderr: typeof out.stderr === 'string' ? out.stderr : '',
+    exitCode: typeof out.exitCode === 'number' ? out.exitCode : null,
+  };
 };
 
 export const hasDisplayValue = (value: unknown): boolean => {

@@ -1,49 +1,49 @@
 import { getDb } from './database';
 import type {
-  ChatToolApproval,
-  ChatToolApprovalDecision,
-  ChatToolApprovalSession,
-  ChatToolApprovalState,
-} from '@iki/backend/types/chat_tool_approval';
+  ToolCallApproval,
+  ToolCallApprovalDecision,
+  ToolCallApprovalSession,
+  ToolCallApprovalState,
+} from '@iki/backend/types/tool_call_approval';
 
-type UpsertChatToolApprovalSessionInput = Omit<
-  ChatToolApprovalSession,
+type UpsertToolCallApprovalSessionInput = Omit<
+  ToolCallApprovalSession,
   'created_at' | 'updated_at'
 >;
 
-type UpsertChatToolApprovalInput = Omit<
-  ChatToolApproval,
+type UpsertToolCallApprovalInput = Omit<
+  ToolCallApproval,
   'created_at' | 'updated_at' | 'responded_at' | 'decision' | 'decision_reason'
 >;
 
-const ACTIVE_APPROVAL_STATES: ChatToolApprovalState[] = ['pending', 'answered'];
+const ACTIVE_APPROVAL_STATES: ToolCallApprovalState[] = ['pending', 'answered'];
 
-export const getChatToolApprovalSession = (sessionId: string): ChatToolApprovalSession | null => {
+export const getToolCallApprovalSession = (sessionId: string): ToolCallApprovalSession | null => {
   const row = getDb()
-    .prepare('SELECT * FROM chat_tool_approval_sessions WHERE session_id = ?')
-    .get(sessionId) as ChatToolApprovalSession | undefined;
+    .prepare('SELECT * FROM tool_call_approval_sessions WHERE session_id = ?')
+    .get(sessionId) as ToolCallApprovalSession | undefined;
   return row ?? null;
 };
 
-export const getChatToolApproval = (approvalId: string): ChatToolApproval | null => {
+export const getToolCallApproval = (approvalId: string): ToolCallApproval | null => {
   const row = getDb()
-    .prepare('SELECT * FROM chat_tool_approvals WHERE approval_id = ?')
-    .get(approvalId) as ChatToolApproval | undefined;
+    .prepare('SELECT * FROM tool_call_approvals WHERE approval_id = ?')
+    .get(approvalId) as ToolCallApproval | undefined;
   return row ?? null;
 };
 
-export const getChatToolApprovalsBySession = (
+export const getToolCallApprovalsBySession = (
   sessionId: string,
-  states?: ChatToolApprovalState[]
-): ChatToolApproval[] => {
+  states?: ToolCallApprovalState[]
+): ToolCallApproval[] => {
   const normalizedStates = Array.isArray(states)
     ? states.filter(
-        (state): state is ChatToolApprovalState =>
+        (state): state is ToolCallApprovalState =>
           state === 'pending' || state === 'answered' || state === 'consumed'
       )
     : [];
 
-  const baseSql = 'SELECT * FROM chat_tool_approvals WHERE session_id = ?';
+  const baseSql = 'SELECT * FROM tool_call_approvals WHERE session_id = ?';
   const stateClause =
     normalizedStates.length > 0
       ? ` AND state IN (${normalizedStates.map(() => '?').join(', ')})`
@@ -53,18 +53,18 @@ export const getChatToolApprovalsBySession = (
 
   return getDb()
     .prepare(sql)
-    .all(...params) as ChatToolApproval[];
+    .all(...params) as ToolCallApproval[];
 };
 
-export const getActiveChatToolApprovalsBySession = (sessionId: string): ChatToolApproval[] =>
-  getChatToolApprovalsBySession(sessionId, ACTIVE_APPROVAL_STATES);
+export const getActiveToolCallApprovalsBySession = (sessionId: string): ToolCallApproval[] =>
+  getToolCallApprovalsBySession(sessionId, ACTIVE_APPROVAL_STATES);
 
-export const upsertChatToolApprovalSession = (session: UpsertChatToolApprovalSessionInput) => {
+export const upsertToolCallApprovalSession = (session: UpsertToolCallApprovalSessionInput) => {
   const now = new Date().toISOString();
   return getDb()
     .prepare(
       `
-        INSERT INTO chat_tool_approval_sessions (
+        INSERT INTO tool_call_approval_sessions (
           session_id, thread_id, assistant_message_id, run_id, provider_type, provider_id, model,
           system_prompt, max_input_tokens, max_output_tokens, max_iterations, enabled_tools,
           available_skill_ids, created_at, updated_at
@@ -96,14 +96,14 @@ export const upsertChatToolApprovalSession = (session: UpsertChatToolApprovalSes
     });
 };
 
-export const upsertChatToolApprovals = (approvals: UpsertChatToolApprovalInput[]) => {
+export const upsertToolCallApprovals = (approvals: UpsertToolCallApprovalInput[]) => {
   if (approvals.length === 0) return;
 
   const db = getDb();
   const now = new Date().toISOString();
   const stmt = db.prepare(
     `
-      INSERT INTO chat_tool_approvals (
+      INSERT INTO tool_call_approvals (
         approval_id, session_id, tool_call_id, tool_name, tool_args, state, decision,
         decision_reason, responded_at, created_at, updated_at
       ) VALUES (
@@ -117,13 +117,13 @@ export const upsertChatToolApprovals = (approvals: UpsertChatToolApprovalInput[]
         tool_args = excluded.tool_args,
         updated_at = excluded.updated_at,
         state = CASE
-          WHEN chat_tool_approvals.state = 'pending' THEN excluded.state
-          ELSE chat_tool_approvals.state
+          WHEN tool_call_approvals.state = 'pending' THEN excluded.state
+          ELSE tool_call_approvals.state
         END
     `
   );
 
-  const run = db.transaction((rows: UpsertChatToolApprovalInput[]) => {
+  const run = db.transaction((rows: UpsertToolCallApprovalInput[]) => {
     for (const row of rows) {
       stmt.run({
         ...row,
@@ -136,16 +136,16 @@ export const upsertChatToolApprovals = (approvals: UpsertChatToolApprovalInput[]
   run(approvals);
 };
 
-export const answerChatToolApproval = (
+export const answerToolCallApproval = (
   approvalId: string,
-  decision: ChatToolApprovalDecision,
+  decision: ToolCallApprovalDecision,
   reason: string
 ) => {
   const now = new Date().toISOString();
   return getDb()
     .prepare(
       `
-        UPDATE chat_tool_approvals
+        UPDATE tool_call_approvals
         SET state = 'answered',
             decision = @decision,
             decision_reason = @decision_reason,
@@ -163,12 +163,12 @@ export const answerChatToolApproval = (
     });
 };
 
-export const consumeChatToolApprovalSession = (sessionId: string) => {
+export const consumeToolCallApprovalSession = (sessionId: string) => {
   const now = new Date().toISOString();
   return getDb()
     .prepare(
       `
-        UPDATE chat_tool_approvals
+        UPDATE tool_call_approvals
         SET state = 'consumed',
             updated_at = @updated_at
         WHERE session_id = @session_id AND state != 'consumed'

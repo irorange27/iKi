@@ -173,7 +173,7 @@ const BASELINE_STATEMENTS: readonly string[] = [
                 artifact_workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
                 skill_ids TEXT
             , client_id TEXT)`,
-  `CREATE TABLE IF NOT EXISTS chat_tool_approval_sessions (
+  `CREATE TABLE IF NOT EXISTS tool_call_approval_sessions (
         session_id TEXT PRIMARY KEY,
         thread_id TEXT NOT NULL,
         assistant_message_id TEXT NOT NULL,
@@ -185,7 +185,7 @@ const BASELINE_STATEMENTS: readonly string[] = [
         updated_at TEXT NOT NULL, available_skill_ids TEXT NOT NULL DEFAULT '[]', max_output_tokens INTEGER DEFAULT NULL, max_iterations INTEGER DEFAULT NULL, provider_id TEXT DEFAULT NULL, max_input_tokens INTEGER DEFAULT NULL, run_id TEXT DEFAULT NULL,
         FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
       )`,
-  `CREATE TABLE IF NOT EXISTS chat_tool_approvals (
+  `CREATE TABLE IF NOT EXISTS tool_call_approvals (
         approval_id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
         tool_call_id TEXT,
@@ -197,7 +197,7 @@ const BASELINE_STATEMENTS: readonly string[] = [
         responded_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        FOREIGN KEY (session_id) REFERENCES chat_tool_approval_sessions(session_id) ON DELETE CASCADE
+        FOREIGN KEY (session_id) REFERENCES tool_call_approval_sessions(session_id) ON DELETE CASCADE
       )`,
   `CREATE TABLE IF NOT EXISTS chat_usage_events (
         id TEXT PRIMARY KEY,
@@ -470,14 +470,14 @@ const BASELINE_STATEMENTS: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_chat_thread_todos_updated
         ON chat_thread_todos(updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_threads_client_id ON chat_threads(client_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_chat_tool_approval_sessions_run_id
-      ON chat_tool_approval_sessions(run_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_chat_tool_approval_sessions_thread_id
-      ON chat_tool_approval_sessions(thread_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_chat_tool_approvals_session_id
-      ON chat_tool_approvals(session_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_chat_tool_approvals_state
-      ON chat_tool_approvals(state)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_call_approval_sessions_run_id
+      ON tool_call_approval_sessions(run_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_call_approval_sessions_thread_id
+      ON tool_call_approval_sessions(thread_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_call_approvals_session_id
+      ON tool_call_approvals(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_call_approvals_state
+      ON tool_call_approvals(state)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_usage_created_at
         ON chat_usage_events(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_usage_provider_model

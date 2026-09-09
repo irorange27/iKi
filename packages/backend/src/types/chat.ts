@@ -32,11 +32,11 @@ export interface ChatMessage {
 }
 
 export type {
-  ChatToolApproval,
-  ChatToolApprovalDecision,
-  ChatToolApprovalSession,
-  ChatToolApprovalState,
-} from './chat_tool_approval';
+  ToolCallApproval,
+  ToolCallApprovalDecision,
+  ToolCallApprovalSession,
+  ToolCallApprovalState,
+} from './tool_call_approval';
 
 export interface Workspace {
   id: string;

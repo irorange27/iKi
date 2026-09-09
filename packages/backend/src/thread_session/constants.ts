@@ -1,9 +1,9 @@
-export const DEFAULT_CHAT_TOOL_MAX_ITERATIONS = 200;
+export const DEFAULT_TOOL_CALL_MAX_ITERATIONS = 200;
 
-export const resolveChatToolMaxIterations = (value?: number): number =>
+export const resolveToolCallMaxIterations = (value?: number): number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0
     ? Math.trunc(value)
-    : DEFAULT_CHAT_TOOL_MAX_ITERATIONS;
+    : DEFAULT_TOOL_CALL_MAX_ITERATIONS;
 
 export const TOOL_AGENT_SYSTEM_PROMPT =
   'You can use tools (filesystem, shell, web, MCP) when they are necessary to solve the task.\n' +
@@ -25,6 +25,7 @@ export const TOOL_AGENT_SYSTEM_PROMPT =
   '- Use an internal ReAct loop: decide if a tool is needed, call it, then re-evaluate based on the result.\n' +
   '- Do a brief internal self-check before finalizing; if something is missing, fix it or use a tool.\n' +
   '- Keep reasoning private; do not reveal chain-of-thought or reflection text.\n' +
+  '- Do not paste raw tool output into your reply. The transcript already shows every tool call and its full output; your reply should state the conclusions and only quote the specific values that matter.\n' +
   '- For each tool call, include a `description` field in the tool arguments: one short sentence explaining why you are calling the tool.\n' +
   '- Be conservative with destructive actions (writing/deleting files, risky shell commands).\n' +
   '- When a workspace is selected for the thread, keep filesystem and shell actions inside that workspace.\n';

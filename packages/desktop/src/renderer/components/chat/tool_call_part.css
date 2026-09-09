@@ -12,6 +12,91 @@
   min-width: 0;
 }
 
+/* Embedded inside a ToolCallGroup row: detail body only — the group row
+   provides title/state, so the card drops its chrome. */
+.tool-call-content.is-embedded,
+.tool-result-content.is-embedded {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 2px 0 4px;
+  max-width: none;
+}
+
+/* Embedded sections lean out to match the quiet reasoning/group rows. */
+.is-embedded .tool-card-section-title {
+  margin-bottom: 4px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+
+.is-embedded .tool-json-output {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-height: 260px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.is-embedded .tool-input-meta {
+  margin-top: 4px;
+}
+
+/* Terminal block for shell calls: $ command followed by captured output. */
+.tool-terminal {
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+.tool-terminal-line {
+  display: flex;
+  gap: 7px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-terminal-prompt {
+  flex: 0 0 auto;
+  color: var(--accent-color);
+  font-weight: 600;
+  user-select: none;
+}
+
+.tool-terminal-output {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--border-color) 60%, transparent);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tool-terminal-output.is-stderr {
+  color: var(--danger-color, var(--warning-color));
+}
+
+.tool-terminal-exit {
+  margin-top: 4px;
+  color: var(--danger-color, var(--warning-color));
+  font-size: 11.5px;
+}
+
 .tool-card-header {
   display: flex;
   align-items: flex-start;

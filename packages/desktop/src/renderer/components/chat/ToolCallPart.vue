@@ -17,7 +17,7 @@
           d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
         />
       </svg>
-      <span class="tool-approval-title">{{ t('chat.tool.approvalRequest') }}</span>
+      <span class="tool-approval-title">{{ t('toolCall.approvalRequest') }}</span>
     </div>
     <div class="tool-approval-body">
       <div class="tool-name">
@@ -29,10 +29,10 @@
     </div>
     <div class="tool-approval-actions">
       <button class="approve-btn" :disabled="approvalProcessing" @click="emitApproval(true)">
-        {{ t('chat.tool.approve') }}
+        {{ t('toolCall.approve') }}
       </button>
       <button class="reject-btn" :disabled="approvalProcessing" @click="emitApproval(false)">
-        {{ t('chat.tool.reject') }}
+        {{ t('toolCall.reject') }}
       </button>
     </div>
   </div>
@@ -40,16 +40,19 @@
   <div
     v-else-if="isToolResultPart(part)"
     class="tool-result-content"
-    :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
+    :class="{
+      'tool-card-collapsed': !embedded && isToolCollapsed(part),
+      'is-embedded': embedded,
+    }"
   >
-    <div class="tool-card-header">
-      <span class="tool-card-tag tag-result">{{ t('chat.tool.resultTag') }}</span>
+    <div v-if="!embedded" class="tool-card-header">
+      <span class="tool-card-tag tag-result">{{ t('toolCall.resultTag') }}</span>
       <div class="tool-card-lead">
         <component :is="getToolIconComponent(part)" :size="16" class="tool-card-lead-icon" />
         <span class="tool-card-title">{{ getToolTitle(part) }}</span>
         <span class="tool-card-tool">{{ getToolName(part) }}</span>
         <span v-if="mcpServerLabel" class="tool-card-server">
-          {{ t('chat.tool.mcpServer', { name: mcpServerLabel }) }}
+          {{ t('toolCall.mcpServer', { name: mcpServerLabel }) }}
         </span>
       </div>
       <div class="tool-card-meta">
@@ -94,7 +97,7 @@
           type="button"
           class="tool-collapse-btn"
           :aria-label="
-            isToolCollapsed(part) ? t('chat.tool.expandDetails') : t('chat.tool.collapseDetails')
+            isToolCollapsed(part) ? t('toolCall.expandDetails') : t('toolCall.collapseDetails')
           "
           @click.stop="toggleToolCollapse(message, part)"
         >
@@ -106,56 +109,78 @@
         </button>
       </div>
     </div>
-    <div v-if="!isToolCollapsed(part)">
-      <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
-        <div class="tool-card-section-title">{{ t('chat.tool.references') }}</div>
-        <ol class="tool-citations">
-          <li
-            v-for="citation in getWebSearchCitations(part)"
-            :key="citation.url"
-            class="tool-citation"
-          >
-            <a :href="citation.url" target="_blank" rel="noopener noreferrer">
-              {{ citation.title }}
-            </a>
-            <span v-if="citation.domain" class="tool-citation-domain">{{ citation.domain }}</span>
-          </li>
-        </ol>
-      </div>
-      <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-        <div class="tool-card-section-title">
-          {{ getToolInputDisplayTitle(part) }}
+    <div v-if="embedded || !isToolCollapsed(part)">
+      <div v-if="terminalView" class="tool-terminal">
+        <div class="tool-terminal-line">
+          <span class="tool-terminal-prompt" aria-hidden="true">$</span>
+          <span class="tool-terminal-command">{{ terminalView.command }}</span>
         </div>
-        <pre class="tool-json-output">{{ formatJson(getToolInputDisplayValue(part)) }}</pre>
-        <div v-if="getToolInputDisplayMetaText(part)" class="tool-input-meta">
-          {{ getToolInputDisplayMetaText(part) }}
+        <div
+          v-if="terminalView.stdout"
+          class="tool-terminal-output"
+        >{{ terminalView.stdout }}</div>
+        <div
+          v-if="terminalView.stderr"
+          class="tool-terminal-output is-stderr"
+        >{{ terminalView.stderr }}</div>
+        <div
+          v-if="terminalView.exitCode !== null && terminalView.exitCode !== 0"
+          class="tool-terminal-exit"
+        >
+          exit {{ terminalView.exitCode }}
         </div>
       </div>
-      <div v-if="hasToolDiff(part)" class="tool-card-section">
-        <div class="tool-card-section-title tool-diff-title">
-          <span>{{ t('chat.tool.diff') }}</span>
-          <span class="tool-diff-stat" aria-hidden="true">
-            <span class="tool-diff-stat-add">+{{ getToolDiffStat(part).additions }}</span>
-            <span class="tool-diff-stat-del">−{{ getToolDiffStat(part).deletions }}</span>
-          </span>
+      <template v-else>
+        <div v-if="hasWebSearchCitations(part)" class="tool-card-section">
+          <div class="tool-card-section-title">{{ t('toolCall.references') }}</div>
+          <ol class="tool-citations">
+            <li
+              v-for="citation in getWebSearchCitations(part)"
+              :key="citation.url"
+              class="tool-citation"
+            >
+              <a :href="citation.url" target="_blank" rel="noopener noreferrer">
+                {{ citation.title }}
+              </a>
+              <span v-if="citation.domain" class="tool-citation-domain">{{ citation.domain }}</span>
+            </li>
+          </ol>
         </div>
-        <div class="tool-diff">
-          <div
-            v-for="(line, lineIndex) in getToolDiffLines(part)"
-            :key="lineIndex"
-            class="tool-diff-line"
-            :class="`tool-diff-line-${line.kind}`"
-          >{{ line.text }}</div>
+        <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
+          <div class="tool-card-section-title">
+            {{ getToolInputDisplayTitle(part) }}
+          </div>
+          <pre class="tool-json-output">{{ formatJson(getToolInputDisplayValue(part)) }}</pre>
+          <div v-if="getToolInputDisplayMetaText(part)" class="tool-input-meta">
+            {{ getToolInputDisplayMetaText(part) }}
+          </div>
         </div>
-      </div>
-      <div v-if="hasDisplayValue(getToolOutputForDisplay(part))" class="tool-card-section">
-        <div class="tool-card-section-title">{{ t('chat.tool.output') }}</div>
-        <pre class="tool-json-output">{{ formatJson(getToolOutputForDisplay(part)) }}</pre>
-      </div>
+        <div v-if="hasToolDiff(part)" class="tool-card-section">
+          <div class="tool-card-section-title tool-diff-title">
+            <span>{{ t('toolCall.diff') }}</span>
+            <span class="tool-diff-stat" aria-hidden="true">
+              <span class="tool-diff-stat-add">+{{ getToolDiffStat(part).additions }}</span>
+              <span class="tool-diff-stat-del">−{{ getToolDiffStat(part).deletions }}</span>
+            </span>
+          </div>
+          <div class="tool-diff">
+            <div
+              v-for="(line, lineIndex) in getToolDiffLines(part)"
+              :key="lineIndex"
+              class="tool-diff-line"
+              :class="`tool-diff-line-${line.kind}`"
+            >{{ line.text }}</div>
+          </div>
+        </div>
+        <div v-if="hasDisplayValue(getToolOutputForDisplay(part))" class="tool-card-section">
+          <div class="tool-card-section-title">{{ t('toolCall.output') }}</div>
+          <pre class="tool-json-output">{{ formatJson(getToolOutputForDisplay(part)) }}</pre>
+        </div>
+      </template>
     </div>
-    <div v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
+    <div v-if="!embedded && getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
       <span class="tool-call-id">
-        {{ t('chat.tool.callId') }}:
+        {{ t('toolCall.callId') }}:
         <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
       </span>
     </div>
@@ -164,16 +189,19 @@
   <div
     v-else-if="isToolCallPart(part)"
     class="tool-call-content"
-    :class="{ 'tool-card-collapsed': isToolCollapsed(part) }"
+    :class="{
+      'tool-card-collapsed': !embedded && isToolCollapsed(part),
+      'is-embedded': embedded,
+    }"
   >
-    <div class="tool-card-header">
-      <span class="tool-card-tag tag-call">{{ t('chat.tool.callTag') }}</span>
+    <div v-if="!embedded" class="tool-card-header">
+      <span class="tool-card-tag tag-call">{{ t('toolCall.callTag') }}</span>
       <div class="tool-card-lead">
         <component :is="getToolIconComponent(part)" :size="16" class="tool-card-lead-icon" />
         <span class="tool-card-title">{{ getToolTitle(part) }}</span>
         <span class="tool-card-tool">{{ getToolName(part) }}</span>
         <span v-if="mcpServerLabel" class="tool-card-server">
-          {{ t('chat.tool.mcpServer', { name: mcpServerLabel }) }}
+          {{ t('toolCall.mcpServer', { name: mcpServerLabel }) }}
         </span>
       </div>
       <div class="tool-card-meta">
@@ -218,7 +246,7 @@
           type="button"
           class="tool-collapse-btn"
           :aria-label="
-            isToolCollapsed(part) ? t('chat.tool.expandDetails') : t('chat.tool.collapseDetails')
+            isToolCollapsed(part) ? t('toolCall.expandDetails') : t('toolCall.collapseDetails')
           "
           @click.stop="toggleToolCollapse(message, part)"
         >
@@ -230,15 +258,15 @@
         </button>
       </div>
     </div>
-    <div v-if="!isToolCollapsed(part)">
+    <div v-if="embedded || !isToolCollapsed(part)">
       <div v-if="hasDisplayValue(getToolInput(part))" class="tool-card-section">
-        <div class="tool-card-section-title">{{ t('chat.tool.arguments') }}</div>
+        <div class="tool-card-section-title">{{ t('toolCall.arguments') }}</div>
         <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
       </div>
     </div>
-    <div v-if="getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
+    <div v-if="!embedded && getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
       <span class="tool-call-id">
-        {{ t('chat.tool.callId') }}:
+        {{ t('toolCall.callId') }}:
         <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
       </span>
     </div>
@@ -260,7 +288,7 @@ import {
   ShieldBan,
   XCircle,
 } from 'lucide-vue-next';
-import type { ChatUiMessage } from '@iki/backend/chat/message_parts';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 
 import {
   canToggleToolCollapse,
@@ -280,6 +308,7 @@ import {
   getToolStateKind,
   getToolStateLabel,
   getToolStatePillClass,
+  getToolTerminalView,
   getToolTitle,
   getWebSearchCitations,
   hasDisplayValue,
@@ -291,11 +320,13 @@ import {
   isToolCollapsed,
   isToolResultPart,
   toggleToolCollapse,
-} from '../../modules/chat/ui_message_tool_parts';
+} from '../../modules/chat/ui_message_tool_calls';
 import { useI18n } from '../../i18n';
 
 const props = defineProps<{
   approvalProcessing: boolean;
+  /** Rendered inside a ToolCallGroup row: detail body only, no card chrome. */
+  embedded?: boolean;
   mcpServerLabel: string;
   message: ChatUiMessage;
   part: unknown;
@@ -312,6 +343,10 @@ const { t } = useI18n();
 
 const isHiddenTodoTool = computed(() => isTranscriptHiddenToolPart(props.part));
 
+// Shell calls render as a terminal block ($ command + output) instead of the
+// generic key/value sections.
+const terminalView = computed(() => (props.embedded ? getToolTerminalView(props.part) : null));
+
 const emitApproval = (approved: boolean) => {
   emit('approve-tool', {
     approved,
@@ -320,4 +355,4 @@ const emitApproval = (approved: boolean) => {
   });
 };
 </script>
-<style scoped src="./chat_tool_part.css"></style>
+<style scoped src="./tool_call_part.css"></style>
