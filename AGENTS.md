@@ -8,7 +8,7 @@
 
 1. Get it running first: `pnpm run app:dev` (or `daemon:start`).
 2. Find the file via the table below; read before writing. Smallest reversible change, no speculative abstraction.
-3. `pnpm run ci:quality` must pass before declaring done. UI changes: click through in the running app — type-check ≠ feature-correct.
+3. `pnpm run ci:quality` must pass before declaring done. UI changes: click through in the running app — type-check ≠ feature-correct. Cross-layer wiring (renderer→IPC→backend→SDK→tools→persistence): run `pnpm run test:e2e` (real app + scripted provider; entry `tests/integration/e2e/run_smoke.mjs`).
 4. Commit only when the user asks (`pnpm run commit`). Never `--no-verify`. Single test file: `pnpm vitest run <path>`.
 5. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
 
@@ -16,6 +16,7 @@
 
 Read the [backend ownership and regression map](packages/backend/README.md#runtime-contracts) before editing a core path. It is tracked; design notes under `docs/` may be missing or stale.
 
+- For concurrency, recovery or tool lifecycle changes, use the [implementation and review checklist](packages/backend/HARNESS_REVIEW.md). State the invariant and scope, then prove it through the real consumer before claiming completion.
 - Reproduce at the actual consumer boundary: provider inputs, SDK step count, persisted approval decision, or exported trajectory. A mock returning the expected text does not validate the wiring.
 - Extend the existing owner; do not add another history slicer, approval policy evaluator, retry loop, or trajectory recorder in a caller.
 - Change behavior, its boundary regression, and the ownership map together. Preserve unrelated uncommitted edits; do not “repair” a failing regression by restoring behavior that the contract explicitly forbids.
