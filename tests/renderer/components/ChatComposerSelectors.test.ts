@@ -30,58 +30,27 @@ const ReasoningSelectorStub = defineComponent({
   template: `<div class="reasoning-selector-stub" />`,
 });
 
-const SkillSelectorStub = defineComponent({
-  name: 'SkillSelector',
+const AutonomousSelectorStub = defineComponent({
+  name: 'AutonomousSelector',
   props: {
-    skillIds: {
-      type: Array<string>,
-      default: () => [],
+    active: {
+      type: Boolean,
+      default: false,
     },
-    mode: {
-      type: String as () => 'manual' | 'auto',
-      default: 'auto',
+    maxIterations: {
+      type: Number,
+      default: 10,
     },
   },
-  emits: ['update:skillIds', 'update:mode'],
+  emits: ['update:active', 'update:maxIterations'],
   template: `
     <div
-      class="skill-selector-stub"
-      :data-skill-ids="skillIds.join(',')"
-      :data-mode="mode"
+      class="autonomous-selector-stub"
+      :data-active="String(active)"
+      :data-max-iterations="String(maxIterations)"
     >
-      <button class="skill-ids-btn" @click="$emit('update:skillIds', ['skill_docs'])" />
-      <button class="skill-mode-btn" @click="$emit('update:mode', 'manual')" />
-    </div>
-  `,
-});
-
-const ToolSelectorStub = defineComponent({
-  name: 'ToolSelector',
-  props: {
-    tools: {
-      type: Array<string>,
-      default: () => [],
-    },
-    mcpServerIds: {
-      type: Array<string>,
-      default: () => [],
-    },
-    mode: {
-      type: String as () => 'manual' | 'auto',
-      default: 'auto',
-    },
-  },
-  emits: ['update:tools', 'update:mcpServerIds', 'update:mode'],
-  template: `
-    <div
-      class="tool-selector-stub"
-      :data-tools="tools.join(',')"
-      :data-mcp-server-ids="mcpServerIds.join(',')"
-      :data-mode="mode"
-    >
-      <button class="tools-btn" @click="$emit('update:tools', ['web'])" />
-      <button class="mcp-btn" @click="$emit('update:mcpServerIds', ['docs_server'])" />
-      <button class="tool-mode-btn" @click="$emit('update:mode', 'manual')" />
+      <button class="autonomous-active-btn" @click="$emit('update:active', true)" />
+      <button class="autonomous-iterations-btn" @click="$emit('update:maxIterations', 25)" />
     </div>
   `,
 });
@@ -91,19 +60,15 @@ const mountComponent = () =>
     props: {
       workspaceLocked: true,
       showWorkspace: true,
-      selectedSkillIds: ['skill_repo'],
-      skillMode: 'auto',
-      selectedTools: ['search'],
-      selectedMcpServerIds: ['repo_server'],
-      toolMode: 'auto',
+      autonomousActive: false,
+      autonomousMaxIterations: 10,
     },
     global: {
       plugins: [createPinia()],
       stubs: {
         WorkspaceSelector: WorkspaceSelectorStub,
         ReasoningSelector: ReasoningSelectorStub,
-        SkillSelector: SkillSelectorStub,
-        ToolSelector: ToolSelectorStub,
+        AutonomousSelector: AutonomousSelectorStub,
       },
     },
   });
@@ -115,30 +80,20 @@ describe('ChatComposerSelectors', () => {
     const workspaceSelector = wrapper.find('.workspace-selector-stub');
     expect(workspaceSelector.attributes('data-locked')).toBe('true');
 
-    const skillSelector = wrapper.find('.skill-selector-stub');
-    expect(skillSelector.attributes('data-skill-ids')).toBe('skill_repo');
-    expect(skillSelector.attributes('data-mode')).toBe('auto');
+    const autonomousSelector = wrapper.find('.autonomous-selector-stub');
+    expect(autonomousSelector.attributes('data-active')).toBe('false');
+    expect(autonomousSelector.attributes('data-max-iterations')).toBe('10');
 
-    const toolSelector = wrapper.find('.tool-selector-stub');
-    expect(toolSelector.attributes('data-tools')).toBe('search');
-    expect(toolSelector.attributes('data-mcp-server-ids')).toBe('repo_server');
-    expect(toolSelector.attributes('data-mode')).toBe('auto');
-
+    expect(wrapper.find('.reasoning-selector-stub').exists()).toBe(true);
   });
 
   it('re-emits child selector intent without owning the underlying state machine', async () => {
     const wrapper = mountComponent();
 
-    await wrapper.find('.skill-ids-btn').trigger('click');
-    await wrapper.find('.skill-mode-btn').trigger('click');
-    await wrapper.find('.tools-btn').trigger('click');
-    await wrapper.find('.mcp-btn').trigger('click');
-    await wrapper.find('.tool-mode-btn').trigger('click');
+    await wrapper.find('.autonomous-active-btn').trigger('click');
+    await wrapper.find('.autonomous-iterations-btn').trigger('click');
 
-    expect(wrapper.emitted('update:selectedSkillIds')).toEqual([[['skill_docs']]]);
-    expect(wrapper.emitted('update:skillMode')).toEqual([['manual']]);
-    expect(wrapper.emitted('update:selectedTools')).toEqual([[['web']]]);
-    expect(wrapper.emitted('update:selectedMcpServerIds')).toEqual([[['docs_server']]]);
-    expect(wrapper.emitted('update:toolMode')).toEqual([['manual']]);
+    expect(wrapper.emitted('update:autonomousActive')).toEqual([[true]]);
+    expect(wrapper.emitted('update:autonomousMaxIterations')).toEqual([[25]]);
   });
 });

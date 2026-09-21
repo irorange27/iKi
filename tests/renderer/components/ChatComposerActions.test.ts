@@ -8,7 +8,6 @@ import ChatComposerActions from '../../../packages/desktop/src/renderer/componen
 const mountComponent = (overrides?: Record<string, unknown>) =>
   mount(ChatComposerActions, {
     props: {
-      contextUsage: null,
       isIncognito: false,
       isPreparingSend: false,
       isLoading: false,
@@ -25,26 +24,14 @@ const mountComponent = (overrides?: Record<string, unknown>) =>
   });
 
 describe('ChatComposerActions', () => {
-  it('renders context usage and emits explicit incognito toggle intent', async () => {
-    const wrapper = mountComponent({
-      contextUsage: {
-        usedTokens: 4200,
-        budgetTokens: 8000,
-        percent: 53,
-        percentLabel: '53%',
-        tokenLabel: '4.2K tok',
-        tooltip: 'Context usage: 4.2K tok / 8K',
-      },
-    });
+  it('renders no context indicator and emits explicit incognito toggle intent', async () => {
+    const wrapper = mountComponent();
 
-    expect(wrapper.find('.composer-context-value').text()).toBe('53%');
+    expect(wrapper.find('.composer-context-indicator').exists()).toBe(false);
 
     const button = wrapper.find('.composer-mode-btn');
     expect(button.attributes('aria-pressed')).toBe('false');
     expect(button.attributes('title')).toContain('Memory is enabled');
-    expect(wrapper.find('.composer-context-indicator').attributes('title')).toContain(
-      'Context usage: 4.2K tok / 8K'
-    );
 
     await button.trigger('click');
 

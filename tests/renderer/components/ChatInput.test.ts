@@ -327,8 +327,6 @@ const mountChatInput = async (options?: {
       plugins: [pinia],
       stubs: {
         LobeIcon: true,
-        SkillSelector: true,
-        ToolSelector: true,
       },
     },
   });
@@ -677,46 +675,6 @@ describe('ChatInput', () => {
     );
   });
 
-  it('shows selected skills as a dedicated composer context and lets the user clear them inline', async () => {
-    const provider = buildProvider({
-      id: 'openai',
-      name: 'OpenAI',
-      type: 'openai',
-      models: '["gpt-4.1"]',
-    });
-
-    const frontendSkill = buildSkill({
-      id: 'codex:frontend-dev',
-      name: 'frontend-dev',
-      description: 'Premium frontend page building',
-      source: 'codex',
-      path: '/Users/nina/.codex/minimax-skills/skills/frontend-dev/SKILL.md',
-    });
-
-    const { wrapper } = await mountChatInput({
-      providers: [provider],
-      skills: [frontendSkill],
-    });
-
-    wrapper
-      .findComponent({ name: 'SkillSelector' })
-      .vm.$emit('update:skillIds', ['codex:frontend-dev']);
-    wrapper.findComponent({ name: 'SkillSelector' }).vm.$emit('update:mode', 'manual');
-    await flushPromises();
-
-    const selectedSkillChip = wrapper.find('.composer-inline-token--skill');
-    expect(selectedSkillChip.exists()).toBe(true);
-    expect(selectedSkillChip.text()).toContain('$frontend-dev');
-    expect(wrapper.find('.chat-input-field').attributes('placeholder') ?? '').toContain(
-      'selected skills'
-    );
-
-    await selectedSkillChip.trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.composer-inline-token--skill').exists()).toBe(false);
-  });
-
   it('clears active invocation and selected skills with backspace when the draft is empty', async () => {
     const provider = buildProvider({
       id: 'openai',
@@ -741,19 +699,6 @@ describe('ChatInput', () => {
     await wrapper.find('.chat-input-field').setValue('/front');
     await flushPromises();
     await wrapper.find('.chat-input-field').trigger('keydown.enter', { key: 'Enter' });
-    await flushPromises();
-
-    expect(wrapper.find('.composer-inline-token--skill').text()).toContain('$frontend-dev');
-
-    await wrapper.find('.chat-input-field').trigger('keydown', { key: 'Backspace' });
-    await flushPromises();
-
-    expect(wrapper.find('.composer-inline-token--skill').exists()).toBe(false);
-
-    wrapper
-      .findComponent({ name: 'SkillSelector' })
-      .vm.$emit('update:skillIds', ['codex:frontend-dev']);
-    wrapper.findComponent({ name: 'SkillSelector' }).vm.$emit('update:mode', 'manual');
     await flushPromises();
 
     expect(wrapper.find('.composer-inline-token--skill').text()).toContain('$frontend-dev');
@@ -1003,7 +948,7 @@ describe('ChatInput', () => {
       },
     });
 
-    expect(wrapper.find('.composer-context-value').text()).toBe('1%');
+    expect(wrapper.find('.composer-context-ring').attributes('title')).toContain('1%');
 
     await wrapper.find('.chat-input-field').setValue('Need help with the repo');
     await wrapper.find('.send-btn').trigger('click');
@@ -1053,7 +998,7 @@ describe('ChatInput', () => {
       },
     });
 
-    expect(wrapper.find('.composer-context-value').text()).toBe('1%');
+    expect(wrapper.find('.composer-context-ring').attributes('title')).toContain('1%');
 
     await wrapper.find('.chat-input-field').setValue('Use the default limit');
     await wrapper.find('.send-btn').trigger('click');

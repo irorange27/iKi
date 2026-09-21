@@ -21,20 +21,6 @@
         @drop-images="handleDropImages"
       >
         <template #input-context>
-          <ChatComposerSelectors
-            class="composer-context-row"
-            :thread-id="props.threadId ?? null"
-            :workspace-locked="props.workspaceLocked"
-            :show-workspace="isWorkThread"
-            v-model:selected-skill-ids="selectedSkillIds"
-            v-model:skill-mode="skillMode"
-            v-model:selected-tools="selectedTools"
-            v-model:selected-mcp-server-ids="selectedMcpServerIds"
-            v-model:tool-mode="toolMode"
-            v-model:autonomous-active="isAutonomousMode"
-            v-model:autonomous-max-iterations="autonomousMaxIterations"
-            @update:selected-mcp-server-ids="selectedMcpServerIds = $event"
-          />
           <div
             v-if="inlineComposerTokens.length > 0"
             class="composer-inline-tokens"
@@ -109,7 +95,7 @@
           </div>
         </template>
 
-        <template #toolbar-right>
+        <template #toolbar-left>
           <PopoverRoot v-model:open="permissionPanelOpen">
             <PopoverTrigger as-child>
               <button
@@ -153,9 +139,40 @@
                 </button>
               </div>
             </PopoverContent>
-          
+
             </PopoverPortal>
           </PopoverRoot>
+          <ChatComposerSelectors
+            class="composer-context-row"
+            :thread-id="props.threadId ?? null"
+            :workspace-locked="props.workspaceLocked"
+            :show-workspace="isWorkThread"
+            v-model:autonomous-active="isAutonomousMode"
+            v-model:autonomous-max-iterations="autonomousMaxIterations"
+          />
+        </template>
+
+        <template #toolbar-right>
+          <div
+            v-if="composerContextUsage"
+            class="composer-context-ring"
+            :class="contextRingToneClass"
+            role="status"
+            :aria-label="t('chat.input.contextUsage')"
+            :title="composerContextUsage.tooltip"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <circle class="composer-context-ring-track" cx="10" cy="10" r="8" />
+              <circle
+                class="composer-context-ring-arc"
+                cx="10"
+                cy="10"
+                r="8"
+                :stroke-dasharray="contextRingCircumference"
+                :stroke-dashoffset="contextRingOffset"
+              />
+            </svg>
+          </div>
           <ChatModelSelector
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
@@ -163,7 +180,6 @@
             @select="handleProviderModelSelect"
           />
           <ChatComposerActions
-            :context-usage="composerContextUsage"
             :is-incognito="isIncognito"
             :is-preparing-send="isPreparingSend"
             :is-loading="isLoading"
@@ -642,6 +658,21 @@ const composerContextUsage = computed(() => {
   });
 });
 
+const CONTEXT_RING_RADIUS = 8;
+const contextRingCircumference = 2 * Math.PI * CONTEXT_RING_RADIUS;
+const contextRingOffset = computed(() => {
+  const percent = composerContextUsage.value?.percent;
+  if (percent === null || percent === undefined) return contextRingCircumference;
+  const fraction = Math.min(100, Math.max(0, percent)) / 100;
+  return contextRingCircumference * (1 - fraction);
+});
+const contextRingToneClass = computed(() => {
+  const percent = composerContextUsage.value?.percent ?? 0;
+  if (percent >= 90) return 'is-danger';
+  if (percent >= 70) return 'is-warning';
+  return '';
+});
+
 useChatComposerLifecycle({
   electronAPI,
   threadId: toRef(() => props.threadId),
@@ -728,6 +759,49 @@ defineExpose({
 <style scoped>
 .chat-input-outer {
   padding: var(--chat-composer-padding, 10px);
+}
+
+.composer-context-ring {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  align-self: center;
+  margin-right: -2px;
+  user-select: none;
+  cursor: default;
+}
+
+.composer-context-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.composer-context-ring-track,
+.composer-context-ring-arc {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.composer-context-ring-track {
+  stroke: color-mix(in srgb, var(--text-muted) 32%, transparent);
+}
+
+.composer-context-ring-arc {
+  stroke: var(--text-muted);
+  transition:
+    stroke-dashoffset 0.3s ease,
+    stroke 0.3s ease;
+}
+
+.composer-context-ring.is-warning .composer-context-ring-arc {
+  stroke: var(--warning-color);
+}
+
+.composer-context-ring.is-danger .composer-context-ring-arc {
+  stroke: var(--danger-color);
 }
 
 .chat-input-plan {
