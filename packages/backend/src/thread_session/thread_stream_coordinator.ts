@@ -35,6 +35,18 @@ class ThreadSession {
  * active stream is the current thread.
  */
 export const createThreadStreamCoordinator = () => {
+  const runningThreads = new Set<string>();
+  const tryAcquireThreadRun = (threadId?: string): (() => void) | null => {
+    if (!threadId) return () => undefined;
+    if (runningThreads.has(threadId)) return null;
+    runningThreads.add(threadId);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      runningThreads.delete(threadId);
+    };
+  };
   const activeStreams = new Map<number, ActiveStreamState>();
   const sessionsByThread = new Map<string, ThreadSession>();
   const sessionBySender = new Map<number, ThreadSession>();
@@ -81,12 +93,21 @@ export const createThreadStreamCoordinator = () => {
     }
   };
 
+  const detachSenderSession = (senderId: number) => {
+    const session = sessionBySender.get(senderId);
+    if (!session) return;
+    session.senderIds.delete(senderId);
+    sessionBySender.delete(senderId);
+    if (session.threadId && session.senderIds.size === 0) sessionsByThread.delete(session.threadId);
+  };
+
   const supersedeActiveStream = (senderId: number) => {
     const streamState = activeStreams.get(senderId);
     if (streamState) {
       streamState.cancelled = true;
       streamState.abortController.abort('superseded-by-new-request');
     }
+    detachSenderSession(senderId);
   };
 
   const trackThreadStream = (threadId: string, senderId: number) => {
@@ -115,6 +136,7 @@ export const createThreadStreamCoordinator = () => {
   };
 
   const unregisterStream = (senderId: number, streamState: ActiveStreamState) => {
+    if (activeStreams.get(senderId) !== streamState) return;
     const session = sessionBySender.get(senderId);
     if (session) {
       if (session.streamState === streamState) {
@@ -195,6 +217,7 @@ export const createThreadStreamCoordinator = () => {
     activeStreams.get(senderId);
 
   const attachStream = (senderId: number, streamState: ActiveStreamState): void => {
+    detachSenderSession(senderId);
     activeStreams.set(senderId, streamState);
   };
 
@@ -205,6 +228,7 @@ export const createThreadStreamCoordinator = () => {
   };
 
   return {
+    tryAcquireThreadRun,
     checkThreadRunRate,
     cancelThreadStreams,
     supersedeActiveStream,

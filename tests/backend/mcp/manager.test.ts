@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   getAppConfigMock,
@@ -64,7 +64,7 @@ const {
     async connect() {
       return undefined;
     }
-    async listTools() {
+    async listTools(): Promise<{ tools: Array<Record<string, unknown>> }> {
       return { tools: [] };
     }
     async callTool() {
@@ -122,6 +122,9 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
   SSEClientTransport: MockSSEClientTransport,
 }));
 
+import { getMcpServer } from '@iki/backend/db/mcp_servers';
+import { defaultToolRegistry } from '@iki/backend/tools';
+import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { McpManager } from '@iki/backend/mcp/manager';
 import type { McpServer } from '@iki/backend/types/mcp';
 
@@ -209,5 +212,61 @@ describe('McpManager transport construction', () => {
     await expect(buildTransport(manager, createRemoteServer('streamable-http'))).rejects.toThrow(
       /remote mcp servers are disabled/i
     );
+  });
+});
+
+
+describe('McpManager execution boundaries', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const connect = async () => {
+    getAppConfigMock.mockReturnValue({ mcp: { ...getAppConfigMock().mcp, allowRemoteServers: true } });
+    vi.mocked(getMcpServer).mockReturnValue({ ...createRemoteServer('streamable-http'), approval_mode: 'always' });
+    vi.spyOn(MockClient.prototype, 'listTools').mockResolvedValue({ tools: [{ name: 'mutate', inputSchema: { type: 'object' } }] });
+    const manager = new McpManager();
+    await manager.connectServer('server_remote');
+    return manager;
+  };
+
+  it('retains explicit MCP approval and does not attach automatic retries', async () => {
+    await connect();
+    expect(vi.mocked(defaultToolRegistry.register).mock.lastCall?.[0]).toMatchObject({ needsApproval: true, approvalMode: 'always' });
+    expect(vi.mocked(defaultToolRegistry.register).mock.lastCall?.[0]).not.toHaveProperty('retry');
+  });
+
+  it('forwards cancellation to the MCP SDK request', async () => {
+    const manager = await connect();
+    const call = vi.spyOn(MockClient.prototype, 'callTool');
+    const controller = new AbortController();
+    await runWithToolRuntimeContext({ abortSignal: controller.signal }, () => manager.callTool('server_remote', 'mutate', {}));
+    expect(call).toHaveBeenCalledWith({ name: 'mutate', arguments: {} }, undefined, expect.objectContaining({ signal: controller.signal }));
+    controller.abort(new Error('stop'));
+    await expect(runWithToolRuntimeContext({ abortSignal: controller.signal }, () => manager.callTool('server_remote', 'mutate', {}))).rejects.toThrow('stop');
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes cancelled queued calls without dispatching or leaking capacity', async () => {
+    getAppConfigMock.mockReturnValue({ mcp: { ...getAppConfigMock().mcp, maxConcurrentRequests: 1, allowRemoteServers: true } });
+    const manager = await connect();
+    let finish!: () => void;
+    const blocked = new Promise<void>(resolve => { finish = resolve; });
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const call = vi.spyOn(MockClient.prototype, 'callTool').mockImplementationOnce(async () => {
+      entered();
+      await blocked;
+      return { content: [] };
+    });
+    const first = manager.callTool('server_remote', 'mutate', {});
+    await started;
+    const controller = new AbortController();
+    const queued = runWithToolRuntimeContext({ abortSignal: controller.signal }, () => manager.callTool('server_remote', 'mutate', {}));
+    controller.abort(new Error('cancel queued'));
+    await expect(queued).rejects.toThrow('cancel queued');
+    expect(call).toHaveBeenCalledTimes(1);
+    finish();
+    await first;
+    await manager.callTool('server_remote', 'mutate', {});
+    expect(call).toHaveBeenCalledTimes(2);
   });
 });

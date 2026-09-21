@@ -14,6 +14,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getAppConfig } from '../config';
+import { getToolRuntimeContext } from '../utils/runtime_context';
 import { createLogger } from '@iki/backend/logger';
 import {
   addMcpServer,
@@ -177,16 +178,24 @@ class Semaphore {
 
   constructor(private readonly limit: number) {}
 
-  async acquire(): Promise<() => void> {
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    signal?.throwIfAborted();
     if (this.active < this.limit) {
       this.active += 1;
       return () => this.release();
     }
-    return new Promise(resolve => {
-      this.queue.push(() => {
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        this.queue = this.queue.filter(entry => entry !== grant);
+        reject(signal?.reason);
+      };
+      const grant = () => {
+        signal?.removeEventListener('abort', onAbort);
         this.active += 1;
         resolve(() => this.release());
-      });
+      };
+      this.queue.push(grant);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 
@@ -272,10 +281,10 @@ export class McpManager extends EventEmitter {
         parameters: tool.inputSchema,
         outputSchema: tool.outputSchema,
         needsApproval,
+        ...(approvalMode === 'always' ? { approvalMode: 'always' as const } : {}),
         autoAllowed: true,
         displayName,
         source: { kind: 'mcp', id: server.id, name: server.name },
-        retry: { maxRetries: 1 },
         handler: async (args: Record<string, unknown>) => {
           return await this.callTool(server.id, tool.name, args);
         },
@@ -615,8 +624,11 @@ export class McpManager extends EventEmitter {
 
   async callTool(serverId: string, toolName: string, args: Record<string, unknown>) {
     this.ensureSemaphore();
-    const release = await this.semaphore.acquire();
+    const signal = getToolRuntimeContext().abortSignal;
+    signal?.throwIfAborted();
+    const release = await this.semaphore.acquire(signal);
     try {
+      signal?.throwIfAborted();
       const connection = this.connections.get(serverId);
       if (!connection) {
         throw new Error('MCP server is not connected');
@@ -624,7 +636,7 @@ export class McpManager extends EventEmitter {
       const result = await connection.client.callTool(
         { name: toolName, arguments: args },
         undefined,
-        this.getRequestOptions()
+        { ...this.getRequestOptions(), signal }
       );
       const typedResult = result as CallToolResult;
       const tool = connection.tools.find(candidate => candidate.name === toolName);

@@ -74,7 +74,7 @@ export class AgentHarness {
 
     // Preserve caller's runtime context across generator iterations
     const ctx = getToolRuntimeContext();
-    const boundGen = bindToolRuntimeContextToGenerator(ctx, agentGen);
+    const boundGen = bindToolRuntimeContextToGenerator({ ...ctx, availableTools: tools, availableSkillIds: this.config_.availableSkillIds }, agentGen);
 
     let handoffData: HandoffStep | null = null;
     let agentResult: AgentResult | undefined;

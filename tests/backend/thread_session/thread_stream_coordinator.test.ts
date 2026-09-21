@@ -10,6 +10,34 @@ const makeStreamState = (): ActiveStreamState => ({
 });
 
 describe('createThreadStreamCoordinator', () => {
+  it('rejects concurrent runs only on the same thread and releases exactly once', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const release = coordinator.tryAcquireThreadRun('a')!;
+    expect(coordinator.tryAcquireThreadRun('a')).toBeNull();
+    const releaseOther = coordinator.tryAcquireThreadRun('b')!;
+    release();
+    const releaseNew = coordinator.tryAcquireThreadRun('a')!;
+    release();
+    expect(coordinator.tryAcquireThreadRun('a')).toBeNull();
+    releaseNew();
+    releaseOther();
+  });
+
+  it('does not keep stale thread membership after a sender switches threads', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const old = makeStreamState();
+    coordinator.trackThreadStream('a', 7);
+    coordinator.registerStream(7, old);
+    coordinator.supersedeActiveStream(7);
+    const current = makeStreamState();
+    coordinator.trackThreadStream('b', 7);
+    coordinator.registerStream(7, current);
+    coordinator.unregisterStream(7, old);
+    coordinator.cancelThreadStreams('a');
+    expect(current.cancelled).toBe(false);
+    expect(coordinator.steerStream(7, 'b', 'hello')).toEqual({ success: true });
+  });
+
   it('steer requires the thread to belong to the sender', () => {
     const coordinator = createThreadStreamCoordinator();
 
@@ -84,6 +112,8 @@ describe('createThreadStreamCoordinator', () => {
 
     coordinator.unregisterStream(42, stale);
     expect(coordinator.peekStream(42)).toBe(current);
+    expect(coordinator.steerStream(42, undefined, "still active")).toEqual({ success: true });
+    expect(coordinator.takeSteerMessages(42)).toEqual(["still active"]);
 
     coordinator.unregisterStream(42, current);
     expect(coordinator.peekStream(42)).toBeUndefined();

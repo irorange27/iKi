@@ -132,8 +132,7 @@ const isToolAllowedForClient = (toolName: string, allowedTools: string[]): boole
   const serverId = typeof tool.source.id === 'string' ? tool.source.id.trim() : '';
   if (!serverId) return false;
 
-  const { allowAll, serverIds } = resolveAllowedMcpServers(normalizedAllowedTools);
-  return allowAll || serverIds.has(serverId);
+  return allowed.has(MCP_ALLOW_ALL_TOKEN) || allowed.has(`${MCP_SERVER_PREFIX}${serverId}`);
 };
 
 export const readRequestedMcpServerIds = (

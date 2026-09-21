@@ -25,6 +25,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const streamCoordinator = createThreadStreamCoordinator();
   const approvals = createChatApproval({
     streams: {
+      tryAcquireThreadRun: streamCoordinator.tryAcquireThreadRun,
       peek: streamCoordinator.peekStream,
       attach: streamCoordinator.attachStream,
       detach: streamCoordinator.detachStream,

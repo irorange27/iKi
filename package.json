@@ -33,7 +33,7 @@
     "test:coverage": "vitest run --coverage",
     "test:renderer": "vitest run tests/renderer",
     "test:watch": "vitest",
-    "test:harness": "vitest run tests/backend/agent tests/backend/thread_session tests/backend/context tests/backend/tools/shell_tools.test.ts tests/backend/utils/action_risk.test.ts tests/backend/workspaces/thread_mode.test.ts tests/main/services/chat/chat_context.test.ts tests/main/services/chat/chat_context_budget.test.ts tests/main/services/chat/chat_approval.test.ts",
+    "test:harness": "vitest run tests/backend/agent tests/backend/thread_session tests/backend/context tests/backend/tools tests/backend/mcp tests/daemon/tool_access.test.ts tests/backend/utils/action_risk.test.ts tests/backend/workspaces/thread_mode.test.ts tests/main/services/chat/chat_context.test.ts tests/main/services/chat/chat_context_budget.test.ts tests/main/services/chat/chat_approval.test.ts",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "ts:vue": "vue-tsc --noEmit",
     "ci:quality": "pnpm run -s lint && pnpm run -s ts && pnpm run -s ts:vue && pnpm run -s lint:arch && pnpm run -s test:coverage",

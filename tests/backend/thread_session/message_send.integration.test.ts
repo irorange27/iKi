@@ -81,6 +81,7 @@ describe('createMessageSend integration', () => {
     ]));
 
     const send = createMessageSend({
+      tryAcquireThreadRun: () => () => undefined,
       checkThreadRunRate: () => ({ allowed: true }),
       usage: { recordUsageEvent: vi.fn() },
       turnPreparer: {

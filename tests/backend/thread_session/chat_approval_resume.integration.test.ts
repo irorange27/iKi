@@ -220,7 +220,7 @@ describe('createChatApproval resume integration', () => {
     const usage = { recordUsageEvent: vi.fn() };
     const target = { id: 7, send: vi.fn() };
     const approvals = createChatApproval({
-      streams: {
+      streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
         peek: streamCoordinator.peekStream,
         attach: streamCoordinator.attachStream,
         detach: streamCoordinator.detachStream,

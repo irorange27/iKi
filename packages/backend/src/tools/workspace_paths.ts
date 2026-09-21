@@ -133,21 +133,29 @@ const tryRealpath = async (targetPath: string): Promise<string | null> => {
     return await fs.realpath(targetPath);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return null;
+    if (code === 'ENOENT') {
+      const entry = await fs.lstat(targetPath).catch((statError: NodeJS.ErrnoException): null => {
+        if (statError.code === 'ENOENT') return null;
+        throw statError;
+      });
+      if (entry?.isSymbolicLink()) {
+        throw new Error(`Path "${targetPath}" is a dangling symbolic link`);
+      }
+      return null;
+    }
     throw error;
   }
 };
 
 const resolveExistingAncestorRealPath = async (targetPath: string): Promise<string> => {
   let currentPath = path.resolve(targetPath);
-  let parentPath = '';
 
-  while (currentPath !== parentPath) {
+  while (currentPath) {
     const realPath = await tryRealpath(currentPath);
     if (realPath) return realPath;
 
-    parentPath = path.dirname(currentPath);
-    currentPath = parentPath;
+    const parentPath = path.dirname(currentPath);
+    currentPath = parentPath === currentPath ? '' : parentPath;
   }
 
   throw new Error(`Path "${targetPath}" does not have an existing ancestor`);
@@ -179,9 +187,7 @@ export const resolveWritableWorkspacePath = async (inputPath: string): Promise<s
     return absolutePath;
   }
 
-  const existingAncestorRealPath = await resolveExistingAncestorRealPath(
-    path.dirname(absolutePath)
-  );
+  const existingAncestorRealPath = await resolveExistingAncestorRealPath(absolutePath);
   ensurePathWithinWorkspaceRoots(inputPath, existingAncestorRealPath, roots);
   return absolutePath;
 };

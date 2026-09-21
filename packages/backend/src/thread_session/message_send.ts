@@ -51,11 +51,14 @@ export type MessageSendDeps = {
       metadata?: Record<string, unknown>;
     }) => void;
   };
+  tryAcquireThreadRun: (threadId?: string) => (() => void) | null;
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
 };
 
 export const createMessageSend = (deps: MessageSendDeps) => {
   const send = async (options: ChatTurnOptions): Promise<MessageSendResult> => {
+    const release = deps.tryAcquireThreadRun(options.threadId);
+    if (!release) return { success: false, error: 'A turn is already running on this thread.' };
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
@@ -251,6 +254,8 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         error: message,
         ...(options.runConfig?.kind && runTracker ? { runId: runTracker.id } : {}),
       };
+    } finally {
+      release();
     }
   };
 

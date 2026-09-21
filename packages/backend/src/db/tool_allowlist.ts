@@ -10,7 +10,7 @@ export type ToolAllowlistEntry = {
 
 /**
  * Learned "always allow" patterns (ADR 005 step 3). A row auto-approves
- * actions of `tool_name` whose stringified input contains `pattern`
+ * actions of `tool_name` whose complete input equals the JSON `pattern`
  * (empty pattern = blanket-allow the tool).
  */
 

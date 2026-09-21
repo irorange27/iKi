@@ -8,7 +8,7 @@ import type { createAgentRunTracker } from '../turn_prep/run_tracker';
 import { startTurnHarness } from '../agent/harness';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import type { ToolModelConfig } from '../provider/tool_model';
-import { BaseTool, defaultToolRegistry } from '@iki/backend/tools/base';
+import { BaseTool } from '@iki/backend/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import {
   AgentToolInputSchema,
@@ -172,13 +172,7 @@ const resolveConversationModel = (): ToolRuntimeConversationModel => {
   };
 };
 
-const resolveRuntimeTools = (): AgentTool[] => {
-  const runtimeTools = getToolRuntimeContext().availableTools;
-  if (Array.isArray(runtimeTools) && runtimeTools.length > 0) {
-    return runtimeTools;
-  }
-  return defaultToolRegistry.getAll();
-};
+const resolveRuntimeTools = (): AgentTool[] => getToolRuntimeContext().availableTools ?? [];
 
 const resolveDelegableTools = (
   requestedTools: string[] | undefined,
@@ -375,6 +369,7 @@ export class DelegatedAgentTool extends BaseTool {
           for await (const event of harness.turn({
             prompt,
             toolsOverride: delegatedTools,
+            abortSignal: runtimeContext.abortSignal,
             runTracker,
           })) {
             if (event.event === 'done') return event.output;

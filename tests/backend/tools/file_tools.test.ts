@@ -94,7 +94,7 @@ describe('file tools workspace boundaries', () => {
     expect(result.content).toBe('hello workspace');
   });
 
-  it('caches reads and clears the cache after file writes', async () => {
+  it('reads current content after external and tool writes', async () => {
     const workspaceRoot = path.join(tempRoot, 'workspace');
     const filePath = path.join(workspaceRoot, 'docs', 'note.txt');
     await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -125,7 +125,7 @@ describe('file tools workspace boundaries', () => {
     )) as { content: string };
 
     expect(first.content).toBe('first');
-    expect(cached.content).toBe('first');
+    expect(cached.content).toBe('external');
     expect(refreshed.content).toBe('via tool');
   });
 
@@ -148,6 +148,55 @@ describe('file tools workspace boundaries', () => {
     await expect(
       runInWorkspaceContext('thread_1', async () => tool.execute({ path: 'shared/secret.txt' }))
     ).rejects.toThrow(/outside workspace roots/i);
+  });
+
+  it.each(['link.txt', 'link/nested.txt'])('rejects writes through dangling symlinks: %s', async input => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    const outsideRoot = path.join(tempRoot, 'outside');
+    await fs.mkdir(workspaceRoot);
+    await fs.mkdir(outsideRoot);
+    const target = path.join(outsideRoot, 'missing');
+    await fs.symlink(target, path.join(workspaceRoot, input.split('/')[0]));
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    await expect(runInWorkspaceContext('thread_1', () =>
+      new WriteFileTool().execute({ path: input, content: 'escaped' })
+    )).rejects.toThrow(/dangling symbolic link/);
+    await expect(fs.access(target)).rejects.toThrow();
+  });
+
+  it('creates missing nested directories inside the workspace', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot);
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+    await runInWorkspaceContext('thread_1', () => new WriteFileTool().execute({ path: 'new/nested/file.txt', content: 'inside' }));
+    expect(await fs.readFile(path.join(workspaceRoot, 'new/nested/file.txt'), 'utf8')).toBe('inside');
+  });
+
+  it('checks cancellation again after asynchronous path resolution', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot);
+    const controller = new AbortController();
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockImplementation(() => {
+      controller.abort(new Error('stop before write'));
+      return createWorkspace(workspaceRoot);
+    });
+    await expect(runWithToolRuntimeContext({ threadId: 'thread_1', abortSignal: controller.signal }, () =>
+      new WriteFileTool().execute({ path: 'new/file.txt', content: 'unwanted' })
+    )).rejects.toThrow('stop before write');
+    await expect(fs.access(path.join(workspaceRoot, 'new'))).rejects.toThrow();
+  });
+
+  it('does not begin file mutations after cancellation', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled by user'));
+    await expect(runWithToolRuntimeContext({ threadId: 'thread_1', abortSignal: controller.signal }, () =>
+      new WriteFileTool().execute({ path: 'new.txt', content: 'unwanted' })
+    )).rejects.toThrow('cancelled by user');
+    expect(getWorkspaceMock).not.toHaveBeenCalled();
   });
 
   it('rejects writes that escape through a symlinked directory', async () => {
@@ -273,6 +322,21 @@ describe('file tools workspace boundaries', () => {
     expect(result.changed).toBe(true);
     expect(result.totalReplacements).toBe(2);
     expect(await fs.readFile(filePath, 'utf8')).toBe('gamma\nbeta\ngamma\n');
+  });
+
+  it('keeps working directories isolated across interleaved tool contexts', async () => {
+    const roots = [path.join(tempRoot, 'a'), path.join(tempRoot, 'b')];
+    await Promise.all(roots.map(root => fs.mkdir(root)));
+    getChatThreadMock.mockImplementation(id => ({ id, workspace_id: id }));
+    getWorkspaceMock.mockImplementation(id => ({ ...createWorkspace(roots[id === 'a' ? 0 : 1]), id }));
+    const values = await Promise.all(['a', 'b'].map(id => runInWorkspaceContext(id, async () => {
+      await new WriteFileTool().execute({ path: 'same.txt', content: id });
+      await Promise.resolve();
+      return new ReadFileTool().execute({ path: 'same.txt' });
+    })));
+    expect(values).toMatchObject([{ content: 'a' }, { content: 'b' }]);
+    expect(await fs.readFile(path.join(roots[0], 'same.txt'), 'utf8')).toBe('a');
+    expect(await fs.readFile(path.join(roots[1], 'same.txt'), 'utf8')).toBe('b');
   });
 
   it('pins relative reads to the active thread workspace when one is selected', async () => {
@@ -505,6 +569,20 @@ describe('edit_file lint gate and undo', () => {
 
     expect(secondUndo.success).toBe(false);
     expect(secondUndo.error).toBe(true);
+  });
+
+  it('isolates undo by thread and refuses to overwrite another edit', async () => {
+    const { filePath } = await setupWorkspace('shared.txt', 'original');
+    await runInWorkspaceContext('thread_1', () => new EditFileTool().execute({
+      path: 'shared.txt', edits: [{ oldText: 'original', newText: 'first' }],
+    }));
+    const otherUndo = await runInWorkspaceContext('thread_2', () => new UndoEditTool().execute({ path: 'shared.txt' }));
+    expect(otherUndo).toMatchObject({ success: false });
+    expect(await fs.readFile(filePath, 'utf8')).toBe('first');
+    await fs.writeFile(filePath, 'newer change');
+    const ownUndo = await runInWorkspaceContext('thread_1', () => new UndoEditTool().execute({ path: 'shared.txt' }));
+    expect(ownUndo).toMatchObject({ success: false, message: expect.stringContaining('File changed') });
+    expect(await fs.readFile(filePath, 'utf8')).toBe('newer change');
   });
 
   it('undoes sequential edits step by step', async () => {

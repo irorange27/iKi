@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { getToolRuntimeContext } from '../utils/runtime_context';
 import { BaseTool } from '@iki/backend/tools/base';
 import {
   DeleteFileInputSchema,
@@ -16,29 +17,9 @@ import {
   resolveWritableWorkspacePath,
 } from './workspace_paths';
 
-const FILE_CACHE_TTL_MS = 30_000;
 const MAX_EDIT_UNDO_DEPTH = 10;
-const readFileCache = new Map<string, { createdAt: number; value: unknown }>();
-const editUndoStacks = new Map<string, Array<{ previousContent: string; encoding: BufferEncoding }>>();
-
-const getCached = (cache: Map<string, { createdAt: number; value: unknown }>, key: string): unknown | undefined => {
-  const entry = cache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() - entry.createdAt > FILE_CACHE_TTL_MS) {
-    cache.delete(key);
-    return undefined;
-  }
-  return entry.value;
-};
-
-const setCached = (cache: Map<string, { createdAt: number; value: unknown }>, key: string, value: unknown): unknown => {
-  cache.set(key, { createdAt: Date.now(), value });
-  return value;
-};
-
-const clearFileReadCaches = () => {
-  readFileCache.clear();
-};
+const editUndoStacks = new Map<string, Array<{ previousContent: string; writtenContent: string; encoding: BufferEncoding }>>();
+const undoKey = (filePath: string): string => JSON.stringify([getToolRuntimeContext().threadId ?? null, filePath]);
 
 const countOccurrences = (content: string, search: string): number => {
   if (!search) return 0;
@@ -229,12 +210,8 @@ export class ReadFileTool extends BaseTool {
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveReadableWorkspacePath(args.path);
-    const cacheKey = JSON.stringify([absolutePath, args.encoding]);
-    const cached = getCached(readFileCache, cacheKey);
-    if (cached !== undefined) return cached;
-
     const content = await fs.readFile(absolutePath, { encoding: args.encoding as BufferEncoding });
-    return setCached(readFileCache, cacheKey, { path: absolutePath, content });
+    return { path: absolutePath, content };
   }
 }
 
@@ -252,11 +229,12 @@ export class WriteFileTool extends BaseTool {
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveWritableWorkspacePath(args.path);
 
+    getToolRuntimeContext().abortSignal?.throwIfAborted();
     // Ensure directory exists
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
 
+    getToolRuntimeContext().abortSignal?.throwIfAborted();
     await fs.writeFile(absolutePath, args.content, { encoding: args.encoding as BufferEncoding });
-    clearFileReadCaches();
     return { path: absolutePath, success: true };
   }
 }
@@ -370,18 +348,18 @@ export class EditFileTool extends BaseTool {
         };
       }
 
-      const undoStack = editUndoStacks.get(absolutePath) ?? [];
-      undoStack.push({
-        previousContent: originalContent,
-        encoding: args.encoding as BufferEncoding,
-      });
-      if (undoStack.length > MAX_EDIT_UNDO_DEPTH) undoStack.shift();
-      editUndoStacks.set(absolutePath, undoStack);
-
+      getToolRuntimeContext().abortSignal?.throwIfAborted();
       await fs.writeFile(absolutePath, updatedContent, {
         encoding: args.encoding as BufferEncoding,
       });
-      clearFileReadCaches();
+      const undoStack = editUndoStacks.get(undoKey(absolutePath)) ?? [];
+      undoStack.push({
+        previousContent: originalContent,
+        writtenContent: updatedContent,
+        encoding: args.encoding as BufferEncoding,
+      });
+      if (undoStack.length > MAX_EDIT_UNDO_DEPTH) undoStack.shift();
+      editUndoStacks.set(undoKey(absolutePath), undoStack);
 
       return {
         path: absolutePath,
@@ -414,13 +392,13 @@ export class UndoEditTool extends BaseTool {
   override autoAllowed = true;
   override description =
     'Revert the most recent successful edit_file change to the given file, restoring the content from before that edit. Only edits made during this session can be undone.';
-  override needsApproval = false;
+  override needsApproval = true;
   override paramSchema = UndoEditInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveWritableWorkspacePath(args.path);
-    const undoStack = editUndoStacks.get(absolutePath);
-    const entry = undoStack?.pop();
+    const undoStack = editUndoStacks.get(undoKey(absolutePath));
+    const entry = undoStack?.at(-1);
     if (!undoStack || !entry) {
       return {
         path: absolutePath,
@@ -433,8 +411,13 @@ export class UndoEditTool extends BaseTool {
       };
     }
 
+    const currentContent = await fs.readFile(absolutePath, { encoding: entry.encoding });
+    if (currentContent !== entry.writtenContent) {
+      return { path: absolutePath, success: false, error: true, message: 'File changed since this edit; refusing to overwrite newer changes.' };
+    }
+    getToolRuntimeContext().abortSignal?.throwIfAborted();
     await fs.writeFile(absolutePath, entry.previousContent, { encoding: entry.encoding });
-    clearFileReadCaches();
+    undoStack.pop();
     return {
       path: absolutePath,
       success: true,
@@ -458,8 +441,8 @@ export class DeleteFileTool extends BaseTool {
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveDeleteWorkspacePath(args.path);
 
+    getToolRuntimeContext().abortSignal?.throwIfAborted();
     await fs.unlink(absolutePath);
-    clearFileReadCaches();
     return { path: absolutePath, deleted: true };
   }
 }

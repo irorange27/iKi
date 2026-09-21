@@ -21,10 +21,22 @@ describe('classifyActionRisk', () => {
 
   it('honors learned allowlist patterns scoped to the tool', () => {
     expect(
-      classifyActionRisk('shell', { command: 'pnpm run eval:live' }, ['pnpm run eval:live'])
+      classifyActionRisk('shell', { command: 'pnpm run eval:live' }, [JSON.stringify({ command: 'pnpm run eval:live' })])
     ).toBe('safe');
     // patterns are tool-scoped: a shell pattern never whitelists another tool
     expect(classifyActionRisk('shell', { command: 'anything' }, [])).toBe('escalate');
+  });
+
+  it('rejects substring rules and modified arguments even if descriptions contain allowed text', () => {
+    const allowed = { command: 'pnpm run eval:live', cwd: '/workspace' };
+    expect(classifyActionRisk('shell', { cwd: '/workspace', command: allowed.command }, [JSON.stringify(allowed)])).toBe('safe');
+    for (const input of [
+      { command: 'rm -rf data', description: allowed.command },
+      { ...allowed, command: `${allowed.command}; rm -rf data` },
+      { ...allowed, cwd: '/another-workspace' },
+    ]) {
+      expect(classifyActionRisk('shell', input, [allowed.command, JSON.stringify(allowed)])).toBe('escalate');
+    }
   });
 
   it('blanket pattern (empty string) allows the whole tool', () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getToolRuntimeContext } from '../utils/runtime_context';
 import type { AgentTool, ToolApprovalFunction, ToolApprovalMode, ToolRetryConfig } from '@iki/backend/agent/types';
 import { createLogger } from '../logger';
 import { zodSchemaToJsonSchema } from './json_schema';
@@ -41,6 +42,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
    * Execute the tool with validation and tracing.
    */
   async execute(args: unknown): Promise<unknown> {
+    getToolRuntimeContext().abortSignal?.throwIfAborted();
     const validatedArgs = this.paramSchema.parse(args);
     const toolSpan = toolLogger.span({
       level: 'debug',

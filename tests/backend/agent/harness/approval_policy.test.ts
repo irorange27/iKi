@@ -14,7 +14,7 @@ registerStandardTools({
 
 const resolve = (
   approvalPolicy?: 'never' | 'trustWorkspace' | 'askRisky' | 'always',
-  toolNames = ['write_file', 'read_file', 'edit']
+  toolNames = ['write_file', 'read_file', 'edit', 'undo_edit']
 ) =>
   resolveTools({
     enableTools: true,
@@ -59,6 +59,7 @@ describe('resolveTools approvalPolicy (ADR 005)', () => {
   it('askRisky gates writes and unknown tools while allowing known reads', () => {
     const tools = resolve('askRisky');
     expect((needsApproval(tools, 'write_file') as (input: unknown) => boolean)({})).toBe(true);
+    expect((needsApproval(tools, 'undo_edit') as (input: unknown) => boolean)({})).toBe(true);
     expect((needsApproval(tools, 'read_file') as (input: unknown) => boolean)({})).toBe(false);
   });
 

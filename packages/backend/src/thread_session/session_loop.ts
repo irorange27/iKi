@@ -60,7 +60,7 @@ export const createChatStreaming = (deps: {
       }
     ) => unknown;
     registerApprovalBatch: RegisterApprovalBatch;
-    cleanupPendingSessionsForSender: (senderId: number) => void;
+    cleanupPendingSessionsForSender: (senderId: number, sessionId?: string) => void;
   };
 }) => {
   const turnPreparer = createChatTurnPreparer({
@@ -85,11 +85,13 @@ export const createChatStreaming = (deps: {
     turnPreparer,
     usage: deps.usage,
     checkThreadRunRate: coordinator.checkThreadRunRate,
+    tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
   });
 
   const stream = async (target: ChatStreamTarget, options: ChatTurnOptions) => {
     const senderId = target.id;
-    coordinator.supersedeActiveStream(senderId);
+    const release = coordinator.tryAcquireThreadRun(options.threadId);
+    if (!release) return { success: false, error: 'A turn is already running on this thread.' };
 
     const uiChunkEmitter = createUiChunkEmitter(target);
 
@@ -97,11 +99,13 @@ export const createChatStreaming = (deps: {
       const rateCheck = coordinator.checkThreadRunRate(options.threadId);
       if (!rateCheck.allowed) {
         const delaySec = Math.ceil((rateCheck.retryAfterMs ?? 1000) / 1000);
+        release();
         uiChunkEmitter.error(`Too many requests on this thread. Retry in ${delaySec}s.`);
         return { success: false, error: `Too many requests on this thread. Retry in ${delaySec}s.` };
       }
     }
 
+    coordinator.supersedeActiveStream(senderId);
     if (options.threadId) {
       coordinator.cancelThreadStreams(options.threadId, senderId);
       coordinator.trackThreadStream(options.threadId, senderId);
@@ -140,6 +144,7 @@ export const createChatStreaming = (deps: {
           });
         },
       });
+      streamState.abortController.signal.throwIfAborted();
       const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
       const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
       const guardedTools = preparedTurn.guardedTools;
@@ -386,7 +391,7 @@ export const createChatStreaming = (deps: {
       };
     } catch (error: unknown) {
       if (streamState.cancelled) {
-        uiChunkEmitter.abort();
+        if (coordinator.peekStream(senderId) === streamState) uiChunkEmitter.abort();
         if (state?.runTracker && state.runTracker.getRun().status === 'running') {
           state.runTracker.markCancelled();
           notifyRunStatus();
@@ -422,13 +427,14 @@ export const createChatStreaming = (deps: {
           options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
         getCompanion().notifyReplyComplete(threadLabel);
       }
-      if (!state?.isAwaitingApproval) {
-        deps.approvals.cleanupPendingSessionsForSender(senderId);
+      if (coordinator.peekStream(senderId) === streamState && !state?.isAwaitingApproval) {
+        deps.approvals.cleanupPendingSessionsForSender(senderId, uiChunkEmitter.messageId);
       }
-      if (options.threadId) {
+      if (coordinator.peekStream(senderId) === streamState && options.threadId) {
         coordinator.untrackThreadStream(options.threadId, senderId);
       }
       coordinator.unregisterStream(senderId, streamState);
+      release();
     }
   };
 

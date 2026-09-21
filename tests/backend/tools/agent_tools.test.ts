@@ -19,7 +19,8 @@ vi.mock('@iki/backend/agent/runners/simple_agent_runner', () => ({
 }));
 
 import { DelegatedAgentTool, setDelegatedAgentRuntime } from '@iki/backend/tools/agent_tools';
-import { ReadFileTool, WriteFileTool } from '@iki/backend/tools/file_tools';
+import { defaultToolRegistry } from '@iki/backend/tools/base';
+import { ReadFileTool, WriteFileTool, UndoEditTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
@@ -211,13 +212,13 @@ describe('DelegatedAgentTool', () => {
     ).rejects.toThrow(/not available to the 'explorer' subagent type/);
   });
 
-  it('rejects explicit approval-gated delegated tools', async () => {
+  it.each([new ShellExecutionTool(), new UndoEditTool()])('rejects explicit approval-gated delegated tools: $name', async gatedTool => {
     const tool = new DelegatedAgentTool();
 
     await expect(
       runWithToolRuntimeContext(
         {
-          availableTools: [new ShellExecutionTool().toAgentTool()],
+          availableTools: [gatedTool.toAgentTool()],
           conversationModel: {
             providerType: 'openai',
             model: 'gpt-4o-mini',
@@ -225,14 +226,41 @@ describe('DelegatedAgentTool', () => {
         },
         async () =>
           await tool.execute({
-            task: 'Run a shell check.',
-            tools: ['shell'],
+            task: 'Perform a gated action.',
+            tools: [gatedTool.name],
           })
       )
     ).rejects.toThrow(/requires approval/i);
 
     expect(createAgentRunTrackerMock).not.toHaveBeenCalled();
     expect(runMock).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, []])('never obtains tools outside the parent capability set (%j)', async availableTools => {
+    const registrySpy = vi.spyOn(defaultToolRegistry, 'getAll').mockReturnValue([new ReadFileTool().toAgentTool()]);
+    try {
+      await expect(runWithToolRuntimeContext({ availableTools }, () =>
+        new DelegatedAgentTool().execute({ task: 'Read something.', tools: ['read_file'] })
+      )).rejects.toThrow(/not enabled/);
+      expect(registrySpy).not.toHaveBeenCalled();
+      expect(runMock).not.toHaveBeenCalled();
+    } finally {
+      registrySpy.mockRestore();
+    }
+  });
+
+  it('passes parent cancellation to the child run', async () => {
+    const controller = new AbortController();
+    runMock.mockImplementation(async function* (request) {
+      expect(request.abortSignal).toBe(controller.signal);
+      yield { event: 'text-delta', text: 'started' };
+      controller.abort(new Error('parent stopped'));
+      request.abortSignal.throwIfAborted();
+    });
+    await expect(runWithToolRuntimeContext({ abortSignal: controller.signal, availableTools: [] }, () =>
+      new DelegatedAgentTool().execute({ task: 'Investigate.' })
+    )).rejects.toThrow('parent stopped');
+    expect(createAgentRunTrackerMock().markCompleted).not.toHaveBeenCalled();
   });
 
   it('blocks recursive delegated agent calls', async () => {

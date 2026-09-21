@@ -94,6 +94,7 @@ describe('createChatStreaming integration', () => {
           threadId: ctx.threadId,
           runId: ctx.runId,
           hasRunTracker: !!ctx.runTracker,
+          toolNames: ctx.availableTools?.map(tool => tool.name),
           conversationModel: ctx.conversationModel,
         };
         return observedContext;
@@ -151,6 +152,7 @@ describe('createChatStreaming integration', () => {
     if (!result.success) throw new Error(result.error);
     expect(result).toMatchObject({ success: true, text: 'stream done', stopped: false });
     expect(observedContext).toMatchObject({
+      toolNames: expect.arrayContaining([toolName]),
       threadId: 'thread_1',
       hasRunTracker: true,
       conversationModel: {
@@ -167,7 +169,7 @@ describe('createChatStreaming integration', () => {
       providerType: 'openai',
       model: 'gpt-4o-mini',
     }));
-    expect(approvals.cleanupPendingSessionsForSender).toHaveBeenCalledWith(42);
+    expect(approvals.cleanupPendingSessionsForSender).toHaveBeenCalledWith(42, expect.any(String));
     expect(streamCoordinator.peekStream(42)).toBeUndefined();
 
     const chunks = target.send.mock.calls
@@ -226,8 +228,69 @@ describe('createChatStreaming integration', () => {
       threadId: 'thread_1', messages: [{ role: 'user', content: 'original task' }],
       tools: toolNames, maxIterations, autonomous: { maxIterations: batches },
     });
-    return { coordinator, run };
+    return { coordinator, run, streaming };
   };
+
+  it('excludes duplicate stream/send calls during preparation but allows another thread', async () => {
+    const faux = new FauxModelProvider([fauxText('other thread'), fauxText('first thread')]);
+    const { streaming, run } = setupLoop(faux);
+    const prepare = prepareChatTurnMock.getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    prepareChatTurnMock.mockImplementationOnce(async () => { await gate; return prepare(); });
+    const first = run();
+    expect(await run()).toMatchObject({ success: false, error: expect.stringContaining('already running') });
+    expect(await streaming.send({ threadId: 'thread_1', providerType: 'openai', model: 'test-model', messages: [] })).toMatchObject({ success: false });
+    const other = await streaming.stream({ id: 43, send: vi.fn() }, {
+      threadId: 'thread_2', providerType: 'openai', model: 'test-model', messages: [],
+    });
+    expect(other).toMatchObject({ success: true, text: 'other thread' });
+    release();
+    expect(await first).toMatchObject({ success: true, text: 'first thread' });
+    expect(prepareChatTurnMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start the superseded request after its delayed preparation resolves', async () => {
+    const faux = new FauxModelProvider([fauxText('new thread'), fauxText('must not execute')]);
+    const { streaming, run } = setupLoop(faux);
+    const prepare = prepareChatTurnMock.getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    prepareChatTurnMock.mockImplementationOnce(async () => { await gate; return prepare(); });
+    const first = run();
+    await streaming.stream({ id: 42, send: vi.fn() }, {
+      threadId: 'thread_2', providerType: 'openai', model: 'test-model', messages: [],
+    });
+    release();
+    await first;
+    expect(faux.remaining).toBe(1);
+  });
+
+  it('preserves tool context across concurrent threads after asynchronous suspension', async () => {
+    const { streaming } = setupLoop(new FauxModelProvider([]), [toolName]);
+    createModelMock.mockImplementation(() => new FauxModelProvider([fauxToolCall(toolName, {}), fauxText('done')]));
+    let entered = 0;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const seen: Array<{ before?: string; after?: string; runId?: string }> = [];
+    defaultToolRegistry.register(createTool({
+      name: toolName, type: 'function', description: 'Context probe', paramSchema: z.object({}),
+      handler: async () => {
+        const before = getToolRuntimeContext().threadId;
+        if (++entered === 2) release();
+        await gate;
+        const after = getToolRuntimeContext();
+        seen.push({ before, after: after.threadId, runId: after.runId });
+        return { threadId: after.threadId };
+      },
+    }));
+    const results = await Promise.all(['a', 'b'].map((threadId, index) => streaming.stream({ id: index + 1, send: vi.fn() }, {
+      threadId, providerType: 'openai', model: 'test-model', messages: [], tools: [toolName],
+    })));
+    expect(results.every(result => result.success)).toBe(true);
+    expect(seen.map(item => [item.before, item.after]).sort()).toEqual([['a', 'a'], ['b', 'b']]);
+    expect(new Set(seen.map(item => item.runId)).size).toBe(2);
+  });
 
   it('ends autonomous work on a natural model stop without spending another call', async () => {
     const faux = new FauxModelProvider([fauxText('done'), fauxText('must not run')]);

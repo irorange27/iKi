@@ -59,6 +59,7 @@ const getRunMaxIterations = (run: AgentRun | null | undefined): number | undefin
 export const createChatApproval = (deps: {
   /** Session-less stream registry access (owned by the stream coordinator). */
   streams: {
+    tryAcquireThreadRun: (threadId?: string) => (() => void) | null;
     peek: (senderId: number) => ActiveStreamState | undefined;
     attach: (senderId: number, streamState: ActiveStreamState) => void;
     detach: (senderId: number, streamState: ActiveStreamState) => void;
@@ -94,16 +95,21 @@ export const createChatApproval = (deps: {
     session.timeouts.clear();
   };
 
-  const scheduleApprovalTimeout = (approvalId: string, session: PendingApprovalSession) => {
+  const scheduleApprovalTimeout = (approvalId: string, session: PendingApprovalSession, delay = APPROVAL_TIMEOUT_MS) => {
     if (!session.timeouts || session.timeouts.has(approvalId)) return;
     const timeoutId = setTimeout(() => {
       if (session.collectedApprovalResponses.has(approvalId)) return;
+      session.timeouts.delete(approvalId);
       void approveTool(session.target, approvalId, false, 'Approval timed out after 30 minutes')
+        .then(result => {
+          if (!result.success && pendingApprovalSessions.get(approvalId) === session) {
+            scheduleApprovalTimeout(approvalId, session, 1000);
+          }
+        })
         .catch(error => createLogger({ module: 'chat_approval' }).event({
           level: 'error', event: 'approval.timeout.failed', error,
         }));
-      session.timeouts.delete(approvalId);
-    }, APPROVAL_TIMEOUT_MS);
+    }, delay);
     session.timeouts.set(approvalId, timeoutId);
   };
 
@@ -372,7 +378,7 @@ export const createChatApproval = (deps: {
     return session;
   };
 
-  const approveTool = async (
+  const resumeApproval = async (
     target: ChatStreamTarget,
     approvalId: string,
     approved: boolean,
@@ -510,6 +516,7 @@ export const createChatApproval = (deps: {
           ...(resumeRunTracker ? { runId: resumeRunTracker.id } : {}),
         }
       : undefined;
+    streamState.runId = resumeRunTracker?.id;
     deps.streams.attach(resumedSenderId, streamState);
     let resolvedHistory: ModelMessage[] | undefined = session.history;
     let isAwaitingApproval = false;
@@ -754,16 +761,35 @@ export const createChatApproval = (deps: {
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {
-      if (!isAwaitingApproval) {
-        cleanupPendingSessionsForSender(resumedSenderId);
+      if (deps.streams.peek(resumedSenderId) === streamState && !isAwaitingApproval) {
+        cleanupPendingSessionsForSender(resumedSenderId, resumeMessageId);
       }
       deps.streams.detach(resumedSenderId, streamState);
     }
   };
 
-  const cleanupPendingSessionsForSender = (senderId: number) => {
+  const approveTool = async (
+    target: ChatStreamTarget,
+    approvalId: string,
+    approved: boolean,
+    reason?: string
+  ) => {
+    const pending = pendingApprovalSessions.get(approvalId);
+    const record = toolCallApprovalDb.getToolCallApproval(approvalId);
+    const storedSession = record ? toolCallApprovalDb.getToolCallApprovalSession(record.session_id) : null;
+    const threadId = pending?.recoveryContext?.threadId ?? storedSession?.thread_id;
+    const release = deps.streams.tryAcquireThreadRun(threadId);
+    if (!release) return { success: false, error: 'A turn is already running on this thread.' };
+    try {
+      return await resumeApproval(target, approvalId, approved, reason);
+    } finally {
+      release();
+    }
+  };
+
+  const cleanupPendingSessionsForSender = (senderId: number, sessionId?: string) => {
     for (const [key, session] of pendingApprovalSessions) {
-      if (session.target.id === senderId) {
+      if (session.target.id === senderId && (!sessionId || session.sessionId === sessionId)) {
         clearApprovalTimeouts(session);
         pendingApprovalSessions.delete(key);
       }

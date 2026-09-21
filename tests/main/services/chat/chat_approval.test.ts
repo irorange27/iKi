@@ -1,3 +1,4 @@
+import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@iki/backend/db/tool_call_approval', () => ({
@@ -128,10 +129,52 @@ beforeEach(() => {
 });
 
 describe('createChatApproval', () => {
+  it('keeps approval decisions pending while a turn owns the thread and resumes once', async () => {
+    const coordinator = createThreadStreamCoordinator();
+    const approvals = createChatApproval({
+      streams: { tryAcquireThreadRun: coordinator.tryAcquireThreadRun, peek: coordinator.peekStream, attach: coordinator.attachStream, detach: coordinator.detachStream },
+      memory: {} as never, usage: { recordUsageEvent: vi.fn() },
+    });
+    const target = { id: 99, send: vi.fn() };
+    approvals.registerApprovalBatch([{ approvalId: 'isolated', toolCallId: 'call', toolCall: { toolName: 'shell', args: {} } }], {
+      target, history: [{ role: 'user', content: 'task' }],
+      recoveryContext: { sessionId: 'session_a', assistantMessageId: 'session_a', threadId: 'thread_a', providerType: 'openai', model: 'test', systemPrompt: 'system', enabledTools: ['shell'] },
+    });
+    const release = coordinator.tryAcquireThreadRun('thread_a')!;
+    expect(await approvals.approveTool(target, 'isolated', true)).toMatchObject({ success: false });
+    expect(answerToolCallApprovalMock).not.toHaveBeenCalled();
+    release();
+    const results = await Promise.all([approvals.approveTool(target, 'isolated', true), approvals.approveTool(target, 'isolated', true)]);
+    expect(results.filter(result => result.success)).toHaveLength(1);
+    expect(answerToolCallApprovalMock).toHaveBeenCalledTimes(1);
+    expect(rehydrateHarnessMock).toHaveBeenCalledTimes(1);
+    approvals.cleanupPendingSessionsForSender(99);
+  });
+
+  it('cleans up only the specified approval session on a shared sender', () => {
+    vi.useFakeTimers();
+    const approvals = createChatApproval({
+      streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun, peek: vi.fn(), attach: vi.fn(), detach: vi.fn() },
+      memory: {} as never, usage: { recordUsageEvent: vi.fn() },
+    });
+    try {
+      for (const id of ['a', 'b']) approvals.ensurePendingApprovalSession(id, {
+        target: { id: 7, send: vi.fn() }, recoveryContext: { sessionId: id, assistantMessageId: id, threadId: id, providerType: 'openai', model: 'test', systemPrompt: '', enabledTools: [] },
+      });
+      approvals.cleanupPendingSessionsForSender(7, 'a');
+      expect(vi.getTimerCount()).toBe(1);
+      approvals.cleanupPendingSessionsForSender(7, 'b');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      approvals.cleanupPendingSessionsForSender(7);
+      vi.useRealTimers();
+    }
+  });
+
   it.each([1, 2])('persists timeout decisions and resumes one batch of %s approvals once', async count => {
     vi.useFakeTimers();
     const approvals = createChatApproval({
-      streams: { peek: vi.fn(), attach: vi.fn(), detach: vi.fn() },
+      streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun, peek: vi.fn(), attach: vi.fn(), detach: vi.fn() },
       memory: {} as never, usage: { recordUsageEvent: vi.fn() },
     });
     const requests = Array.from({ length: count }, (_, index) => ({
@@ -162,7 +205,7 @@ describe('createChatApproval', () => {
 
   it('persists approval batches with structured recovery context', () => {
     const approvals = createChatApproval({
-      streams: {
+      streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
         peek: vi.fn(() => undefined),
         attach: vi.fn(),
         detach: vi.fn(),
@@ -307,7 +350,7 @@ describe('createChatApproval', () => {
     ]);
 
     const approvals = createChatApproval({
-      streams: {
+      streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
         peek: vi.fn(() => undefined),
         attach: vi.fn(),
         detach: vi.fn(),
@@ -320,7 +363,12 @@ describe('createChatApproval', () => {
       },
     });
 
-    await approvals.approveTool({ id: 11, send: vi.fn() }, 'approval_2', true);
+    const recovered = await Promise.all([
+      approvals.approveTool({ id: 11, send: vi.fn() }, 'approval_2', true),
+      approvals.approveTool({ id: 12, send: vi.fn() }, 'approval_2', true),
+    ]);
+    expect(recovered.filter(result => result.success)).toHaveLength(1);
+    expect(rehydrateHarnessMock).toHaveBeenCalledTimes(1);
 
     expect(getChatMessagesMock).toHaveBeenCalledWith('thread_skill_1');
     expect(rehydrateHarnessMock).toHaveBeenCalledWith(
@@ -337,7 +385,7 @@ describe('createChatApproval', () => {
 
   it('cleans up pending approval sessions for a given target senderId', async () => {
     const approvals = createChatApproval({
-      streams: {
+      streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
         peek: vi.fn(() => undefined),
         attach: vi.fn(),
         detach: vi.fn(),

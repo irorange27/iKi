@@ -13,7 +13,7 @@ Headless HTTP + WebSocket server. Exposes the same chat/agent surface as the des
 | `server_http.ts` | REST: `/v1/chat/send`, `/v1/chat/approve-tool`, `/v1/chat/stop-stream`, threads, messages, runs |
 | `server_ws.ts` | WS `/v1/chat/stream` — message types: `start`, `approve-tool`, `steer`, `stop`. Adapts each WS session to a `ChatStreamTarget` (`{ id, send }`) so it can reuse `thread_session.stream` unchanged. |
 | `napcat_adapter.ts` | OneBot v11 reverse WS endpoint `/onebot/v11/ws` (QQ bot bridge). Calls `thread_session.send` (non-streaming). |
-| `tool_access.ts` | Per-client tool filtering |
+| `tool_access.ts` | Per-client tool filtering: individual MCP tool grants stay individual; `mcp:server:<id>` / `mcp:*` explicitly grant wider access. Server activation filters alone do not authorize tools. |
 
 ## Don't
 

@@ -79,7 +79,14 @@ describe('tool_access', () => {
     expect(resolved).toEqual(['mcp_alpha_lookup']);
   });
 
-  it('derives MCP server permissions from explicitly allowed MCP tool names', () => {
+  it('does not expand a single MCP tool grant to sibling tools on its server', () => {
+    registerMcpTool('mcp_alpha_lookup', 'alpha');
+    registerMcpTool('mcp_beta_lookup', 'alpha');
+    expect(resolveToolsForClient(['mcp_alpha_lookup', 'mcp_beta_lookup'], ['mcp_alpha_lookup'])).toEqual(['mcp_alpha_lookup']);
+    expect(resolveToolsForClient(['mcp_alpha_lookup', 'mcp_beta_lookup'], ['mcp:server:alpha'])).toEqual(['mcp_alpha_lookup', 'mcp_beta_lookup']);
+  });
+
+  it('derives MCP server activation filters from explicitly allowed MCP tool names', () => {
     registerMcpTool('mcp_alpha_lookup', 'alpha');
     registerMcpTool('mcp_beta_lookup', 'beta');
 
