@@ -321,6 +321,8 @@ onMounted(() => {
   flex: 1 1 auto;
   display: flex;
   align-items: flex-end;
+  /* keeps the actions pinned to the right edge even when the toolbar wraps */
+  margin-left: auto;
 }
 
 .placeholder-muted::placeholder {

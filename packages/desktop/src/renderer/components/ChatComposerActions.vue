@@ -1,30 +1,5 @@
 <template>
   <div class="composer-toolbar-right flex items-center gap-2">
-    <div
-      v-if="contextUsage"
-      class="composer-context-indicator"
-      :title="contextUsage.tooltip"
-      :aria-label="t('chat.input.contextUsage')"
-    >
-      <svg
-        class="composer-context-icon"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.9"
-          d="M5 14a7 7 0 1114 0"
-        />
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M12 14l3-3" />
-      </svg>
-      <span class="composer-context-value">
-        {{ contextUsage.percentLabel || contextUsage.tokenLabel }}
-      </span>
-    </div>
     <button
       class="composer-icon-btn composer-mode-btn h-8 w-8 rounded-lg flex items-center justify-center"
       :class="props.isIncognito ? 'is-incognito ui-text-accent' : 'ui-text-secondary'"
@@ -150,7 +125,7 @@
       {{ props.runActive ? (props.runStatus === 'blocked' ? 'Awaiting' : 'Working') : 'Auto' }}
     </span>
     <button
-      class="composer-icon-btn send-btn h-8 w-8 rounded-lg flex items-center justify-center"
+      class="composer-icon-btn send-btn h-8 w-8 rounded-full flex items-center justify-center"
       :class="[
         props.isLoading ? 'ui-text-danger stop-btn' : 'ui-text-accent',
         props.isStopping ? 'is-stopping' : '',
@@ -176,7 +151,7 @@
           stroke-linecap="round"
           stroke-linejoin="round"
           stroke-width="2"
-          d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+          d="M12 19V5m0 0l-6 6m6-6l6 6"
         />
       </svg>
     </button>
@@ -186,11 +161,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import type { ContextUsageIndicator } from '../modules/chat/ui_message_references';
 import { useI18n } from '../i18n';
 
 const props = defineProps<{
-  contextUsage?: ContextUsageIndicator | null;
   isIncognito?: boolean;
   isPreparingSend: boolean;
   isLoading: boolean;
@@ -232,27 +205,6 @@ const sendButtonTooltip = computed(() =>
 <style scoped>
 .composer-toolbar-right {
   gap: 14px;
-}
-
-.composer-context-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-muted);
-  user-select: none;
-  white-space: nowrap;
-}
-
-.composer-context-icon {
-  width: 14px;
-  height: 14px;
-  opacity: 0.85;
-}
-
-.composer-context-value {
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
 }
 
 button {
