@@ -213,6 +213,8 @@ export const createChatStreaming = (deps: {
           metadata: {
             ...(options.runConfig?.metadata ?? {}),
             transport: 'stream',
+            approvalPolicy,
+            requireApproval: preparedTurn.requireApproval,
             contextTokens: preparedTurn.report.totalEstimatedTokens,
             skillMode: preparedTurn.skillMode,
             maxIterations,
@@ -238,9 +240,10 @@ export const createChatStreaming = (deps: {
             providerId: options.providerId,
             model: options.model,
             systemPrompt,
-            maxInputTokens: preparedTurn.maxInputTokens,
             maxOutputTokens: preparedTurn.maxOutputTokens,
+            maxInputTokens: preparedTurn.maxInputTokens,
             maxIterations,
+            requireApproval: preparedTurn.requireApproval,
             enabledTools: guardedTools,
             availableSkillIds: preparedTurn.selectedSkillIds,
             ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
@@ -263,6 +266,7 @@ export const createChatStreaming = (deps: {
         maxIterations,
         threadId: options.threadId,
         maxOutputTokens: preparedTurn.maxOutputTokens,
+        maxInputTokens: preparedTurn.maxInputTokens,
         ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         ...(approvalPolicy ? { approvalPolicy } : {}),
       });

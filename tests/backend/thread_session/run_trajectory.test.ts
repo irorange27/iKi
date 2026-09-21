@@ -97,7 +97,7 @@ describe('getRunTrajectory', () => {
     const toolStep = trajectory!.steps.find(step => (step.tool_calls?.length ?? 0) > 0);
     expect(toolStep).toBeDefined();
     expect(toolStep!.tool_calls![0]!.function_name).toBe('web');
-    expect(toolStep!.observation?.results[0]?.content).toEqual({ results: ['a link'] });
+    expect(toolStep!.observation?.results[0]?.content).toEqual(JSON.stringify({ results: ['a link'] }));
     expect((toolStep!.extra as Record<string, unknown>).run_step_index).toBe(0);
 
     expect(trajectory!.final_metrics).toMatchObject({

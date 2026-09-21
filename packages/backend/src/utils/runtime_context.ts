@@ -22,6 +22,7 @@ export type ToolRuntimeConversationModel = {
 };
 
 export type ToolRuntimeContext = {
+  abortSignal?: AbortSignal;
   threadId?: string;
   runId?: string;
   runTracker?: ToolRuntimeChildRunRecorder;

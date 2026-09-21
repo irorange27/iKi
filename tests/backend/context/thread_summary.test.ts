@@ -25,7 +25,7 @@ vi.mock('@iki/backend/logger', () => ({
 
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { createSimplePromptTextGenerator } from '@iki/backend/runtimes/prompt_text_generator';
-import { generateThreadSummary } from '@iki/backend/turn_prep/thread_summary';
+import { generateThreadSummary } from '@iki/backend/runtimes/thread_summary';
 
 const getToolModelMock = vi.mocked(getToolModel);
 const createSimplePromptTextGeneratorMock = vi.mocked(createSimplePromptTextGenerator);
@@ -71,7 +71,7 @@ describe('generateThreadSummary', () => {
     );
   });
 
-  it('builds a bounded normalized prompt and strips fenced summary output', async () => {
+  it('summarizes the complete prefix and strips fenced summary output', async () => {
     const generateMock = vi.fn().mockResolvedValue({
       response: '```text\n"Summary line 1\n\n\nline 2"\n```',
     });
@@ -111,14 +111,13 @@ describe('generateThreadSummary', () => {
       .split('Existing summary:\n')[1]
       .split('\n\nConversation delta:')[0];
 
-    expect(existingSection.length).toBe(2400);
-    expect(existingSection.startsWith('Alpha Beta\n\n')).toBe(true);
-    expect(existingSection).not.toContain('\r');
-    expect(prompt).toContain('Conversation delta:\nAssistant: answer with space\nUser: final\n\nrequest');
-    expect(prompt).not.toContain('older dropped');
+    expect(existingSection).toBe(existingSummary);
+    expect(prompt).toContain('older dropped');
+    expect(prompt).toContain('x'.repeat(13000));
+
   });
 
-  it('clips oversized generated summaries to the maximum stored length', async () => {
+  it('preserves the complete generated summary', async () => {
     createSimplePromptTextGeneratorMock.mockReturnValue({
       generate: vi.fn().mockResolvedValue({
         response: `  ${'x'.repeat(2300)}  `,
@@ -129,8 +128,8 @@ describe('generateThreadSummary', () => {
       messages: [{ role: 'user', content: 'Summarize this thread.' }],
     });
 
-    expect(result?.summary).toHaveLength(2200);
-    expect(result?.summary.endsWith('...')).toBe(true);
+    expect(result?.summary).toHaveLength(2300);
+    expect(result?.summary.endsWith('...')).toBe(false);
     expect(result?.model).toEqual(toolModel);
   });
 

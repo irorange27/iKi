@@ -20,6 +20,7 @@ vi.mock('ai', () => ({
   streamText: streamTextMock,
   smoothStream: smoothStreamMock,
   stepCountIs: stepCountIsMock,
+  hasToolCall: vi.fn(() => () => false),
 }));
 
 // ── Factory mocks ──────────────────────────────────────────────────────────
@@ -221,79 +222,23 @@ describe('SimpleAgentRunner — characterization tests', () => {
     vi.clearAllMocks();
   });
 
-  describe('error part in fullStream (Bug 1: NoOutputGeneratedError)', () => {
-    it('logs error parts and continues processing subsequent parts', async () => {
-      const result = makeStreamTextResult({
+  describe('stream failures', () => {
+    it('fails partial output without replaying the attempt', async () => {
+      setupAgentConfig();
+      setupModel();
+      streamTextMock.mockReturnValue(makeStreamTextResult({
         fullStreamParts: [
-          { type: 'text-delta', text: 'Before error.' },
-          {
-            type: 'error',
-            error: new Error('AI_NoOutputGeneratedError: No output generated.'),
-          },
-          { type: 'text-delta', text: 'After error.' },
-          { type: 'finish', finishReason: 'stop' },
+          { type: 'text-delta', text: 'partial' },
+          { type: 'error', error: new Error('connection reset') },
         ],
-      });
-      setupAll(result);
-
-      const runner = new SimpleAgentRunner();
-      const gen = runner.run({
-        config: { enabled: true },
-        prompt: 'test',
-        tools: [],
-        providerType: 'openai',
-        providerId: '',
-        model: 'gpt-4o-mini',
-      });
-
-      const steps: unknown[] = [];
-      for await (const step of gen) {
-        steps.push(step);
-      }
-      // Get the return value
-      const iterResult = await gen.next();
-      const result_: unknown = iterResult.value;
-
-      // Should have received both text deltas
-      const textSteps = steps.filter((s: any) => s.type === 'message_update');
-      expect(textSteps).toHaveLength(2);
-
-      // Should have completed successfully despite the error part
-      const finishStep = steps.find((s: any) => s.type === 'turn_end');
-      expect(finishStep).toBeDefined();
-      expect((finishStep as any)?.text).toContain('After error');
-    });
-
-    it('handles error parts with non-Error payloads gracefully', async () => {
-      const result = makeStreamTextResult({
-        fullStreamParts: [
-          {
-            type: 'error',
-            error: 'plain string error message',
-          },
-          { type: 'finish', finishReason: 'stop' },
-        ],
-      });
-      setupAll(result);
-
-      const runner = new SimpleAgentRunner();
-      const gen = runner.run({
-        config: { enabled: true },
-        prompt: 'test',
-        tools: [],
-        providerType: 'openai',
-        providerId: '',
-        model: 'gpt-4o-mini',
-      });
-
-      const steps: unknown[] = [];
-      for await (const step of gen) {
-        steps.push(step);
-      }
-      await gen.next();
-
-      const finishStep = steps.find((s: any) => s.type === 'turn_end');
-      expect(finishStep).toBeDefined();
+      }));
+      const consume = async () => {
+        for await (const _step of new SimpleAgentRunner().run({
+          config: { enabled: true }, prompt: 'test', tools: [], providerType: 'openai', model: 'test',
+        })) { /* drain */ }
+      };
+      await expect(consume()).rejects.toThrow('connection reset');
+      expect(streamTextMock).toHaveBeenCalledTimes(1);
     });
   });
 

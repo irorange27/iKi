@@ -5,7 +5,7 @@ import {
   clipTextToTokenBudget,
   estimateMessageTokens,
   estimateTextTokens,
-} from '../thread_session/token_estimator';
+} from '../agent/context_budget';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
@@ -29,46 +29,6 @@ export const countMessageTokens = (
   _modelCapability?: unknown
 ): number => estimateMessageTokens(message);
 
-export const clipMessageToBudget = (
-  message: ChatInputMessage,
-  maxTokens: number,
-  _modelCapability?: ModelCapability | null
-): { message: ChatInputMessage; truncated: boolean } => {
-  if (maxTokens <= 0) return { message, truncated: false };
-
-  if (message.role === 'tool') {
-    return { message, truncated: false };
-  }
-
-  if (typeof message.content === 'string') {
-    const clipped = clipTextToTokenBudget(message.content, maxTokens);
-    return clipped.truncated
-      ? { message: { ...message, content: clipped.text }, truncated: true }
-      : { message, truncated: false };
-  }
-
-  if (
-    Array.isArray(message.content) &&
-    message.content.every(
-      part =>
-        part &&
-        typeof part === 'object' &&
-        'type' in part &&
-        (part as { type?: unknown }).type === 'text' &&
-        typeof (part as { text?: unknown }).text === 'string'
-    )
-  ) {
-    const clipped = clipTextToTokenBudget(
-      extractTextFromModelMessageContent(message.content),
-      maxTokens
-    );
-    return clipped.truncated
-      ? { message: { ...message, content: clipped.text }, truncated: true }
-      : { message, truncated: false };
-  }
-
-  return { message, truncated: false };
-};
 
 export const buildMessagePreview = (message: ChatInputMessage): string => {
   if (typeof message.content === 'string') return message.content;

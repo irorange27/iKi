@@ -47,6 +47,7 @@ vi.mock('@iki/backend/thread_session/ui_messages', () => ({
 
 vi.mock('@iki/backend/agent/harness', () => ({
   rehydrateHarness: vi.fn(),
+  cloneModelMessages: (messages: unknown[]) => structuredClone(messages),
 }));
 
 vi.mock('@iki/backend/turn_prep/run_tracker', () => ({
@@ -127,6 +128,38 @@ beforeEach(() => {
 });
 
 describe('createChatApproval', () => {
+  it.each([1, 2])('persists timeout decisions and resumes one batch of %s approvals once', async count => {
+    vi.useFakeTimers();
+    const approvals = createChatApproval({
+      streams: { peek: vi.fn(), attach: vi.fn(), detach: vi.fn() },
+      memory: {} as never, usage: { recordUsageEvent: vi.fn() },
+    });
+    const requests = Array.from({ length: count }, (_, index) => ({
+      approvalId: `timeout_${index}`, toolCallId: `call_${index}`,
+      toolCall: { toolName: 'shell', args: { command: 'work' } },
+    }));
+    try {
+      approvals.registerApprovalBatch(requests, {
+        target: { id: 99, send: vi.fn() },
+        history: [{ role: 'user', content: 'task' }],
+        recoveryContext: {
+          sessionId: 'timeout_session', assistantMessageId: 'timeout_session', threadId: 'thread_timeout',
+          providerType: 'openai', model: 'test', systemPrompt: 'system', enabledTools: ['shell'],
+        },
+      });
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+      for (const request of requests) expect(answerToolCallApprovalMock).toHaveBeenCalledWith(
+        request.approvalId, 'rejected', 'Approval timed out after 30 minutes',
+      );
+      expect(consumeToolCallApprovalSessionMock).toHaveBeenCalledWith('timeout_session');
+      expect(rehydrateHarnessMock).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      approvals.cleanupPendingSessionsForSender(99);
+      vi.useRealTimers();
+    }
+  });
+
   it('persists approval batches with structured recovery context', () => {
     const approvals = createChatApproval({
       streams: {

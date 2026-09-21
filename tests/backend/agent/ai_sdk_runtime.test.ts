@@ -78,6 +78,12 @@ describe('ai_sdk_runtime', () => {
     });
   });
 
+  it('does not add count-based compaction behind the model budget owner', () => {
+    const history = Array.from({ length: 100 }, (_, index) => ({ role: 'user' as const, content: `constraint ${index}` }));
+    const prompt = buildPromptContext({ providerType: 'openai', providerId: '', systemPrompt: 'system' }, history);
+    expect(prompt.messages).toEqual(history);
+  });
+
   it('drops orphaned tool messages before sending prompt context to the provider', () => {
     const history = [
       { role: 'system' as const, content: 'thread system' },

@@ -19,7 +19,7 @@ import {
 export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
 
 export interface PromptTextGenerator {
-  generate(prompt: string): Promise<PromptTextGeneratorResult>;
+  generate(prompt: string, abortSignal?: AbortSignal): Promise<PromptTextGeneratorResult>;
 }
 
 export type PromptTextGeneratorConfig = PartialAgentConfig & {
@@ -40,7 +40,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
     this.threadId = config?.threadId;
   }
 
-  async generate(prompt: string): Promise<PromptTextGeneratorResult> {
+  async generate(prompt: string, abortSignal?: AbortSignal): Promise<PromptTextGeneratorResult> {
     validateAgentConfig(this.config);
 
     const history = appendUserPromptToHistory([], prompt);
@@ -55,6 +55,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
       });
       const result = await generateText({
         model,
+        abortSignal,
         system: systemPrompt,
         messages,
         ...getModelGenerationSettings({

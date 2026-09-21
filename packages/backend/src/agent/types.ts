@@ -148,6 +148,7 @@ export const AgentResultSchema = z.object({
   perf: AgentTurnPerfSchema.optional(),
   iterations: z.number().int().nonnegative(),
   requiresApproval: z.boolean().optional(),
+  finishReason: z.string().optional(),
   contextWarning: z.boolean().optional(),
 });
 

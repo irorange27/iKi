@@ -52,7 +52,7 @@ vi.mock('@iki/backend/db/memory', () => ({
   extractTextFromMessageJson: extractTextFromMessageJsonMock,
 }));
 
-vi.mock('@iki/backend/turn_prep/thread_summary', () => ({
+vi.mock('@iki/backend/runtimes/thread_summary', () => ({
   generateThreadSummary: generateThreadSummaryMock,
 }));
 
@@ -159,68 +159,6 @@ describe('chat_context assembler', () => {
     expect(memory.getAffectContextMessage).not.toHaveBeenCalled();
   });
 
-  it('compacts long threads into a persisted summary plus recent raw turns', async () => {
-    const storedRows = [
-      makeStoredMessage('user', 'u1'),
-      makeStoredMessage('assistant', 'a1'),
-      makeStoredMessage('user', 'u2'),
-      makeStoredMessage('assistant', 'a2'),
-      makeStoredMessage('user', 'u3'),
-      makeStoredMessage('assistant', 'a3'),
-      makeStoredMessage('user', 'u4'),
-      makeStoredMessage('assistant', 'a4'),
-    ];
-    getChatMessagesMock.mockReturnValue(storedRows as never[]);
-
-    const assembler = createChatContextAssembler({
-      memory: {
-        retrieveRelevantMemory: vi.fn(() => null),
-        getAffectContextMessage: vi.fn(() => ''),
-      } as never,
-    });
-
-    const result = await assembler.assemble({
-      memoryContextConfig: baseConfig.memory.context,
-      threadId: 'thread_1',
-      messages: [
-        { role: 'user', content: 'u1' },
-        { role: 'assistant', content: 'a1' },
-        { role: 'user', content: 'u2' },
-        { role: 'assistant', content: 'a2' },
-        { role: 'user', content: 'u3' },
-        { role: 'assistant', content: 'a3' },
-        { role: 'user', content: 'u4' },
-        { role: 'assistant', content: 'a4' },
-      ],
-    });
-
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: 'Thread summary:\nRolled summary of the earlier conversation.',
-    });
-    expect(result.messages.slice(1)).toEqual([
-      { role: 'assistant', content: 'a3' },
-      { role: 'user', content: 'u4' },
-      { role: 'assistant', content: 'a4' },
-    ]);
-    expect(result.report.retainedRecentMessages).toBe(3);
-    expect(result.report.compactedMessages).toBe(5);
-    expect(result.report.blocks).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'thread-summary',
-          status: 'included',
-          sourceCount: 6,
-        }),
-      ])
-    );
-    expect(upsertThreadContextMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        thread_id: 'thread_1',
-        covered_message_count: 6,
-      })
-    );
-  });
 
   it('reduces retrieved memory to fit the configured budget and reports the truncation', async () => {
     const onMemoryRetrieved = vi.fn();
@@ -539,7 +477,7 @@ describe('chat_context assembler', () => {
     );
   });
 
-  it('never clips the latest user prompt even when older turns are clipped', async () => {
+  it('preserves old and new prompts until the model budget boundary', async () => {
     const assembler = createChatContextAssembler({
       memory: {
         retrieveRelevantMemory: vi.fn(() => null),
@@ -570,12 +508,12 @@ describe('chat_context assembler', () => {
     });
     expect(result.report.blocks.find(block => block.kind === 'recent-history')).toEqual(
       expect.objectContaining({
-        status: 'truncated',
+        status: 'included',
       })
     );
   });
 
-  it('clips oversized rich-text recent messages into a bounded plain-text history entry', async () => {
+  it('preserves structured history until the model budget boundary', async () => {
     const { assembler } = createAssembler();
 
     const result = await assembler.assemble({
@@ -596,7 +534,7 @@ describe('chat_context assembler', () => {
 
     expect(result.messages[0]).toEqual({
       role: 'assistant',
-      content: expect.stringMatching(/\.\.\.$/),
+      content: [{ type: 'text', text: 'older assistant context that is far too long to keep in full form' }],
     });
     expect(result.messages[1]).toEqual({
       role: 'user',
@@ -605,8 +543,7 @@ describe('chat_context assembler', () => {
     expect(findBlock(result, 'recent-history')).toEqual(
       expect.objectContaining({
         kind: 'recent-history',
-        status: 'truncated',
-        reason: 'clipped oversized recent text',
+        status: 'included',
       })
     );
   });
@@ -917,257 +854,10 @@ describe('chat_context assembler', () => {
     );
   });
 
-  it('reuses an already up-to-date persisted thread summary without regenerating it', async () => {
-    const storedRows = [
-      makeStoredMessage('user', 'u1'),
-      makeStoredMessage('assistant', 'a1'),
-      makeStoredMessage('user', 'u2'),
-      makeStoredMessage('assistant', 'a2'),
-      makeStoredMessage('user', 'u3'),
-      makeStoredMessage('assistant', 'a3'),
-      makeStoredMessage('user', 'u4'),
-      makeStoredMessage('assistant', 'a4'),
-    ];
-    getChatMessagesMock.mockReturnValue(storedRows as never[]);
-    getThreadContextMock.mockReturnValue({
-      thread_id: 'thread_summary_reuse',
-      summary: 'Existing summary.',
-      covered_message_count: 6,
-      metadata: {},
-    });
 
-    const { assembler } = createAssembler();
 
-    const result = await assembler.assemble({
-      memoryContextConfig: baseConfig.memory.context,
-      threadId: 'thread_summary_reuse',
-      messages: [
-        { role: 'user', content: 'u1' },
-        { role: 'assistant', content: 'a1' },
-        { role: 'user', content: 'u2' },
-        { role: 'assistant', content: 'a2' },
-        { role: 'user', content: 'u3' },
-        { role: 'assistant', content: 'a3' },
-        { role: 'user', content: 'u4' },
-        { role: 'assistant', content: 'a4' },
-      ],
-    });
 
-    expect(generateThreadSummaryMock).not.toHaveBeenCalled();
-    expect(upsertThreadContextMock).not.toHaveBeenCalled();
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: 'Thread summary:\nExisting summary.',
-    });
-    expect(findBlock(result, 'thread-summary')).toEqual(
-      expect.objectContaining({
-        kind: 'thread-summary',
-        status: 'included',
-        sourceCount: 6,
-      })
-    );
-  });
 
-  it('keeps the stale persisted summary when incremental regeneration fails', async () => {
-    const storedRows = [
-      makeStoredMessage('user', 'u1'),
-      makeStoredMessage('assistant', 'a1'),
-      makeStoredMessage('user', 'u2'),
-      makeStoredMessage('assistant', 'a2'),
-      makeStoredMessage('user', 'u3'),
-      makeStoredMessage('assistant', 'a3'),
-      makeStoredMessage('user', 'u4'),
-      makeStoredMessage('assistant', 'a4'),
-    ];
-    getChatMessagesMock.mockReturnValue(storedRows as never[]);
-    getThreadContextMock.mockReturnValue({
-      thread_id: 'thread_summary_stale',
-      summary: 'Existing summary.',
-      covered_message_count: 4,
-      metadata: {},
-    });
-    generateThreadSummaryMock.mockResolvedValue(null);
-
-    const { assembler } = createAssembler();
-
-    const result = await assembler.assemble({
-      memoryContextConfig: baseConfig.memory.context,
-      threadId: 'thread_summary_stale',
-      messages: [
-        { role: 'user', content: 'u1' },
-        { role: 'assistant', content: 'a1' },
-        { role: 'user', content: 'u2' },
-        { role: 'assistant', content: 'a2' },
-        { role: 'user', content: 'u3' },
-        { role: 'assistant', content: 'a3' },
-        { role: 'user', content: 'u4' },
-        { role: 'assistant', content: 'a4' },
-      ],
-    });
-
-    expect(generateThreadSummaryMock).toHaveBeenCalledWith({
-      threadId: 'thread_summary_stale',
-      existingSummary: 'Existing summary.',
-      messages: [
-        { role: 'user', content: 'u3' },
-        { role: 'assistant', content: 'a3' },
-      ],
-    });
-    expect(upsertThreadContextMock).not.toHaveBeenCalled();
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: 'Thread summary:\nExisting summary.',
-    });
-    expect(findBlock(result, 'thread-summary')).toEqual(
-      expect.objectContaining({
-        kind: 'thread-summary',
-        status: 'included',
-        sourceCount: 6,
-      })
-    );
-  });
-
-  it('reports summary unavailability when regeneration fails without an existing summary', async () => {
-    const storedRows = [
-      makeStoredMessage('user', 'u1'),
-      makeStoredMessage('assistant', 'a1'),
-      makeStoredMessage('user', 'u2'),
-      makeStoredMessage('assistant', 'a2'),
-      makeStoredMessage('user', 'u3'),
-      makeStoredMessage('assistant', 'a3'),
-      makeStoredMessage('user', 'u4'),
-      makeStoredMessage('assistant', 'a4'),
-    ];
-    getChatMessagesMock.mockReturnValue(storedRows as never[]);
-    generateThreadSummaryMock.mockResolvedValue(null);
-
-    const { assembler } = createAssembler();
-
-    const result = await assembler.assemble({
-      memoryContextConfig: baseConfig.memory.context,
-      threadId: 'thread_summary_unavailable',
-      messages: [
-        { role: 'user', content: 'u1' },
-        { role: 'assistant', content: 'a1' },
-        { role: 'user', content: 'u2' },
-        { role: 'assistant', content: 'a2' },
-        { role: 'user', content: 'u3' },
-        { role: 'assistant', content: 'a3' },
-        { role: 'user', content: 'u4' },
-        { role: 'assistant', content: 'a4' },
-      ],
-    });
-
-    expect(upsertThreadContextMock).not.toHaveBeenCalled();
-    expect(result.messages[0]).toEqual({
-      role: 'assistant',
-      content: 'a3',
-    });
-    expect(findBlock(result, 'thread-summary')).toEqual(
-      expect.objectContaining({
-        kind: 'thread-summary',
-        status: 'dropped',
-        reason: 'summary unavailable',
-      })
-    );
-  });
-
-  it('regenerates the thread summary from scratch when the persisted coverage is ahead of the compactable window', async () => {
-    const storedRows = [
-      makeStoredMessage('user', 'u1'),
-      makeStoredMessage('assistant', 'a1'),
-      makeStoredMessage('user', 'u2'),
-      makeStoredMessage('assistant', 'a2'),
-      makeStoredMessage('user', 'u3'),
-      makeStoredMessage('assistant', 'a3'),
-    ];
-    getChatMessagesMock.mockReturnValue(storedRows as never[]);
-    getThreadContextMock.mockReturnValue({
-      thread_id: 'thread_summary_regen',
-      summary: 'Too-far-ahead summary.',
-      covered_message_count: 5,
-      metadata: {},
-    });
-    generateThreadSummaryMock.mockResolvedValue({
-      summary: 'Regenerated summary.',
-      model: { providerType: 'openai', model: 'gpt-4o-mini' },
-    });
-
-    const { assembler } = createAssembler();
-
-    const result = await assembler.assemble({
-      memoryContextConfig: baseConfig.memory.context,
-      threadId: 'thread_summary_regen',
-      messages: [
-        { role: 'user', content: 'u1' },
-        { role: 'assistant', content: 'a1' },
-        { role: 'user', content: 'u2' },
-        { role: 'assistant', content: 'a2' },
-        { role: 'user', content: 'u3' },
-        { role: 'assistant', content: 'a3' },
-      ],
-    });
-
-    expect(generateThreadSummaryMock).toHaveBeenCalledWith({
-      threadId: 'thread_summary_regen',
-      existingSummary: '',
-      messages: [
-        { role: 'user', content: 'u1' },
-        { role: 'assistant', content: 'a1' },
-        { role: 'user', content: 'u2' },
-        { role: 'assistant', content: 'a2' },
-      ],
-    });
-    expect(upsertThreadContextMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        thread_id: 'thread_summary_regen',
-        summary: 'Regenerated summary.',
-        covered_message_count: 4,
-      })
-    );
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: 'Thread summary:\nRegenerated summary.',
-    });
-  });
-
-  it('deletes persisted thread summaries when there is nothing compactable anymore', async () => {
-    getAppConfigMock.mockReturnValue({
-      memory: {
-        context: {
-          ...baseConfig.memory.context,
-          summaryTriggerMessages: 1,
-          summaryRecentMessages: 4,
-        },
-      },
-    });
-    getChatMessagesMock.mockReturnValue([makeStoredMessage('user', 'u1')] as never[]);
-    getThreadContextMock.mockReturnValue({
-      thread_id: 'thread_summary_delete',
-      summary: 'Old summary.',
-      covered_message_count: 1,
-      metadata: {},
-    });
-
-    const { assembler } = createAssembler();
-
-    const result = await assembler.assemble({
-      memoryContextConfig: baseConfig.memory.context,
-      threadId: 'thread_summary_delete',
-      messages: [{ role: 'user', content: 'u1' }],
-    });
-
-    expect(deleteThreadContextMock).toHaveBeenCalledWith('thread_summary_delete');
-    expect(generateThreadSummaryMock).not.toHaveBeenCalled();
-    expect(upsertThreadContextMock).not.toHaveBeenCalled();
-    expect(findBlock(result, 'thread-summary')).toEqual(
-      expect.objectContaining({
-        kind: 'thread-summary',
-        status: 'dropped',
-        reason: 'thread too short for summarization',
-      })
-    );
-  });
 
   it('injects the active identity block through the shared context pipeline', async () => {
     getAssistantProfileContextMessageMock.mockReturnValue(
@@ -1233,15 +923,17 @@ describe('chat_context assembler', () => {
     );
   });
 
-  it('loads IKI.md agent instructions from the workspace root into the identity block', async () => {
+  it.each(['AGENTS.md', 'IKI.md'])('loads complete %s instructions, preferring AGENTS.md over the legacy file', async filename => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iki-ikitest-'));
     try {
       const ikiContent = [
-        '# IKI',
+        '# Instructions',
+        'preserve this constraint '.repeat(1000),
         '',
         'Always ask before writing to any file. Prefer read-only operations during exploration.',
       ].join('\n');
-      fs.writeFileSync(path.join(tmpDir, 'IKI.md'), ikiContent);
+      fs.writeFileSync(path.join(tmpDir, 'IKI.md'), 'Legacy instructions');
+      fs.writeFileSync(path.join(tmpDir, filename), ikiContent);
 
       getThreadWorkspaceSelectionMock.mockReturnValue({
         threadId: 'thread_iki_md',
@@ -1266,9 +958,11 @@ describe('chat_context assembler', () => {
         message =>
           message.role === 'system' &&
           typeof message.content === 'string' &&
-          message.content.includes('IKI.md')
+          message.content.includes(filename)
       );
       expect(identityMessage).toBeTruthy();
+      expect(String(identityMessage!.content)).toContain(ikiContent);
+      expect(String(identityMessage!.content)).not.toContain('Legacy instructions');
       expect(String(identityMessage!.content)).toContain(
         'Always ask before writing to any file'
       );

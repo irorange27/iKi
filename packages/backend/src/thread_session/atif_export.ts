@@ -1,3 +1,5 @@
+import { version } from '../../../../package.json';
+import { isObjectRecord } from '../utils/guards';
 import { z } from 'zod';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
@@ -40,7 +42,7 @@ const AtifObservationSchema = z.object({
   results: z.array(
     z.object({
       source_call_id: z.string(),
-      content: z.unknown(),
+      content: z.string(),
     })
   ),
 });
@@ -50,7 +52,7 @@ const AtifStepSchema = z.object({
   timestamp: z.string(),
   source: z.enum(['system', 'user', 'agent']),
   model_name: z.string().optional(),
-  message: z.string().optional(),
+  message: z.string(),
   reasoning_content: z.string().optional(),
   tool_calls: z.array(AtifToolCallSchema).optional(),
   observation: AtifObservationSchema.optional(),
@@ -64,7 +66,7 @@ export const AtifTrajectorySchema = z.object({
   trajectory_id: z.string().optional(),
   agent: z.object({
     name: z.string(),
-    version: z.string().optional(),
+    version: z.string(),
     model_name: z.string().optional(),
     extra: z.record(z.string(), z.unknown()).optional(),
   }),
@@ -147,25 +149,62 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
 
   const observationByCallId = new Map<string, AtifStep['observation']>();
   for (const step of orderedSteps) {
-    if (step.type !== 'tool-result') continue;
+    if (step.type !== 'tool-result' && !(step.type === 'error' && stepInput(step).toolCallId)) continue;
     const output = stepOutput(step);
     const content = 'error' in output ? output.error : (output.output ?? null);
     observationByCallId.set(toolCallIdOf(step), {
-      results: [{ source_call_id: toolCallIdOf(step), content }],
+      results: [{ source_call_id: toolCallIdOf(step), content: typeof content === 'string' ? content : JSON.stringify(content) }],
     });
   }
+
+  const inferences = orderedSteps.filter(step => step.type === 'model' && stepOutput(step).inference === true);
+  const recordedCallIds = new Set(inferences.flatMap(step => {
+    const content = stepOutput(step).content;
+    return Array.isArray(content) ? content.filter(isObjectRecord).flatMap(part =>
+      part.type === 'tool-call' && typeof part.toolCallId === 'string' ? [part.toolCallId] : []) : [];
+  }));
 
   for (const step of orderedSteps) {
     const output = stepOutput(step);
     const extra: Record<string, unknown> = { run_step_index: step.stepIndex, run_step_type: step.type };
 
-    if (step.type === 'tool-result' && !observationByCallId.has(toolCallIdOf(step))) continue;
+    if ((step.type === 'tool-result' || (step.type === 'error' && stepInput(step).toolCallId)) && !observationByCallId.has(toolCallIdOf(step))) continue;
 
     const base = {
       step_id: trajectorySteps.length + 1,
       timestamp: step.startedAt,
       source: 'agent' as const,
     };
+
+    if (inferences.length > 0) {
+      if ((step.type === 'tool-call' || step.type === 'tool-result' || step.type === 'error') && recordedCallIds.has(toolCallIdOf(step))) continue;
+      if (step.type === 'model' && output.inference !== true) continue;
+    }
+    if (step.type === 'model' && output.inference === true) {
+      const parts = Array.isArray(output.content) ? output.content.filter(isObjectRecord) : [];
+      const calls = parts.filter(part => part.type === 'tool-call').map(part => ({
+        tool_call_id: String(part.toolCallId), function_name: String(part.toolName), arguments: part.input,
+      }));
+      const results = parts.filter(part => part.type === 'tool-result' || part.type === 'tool-error').map(part => ({
+        source_call_id: String(part.toolCallId),
+        content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
+      }));
+      const usage = isObjectRecord(output.usage) ? output.usage : {};
+      trajectorySteps.push({
+        ...base, model_name: modelName,
+        message: parts.filter(part => part.type === 'text').map(part => part.text).join(''),
+        reasoning_content: parts.filter(part => part.type === 'reasoning').map(part => part.text).join(''),
+        ...(calls.length ? { tool_calls: calls } : {}),
+        ...(results.length ? { observation: { results } } : {}),
+        metrics: {
+          prompt_tokens: typeof usage.inputTokens === 'number' ? usage.inputTokens : undefined,
+          completion_tokens: typeof usage.outputTokens === 'number' ? usage.outputTokens : undefined,
+          cached_tokens: typeof usage.cacheReadTokens === 'number' ? usage.cacheReadTokens : undefined,
+        },
+        extra,
+      });
+      continue;
+    }
 
     if (step.type === 'tool-call') {
       const input = stepInput(step);
@@ -195,8 +234,7 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
         ...base,
         model_name: modelName,
         message: step.summary,
-        observation: { results: [{ source_call_id: toolCallIdOf(step), content: output.output ?? null }] },
-        extra,
+        extra: { ...extra, unmatched_output: output },
       });
       continue;
     }
@@ -205,8 +243,8 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
       trajectorySteps.push({
         ...base,
         message: step.summary,
-        observation: { results: [{ source_call_id: `error_${step.stepIndex}`, content: output }] },
-        extra,
+        source: 'system',
+        extra: { ...extra, error: output },
       });
       continue;
     }
@@ -251,6 +289,7 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     trajectory_id: run.id,
     agent: {
       name: 'iKi',
+      version,
       model_name: modelName,
       extra: {
         provider_type: run.providerType,

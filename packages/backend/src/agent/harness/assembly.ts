@@ -11,12 +11,16 @@ export type TurnHarnessAssembly = Omit<HarnessConfig, 'maxOutputTokens'> & {
   maxOutputTokens?: HarnessConfig['maxOutputTokens'] | null;
 };
 
-const toHarnessConfig = (assembly: TurnHarnessAssembly): HarnessConfig => ({
-  ...assembly,
-  ...(typeof assembly.maxOutputTokens === 'number'
-    ? { maxOutputTokens: assembly.maxOutputTokens }
-    : {}),
-});
+const toHarnessConfig = (assembly: TurnHarnessAssembly): HarnessConfig => {
+  const { maxInputTokens, maxOutputTokens, ...config } = assembly;
+  const validBudget = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0;
+  return {
+    ...config,
+    ...(validBudget(maxInputTokens) ? { maxInputTokens } : {}),
+    ...(validBudget(maxOutputTokens) ? { maxOutputTokens } : {}),
+  };
+};
 
 /** A harness for a brand-new turn (stream send, chat send, delegated subagent). */
 export const startTurnHarness = (assembly: TurnHarnessAssembly): AgentHarness =>

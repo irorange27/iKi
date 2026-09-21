@@ -68,7 +68,7 @@ import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
-import { createTool, defaultToolRegistry } from '@iki/backend/tools';
+import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools';
 
 const toolName = 'streaming_context_probe';
 
@@ -203,4 +203,89 @@ describe('createChatStreaming integration', () => {
       chunks.indexOf(usageChunk)
     );
   });
+  const setupLoop = (faux: FauxModelProvider, toolNames: string[] = []) => {
+    createModelMock.mockReturnValue(faux);
+    prepareChatTurnMock.mockResolvedValue({
+      report: { totalEstimatedTokens: 1 }, usedSkills: [], selectedSkillIds: [], skillMode: 'manual',
+      finalMessages: [{ role: 'user', content: 'original task' }], history: [], prompt: 'original task',
+      guardActive: false, requireApproval: false, autoApproveToolRequests: false,
+      affectSignal: null, interventionPolicy: null, guardedTools: toolNames, enableTools: toolNames.length > 0,
+    });
+    const coordinator = createThreadStreamCoordinator();
+    const streaming = createChatStreaming({
+      streamCoordinator: coordinator, memory: {} as never,
+      usage: { recordUsageEvent: vi.fn() },
+      approvals: {
+        ensurePendingApprovalSession: vi.fn(), registerApprovalBatch: vi.fn(),
+        cleanupPendingSessionsForSender: vi.fn(),
+      },
+      getThreadTitle: () => 'Thread',
+    });
+    const run = (maxIterations = 10, batches = 2) => streaming.stream({ id: 42, send: vi.fn() }, {
+      providerType: 'openai', providerId: 'provider_primary', model: 'test-model',
+      threadId: 'thread_1', messages: [{ role: 'user', content: 'original task' }],
+      tools: toolNames, maxIterations, autonomous: { maxIterations: batches },
+    });
+    return { coordinator, run };
+  };
+
+  it('ends autonomous work on a natural model stop without spending another call', async () => {
+    const faux = new FauxModelProvider([fauxText('done'), fauxText('must not run')]);
+    const { run } = setupLoop(faux);
+    expect(await run()).toMatchObject({ success: true, text: 'done' });
+    expect(faux.remaining).toBe(1);
+  });
+
+  it('resumes an autonomous handoff with its summary and next task', async () => {
+    defaultToolRegistry.register(new HandoffTool());
+    const faux = new FauxModelProvider([
+      fauxToolCall('handoff', { summary: 'Found the defect', next_steps: 'Fix it', reason: 'context_limit' }),
+      fauxText('fixed'),
+    ]);
+    const call = vi.spyOn(faux, 'doStream');
+    const { run } = setupLoop(faux, ['handoff']);
+    try {
+      expect(await run()).toMatchObject({ success: true });
+      expect(call).toHaveBeenCalledTimes(2);
+      const prompt = JSON.stringify(call.mock.calls[1][0].prompt);
+      expect(prompt).toContain('Found the defect');
+      expect(prompt).toContain('Fix it');
+    } finally { defaultToolRegistry.remove('handoff'); }
+  });
+
+  it('respects the autonomous batch limit after SDK step exhaustion', async () => {
+    defaultToolRegistry.register(createTool({
+      name: toolName, type: 'function', description: 'Probe',
+      paramSchema: z.object({}), handler: async () => 'observation',
+    }));
+    const faux = new FauxModelProvider([
+      fauxToolCall(toolName, {}), fauxToolCall(toolName, {}), fauxText('must not run'),
+    ]);
+    const { run } = setupLoop(faux, [toolName]);
+    expect(await run(1, 2)).toMatchObject({ success: true });
+    expect(faux.remaining).toBe(1);
+  });
+
+  it('preserves observations and the latest human feedback during steering', async () => {
+    defaultToolRegistry.register(createTool({
+      name: toolName, type: 'function', description: 'Probe',
+      paramSchema: z.object({}), handler: async () => 'completed observation',
+    }));
+    const faux = new FauxModelProvider([
+      fauxToolCall(toolName, {}), fauxText('interrupted'), fauxText('steered response'),
+    ]);
+    const { coordinator, run } = setupLoop(faux, [toolName]);
+    const original = faux.doStream.bind(faux);
+    let calls = 0;
+    const call = vi.spyOn(faux, 'doStream').mockImplementation(options => {
+      if (++calls === 2) expect(coordinator.steerStream(42, 'thread_1', 'new direction').success).toBe(true);
+      return original(options);
+    });
+    expect(await run()).toMatchObject({ success: true, text: 'steered response' });
+    const prompt = JSON.stringify(call.mock.calls[2][0].prompt);
+    expect(prompt).toContain('completed observation');
+    expect(prompt.match(/original task/g)).toHaveLength(1);
+    expect(JSON.stringify(call.mock.calls[2][0].prompt.at(-1))).toContain('new direction');
+  });
+
 });

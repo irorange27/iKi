@@ -42,7 +42,7 @@ describe('resolveTools approvalPolicy (ADR 005)', () => {
     expect(needsApproval(tools, 'read_file')).toBe(true);
   });
 
-  it('trustWorkspace auto-approves workspace writes and readonly shell, escalates the rest', () => {
+  it('trustWorkspace auto-approves workspace writes but gates all shell commands', () => {
     const tools = resolve('trustWorkspace', ['write_file', 'read_file', 'edit', 'shell', 'delete_file']);
 
     const writeNeed = needsApproval(tools, 'write_file');
@@ -50,10 +50,16 @@ describe('resolveTools approvalPolicy (ADR 005)', () => {
     expect((writeNeed as (input: unknown) => boolean)({ path: 'a.txt' })).toBe(false);
 
     const shellNeed = needsApproval(tools, 'shell') as (input: unknown) => boolean;
-    expect(shellNeed({ command: 'ls -la' })).toBe(false);
+    expect(shellNeed({ command: 'ls -la' })).toBe(true);
     expect(shellNeed({ command: 'rm -rf build' })).toBe(true);
 
     expect((needsApproval(tools, 'delete_file') as (input: unknown) => boolean)({})).toBe(true);
+  });
+
+  it('askRisky gates writes and unknown tools while allowing known reads', () => {
+    const tools = resolve('askRisky');
+    expect((needsApproval(tools, 'write_file') as (input: unknown) => boolean)({})).toBe(true);
+    expect((needsApproval(tools, 'read_file') as (input: unknown) => boolean)({})).toBe(false);
   });
 
   it('defaults to the legacy guard behavior when no policy is set', () => {

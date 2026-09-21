@@ -1,3 +1,4 @@
+import { getToolRuntimeContext, runWithToolRuntimeContext } from '../utils/runtime_context';
 import {
   jsonSchema,
   tool,
@@ -66,9 +67,16 @@ export const buildAiToolSet = (
             ? { outputSchema: jsonSchema(agentTool.outputSchema as object) }
             : {}),
           needsApproval: agentTool.needsApproval,
-          execute: agentTool.retry
-            ? withRetry(async (input: unknown) => await agentTool.handler(input), agentTool.retry)
-            : async (input: unknown) => await agentTool.handler(input),
+          execute: async (input, options) => runWithToolRuntimeContext(
+            { ...getToolRuntimeContext(), abortSignal: options.abortSignal },
+            async () => {
+              const invoke = async () => {
+                options.abortSignal?.throwIfAborted();
+                return agentTool.handler(input);
+              };
+              return agentTool.retry ? withRetry(invoke, agentTool.retry)() : invoke();
+            },
+          ),
         };
         const toolDef = tool(definition);
 
@@ -134,10 +142,6 @@ export const buildPromptContext = (
   config: Pick<AgentConfig, 'providerType' | 'providerId' | 'systemPrompt'>,
   history: ModelMessage[]
 ): { systemPrompt: string; messages: ModelMessage[] } => {
-  const MAX_MESSAGES = 80;
-  const KEEP_RECENT = 40;
-  const KEEP_PREFIX = 5;
-
   const conversationMessages = history.filter(message => message.role !== 'system');
   const sanitizedConversation = sanitizeModelConversationMessages(conversationMessages);
   const sanitized = sanitizedConversation.messages;
@@ -156,33 +160,6 @@ export const buildPromptContext = (
     }
   }
 
-  // Compaction: when conversation exceeds threshold, keep recent messages + prefix,
-  // drop middle, and insert a compaction note so the model knows context was truncated.
-  let compactedHistory: ModelMessage[] = sanitized;
-  if (sanitized.length > MAX_MESSAGES) {
-    const prefix = sanitized.slice(0, KEEP_PREFIX);
-    const recent = sanitized.slice(-KEEP_RECENT);
-    const droppedCount = sanitized.length - KEEP_PREFIX - KEEP_RECENT;
-    compactedHistory = [...prefix, ...recent];
-
-    systemParts.push(
-      `[History compacted: ${droppedCount} older messages were dropped to stay within context limits. ` +
-      `The first ${KEEP_PREFIX} messages and most recent ${KEEP_RECENT} messages are preserved. ` +
-      `If the missing context matters, ask the user or re-read relevant files.]`
-    );
-
-    logger.event({
-      level: 'info',
-      event: 'agent.history.compacted',
-      outcome: 'degraded',
-      data: {
-        original_message_count: sanitized.length,
-        compacted_message_count: compactedHistory.length,
-        dropped_message_count: droppedCount,
-      },
-    });
-  }
-
   if (sanitizedConversation.droppedMessages > 0) {
     logger.event({
       level: 'warn',
@@ -198,7 +175,7 @@ export const buildPromptContext = (
 
   return {
     systemPrompt: systemParts.join('\n\n'),
-    messages: compactedHistory,
+    messages: sanitized,
   };
 };
 

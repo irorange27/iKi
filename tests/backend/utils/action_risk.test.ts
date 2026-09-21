@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { classifyActionRisk } from '@iki/backend/utils/action_risk';
 
 describe('classifyActionRisk', () => {
-  it('auto-approves readonly shell commands', () => {
-    expect(classifyActionRisk('shell', { command: 'ls -la' })).toBe('safe');
-    expect(classifyActionRisk('shell', { command: 'cat notes.md | head -5' })).toBe('safe');
+  it('gates shell without guessing what arbitrary programs do', () => {
+    expect(classifyActionRisk('shell', { command: 'ls -la' })).toBe('escalate');
+    expect(classifyActionRisk('shell', { command: 'cat notes.md | head -5' })).toBe('escalate');
   });
 
   it('escalates mutating and dangerous shell commands', () => {

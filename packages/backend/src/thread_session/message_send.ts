@@ -130,6 +130,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           maxIterations,
           threadId: options.threadId,
           maxOutputTokens: preparedTurn.maxOutputTokens,
+          maxInputTokens: preparedTurn.maxInputTokens,
           ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
           ...(approvalPolicy ? { approvalPolicy } : {}),
         });

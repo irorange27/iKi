@@ -40,7 +40,11 @@ describe('AgentHarness', () => {
       modelFactory: () => faux,
     });
 
+    const modelCall = vi.spyOn(faux, 'doStream');
     const { events, output } = await drainTurn(harness, 'Say hello');
+    expect(modelCall.mock.calls[0][0].prompt).toContainEqual({
+      role: 'system', content: 'You are a test agent.',
+    });
 
     // Should have message_update step(s) + done event
     const steps = events.filter(e => e.event === 'step');
@@ -128,7 +132,9 @@ describe('AgentHarness', () => {
       modelFactory: () => faux,
     });
 
-    const { events, output } = await drainTurn(harness, 'Research then handoff');
+    const { events, output } = await drainTurn(harness, 'Research then handoff', {
+      toolsOverride: [handoffTool],
+    });
 
     const handoffSteps = events.filter(e => e.event === 'step' && e.step.type === 'handoff');
     expect(handoffSteps.length).toBe(1);
@@ -136,6 +142,55 @@ describe('AgentHarness', () => {
     expect(output.handoff).toBeDefined();
     expect(output.handoff!.summary).toBe('Research done');
     expect(output.handoff!.nextSteps).toBe('Write report');
+    expect(faux.remaining).toBe(1);
+  });
+
+  it('preserves completed tool steps when a later model call is aborted', async () => {
+    const abort = new AbortController();
+    const probe = createTool({
+      name: 'probe', type: 'function', description: 'Probe',
+      paramSchema: z.object({}), handler: async () => 'durable observation',
+    });
+    const faux = new FauxModelProvider([fauxToolCall('probe', {}), fauxText('unused')]);
+    const original = faux.doStream.bind(faux);
+    let calls = 0;
+    vi.spyOn(faux, 'doStream').mockImplementation(options => {
+      if (++calls === 2) abort.abort('steer');
+      return original(options);
+    });
+    const harness = new AgentHarness({
+      providerType: 'faux', model: 'faux-model', systemPrompt: 'Test.',
+      enableTools: true, enabledToolNames: [], availableSkillIds: [],
+      guardActive: false, maxIterations: 3, modelFactory: () => faux,
+    });
+    const consume = async () => {
+      for await (const _event of harness.turn({
+        prompt: 'original task', toolsOverride: [probe], abortSignal: abort.signal,
+      })) { /* drain */ }
+    };
+    await expect(consume()).rejects.toMatchObject({ name: 'AbortError' });
+    expect(harness.getHistory().map(message => message.role)).toEqual(['user', 'assistant', 'tool']);
+    expect(JSON.stringify(harness.getHistory())).toContain('durable observation');
+  });
+
+  it('advances the Anthropic cache breakpoint through real SDK tool steps', async () => {
+    const probe = createTool({
+      name: 'probe', type: 'function', description: 'Probe',
+      paramSchema: z.object({}), handler: async () => 'observation',
+    });
+    const faux = new FauxModelProvider([fauxToolCall('probe', {}), fauxText('done')]);
+    const call = vi.spyOn(faux, 'doStream');
+    const harness = new AgentHarness({
+      providerType: 'anthropic', model: 'faux-model', systemPrompt: 'Test.',
+      enableTools: true, enabledToolNames: [], availableSkillIds: [],
+      guardActive: false, maxIterations: 3, modelFactory: () => faux,
+    });
+    await drainTurn(harness, 'check', { toolsOverride: [probe] });
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(call.mock.calls[1][0].prompt.at(-1)).toMatchObject({
+      role: 'tool', providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+    });
+    expect(harness.getHistory().some(message => message.providerOptions?.anthropic)).toBe(false);
   });
 
   it('tracks history across turns', async () => {

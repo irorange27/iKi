@@ -42,12 +42,6 @@ export type AssembleChatContextResult = {
   effectiveContextConfig: EffectiveContextConfig;
 };
 
-export type ThreadSummaryState = {
-  summary: string;
-  coveredMessageCount: number;
-  sourceMessageCount: number;
-  stale: boolean;
-};
 
 export type ContextConfig = typeof DEFAULT_APP_CONFIG.memory.context;
 
@@ -77,15 +71,7 @@ export type RecentHistoryContext = {
   block: ContextReportBlock;
 };
 
-export type ConversationChunk = {
-  messages: ChatInputMessage[];
-  preserveAtomically: boolean;
-};
 
-export type SummaryContext = {
-  systemMessage: string;
-  block: ContextReportBlock;
-};
 
 export type IdentityContext = {
   systemMessage: string;

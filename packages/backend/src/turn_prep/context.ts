@@ -18,8 +18,6 @@ import {
   insertSystemMessages,
 } from './context_helpers';
 import {
-  buildThreadSummaryContext,
-  ensureThreadSummary,
   selectRecentHistory,
 } from './context_history';
 import type { AssembleChatContextParams, SkillContext } from './context_types';
@@ -76,22 +74,7 @@ export const createChatContextAssembler = (deps: {
         );
     blocks.push(identityContext.block);
 
-    const threadSummary =
-      benchmarkCleanContext || !params.threadId
-        ? null
-        : await ensureThreadSummary(params.threadId, contextConfig);
-    const summaryContext = benchmarkCleanContext
-      ? {
-          systemMessage: '',
-          block: buildDroppedBlock('thread-summary', 'disabled for benchmark clean mode'),
-        }
-      : buildThreadSummaryContext(
-          threadSummary,
-          recentHistory.compactedMessages,
-          contextConfig,
-          params.modelCapability
-        );
-    blocks.push(summaryContext.block);
+    blocks.push(buildDroppedBlock('thread-summary', 'managed at model step boundary'));
 
     const query = buildQueryFromMessages(params.messages);
     const memoryContext =
@@ -113,7 +96,6 @@ export const createChatContextAssembler = (deps: {
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
       [
         identityContext.systemMessage,
-        summaryContext.systemMessage,
         memoryContext.systemMessage,
       ]
     );

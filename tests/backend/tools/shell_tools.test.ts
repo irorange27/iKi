@@ -1,3 +1,4 @@
+import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 
@@ -34,107 +35,33 @@ describe('shell tool', () => {
     vi.stubGlobal('setTimeout', vi.fn(() => ({} as ReturnType<typeof setTimeout>)));
   });
 
-  it('is auto-eligible and has dynamic needsApproval', () => {
+  it('requires explicit approval for arbitrary shell execution', () => {
     const tool = newTool().toAgentTool();
     expect(tool.autoAllowed).toBe(true);
-    expect(tool.needsApproval).toBeTypeOf('function');
+    expect(tool.needsApproval).toBe(true);
+    expect(tool.approvalMode).toBe('always');
   });
 
-  describe('isShellCommandReadonly (via needsApproval)', () => {
-    const needsApprovalFor = (command: string): boolean => {
-      const tool = newTool();
-      const fn = tool.needsApproval as (args: { command: string }) => boolean;
-      return fn({ command });
-    };
 
-    // Read-only: no approval needed
-    it.each([
-      'ls',
-      'ls -la',
-      'cat /tmp/file.txt',
-      'head -n 10 /var/log/syslog',
-      'tail -f /var/log/app.log',
-      'grep error /var/log/*.log',
-      'find . -name "*.ts"',
-      'wc -l file.txt',
-      'which node',
-      'pwd',
-      'date',
-      'uname -a',
-      'whoami',
-      'echo hello world',
-      'ps aux',
-      'stat package.json',
-      'file README.md',
-      'du -sh .',
-      'df -h',
-      'node -v',
-      'python --version',
-      'git status',
-      'git log --oneline -5',
-      'git diff HEAD~1',
-      'git branch',
-      'git show HEAD',
-      'npm list',
-      'pnpm list',
-      'pnpm outdated',
-      'brew list',
-      'docker ps',
-      'kubectl get pods',
-      'helm list',
-      'pgrep node',
-      'man ls',
-    ])('returns false (no approval) for: %s', (command) => {
-      expect(needsApprovalFor(command)).toBe(false);
-    });
+  it('cancels the process without retrying the command', async () => {
+    const child = buildChild();
+    spawnMock.mockReturnValue(child);
+    const abort = new AbortController();
+    const result = runWithToolRuntimeContext({ abortSignal: abort.signal }, () => newTool().handler({ command: 'work' }));
+    const rejected = expect(result).rejects.toBeDefined();
+    await Promise.resolve();
+    abort.abort();
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    child.emit('close', null);
+    await rejected;
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+  });
 
-    // Dangerous: needs approval
-    it.each([
-      'rm file.txt',
-      'rm -rf node_modules',
-      'mv a b',
-      'cp file backup',
-      'mkdir newdir',
-      'touch newfile',
-      'chmod +x script.sh',
-      'sudo ls',
-      'kill 1234',
-      'killall node',
-      'curl https://example.com',
-      'curl -X POST https://example.com',
-      'wget https://example.com/file.zip',
-      'git commit -m "fix"',
-      'git push origin main',
-      'git checkout -b new-branch',
-      'git merge feature',
-      'npm install express',
-      'pnpm add lodash',
-      'pip install requests',
-      'brew install ripgrep',
-      'docker run alpine',
-      'kubectl delete pod x',
-      'echo hello > file.txt',
-      'echo hello >> file.txt',
-    ])('returns true (needs approval) for: %s', (command) => {
-      expect(needsApprovalFor(command)).toBe(true);
-    });
-
-    // Chained commands: all parts must be safe
-    it.each([
-      ['ls && cat file.txt', false],
-      ['ls && rm file.txt', true],
-      ['git status && git log', false],
-      ['git status && git push', true],
-      ['echo safe; echo also-safe', false],
-      ['echo safe; rm -rf /', true],
-    ])('chained command "%s" → needsApproval=%s', (command, expected) => {
-      expect(needsApprovalFor(command)).toBe(expected);
-    });
-
-    // Unknown commands default to unsafe
-    it('returns true for unknown commands (fail safe)', () => {
-      expect(needsApprovalFor('some-unknown-command --flag')).toBe(true);
-    });
+  it('does not start an already cancelled command', async () => {
+    const abort = new AbortController();
+    abort.abort();
+    await expect(runWithToolRuntimeContext({ abortSignal: abort.signal }, () => newTool().handler({ command: 'work' }))).rejects.toBeDefined();
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it('executes a shell command and returns stdout/stderr/exitCode', async () => {

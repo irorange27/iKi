@@ -1,10 +1,14 @@
+import { autoCompactHistory, estimateMessageTokens, estimateTextTokens } from '../context_budget';
+import { generateThreadSummary } from '../../runtimes/thread_summary';
 import {
+  hasToolCall,
   smoothStream,
   stepCountIs,
   streamText,
   type LanguageModel,
   type ModelMessage,
   type ToolSet,
+  type StepResult,
 } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
@@ -130,6 +134,8 @@ export interface AgentRunnerRequest {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  maxInputTokens?: number;
+  onModelStep?: (step: StepResult<ToolSet>, messages: ModelMessage[], system: string) => void;
   /** Reasoning-effort override (e.g. 'low' | 'medium' | 'high') merged into providerOptions. */
   reasoningEffort?: string;
 
@@ -157,7 +163,7 @@ export class SimpleAgentRunner {
   private history: ModelMessage[] = [];
 
   constructor(
-    config?: PartialAgentConfig & {
+    config?: {
         modelFactory?: (
         providerType: string,
         modelId: string,
@@ -183,18 +189,9 @@ export class SimpleAgentRunner {
 
     // streamText only sees the internal controller, so without this wiring
     // a caller's stop/supersede/steer abort would never reach the model call.
-    const externalAbort = request.abortSignal;
-    if (externalAbort) {
-      if (externalAbort.aborted) {
-        this.abortController.abort();
-      } else {
-        externalAbort.addEventListener(
-          'abort',
-          () => this.abortController.abort(),
-          { once: true },
-        );
-      }
-    }
+    const signal = request.abortSignal
+      ? AbortSignal.any([this.abortController.signal, request.abortSignal])
+      : this.abortController.signal;
 
     const config = loadAgentConfig({
       ...(request.config ?? {}),
@@ -224,9 +221,7 @@ export class SimpleAgentRunner {
     let retryAttempt = 0;
 
     while (retryAttempt <= retryMaxAttempts) {
-      if (this.cancelRequested) {
-        throw new Error('Run cancelled');
-      }
+      signal.throwIfAborted();
 
       const usingCustomModel = Boolean(this.modelFactory);
       const model = usingCustomModel
@@ -239,6 +234,14 @@ export class SimpleAgentRunner {
       const messages = withCacheBreakpoint(config.providerType, promptContext.messages);
       const { systemPrompt } = promptContext;
 
+      let stepContext: ModelMessage[] = [];
+      let seenMessages = 0;
+      let summaryMessage: ModelMessage | undefined;
+      let streamError: unknown;
+      let emittedOutput = false;
+      const overhead = estimateTextTokens(systemPrompt) + estimateTextTokens(JSON.stringify(
+        (request.tools ?? []).map(tool => ({ name: tool.name, description: tool.description, parameters: tool.parameters }))
+      ));
       try {
         const telemetry = langfuseTelemetry('agent.stream', {
           sessionId: request.threadId,
@@ -259,10 +262,49 @@ export class SimpleAgentRunner {
             reasoningEffort: request.reasoningEffort,
           }),
           maxOutputTokens: config.maxTokens,
-          stopWhen: stepCountIs(
-            config.enableTools ? Math.max(1, maxIterations - totalSteps) : 1
-          ),
-          abortSignal: this.abortController?.signal,
+          stopWhen: [
+            stepCountIs(config.enableTools ? Math.max(1, maxIterations - totalSteps) : 1),
+            hasToolCall('handoff'),
+          ],
+          prepareStep: async ({ messages: stepMessages }) => {
+            signal.throwIfAborted();
+            stepContext = [...stepContext, ...stepMessages.slice(seenMessages)];
+            seenMessages = stepMessages.length;
+            if (request.maxInputTokens) {
+              const budget = request.maxInputTokens - overhead;
+              const planned = autoCompactHistory({ history: stepContext, maxInputTokens: budget });
+              if (planned.compacted) {
+                const summary = await generateThreadSummary({
+                  threadId: request.threadId,
+                  abortSignal: signal,
+                  existingSummary: typeof summaryMessage?.content === 'string' ? summaryMessage.content : undefined,
+                  messages: planned.omitted.map(message => ({
+                    role: message.role === 'user' ? 'user' : 'assistant',
+                    content: typeof message.content === 'string' ? message.content : JSON.stringify({ role: message.role, content: message.content }),
+                  })),
+                });
+                signal.throwIfAborted();
+                if (!summary) throw new Error('Context compaction failed; original history has been preserved.');
+                const systems = planned.history.filter(message => message.role === 'system' && message !== summaryMessage);
+                summaryMessage = { role: 'system', content: `Earlier conversation summary:\n${summary.summary}` };
+                stepContext = [
+                  ...systems,
+                  summaryMessage,
+                  ...planned.history.filter(message => message.role !== 'system'),
+                ];
+              }
+              if (stepContext.reduce((sum, message) => sum + estimateMessageTokens(message), overhead) > request.maxInputTokens) {
+                throw new Error('Context budget exceeded by protected instructions or the current turn; history has been preserved.');
+              }
+            }
+            return { messages: withCacheBreakpoint(config.providerType, stepContext) };
+          },
+          onStepFinish: step => {
+            // SDK step responses contain all completed messages in this attempt.
+            this.history = appendResponseMessages(history, step.response.messages);
+            request.onModelStep?.(step, stepContext, systemPrompt);
+          },
+          abortSignal: signal,
           experimental_transform: smoothStream(),
           ...(telemetry ? { experimental_telemetry: telemetry } : {}),
           onAbort: () => {
@@ -316,6 +358,7 @@ export class SimpleAgentRunner {
           }
 
           if (part.type === 'text-delta' && part.text) {
+            emittedOutput = true;
             if (stepStartedAt !== null && firstDeltaAt === null) {
               firstDeltaAt = Date.now() - stepStartedAt;
               attemptFirstTokenSamples.push(firstDeltaAt);
@@ -326,6 +369,7 @@ export class SimpleAgentRunner {
           }
 
           if (part.type === 'tool-call') {
+            emittedOutput = true;
             const toolName =
               typeof part.toolName === 'string' ? part.toolName : '';
             if (toolName && TERMINAL_TOOL_NAMES.has(toolName)) {
@@ -463,6 +507,7 @@ export class SimpleAgentRunner {
             // Collect them so the post-stream promise resolution can surface
             // the underlying cause instead of a generic "No output generated".
             const error = part.error as Error;
+            streamError = error ?? new Error('Model stream failed');
             logger.event({
               level: 'error',
               event: 'agent.stream.error_part',
@@ -522,10 +567,11 @@ export class SimpleAgentRunner {
           }
         }
 
-        if (this.cancelRequested) {
-          disposeLanguageModel(model);
-          throw new Error('Run cancelled');
+        if (this.cancelRequested || signal.aborted) {
+          throw new DOMException('Run cancelled', 'AbortError');
         }
+
+        if (streamError) throw streamError;
 
         // Resolve post-stream promises independently. The AI SDK may reject
         // some of them with NoOutputGeneratedError when the outer stream
@@ -642,7 +688,6 @@ export class SimpleAgentRunner {
           } satisfies ApprovalRequestStep;
 
           // Return so caller can gate approval and resume
-          disposeLanguageModel(model);
           return {
             response: allText || streamedText,
             toolApprovalRequests: mergedApprovalRequests,
@@ -706,7 +751,6 @@ export class SimpleAgentRunner {
         };
         yield finishStep;
 
-        disposeLanguageModel(model);
 
         const allToolCalls = collectToolCalls(steps, resultToolCalls);
 
@@ -718,13 +762,13 @@ export class SimpleAgentRunner {
           usage: cumulativeUsage,
           ...(cumulativePerf ? { perf: cumulativePerf } : {}),
           iterations: totalSteps,
+          finishReason,
         };
       } catch (error) {
-        disposeLanguageModel(model);
 
         // Cancelled
         if (
-          this.cancelRequested ||
+          signal.aborted || this.cancelRequested ||
           (error instanceof Error && error.name === 'AbortError')
         ) {
           throw error;
@@ -732,6 +776,8 @@ export class SimpleAgentRunner {
 
         // Retryable error
         if (
+          !emittedOutput &&
+          !signal.aborted &&
           retryAttempt < retryMaxAttempts &&
           isRetryableError(error)
         ) {
@@ -781,6 +827,8 @@ export class SimpleAgentRunner {
         };
         yield errorStep;
         throw error;
+      } finally {
+        disposeLanguageModel(model);
       }
     }
 
@@ -815,11 +863,5 @@ export class SimpleAgentRunner {
 }
 
 export const createSimpleAgentRunner = (
-  config?: PartialAgentConfig & {
-    modelFactory?: (
-      providerType: string,
-      modelId: string,
-      providerId: string,
-    ) => LanguageModel;
-  },
-): SimpleAgentRunner => new SimpleAgentRunner(config);
+  dependencies?: ConstructorParameters<typeof SimpleAgentRunner>[0],
+): SimpleAgentRunner => new SimpleAgentRunner(dependencies);

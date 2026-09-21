@@ -24,6 +24,7 @@ export type HarnessConfig = {
   approvalPolicy?: ApprovalPolicy;
   maxIterations: number;
   maxOutputTokens?: number;
+  maxInputTokens?: number;
   /** Reasoning-effort override forwarded to the provider call (e.g. 'low' | 'medium' | 'high'). */
   reasoningEffort?: string;
   threadId?: string;
@@ -50,6 +51,7 @@ export type TurnOutput = {
   perf?: AgentTurnPerf;
   toolCalls?: AgentResult['toolCalls'];
   requiresApproval: boolean;
+  finishReason?: string;
   toolApprovalRequests?: ToolApprovalRequest[];
   handoff?: {
     summary: string;

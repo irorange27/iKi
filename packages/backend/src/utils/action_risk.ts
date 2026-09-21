@@ -1,31 +1,18 @@
-import { isShellCommandReadonly } from '@iki/backend/tools/shell_tools';
-
 export type ActionRisk = 'safe' | 'escalate';
 
-const ESCALATE_TOOLS = new Set(['delete_file', 'shell']);
+const READ_TOOLS = new Set(['read_file', 'web_search', 'fetch', 'load_skill', 'list_personal_skills', 'read_personal_skill', 'list_todo_lists', 'read_todo_list', 'list_awaiters', 'read_awaiter', 'list_proactive_tasks', 'read_proactive_task']);
+const WORKSPACE_WRITE_TOOLS = new Set(['write_file', 'edit', 'undo_edit']);
 
-/**
- * Classifies a single tool action for the 'trustWorkspace' approval policy
- * (ADR 005 step 2): reads and workspace-contained writes are safe; deletions
- * and non-readonly shell commands escalate. Workspace containment itself is
- * still enforced by the tools' own path resolution at execution time.
- */
 export const classifyActionRisk = (
   toolName: string,
   input: unknown,
-  allowPatterns: string[] = []
+  allowPatterns: string[] = [],
+  trustWorkspace = true
 ): ActionRisk => {
   const inputText =
     input && typeof input === 'object' ? JSON.stringify(input) : String(input ?? '');
   for (const pattern of allowPatterns) {
     if (pattern === '' || inputText.includes(pattern)) return 'safe';
   }
-  if (toolName === 'shell') {
-    const command =
-      input && typeof input === 'object' && typeof (input as Record<string, unknown>).command === 'string'
-        ? ((input as Record<string, unknown>).command as string)
-        : '';
-    return isShellCommandReadonly(command) ? 'safe' : 'escalate';
-  }
-  return ESCALATE_TOOLS.has(toolName) ? 'escalate' : 'safe';
+  return READ_TOOLS.has(toolName) || (trustWorkspace && WORKSPACE_WRITE_TOOLS.has(toolName)) ? 'safe' : 'escalate';
 };

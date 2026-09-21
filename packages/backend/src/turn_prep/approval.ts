@@ -1,3 +1,5 @@
+import { createLogger } from '@iki/backend/logger';
+import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import {
@@ -96,12 +98,10 @@ export const createChatApproval = (deps: {
     if (!session.timeouts || session.timeouts.has(approvalId)) return;
     const timeoutId = setTimeout(() => {
       if (session.collectedApprovalResponses.has(approvalId)) return;
-      session.collectedApprovalResponses.set(approvalId, {
-        type: 'tool-approval-response' as const,
-        approvalId,
-        approved: false,
-        reason: 'Approval timed out after 30 minutes',
-      });
+      void approveTool(session.target, approvalId, false, 'Approval timed out after 30 minutes')
+        .catch(error => createLogger({ module: 'chat_approval' }).event({
+          level: 'error', event: 'approval.timeout.failed', error,
+        }));
       session.timeouts.delete(approvalId);
     }, APPROVAL_TIMEOUT_MS);
     session.timeouts.set(approvalId, timeoutId);
@@ -353,6 +353,9 @@ export const createChatApproval = (deps: {
           ? { maxOutputTokens: approvalSession.max_output_tokens }
           : {}),
         maxIterations,
+        approvalPolicy: parseApprovalPolicy(runSnapshot?.input?.metadata?.approvalPolicy) ?? undefined,
+        requireApproval: typeof runSnapshot?.input?.metadata?.requireApproval === 'boolean'
+          ? runSnapshot.input.metadata.requireApproval : true,
         enabledTools: resolvedToolNames,
         availableSkillIds,
       },
@@ -372,7 +375,8 @@ export const createChatApproval = (deps: {
   const approveTool = async (
     target: ChatStreamTarget,
     approvalId: string,
-    approved: boolean
+    approved: boolean,
+    reason?: string
   ) => {
     const storedApproval = toolCallApprovalDb.getToolCallApproval(approvalId);
     let session = pendingApprovalSessions.get(approvalId);
@@ -399,7 +403,7 @@ export const createChatApproval = (deps: {
       type: 'tool-approval-response',
       approvalId,
       approved,
-      reason: approved ? 'User approved tool execution.' : 'User rejected tool execution.',
+      reason: reason ?? (approved ? 'User approved tool execution.' : 'User rejected tool execution.'),
     };
 
     if (session.collectedApprovalResponses.has(approvalId)) {
@@ -478,6 +482,8 @@ export const createChatApproval = (deps: {
             messages: session.history ?? [],
             metadata: {
               transport: 'approval-resume',
+              approvalPolicy: baseApprovalContext.approvalPolicy,
+              requireApproval: baseApprovalContext.requireApproval ?? true,
               sourceSessionId: session.sessionId ?? session.recoveryContext?.sessionId ?? null,
               sourceRunId: session.recoveryContext?.runId ?? null,
               answeredApprovalIds: Array.from(session.collectedApprovalResponses.keys()),
@@ -530,10 +536,13 @@ export const createChatApproval = (deps: {
             providerId: ctx?.providerId,
             model: ctx?.model ?? '',
             systemPrompt: ctx?.systemPrompt ?? '',
+            maxInputTokens: ctx?.maxInputTokens,
             enableTools: true,
             enabledToolNames: ctx?.enabledTools ?? [],
             availableSkillIds: ctx?.availableSkillIds ?? [],
             guardActive: false,
+            approvalPolicy: ctx?.approvalPolicy,
+            requireApproval: ctx?.requireApproval ?? true,
             maxIterations: ctx?.maxIterations ?? 10,
             ...(approvalThreadId ? { threadId: approvalThreadId } : {}),
             ...(typeof ctx?.maxOutputTokens === 'number'
@@ -667,6 +676,20 @@ export const createChatApproval = (deps: {
 
           // Track history for subsequent getHistory() calls
           resolvedHistory = approvalHarness.getHistory();
+          if (agentResult?.toolApprovalRequests?.length) {
+            registerApprovalBatch(agentResult.toolApprovalRequests, {
+              target: session.target,
+              history: resolvedHistory,
+              recoveryContext: nextApprovalContext,
+            });
+            for (const request of agentResult.toolApprovalRequests) {
+              resumeRunTracker?.recordToolEvent({
+                type: 'tool-approval-request',
+                approvalId: request.approvalId,
+                toolCallId: request.toolCallId ?? '',
+              });
+            }
+          }
 
           return result;
         }

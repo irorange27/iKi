@@ -92,7 +92,7 @@ describe('buildRunTrajectory', () => {
       { tool_call_id: 'call_1', function_name: 'read_file', arguments: { path: 'a.txt' } },
     ]);
     expect(toolStep.observation).toEqual({
-      results: [{ source_call_id: 'call_1', content: { content: 'file body' } }],
+      results: [{ source_call_id: 'call_1', content: JSON.stringify({ content: 'file body' }) }],
     });
 
     const approvalStep = trajectory.steps[2]!;
@@ -108,6 +108,35 @@ describe('buildRunTrajectory', () => {
     });
 
     expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('exports inference boundaries once with paired errors and per-call usage', () => {
+    const steps = [
+      ...fixtureSteps().slice(0, 2),
+      fixtureStep(3, 'model', {}, { inference: true, usage: { inputTokens: 12, outputTokens: 3 }, content: [
+        { type: 'reasoning', text: 'Inspecting the failure' },
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } },
+        { type: 'tool-error', toolCallId: 'call_1', error: 'missing file' },
+      ] }),
+      fixtureStep(4, 'model', {}, { text: 'aggregate should not duplicate inference' }),
+    ];
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+    expect(trajectory.steps).toHaveLength(2);
+    expect(trajectory.steps[1]).toMatchObject({
+      reasoning_content: 'Inspecting the failure',
+      metrics: { prompt_tokens: 12, completion_tokens: 3 },
+      observation: { results: [{ source_call_id: 'call_1', content: '"missing file"' }] },
+    });
+  });
+
+  it('pairs legacy tool errors and keeps standalone errors valid', () => {
+    const steps = [
+      fixtureSteps()[0],
+      fixtureStep(2, 'error', { toolCallId: 'call_1' }, { error: 'missing file' }),
+      fixtureStep(3, 'error', null, { error: 'model failed' }),
+    ];
+    expect(validateAtifTrajectory(buildRunTrajectory(fixtureRun(), steps))).toEqual([]);
   });
 
   it('falls back to a system step when the run input has no user message', () => {
@@ -136,7 +165,7 @@ describe('validateAtifTrajectory', () => {
 
   it('rejects observations referencing unknown tool calls', () => {
     const trajectory = buildRunTrajectory(fixtureRun(), fixtureSteps());
-    trajectory.steps[1]!.observation = { results: [{ source_call_id: 'call_missing', content: null }] };
+    trajectory.steps[1]!.observation = { results: [{ source_call_id: 'call_missing', content: '' }] };
     const errors = validateAtifTrajectory(trajectory);
     expect(errors.some(e => e.includes('unknown tool call'))).toBe(true);
   });

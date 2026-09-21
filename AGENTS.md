@@ -12,6 +12,15 @@
 4. Commit only when the user asks (`pnpm run commit`). Never `--no-verify`. Single test file: `pnpm vitest run <path>`.
 5. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
 
+## Changing the harness
+
+Read the [backend ownership and regression map](packages/backend/README.md#runtime-contracts) before editing a core path. It is tracked; design notes under `docs/` may be missing or stale.
+
+- Reproduce at the actual consumer boundary: provider inputs, SDK step count, persisted approval decision, or exported trajectory. A mock returning the expected text does not validate the wiring.
+- Extend the existing owner; do not add another history slicer, approval policy evaluator, retry loop, or trajectory recorder in a caller.
+- Change behavior, its boundary regression, and the ownership map together. Preserve unrelated uncommitted edits; do not “repair” a failing regression by restoring behavior that the contract explicitly forbids.
+- Use `pnpm run test:harness` for the focused loop; `pnpm run ci:quality` remains the completion gate. Keep fixes local to backend unless the transport contract changes.
+
 ## Where things are
 
 ```
@@ -29,6 +38,7 @@ postmortem/        ← incident write-ups
 | You want to… | Start here |
 |---|---|
 | Add/modify a tool | `packages/backend/src/tools/` + `tools/schemas/` + register in `tools/index.ts` |
+| Change context budget / compaction | `packages/backend/src/agent/context_budget.ts` + runner `prepareStep`; see backend contract |
 | Change prompt assembly | `packages/backend/src/turn_prep/context.ts`, `context_blocks.ts` |
 | LLM-call surface / add a provider | `packages/backend/src/provider/llm/factory.ts` |
 | Tool approval UX | `packages/backend/src/turn_prep/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveThreadWorkMode } from '../../../packages/backend/src/workspaces/thread_mode';
+import { resolveThreadWorkMode, parseApprovalPolicy } from '../../../packages/backend/src/workspaces/thread_mode';
 
 describe('resolveThreadWorkMode', () => {
   it('uses the explicit metadata mode when present', () => {
@@ -20,5 +20,12 @@ describe('resolveThreadWorkMode', () => {
 
   it('survives malformed metadata', () => {
     expect(resolveThreadWorkMode({ metadata: 'not-json', workspace_id: 'ws_user' })).toBe('work');
+  });
+});
+
+describe('approval policy parsing', () => {
+  it.each(['never', 'always', 'askRisky', 'trustWorkspace'] as const)('round-trips %s', policy => {
+    expect(parseApprovalPolicy(policy)).toBe(policy);
+    expect(parseApprovalPolicy(policy.toUpperCase())).toBe(policy);
   });
 });

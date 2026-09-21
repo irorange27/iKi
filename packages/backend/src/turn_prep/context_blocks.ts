@@ -26,7 +26,7 @@ import {
 } from './context_helpers';
 import type { ChatInputMessage } from '../thread_session/types';
 
-const AGENT_INSTRUCTIONS_FILENAME = 'IKI.md';
+const AGENT_INSTRUCTIONS_FILENAMES = ['AGENTS.md', 'IKI.md'];
 
 const stripHtmlComments = (value: string): string => value.replace(/<!--[\s\S]*?-->/g, '');
 
@@ -43,13 +43,14 @@ export const readAgentInstructions = (threadId?: string): string => {
   if (!workspacePath) return '';
 
   try {
-    const filePath = path.join(workspacePath, AGENT_INSTRUCTIONS_FILENAME);
-    if (!fs.existsSync(filePath)) return '';
+    const filename = AGENT_INSTRUCTIONS_FILENAMES.find(name => fs.existsSync(path.join(workspacePath, name)));
+    if (!filename) return '';
+    const filePath = path.join(workspacePath, filename);
     const raw = fs.readFileSync(filePath, 'utf8');
     const cleaned = stripHtmlComments(raw).trim();
     if (!hasMeaningfulContent(cleaned)) return '';
     return [
-      `Project agent instructions (from ${AGENT_INSTRUCTIONS_FILENAME}):`,
+      `Project agent instructions (from ${filename}):`,
       cleaned,
     ].join('\n');
   } catch {
@@ -64,17 +65,11 @@ export const buildIdentityContext = (
   modelCapability?: ModelCapability | null,
   agentInstructions?: string
 ): IdentityContext => {
-  const combinedMessage = [
-    getAssistantProfileContextMessage().trim(),
-    workspaceSystemMessage?.(threadId)?.trim() ?? '',
-    agentInstructions?.trim() ?? '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-  const identityClip = clipTextToTokenBudget(
-    combinedMessage,
-    contextConfig.maxIdentityTokens
-  );
+  const profile = clipTextToTokenBudget(getAssistantProfileContextMessage().trim(), contextConfig.maxIdentityTokens);
+  const identityClip = {
+    text: [profile.text, workspaceSystemMessage?.(threadId)?.trim() ?? '', agentInstructions?.trim() ?? ''].filter(Boolean).join('\n\n'),
+    truncated: profile.truncated,
+  };
 
   return {
     systemMessage: identityClip.text,

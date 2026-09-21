@@ -26,9 +26,7 @@ export const THREAD_APPROVAL_POLICIES: readonly ThreadApprovalPolicy[] = [
 export const parseApprovalPolicy = (value: unknown): ThreadApprovalPolicy | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
-  return (THREAD_APPROVAL_POLICIES as readonly string[]).includes(trimmed)
-    ? (trimmed as ThreadApprovalPolicy)
-    : null;
+  return THREAD_APPROVAL_POLICIES.find(policy => policy.toLowerCase() === trimmed) ?? null;
 };
 
 /** Scratch workspaces auto-created per thread carry this id prefix. */

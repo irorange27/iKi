@@ -1,3 +1,4 @@
+import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { ModelMessage } from 'ai';
 import type { AgentResult, ToolApprovalRequest } from '@iki/backend/agent';
 import type { ChatStreamTarget } from '../thread_session/types';
@@ -16,6 +17,8 @@ export type ApprovalRecoveryContext = {
   maxIterations?: number;
   /** Reasoning-effort override to keep across approval-resumed turns. */
   reasoningEffort?: string;
+  approvalPolicy?: ApprovalPolicy;
+  requireApproval?: boolean;
   enabledTools: string[];
   availableSkillIds?: string[];
   autonomous?: {
@@ -76,6 +79,8 @@ export const createApprovalRecoveryContext = (params: {
   maxOutputTokens?: number;
   maxIterations: number;
   reasoningEffort?: string;
+  approvalPolicy?: ApprovalPolicy;
+  requireApproval?: boolean;
   enabledTools: string[];
   availableSkillIds: string[];
   autonomous?: {
@@ -107,6 +112,8 @@ export const createApprovalRecoveryContext = (params: {
       ? { maxOutputTokens: params.maxOutputTokens }
       : {}),
     maxIterations: params.maxIterations,
+    approvalPolicy: params.approvalPolicy,
+    requireApproval: params.requireApproval,
     enabledTools: [...params.enabledTools],
     availableSkillIds: [...params.availableSkillIds],
     ...(params.reasoningEffort ? { reasoningEffort: params.reasoningEffort } : {}),

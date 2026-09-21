@@ -94,16 +94,21 @@ describe('createChatApproval resume integration', () => {
     defaultToolRegistry.remove(toolName);
   });
 
-  it('resumes approved tools through AgentHarness and preserves runtime context', async () => {
+  it.each([
+    { approved: true, repeat: false },
+    { approved: false, repeat: false },
+    { approved: true, repeat: true },
+  ])('resumes approval decisions $approved with another approval $repeat', async ({ approved, repeat }) => {
+    let executions = 0;
     let observedContext: unknown;
     const tool = createTool({
       name: toolName,
       type: 'function',
       description: 'Probe approval resume context',
       paramSchema: z.object({}),
-      needsApproval: true,
-      approvalMode: 'always',
+      needsApproval: false,
       handler: async () => {
+        executions++;
         const ctx = getToolRuntimeContext();
         observedContext = {
           threadId: ctx.threadId,
@@ -128,6 +133,7 @@ describe('createChatApproval resume integration', () => {
       enabledToolNames: [toolName],
       availableSkillIds: [],
       guardActive: false,
+      approvalPolicy: 'always',
       maxIterations: 10,
       modelFactory: () => blockedModel,
     });
@@ -161,7 +167,10 @@ describe('createChatApproval resume integration', () => {
     };
     expect(blockedHarness.getHistory().at(-1)).toMatchObject({ role: 'assistant' });
 
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('approval resumed')], 'gpt-4o-mini'));
+    createModelMock.mockReturnValue(new FauxModelProvider([
+      ...(repeat ? [fauxToolCall(toolName, {}, { id: 'call_2' })] : []),
+      fauxText('approval resumed'),
+    ], 'gpt-4o-mini'));
     vi.mocked(approvalDb.getToolCallApproval).mockReturnValue(approvedRecord as never);
     vi.mocked(approvalDb.getToolCallApprovalSession).mockReturnValue({
       session_id: 'assistant_1',
@@ -194,7 +203,7 @@ describe('createChatApproval resume integration', () => {
         systemPrompt: 'system prompt',
         enabledTools: [toolName],
         availableSkillIds: [],
-        input: { metadata: { maxIterations: 10 } },
+        input: { metadata: { maxIterations: 10, approvalPolicy: 'always', requireApproval: false } },
         working: {
           modelMessages: blockedHarness.getHistory(),
           accumulatedText: '',
@@ -220,16 +229,27 @@ describe('createChatApproval resume integration', () => {
       usage,
     });
 
-    const result = await approvals.approveTool(target, approvedId, true);
+    const result = await approvals.approveTool(target, approvedId, approved);
 
-    expect(result).toEqual({ success: true, awaitingApproval: false, stopped: false });
+    expect(result).toEqual({ success: true, awaitingApproval: repeat, stopped: false });
+    expect(executions).toBe(approved ? 1 : 0);
+    if (repeat) {
+      const saved = vi.mocked(approvalDb.upsertToolCallApprovals).mock.calls.at(-1)?.[0];
+      expect(saved).toHaveLength(1);
+      const nextId = saved![0].approval_id;
+      expect(nextId).not.toBe(approvedId);
+      const resumed = await approvals.approveTool(target, nextId, true);
+      expect(resumed).toMatchObject({ success: true, awaitingApproval: false });
+      expect(executions).toBe(2);
+    }
     expect(approvalDb.answerToolCallApproval).toHaveBeenCalledWith(
       approvedId,
-      'approved',
-      'User approved tool execution.'
+      approved ? 'approved' : 'rejected',
+      approved ? 'User approved tool execution.' : 'User rejected tool execution.'
     );
     expect(approvalDb.consumeToolCallApprovalSession).toHaveBeenCalledWith('assistant_1');
     expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
+    if (approved) {
     expect(observedContext).toMatchObject({
       threadId: 'thread_1',
       hasRunTracker: true,
@@ -240,6 +260,7 @@ describe('createChatApproval resume integration', () => {
       },
     });
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
+    }
     expect(usage.recordUsageEvent).toHaveBeenCalledWith(expect.objectContaining({
       source: 'chat.approval-stream',
       threadId: 'thread_1',

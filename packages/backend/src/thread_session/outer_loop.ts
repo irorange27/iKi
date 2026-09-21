@@ -1,6 +1,5 @@
 import type { ModelMessage } from 'ai';
 
-import { createLogger } from '@iki/backend/logger';
 import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/agent';
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
@@ -12,14 +11,10 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../turn_pre
 import { createApprovalRecoveryContext } from '../turn_prep/approval_types';
 import type { ChatTurnOptions, PreparedChatTurn } from '../turn_prep/turn_preparer';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
-import { autoCompactHistory } from './token_estimator';
 import { getCompanion } from './platform';
 import { writeThreadTodoPlan } from '../db/thread_todos';
+import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
-
-// Same module tag as session_loop: the outer loop is the same logical
-// component, and the auto_compact event keeps its log contract.
-const outerLoopLogger = createLogger({ module: 'chat_streaming' });
 
 export type OuterLoopStreamResult = {
   awaitingApproval: boolean;
@@ -218,7 +213,6 @@ export const runOuterLoop = async (
       let agentResult: import('@iki/backend/agent').AgentResult | undefined;
       let cancelled = false;
       let steered = false;
-      const awaitingApproval = false;
 
       try {
         agentResult = await traceChatTurn(
@@ -262,6 +256,7 @@ export const runOuterLoop = async (
                       ...(output.perf ? { perf: output.perf } : {}),
                       iterations: 0,
                       requiresApproval: output.requiresApproval,
+                      finishReason: output.finishReason,
                     } as import('@iki/backend/agent').AgentResult;
                   }
                 }
@@ -301,6 +296,7 @@ export const runOuterLoop = async (
           ];
         }
         streamState.abortController = new AbortController();
+        state.streamPrompt = '';
         continue;
       }
 
@@ -361,7 +357,7 @@ export const runOuterLoop = async (
               },
             }
           : {}),
-        ...(terminalToolName ? { finished: true } : {}),
+        finished: !handoff && agentResult?.finishReason !== 'tool-calls',
       };
 
       if (streamResult.response) {
@@ -419,6 +415,8 @@ export const runOuterLoop = async (
             messages: [],
             metadata: {
               source: 'handoff',
+              approvalPolicy: parseApprovalPolicy(options.approvalPolicy),
+              requireApproval: preparedTurn.requireApproval,
               parentRunId,
               summary: streamResult.handoff.summary,
               nextSteps: streamResult.handoff.nextSteps,
@@ -444,9 +442,13 @@ export const runOuterLoop = async (
           enabledToolNames: preparedTurn.guardedTools,
           availableSkillIds: preparedTurn.selectedSkillIds,
           guardActive: preparedTurn.guardActive,
+          requireApproval: preparedTurn.requireApproval,
+          autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
+          approvalPolicy: parseApprovalPolicy(options.approvalPolicy) ?? undefined,
           maxIterations: deps.maxIterations,
           threadId: options.threadId,
           maxOutputTokens: preparedTurn.maxOutputTokens,
+          maxInputTokens: preparedTurn.maxInputTokens,
           ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         });
 
@@ -459,9 +461,11 @@ export const runOuterLoop = async (
               providerId: options.providerId,
               model: options.model,
               systemPrompt: deps.systemPrompt,
-              maxInputTokens: preparedTurn.maxInputTokens,
               maxOutputTokens: preparedTurn.maxOutputTokens,
+              maxInputTokens: preparedTurn.maxInputTokens,
               maxIterations: deps.maxIterations,
+              approvalPolicy: parseApprovalPolicy(options.approvalPolicy) ?? undefined,
+              requireApproval: preparedTurn.requireApproval,
               enabledTools: preparedTurn.guardedTools,
               availableSkillIds: preparedTurn.selectedSkillIds,
               ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
@@ -481,23 +485,12 @@ export const runOuterLoop = async (
       if (!deps.autonomousMode) break;
 
       state.outerBatch++;
-      if (state.outerBatch >= MAX_OUTER_AUTONOMOUS_BATCHES) break;
+      if (state.outerBatch >= Math.min(
+        MAX_OUTER_AUTONOMOUS_BATCHES,
+        options.autonomous?.maxIterations ?? MAX_OUTER_AUTONOMOUS_BATCHES,
+      )) break;
 
-      const nextHistory = state.harness.getHistory() ?? state.streamHistory;
-      const compacted = autoCompactHistory({
-        history: nextHistory,
-        maxInputTokens: preparedTurn.maxInputTokens,
-      });
-      if (compacted.compacted) {
-        outerLoopLogger.event({
-          level: 'info',
-          event: 'chat.stream.auto_compact',
-          data: { threadId: options.threadId ?? null, droppedMessages: compacted.droppedCount },
-        });
-        state.streamHistory = compacted.history;
-      } else {
-        state.streamHistory = nextHistory;
-      }
+      state.streamHistory = state.harness.getHistory();
       state.streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
     }
 

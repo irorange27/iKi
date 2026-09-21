@@ -94,6 +94,7 @@ const inferRootRunId = (parentRunId?: string, explicitRootRunId?: string): strin
 export type AgentRunTracker = {
   id: string;
   getRun: () => AgentRun;
+  recordModelStep: (input: Record<string, unknown>, output: Record<string, unknown>) => void;
   syncModelMessages: (messages: unknown[]) => AgentRun;
   recordToolEvent: (event: ChatStreamEvent) => void;
   recordChildRun: (params: {
@@ -184,6 +185,9 @@ export const createAgentRunTracker = (
   return {
     id: currentRun.id,
     getRun: () => currentRun,
+    recordModelStep: (input, output) => {
+      appendStep({ type: 'model', status: 'completed', summary: 'Model inference', input, output });
+    },
     syncModelMessages: messages => {
       persist({
         working: {

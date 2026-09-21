@@ -54,16 +54,7 @@ export const runScenarioLive = async (params: {
   });
 
   const maxIterations = scenario.maxIterations ?? 6;
-  const runner = createSimpleAgentRunner({
-    enabled: true,
-    providerType: ctx.providerType,
-    providerId: ctx.providerId,
-    model: ctx.model,
-    systemPrompt: EVAL_SYSTEM_PROMPT,
-    enableTools: tools.length > 0,
-    maxIterations,
-    maxTokens: 2000,
-  });
+  const runner = createSimpleAgentRunner();
 
   const toolsUsed = new Set<string>();
   const stepTypes = new Map<string, number>();

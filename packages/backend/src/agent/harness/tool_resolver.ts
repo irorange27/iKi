@@ -32,12 +32,12 @@ const prepareToolWithGuard = (
     resolved = { ...tool, needsApproval: false };
   } else if (approvalPolicy === 'always') {
     resolved = { ...tool, needsApproval: true };
-  } else if (approvalPolicy === 'trustWorkspace') {
+  } else if (approvalPolicy === 'trustWorkspace' || approvalPolicy === 'askRisky') {
     const allowPatterns = listToolAllowPatterns(tool.name);
     resolved = {
       ...tool,
       needsApproval: (input: unknown) =>
-        classifyActionRisk(tool.name, input, allowPatterns) === 'escalate',
+        classifyActionRisk(tool.name, input, allowPatterns, approvalPolicy === 'trustWorkspace') === 'escalate',
     };
   } else if (requireApproval) {
     resolved = { ...tool, needsApproval: true };
@@ -45,7 +45,7 @@ const prepareToolWithGuard = (
     resolved = { ...tool, needsApproval: false };
   }
 
-  return applyToolApprovalPolicy(resolved, { autoApproveToolRequests });
+  return approvalPolicy ? resolved : applyToolApprovalPolicy(resolved, { autoApproveToolRequests });
 };
 
 export const resolveTools = (params: {

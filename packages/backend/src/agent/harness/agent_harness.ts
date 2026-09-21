@@ -1,3 +1,4 @@
+import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
 import type { ModelMessage } from 'ai';
 
 import type { AgentStep, HandoffStep } from '@iki/backend/agent/agent_step';
@@ -40,17 +41,7 @@ export class AgentHarness {
       ...(this.config_.approvalPolicy ? { approvalPolicy: this.config_.approvalPolicy } : {}),
     });
 
-    const runner = createSimpleAgentRunner({
-      enabled: true,
-      providerType: this.config_.providerType,
-      providerId: this.config_.providerId,
-      model: this.config_.model,
-      systemPrompt: this.config_.systemPrompt,
-      enableTools: tools.length > 0,
-      maxIterations: this.config_.maxIterations,
-      maxTokens: this.config_.maxOutputTokens,
-      ...(this.config_.modelFactory ? { modelFactory: this.config_.modelFactory } : {}),
-    });
+    const runner = createSimpleAgentRunner({ modelFactory: this.config_.modelFactory });
 
     this.activeRunner = runner;
     this.runTracker = input.runTracker ?? null;
@@ -58,8 +49,6 @@ export class AgentHarness {
     const agentGen = runner.run({
       config: {
         enabled: true,
-        providerType: this.config_.providerType,
-        model: this.config_.model,
         enableTools: tools.length > 0,
       },
       prompt: input.prompt,
@@ -68,6 +57,8 @@ export class AgentHarness {
       providerId: this.config_.providerId,
       model: this.config_.model,
       history: input.history ?? this.history,
+      systemPrompt: this.config_.systemPrompt,
+      maxInputTokens: this.config_.maxInputTokens,
       ...(this.config_.threadId ? { threadId: this.config_.threadId } : {}),
       ...(this.config_.reasoningEffort ? { reasoningEffort: this.config_.reasoningEffort } : {}),
       ...(this.config_.maxOutputTokens
@@ -75,6 +66,10 @@ export class AgentHarness {
         : {}),
       maxIterations: this.config_.maxIterations,
       abortSignal: input.abortSignal,
+      onModelStep: (step, messages, systemPrompt) => input.runTracker?.recordModelStep?.(
+        { messages, systemPrompt },
+        { inference: true, content: step.content, finishReason: step.finishReason, usage: normalizeLanguageModelUsage(step.usage) },
+      ),
     });
 
     // Preserve caller's runtime context across generator iterations
@@ -98,14 +93,14 @@ export class AgentHarness {
       }
       agentResult = next.value as AgentResult | undefined;
     } finally {
+      if (!agentResult) {
+        runner.cancel();
+        await boundGen.return(undefined as never);
+      }
       this.activeRunner = null;
+      this.history = cloneModelMessages(runner.getHistory());
+      this.runTracker?.syncModelMessages(this.history);
     }
-
-    // Sync history from runner
-    const newHistory = runner.getHistory?.() ?? [];
-    this.history = cloneModelMessages(newHistory);
-
-    this.runTracker?.syncModelMessages(this.history);
 
     // Build turn output
     const output: TurnOutput = {
@@ -113,6 +108,7 @@ export class AgentHarness {
       usage: agentResult?.usage,
       ...(agentResult?.perf ? { perf: agentResult.perf } : {}),
       requiresApproval: agentResult?.requiresApproval ?? false,
+      finishReason: agentResult?.finishReason,
       ...(agentResult?.toolCalls
         ? { toolCalls: agentResult.toolCalls }
         : {}),

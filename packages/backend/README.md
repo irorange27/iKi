@@ -1,60 +1,64 @@
 # @iki/backend
 
-All non-UI business logic. Pure Node/TS. **No Electron, no Vue, no DOM.**
+Pure Node/TypeScript business logic shared by Electron and the daemon. No Electron or Vue imports.
+Dependencies point from shells to backend; the architecture gate checks backend layer direction too.
 
-Both `packages/desktop` and `packages/daemon` import this package — keep it shell-agnostic.
+## Entry points
 
-## Major directories
+`thread_session/session_loop.ts` prepares and streams a turn; `message_send.ts` handles non-streaming sends.
+Both create `AgentHarness` through `agent/harness/assembly.ts`. The harness resolves tools and invokes
+`SimpleAgentRunner`, which uses the installed AI SDK's `streamText` loop. `outer_loop.ts` handles bounded
+continuations, steering and handoff. `turn_prep/approval.ts` persists approval decisions and rebuilds a
+harness to replay an answered batch. `thread_stream_coordinator.ts` owns active streams and steering queues.
 
-| Path | What it owns |
-|---|---|
-| `agent/` | `AgentHarness` + `SimpleAgentRunner` (the chat-turn engine) |
-| `turn_prep/` | turn preparation (`turn_preparer.ts` → context assembly: skills, budget, affect/identity, thread summary; semantic memory is excluded on the chat path), persistence, approval + approval recovery, run tracking (`agent_runs`/`agent_run_steps`/`agent_run_checkpoints`), tool guard |
-| `thread_session/` | the public service surface used by IPC and daemon: `session_loop.ts` (supersede/rate-limit, outer autonomous loop, ui-chunk emission), `message_send.ts`, plus per-concern submodules (memory, usage, runs, models, skills, ui_stream) |
-| `tools/` | built-in tool implementations + Zod schemas; `index.ts` registers `defaultToolRegistry` |
-| `provider/llm/` | provider-specific model factories (`factory.ts` is the entry) |
-| `db/` | `node:sqlite` (built-in) connection + migrations + per-table modules |
-| `mcp/` | MCP server client; server tools register into `defaultToolRegistry` (`manager.ts`), and the harness resolves the per-turn toolset (`agent/harness/tool_resolver.ts`) |
-| `runtimes/` | auxiliary prompt-text generators (titles, summaries) |
-| `observability/` | Langfuse tracing init + helpers |
-| `affect/`, `awaiters/`, `tasks/`, `workspaces/`, `memory/` | feature modules |
+## Runtime contracts
 
-## Chat-turn flow
+This table records implemented ownership, not equivalence to another framework. Update it with the
+relevant regression when changing behavior. Tests use the real SDK with scripted providers where possible;
+that does not establish live-provider compatibility or crash-safe exactly-once tools.
 
-```
-renderer composables (useChatComposerSend → electronAPI.chat.stream)
-  → IPC 'chat:stream'    (daemon: WS /v1/chat/stream, message type `start`)
-  → desktop main/ipc/chat.ts
-  → thread_session/session_loop.ts
-       1. supersede prior stream from the same sender (abort 'superseded-by-new-request')
-       2. rate-limit (5 req / 10s per thread) + cancelThreadStreams
-       3. prepare the turn — turn_prep/turn_preparer.ts → context.ts assembler
-          (skills + context budget + affect/identity + thread summary;
-           semantic memory is NOT injected here: includeMemory: false)
-       4. open AgentRunTracker row (SQLite agent_runs)
-       5. new AgentHarness(...)
-       6. traceChatTurn() wraps each harness.turn() iteration (Langfuse; threadId → trace sessionId)
-  → AgentHarness.turn      (agent/harness/)   tool resolution / approval gating / handoff capture / history sync
-  → SimpleAgentRunner.run  (agent/runners/)   wraps AI SDK streamText
-       └─ inner loop = AI SDK stopWhen: stepCountIs(remaining), budget DEFAULT_CHAT_TOOL_MAX_ITERATIONS = 200
-  → provider/llm/factory.ts   branches: acp / openai / anthropic(+compatible) / deepseek / minimax / isResponseApi / openai-compatible fallback
-  → forwardAgentStep → uiChunkEmitter (thread_session/ui_stream.ts) → target.send('chat:ui-chunk')
-  → renderer ipc_chat_transport → Chat (AbstractChat; SDK `processUIMessageStream` accumulates into `chat_instance`'s reactive state) → ChatMessageStore view
+| Responsibility | One owner | Contract | Regression |
+|---|---|---|---|
+| Turn configuration | `agent/harness/assembly.ts` → `agent_harness.ts` → runner request | Runner construction accepts dependencies only. Instructions and budgets belong in the run request; invalid numeric budgets are omitted. | `tests/backend/agent/harness/agent_harness.test.ts` |
+| Context projection | `agent/runners/simple_agent_runner.ts: prepareStep`, pure planner in `agent/context_budget.ts` | Check every SDK inference. Preserve system instructions, latest user input and complete tool exchanges. Summarize the exact omitted content before replacement. If summary/budget fails, fail explicitly and retain original history. Never add count-based or per-message truncation upstream. | `tests/backend/agent/harness/context_compaction.test.ts`, `tests/backend/thread_session/auto_compact.test.ts` |
+| Context assembly | `turn_prep/context.ts`, `context_blocks.ts` | Assemble identity, workspace, skills and optional memory; do not discard conversation history. Workspace-root AGENTS.md takes precedence over legacy IKI.md. Project instructions are never clipped to the persona budget. | `tests/main/services/chat/chat_context.test.ts`, `tests/backend/agent/ai_sdk_runtime.test.ts` |
+| Summary generation | `runtimes/thread_summary.ts` | Feed the complete omitted transcript and previous summary to the configured tool model. Never claim coverage for text excluded by a character cap. Forward cancellation. | `tests/backend/context/thread_summary.test.ts` |
+| Stop / handoff / steer | SDK stop conditions + `thread_session/outer_loop.ts` | Natural model stop ends a turn. Only exhausted tool steps may continue within the requested batch bound. Handoff stops the inner loop before chaining. Steering appends feedback once and preserves completed observations. | `tests/backend/thread_session/chat_streaming.integration.test.ts` |
+| Approval policy | `agent/harness/tool_resolver.ts`, `utils/action_risk.ts` | Explicit per-turn policy wins over legacy global flags. askRisky permits known reads; trustWorkspace additionally permits scoped writes. Arbitrary shell/unknown tools require a decision unless explicitly allowed. Do not infer shell safety from command text. | `tests/backend/agent/harness/approval_policy.test.ts`, `tests/backend/workspaces/thread_mode.test.ts` |
+| Approval recovery | `turn_prep/approval.ts` | User and timeout decisions use the same entry. Persist every batch with final history and policy; a second approval must resume correctly. Missing legacy policy requires new approvals. Planning/handoff exemptions live in tool_resolver. | `tests/backend/thread_session/chat_approval_resume.integration.test.ts`, `tests/main/services/chat/chat_approval.test.ts` |
+| Tool execution / cancellation | `provider/ai_sdk_runtime.ts` → `utils/runtime_context.ts` → tool handler | Forward SDK abort signal through runtime context. Shell terminates its process group on supported POSIX hosts; no automatic replay after timeout. Other tool implementations must cooperate with the signal. | `tests/backend/tools/shell_tools.test.ts`, harness integration tests |
+| Failure / retry | `agent/runners/simple_agent_runner.ts` | A stream error is not a successful partial answer. Never restart an attempt after visible text or a tool call; side effects may already have occurred. Dispose model resources on generator exit. | `tests/backend/agent/simple_agent_runner.test.ts` |
+| Raw inference record | `turn_prep/run_tracker.ts: recordModelStep`, invoked by harness | Record each completed SDK inference with input projection, content and usage. Keep raw working history separate from the smaller provider projection. UI tool events remain execution audit events. | harness/session integration tests |
+| ATIF projection | `thread_session/atif_export.ts` | Prefer inference records over duplicated tool audit entries. Pair calls/results/errors, emit textual observations and agent version. Legacy audit records have a fallback projection. | `tests/backend/thread_session/atif_export.test.ts` |
+
+## Fast verification
+
+From repository root:
+
+```sh
+pnpm run test:harness
+pnpm run ci:quality
 ```
 
-Loops: **inner** = AI SDK `stopWhen` above (1 step if tools disabled). **Outer** = session_loop.ts runs one `harness.turn` per batch and continues **only in autonomous mode**, capped at `MAX_OUTER_AUTONOMOUS_BATCHES = 50`, syncing history into the run row (`working.modelMessages`) every batch via `syncModelMessages`; handoff chains are separately capped at `MAX_HANDOFF_CHAIN = 5`. Both caps are live code.
+For a single behavior, run the test path in the table with `pnpm vitest run <path>`.
+A lower test count after deleting obsolete behavior tests is not evidence of less coverage or more quality;
+retain the observable invariants and pass the actual coverage gate.
 
-## Invariants
+## Limits that must not be advertised as solved
 
-- **Memory:** retrieval is off on the chat path (`includeMemory: false`); full retrieval only on approval recovery. Writes split: short-memory sync after persistence, long/emotion async fire-and-forget.
-- **Two observability stacks, don't unify:** `AgentRunTracker` → SQLite `agent_runs` + append-only `agent_run_steps` (can-I-resume-this-turn; the run row's `working` state is the resume source — `agent_run_checkpoints` is historical only, see ADR 004 phase 3); Langfuse → why-did-the-model-do-that (`traceChatTurn` maps `threadId` to the trace `sessionId`). Eval exports run trajectories as ATIF (`thread_session/atif_export.ts`).
-- **`AgentHarness` construction goes through `agent/harness/assembly.ts`** (`startTurnHarness` for fresh turns, `rehydrateHarness` for durable-state resume) — five call sites (session_loop, outer_loop, message_send, approval recovery, subagent); new always-pass config fields land in `assembly.ts`, not at the call sites. Approval resume (live or recovered) always builds a fresh harness rehydrated from durable state (run row + approval rows) — that rebuild IS the resume mechanism, matching Codex's rollout replay (ADR 004).
-- **Subagent** (`tools/agent_tools.ts`) skips context assembly/compaction but records a child run via `turn_prep/run_tracker`.
-- **MCP tools** register into `defaultToolRegistry` (`mcp/manager.ts`); the harness picks the per-turn toolset (`agent/harness/tool_resolver.ts`). `resolveToolsForClient` in the daemon is per-client filtering, not the merge point.
+- Budgeting estimates tokens; provider-specific image accounting differs. Unknown input budgets disable automatic projection. A single oversized protected instruction or tool exchange stops explicitly.
+- Summarization needs a configured tool model, is lossy, and may fail. No silent deletion fallback. Compaction costs are separate from main-model usage.
+- Per-call records cover completed inferences; interrupted provider output and subagent trajectories are not yet a complete externally replayable rollout. Working history alone is not an exactly-once execution log.
+- Approval continuation has its own resumed stream lifecycle; it is not currently a steerable outer autonomous session. Consumed decisions plus external side effects are not one atomic transaction.
+- Native programmatic tool calling (code orchestrating the registry with filtered intermediate results) is not implemented. Shell, MCP and external ACP capabilities do not establish native PTC.
 
-## Don't
+## Other modules
 
-- Don't import `electron` here. If you need a host capability (window, dialog, clipboard), accept it via a platform interface defined in `chat_platform.ts` / `platform.ts`.
-- Don't reach into `packages/desktop` or `packages/daemon`. Dependency direction is one-way.
+`provider/llm/factory.ts` wires providers; `tools/index.ts` registers builtin tools; `mcp/manager.ts` registers
+MCP tools; `db/` owns SQLite; `runtimes/` owns auxiliary generation; `observability/` owns tracing;
+`memory/`, `affect/`, `awaiters/`, `tasks/`, and `workspaces/` own their named subsystems.
+Semantic memory retrieval remains disabled on the ordinary chat path (`includeMemory: false`).
+Subagents use a separate scratchpad and child run; they do not inherit the full parent transcript.
 
-See repo root [AGENTS.md](../../AGENTS.md) for orientation and the doc map; [docs/harness.md](../../docs/harness.md) for the runtime concept model (context engineering, steering, durable execution).
+See [AGENTS.md](../../AGENTS.md) for repository workflow. Historical rationale may live under ignored
+`docs/`; executable behavior and this tracked ownership map take precedence over architectural analogies.
