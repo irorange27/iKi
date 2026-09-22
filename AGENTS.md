@@ -12,6 +12,26 @@
 4. Commit only when the user asks (`pnpm run commit`). Never `--no-verify`. Single test file: `pnpm vitest run <path>`.
 5. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
 
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `pnpm run app:dev` | Desktop app in dev mode |
+| `pnpm run app:preview` | Launch the latest packaged app from `out/` |
+| `pnpm run app:build` | Build distributable artifacts |
+| `pnpm run daemon:start` | Headless daemon |
+| `pnpm run -s ci:quality` | Completion gate: lint + tsc + vue-tsc + architecture + coverage run |
+| `pnpm test` | All tests |
+| `pnpm run test:harness` | Focused harness regression set |
+| `pnpm run test:e2e` | Cross-layer smoke (real app + scripted provider) |
+| `pnpm run test:renderer` | Renderer-only tests |
+| `pnpm vitest run <path>` | One test file |
+| `pnpm run commit` | Interactive semantic commit |
+| `pnpm run changelog:check` | Verify `changelogs/` matches the generator |
+| `python3 scripts/generate-icon.py` | Regenerate the app icon (requires Pillow) |
+
+DevTools auto-open is on in dev (`app:dev`, `start`); set `IKI_AUTO_OPEN_DEVTOOLS=false` to disable. Packaged builds never auto-open.
+
 ## Changing the harness
 
 Read the [backend ownership and regression map](packages/backend/README.md#runtime-contracts) before editing a core path. It is tracked; design notes under `docs/` may be missing or stale.
@@ -30,7 +50,7 @@ packages/desktop   ← Electron shell: main (IPC translation only) / preload / r
 packages/daemon    ← headless server: server_http / server_ws / napcat_adapter / tool_access
 packages/theme     ← shared CSS tokens
 tests/             ← vitest, partially mirrors packages/*/src
-docs/              ← ADRs, conventions, design notes (gitignored — may be absent on fresh clones)
+docs/              ← conventions, ADRs, design notes, reports, process (gitignored — may be absent on fresh clones)
 postmortem/        ← incident write-ups
 ```
 
@@ -52,9 +72,10 @@ postmortem/        ← incident write-ups
 - `packages/backend/README.md` — chat-turn pipeline, backend directory map, harness invariants (memory, approval, observability)
 - `docs/harness.md` — runtime concept model in current framework vocabulary (context engineering, op-loop/steering, HITL approvals, durable execution); read before renaming or moving these concepts
 - `packages/{desktop,daemon}/README.md` — shell boundary rules
-- `docs/conventions.md` — code conventions, prohibited actions, landmines, testing & coverage gates, commit governance
+- `docs/conventions.md` — code conventions, prohibited actions, landmines, testing, commit governance
 - `docs/decisions/` — ADRs: why `AgentHarness` exists, why `turn_prep/` is the boundary, why `@iki/core` was deleted
 - `docs/napcat-integration.md` — QQ bridge via NapCat; `postmortem/backend-bugs-2026-04.md` — bug patterns (pre-monorepo paths, see its banner)
-- `docs/design/` — live subsystem notes only (MCP, awaiters, proactive tasks, logging contract, ACP, affect) — see its README index
-- `README.md` — user-facing (tech stack, download); `.impeccable.md` — UI design philosophy
+- `docs/design/` — operative subsystem notes only (MCP, awaiters, proactive tasks, logging contract, ACP) — see its README index
+- `docs/reports/` — dated audits and their measured results; `docs/process/` — proposals and research notes
+- `README.md` — user-facing (features, download, quick start); `.impeccable.md` — UI design philosophy
 - `CLAUDE.md` / `IKI.md` — pointer stubs to this file; don't add content there

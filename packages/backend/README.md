@@ -13,9 +13,8 @@ harness to replay an answered batch. `thread_stream_coordinator.ts` owns active 
 
 ## Runtime contracts
 
-This table records implemented ownership, not equivalence to another framework. Update it with the
-relevant regression when changing behavior. Tests use the real SDK with scripted providers where possible;
-that does not establish live-provider compatibility or crash-safe exactly-once tools.
+This table records implemented ownership. Update it with the relevant regression when changing behavior.
+Tests use the real SDK with scripted providers where possible.
 
 | Responsibility | One owner | Contract | Regression |
 |---|---|---|---|
@@ -48,18 +47,18 @@ pnpm run ci:quality
 ```
 
 For a single behavior, run the test path in the table with `pnpm vitest run <path>`.
-A lower test count after deleting obsolete behavior tests is not evidence of less coverage or more quality;
-retain the observable invariants and pass the actual coverage gate.
+Deleting obsolete behavior tests lowers the test count without lowering coverage of the surviving
+invariants; keep the invariants observable and run `pnpm run ci:quality`.
 
-## Limits that must not be advertised as solved
+## Limits
 
 - Budgeting estimates tokens; provider-specific image accounting differs. Unknown input budgets disable automatic projection. A single oversized protected instruction or tool exchange stops explicitly.
 - Summarization needs a configured tool model, is lossy, and may fail. No silent deletion fallback. Compaction costs are separate from main-model usage.
-- Per-call records cover completed inferences; interrupted provider output and subagent trajectories are not yet a complete externally replayable rollout. Working history alone is not an exactly-once execution log.
+- Per-call records cover completed inferences. Interrupted provider output and subagent trajectories leave no complete externally replayable rollout; working history is not an exactly-once execution log.
 - Approval continuation has its own resumed stream lifecycle; it is not currently a steerable outer autonomous session. Consumed decisions plus external side effects are not one atomic transaction.
 - Admission locks are in-memory per chat-service instance plus a SQLite lease shared by processes on the same database; a lease holder that loses database access entirely (separate data directories) is outside this guarantee, and a reclaimed lease can double-run for at most one heartbeat interval before the old holder aborts. Threads sharing a workspace still share files: writes are atomic (no torn files) and serialized per path in-process, but cross-process read-modify-write races remain last-writer-wins. Workspace selection is snapshotted at turn start; switching workspaces between turns is not restricted further by this. Companion previews remain a shared presentation surface.
 - Workspace path validation is not an OS sandbox: it does not close concurrent symlink-replacement races or hard-link aliases. Approved shell commands and remote MCP servers can access beyond the workspace. Cancellation cannot roll back filesystem operations already submitted or guarantee remote servers stop; detached shell descendants may outlive their process group.
-- Native programmatic tool calling (code orchestrating the registry with filtered intermediate results) is not implemented. Shell, MCP and external ACP capabilities do not establish native PTC.
+- Native programmatic tool calling (code orchestrating the registry with filtered intermediate results) is not implemented.
 
 ## Other modules
 
@@ -69,5 +68,4 @@ MCP tools; `db/` owns SQLite; `runtimes/` owns auxiliary generation; `observabil
 Semantic memory retrieval remains disabled on the ordinary chat path (`includeMemory: false`).
 Subagents use a separate scratchpad and child run; they do not inherit the full parent transcript.
 
-See [AGENTS.md](../../AGENTS.md) for repository workflow. Historical rationale may live under ignored
-`docs/`; executable behavior and this tracked ownership map take precedence over architectural analogies.
+See [AGENTS.md](../../AGENTS.md) for repository workflow.
