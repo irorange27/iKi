@@ -1,1 +1,5 @@
 pnpm run -s ts
+# ponytail: changelog trails the tip commit by one — entry links need a real commit object.
+# Release notes are regenerated from the tag in .github/workflows/release-build.yml.
+pnpm run -s changelog:sync
+git add changelogs
