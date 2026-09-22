@@ -61,8 +61,6 @@ const createHarness = (options?: {
   const message = ref(options?.message ?? 'Need help');
   const isRecording = ref(false);
   const isTranscribing = ref(false);
-  const selectedSkillIds = ref<string[]>([]);
-  const isAutoSkillMode = ref(true);
   const provider = buildProvider({
     id: 'openai',
     name: 'OpenAI',
@@ -101,8 +99,6 @@ const createHarness = (options?: {
     message,
     isRecording,
     isTranscribing,
-    selectedSkillIds,
-    isAutoSkillMode,
     isAutonomousMode: ref(false),
     autonomousMaxIterations: ref(10),
     reasoningEffort: ref(''),

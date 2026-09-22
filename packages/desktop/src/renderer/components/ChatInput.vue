@@ -368,8 +368,7 @@ type ComposerInlineToken = {
   label: string;
   title: string;
   toneClass: string;
-  kind: 'active-invocation' | 'selected-skill';
-  skillId?: string;
+  kind: 'active-invocation';
 };
 
 const inputRef = ref<ComposerTextControl | null>(null);
@@ -388,9 +387,6 @@ const showVisionWarning = computed(
   () => attachedImages.value.length > 0 && !modelSupportsVision.value
 );
 const isBusy = ref(false);
-const selectedSkillIds = ref<string[]>([]);
-const skillMode = ref<'manual' | 'auto'>('auto');
-const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 const isAutonomousMode = ref(false);
 const autonomousMaxIterations = ref(20);
 
@@ -438,7 +434,6 @@ const {
   activeSuggestionIndex: activeSlashCommandIndex,
   isMenuVisible: isSlashCommandMenuVisible,
   activeInvocation,
-  selectedSkills,
   applySuggestion: applySlashCommandSuggestion,
   clearActiveInvocation,
   handleComposerKeydown: handleSlashCommandKeydown,
@@ -450,7 +445,6 @@ const {
   threadId: computed(() => props.threadId),
   currentIncognito: isIncognito,
   currentPersonality,
-  selectedSkillIds,
   onRequestNewChat: () => emit('new-chat-requested'),
   onRequestClearThread: () => emit('clear-thread-requested'),
   onRequestIncognitoChange: (nextValue: boolean) => void threadSession.setIncognito(nextValue),
@@ -494,8 +488,6 @@ const {
   message,
   isRecording,
   isTranscribing,
-  selectedSkillIds,
-  isAutoSkillMode,
   isAutonomousMode,
   autonomousMaxIterations,
   reasoningEffort: currentReasoningEffort,
@@ -542,22 +534,6 @@ const getInvocationLabel = (command: ComposerSlashCommand) => {
   return command.name;
 };
 
-const selectedSkillTokens = computed<ComposerInlineToken[]>(() => {
-  if (activeInvocation.value?.kind === 'skill') {
-    return [];
-  }
-
-  return selectedSkills.value.map(skill => ({
-    id: `selected-skill:${skill.id}`,
-    prefix: '$',
-    label: skill.name,
-    title: skill.description || skill.path || skill.id,
-    toneClass: 'composer-inline-token--skill',
-    kind: 'selected-skill',
-    skillId: skill.id,
-  }));
-});
-
 const inlineComposerTokens = computed<ComposerInlineToken[]>(() => {
   const tokens: ComposerInlineToken[] = [];
 
@@ -577,7 +553,7 @@ const inlineComposerTokens = computed<ComposerInlineToken[]>(() => {
     });
   }
 
-  return [...tokens, ...selectedSkillTokens.value];
+  return tokens;
 });
 
 const composerPlaceholder = computed(() => {
@@ -590,22 +566,12 @@ const composerPlaceholder = computed(() => {
   if (activeInvocation.value?.kind === 'builtin') {
     return t('chat.input.placeholder.commandInvocation', { name: activeInvocation.value.name });
   }
-  if (selectedSkills.value.length > 0) {
-    return t('chat.input.placeholder.skillsActive');
-  }
   return t('chat.input.placeholder');
 });
-
-const removeSelectedSkill = (skillId: string) => {
-  selectedSkillIds.value = selectedSkillIds.value.filter(id => id !== skillId);
-  skillMode.value = 'manual';
-};
 
 const handleInlineTokenClick = (token: ComposerInlineToken) => {
   if (token.kind === 'active-invocation') {
     clearActiveInvocation();
-  } else if (token.skillId) {
-    removeSelectedSkill(token.skillId);
   }
 
   inputRef.value?.focus();
@@ -692,16 +658,7 @@ const handleComposerKeydown = (event: KeyboardEvent) => {
   if (activeInvocation.value) {
     event.preventDefault();
     clearActiveInvocation();
-    return;
   }
-
-  const lastSelectedSkill = selectedSkills.value.at(-1);
-  if (!lastSelectedSkill) {
-    return;
-  }
-
-  event.preventDefault();
-  removeSelectedSkill(lastSelectedSkill.id);
 };
 
 const shouldShowSkillSectionLabel = (index: number) => {

@@ -54,8 +54,6 @@ export const useChatComposerSend = (deps: {
   message: Ref<string>;
   isRecording: Ref<boolean>;
   isTranscribing: Ref<boolean>;
-  selectedSkillIds: Ref<string[]>;
-  isAutoSkillMode: Ref<boolean>;
   isAutonomousMode: Ref<boolean>;
   autonomousMaxIterations: Ref<number>;
   reasoningEffort: Ref<string>;
@@ -172,12 +170,12 @@ export const useChatComposerSend = (deps: {
       return;
     }
 
-    const effectiveSkillMode =
-      resolvedSendRequest.skillMode ?? (deps.isAutoSkillMode.value ? 'auto' : 'manual');
+    // The composer holds no persistent skill selection; only slash-command overrides apply.
+    const effectiveSkillMode = resolvedSendRequest.skillMode ?? 'auto';
     const effectiveSelectedSkillIds =
       resolvedSendRequest.skillMode === 'manual' && Array.isArray(resolvedSendRequest.skillIds)
         ? resolvedSendRequest.skillIds
-        : deps.selectedSkillIds.value;
+        : [];
 
     const providerReady = await deps.ensureProviderReady();
     if (providerReady.ok === false) {

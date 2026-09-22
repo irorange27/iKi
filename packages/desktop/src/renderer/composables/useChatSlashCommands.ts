@@ -79,17 +79,8 @@ const toComposerInvocationToken = (
   return toSkillComposerInvocationToken(command);
 };
 
-const toSelectedSkillComposerToken = (skill: SkillSummary): ComposerInvocationToken => ({
-  id: `selected-skill:${skill.id}`,
-  kind: 'skill',
-  prefix: '$',
-  label: skill.name,
-  title: skill.description || skill.path || skill.id,
-});
-
 const buildComposerInvocationTokens = (params: {
   activeInvocation: ComposerSlashCommand | null;
-  selectedSkills: readonly SkillSummary[];
 }): ComposerInvocationToken[] => {
   const tokens: ComposerInvocationToken[] = [];
   const invocationToken = params.activeInvocation
@@ -100,11 +91,7 @@ const buildComposerInvocationTokens = (params: {
     tokens.push(invocationToken);
   }
 
-  if (params.activeInvocation?.kind === 'skill') {
-    return tokens;
-  }
-
-  return [...tokens, ...params.selectedSkills.map(toSelectedSkillComposerToken)];
+  return tokens;
 };
 
 const toComposerInvocationPartData = (
@@ -122,7 +109,6 @@ export const useChatSlashCommands = (deps: {
   threadId: Ref<string | undefined>;
   currentIncognito: Ref<boolean>;
   currentPersonality: Ref<string>;
-  selectedSkillIds: Ref<string[]>;
   onRequestNewChat: () => void;
   onRequestClearThread: () => void;
   onRequestIncognitoChange: (nextValue: boolean) => void;
@@ -309,25 +295,9 @@ export const useChatSlashCommands = (deps: {
     if (!parsed || parsed.hasArgumentSeparator) return null;
     return parsed.query;
   });
-  const selectedSkills = computed<SkillSummary[]>(() => {
-    const skillById = new Map(availableSkills.value.map(skill => [skill.id, skill] as const));
-    return deps.selectedSkillIds.value.map(skillId => {
-      const existing = skillById.get(skillId);
-      if (existing) return existing;
-
-      return {
-        id: skillId,
-        name: skillId.split(':').at(-1) ?? skillId,
-        description: '',
-        source: 'user',
-        path: undefined,
-      } satisfies SkillSummary;
-    });
-  });
   const composerInvocationTokens = computed(() =>
     buildComposerInvocationTokens({
       activeInvocation: activeInvocation.value,
-      selectedSkills: selectedSkills.value,
     })
   );
 
@@ -566,7 +536,6 @@ export const useChatSlashCommands = (deps: {
       composerInvocations: toComposerInvocationPartData(
         buildComposerInvocationTokens({
           activeInvocation: command,
-          selectedSkills: selectedSkills.value,
         })
       ),
       onCommitted: clearActiveInvocation,
@@ -583,7 +552,6 @@ export const useChatSlashCommands = (deps: {
     composerInvocations: toComposerInvocationPartData(
       buildComposerInvocationTokens({
         activeInvocation: command,
-        selectedSkills: selectedSkills.value,
       })
     ),
     onCommitted: clearActiveInvocation,
@@ -663,7 +631,6 @@ export const useChatSlashCommands = (deps: {
       composerInvocations: toComposerInvocationPartData(
         buildComposerInvocationTokens({
           activeInvocation: promptAppCommand,
-          selectedSkills: selectedSkills.value,
         })
       ),
     };
@@ -674,7 +641,6 @@ export const useChatSlashCommands = (deps: {
     activeSuggestionIndex,
     isMenuVisible,
     activeInvocation,
-    selectedSkills,
     composerInvocationTokens,
     applySuggestion,
     clearActiveInvocation,
