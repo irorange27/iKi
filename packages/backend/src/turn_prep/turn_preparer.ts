@@ -359,9 +359,6 @@ export const createChatTurnPreparer = (deps: {
       providerType: options.providerType,
       providerId: options.providerId,
       model: options.model,
-      tools: guardedTools,
-      toolMode: mode,
-      mcpServerIds: options.mcpServerIds,
       affectSignal,
       interventionPolicy,
     });

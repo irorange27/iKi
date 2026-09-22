@@ -6,33 +6,11 @@ import {
   parseJsonRecord,
   parseThreadAffectState,
   parseThreadInterventionPolicyState,
-  parseThreadToolNames,
-  parseThreadToolSelectionState,
 } from '@iki/backend/message/thread_runtime_hints';
 
 describe('thread_runtime_hints', () => {
   it('normalizes string arrays by trimming and de-duplicating values', () => {
-    expect(normalizeStringArray([' web ', '', 'fetch', 'web', 1, null])).toEqual([
-      'web',
-      'fetch',
-    ]);
-  });
-
-  it('parses persisted thread tool hints from thread fields', () => {
-    expect(parseThreadToolNames('["web","mcp_lookup","web"]')).toEqual(['web', 'mcp_lookup']);
-    expect(
-      parseThreadToolSelectionState(
-        JSON.stringify({
-          toolSelection: {
-            mode: 'manual',
-            mcpServerIds: [' docs ', 'docs', 'search'],
-          },
-        })
-      )
-    ).toEqual({
-      mode: 'manual',
-      mcpServerIds: ['docs', 'search'],
-    });
+    expect(normalizeStringArray([' web ', '', 'fetch', 'web', 1, null])).toEqual(['web', 'fetch']);
   });
 
   it('builds next runtime metadata without dropping unrelated metadata', () => {
@@ -57,8 +35,6 @@ describe('thread_runtime_hints', () => {
         existingMetadata: existing,
         providerType: 'deepseek',
         model: 'deepseek-chat',
-        toolMode: 'manual',
-        mcpServerIds: [' docs ', 'docs'],
         updatedAt: '2026-03-22T00:00:00.000Z',
       })
     ).toEqual({
@@ -68,11 +44,12 @@ describe('thread_runtime_hints', () => {
         model: 'deepseek-chat',
         updatedAt: '2026-03-22T00:00:00.000Z',
       },
+      // Legacy `toolSelection` is carried through untouched: nothing reads it any
+      // more, but existing thread rows keep their recorded history.
       toolSelection: {
-        mode: 'manual',
-        mcpServerIds: ['docs'],
+        mode: 'auto',
+        mcpServerIds: ['legacy'],
         pinned: true,
-        updatedAt: '2026-03-22T00:00:00.000Z',
       },
     });
   });
@@ -82,7 +59,6 @@ describe('thread_runtime_hints', () => {
       existingMetadata: '{}',
       providerType: 'openai',
       model: 'gpt-4.1',
-      toolMode: 'auto',
       affectSignal: {
         source: 'realtime',
         guardActive: true,
@@ -128,7 +104,6 @@ describe('thread_runtime_hints', () => {
       existingMetadata: '{}',
       providerType: 'openai',
       model: 'gpt-4.1',
-      toolMode: 'manual',
       interventionPolicy: {
         interventionState: 'co_plan',
         escalate: 0,

@@ -145,7 +145,9 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const syncProviderState = (thread: ChatThread | null) => {
-    const providerId = thread ? parseThreadLlmSelectionState(thread.metadata).providerId : undefined;
+    const providerId = thread
+      ? parseThreadLlmSelectionState(thread.metadata).providerId
+      : undefined;
     currentProviderId.value = providerId ?? null;
   };
 
@@ -155,7 +157,9 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
   const syncReasoningEffortState = (thread: ChatThread | null) => {
     currentReasoningEffort.value =
-      typeof thread?.reasoning_effort === 'string' ? thread.reasoning_effort.trim().toLowerCase() : '';
+      typeof thread?.reasoning_effort === 'string'
+        ? thread.reasoning_effort.trim().toLowerCase()
+        : '';
   };
 
   const syncPersonalityState = (thread: ChatThread | null) => {
@@ -221,10 +225,12 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       typeof thread.reasoning_effort === 'string' && thread.reasoning_effort.trim()
         ? thread.reasoning_effort
         : undefined,
-    metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
+    metadata:
+      typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
     client_id:
-      typeof thread.client_id === 'string' && thread.client_id.trim() ? thread.client_id : undefined,
-    tools: typeof thread.tools === 'string' && thread.tools.trim() ? thread.tools : undefined,
+      typeof thread.client_id === 'string' && thread.client_id.trim()
+        ? thread.client_id
+        : undefined,
     is_favorited: thread.is_favorited ? 1 : 0,
     is_incognito: thread.is_incognito ? 1 : 0,
     workspace_id: normalizeWorkspaceId(thread.workspace_id) ?? undefined,
@@ -385,7 +391,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
         reasoning_effort: draftEffort || null,
         metadata: JSON.stringify(metadata),
         is_incognito: isIncognito.value ? 1 : 0,
-        workspace_id: mode === 'work' ? options?.workspaceId ?? null : null,
+        workspace_id: mode === 'work' ? (options?.workspaceId ?? null) : null,
       });
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
@@ -721,8 +727,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const setReasoningEffort = async (nextValue: string | null) => {
-    const normalizedValue =
-      typeof nextValue === 'string' ? nextValue.trim().toLowerCase() : '';
+    const normalizedValue = typeof nextValue === 'string' ? nextValue.trim().toLowerCase() : '';
     const previousValue = currentReasoningEffort.value;
     const activeThread = currentThread.value;
 

@@ -57,11 +57,7 @@ const createHarness = (
       is_incognito:
         typeof input.is_incognito === 'number' ? input.is_incognito : input.is_incognito ? 1 : 0,
       is_favorited:
-        typeof input.is_favorited === 'number'
-          ? input.is_favorited
-          : input.is_favorited
-            ? 1
-            : 0,
+        typeof input.is_favorited === 'number' ? input.is_favorited : input.is_favorited ? 1 : 0,
       workspace_id:
         typeof input.workspace_id === 'string' && input.workspace_id.trim().length > 0
           ? input.workspace_id
@@ -387,12 +383,14 @@ describe('threadSession store', () => {
         model: 'deepseek-chat',
         metadata: '{"llm":{"providerId":"deepseek"}}',
         client_id: 'client_desktop',
-        tools: '["web"]',
         is_favorited: 1,
         is_incognito: 1,
         workspace_id: 'workspace_alpha',
       })
     );
+    // Recorded tool hints are history, not runtime state — they must not follow the
+    // cleared thread into its replacement.
+    expect(clearThread.mock.calls[0]?.[1]).not.toHaveProperty('tools');
     expect(clearedThread?.id).toBe('thread_clear_me');
     expect(clearedThread?.title).toBe('New Chat');
     expect(clearedThread?.prompt_app_id).toBeUndefined();
@@ -605,14 +603,20 @@ describe('threadSession store', () => {
       ],
     });
 
-    expect(generateTitle).toHaveBeenCalledWith('User: 请告诉我现在几点\nAssistant: 我先调用系统时间工具。');
+    expect(generateTitle).toHaveBeenCalledWith(
+      'User: 请告诉我现在几点\nAssistant: 我先调用系统时间工具。'
+    );
     expect(updateThread).toHaveBeenCalledWith(thread.id, { title: 'Generated title' });
   });
 
   it('discards stale message-load results when a newer thread selection has started', async () => {
     // Thread A: slow message load. Thread B: instant message load.
     const threadA = createStoredThread({ id: 'thread_A', title: 'Thread A', model: 'gpt-4o' });
-    const threadB = createStoredThread({ id: 'thread_B', title: 'Thread B', model: 'deepseek-chat' });
+    const threadB = createStoredThread({
+      id: 'thread_B',
+      title: 'Thread B',
+      model: 'deepseek-chat',
+    });
 
     const aMessages: ChatMessage[] = [
       {
@@ -662,7 +666,13 @@ describe('threadSession store', () => {
     store.initRuntime({
       electronAPI: {
         chat: {
-          threads: { create: vi.fn(), clear: vi.fn(), update: updateThread, get: getThread, delete: vi.fn() },
+          threads: {
+            create: vi.fn(),
+            clear: vi.fn(),
+            update: updateThread,
+            get: getThread,
+            delete: vi.fn(),
+          },
           messages: { list: listMessages },
         },
         toolModel: { generateTitle: vi.fn() },
@@ -728,13 +738,24 @@ describe('threadSession store', () => {
     store.initRuntime({
       electronAPI: {
         chat: {
-          threads: { create: vi.fn(), clear: vi.fn(), update: updateThread, get: getThread, delete: vi.fn() },
+          threads: {
+            create: vi.fn(),
+            clear: vi.fn(),
+            update: updateThread,
+            get: getThread,
+            delete: vi.fn(),
+          },
           messages: { list: vi.fn(async () => []) },
         },
         toolModel: { generateTitle: vi.fn() },
         tasks: {},
       } as never,
-      messageStore: { append: vi.fn(), clear: vi.fn(), hasId: vi.fn(() => false), setAll: vi.fn() } as never,
+      messageStore: {
+        append: vi.fn(),
+        clear: vi.fn(),
+        hasId: vi.fn(() => false),
+        setAll: vi.fn(),
+      } as never,
       persistence: { resetPersistedMessageIds: vi.fn() } as never,
       sidebarRef: ref({ refresh: vi.fn(), setCurrentThread: vi.fn() }) as never,
       scrollToBottom: vi.fn(),
@@ -751,7 +772,10 @@ describe('threadSession store', () => {
     expect(state.currentThread.value?.model).toBe('gpt-4o');
 
     // Change model — IPC will fail
-    state.handleModelSelected({ model: 'deepseek-chat', provider: { id: 'deepseek', type: 'deepseek' } });
+    state.handleModelSelected({
+      model: 'deepseek-chat',
+      provider: { id: 'deepseek', type: 'deepseek' },
+    });
 
     // Optimistic update has been applied
     expect(state.currentModel.value).toBe('deepseek-chat');
