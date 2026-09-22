@@ -61,9 +61,13 @@ export const createToolApprovalController = (deps: {
         reason: approved ? 'User approved tool execution.' : 'User rejected tool execution.',
       });
 
-      if (!result.awaitingApproval) {
-        void deps.chat.resumeStream();
-      }
+      // approveTool resolves only after the backend pushed the whole resumed
+      // segment, so consume it in both outcomes. When the turn blocked again
+      // (awaitingApproval) the segment carries the next tool part and approval
+      // card but no terminal chunk — close the slot so the read ends and the
+      // card renders; otherwise the turn stalls on an unconsumed stream.
+      deps.transport.closeFollowUpStream();
+      void deps.chat.resumeStream();
     } catch (error) {
       approvalLogger.event({
         level: 'error',

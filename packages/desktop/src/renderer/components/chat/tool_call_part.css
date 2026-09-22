@@ -249,6 +249,17 @@
   opacity: 0.9;
 }
 
+/* Failure reason of an output-error part, always visible (collapsed cards
+   included); full text on hover via the title attribute. */
+.tool-error-text {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--danger-color);
+}
+
 .tool-duration-icon {
   opacity: 0.85;
 }

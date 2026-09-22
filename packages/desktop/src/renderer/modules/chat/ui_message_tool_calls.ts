@@ -94,6 +94,17 @@ export const getToolStateKind = (part: unknown): ToolStateKind => {
 export const getToolStatePillClass = (part: unknown): string =>
   `tool-state-${getToolStateKind(part)}`;
 
+/**
+ * The recorded failure reason of an output-error part. Surfaced in the card's
+ * meta row so interrupted/failed calls say why instead of a bare "Failed"
+ * pill — even while the card is collapsed.
+ */
+export const getToolErrorText = (part: unknown): string => {
+  if (!isObjectRecord(part) || getToolStateKind(part) !== 'error') return '';
+  if (typeof part.errorText !== 'string') return '';
+  return part.errorText.trim();
+};
+
 const coerceToTimestampMs = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
 
@@ -693,9 +704,17 @@ export const getToolDiffStat = (part: unknown): ToolDiffStat => {
 // Output for the raw-JSON section: hide `diff` when it is rendered as a dedicated view.
 export const getToolOutputForDisplay = (part: unknown): unknown => {
   const output = getToolOutput(part);
-  if (!hasToolDiff(part) || !isObjectRecord(output)) return output;
-  const { diff: _diff, ...rest } = output;
-  return rest;
+  if (output !== undefined) {
+    if (!hasToolDiff(part) || !isObjectRecord(output)) return output;
+    const { diff: _diff, ...rest } = output;
+    return rest;
+  }
+  // Error results carry their reason in errorText — the Output section falls
+  // back to it (embedded views have no meta row to show it in).
+  if (typeof getToolErrorText(part) === 'string' && getToolErrorText(part)) {
+    return getToolErrorText(part);
+  }
+  return undefined;
 };
 
 export type ToolTerminalView = {

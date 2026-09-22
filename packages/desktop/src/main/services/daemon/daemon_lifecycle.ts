@@ -45,13 +45,19 @@ const normalizePort = (value: unknown, fallback: number): number => {
 };
 
 const readConfigDaemonBinding = (): { host: string; port: number } => {
+  // IKI_DAEMON_PORT (also honored by standalone daemon mode) wins over the
+  // stored config so isolation-scoped launches (e2e) never fight over the
+  // default port with a concurrently running instance.
+  const envPort = normalizePort(process.env.IKI_DAEMON_PORT ?? null, Number.NaN);
   try {
     const config = getAppConfig();
     const host =
       typeof config.daemon?.host === 'string' && config.daemon.host.trim()
         ? config.daemon.host.trim()
         : DEFAULT_DAEMON_HOST;
-    const port = normalizePort(config.daemon?.port, DEFAULT_DAEMON_PORT);
+    const port = Number.isFinite(envPort)
+      ? envPort
+      : normalizePort(config.daemon?.port, DEFAULT_DAEMON_PORT);
     return { host, port };
   } catch (error) {
     getDaemonLifecycleLogger().event({

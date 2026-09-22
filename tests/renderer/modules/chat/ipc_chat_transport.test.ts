@@ -177,6 +177,37 @@ describe('ipc_chat_transport', () => {
     expect(await transport.reconnectToStream({ chatId: 'chat_1' })).toBeNull();
   });
 
+  it('ends a blocked follow-up segment on closeFollowUpStream and still replays its chunks', async () => {
+    const electronApi = createElectronApiStub();
+    const transport = createIpcChatTransport({ electronAPI: electronApi.electronAPI });
+
+    transport.expectFollowUpStream();
+    electronApi.emit({ type: 'start', messageId: 'assistant_1' });
+    electronApi.emit({
+      type: 'tool-input-available',
+      toolCallId: 'call_2',
+      toolName: 'shell',
+      input: { command: 'ls' },
+      dynamic: true,
+    });
+    electronApi.emit({
+      type: 'tool-approval-request',
+      approvalId: 'aitxt_2',
+      toolCallId: 'call_2',
+    });
+    // A blocked resume (repeat approval) never emits finish/abort/error.
+    transport.closeFollowUpStream();
+
+    const reconnected = await transport.reconnectToStream({ chatId: 'chat_1' });
+    expect(reconnected).not.toBeNull();
+    const chunks = await readAll(reconnected as ReadableStream<Chunk>);
+    expect(chunks.map(chunk => chunk.type)).toEqual([
+      'start',
+      'tool-input-available',
+      'tool-approval-request',
+    ]);
+  });
+
   it('fails the stream when the send invoke reports a failure', async () => {
     const electronApi = createElectronApiStub();
     electronApi.electronAPI.chat.stream = async () => ({ success: false, error: 'rate limited' });

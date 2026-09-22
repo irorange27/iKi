@@ -82,6 +82,13 @@ export type IpcChatTransport = ChatTransport<ChatUiMessage> & {
   expectFollowUpStream: () => void;
   /** Drops the armed follow-up slot (e.g. when the approve IPC failed). */
   disarmFollowUpStream: () => void;
+  /**
+   * Ends the armed follow-up segment without dropping buffered chunks. A
+   * blocked resume (another approval requested) emits no terminal chunk, so
+   * the reader side would never finish; reconnectToStream still replays what
+   * was buffered.
+   */
+  closeFollowUpStream: () => void;
   /** Detaches the active stream and closes its reader side. */
   detachActiveStream: () => void;
   /** Thread id of the stream this transport is currently bound to. */
@@ -142,6 +149,11 @@ export const createIpcChatTransport = (deps: {
     disarmFollowUpStream() {
       resume?.close();
       resume = null;
+    },
+
+    closeFollowUpStream() {
+      resume?.close();
+      if (active === resume) active = null;
     },
 
     detachActiveStream() {

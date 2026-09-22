@@ -210,12 +210,8 @@ describe('chat_context assembler', () => {
         ]),
       })
     );
-    expect(result.messages[0]).toEqual(
-      expect.objectContaining({
-        role: 'system',
-      })
-    );
-    expect(String(result.messages[0].content)).toContain('Long-term memory');
+    expect(result.messages.at(-1)!.role).toBe('user');
+    expect(String(result.messages.at(-1)!.content)).toContain('Long-term memory');
   });
 
   it('injects durable continuity through the memory block even when archive memory is unavailable', async () => {
@@ -240,14 +236,12 @@ describe('chat_context assembler', () => {
       onMemoryRetrieved,
     });
 
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: expect.stringContaining('Durable continuity context (use only if relevant):'),
-    });
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: expect.stringContaining('preference: Call the owner Nina.'),
-    });
+    expect(String(result.messages.at(-1)!.content)).toContain(
+      'Durable continuity context (use only if relevant):'
+    );
+    expect(String(result.messages.at(-1)!.content)).toContain(
+      'preference: Call the owner Nina.'
+    );
     expect(findBlock(result, 'memory')).toEqual(
       expect.objectContaining({
         kind: 'memory',
@@ -303,16 +297,85 @@ describe('chat_context assembler', () => {
       { role: 'system', content: 'Existing system A.' },
       { role: 'system', content: 'Existing system B.' },
       { role: 'system', content: 'Identity block.' },
-      {
-        role: 'system',
-        content:
-          'Long-term memory (use only if relevant; ignore if unrelated):\n- (0.900) Remember the design goal.',
-      },
-      { role: 'system', content: 'Affect block.' },
       { role: 'system', content: 'Use the planning skill.' },
       { role: 'assistant', content: 'Previous reply.' },
-      { role: 'user', content: 'Plan the next step.' },
+      {
+        role: 'user',
+        content:
+          'Plan the next step.\n\n' +
+          '<system-reminder>\n' +
+          'Long-term memory (use only if relevant; ignore if unrelated):\n- (0.900) Remember the design goal.\n\n' +
+          'Affect block.\n' +
+          '</system-reminder>',
+      },
     ]);
+  });
+
+  // Prompt caching is a prefix: anything that changes before the transcript
+  // forces the whole history to be re-prefilled. Per-turn volatile context must
+  // therefore not sit in the system prefix.
+  it('keeps the system prefix stable when the affect block changes', async () => {
+    const systemOf = (messages: Array<{ role: string; content: unknown }>) =>
+      messages
+        .filter(message => message.role === 'system')
+        .map(message => String(message.content))
+        .join('\n');
+
+    const { assembler: calm } = createAssembler({
+      getAffectContextMessage: vi.fn(() => 'Calm and focused.'),
+    });
+    const { assembler: frustrated } = createAssembler({
+      getAffectContextMessage: vi.fn(() => 'Frustrated and rushed.'),
+    });
+
+    const params = {
+      memoryContextConfig: baseConfig.memory.context,
+      threadId: 'thread_cache_prefix',
+      skillMode: 'manual' as const,
+      messages: [{ role: 'user' as const, content: 'Plan the next step.' }],
+    };
+
+    const before = await calm.assemble(params);
+    const after = await frustrated.assemble(params);
+
+    expect(systemOf(after.messages)).toBe(systemOf(before.messages));
+  });
+
+  it('delivers the affect block with the newest user message', async () => {
+    const { assembler } = createAssembler({
+      getAffectContextMessage: vi.fn(() => 'Frustrated and rushed.'),
+    });
+
+    const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
+      threadId: 'thread_affect_delivery',
+      skillMode: 'manual',
+      messages: [{ role: 'user', content: 'Plan the next step.' }],
+    });
+
+    const last = result.messages.at(-1)!;
+    expect(last.role).toBe('user');
+    expect(String(last.content)).toContain('Frustrated and rushed.');
+    expect(String(last.content)).toContain('Plan the next step.');
+  });
+
+  // Injected context shares the user message's role, so it must be delimited or
+  // the model reads it as something the user actually said.
+  it('delimits injected context so it is not read as user speech', async () => {
+    const { assembler } = createAssembler({
+      getAffectContextMessage: vi.fn(() => 'Frustrated and rushed.'),
+    });
+
+    const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
+      threadId: 'thread_envelope',
+      skillMode: 'manual',
+      messages: [{ role: 'user', content: 'Plan the next step.' }],
+    });
+
+    expect(String(result.messages.at(-1)!.content)).toBe(
+      'Plan the next step.\n\n<system-reminder>\nFrustrated and rushed.\n</system-reminder>'
+    );
   });
 
   it('drops memory retrieval when the latest prompt is unavailable', async () => {
@@ -423,16 +486,13 @@ describe('chat_context assembler', () => {
         sourceCount: 1,
       })
     );
-    expect(result.messages).toContainEqual({
-      role: 'system',
-      content: 'Affect state:\n- User seems focused, keep execution crisp.',
-    });
+    expect(String(result.messages.at(-1)!.content)).toContain(
+      'Affect state:\n- User seems focused, keep execution crisp.'
+    );
     expect(
       result.messages.some(
         message =>
-          message.role === 'system' &&
-          typeof message.content === 'string' &&
-          message.content.includes('Long-term memory')
+          typeof message.content === 'string' && message.content.includes('Long-term memory')
       )
     ).toBe(false);
   });
@@ -464,10 +524,8 @@ describe('chat_context assembler', () => {
         sourceCount: 1,
       })
     );
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: expect.stringMatching(/\.\.\.$/),
-    });
+    // The clipped memory keeps its truncation marker inside the envelope.
+    expect(String(result.messages.at(-1)!.content)).toMatch(/\.\.\.\n<\/system-reminder>$/);
     expect(onMemoryRetrieved).toHaveBeenCalledWith(
       expect.objectContaining({
         query: 'Need memory context.',
@@ -666,16 +724,15 @@ describe('chat_context assembler', () => {
       skillMode: 'auto',
     });
 
-    expect(result.messages.slice(0, 2)).toEqual([
-      {
-        role: 'system',
-        content: 'Current affect: focused and calm.',
-      },
+    expect(result.messages.filter(message => message.role === 'system')).toEqual([
       {
         role: 'system',
         content: 'Use the writing skill.',
       },
     ]);
+    expect(String(result.messages.at(-1)!.content)).toContain(
+      'Current affect: focused and calm.'
+    );
     expect(result.usedSkills).toEqual([
       expect.objectContaining({
         id: 'skill_writer',
@@ -715,10 +772,7 @@ describe('chat_context assembler', () => {
     });
 
     expect(getAffectContextMessage).not.toHaveBeenCalled();
-    expect(result.messages[0]).toEqual({
-      role: 'system',
-      content: 'Realtime affect.',
-    });
+    expect(String(result.messages.at(-1)!.content)).toContain('Realtime affect.');
     expect(findBlock(result, 'affect')).toEqual(
       expect.objectContaining({
         kind: 'affect',

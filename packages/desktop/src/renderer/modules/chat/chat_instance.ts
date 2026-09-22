@@ -40,7 +40,7 @@ const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
  * spliced rather than reassigned. Every mutation triggers Vue reactivity
  * through the shared ref.
  */
-const createReactiveChatState = (
+export const createReactiveChatState = (
   onWrite: (message: ChatUiMessage) => void
 ): { state: ChatState<ChatUiMessage>; messagesArray: ChatUiMessage[] } => {
   const messagesRef = ref<ChatUiMessage[]>([]);
@@ -75,7 +75,25 @@ const createReactiveChatState = (
     },
     replaceMessage: (index, message) => {
       if (index < 0 || index >= messagesRef.value.length) return;
-      messagesRef.value.splice(index, 1, message);
+      // Tripwire for the streaming-render regression class: writing the
+      // identical reference back keeps prop-driven children shallow-equal and
+      // their computeds stale (empty chat bubbles). Only a fresh clone per
+      // write re-renders; warn loudly if that invariant regresses.
+      if (messagesRef.value[index] === message) {
+        chatInstanceLogger.event({
+          level: 'warn',
+          event: 'chat.state.replace_message',
+          outcome: 'degraded',
+          message:
+            'Identical message reference written back; prop-driven message components will not re-render.',
+        });
+      }
+      // The SDK passes the same accumulating raw object every write and mutates
+      // its parts off-proxy, so splicing that reference back in leaves the
+      // child component's props identical and its segments computed stale.
+      // A fresh shallow clone per write gives Vue a new reactive proxy to
+      // invalidate on; the parts array itself is still the SDK's live state.
+      messagesRef.value.splice(index, 1, { ...message });
       onWrite(message);
     },
     snapshot: <T>(thing: T): T => thing,

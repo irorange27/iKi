@@ -239,6 +239,7 @@ const ChatInputStub = defineComponent({
   props: {
     threadId: { type: String, default: '' },
     activeModel: { type: String, default: '' },
+    approvalPolicy: { type: String, default: '' },
     isIncognito: { type: Boolean, default: false },
     selectedWorkspaceId: { type: String, default: null },
     workspaceLocked: { type: Boolean, default: false },
@@ -391,6 +392,19 @@ describe('ChatView', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
     document.body.innerHTML = '';
+  });
+
+  it('forwards the thread approval policy to the composer so permission choices reach the send path', async () => {
+    const wrapper = await mountChatView();
+    const chatInput = wrapper.findComponent(ChatInputStub);
+    expect(chatInput.props('approvalPolicy')).toBe('');
+
+    const threadSession = useThreadSessionStore();
+    threadSession.currentApprovalPolicy = 'always';
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent(ChatInputStub).props('approvalPolicy')).toBe('always');
   });
 
   it('forwards tool approval events from message items into the streaming controller', async () => {

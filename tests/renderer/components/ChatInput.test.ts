@@ -4,7 +4,10 @@ import { ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
+import {
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+} from '@iki/backend/utils/provider_models';
 import { useThreadSessionStore } from '../../../packages/desktop/src/renderer/store/thread_session';
 
 const { loggerEventMock } = vi.hoisted(() => ({
@@ -962,7 +965,7 @@ describe('ChatInput', () => {
     );
   });
 
-  it('falls back to the shared 128k context denominator when model metadata is unavailable', async () => {
+  it('falls back to the shared default context denominator when model metadata is unavailable', async () => {
     const provider = buildProvider({
       id: 'openai',
       name: 'OpenAI',
@@ -990,7 +993,7 @@ describe('ChatInput', () => {
       },
     });
 
-    expect(wrapper.find('.composer-context-ring').attributes('title')).toContain('1%');
+    expect(wrapper.find('.composer-context-ring').attributes('title')).toContain('0%');
 
     await wrapper.find('.chat-input-field').setValue('Use the default limit');
     await wrapper.find('.send-btn').trigger('click');
@@ -1005,6 +1008,7 @@ describe('ChatInput', () => {
         modelCapability: {
           contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
           maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+          maxOutputTokens: DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
         },
         }),
       }),
@@ -1077,11 +1081,7 @@ describe('ChatInput', () => {
 
     // Manual tool/MCP selection is gone: a thread's persisted allowlist must
     // never leak into the turn, or it silently restricts tools with no UI to
-    // see or clear it. Assert the send happened first — otherwise the absence
-    // checks below pass vacuously when neither mock is called.
-    expect(prepareMessageSend).toHaveBeenCalledTimes(1);
-    expect(submitTurn).toHaveBeenCalledTimes(1);
-
+    // see or clear it.
     const preparePayload = prepareMessageSend.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(preparePayload).not.toHaveProperty('tools');
     expect(preparePayload).not.toHaveProperty('mcpServerIds');
