@@ -78,9 +78,7 @@ describe('ChatModelSelector', () => {
     await flushPromises();
 
     expect(wrapper.find('.model-selector-panel').exists()).toBe(false);
-    expect(wrapper.emitted('select')).toEqual([
-      [{ provider: openai, model: 'gpt-4o' }],
-    ]);
+    expect(wrapper.emitted('select')).toEqual([[{ provider: openai, model: 'gpt-4o' }]]);
   });
 
   it('uses the shared custom-provider icon fallback for custom providers', async () => {
@@ -100,9 +98,9 @@ describe('ChatModelSelector', () => {
       global: {
         stubs: {
           LobeIcon: {
-            props: ['name', 'cdnPrefix', 'useCdn', 'fallbackText'],
+            props: ['name', 'fallbackText'],
             template:
-              '<div class="lobe-icon-stub" :data-name="name" :data-cdn-prefix="cdnPrefix || \'\'" :data-use-cdn="useCdn === undefined ? \'\' : String(useCdn)" :data-fallback-text="fallbackText || \'\'"></div>',
+              '<div class="lobe-icon-stub" :data-name="name" :data-fallback-text="fallbackText || \'\'"></div>',
           },
         },
       },
@@ -114,10 +112,6 @@ describe('ChatModelSelector', () => {
 
     const triggerIcon = wrapper.find('.model-selector-trigger-icon .lobe-icon-stub');
     expect(triggerIcon.attributes('data-name')).toBe('grid-2x2');
-    expect(triggerIcon.attributes('data-cdn-prefix')).toBe(
-      'https://unpkg.com/lucide-static@latest/icons'
-    );
-    expect(triggerIcon.attributes('data-use-cdn')).toBe('true');
     expect(triggerIcon.attributes('data-fallback-text')).toBe('PR');
 
     await wrapper.find('.model-selector-trigger').trigger('click');
@@ -125,10 +119,6 @@ describe('ChatModelSelector', () => {
 
     const groupIcon = wrapper.find('.model-provider-icon .lobe-icon-stub');
     expect(groupIcon.attributes('data-name')).toBe('grid-2x2');
-    expect(groupIcon.attributes('data-cdn-prefix')).toBe(
-      'https://unpkg.com/lucide-static@latest/icons'
-    );
-    expect(groupIcon.attributes('data-use-cdn')).toBe('true');
     expect(groupIcon.attributes('data-fallback-text')).toBe('PR');
   });
 
