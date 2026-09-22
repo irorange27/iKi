@@ -28,6 +28,11 @@ jobs:
         with:
           run_install: false
 
+      # ponytail: pnpm-lock.yaml records @electron/node-gyp as an SSH remote and runners have
+      # no deploy key. Re-record it over HTTPS (`pnpm update @electron/node-gyp`) and drop this.
+      - name: Prefer HTTPS for GitHub git fetches
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
