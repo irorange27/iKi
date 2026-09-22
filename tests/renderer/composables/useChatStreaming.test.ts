@@ -42,7 +42,6 @@ const createHarness = (options?: {
 }) => {
   const currentThread = ref<ChatThread | null>(options?.currentThread ?? null);
   const currentModel = ref(options?.currentModel ?? options?.currentThread?.model ?? 'gpt-4.1');
-  const selectedTools = ref<string[]>([]);
   const showWelcome = ref(true);
 
   const messageCreated = vi.fn(async (input: { id: string }) => ({ id: input.id }));
@@ -117,7 +116,6 @@ const createHarness = (options?: {
     onAssistantMessagePersisted,
     currentThread,
     currentModel,
-    selectedTools,
     showWelcome,
     createNewThread,
     clearCurrentThread,
@@ -133,7 +131,6 @@ const createHarness = (options?: {
     messageStore,
     currentThread,
     currentModel,
-    selectedTools,
     showWelcome,
     messageCreated,
     messageUpdated,
@@ -252,7 +249,7 @@ describe('useChatStreaming', () => {
   });
 
   it('creates the first thread on send and persists the built user message', async () => {
-    const { state, chatInstance, createNewThread, selectedTools, showWelcome, messageCreated } =
+    const { state, chatInstance, createNewThread, showWelcome, messageCreated } =
       createHarness({
         currentThread: null,
         currentModel: 'gpt-4.1',
@@ -261,12 +258,10 @@ describe('useChatStreaming', () => {
     const result = await state.prepareMessageSend({
       content: 'Hello from a fresh composer',
       model: 'gpt-4.1',
-      tools: ['web'],
     });
     await flushMicrotasks();
 
     expect(createNewThread).toHaveBeenCalledWith({ model: 'gpt-4.1' });
-    expect(selectedTools.value).toEqual(['web']);
     expect(showWelcome.value).toBe(false);
     expect(messageCreated).toHaveBeenCalledWith(
       expect.objectContaining({

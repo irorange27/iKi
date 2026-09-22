@@ -239,7 +239,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef, watchEffect } from 'vue';
+import { computed, ref, watchEffect } from 'vue';
 import type { Component } from 'vue';
 import type { FileUIPart } from 'ai';
 import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
@@ -270,7 +270,6 @@ import {
   type ComposerSlashCommand,
 } from '../composables/useChatSlashCommands';
 import { useSpeechInput } from '../composables/useSpeechInput';
-import { useThreadToolSelection } from '../composables/useThreadToolSelection';
 import { useRunStatus } from '../composables/useRunStatus';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useConfigStore } from '../store/config';
@@ -411,18 +410,6 @@ const {
 });
 
 const {
-  selectedTools,
-  selectedMcpServerIds,
-  toolMode,
-  isAutoToolMode,
-  syncToolSelectionFromThread,
-  resolveSelectedMcpServerIds,
-} = useThreadToolSelection({
-  electronAPI,
-  isLoading: isBusy,
-});
-
-const {
   isRecording,
   isTranscribing,
   speechStatusLabel,
@@ -507,10 +494,7 @@ const {
   message,
   isRecording,
   isTranscribing,
-  selectedTools,
-  selectedMcpServerIds,
   selectedSkillIds,
-  isAutoToolMode,
   isAutoSkillMode,
   isAutonomousMode,
   autonomousMaxIterations,
@@ -529,7 +513,6 @@ const {
   resolveSendRequest: resolveSlashCommandSend,
   canResolveEmptyDraft: () => activeInvocation.value !== null,
   ensureProviderReady,
-  resolveSelectedMcpServerIds,
   stopVoiceInput,
   attachedImages,
   audioEmotion,
@@ -675,13 +658,10 @@ const contextRingToneClass = computed(() => {
 
 useChatComposerLifecycle({
   electronAPI,
-  threadId: toRef(() => props.threadId),
   activeModel: threadModel,
   activeProviderId: currentProviderId,
-  isBusy,
   loadAvailableProviders,
   syncPreferredModel,
-  syncToolSelectionFromThread,
   loadSpeechStatus,
 });
 

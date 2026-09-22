@@ -36,7 +36,6 @@ export const useChatStreaming = (deps: {
   }) => Promise<void>;
   currentThread: Ref<ChatThread | null>;
   currentModel: Ref<string>;
-  selectedTools: Ref<string[]>;
   showWelcome: Ref<boolean>;
   createNewThread: (options?: { model?: string }) => Promise<ChatThread | null>;
   clearCurrentThread: () => Promise<ChatThread | null>;
@@ -143,7 +142,7 @@ export const useChatStreaming = (deps: {
   const prepareMessageSend = async (
     payload: PrepareMessageSendPayload
   ): Promise<PreparedMessageSend | null> => {
-    const { content, model, tools, promptAppId, composerInvocations } = payload;
+    const { content, model, promptAppId, composerInvocations } = payload;
     const pendingEditMessageId = editingUserMessageId.value;
 
     if (!deps.currentThread.value) {
@@ -194,10 +193,6 @@ export const useChatStreaming = (deps: {
         prompt_app_id: promptAppId,
       });
       deps.currentThread.value.prompt_app_id = promptAppId;
-    }
-
-    if (tools) {
-      deps.selectedTools.value = tools;
     }
 
     deps.showWelcome.value = false;

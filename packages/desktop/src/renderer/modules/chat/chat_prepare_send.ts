@@ -6,8 +6,6 @@ export type PrepareMessageSendPayload = {
   content: string;
   model?: string;
   providerId?: string;
-  tools?: string[];
-  mcpServerIds?: string[];
   promptAppId?: string;
   composerInvocations?: ComposerInvocationPartData;
   files?: FileUIPart[];

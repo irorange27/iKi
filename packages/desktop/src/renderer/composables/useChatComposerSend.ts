@@ -54,10 +54,7 @@ export const useChatComposerSend = (deps: {
   message: Ref<string>;
   isRecording: Ref<boolean>;
   isTranscribing: Ref<boolean>;
-  selectedTools: Ref<string[]>;
-  selectedMcpServerIds: Ref<string[]>;
   selectedSkillIds: Ref<string[]>;
-  isAutoToolMode: Ref<boolean>;
   isAutoSkillMode: Ref<boolean>;
   isAutonomousMode: Ref<boolean>;
   autonomousMaxIterations: Ref<number>;
@@ -73,7 +70,6 @@ export const useChatComposerSend = (deps: {
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
   /** Work threads: return a feedback message when the project workspace is missing; null = ok. */
   ensureWorkspaceForWork?: () => string | null;
-  resolveSelectedMcpServerIds: () => Promise<string[]>;
   stopVoiceInput: () => void;
   attachedImages?: Ref<FileUIPart[]>;
   audioEmotion?: Ref<AudioEmotionResult | null>;
@@ -199,8 +195,6 @@ export const useChatComposerSend = (deps: {
       return;
     }
 
-    const resolvedMcpServerIds = await deps.resolveSelectedMcpServerIds();
-    deps.selectedMcpServerIds.value = resolvedMcpServerIds;
     isPreparingSend.value = true;
 
     let preparedMessageSend: PreparedMessageSend | null = null;
@@ -217,8 +211,6 @@ export const useChatComposerSend = (deps: {
           content: userMessage,
           model: providerReady.model,
           providerId: providerReady.provider.id,
-          tools: deps.selectedTools.value,
-          mcpServerIds: resolvedMcpServerIds,
           promptAppId: resolvedSendRequest.promptAppId,
           composerInvocations: resolvedSendRequest.composerInvocations,
           files: deps.attachedImages?.value?.length
@@ -255,9 +247,6 @@ export const useChatComposerSend = (deps: {
       const body = createChatComposerStreamPayload({
         providerReady: readyProvider,
         threadId: preparedMessageSend.threadId,
-        isAutoToolMode: deps.isAutoToolMode.value,
-        selectedTools: deps.selectedTools.value,
-        resolvedMcpServerIds,
         isAutoSkillMode: effectiveSkillMode === 'auto',
         selectedSkillIds: effectiveSelectedSkillIds,
         reasoningEffort: deps.reasoningEffort.value,

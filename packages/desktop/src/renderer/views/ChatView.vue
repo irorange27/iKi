@@ -461,7 +461,6 @@ const {
   currentApprovalPolicy,
   isIncognito,
   selectedWorkspaceId,
-  selectedTools,
   showWelcome,
 } = storeToRefs(threadSession);
 const {
@@ -526,7 +525,6 @@ const streaming = useChatStreaming({
   onAssistantMessagePersisted: handleAssistantMessagePersisted,
   currentThread,
   currentModel,
-  selectedTools,
   showWelcome,
   createNewThread,
   clearCurrentThread: clearCurrentThreadBase,
