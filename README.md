@@ -1,10 +1,6 @@
 # iKi
 
-A local-first Electron desktop chat client for AI models — assemble prompts, run tool calls, and manage conversations, all from your Mac. iKi is a desktop companion that routes messages to third-party LLM providers, executes file operations and shell commands locally, and stores everything in SQLite. It is **not itself an AI** — the intelligence comes entirely from the external APIs you connect.
-
-<p align="center">
-  <sub>📸 Add a screenshot at assets/screenshot.png</sub>
-</p>
+A local-first Electron desktop chat client for AI models — assemble prompts, run tool calls, and manage conversations from your Mac. iKi routes messages to third-party LLM providers, executes file operations and shell commands locally, and stores everything in SQLite. It is **not itself an AI** — the intelligence comes from the external APIs you connect.
 
 ## Download
 
@@ -14,7 +10,7 @@ Download the `.dmg` from the latest release, open it, and drag iKi to Applicatio
 
 **Requirements:** macOS 14+ (arm64).
 
-## Quick Start (development)
+## Quick Start
 
 ```bash
 git clone https://github.com/irorange27/iKi.git
@@ -42,47 +38,26 @@ On first launch, add a provider (OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Oll
 
 ## Features
 
-### Multi-provider chat
-A unified chat interface that routes messages to OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, and ACP-backed agents. All conversations are saved locally in SQLite.
+- **Multi-provider chat** — one chat surface for OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, and ACP-backed agents. Conversations persist in local SQLite.
+- **Tool calling** — read, write, edit, and delete files; run shell commands; search the web; manage todo lists; write personal skill instructions; delegate work to sub-agents. Destructive operations require approval. File and shell tools are scoped to a selected workspace directory.
+- **Daemon mode** — a headless HTTP + WebSocket server exposes the same chat and tool surface to external clients, including a QQ bot via the built-in NapCat reverse bridge.
+- **Proactive tasks** — cron-scheduled prompts that trigger the model on a timer.
+- **Awaiters** — one-shot deferred reminders that continue a thread later.
+- **Continuity** — user-declared facts injected into future prompts.
+- **Long-term memory** — embedding-based semantic search over stored text entries.
+- **Companion overlay** — a small desktop window showing the agent's current phase.
+- **Affect analysis** — model-inferred emotional state from user messages, optionally gating tool approval.
 
-### Tool calling
-The model can read, write, edit, and delete files; run shell commands; search the web; manage todo lists; create personal skill instructions; and delegate work to sub-agents. Destructive operations require user approval. File and shell tools are scoped to a selected workspace directory.
+## Privacy
 
-### Daemon mode
-A headless HTTP + WebSocket server exposes the same chat and tool surface to external clients — for example, a QQ bot via the built-in NapCat reverse bridge.
+Messages are sent to whichever third-party API provider you configure. Conversations are stored locally, but content leaves your machine on every API call unless you use a local Ollama model.
 
-### Extras
-- **Proactive tasks**: cron-scheduled prompts that trigger the model on a timer.
-- **Awaiters**: one-shot deferred reminders to continue a thread later.
-- **Continuity**: user-declared facts injected into future prompts.
-- **Long-term memory**: embedding-based semantic search over stored text entries.
-- **Companion overlay**: a small desktop window showing the agent's current phase.
-- **Affect analysis**: model-inferred emotional state from user messages, optionally gating tool approval.
+## Repository
 
-### Privacy
-Messages are sent to whichever third-party API provider you configure. The app stores conversations locally, but content leaves your machine on every API call — unless you use a local Ollama model.
-
-## Development
-
-```bash
-pnpm run app:dev          # Start desktop app in dev mode
-pnpm run app:preview      # Launch latest packaged app from out/
-pnpm run app:build        # Create distributable artifacts
-pnpm run -s ci:quality    # Full quality gate: lint + tsc + vue-tsc + tests
-
-pnpm test                 # Run all tests
-pnpm run test:renderer    # Renderer-only tests
-pnpm run commit           # Interactive semantic commit
-
-python3 scripts/generate-icon.py  # Regenerate app icon (requires Pillow)
-```
-
-- DevTools auto-open: on by default in dev (`pnpm run start` / `app:dev`); set `IKI_AUTO_OPEN_DEVTOOLS=false` to disable. Packaged builds never auto-open.
-- Daemon binds to `127.0.0.1` by default
-
-## Commit Governance
-
-Conventional Commits required. Release notes are generated automatically from commit history between tags. CI enforces lint, type-check, and test coverage gates on every PR and tag push.
+- [AGENTS.md](AGENTS.md) — architecture map, workflow, commands, conventions
+- [packages/backend/README.md](packages/backend/README.md) — chat-turn pipeline and runtime contracts
+- [changelogs/](changelogs/) — release notes per version
+- [postmortem/](postmortem/) — incident write-ups
 
 ## License
 

@@ -20,4 +20,4 @@ Headless HTTP + WebSocket server. Exposes the same chat/agent surface as the des
 - Don't duplicate chat logic. The daemon **must** reuse `@iki/backend` — including the streaming path, by adapting each connection to a `ChatStreamTarget` for `chatService.stream`.
 - Don't expose the daemon to `0.0.0.0` without an auth story.
 
-See repo root [AGENTS.md](../../AGENTS.md) and [docs/napcat-integration.md](../../docs/napcat-integration.md).
+See repo root [AGENTS.md](../../AGENTS.md) and the NapCat bridge guide `docs/napcat-integration.md` (local doc — `docs/` is gitignored).

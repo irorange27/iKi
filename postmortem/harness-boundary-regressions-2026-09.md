@@ -38,7 +38,7 @@ prompt assertion failed before repair. Full quality gate passed: 194 files, 1139
 This does not establish crash-safe exactly-once tools, shell process cancellation, approval
 timeout completion, native PTC, lossless trajectories, live-provider interoperability or
 long-context preservation. Detailed code evidence and follow-up priorities are in
-`docs/design/coding-harness-audit-2026-09-21.md`. Changelogs remain generated from commits;
+`docs/reports/coding-harness-audit-2026-09-21.md`. Changelogs remain generated from commits;
 no commit or manual changelog update was made.
 
 ## Follow-up: preventing repeated cross-agent regressions
