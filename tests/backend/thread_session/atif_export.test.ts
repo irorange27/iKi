@@ -146,6 +146,25 @@ describe('buildRunTrajectory', () => {
     expect(trajectory.steps[0]).toMatchObject({ source: 'system' });
     expect(validateAtifTrajectory(trajectory)).toEqual([]);
   });
+
+  it('omits the injected context envelope from the exported user step', () => {
+    const run = {
+      ...fixtureRun(),
+      input: {
+        messages: [
+          {
+            role: 'user',
+            content:
+              'What is 2+2?\n\n<system-reminder>\nAffect state: rushed.\n</system-reminder>',
+          },
+        ],
+      },
+    };
+    const trajectory = buildRunTrajectory(run, []);
+
+    expect(trajectory.steps[0].message).toBe('What is 2+2?');
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
 });
 
 describe('validateAtifTrajectory', () => {

@@ -12,6 +12,7 @@ import type {
   AtifTrajectoryExportResult,
 } from '@iki/backend/types/atif';
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
+import { stripInjectedContext } from '@iki/backend/turn_prep/context_helpers';
 
 /**
  * Exporter for the Agent Trajectory Interchange Format (ATIF, v1.8) —
@@ -111,7 +112,7 @@ const extractLastUserText = (messages: unknown[] | undefined): string | null => 
         : content && typeof content === 'object'
           ? extractTextFromModelMessageContent(content)
           : '';
-    if (text.trim()) return clip(text);
+    if (text.trim()) return clip(stripInjectedContext(text));
   }
   return null;
 };

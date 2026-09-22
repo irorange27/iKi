@@ -51,8 +51,11 @@ export const MAX_FETCH_MAX_CHARS = 80000;
 export const DEFAULT_SHELL_TIMEOUT_MS = 30000;
 export const DEFAULT_FILE_ENCODING = 'utf-8';
 export const MAX_EDIT_FILE_OPERATIONS = 20;
-export const DEFAULT_AGENT_MAX_ITERATIONS = 8;
-export const MAX_AGENT_MAX_ITERATIONS = 12;
+// Sub-agent delegation budget: bounded investigations routinely read several
+// files and verify results — 8 steps starved them. Keep it generous but
+// bounded; the ceiling still caps runaway delegation.
+export const DEFAULT_AGENT_MAX_ITERATIONS = 25;
+export const MAX_AGENT_MAX_ITERATIONS = 50;
 export const MAX_AGENT_TOOL_SELECTION = 12;
 
 // ---------------------------------------------------------------------------

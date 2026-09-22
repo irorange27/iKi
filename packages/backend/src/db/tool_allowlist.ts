@@ -14,6 +14,12 @@ export type ToolAllowlistEntry = {
  * (empty pattern = blanket-allow the tool).
  */
 
+// ponytail: per-process memo, cleared by the writers below. Ceiling: another
+// process sharing this database (desktop + daemon) can insert a rule this one
+// does not see until the next clear; drop the memo if that ever matters — the
+// point query without it is ~0.005 ms.
+const patternMemo = new Map<string, string[]>();
+
 const mapRow = (row: Record<string, unknown>): ToolAllowlistEntry => ({
   id: row.id as string,
   toolName: row.tool_name as string,
@@ -48,20 +54,30 @@ export const addToolAllowlistEntry = (input: {
       pattern: entry.pattern,
       created_at: entry.createdAt,
     });
+  patternMemo.clear();
   return entry;
 };
 
 export const removeToolAllowlistEntry = (id: string): { success: boolean } => {
   const result = getDb().prepare('DELETE FROM tool_allowlist WHERE id = @id').run({ id });
+  patternMemo.clear();
   return { success: result.changes > 0 };
 };
 
 /** Allowlist patterns for one tool; empty pattern entries blanket-allow it. */
 export const listToolAllowPatterns = (toolName: string): string[] => {
+  const cached = patternMemo.get(toolName);
+  if (cached) return cached;
+
   try {
-    return listToolAllowlist()
-      .filter(entry => entry.toolName === toolName)
-      .map(entry => entry.pattern);
+    const rows = getDb()
+      .prepare(
+        'SELECT pattern FROM tool_allowlist WHERE tool_name = ? ORDER BY created_at DESC'
+      )
+      .all(toolName) as Record<string, unknown>[];
+    const patterns = rows.map(row => String(row.pattern));
+    patternMemo.set(toolName, patterns);
+    return patterns;
   } catch {
     // No database in this context — no learned patterns.
     return [];

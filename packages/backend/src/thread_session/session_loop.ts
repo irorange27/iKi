@@ -177,6 +177,20 @@ export const createChatStreaming = (deps: {
       }
 
       const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
+      if (preparedTurn.enableTools && !approvalPolicy && !preparedTurn.requireApproval) {
+        // The legacy fallback below auto-runs workspace writes for tool turns
+        // with no policy; that is exactly how a frontend wiring gap silently
+        // became "approvals never asked" once. Make the degradation loud.
+        chatStreamingLogger.event({
+          level: 'warn',
+          event: 'chat.stream.approval_policy',
+          outcome: 'degraded',
+          entity: { thread_id: options.threadId || null },
+          message:
+            'Tool-enabled turn started without an explicit approval policy; legacy defaults may auto-run workspace writes.',
+          data: { hint: 'The composer should send approvalPolicy (ChatInput approvalPolicy prop).' },
+        });
+      }
 
       const systemPrompt = [
         preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,

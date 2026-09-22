@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createModelCapabilityFromProviderModelOptions,
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   ensureModelCapability,
   getModelsDevProviderKey,
   getProviderModelOptions,
@@ -224,13 +225,15 @@ describe('provider_models helpers', () => {
     });
   });
 
-  it('normalizes missing capability limits to the shared 128k default', () => {
+  it('normalizes missing capability limits to the modern large-window defaults', () => {
     expect(normalizeModelCapabilityLimits()).toEqual({
       contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
       maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-      maxOutputTokens: null,
+      maxOutputTokens: DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
     });
 
+    // Unknown models assume a modern multimodal reasoner: 1M window, 384K
+    // output, text/image/reasoning/tools all offered by default.
     expect(ensureModelCapability('openai', 'gpt-unknown')).toEqual({
       providerType: 'openai',
       providerKey: 'openai',
@@ -238,9 +241,10 @@ describe('provider_models helpers', () => {
       displayName: 'gpt-unknown',
       contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
       maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-      maxOutputTokens: null,
-      supportsToolCalls: null,
-      supportsReasoning: null,
+      maxOutputTokens: DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+      supportsToolCalls: true,
+      supportsReasoning: true,
+      supportsVision: true,
       source: 'default',
     });
   });

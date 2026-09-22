@@ -1,4 +1,13 @@
 import { getDb } from './database';
+import { getChatMessages, updateChatMessage } from './chat_message';
+import { expirePendingToolCallApprovalsByRunIds } from './tool_call_approval';
+import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
+import {
+  interruptedToolPartErrorText,
+  isObjectRecord,
+  isTerminalDynamicToolPart,
+  toInterruptedToolPart,
+} from '@iki/backend/message/tool_parts';
 import type {
   AgentRun,
   AgentRunError,
@@ -509,17 +518,24 @@ export type RunRecoveryResult = {
   failedRuns: number;
   blockedRuns: number;
   totalRuns: number;
+  expiredApprovals: number;
+  interruptedToolParts: number;
 };
 
+// Restart reconciliation for runs that died mid-flight: mark the runs failed,
+// expire approval cards that can never be answered, and record the
+// interruption as the persisted tool parts' terminal error so the UI shows a
+// final state and the next turn feeds the error to the model as the tool
+// result (the loop continues instead of silently dead-ending).
 export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   const stuckStatuses: AgentRun['status'][] = ['running', 'blocked'];
   const statusPlaceholders = stuckStatuses.map(() => '?').join(', ');
 
   const rows = getDb()
     .prepare(
-      `SELECT id, status FROM agent_runs WHERE status IN (${statusPlaceholders})`
+      `SELECT id, status, thread_id FROM agent_runs WHERE status IN (${statusPlaceholders})`
     )
-    .all(...stuckStatuses) as { id: string; status: string }[];
+    .all(...stuckStatuses) as { id: string; status: string; thread_id?: string | null }[];
 
   let failedRuns = 0;
   let blockedRuns = 0;
@@ -559,10 +575,50 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
     }
   }
 
+  const killedRunIds = rows.map(row => row.id);
+  const expiredApprovals =
+    killedRunIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(killedRunIds).length : 0;
+
+  const threadIds = Array.from(
+    new Set(rows.map(row => row.thread_id).filter((id): id is string => typeof id === 'string'))
+  );
+  let interruptedToolParts = 0;
+  for (const threadId of threadIds) {
+    for (const messageRow of getChatMessages(threadId)) {
+      if (!messageRow.message.includes('"dynamic-tool"')) continue;
+      let parsed: { parts?: unknown[] } | null = null;
+      try {
+        parsed = JSON.parse(messageRow.message);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsed?.parts)) continue;
+
+      let changed = false;
+      const parts = parsed.parts.map(part => {
+        if (!isObjectRecord(part) || part.type !== 'dynamic-tool') return part;
+        if (isTerminalDynamicToolPart(part)) return part;
+        changed = true;
+        interruptedToolParts += 1;
+        return toInterruptedToolPart(
+          part as unknown as DynamicToolPart,
+          interruptedToolPartErrorText(part as unknown as DynamicToolPart)
+        );
+      });
+      if (!changed) continue;
+
+      updateChatMessage(messageRow.id, {
+        message: JSON.stringify({ ...parsed, parts }),
+      });
+    }
+  }
+
   return {
     failedRuns,
     blockedRuns,
     totalRuns: rows.length,
+    expiredApprovals,
+    interruptedToolParts,
   };
 };
 

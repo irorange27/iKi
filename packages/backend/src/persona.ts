@@ -16,16 +16,13 @@ export const getPersonaPrompt = () => {
     prompt += `set targetDate to current date\n`;
     prompt += `set year of targetDate to ${now.getFullYear()}\n`;
     prompt += `set month of targetDate to ${now.getMonth() + 1}\n`;
-    prompt += `set day of targetDate to ${now.getDate()}\n`;
-    prompt += `set hours of targetDate to ${now.getHours()}\n`;
-    prompt += `set minutes of targetDate to ${now.getMinutes()}\n`;
-    prompt += `set seconds of targetDate to ${now.getSeconds()}`;
+    prompt += `set day of targetDate to ${now.getDate()}`;
+    // ponytail: no hours/minutes/seconds here — this prompt is the head of the
+    // system prefix, so sub-day clock values would invalidate the KV cache on
+    // every turn. Set the time fields to the target, not to "now".
   }
 
   prompt += `\n\nWORKING DIRECTORY - Your current working directory is: ${cwd}. All file operations and shell commands will be executed relative to this directory.`;
 
   return prompt;
 };
-
-// Keep the old prompt export for backward compatibility if needed, but make it dynamic
-export const prompt = getPersonaPrompt();

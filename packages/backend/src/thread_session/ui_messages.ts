@@ -9,13 +9,17 @@ import type {
   UiMessagePart,
 } from '@iki/backend/message/message_parts';
 import { isChatUiMetadataPart } from '@iki/backend/message/message_parts';
+import { isTerminalDynamicToolPart, toInterruptedToolPart } from '@iki/backend/message/tool_parts';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './types';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { normalizeToolPartForValidation } from '@iki/backend/message/tool_parts';
 import { isObjectRecord } from '@iki/backend/message/tool_parts';
 
-const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMessage[] =>
+const normalizeUiMessagesForValidation = (
+  messages: ChatUiMessage[],
+  options?: { repairInterruptedTools?: boolean }
+): ChatUiMessage[] =>
   messages.flatMap((message, messageIndex) => {
     const messageId =
       typeof message.id === 'string' && message.id.length > 0
@@ -35,7 +39,13 @@ const normalizeUiMessagesForValidation = (messages: ChatUiMessage[]): ChatUiMess
             const partType = typeof partRecord.type === 'string' ? partRecord.type : '';
             if (!partType) return null;
             if (partType === 'dynamic-tool' || partType.startsWith('tool-')) {
-              return normalizeToolPartForValidation(partRecord, `${messageId}_tool_${partIndex}`);
+              const normalized = normalizeToolPartForValidation(
+                partRecord,
+                `${messageId}_tool_${partIndex}`
+              );
+              return options?.repairInterruptedTools === false
+                ? normalized
+                : repairInterruptedToolPart(normalized);
             }
             if (isChatUiMetadataPart(partRecord)) {
               return null;
@@ -89,13 +99,27 @@ const isUiMessage = (value: unknown): value is ChatUiMessage =>
   typeof value.role === 'string' &&
   Array.isArray((value as { parts?: unknown }).parts);
 
+// A persisted snapshot can stop mid-tool (crash, quit, cancelled turn) with the
+// part still in a non-terminal state. Left as-is, conversion would either drop
+// the call (input-streaming/input-available — the model then re-issues a call
+// whose side effects may already exist) or emit an assistant tool-call with no
+// tool-result (approval-requested/approval-responded — providers reject the
+// whole follow-up request). Record the interruption as the tool result instead:
+// pairing stays valid and the model learns the action's outcome is unknown.
+const repairInterruptedToolPart = (part: DynamicToolPart): DynamicToolPart =>
+  isTerminalDynamicToolPart(part) ? part : toInterruptedToolPart(part);
+
 export const toModelInputMessages = async (
-  messages: ChatTransportMessage[] | unknown[]
+  messages: ChatTransportMessage[] | unknown[],
+  options?: { repairInterruptedTools?: boolean }
 ): Promise<ChatInputMessage[]> => {
   if (!Array.isArray(messages) || messages.length === 0) return [];
 
   if (messages.every(isUiMessage)) {
-    const normalizedUiMessages = normalizeUiMessagesForValidation(messages as ChatUiMessage[]);
+    const normalizedUiMessages = normalizeUiMessagesForValidation(
+      messages as ChatUiMessage[],
+      options
+    );
     if (normalizedUiMessages.length === 0) return [];
 
     try {

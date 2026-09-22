@@ -5,7 +5,12 @@ import type { AgentStep, HandoffStep } from '@iki/backend/agent/agent_step';
 import type { AgentResult } from '@iki/backend/agent/types';
 
 import { createSimpleAgentRunner } from '../runners/simple_agent_runner';
-import { resolveTools } from './tool_resolver';
+import { resolveThreadWorkspaceSelectionSnapshot } from '../../workspaces/thread_workspace';
+import {
+  resolveTools,
+  createApprovalPolicyBox,
+  advanceApprovalPolicySnapshot,
+} from './tool_resolver';
 import {
   getToolRuntimeContext,
   bindToolRuntimeContextToGenerator,
@@ -31,6 +36,9 @@ export class AgentHarness {
   // ── Public API ──────────────────────────────────────────────────────
 
   async *turn(input: TurnInput): AsyncGenerator<TurnEvent, void> {
+    // One policy snapshot per SDK step: advancing happens in onModelStep below,
+    // so a step's tool calls share it and a user change lands on the next step.
+    const policyBox = createApprovalPolicyBox(this.config_.approvalPolicy);
     const tools = input.toolsOverride ?? resolveTools({
       enableTools: this.config_.enableTools,
       enabledToolNames: this.config_.enabledToolNames,
@@ -39,6 +47,7 @@ export class AgentHarness {
       requireApproval: this.config_.requireApproval ?? this.config_.guardActive,
       autoApproveToolRequests: this.config_.autoApproveToolRequests ?? false,
       ...(this.config_.approvalPolicy ? { approvalPolicy: this.config_.approvalPolicy } : {}),
+      approvalPolicyBox: policyBox,
     });
 
     const runner = createSimpleAgentRunner({ modelFactory: this.config_.modelFactory });
@@ -66,15 +75,29 @@ export class AgentHarness {
         : {}),
       maxIterations: this.config_.maxIterations,
       abortSignal: input.abortSignal,
-      onModelStep: (step, messages, systemPrompt) => input.runTracker?.recordModelStep?.(
-        { messages, systemPrompt },
-        { inference: true, content: step.content, finishReason: step.finishReason, usage: normalizeLanguageModelUsage(step.usage) },
-      ),
+      onModelStep: (step, messages, systemPrompt) => {
+        // End of one SDK step = start of the next policy snapshot.
+        advanceApprovalPolicySnapshot(policyBox, this.config_.approvalPolicy);
+        input.runTracker?.recordModelStep?.(
+          { messages, systemPrompt },
+          { inference: true, content: step.content, finishReason: step.finishReason, usage: normalizeLanguageModelUsage(step.usage) },
+        );
+      },
     });
 
-    // Preserve caller's runtime context across generator iterations
+    // Preserve caller's runtime context across generator iterations. The
+    // workspace selection is snapshotted once per turn here: every later copy
+    // of this context (the SDK tool adapter spreads it per invocation) shares
+    // the box by reference, so a mid-run workspace switch cannot redirect
+    // later tools of the same turn.
     const ctx = getToolRuntimeContext();
-    const boundGen = bindToolRuntimeContextToGenerator({ ...ctx, availableTools: tools, availableSkillIds: this.config_.availableSkillIds }, agentGen);
+    const boundContext = { ...ctx, availableTools: tools, availableSkillIds: this.config_.availableSkillIds };
+    if (!boundContext.workspaceSelectionBox) {
+      boundContext.workspaceSelectionBox = {
+        selection: resolveThreadWorkspaceSelectionSnapshot(this.config_.threadId),
+      };
+    }
+    const boundGen = bindToolRuntimeContextToGenerator(boundContext, agentGen);
 
     let handoffData: HandoffStep | null = null;
     let agentResult: AgentResult | undefined;

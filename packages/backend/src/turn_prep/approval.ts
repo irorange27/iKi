@@ -18,7 +18,10 @@ import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_appr
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from '../thread_session/memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
-import { resolveToolCallMaxIterations } from '../thread_session/constants';
+import {
+  DEFAULT_TOOL_CALL_MAX_ITERATIONS,
+  resolveToolCallMaxIterations,
+} from '../thread_session/constants';
 import { createAgentRunTracker } from '../turn_prep/run_tracker';
 import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from '../thread_session/types';
 import { createUiChunkEmitter } from '../thread_session/ui_stream';
@@ -286,13 +289,27 @@ export const createChatApproval = (deps: {
       historyFromRun && historyFromRun.length > 0
         ? historyFromRun
         : await (async () => {
+            createLogger({ module: 'chat_approval' }).event({
+              level: 'warn',
+              event: 'chat.approval.resume_history',
+              outcome: 'degraded',
+              entity: { thread_id: threadId },
+              message:
+                'Approval resume fell back to the persisted UI history; run snapshot missing.',
+              data: { run_id: storedRunId || null },
+            });
             const rows = chatMessageDb.getChatMessages(threadId);
             if (rows.length === 0) return null;
             const uiMessages = rows.map(row =>
               parseStoredUiMessageRow({ id: row.id, message: row.message })
             );
             return await deps.memory.injectMemoryIntoMessages(
-              await toModelInputMessages(uiMessages),
+              // Keep non-terminal tool parts intact here: the pending
+              // approval-request is live state the resumed harness must pair
+              // with the user's approval response. Repairing it to an
+              // interruption result makes the response reference an unknown
+              // approvalId and the resume is rejected.
+              await toModelInputMessages(uiMessages, { repairInterruptedTools: false }),
               threadId,
               { skipRetrieval: true }
             );
@@ -550,7 +567,10 @@ export const createChatApproval = (deps: {
             guardActive: false,
             approvalPolicy: ctx?.approvalPolicy,
             requireApproval: ctx?.requireApproval ?? true,
-            maxIterations: ctx?.maxIterations ?? 10,
+            // A resumed turn continues the original budget; when recovery
+            // context lacks it, fall back to the chat-turn default (not a
+            // starved legacy 10).
+            maxIterations: ctx?.maxIterations ?? DEFAULT_TOOL_CALL_MAX_ITERATIONS,
             ...(approvalThreadId ? { threadId: approvalThreadId } : {}),
             ...(typeof ctx?.maxOutputTokens === 'number'
               ? { maxOutputTokens: ctx.maxOutputTokens }

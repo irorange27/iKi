@@ -193,6 +193,33 @@ describe('AgentHarness', () => {
     expect(harness.getHistory().some(message => message.providerOptions?.anthropic)).toBe(false);
   });
 
+  it('keeps exactly one cache breakpoint on the growing prefix', async () => {
+    const probe = createTool({
+      name: 'probe', type: 'function', description: 'Probe',
+      paramSchema: z.object({}), handler: async () => 'observation',
+    });
+    // More tool steps than Anthropic's four-breakpoint budget: markers left
+    // behind on earlier messages would evict the live one at the tail.
+    const faux = new FauxModelProvider([
+      ...Array.from({ length: 6 }, () => fauxToolCall('probe', {})),
+      fauxText('done'),
+    ]);
+    const call = vi.spyOn(faux, 'doStream');
+    const harness = new AgentHarness({
+      providerType: 'anthropic', model: 'faux-model', systemPrompt: 'Test.',
+      enableTools: true, enabledToolNames: [], availableSkillIds: [],
+      guardActive: false, maxIterations: 10, modelFactory: () => faux,
+    });
+    await drainTurn(harness, 'check', { toolsOverride: [probe] });
+
+    const lastPrompt = call.mock.calls.at(-1)![0].prompt as Array<{
+      providerOptions?: { anthropic?: { cacheControl?: unknown } };
+    }>;
+    const marked = lastPrompt.filter(m => m.providerOptions?.anthropic?.cacheControl);
+    expect(marked).toHaveLength(1);
+    expect(marked[0]).toBe(lastPrompt.at(-1));
+  });
+
   it('tracks history across turns', async () => {
     const faux = new FauxModelProvider([
       fauxText('First response.'),

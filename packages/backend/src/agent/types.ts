@@ -31,7 +31,9 @@ export const AgentConfigSchema = z.object({
   model: z.string(),
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().int().positive().default(2000),
-  maxIterations: z.number().int().positive().default(10),
+  // Model steps per turn; mirrors the chat-turn default
+  // (DEFAULT_TOOL_CALL_MAX_ITERATIONS in thread_session/constants).
+  maxIterations: z.number().int().positive().default(200),
   enableTools: z.boolean().default(false),
   enableMemory: z.boolean().default(false),
 });

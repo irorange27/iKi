@@ -63,6 +63,12 @@ const initCoreTables = (database: SqliteDatabase) => {
       acp_api_provider_id TEXT,
       acp_model_mapping TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS thread_run_locks (
+      thread_id TEXT PRIMARY KEY,
+      token TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
   `);
 };
 

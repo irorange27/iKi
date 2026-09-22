@@ -518,6 +518,11 @@ const BASELINE_STATEMENTS: readonly string[] = [
         ON todo_items(list_id, sort_order, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_todo_lists_updated_at
         ON todo_lists(updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS thread_run_locks (
+        thread_id TEXT PRIMARY KEY,
+        token TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      )`,
 ];
 
 export const migration: Migration = {

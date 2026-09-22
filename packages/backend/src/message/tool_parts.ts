@@ -8,6 +8,13 @@ export { isObjectRecord } from './message_parts';
 
 export { getApprovalId, getToolCallIdFromPart } from './tool_parts/ids';
 export {
+  APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT,
+  TOOL_INTERRUPTED_ERROR_TEXT,
+  interruptedToolPartErrorText,
+  isTerminalDynamicToolPart,
+  toInterruptedToolPart,
+} from './tool_parts/interrupt';
+export {
   isApprovalRequestedPart,
   isToolCallPart,
   isToolPart,

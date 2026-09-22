@@ -64,3 +64,59 @@ Coverage: statements 65.67%, branches 52.62%, functions 61.42%, lines 68.10%.
 The updated Electron app booted, renderer connected, and embedded daemon listened on port 6127.
 Remote model-catalog discovery timed out during boot; no paid-provider or live cache-hit verification
 was performed. Unrelated frontend edits and the lockfile were preserved. No commit was created.
+
+
+## Follow-up: tool execution and authority boundaries
+
+Code inspection found four authority leaks: dangling file symlinks could create outside targets;
+subagents fell back to the global registry when parent tools were empty; daemon single-tool MCP
+grants expanded to siblings; and learned substring rules could be satisfied by unrelated description
+text. MCP always-approval metadata was also dropped on registration, undo was marked approval-free,
+and remote tools retried potentially completed side effects after transient failures.
+
+Path resolution now rejects dangling symlinks at any ancestor, including missing intermediate paths.
+The ancestor walk also now actually traverses more than one level, restoring ordinary nested writes.
+Subagents use only parent capabilities and propagate cancellation. Daemon tool filtering distinguishes
+individual from server grants. Nonempty learned rules compare complete JSON arguments; legacy
+substring rules fail closed. Explicit blanket grants remain explicit blanket grants.
+
+MCP registrations retain always-approval and have no implicit execution retries. MCP requests forward
+the runtime abort signal; cancelled semaphore waiters leave the queue without dispatch or capacity
+leaks. Builtin entry points and file mutation checkpoints check cancellation; undo bookkeeping changes
+only after successful writes. Regression locations and remaining sandbox limitations are in the
+tracked backend README; the fast harness gate includes file/delegation/MCP/daemon boundary tests.
+
+No OS sandbox or remote rollback guarantee was added. Concurrent path replacement and hard links
+still require stronger filesystem isolation; arbitrary approved shell and remote MCP execution have
+host/server authority. Native PTC remains unimplemented. This audit did not exercise live MCP servers.
+
+Verification: `pnpm run ci:quality` passed (195 files / 1095 tests, type checks, lint and architecture gate);
+`pnpm run test:harness` passed (41 files / 255 tests). No live provider or remote MCP execution was used.
+
+
+## Follow-up: concurrent turns and session isolation
+
+Old stream finalizers could erase a newer sender's steering queue and thread membership, and
+sender-wide approval cleanup could discard another thread's pending batch. Stream preparation could
+resume after supersession and begin work. Non-streaming send had no shared exclusion with streams;
+concurrent cold approval recovery could build independent sessions from the same durable decision.
+
+The coordinator now owns an admission lease used by stream, send and approval recovery before any
+asynchronous preparation. Duplicates return busy; independent threads remain parallel. Approval busy
+responses do not consume decisions; expiry retries admission if another turn currently owns the thread.
+Cleanup checks stream identity and approval session ID. Supersession detaches old thread membership;
+cancelled preparation cannot start model/tool execution. Interleaved real-SDK tests verify runtime
+thread/run separation; harness now explicitly binds the current capability set for delegated tools.
+
+Global path-only undo history and a 30-second read cache also crossed session boundaries. Undo is
+thread/path scoped, refuses changed content and updates its stack only after successful writes;
+file tools now read current filesystem content. Tests exercise two working directories concurrently,
+shared-file undo rejection, duplicate send/stream admission and duplicate cold approval recovery.
+
+These are in-process guarantees for one chat-service instance. Cross-process durable leases, atomic
+shared-file editing, frozen workspace selection across an entire run and companion display isolation
+remain separate work; do not advertise them as solved by AsyncLocalStorage or admission locks.
+
+Verification: `pnpm run ci:quality` exited 0 (195 files / 1104 tests; lint, both type checks,
+architecture and coverage gates passed). The focused harness run passed 264 tests across 41 files.
+No frontend behavior was changed or live-provider parallel-load test performed in this follow-up.

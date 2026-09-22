@@ -605,3 +605,113 @@ describe('edit_file lint gate and undo', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe('value = 1\n');
   });
 });
+
+describe('atomic file writes', () => {
+  let tempRoot: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    getChatThreadMock.mockReturnValue(null);
+    getWorkspaceByPathMock.mockReturnValue(null);
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-file-atomic-'));
+    process.env.IKI_USER_DATA_PATH = path.join(tempRoot, 'user-data');
+  });
+
+  afterEach(async () => {
+    delete process.env.IKI_USER_DATA_PATH;
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  it('leaves no temp artifacts and stores full content', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const writer = new WriteFileTool();
+    await runInWorkspaceContext('thread_1', async () => {
+      await writer.execute({ path: 'atomic.txt', content: 'full-content'.repeat(100) });
+    });
+
+    expect(await fs.readFile(path.join(workspaceRoot, 'atomic.txt'), 'utf8')).toBe(
+      'full-content'.repeat(100)
+    );
+    const leftovers = (await fs.readdir(workspaceRoot)).filter(name => name.includes('.tmp-'));
+    expect(leftovers).toEqual([]);
+  });
+});
+
+describe('concurrent same-path writes', () => {
+  let tempRoot: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    getChatThreadMock.mockReturnValue(null);
+    getWorkspaceByPathMock.mockReturnValue(null);
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-file-concurrent-'));
+    process.env.IKI_USER_DATA_PATH = path.join(tempRoot, 'user-data');
+    vi.useFakeTimers({ now: new Date('2026-01-01T00:00:00Z'), shouldAdvanceTime: true });
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    delete process.env.IKI_USER_DATA_PATH;
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  });
+
+  const setupWorkspace = async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+    return workspaceRoot;
+  };
+
+  it('keeps same-millisecond concurrent writes to one path atomic with unique temp files', async () => {
+    const workspaceRoot = await setupWorkspace();
+    const writer = new WriteFileTool();
+
+    // Fake clock pins Date.now: pid+timestamp temp names would collide here.
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        runInWorkspaceContext('thread_1', () =>
+          writer.execute({ path: 'shared.txt', content: `writer-${i}-` .repeat(200) })
+        )
+      )
+    );
+
+    for (const result of results) {
+      expect((result as { success: boolean }).success).toBe(true);
+    }
+    const finalContent = await fs.readFile(path.join(workspaceRoot, 'shared.txt'), 'utf8');
+    expect(finalContent).toMatch(/^writer-\d+-/);
+    const leftovers = (await fs.readdir(workspaceRoot)).filter(name => name.includes('.tmp-'));
+    expect(leftovers).toEqual([]);
+  });
+
+  it('serializes concurrent edits so every applied edit is based on the previous write', async () => {
+    const workspaceRoot = await setupWorkspace();
+    await fs.writeFile(path.join(workspaceRoot, 'log.txt'), 'start\n', 'utf8');
+
+    const editor = new EditFileTool();
+    const edits = Array.from({ length: 6 }, (_, i) =>
+      runInWorkspaceContext('thread_1', () =>
+        editor.execute({
+          path: 'log.txt',
+          edits: [{ oldText: 'start', newText: `start line-${i}` }],
+        })
+      )
+    );
+
+    const results = (await Promise.all(edits)) as Array<{ success?: boolean; message?: string }>;
+    // Without per-path serialization only the first edit could match; with it,
+    // each subsequent edit runs after the previous write (fuzzy anchor keeps
+    // matching), so all six apply.
+    const succeeded = results.filter(result => result.success).length;
+    expect(succeeded).toBe(6);
+    const content = await fs.readFile(path.join(workspaceRoot, 'log.txt'), 'utf8');
+    expect(content).toContain('line-5');
+  });
+});

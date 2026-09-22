@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { getToolRuntimeContext } from '../utils/runtime_context';
@@ -20,6 +21,51 @@ import {
 const MAX_EDIT_UNDO_DEPTH = 10;
 const editUndoStacks = new Map<string, Array<{ previousContent: string; writtenContent: string; encoding: BufferEncoding }>>();
 const undoKey = (filePath: string): string => JSON.stringify([getToolRuntimeContext().threadId ?? null, filePath]);
+
+// Mutating writes go through a same-directory temp file plus rename, so two
+// concurrent writers (threads sharing a workspace, or the desktop and daemon
+// processes) can never leave a torn half-written file behind: readers see
+// either the old or the new content, never a mix. The temp name carries a
+// random UUID — pid + timestamp alone collide for same-millisecond writes to
+// the same path from one process, and two writers sharing a temp file breaks
+// the atomicity the rename is there to provide.
+const writeFileAtomically = async (
+  absolutePath: string,
+  content: string,
+  encoding: BufferEncoding
+): Promise<void> => {
+  const tempPath = `${absolutePath}.tmp-${randomUUID()}`;
+  await fs.writeFile(tempPath, content, { encoding });
+  try {
+    await fs.rename(tempPath, absolutePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch((): Promise<void> => undefined);
+    throw error;
+  }
+};
+
+// In-process read-modify-write serialization per absolute path. Concurrent
+// threads on one workspace would otherwise race edit/undo's read→write
+// sequence even with atomic replacement: each write is whole, but the later
+// writer clobbers a state it never read. Cross-process races remain
+// last-writer-wins (see backend README limits).
+const pathWriteLocks = new Map<string, Promise<unknown>>();
+
+const withPathWriteLock = <T>(absolutePath: string, fn: () => Promise<T>): Promise<T> => {
+  const previous = pathWriteLocks.get(absolutePath) ?? Promise.resolve();
+  const run = previous.then(fn, fn);
+  const settled = run.then(
+    (): Promise<void> => Promise.resolve(),
+    (): Promise<void> => Promise.resolve()
+  );
+  const release = settled.then(() => {
+    if (pathWriteLocks.get(absolutePath) === release) {
+      pathWriteLocks.delete(absolutePath);
+    }
+  });
+  pathWriteLocks.set(absolutePath, release);
+  return run;
+};
 
 const countOccurrences = (content: string, search: string): number => {
   if (!search) return 0;
@@ -229,13 +275,15 @@ export class WriteFileTool extends BaseTool {
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveWritableWorkspacePath(args.path);
 
-    getToolRuntimeContext().abortSignal?.throwIfAborted();
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    return await withPathWriteLock(absolutePath, async () => {
+      getToolRuntimeContext().abortSignal?.throwIfAborted();
+      // Ensure directory exists
+      await fs.mkdir(path.dirname(absolutePath), { recursive: true });
 
-    getToolRuntimeContext().abortSignal?.throwIfAborted();
-    await fs.writeFile(absolutePath, args.content, { encoding: args.encoding as BufferEncoding });
-    return { path: absolutePath, success: true };
+      getToolRuntimeContext().abortSignal?.throwIfAborted();
+      await writeFileAtomically(absolutePath, args.content, args.encoding as BufferEncoding);
+      return { path: absolutePath, success: true };
+    });
   }
 }
 
@@ -253,7 +301,13 @@ export class EditFileTool extends BaseTool {
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveWritableWorkspacePath(args.path);
+    return await withPathWriteLock(absolutePath, () => this.applyEdits(absolutePath, args));
+  }
 
+  private async applyEdits(
+    absolutePath: string,
+    args: z.infer<typeof this.paramSchema>
+  ) {
     let originalContent: string;
     try {
       originalContent = await fs.readFile(absolutePath, {
@@ -349,9 +403,7 @@ export class EditFileTool extends BaseTool {
       }
 
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      await fs.writeFile(absolutePath, updatedContent, {
-        encoding: args.encoding as BufferEncoding,
-      });
+      await writeFileAtomically(absolutePath, updatedContent, args.encoding as BufferEncoding);
       const undoStack = editUndoStacks.get(undoKey(absolutePath)) ?? [];
       undoStack.push({
         previousContent: originalContent,
@@ -397,6 +449,10 @@ export class UndoEditTool extends BaseTool {
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const absolutePath = await resolveWritableWorkspacePath(args.path);
+    return await withPathWriteLock(absolutePath, () => this.applyUndo(absolutePath, args));
+  }
+
+  private async applyUndo(absolutePath: string, args: z.infer<typeof this.paramSchema>) {
     const undoStack = editUndoStacks.get(undoKey(absolutePath));
     const entry = undoStack?.at(-1);
     if (!undoStack || !entry) {
@@ -416,7 +472,7 @@ export class UndoEditTool extends BaseTool {
       return { path: absolutePath, success: false, error: true, message: 'File changed since this edit; refusing to overwrite newer changes.' };
     }
     getToolRuntimeContext().abortSignal?.throwIfAborted();
-    await fs.writeFile(absolutePath, entry.previousContent, { encoding: entry.encoding });
+    await writeFileAtomically(absolutePath, entry.previousContent, entry.encoding);
     undoStack.pop();
     return {
       path: absolutePath,

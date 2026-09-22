@@ -183,3 +183,67 @@ describe('createThreadStreamCoordinator', () => {
     expect(coordinator.peekStream(7)).toBeUndefined();
   });
 });
+
+describe('createThreadStreamCoordinator cross-process lease', () => {
+  it('declines admission when another process holds the thread lease', () => {
+    const heldThreads = new Set(['thread_remote']);
+    const coordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: threadId => {
+        if (heldThreads.has(threadId)) return null;
+        heldThreads.add(threadId);
+        return () => {
+          heldThreads.delete(threadId);
+        };
+      },
+    });
+
+    expect(coordinator.tryAcquireThreadRun('thread_remote')).toBeNull();
+
+    const release = coordinator.tryAcquireThreadRun('thread_local');
+    expect(release).not.toBeNull();
+    // In-process fast path still guards while the cross lease is held locally.
+    expect(coordinator.tryAcquireThreadRun('thread_local')).toBeNull();
+    release!();
+    expect(coordinator.tryAcquireThreadRun('thread_local')).not.toBeNull();
+  });
+
+  it('releases the cross-process lease together with the in-process one', () => {
+    const released: string[] = [];
+    const coordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: threadId => () => {
+        released.push(threadId);
+      },
+    });
+
+    const release = coordinator.tryAcquireThreadRun('thread_xproc');
+    release!();
+    release!(); // idempotent: cross lease released exactly once
+    expect(released).toEqual(['thread_xproc']);
+  });
+});
+
+describe('createThreadStreamCoordinator lease-loss abort', () => {
+  it('aborts the thread active stream when the cross-process lease is reported lost', () => {
+    let notifyLeaseLost: (() => void) | undefined;
+    const coordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: (_threadId, options) => {
+        notifyLeaseLost = options.onLeaseLost;
+        return () => undefined;
+      },
+    });
+
+    const release = coordinator.tryAcquireThreadRun('thread_lost');
+    expect(release).not.toBeNull();
+
+    const stream = makeStreamState();
+    coordinator.trackThreadStream('thread_lost', 11);
+    coordinator.registerStream(11, stream);
+    expect(stream.cancelled).toBe(false);
+
+    notifyLeaseLost!();
+    expect(stream.cancelled).toBe(true);
+    expect(stream.abortController.signal.aborted).toBe(true);
+
+    release!();
+  });
+});
