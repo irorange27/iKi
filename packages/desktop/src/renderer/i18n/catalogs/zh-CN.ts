@@ -144,7 +144,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.placeholder.promptInvocation': ({ name }) => `继续补充 ${asText(name)} 的请求内容...`,
   'chat.input.placeholder.commandInvocation': ({ name }) =>
     `继续补充 ${asText(name)} 的可选参数...`,
-  'chat.input.placeholder.skillsActive': '继续输入，消息会带着已选技能一起运行...',
   'chat.input.contextUsage': '上下文使用量',
   'chat.input.enableIncognito': '开启无痕模式',
   'chat.input.disableIncognito': '关闭无痕模式',

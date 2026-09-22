@@ -146,7 +146,6 @@ export const en = defineCatalog({
   'chat.input.placeholder.promptInvocation': ({ name }) => `Add the request for ${asText(name)}...`,
   'chat.input.placeholder.commandInvocation': ({ name }) =>
     `Add optional arguments for ${asText(name)}...`,
-  'chat.input.placeholder.skillsActive': 'Type with the selected skills...',
   'chat.input.contextUsage': 'Context usage',
   'chat.input.enableIncognito': 'Enable incognito mode',
   'chat.input.disableIncognito': 'Disable incognito mode',
