@@ -32,6 +32,15 @@ const normalizeWorkspacePath = (rawPath: unknown): string => {
 };
 
 const resolveThreadWorkspaceSelection = (): ThreadWorkspaceSelection | null => {
+  // Read-only inside a run: the harness snapshots the selection at turn start
+  // onto the runtime context, and every context copy shares that box. Never
+  // write a box here — the SDK tool adapter spreads the context per
+  // invocation, so a box stored on a copy would be discarded with it.
+  const box = getToolRuntimeContext().workspaceSelectionBox;
+  if (box) {
+    return box.selection as ThreadWorkspaceSelection | null;
+  }
+  // Outside a harness run (direct tool routes) resolve from thread state.
   const { threadId } = getToolRuntimeContext();
   return ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId);
 };

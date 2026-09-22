@@ -97,7 +97,12 @@ export type ModelCapabilityLimits = Pick<
   'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
 >;
 
-export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 128_000;
+// Fallback assumptions for models with no catalog/provider data (custom
+// openai-compatible endpoints, or while the models.dev catalog is
+// unreachable): assume a modern large-window multimodal model. Stored
+// provider/model options always win over these defaults.
+export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 1_000_000;
+export const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 393_216; // 384K
 
 /**
  * Hard per-request output caps enforced by provider APIs. A stored model
@@ -477,7 +482,8 @@ export const normalizeModelCapabilityLimits = (
   return {
     contextWindow,
     maxInputTokens: maxInputTokens ?? contextWindow,
-    maxOutputTokens: normalizePositiveInteger(limits?.maxOutputTokens),
+    maxOutputTokens:
+      normalizePositiveInteger(limits?.maxOutputTokens) ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   };
 };
 
@@ -513,8 +519,12 @@ export const ensureModelCapability = (
     modelId: trimmedModelId,
     displayName: trimmedModelId,
     ...normalizedLimits,
-    supportsToolCalls: null,
-    supportsReasoning: null,
+    // Unknown models are assumed to be modern multimodal reasoners: the UI
+    // offers image input and reasoning controls by default, and catalog or
+    // provider data still overrides these when it exists.
+    supportsToolCalls: true,
+    supportsReasoning: true,
+    supportsVision: true,
     source: 'default',
   };
 };

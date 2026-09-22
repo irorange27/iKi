@@ -34,17 +34,42 @@ class ThreadSession {
  * guarantees at most one active stream per connection, so the connection's
  * active stream is the current thread.
  */
-export const createThreadStreamCoordinator = () => {
+export const createThreadStreamCoordinator = (deps?: {
+  /**
+   * Cross-process admission lease (SQLite-backed). Extends the per-thread
+   * guard to turns running in other processes sharing the same database
+   * (desktop + headless daemon). Returning null means "held elsewhere".
+   * `onLeaseLost` fires when another process reclaims this holder's expired
+   * lease, so the local run aborts instead of double-running the thread.
+   */
+  crossProcessThreadRun?: (
+    threadId: string,
+    options: { onLeaseLost: () => void }
+  ) => (() => void) | null;
+}) => {
   const runningThreads = new Set<string>();
+  const abortThreadRunForLeaseLoss = (threadId: string) => {
+    const session = sessionsByThread.get(threadId);
+    const streamState = session?.streamState;
+    if (streamState && !streamState.cancelled) {
+      streamState.cancelled = true;
+      streamState.abortController.abort('thread-lease-lost');
+    }
+  };
   const tryAcquireThreadRun = (threadId?: string): (() => void) | null => {
     if (!threadId) return () => undefined;
     if (runningThreads.has(threadId)) return null;
+    const releaseCrossProcess = deps?.crossProcessThreadRun?.(threadId, {
+      onLeaseLost: () => abortThreadRunForLeaseLoss(threadId),
+    });
+    if (releaseCrossProcess === null) return null;
     runningThreads.add(threadId);
     let released = false;
     return () => {
       if (released) return;
       released = true;
       runningThreads.delete(threadId);
+      releaseCrossProcess?.();
     };
   };
   const activeStreams = new Map<number, ActiveStreamState>();

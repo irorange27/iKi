@@ -30,6 +30,14 @@ export type ToolRuntimeContext = {
   availableTools?: AgentTool[];
   conversationModel?: ToolRuntimeConversationModel;
   delegationDepth?: number;
+  /**
+   * Lazily-frozen workspace selection for this run. The first filesystem or
+   * shell tool call resolves the thread's workspace from the database and
+   * pins it here, so changing the thread's workspace mid-run cannot redirect
+   * later tools in the same run to a different root. Boxed so "resolved to
+   * no workspace" (selection: null) stays distinct from "not resolved yet".
+   */
+  workspaceSelectionBox?: { selection: unknown };
 };
 
 const storage = new AsyncLocalStorage<ToolRuntimeContext>();

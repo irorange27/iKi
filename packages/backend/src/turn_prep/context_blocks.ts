@@ -5,6 +5,7 @@ import type { AffectState } from '@iki/backend/affect/affect_state';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
+import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
 import { resolveSkillsSystemPrompt } from '../thread_session/skills';
 import { getClipboardContextMessage, getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../thread_session/platform';
 import { getPromptFromMessage } from '../thread_session/ui_messages';
@@ -337,7 +338,7 @@ export const buildClipboardContext = (
     }
 
     const tokens = estimateTextTokens(message);
-    const maxTokens = modelCapability?.maxInputTokens ?? 128_000;
+    const maxTokens = modelCapability?.maxInputTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
     const budget = Math.floor(maxTokens * 0.02); // 2% budget for clipboard context
     const clipped = clipTextToTokenBudget(message, budget);
     const systemMessage = clipped.text;

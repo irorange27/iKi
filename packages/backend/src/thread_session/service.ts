@@ -9,6 +9,7 @@ import { createChatRuns } from './runs';
 import { createChatEval } from './eval';
 import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
+import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';
 import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
@@ -22,7 +23,12 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
 
   const memory = createChatMemory();
   const usage = createChatUsage();
-  const streamCoordinator = createThreadStreamCoordinator();
+  // The SQLite lease extends per-thread admission across processes sharing
+  // this database (desktop window + headless daemon both enter here).
+  const streamCoordinator = createThreadStreamCoordinator({
+    crossProcessThreadRun: (threadId, options) =>
+      tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
+  });
   const approvals = createChatApproval({
     streams: {
       tryAcquireThreadRun: streamCoordinator.tryAcquireThreadRun,

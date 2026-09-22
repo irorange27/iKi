@@ -13,6 +13,7 @@ import {
   resolveAffectMessage,
 } from './context_blocks';
 import {
+  appendContextToLastUserMessage,
   buildAssembleResult,
   getContextConfig,
   insertSystemMessages,
@@ -94,10 +95,7 @@ export const createChatContextAssembler = (deps: {
 
     const baseMessages = insertSystemMessages(
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
-      [
-        identityContext.systemMessage,
-        memoryContext.systemMessage,
-      ]
+      [identityContext.systemMessage]
     );
 
     const affectContext = resolveAffectMessage(params, deps.memory);
@@ -117,10 +115,16 @@ export const createChatContextAssembler = (deps: {
       : buildClipboardContext(contextConfig, params.modelCapability);
     blocks.push(clipboardContext.block);
 
-    const baseWithAffect = insertSystemMessages(baseMessages, [
-      affectContext.message,
-      clipboardContext.systemMessage,
-    ]);
+    // Identity and skills are stable instruction blocks and stay in the system
+    // prefix. Memory, affect and clipboard are per-turn data: they ride with the
+    // newest user message so a change to them cannot invalidate the cached
+    // history prefix.
+    const baseWithVolatile = appendContextToLastUserMessage(
+      baseMessages,
+      [memoryContext.systemMessage, affectContext.message, clipboardContext.systemMessage]
+        .filter(part => part.trim().length > 0)
+        .join('\n\n')
+    );
     const skillContext: SkillContext = benchmarkCleanContext
       ? {
           systemMessage: '',
@@ -129,7 +133,7 @@ export const createChatContextAssembler = (deps: {
           block: buildDroppedBlock('skills', 'disabled for benchmark clean mode'),
         }
       : await buildSkillContext({
-          inputMessages: baseWithAffect,
+          inputMessages: baseWithVolatile,
           threadId: params.threadId,
           skillIds: params.skillIds,
           skillMode: params.skillMode,
@@ -140,7 +144,7 @@ export const createChatContextAssembler = (deps: {
     blocks.push(skillContext.block);
 
     return buildAssembleResult({
-      messages: insertSystemMessages(baseWithAffect, [skillContext.systemMessage]),
+      messages: insertSystemMessages(baseWithVolatile, [skillContext.systemMessage]),
       usedSkills: skillContext.usedSkills,
       skillMode: skillContext.skillMode,
       retainedRecentMessages: recentHistory.recentMessages.length,

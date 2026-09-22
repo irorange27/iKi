@@ -68,6 +68,9 @@ const ANTHROPIC_CACHE_PROVIDER_TYPES = new Set(['anthropic', 'anthropic-compatib
  * breakpoint so the system prompt, tool definitions and the growing history
  * prefix are cache-served on subsequent steps/batches instead of being
  * re-billed as fresh input tokens (SWE-agent's CacheControl equivalent).
+ * Stale breakpoints on earlier messages are stripped first: prepareStep feeds
+ * the previous step's marked messages back in, so a leftover marker would pin
+ * one of Anthropic's four breakpoint slots to a prefix that no longer grows.
  * The caller's history array is never mutated.
  */
 const withCacheBreakpoint = (providerType: string, messages: ModelMessage[]): ModelMessage[] => {
@@ -75,18 +78,28 @@ const withCacheBreakpoint = (providerType: string, messages: ModelMessage[]): Mo
     return messages;
   }
 
-  const last = messages[messages.length - 1]!;
-  return [
-    ...messages.slice(0, -1),
-    {
-      ...last,
+  return messages.map((message, index) => {
+    const source = message as ModelMessage & { providerOptions?: Record<string, any> };
+    const anthropicOptions = source.providerOptions?.anthropic;
+    const isBreakpoint = index === messages.length - 1;
+
+    if (!isBreakpoint) {
+      if (anthropicOptions?.cacheControl === undefined) return message;
+      const { cacheControl: _stale, ...rest } = anthropicOptions;
+      return {
+        ...source,
+        providerOptions: { ...source.providerOptions, anthropic: rest },
+      } as ModelMessage;
+    }
+
+    return {
+      ...source,
       providerOptions: {
-        ...((last as ModelMessage & { providerOptions?: Record<string, unknown> }).providerOptions ??
-          {}),
-        anthropic: { cacheControl: { type: 'ephemeral' } },
+        ...source.providerOptions,
+        anthropic: { ...anthropicOptions, cacheControl: { type: 'ephemeral' } },
       },
-    } as ModelMessage,
-  ];
+    } as ModelMessage;
+  });
 };
 
 const TERMINAL_TOOL_NAMES = new Set(['handoff']);

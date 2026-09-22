@@ -119,6 +119,16 @@ export const ensureThreadWorkspaceSelection = (
   };
 };
 
+/**
+ * Turn-start snapshot used by the agent harness to freeze the workspace for a
+ * whole run: later thread-state changes cannot redirect tools already running
+ * under the frozen context.
+ */
+export const resolveThreadWorkspaceSelectionSnapshot = (
+  threadId?: string | null
+): ThreadWorkspaceSelection | null =>
+  ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId);
+
 export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): string => {
   const selection = ensureThreadWorkspaceSelection(threadId);
   if (!selection?.threadId || !selection.workspaceId) {

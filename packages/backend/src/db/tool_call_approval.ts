@@ -59,6 +59,33 @@ export const getToolCallApprovalsBySession = (
 export const getActiveToolCallApprovalsBySession = (sessionId: string): ToolCallApproval[] =>
   getToolCallApprovalsBySession(sessionId, ACTIVE_APPROVAL_STATES);
 
+/**
+ * Expires the still-pending approvals owned by the given runs (startup
+ * recovery killed those runs, so their approval cards can never be answered).
+ * Recorded as a system rejection with an explicit reason — same shape as the
+ * approval-timeout path. Returns the approvals that were expired.
+ */
+export const expirePendingToolCallApprovalsByRunIds = (runIds: string[]): ToolCallApproval[] => {
+  if (runIds.length === 0) return [];
+  const placeholders = runIds.map(() => '?').join(', ');
+  const rows = getDb()
+    .prepare(
+      `SELECT a.* FROM tool_call_approvals a
+       JOIN tool_call_approval_sessions s ON s.session_id = a.session_id
+       WHERE a.state = 'pending' AND s.run_id IN (${placeholders})`
+    )
+    .all(...runIds) as ToolCallApproval[];
+
+  for (const row of rows) {
+    answerToolCallApproval(
+      row.approval_id,
+      'rejected',
+      'Expired by restart: the app restarted while this approval was pending; the tool never executed.'
+    );
+  }
+  return rows;
+};
+
 export const upsertToolCallApprovalSession = (session: UpsertToolCallApprovalSessionInput) => {
   const now = new Date().toISOString();
   return getDb()
