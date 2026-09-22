@@ -3,10 +3,7 @@ import { createLogger } from '@iki/backend/logger';
 import type { ChatThread } from '@iki/backend/types/chat';
 import type { AffectSignal } from '@iki/backend/types/affect';
 import type { InterventionPolicySignal } from '@iki/backend/message/intervention_policy';
-import {
-  buildThreadRuntimeMetadata,
-  normalizeStringArray,
-} from '@iki/backend/message/thread_runtime_hints';
+import { buildThreadRuntimeMetadata } from '@iki/backend/message/thread_runtime_hints';
 
 const chatThreadHintsLogger = createLogger({ module: 'chat_thread_hints' });
 
@@ -15,9 +12,6 @@ export const persistThreadRuntimeHints = (params: {
   providerType: string;
   providerId?: string;
   model: string;
-  tools: string[];
-  toolMode: 'manual' | 'auto';
-  mcpServerIds?: string[];
   affectSignal?: AffectSignal | null;
   interventionPolicy?: InterventionPolicySignal | null;
 }): void => {
@@ -26,19 +20,15 @@ export const persistThreadRuntimeHints = (params: {
 
   try {
     const thread = chatThreadDb.getChatThread(normalizedThreadId);
-    const normalizedTools = normalizeStringArray(params.tools);
 
     const update: Partial<ChatThread> = {
       model: params.model || thread?.model || null,
-      tools: normalizedTools.length > 0 ? JSON.stringify(normalizedTools) : null,
       metadata: JSON.stringify(
         buildThreadRuntimeMetadata({
           existingMetadata: thread?.metadata,
           providerType: params.providerType,
           providerId: params.providerId,
           model: params.model,
-          toolMode: params.toolMode,
-          mcpServerIds: params.mcpServerIds,
           affectSignal: params.affectSignal,
           interventionPolicy: params.interventionPolicy,
         })

@@ -5,22 +5,12 @@ import {
   type AffectSignal,
   type AffectSignalSource,
 } from '@iki/backend/types/affect';
-import {
-  isInterventionState,
-  type InterventionPolicySignal,
-} from './intervention_policy';
-
-export type ThreadToolSelectionMode = 'manual' | 'auto';
+import { isInterventionState, type InterventionPolicySignal } from './intervention_policy';
 
 export type ThreadLlmSelectionState = {
   providerType?: string;
   providerId?: string;
   model?: string;
-};
-
-export type ThreadToolSelectionState = {
-  mode?: ThreadToolSelectionMode;
-  mcpServerIds: string[];
 };
 
 export type ThreadAffectState = AffectSignal & {
@@ -58,32 +48,6 @@ export const parseJsonRecord = (raw: unknown): ObjectRecord => {
   } catch {
     return {};
   }
-};
-
-export const parseThreadToolNames = (raw: unknown): string[] => {
-  if (typeof raw === 'string') {
-    try {
-      return normalizeStringArray(JSON.parse(raw));
-    } catch {
-      return [];
-    }
-  }
-
-  return normalizeStringArray(raw);
-};
-
-export const parseThreadToolSelectionState = (metadataRaw: unknown): ThreadToolSelectionState => {
-  const metadata = parseJsonRecord(metadataRaw);
-  const toolSelection = isObjectRecord(metadata.toolSelection) ? metadata.toolSelection : {};
-  const mode =
-    toolSelection.mode === 'auto' || toolSelection.mode === 'manual'
-      ? toolSelection.mode
-      : undefined;
-
-  return {
-    mode,
-    mcpServerIds: normalizeStringArray(toolSelection.mcpServerIds),
-  };
 };
 
 export const parseThreadLlmSelectionState = (metadataRaw: unknown): ThreadLlmSelectionState => {
@@ -198,9 +162,7 @@ export const parseThreadInterventionPolicyState = (
   const escalateRaw = toFiniteNumber(policy.escalate);
   const confidence = toFiniteNumber(policy.confidence);
   const rationale =
-    typeof policy.rationale === 'string' && policy.rationale.trim()
-      ? policy.rationale.trim()
-      : '';
+    typeof policy.rationale === 'string' && policy.rationale.trim() ? policy.rationale.trim() : '';
 
   if (escalateRaw === undefined || confidence === undefined || !rationale) {
     return null;
@@ -213,7 +175,9 @@ export const parseThreadInterventionPolicyState = (
     rationale,
     reasonCodes: normalizeReasonCodes(policy.reasonCodes),
     affectUsed: policy.affectUsed === true,
-    ...(policy.applied === true || policy.applied === false ? { applied: policy.applied === true } : {}),
+    ...(policy.applied === true || policy.applied === false
+      ? { applied: policy.applied === true }
+      : {}),
     ...(typeof policy.updatedAt === 'string' && policy.updatedAt.trim()
       ? { updatedAt: policy.updatedAt }
       : {}),
@@ -225,17 +189,12 @@ export const buildThreadRuntimeMetadata = (params: {
   providerType: string;
   providerId?: string;
   model: string;
-  toolMode: ThreadToolSelectionMode;
-  mcpServerIds?: string[];
   affectSignal?: AffectSignal | null;
   interventionPolicy?: InterventionPolicySignal | null;
   updatedAt?: string;
 }): ObjectRecord => {
   const metadataRecord = parseJsonRecord(params.existingMetadata);
   const nextLlm = isObjectRecord(metadataRecord.llm) ? metadataRecord.llm : {};
-  const nextToolSelection = isObjectRecord(metadataRecord.toolSelection)
-    ? metadataRecord.toolSelection
-    : {};
   const updatedAt = params.updatedAt || new Date().toISOString();
   const nextMetadata: ObjectRecord = {
     ...metadataRecord,
@@ -246,12 +205,6 @@ export const buildThreadRuntimeMetadata = (params: {
         ? { providerId: params.providerId.trim() }
         : {}),
       model: params.model,
-      updatedAt,
-    },
-    toolSelection: {
-      ...nextToolSelection,
-      mode: params.toolMode,
-      mcpServerIds: normalizeStringArray(params.mcpServerIds),
       updatedAt,
     },
   };
@@ -297,7 +250,8 @@ export const buildThreadRuntimeMetadata = (params: {
         rationale: params.interventionPolicy.rationale,
         reasonCodes: [...params.interventionPolicy.reasonCodes],
         affectUsed: params.interventionPolicy.affectUsed,
-        ...(params.interventionPolicy.applied === true || params.interventionPolicy.applied === false
+        ...(params.interventionPolicy.applied === true ||
+        params.interventionPolicy.applied === false
           ? { applied: params.interventionPolicy.applied === true }
           : {}),
         updatedAt,
