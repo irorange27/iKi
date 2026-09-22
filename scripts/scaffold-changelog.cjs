@@ -215,6 +215,14 @@ const resolveStartRef = ({ cwd, versionTag, toRef, explicitFrom }) => {
   });
 };
 
+// A tagged version is a frozen snapshot: read it back from its own tag. An untagged
+// version is still open, so its changelog grows with HEAD.
+const resolveToRef = ({ explicitTo, versionTag, tagExists }) =>
+  explicitTo || (tagExists ? versionTag : 'HEAD');
+
+const hasGitTag = ({ cwd, tag }) =>
+  runGit(['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`], { cwd, allowFailure: true }) !== '';
+
 const collectCommits = ({ cwd, fromRef, toRef }) => {
   const rangeArgs =
     fromRef && fromRef.trim() !== ''
@@ -260,7 +268,7 @@ const parseArgs = argv => {
   const args = {
     version: null,
     from: null,
-    to: 'HEAD',
+    to: null,
     output: null,
     dryRun: false,
     check: false,
@@ -354,7 +362,7 @@ const printHelp = () => {
       'Options:',
       '  --version <vX.Y.Z>   Target version tag. Defaults to package.json version.',
       '  --from <git-ref>     Start ref for the changelog range.',
-      '  --to <git-ref>       End ref for the changelog range. Defaults to HEAD.',
+      '  --to <git-ref>       End ref for the changelog range. Defaults to the version tag when it exists, otherwise HEAD.',
       '  --output <path>      Output file path. Defaults to changelogs/<version>.md.',
       '  --dry-run            Print the generated changelog instead of writing a file.',
       '  --check              Verify an existing changelog file matches generated output.',
@@ -382,7 +390,11 @@ const run = () => {
   const manifest = readPackageManifest(cwd);
   const versionTag = normalizeVersionTag(args.version || manifest.version);
   const outputPath = path.resolve(cwd, args.output || path.join(CHANGELOG_DIR, `${versionTag}.md`));
-  const toRef = args.to || 'HEAD';
+  const toRef = resolveToRef({
+    explicitTo: args.to,
+    versionTag,
+    tagExists: hasGitTag({ cwd, tag: versionTag }),
+  });
   const fromRef = resolveStartRef({
     cwd,
     versionTag,
@@ -459,4 +471,5 @@ module.exports = {
   resolveSection,
   resolveStartRefFromMergedTags,
   resolveStartRef,
+  resolveToRef,
 };

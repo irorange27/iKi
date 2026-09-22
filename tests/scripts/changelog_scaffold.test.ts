@@ -13,6 +13,7 @@ const {
   renderChangelog,
   resolveSection,
   resolveStartRefFromMergedTags,
+  resolveToRef,
 } = changelogScaffold;
 
 describe('scaffold-changelog', () => {
@@ -66,7 +67,7 @@ describe('scaffold-changelog', () => {
         check: true,
         dryRun: false,
         force: false,
-        to: 'HEAD',
+        to: null,
       })
     );
     expect(parseArgs(['--dry-run'])).toEqual(
@@ -115,6 +116,12 @@ describe('scaffold-changelog', () => {
         '',
       ].join('\n')
     );
+  });
+
+  it('defaults the end ref to the version tag once it exists', () => {
+    expect(resolveToRef({ explicitTo: null, versionTag: 'v0.0.2', tagExists: true })).toBe('v0.0.2');
+    expect(resolveToRef({ explicitTo: null, versionTag: 'v0.0.3', tagExists: false })).toBe('HEAD');
+    expect(resolveToRef({ explicitTo: 'abc123', versionTag: 'v0.0.2', tagExists: true })).toBe('abc123');
   });
 
   it('resolves the previous merged tag when the target tag already exists', () => {

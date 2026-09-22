@@ -51,7 +51,7 @@
     "name": "irorange27",
     "email": "orange27@shu.edu.cn"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "packageManager": "pnpm@12.3.4",
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
