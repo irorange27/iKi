@@ -301,7 +301,9 @@ describe('data access IPC modules', () => {
         error: updateError,
       })
     );
-  });
+    // ponytail: CI can push this case past the 5s default under load (it runs ~22ms
+    // locally). Per-case timeout only — a global testTimeout would slow real hangs.
+  }, 15000);
 
   it('creates workspace records with normalized defaults and forwards remaining workspace handlers', async () => {
     vi.useFakeTimers();
