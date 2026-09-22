@@ -4,10 +4,8 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 
 export const useChatComposerLifecycle = (deps: {
   electronAPI: Pick<ElectronApi, 'providers'>;
-  threadId: Ref<string | undefined>;
   activeModel: Ref<string | undefined>;
   activeProviderId: Ref<string | null | undefined>;
-  isBusy: Ref<boolean>;
   loadAvailableProviders: (
     preferredModel?: string | null,
     nextPreferredProviderId?: string | null
@@ -16,26 +14,9 @@ export const useChatComposerLifecycle = (deps: {
     preferredModel?: string | null,
     nextPreferredProviderId?: string | null
   ) => void;
-  syncToolSelectionFromThread: (threadId?: string) => Promise<void>;
   loadSpeechStatus: () => Promise<void>;
 }) => {
   let removeProviderUpdateListener: () => void = () => undefined;
-  let syncInProgress = false;
-
-  watch(
-    () => [deps.threadId.value, deps.isBusy.value] as const,
-    async ([threadId, busy], [previousThreadId, previousBusy]) => {
-      if (busy) return;
-      if (threadId === previousThreadId && previousBusy === busy) return;
-      if (syncInProgress) return;
-      syncInProgress = true;
-      try {
-        await deps.syncToolSelectionFromThread(threadId);
-      } finally {
-        syncInProgress = false;
-      }
-    }
-  );
 
   watch(
     () => [deps.activeModel.value, deps.activeProviderId.value] as const,
@@ -56,7 +37,6 @@ export const useChatComposerLifecycle = (deps: {
 
     await deps.loadAvailableProviders(deps.activeModel.value, deps.activeProviderId.value);
     await deps.loadSpeechStatus();
-    await deps.syncToolSelectionFromThread(deps.threadId.value);
   });
 
   onUnmounted(() => {

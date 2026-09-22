@@ -13,7 +13,6 @@ const {
   currentModelRef,
   isIncognitoRef,
   selectedWorkspaceIdRef,
-  selectedToolsRef,
   showWelcomeRef,
   editingUserMessageIdRef,
   chatInstance,
@@ -59,7 +58,6 @@ const {
   const currentModelRef = makeRef('gpt-4.1');
   const isIncognitoRef = makeRef(false);
   const selectedWorkspaceIdRef = makeRef<string | null>(null);
-  const selectedToolsRef = makeRef<string[]>([]);
   const showWelcomeRef = makeRef(false);
   const editingUserMessageIdRef = makeRef<string | null>(null);
 
@@ -140,7 +138,6 @@ const {
     currentModelRef,
     isIncognitoRef,
     selectedWorkspaceIdRef,
-    selectedToolsRef,
     showWelcomeRef,
     editingUserMessageIdRef,
     chatInstance,
@@ -293,7 +290,6 @@ const mountChatView = async () => {
   threadSession.currentModel = currentModelRef.value;
   threadSession.isIncognito = isIncognitoRef.value;
   threadSession.selectedWorkspaceId = selectedWorkspaceIdRef.value;
-  threadSession.selectedTools = [...selectedToolsRef.value];
   threadSession.showWelcome = showWelcomeRef.value;
 
   const ChatView = (await import('../../../packages/desktop/src/renderer/views/ChatView.vue')).default;
@@ -321,7 +317,6 @@ describe('ChatView', () => {
     currentModelRef.value = 'gpt-4.1';
     isIncognitoRef.value = false;
     selectedWorkspaceIdRef.value = null;
-    selectedToolsRef.value = [];
     showWelcomeRef.value = false;
     editingUserMessageIdRef.value = null;
     chatInstance.activeAssistantMessageId.value = null;

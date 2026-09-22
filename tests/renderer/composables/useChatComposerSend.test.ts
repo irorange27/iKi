@@ -61,10 +61,7 @@ const createHarness = (options?: {
   const message = ref(options?.message ?? 'Need help');
   const isRecording = ref(false);
   const isTranscribing = ref(false);
-  const selectedTools = ref<string[]>([]);
-  const selectedMcpServerIds = ref<string[]>([]);
   const selectedSkillIds = ref<string[]>([]);
-  const isAutoToolMode = ref(true);
   const isAutoSkillMode = ref(true);
   const provider = buildProvider({
     id: 'openai',
@@ -81,7 +78,6 @@ const createHarness = (options?: {
         model: 'gpt-4.1',
       } as const)
   );
-  const resolveSelectedMcpServerIds = vi.fn(async () => []);
   const prepareMessageSend =
     options?.prepareMessageSend ??
     vi.fn(async () => ({
@@ -105,10 +101,7 @@ const createHarness = (options?: {
     message,
     isRecording,
     isTranscribing,
-    selectedTools,
-    selectedMcpServerIds,
     selectedSkillIds,
-    isAutoToolMode,
     isAutoSkillMode,
     isAutonomousMode: ref(false),
     autonomousMaxIterations: ref(10),
@@ -121,14 +114,12 @@ const createHarness = (options?: {
     submitTurn,
     resolveSendRequest: options?.resolveSendRequest,
     ensureProviderReady,
-    resolveSelectedMcpServerIds,
     stopVoiceInput,
   });
 
   return {
     message,
     ensureProviderReady,
-    resolveSelectedMcpServerIds,
     prepareMessageSend,
     stopVoiceInput,
     submitTurn,

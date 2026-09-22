@@ -254,8 +254,6 @@ const mountChatInput = async (options?: {
     content: string;
     model?: string;
     providerId?: string;
-    tools?: string[];
-    mcpServerIds?: string[];
     promptAppId?: string;
   }) => Promise<{
     threadId: string;
@@ -273,8 +271,6 @@ const mountChatInput = async (options?: {
       content: string;
       model?: string;
       providerId?: string;
-      tools?: string[];
-      mcpServerIds?: string[];
       promptAppId?: string;
     }) => {
       if (options?.prepareMessageSend) {
@@ -555,8 +551,6 @@ describe('ChatInput', () => {
         content: 'Need help with the repo',
         model: 'gpt-4.1',
         providerId: 'openai',
-        tools: [],
-        mcpServerIds: [],
       })
     );
 
@@ -567,8 +561,6 @@ describe('ChatInput', () => {
         providerType: 'openai',
         providerId: 'openai',
         model: 'gpt-4.1',
-        tools: undefined,
-        mcpServerIds: [],
         skillMode: 'auto',
         skillIds: undefined,
         }),
@@ -1052,7 +1044,7 @@ describe('ChatInput', () => {
     expect((wrapper.find('.chat-input-field').element as HTMLInputElement).value).toBe('');
   });
 
-  it('restores persisted manual tool selection from the thread and forwards it on send', async () => {
+  it('ignores persisted manual tool selection on send (manual selection removed)', async () => {
     const provider = buildProvider({
       id: 'openai',
       name: 'OpenAI',
@@ -1060,7 +1052,7 @@ describe('ChatInput', () => {
       models: '["gpt-4.1"]',
     });
 
-    const { wrapper, api, submitTurn, prepareMessageSend } = await mountChatInput({
+    const { wrapper, submitTurn, prepareMessageSend } = await mountChatInput({
       providers: [provider],
       thread: {
         id: 'thread_1',
@@ -1079,27 +1071,24 @@ describe('ChatInput', () => {
       },
     });
 
-    expect(api.chat.threads.get).toHaveBeenCalledWith('thread_1');
-
     await wrapper.find('.chat-input-field').setValue('Search the docs');
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    expect(prepareMessageSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tools: ['web', 'mcp_lookup'],
-        mcpServerIds: ['docs_server'],
-      })
-    );
+    // Manual tool/MCP selection is gone: a thread's persisted allowlist must
+    // never leak into the turn, or it silently restricts tools with no UI to
+    // see or clear it. Assert the send happened first — otherwise the absence
+    // checks below pass vacuously when neither mock is called.
+    expect(prepareMessageSend).toHaveBeenCalledTimes(1);
+    expect(submitTurn).toHaveBeenCalledTimes(1);
 
-    expect(submitTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        body: expect.objectContaining({
-        tools: ['web', 'mcp_lookup'],
-        mcpServerIds: ['docs_server'],
-        }),
-      }),
-    );
+    const preparePayload = prepareMessageSend.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(preparePayload).not.toHaveProperty('tools');
+    expect(preparePayload).not.toHaveProperty('mcpServerIds');
+
+    const body = (submitTurn.mock.calls[0]?.[0] as { body?: Record<string, unknown> })?.body;
+    expect(body).not.toHaveProperty('tools');
+    expect(body).not.toHaveProperty('mcpServerIds');
   });
 
   it('reflects incognito state and applies explicit toggle requests to the session store', async () => {

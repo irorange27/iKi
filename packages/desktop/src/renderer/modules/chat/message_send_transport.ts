@@ -17,9 +17,6 @@ export type ChatComposerInvocationBody = Omit<ChatInvocationOptions, 'messages'>
 export const createChatComposerStreamPayload = (params: {
   providerReady: ComposerReadyProvider;
   threadId: string;
-  isAutoToolMode: boolean;
-  selectedTools: string[];
-  resolvedMcpServerIds: string[];
   isAutoSkillMode: boolean;
   selectedSkillIds: string[];
   /** Thread-level reasoning effort; empty string = provider default (omitted from payload). */
@@ -51,12 +48,8 @@ export const createChatComposerStreamPayload = (params: {
       typeof params.providerReady.modelCapability.maxOutputTokens === 'number')
       ? { modelCapability: clonePlainData(params.providerReady.modelCapability) }
       : {}),
-    tools: params.isAutoToolMode
-      ? undefined
-      : params.selectedTools.length > 0
-        ? clonePlainData(params.selectedTools)
-        : [],
-    mcpServerIds: clonePlainData(params.resolvedMcpServerIds),
+    // Manual tool/MCP selection was removed with the composer selectors; the
+    // composer always runs in auto tool mode (omit `tools` = agent decides).
     skillMode: params.isAutoSkillMode ? 'auto' : 'manual',
     skillIds: params.isAutoSkillMode ? undefined : clonePlainData(params.selectedSkillIds),
     threadId: params.threadId,

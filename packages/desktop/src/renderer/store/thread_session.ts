@@ -97,7 +97,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const currentApprovalPolicy = ref<ThreadApprovalPolicy | ''>('');
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
-  const selectedTools = ref<string[]>([]);
   const showWelcome = ref(!localStorage.getItem('iki-welcome-seen'));
 
   // ── Runtime (injected once) ─────────────────────────────────────────
@@ -916,7 +915,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     currentApprovalPolicy,
     isIncognito,
     selectedWorkspaceId,
-    selectedTools,
     showWelcome,
     // runtime
     initRuntime,

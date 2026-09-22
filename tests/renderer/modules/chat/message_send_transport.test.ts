@@ -46,9 +46,6 @@ describe('message_send_transport', () => {
         },
       },
       threadId: 'thread_1',
-      isAutoToolMode: false,
-      selectedTools: ['web'],
-      resolvedMcpServerIds: ['docs_server'],
       isAutoSkillMode: false,
       selectedSkillIds: ['skill.docs'],
     });
@@ -62,8 +59,6 @@ describe('message_send_transport', () => {
         maxInputTokens: 128000,
         maxOutputTokens: 16384,
       },
-      tools: ['web'],
-      mcpServerIds: ['docs_server'],
       skillMode: 'manual',
       skillIds: ['skill.docs'],
       threadId: 'thread_1',
@@ -84,9 +79,6 @@ describe('message_send_transport', () => {
           model: 'gpt-4.1',
         },
         threadId: '',
-        isAutoToolMode: true,
-        selectedTools: ['web'],
-        resolvedMcpServerIds: [],
         isAutoSkillMode: true,
         selectedSkillIds: ['skill.docs'],
       })
@@ -102,9 +94,6 @@ describe('message_send_transport', () => {
     const base = {
       providerReady: { provider, model: 'gpt-5.2' },
       threadId: 'thread_1',
-      isAutoToolMode: true,
-      selectedTools: [],
-      resolvedMcpServerIds: [],
       isAutoSkillMode: true,
       selectedSkillIds: [],
     };
