@@ -1,20 +1,9 @@
 <template>
-  <img
-    v-if="type === 'img'"
-    :src="iconSrc"
-    :alt="alt || name"
-    :width="computedSize"
-    :height="computedSize"
-    :class="['lobe-icon', `lobe-icon-${name}`, className]"
-    :style="iconStyle"
-    @error="handleError"
-    @load="handleLoad"
-  />
-  <svg
-    v-else-if="type === 'svg' && svgContent"
-    v-html="svgContent"
-    :width="computedSize"
-    :height="computedSize"
+  <span
+    v-if="svgMarkup"
+    v-html="svgMarkup"
+    role="img"
+    :aria-label="alt || name"
     :class="['lobe-icon', `lobe-icon-${name}`, className]"
     :style="iconStyle"
   />
@@ -24,8 +13,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue';
+import { computed } from 'vue';
 import type { CSSProperties } from 'vue';
+import { getIconSvg } from './icon_svg_assets';
 
 export type IconName =
   | 'openai'
@@ -56,9 +46,6 @@ interface Props {
   alt?: string;
   color?: string;
   spin?: boolean;
-  type?: 'img' | 'svg';
-  useCdn?: boolean;
-  cdnPrefix?: string;
   fallbackText?: string;
   style?: CSSProperties;
 }
@@ -69,20 +56,9 @@ const props = withDefaults(defineProps<Props>(), {
   alt: '',
   color: '',
   spin: false,
-  type: 'img',
-  useCdn: true,
-  cdnPrefix: 'https://unpkg.com/@lobehub/icons-static-svg@latest/icons',
   fallbackText: '?',
   style: () => ({}),
 });
-
-const emit = defineEmits<{
-  load: [event?: Event];
-  error: [event: Event | string];
-}>();
-
-const svgContent = ref<string>('');
-const hasError = ref(false);
 
 const computedSize = computed(() => {
   if (typeof props.size === 'number') {
@@ -91,26 +67,15 @@ const computedSize = computed(() => {
   return props.size;
 });
 
-const iconSrc = computed(() => {
-  if (hasError.value) return '';
-
-  if (props.useCdn) {
-    return `${props.cdnPrefix}/${props.name}.svg`;
-  }
-
-  return `/icons/${props.name}.svg`;
-});
+// An unknown name falls back to the initials placeholder — never a network fetch.
+const svgMarkup = computed(() => getIconSvg(props.name));
 
 const iconStyle = computed<CSSProperties>(() => ({
   ...props.style,
+  width: computedSize.value,
+  height: computedSize.value,
   color: props.color || undefined,
   animation: props.spin ? 'spin 1s linear infinite' : undefined,
-  ...(props.type === 'img'
-    ? {
-        objectFit: 'contain',
-        display: 'block',
-      }
-    : {}),
 }));
 
 const placeholderStyle = computed<CSSProperties>(() => ({
@@ -125,68 +90,20 @@ const placeholderStyle = computed<CSSProperties>(() => ({
   fontSize: '12px',
   ...props.style,
 }));
-
-const handleLoad = (event: Event) => {
-  emit('load', event);
-};
-
-const handleError = (event: Event) => {
-  hasError.value = true;
-  emit('error', event);
-};
-
-const loadSvgContent = async () => {
-  if (props.type !== 'svg') return;
-
-  try {
-    const response = await fetch(iconSrc.value);
-    if (response.ok) {
-      const svgText = await response.text();
-      svgContent.value = svgText;
-      emit('load');
-    } else {
-      throw new Error(`Failed to load SVG: ${response.status}`);
-    }
-  } catch (error) {
-    hasError.value = true;
-    emit('error', error instanceof Error ? error.message : 'Failed to load SVG');
-  }
-};
-
-watch(
-  () => props.name,
-  () => {
-    hasError.value = false;
-    if (props.type === 'svg') {
-      loadSvgContent();
-    }
-  }
-);
-
-watch(
-  () => props.type,
-  newType => {
-    if (newType === 'svg') {
-      loadSvgContent();
-    } else {
-      svgContent.value = '';
-    }
-  }
-);
-
-onMounted(() => {
-  if (props.type === 'svg') {
-    loadSvgContent();
-  }
-});
 </script>
 
 <style scoped>
+/* :deep() is required — v-html content carries no scope attribute. */
 .lobe-icon {
-  display: inline-block;
+  display: inline-flex;
   vertical-align: middle;
-  max-width: 100%;
-  max-height: 100%;
+  flex: none;
+}
+
+.lobe-icon :deep(svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .lobe-icon-placeholder {

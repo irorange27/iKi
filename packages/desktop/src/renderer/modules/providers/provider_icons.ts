@@ -4,8 +4,6 @@ import { getCanonicalBuiltInProviderName, getProviderFallbackText } from './prov
 
 export type ProviderIconProps = {
   name: string;
-  useCdn?: boolean;
-  cdnPrefix?: string;
   fallbackText: string;
 };
 
@@ -13,7 +11,6 @@ type ProviderWithOptionalIcon = Pick<Provider, 'name' | 'type'> & {
   icon?: string | null;
 };
 
-const CUSTOM_PROVIDER_ICON_CDN = 'https://unpkg.com/lucide-static@latest/icons';
 const BUILTIN_PROVIDER_NAME_BY_ID = new Map(
   BUILTIN_PROVIDERS.map(provider => [provider.id, provider.name])
 );
@@ -61,8 +58,6 @@ export const getCustomProviderIconProps = (
 
   return {
     name: normalizedIcon && normalizedIcon !== 'custom' ? normalizedIcon : 'grid-2x2',
-    useCdn: true,
-    cdnPrefix: CUSTOM_PROVIDER_ICON_CDN,
     fallbackText,
   };
 };
