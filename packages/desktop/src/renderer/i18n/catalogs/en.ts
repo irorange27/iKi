@@ -273,41 +273,6 @@ export const en = defineCatalog({
   'chat.workspace.lockedHint': 'Workspace locked after the first message in this thread',
   'chat.workspace.tempCompact': '(Temp)',
   'chat.workspace.lockedNote': 'Workspace cannot be changed after sending messages',
-  'chat.tools.title': 'Tools',
-  'chat.tools.description':
-    'Allow iKi to use built-in tools for the next response. Auto mode considers all built-in tools plus all tools from enabled MCP servers.',
-  'chat.tools.trigger.choose': 'Choose tools',
-  'chat.tools.trigger.auto': 'Tools: auto',
-  'chat.tools.trigger.selected': ({ count }) => `Tools: ${asCount(count)} selected`,
-  'chat.tools.autoDescription':
-    'Auto considers all built-in tools plus all tools from the MCP servers enabled below.',
-  'chat.tools.auto': 'Auto',
-  'chat.tools.selectAll': 'Select all',
-  'chat.tools.clear': 'Clear',
-  'chat.tools.noBuiltins': 'No built-in tools available.',
-  'chat.tools.mcpServers': 'MCP Servers',
-  'chat.tools.refreshMcpTitle': 'Refresh MCP servers',
-  'chat.tools.mcpDescription':
-    'Enable MCP servers for this conversation. Manual mode exposes all tools from enabled servers. Auto mode also considers all tools from enabled servers.',
-  'chat.tools.loadingMcp': 'Loading MCP servers...',
-  'chat.tools.noMcp': 'No MCP servers configured.',
-  'chat.tools.statusDisabled': 'Disabled',
-  'chat.tools.statusConnected': 'Connected',
-  'chat.tools.statusConnecting': 'Connecting',
-  'chat.tools.statusError': 'Error',
-  'chat.tools.statusDisconnected': 'Disconnected',
-  'chat.tools.toolCount': ({ count }) => {
-    const normalized = asCount(count);
-    return `${normalized} tool${normalized === 1 ? '' : 's'}`;
-  },
-  'chat.skills.title': 'Skills',
-  'chat.skills.description':
-    'Inject reusable instructions (workflows, best practices) into the next response. Skills are loaded from your local filesystem.',
-  'chat.skills.trigger.choose': 'Choose skills',
-  'chat.skills.trigger.auto': 'Skills: auto',
-  'chat.skills.trigger.selected': ({ count }) => `Skills: ${asCount(count)} selected`,
-  'chat.skills.autoHint': 'iKi will automatically pick relevant skills based on your message.',
-  'chat.skills.noSkills': 'No skills found.',
   'chat.references.affect': 'affect',
   'chat.references.memories': ({ count }) => `${asCount(count)} memories`,
   'chat.references.tools': ({ count }) => {
