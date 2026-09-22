@@ -4,6 +4,15 @@ packages:
 
 nodeLinker: hoisted
 strictDepBuilds: true
+# @electron/rebuild pins @electron/node-gyp to a git URL; pnpm 12 reads this setting from
+# here, not from the .npmrc spelling `block-exotic-subdeps`.
+blockExoticSubdeps: false
+
+# extract-zip@2.0.1 (electron's postinstall) reads through yauzl@2.10.0, whose inflate
+# stream freezes mid-entry and never settles — electron installs half-built and
+# `pnpm start` dies on the missing path.txt. yauzl@3 reads the same entry complete.
+overrides:
+  yauzl: ^3.4.0
 
 allowBuilds:
   better-sqlite3: true
