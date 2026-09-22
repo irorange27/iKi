@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getToolDiffLines,
   getToolDiffStat,
+  getToolErrorText,
   getToolOutputForDisplay,
   getToolTerminalView,
   getToolTitle,
@@ -139,6 +140,31 @@ describe('ui_message_tool_calls', () => {
     };
     expect(getToolOutputForDisplay(shellPart)).toEqual({ stdout: '/tmp' });
     expect(hasToolDiff(shellPart)).toBe(false);
+  });
+
+  it('surfaces the failure reason of output-error parts in the meta row and output section', () => {
+    const interruptedPart = {
+      type: 'dynamic-tool',
+      toolCallId: 'call_interrupted',
+      toolName: 'shell',
+      state: 'output-error',
+      input: { command: 'ls' },
+      errorText:
+        'Tool call was waiting for approval when the app restarted; it never executed.',
+    };
+
+    // Always-visible meta-row text (the awaiting-forever / silent-failure fix).
+    expect(getToolErrorText(interruptedPart)).toContain('never executed');
+    // The Output section falls back to the reason for embedded views.
+    expect(getToolOutputForDisplay(interruptedPart)).toContain('never executed');
+
+    // Non-error parts never leak an errorText-styled meta entry.
+    expect(
+      getToolErrorText({ ...interruptedPart, state: 'output-available', output: 'ok' })
+    ).toBe('');
+    // Error state without a recorded reason degrades to no text.
+    expect(getToolErrorText({ ...interruptedPart, errorText: '   ' })).toBe('');
+    expect(getToolOutputForDisplay({ ...interruptedPart, errorText: '   ' })).toBeUndefined();
   });
 });
 

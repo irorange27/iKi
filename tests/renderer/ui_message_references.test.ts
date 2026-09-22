@@ -433,7 +433,7 @@ describe('ui_message_references', () => {
     expect(indicator?.tooltip).toContain('Model: gpt-5-mini');
   });
 
-  it('falls back to the shared 128k default when token usage metadata omits a budget', () => {
+  it('falls back to the shared default window when token usage metadata omits a budget', () => {
     const indicator = buildTokenUsageIndicator({
       inputTokens: 640,
       outputTokens: null,
@@ -459,11 +459,13 @@ describe('ui_message_references', () => {
       expect.objectContaining({
         usedTokens: 640,
         budgetTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-        percent: 1,
-        percentLabel: '1%',
+        percent: 0,
+        percentLabel: '0%',
       })
     );
-    expect(indicator?.tooltip).toContain('Context usage: 640 tok / 128,000 tok (1%)');
+    expect(indicator?.tooltip).toContain(
+      `Context usage: 640 tok / ${DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS.toLocaleString('en-US')} tok (0%)`
+    );
   });
 
   it('does not treat context-only metadata as an expandable reference summary', () => {

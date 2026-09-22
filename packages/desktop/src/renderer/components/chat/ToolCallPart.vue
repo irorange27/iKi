@@ -88,6 +88,13 @@
           />
           <span>{{ getToolStateLabel(part) }}</span>
         </span>
+        <span
+          v-if="getToolErrorText(part)"
+          class="tool-error-text"
+          :title="getToolErrorText(part)"
+        >
+          {{ getToolErrorText(part) }}
+        </span>
         <span v-if="getToolDurationLabel(part)" class="tool-duration">
           <Clock :size="14" class="tool-duration-icon" />
           <span>{{ getToolDurationLabel(part) }}</span>
@@ -237,6 +244,13 @@
           />
           <span>{{ getToolStateLabel(part) }}</span>
         </span>
+        <span
+          v-if="getToolErrorText(part)"
+          class="tool-error-text"
+          :title="getToolErrorText(part)"
+        >
+          {{ getToolErrorText(part) }}
+        </span>
         <span v-if="getToolDurationLabel(part)" class="tool-duration">
           <Clock :size="14" class="tool-duration-icon" />
           <span>{{ getToolDurationLabel(part) }}</span>
@@ -297,6 +311,7 @@ import {
   getToolDiffLines,
   getToolDiffStat,
   getToolDurationLabel,
+  getToolErrorText,
   getToolIconComponent,
   getToolInput,
   getToolInputDisplayMetaText,

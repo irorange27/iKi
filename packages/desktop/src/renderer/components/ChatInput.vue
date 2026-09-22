@@ -392,7 +392,7 @@ const selectedSkillIds = ref<string[]>([]);
 const skillMode = ref<'manual' | 'auto'>('auto');
 const isAutoSkillMode = computed(() => skillMode.value === 'auto');
 const isAutonomousMode = ref(false);
-const autonomousMaxIterations = ref(10);
+const autonomousMaxIterations = ref(20);
 
 const runStatusState = useRunStatus({ electronAPI });
 

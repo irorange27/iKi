@@ -108,6 +108,7 @@
         <ChatInput
           ref="chatInputRef"
           :thread-id="currentThread?.id || ''"
+          :approval-policy="currentApprovalPolicy"
           :workspace-locked="isWorkspaceLocked"
           :latest-token-usage="latestAssistantTokenUsage"
           :todo-plan="activeTodoPlan"
