@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createLogger } from '@iki/backend/logger';
 import { maybeOpenDevTools } from './devtools_policy';
 import { loadRendererEntry } from './renderer';
+import { attachViewportResyncGuard } from './viewport_resync';
 import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
 
 const windowLogger = createLogger({ module: 'main_window' });
@@ -43,6 +44,8 @@ export const createMainWindow = (): BrowserWindow => {
   });
 
   mainWindowRef = mainWindow;
+
+  attachViewportResyncGuard(mainWindow);
 
   void loadRendererEntry(mainWindow, { isPackaged: app.isPackaged });
 

@@ -123,6 +123,30 @@
     background: transparent;
   }
 
+  /* Underline tab shared by the view-level and panel-level tab rows. */
+  .ui-tab {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .ui-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .ui-tab[aria-selected='true'] {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
+  }
+
+  .ui-tab:focus-visible {
+    outline: 1px solid var(--accent-color);
+    outline-offset: -2px;
+  }
+
   .composer-control-btn {
     border: 1px solid var(--chat-composer-control-border-color);
     background: var(--chat-composer-control-background);
@@ -572,5 +596,148 @@
     font-size: 10px;
     font-weight: 700;
     color: var(--composer-workspace-badge-foreground);
+  }
+
+  /* ── Trajectory view shared chrome (run ledger, timing, detail) ──
+     TrajectoryView.vue carries no scoped styles; the detail pane receives
+     its width from the parent as the --detail-width custom property. */
+  .traj-root {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    container-type: inline-size;
+  }
+
+  .traj-toolbar {
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .traj-search {
+    border: 1px solid var(--border-color);
+    border-radius: var(--control-radius-sm);
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
+  .traj-search:focus-within {
+    border-color: var(--accent-color);
+  }
+
+  .traj-search input {
+    background: transparent;
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .traj-resize {
+    border-left: 1px solid var(--border-color);
+  }
+
+  .traj-resize:hover,
+  .traj-resize:focus-visible {
+    background: var(--accent-color);
+    outline: none;
+  }
+
+  .trajectory-control {
+    padding: 3px 5px;
+    border: 0;
+    border-radius: var(--control-radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 18px;
+    cursor: pointer;
+  }
+
+  .trajectory-control:hover,
+  .trajectory-control[aria-pressed='true'] {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .trajectory-control:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .trajectory-control:focus-visible {
+    outline: 1px solid var(--accent-color);
+    outline-offset: 1px;
+  }
+
+  /* Entry-kind accent consumed by tags and timing bars via --trajectory-color. */
+  .traj-root [data-kind] {
+    --trajectory-color: var(--text-secondary);
+  }
+
+  .traj-root [data-kind='user'] {
+    --trajectory-color: var(--accent-color);
+  }
+
+  .traj-root [data-kind='model'] {
+    --trajectory-color: var(--chart-4);
+  }
+
+  .traj-root [data-kind='tool-call'],
+  .traj-root [data-kind='tool-result'] {
+    --trajectory-color: var(--warning-color);
+  }
+
+  .traj-root [data-kind='approval-request'],
+  .traj-root [data-kind='approval-response'] {
+    --trajectory-color: var(--chart-2);
+  }
+
+  .traj-root [data-error='true'],
+  .traj-root [data-kind='error'] {
+    --trajectory-color: var(--danger-color);
+  }
+
+  .trajectory-tag {
+    display: inline-block;
+    min-width: 54px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 10px;
+    line-height: 15px;
+    text-align: center;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--trajectory-color) 45%, var(--text-primary));
+    background: color-mix(in srgb, var(--trajectory-color) 10%, var(--bg-primary));
+  }
+
+  .detail-pane {
+    width: var(--detail-width, 38%);
+    background: var(--bg-primary);
+  }
+
+  @container (max-width: 720px) {
+    .has-detail .ledger-scroll,
+    .has-detail .traj-resize {
+      display: none;
+    }
+    .has-detail .detail-pane {
+      width: 100%;
+    }
+  }
+}
+
+/* Reduced motion (WCAG 2.3.3): transitions and decorative/entrance animation
+   collapse app-wide. Functional busy indicators — spinners, the transcribing
+   pulse, the indeterminate progress bar — are deliberately not listed: a
+   frozen "loading" state reads as a hang. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .image-viewer-backdrop,
+  .image-viewer-img,
+  .run-dot {
+    animation: none !important;
   }
 }

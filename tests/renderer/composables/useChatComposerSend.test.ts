@@ -56,6 +56,7 @@ const createHarness = (options?: {
       };
   prepareMessageSend?: ReturnType<typeof vi.fn>;
   resolveSendRequest?: ReturnType<typeof vi.fn>;
+  submitTurn?: ReturnType<typeof vi.fn>;
   stopStreamResult?: { success?: boolean; error?: string };
 }) => {
   const message = ref(options?.message ?? 'Need help');
@@ -87,7 +88,7 @@ const createHarness = (options?: {
       },
     }));
   const stopVoiceInput = vi.fn();
-  const submitTurn = vi.fn(async () => ({ ok: true }));
+  const submitTurn = options?.submitTurn ?? vi.fn(async () => ({ ok: true }));
   const stopStream = vi.fn(async () => options?.stopStreamResult ?? { success: true });
 
   const state = useChatComposerSend({
@@ -140,6 +141,23 @@ describe('useChatComposerSend', () => {
     expect(harness.state.composerFeedback.value).toBe('Please configure OpenAI first.');
 
     harness.message.value = 'Need help now';
+    await nextTick();
+
+    expect(harness.state.composerFeedback.value).toBe('');
+  });
+
+  it('restores the draft and keeps the failed stream feedback visible after the message watcher flushes', async () => {
+    const harness = createHarness({
+      submitTurn: vi.fn(async () => ({ ok: false, error: 'Not Found' })),
+    });
+
+    await harness.state.sendMessage();
+    await nextTick();
+
+    expect(harness.message.value).toBe('Need help');
+    expect(harness.state.composerFeedback.value).toBe('Not Found');
+
+    harness.message.value = 'Try a different prompt';
     await nextTick();
 
     expect(harness.state.composerFeedback.value).toBe('');

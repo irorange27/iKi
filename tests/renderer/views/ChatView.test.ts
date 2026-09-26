@@ -161,7 +161,7 @@ const {
     openSkillReferenceMock,
     getMcpServerLabelMock,
     configStoreState,
-      useChatStreamingMock,
+    useChatStreamingMock,
     useChatThreadTodoPlanMock,
     useToolMetadataMock,
     useChatViewLifecycleMock,
@@ -293,7 +293,8 @@ const mountChatView = async () => {
   threadSession.selectedWorkspaceId = selectedWorkspaceIdRef.value;
   threadSession.showWelcome = showWelcomeRef.value;
 
-  const ChatView = (await import('../../../packages/desktop/src/renderer/views/ChatView.vue')).default;
+  const ChatView = (await import('../../../packages/desktop/src/renderer/views/ChatView.vue'))
+    .default;
   const wrapper = mount(ChatView, {
     global: {
       plugins: [pinia],
@@ -302,6 +303,7 @@ const mountChatView = async () => {
         WelcomeScreen: WelcomeScreenStub,
         ChatInput: ChatInputStub,
         ChatMessageItem: ChatMessageItemStub,
+        TrajectoryView: true,
         FolderOpen: true,
       },
     },
@@ -392,6 +394,25 @@ describe('ChatView', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
     document.body.innerHTML = '';
+  });
+
+  it('keeps the composer mounted across trajectory switches and returns to chat when the thread is cleared', async () => {
+    const wrapper = await mountChatView();
+    const composer = wrapper.findComponent(ChatInputStub).vm;
+    await wrapper.get('#trajectory-tab').trigger('click');
+    expect(wrapper.find('trajectory-view-stub').exists()).toBe(true);
+    expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
+
+    await wrapper.get('#chat-tab').trigger('click');
+    expect(wrapper.find('trajectory-view-stub').exists()).toBe(false);
+    expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
+
+    await wrapper.get('#trajectory-tab').trigger('click');
+    useThreadSessionStore().currentThread = null;
+    await flushPromises();
+    expect(wrapper.find('trajectory-view-stub').exists()).toBe(false);
+    expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
+    wrapper.unmount();
   });
 
   it('forwards the thread approval policy to the composer so permission choices reach the send path', async () => {

@@ -22,55 +22,101 @@
           <span v-if="currentThreadOrigin?.isExternal" class="thread-origin-chip">
             {{ currentThreadOrigin.channelLabel || currentThreadOrigin.sourceLabel || 'External' }}
           </span>
-          <button
-            class="run-panel-toggle-btn"
-            :class="{ active: showRunPanel }"
-            type="button"
-            :title="t('chat.runs.toggle')"
-            @click="showRunPanel = !showRunPanel"
-          >
-            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </button>
         </div>
       </div>
 
+      <div
+        v-if="currentThread"
+        class="chat-view-tabs flex h-9 shrink-0 items-end gap-5 px-4"
+        role="tablist"
+        :aria-label="t('chat.runs.views')"
+      >
+        <button
+          id="chat-tab"
+          type="button"
+          role="tab"
+          class="ui-tab h-full"
+          :aria-selected="!showRunPanel"
+          :tabindex="showRunPanel ? -1 : 0"
+          aria-controls="chat-panel"
+          @click="showRunPanel = false"
+          @keydown.right.prevent="
+            showRunPanel = true;
+            focusViewTab('trajectory-tab');
+          "
+        >
+          {{ t('chat.runs.chat') }}
+        </button>
+        <button
+          id="trajectory-tab"
+          type="button"
+          role="tab"
+          class="ui-tab h-full"
+          :aria-selected="showRunPanel"
+          :tabindex="showRunPanel ? 0 : -1"
+          aria-controls="trajectory-panel"
+          @click="showRunPanel = true"
+          @keydown.left.prevent="
+            showRunPanel = false;
+            focusViewTab('chat-tab');
+          "
+        >
+          {{ t('chat.runs.title') }}
+        </button>
+      </div>
+      <TrajectoryView
+        v-if="showRunPanel"
+        id="trajectory-panel"
+        role="tabpanel"
+        aria-labelledby="trajectory-tab"
+        class="min-h-0 min-w-0 flex-1"
+        :thread-id="currentThread?.id ?? null"
+        :electronAPI="electronAPI"
+        @close="showRunPanel = false"
+      />
+
       <!-- Main Area -->
-      <div class="chat-main-wrap relative flex min-h-0 min-w-0 flex-1">
+      <div
+        v-show="!showRunPanel"
+        id="chat-panel"
+        role="tabpanel"
+        aria-labelledby="chat-tab"
+        class="chat-main-wrap relative flex min-h-0 min-w-0 flex-1"
+      >
         <div
           class="chat-main-area ui-scrollbar flex min-h-0 min-w-0 flex-1 overflow-y-auto"
           :class="showWelcomeScreen ? 'chat-main-area-welcome' : 'items-center justify-center'"
           ref="messagesContainer"
+          @scroll="handleMessagesScroll"
         >
-        <WelcomeScreen
-          v-if="showWelcomeScreen"
-          :active-model="currentModel"
-          :active-provider-id="currentProviderId"
-          @compose-starter="handleComposeStarter"
-        />
+          <WelcomeScreen
+            v-if="showWelcomeScreen"
+            :active-model="currentModel"
+            :active-provider-id="currentProviderId"
+            @compose-starter="handleComposeStarter"
+          />
 
-        <!-- Messages List -->
-        <div v-else class="messages-area w-full h-full min-w-0">
-          <div v-if="externalThreadNotice" class="thread-origin-banner">
-            {{ externalThreadNotice }}
+          <!-- Messages List -->
+          <div v-else class="messages-area w-full h-full min-w-0">
+            <div v-if="externalThreadNotice" class="thread-origin-banner">
+              {{ externalThreadNotice }}
+            </div>
+            <div class="messages-container" @click="handleMarkdownClick">
+              <ChatMessageItem
+                v-for="(m, index) in chatMessages"
+                :key="m.id ? m.id : index"
+                :message="m"
+                :message-index="index"
+                :active-assistant-message-id="chatInstance.activeAssistantMessageId.value"
+                :turn-highlight-ids="turnHighlightIds"
+                :approval-processing="isApprovalProcessing"
+                :get-mcp-server-label="getMcpServerLabel"
+                @approve-tool="handleToolApprovalEvent"
+                @regenerate-user-message="regenerateMessage"
+                @edit-user-message="beginEditMessage"
+              />
+            </div>
           </div>
-          <div class="messages-container" @click="handleMarkdownClick">
-            <ChatMessageItem
-              v-for="(m, index) in chatMessages"
-              :key="m.id ? m.id : index"
-              :message="m"
-              :message-index="index"
-              :active-assistant-message-id="chatInstance.activeAssistantMessageId.value"
-              :turn-highlight-ids="turnHighlightIds"
-              :approval-processing="isApprovalProcessing"
-              :get-mcp-server-label="getMcpServerLabel"
-              @approve-tool="handleToolApprovalEvent"
-              @regenerate-user-message="regenerateMessage"
-              @edit-user-message="beginEditMessage"
-            />
-          </div>
-        </div>
         </div>
 
         <!-- Fixed turn rail: one thin line per turn, pinned to the left edge
@@ -120,12 +166,6 @@
         <ChatSessionStatsBar :stats="sessionPerfStats" />
       </div>
     </div>
-    <RunPanel
-      :visible="showRunPanel"
-      :thread-id="currentThread?.id ?? null"
-      :electronAPI="electronAPI"
-      @close="showRunPanel = false"
-    />
     <TurnPreviewCard
       :anchor="turnPreview?.anchor ?? null"
       :messages="turnPreview?.messages ?? null"
@@ -145,8 +185,8 @@ import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import ChatSessionStatsBar from '../components/chat/ChatSessionStatsBar.vue';
 import TurnPreviewCard from '../components/chat/TurnPreviewCard.vue';
-import RunPanel from '../components/RunPanel.vue';
-import { FolderOpen, X } from 'lucide-vue-next';
+import TrajectoryView from './TrajectoryView.vue';
+import { FolderOpen } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 import { buildSessionPerfStats, getTokenUsageSummary } from '../modules/chat/ui_message_references';
 import { createChatInstance } from '../modules/chat/chat_instance';
@@ -218,7 +258,7 @@ const chatInstance = createChatInstance({
   generateId: () => createPrefixedId('msg'),
   getCurrentThreadId: () => currentThread.value?.id || null,
   onAssistantMessagePersisted: params => handleAssistantMessagePersisted(params),
-  onStreamActivity: () => scrollToBottom(),
+  onStreamActivity: () => scheduleFollowScroll(),
 });
 const chat = chatInstance.chat;
 const persistence = chatInstance.persistence;
@@ -228,6 +268,9 @@ const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
 const showRunPanel = ref(false);
+const focusViewTab = (id: string) => {
+  void nextTick(() => document.getElementById(id)?.focus());
+};
 
 // The AI SDK appends usage parts to a message in place, which does not
 // invalidate computeds that only iterate `chat.messages`. Bump a counter when
@@ -242,12 +285,9 @@ chatInstance.transport.onChunk(chunk => {
     usageChunkTick.value += 1;
   }, 0);
 });
-watch(
-  chatInstance.status,
-  status => {
-    if (status === 'ready') usageChunkTick.value += 1;
-  }
-);
+watch(chatInstance.status, status => {
+  if (status === 'ready') usageChunkTick.value += 1;
+});
 
 const createMessageId = () => createPrefixedId('msg');
 const { handleMarkdownClick } = useMarkdownCopy();
@@ -283,13 +323,6 @@ const showMessageCount = computed(() => chatMessages.value.length > 0);
 const showHeaderMeta = computed(() => showMessageCount.value || Boolean(currentThread.value));
 const showWelcomeScreen = computed(() => showWelcome.value && chatMessages.value.length === 0);
 
-const userMessageCount = computed(
-  () => chatMessages.value.filter(message => message?.role === 'user').length
-);
-const assistantMessageCount = computed(
-  () => chatMessages.value.filter(message => message?.role === 'assistant').length
-);
-
 const currentThreadOrigin = computed(() =>
   currentThread.value ? getThreadOriginInfo(currentThread.value) : null
 );
@@ -315,7 +348,30 @@ const handleToolApprovalEvent = (payload: {
   void handleToolApproval(payload.message, payload.part, payload.approved);
 };
 
+const FOLLOW_TAIL_THRESHOLD_PX = 40;
+let pinnedToBottom = true;
+let followScrollRaf: number | null = null;
+
+const handleMessagesScroll = () => {
+  const el = messagesContainer.value;
+  if (!el) return;
+  pinnedToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_TAIL_THRESHOLD_PX;
+};
+
+// Stream activity coalesces into one scroll per frame and yields to a user
+// who scrolled up; explicit jumps (send, thread switch) go through
+// scrollToBottom and re-engage following.
+const scheduleFollowScroll = () => {
+  if (!pinnedToBottom || followScrollRaf !== null) return;
+  followScrollRaf = requestAnimationFrame(() => {
+    followScrollRaf = null;
+    const el = messagesContainer.value;
+    if (el && pinnedToBottom) el.scrollTop = el.scrollHeight;
+  });
+};
+
 const scrollToBottom = () => {
+  pinnedToBottom = true;
   nextTick(() => {
     if (messagesContainer.value) {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
@@ -439,36 +495,31 @@ const measureTurnMarkers = () => {
     return;
   }
   const markerIds: Array<string> = [];
-  content
-    .querySelectorAll<HTMLElement>('.message-wrapper.user[data-message-id]')
-    .forEach(node => {
-      const messageId = node.dataset.messageId;
-      if (messageId) markerIds.push(messageId);
-    });
+  content.querySelectorAll<HTMLElement>('.message-wrapper.user[data-message-id]').forEach(node => {
+    const messageId = node.dataset.messageId;
+    if (messageId) markerIds.push(messageId);
+  });
   turnMarkers.value = markerIds.length >= TURN_RAIL_MIN_TURNS ? markerIds : [];
 };
 
 onBeforeUnmount(() => {
   railResizeObserver?.disconnect();
   railResizeObserver = null;
+  if (followScrollRaf !== null) cancelAnimationFrame(followScrollRaf);
+  followScrollRaf = null;
 });
 
 const {
   currentThread,
   currentModel,
   currentProviderId,
-  currentReasoningEffort,
-  currentPersonality,
   currentApprovalPolicy,
-  isIncognito,
-  selectedWorkspaceId,
   showWelcome,
 } = storeToRefs(threadSession);
 const {
   dismissWelcome,
   refreshThreads,
   createNewThread,
-  handleModelSelected,
   ensureWorkspaceForCurrentThread,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
@@ -476,6 +527,14 @@ const {
   handleAwaiterPush,
 } = threadSession;
 const selectThreadBase = threadSession.selectThread;
+
+watch(
+  () => currentThread.value?.id,
+  id => {
+    if (!id) showRunPanel.value = false;
+  },
+  { flush: 'sync' }
+);
 
 onMounted(() => {
   railResizeObserver = new ResizeObserver(() => measureTurnMarkers());
@@ -575,7 +634,6 @@ const handleComposeStarter = async (text: string) => {
   scrollToBottom();
 };
 
-
 useChatViewLifecycle({
   configStore,
   refreshThreads,
@@ -593,6 +651,10 @@ electronAPI.onFocusThread?.(threadId => {
 </script>
 
 <style scoped>
+.chat-view-tabs {
+  border-bottom: 1px solid var(--border-color);
+}
+
 /* Messages styles */
 .messages-area {
   display: flex;
@@ -615,13 +677,16 @@ electronAPI.onFocusThread?.(threadId => {
 
 .messages-container {
   width: 100%;
-  max-width: 860px;
+  max-width: var(--chat-column-max);
   min-width: 0;
   margin: 0 auto;
 }
 
 .chat-main-wrap {
   min-width: 0;
+  /* Conversation column follows the window: grows from the 860px reading
+     width up to 1600px, holding ~82% of the chat area in between. */
+  --chat-column-max: clamp(860px, 82%, 1600px);
 }
 
 .turn-rail {
@@ -630,23 +695,25 @@ electronAPI.onFocusThread?.(threadId => {
   top: 0;
   bottom: 0;
   width: 26px;
-  z-index: 20;
+  z-index: 19;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   pointer-events: none;
 }
 
+/* Mark hit areas are contiguous: padding supplies the target size (26×24px),
+   the 14×2px span is the only visible part. */
 .turn-rail-mark {
   pointer-events: auto;
   flex: 0 0 auto;
   display: block;
-  padding: 3px 3px;
+  padding: 11px 6px;
   border: none;
   background: transparent;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   opacity: 0.45;
   transition:
@@ -690,7 +757,7 @@ electronAPI.onFocusThread?.(threadId => {
 
 .thread-origin-banner {
   width: 100%;
-  max-width: 860px;
+  max-width: var(--chat-column-max);
   margin: 0 auto 12px;
   border: 1px solid var(--border-color);
   border-radius: 14px;
@@ -707,7 +774,7 @@ electronAPI.onFocusThread?.(threadId => {
 
 .edit-banner {
   width: 100%;
-  max-width: 860px;
+  max-width: var(--chat-column-max);
   margin: 0 auto 8px;
   display: flex;
   align-items: center;
@@ -749,31 +816,5 @@ electronAPI.onFocusThread?.(threadId => {
   .messages-container {
     max-width: 100%;
   }
-}
-
-.run-panel-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-left: 4px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.run-panel-toggle-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.run-panel-toggle-btn.active {
-  color: var(--accent-color);
-  border-color: rgba(var(--accent-rgb), 0.25);
-  background: rgba(var(--accent-rgb), 0.1);
 }
 </style>

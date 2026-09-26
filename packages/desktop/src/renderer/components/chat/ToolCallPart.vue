@@ -88,11 +88,7 @@
           />
           <span>{{ getToolStateLabel(part) }}</span>
         </span>
-        <span
-          v-if="getToolErrorText(part)"
-          class="tool-error-text"
-          :title="getToolErrorText(part)"
-        >
+        <span v-if="getToolErrorText(part)" class="tool-error-text" :title="getToolErrorText(part)">
           {{ getToolErrorText(part) }}
         </span>
         <span v-if="getToolDurationLabel(part)" class="tool-duration">
@@ -116,20 +112,23 @@
         </button>
       </div>
     </div>
+    <p
+      v-if="embedded && getToolErrorText(part)"
+      class="ui-text-danger px-2 py-1 text-xs whitespace-pre-wrap break-words"
+      role="alert"
+    >
+      {{ getToolErrorText(part) }}
+    </p>
     <div v-if="embedded || !isToolCollapsed(part)">
       <div v-if="terminalView" class="tool-terminal">
         <div class="tool-terminal-line">
           <span class="tool-terminal-prompt" aria-hidden="true">$</span>
           <span class="tool-terminal-command">{{ terminalView.command }}</span>
         </div>
-        <div
-          v-if="terminalView.stdout"
-          class="tool-terminal-output"
-        >{{ terminalView.stdout }}</div>
-        <div
-          v-if="terminalView.stderr"
-          class="tool-terminal-output is-stderr"
-        >{{ terminalView.stderr }}</div>
+        <div v-if="terminalView.stdout" class="tool-terminal-output">{{ terminalView.stdout }}</div>
+        <div v-if="terminalView.stderr" class="tool-terminal-output is-stderr">
+          {{ terminalView.stderr }}
+        </div>
         <div
           v-if="terminalView.exitCode !== null && terminalView.exitCode !== 0"
           class="tool-terminal-exit"
@@ -176,7 +175,9 @@
               :key="lineIndex"
               class="tool-diff-line"
               :class="`tool-diff-line-${line.kind}`"
-            >{{ line.text }}</div>
+            >
+              {{ line.text }}
+            </div>
           </div>
         </div>
         <div v-if="hasDisplayValue(getToolOutputForDisplay(part))" class="tool-card-section">
@@ -185,7 +186,10 @@
         </div>
       </template>
     </div>
-    <div v-if="!embedded && getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
+    <div
+      v-if="!embedded && getToolCallIdFromPart(part) && !isToolCollapsed(part)"
+      class="tool-card-footer"
+    >
       <span class="tool-call-id">
         {{ t('toolCall.callId') }}:
         <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
@@ -244,11 +248,7 @@
           />
           <span>{{ getToolStateLabel(part) }}</span>
         </span>
-        <span
-          v-if="getToolErrorText(part)"
-          class="tool-error-text"
-          :title="getToolErrorText(part)"
-        >
+        <span v-if="getToolErrorText(part)" class="tool-error-text" :title="getToolErrorText(part)">
           {{ getToolErrorText(part) }}
         </span>
         <span v-if="getToolDurationLabel(part)" class="tool-duration">
@@ -278,7 +278,10 @@
         <pre class="tool-json-output">{{ formatJson(getToolInput(part)) }}</pre>
       </div>
     </div>
-    <div v-if="!embedded && getToolCallIdFromPart(part) && !isToolCollapsed(part)" class="tool-card-footer">
+    <div
+      v-if="!embedded && getToolCallIdFromPart(part) && !isToolCollapsed(part)"
+      class="tool-card-footer"
+    >
       <span class="tool-call-id">
         {{ t('toolCall.callId') }}:
         <span class="tool-call-id-value">{{ getToolCallIdFromPart(part) }}</span>
@@ -348,10 +351,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (
-    event: 'approve-tool',
-    payload: { approved: boolean; message: ChatUiMessage; part: unknown }
-  ): void;
+  'approve-tool': [payload: { approved: boolean; message: ChatUiMessage; part: unknown }];
 }>();
 
 const { t } = useI18n();
