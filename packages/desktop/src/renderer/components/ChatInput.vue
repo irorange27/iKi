@@ -347,8 +347,8 @@ const {
 // work threads bound to a project folder.
 const isWorkThread = computed(() => resolveThreadWorkMode(currentThread.value) === 'work');
 const emit = defineEmits<{
-  (event: 'new-chat-requested'): void;
-  (event: 'clear-thread-requested'): void;
+  'new-chat-requested': [];
+  'clear-thread-requested': [];
 }>();
 
 const props = defineProps<{
@@ -787,15 +787,7 @@ defineExpose({
 
 .composer-inline-token-prefix,
 .composer-inline-token-label {
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    Liberation Mono,
-    Courier New,
-    monospace;
+  font-family: var(--font-mono);
 }
 
 .composer-inline-token-prefix {
@@ -910,15 +902,7 @@ defineExpose({
 }
 
 .slash-command-shortcut {
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    Liberation Mono,
-    Courier New,
-    monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.01em;

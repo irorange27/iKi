@@ -77,15 +77,15 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'update:modelValue', value: string): void;
-  (event: 'keydown', value: KeyboardEvent): void;
-  (event: 'keydownEnter', value: KeyboardEvent): void;
-  (event: 'compositionStart', value: CompositionEvent): void;
-  (event: 'compositionEnd', value: CompositionEvent): void;
-  (event: 'dismissFeedback'): void;
-  (event: 'dragover', value: DragEvent): void;
-  (event: 'pasteImage', value: { mediaType: string; url: string; filename?: string }): void;
-  (event: 'dropImages', value: { mediaType: string; url: string; filename?: string }[]): void;
+  'update:modelValue': [value: string];
+  keydown: [value: KeyboardEvent];
+  keydownEnter: [value: KeyboardEvent];
+  compositionStart: [value: CompositionEvent];
+  compositionEnd: [value: CompositionEvent];
+  dismissFeedback: [];
+  dragover: [value: DragEvent];
+  pasteImage: [value: { mediaType: string; url: string; filename?: string }];
+  dropImages: [value: { mediaType: string; url: string; filename?: string }[]];
 }>();
 
 const { t } = useI18n();

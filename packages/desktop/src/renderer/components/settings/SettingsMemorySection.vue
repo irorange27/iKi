@@ -25,8 +25,8 @@ import { useI18n } from '../../i18n';
 import type { Provider } from '@iki/backend/types/provider';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
-  (event: 'reset'): void;
+  'config-change': [];
+  reset: [];
 }>();
 
 withDefaults(

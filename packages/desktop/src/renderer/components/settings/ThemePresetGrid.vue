@@ -77,9 +77,9 @@ withDefaults(
 );
 
 const emit = defineEmits<{
-  (event: 'delete', presetId: string): void;
-  (event: 'edit', presetId: string): void;
-  (event: 'select', presetId: string): void;
+  delete: [presetId: string];
+  edit: [presetId: string];
+  select: [presetId: string];
 }>();
 
 const { t } = useI18n();

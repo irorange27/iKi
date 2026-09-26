@@ -72,8 +72,8 @@ import type { AppConfig } from '@iki/backend/types/config';
 import { formatLabel } from './settings_formatters';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
-  (event: 'reset'): void;
+  'config-change': [];
+  reset: [];
 }>();
 
 const { t } = useI18n();

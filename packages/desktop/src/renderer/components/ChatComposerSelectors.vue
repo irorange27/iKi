@@ -24,8 +24,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'update:autonomousActive', value: boolean): void;
-  (event: 'update:autonomousMaxIterations', value: number): void;
+  'update:autonomousActive': [value: boolean];
+  'update:autonomousMaxIterations': [value: number];
 }>();
 </script>
 

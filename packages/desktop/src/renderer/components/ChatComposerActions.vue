@@ -181,10 +181,10 @@ const props = defineProps<{
 }>();
 
 defineEmits<{
-  (event: 'toggle-incognito'): void;
-  (event: 'toggle-voice-input'): void;
-  (event: 'send-message'): void;
-  (event: 'stop-streaming'): void;
+  'toggle-incognito': [];
+  'toggle-voice-input': [];
+  'send-message': [];
+  'stop-streaming': [];
 }>();
 
 const { t } = useI18n();

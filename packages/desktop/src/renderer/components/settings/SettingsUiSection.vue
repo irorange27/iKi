@@ -107,8 +107,8 @@ import { useConfigStore } from '../../store/config';
 import type { AppConfig } from '@iki/backend/types/config';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
-  (event: 'reset'): void;
+  'config-change': [];
+  reset: [];
 }>();
 
 const { t } = useI18n();

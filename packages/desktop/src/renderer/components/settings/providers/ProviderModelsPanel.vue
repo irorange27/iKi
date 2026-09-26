@@ -161,11 +161,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'toggle-open'): void;
-  (event: 'fetch-models'): void;
-  (event: 'toggle-model', modelId: string): void;
-  (event: 'edit-model-options', modelId: string): void;
-  (event: 'add-model', payload: { modelId: string; displayName: string }): void;
+  'toggle-open': [];
+  'fetch-models': [];
+  'toggle-model': [modelId: string];
+  'edit-model-options': [modelId: string];
+  'add-model': [payload: { modelId: string; displayName: string }];
 }>();
 
 type ModelRow = {
@@ -475,9 +475,7 @@ const submitManualModel = () => {
 }
 
 .provider-model-row-title {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-primary);
   line-height: 1.35;

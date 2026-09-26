@@ -305,8 +305,8 @@ import SettingsSelect from './SettingsSelect.vue';
 import { useNapCatSettings } from '../../composables/useNapCatSettings';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
-  (event: 'reset'): void;
+  'config-change': [];
+  reset: [];
 }>();
 const props = defineProps<{
   active: boolean;

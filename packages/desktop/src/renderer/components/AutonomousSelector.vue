@@ -103,8 +103,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'update:active', value: boolean): void;
-  (event: 'update:maxIterations', value: number): void;
+  'update:active': [value: boolean];
+  'update:maxIterations': [value: number];
 }>();
 
 const { t } = useI18n();

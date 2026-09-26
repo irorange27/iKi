@@ -96,7 +96,7 @@ import { listProviderEmbeddingModels } from '@iki/backend/utils/memory_embedding
 import { getProviderDisplayName } from '../../../modules/providers/provider_display';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
+  'config-change': [];
 }>();
 
 const props = withDefaults(

@@ -26,7 +26,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'close'): void;
+  close: [];
 }>();
 
 const { t } = useI18n();

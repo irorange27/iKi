@@ -168,14 +168,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (
-    event: 'approve-tool',
-    payload: {
+  'approve-tool': [payload: {
       approved: boolean;
       message: ChatUiMessage;
       part: unknown;
-    }
-  ): void;
+    }];
 }>();
 
 const viewerSrc = ref('');
@@ -281,15 +278,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
 
 .message-invocation-token-prefix,
 .message-invocation-token-label {
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    Liberation Mono,
-    Courier New,
-    monospace;
+  font-family: var(--font-mono);
 }
 
 .message-invocation-token-prefix {
