@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { loggerEventMock } = vi.hoisted(() => ({
+const { loggerEventMock, generateTextMock, createModelMock, disposeLanguageModelMock } = vi.hoisted(() => ({
   loggerEventMock: vi.fn(),
+  generateTextMock: vi.fn(),
+  createModelMock: vi.fn(),
+  disposeLanguageModelMock: vi.fn(),
 }));
 
 vi.mock('@iki/backend/provider/tool_model', () => ({
@@ -10,6 +13,19 @@ vi.mock('@iki/backend/provider/tool_model', () => ({
 
 vi.mock('@iki/backend/runtimes/prompt_text_generator', () => ({
   createSimplePromptTextGenerator: vi.fn(),
+}));
+
+vi.mock('ai', () => ({
+  generateText: generateTextMock,
+}));
+
+vi.mock('@iki/backend/provider/llm/factory', () => ({
+  createModel: createModelMock,
+  disposeLanguageModel: disposeLanguageModelMock,
+}));
+
+vi.mock('@iki/backend/observability/langfuse', () => ({
+  langfuseTelemetry: vi.fn(() => undefined),
 }));
 
 vi.mock('@iki/backend/logger', () => ({
@@ -25,7 +41,10 @@ vi.mock('@iki/backend/logger', () => ({
 
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { createSimplePromptTextGenerator } from '@iki/backend/runtimes/prompt_text_generator';
-import { generateThreadSummary } from '@iki/backend/runtimes/thread_summary';
+import {
+  generateThreadSummary,
+  type ThreadSummaryCachePrefix,
+} from '@iki/backend/runtimes/thread_summary';
 
 const getToolModelMock = vi.mocked(getToolModel);
 const createSimplePromptTextGeneratorMock = vi.mocked(createSimplePromptTextGenerator);
@@ -166,5 +185,121 @@ describe('generateThreadSummary', () => {
         error,
       })
     );
+  });
+});
+
+describe('generateThreadSummary — cache-aware prefix replay', () => {
+  const conversationModel = {
+    providerType: 'anthropic',
+    providerId: 'p1',
+    model: 'claude-3-5-sonnet',
+  };
+
+  const cachePrefix: ThreadSummaryCachePrefix = {
+    ...conversationModel,
+    systemPrompt: 'routed system prompt',
+    history: [
+      { role: 'user', content: 'old question' },
+      { role: 'assistant', content: 'old answer' },
+    ],
+    tools: {
+      probe: { description: 'probe', inputSchema: {}, execute: async () => 'ran' },
+    } as unknown as ThreadSummaryCachePrefix['tools'],
+  };
+
+  it('replays the routed prefix with the summary instruction as the final user message when routes match', async () => {
+    getToolModelMock.mockReturnValue({ ...conversationModel });
+    generateTextMock.mockResolvedValue({ text: 'plain summary' });
+    createModelMock.mockReturnValue({ fake: 'model' });
+
+    const result = await generateThreadSummary({
+      messages: [{ role: 'user', content: 'dropped middle' }],
+      cachePrefix,
+    });
+
+    expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
+    expect(createModelMock).toHaveBeenCalledWith('anthropic', 'claude-3-5-sonnet', 'p1');
+    const call = generateTextMock.mock.calls[0][0] as Record<string, any>;
+    expect(call.system).toBe('routed system prompt');
+    expect(call.messages).toHaveLength(3);
+    expect(call.messages[0]).toEqual({ role: 'user', content: 'old question' });
+    expect(call.messages[2].role).toBe('user');
+    expect(call.messages[2].content).toContain('Conversation delta:');
+    expect(call.messages[2].content).toContain('dropped middle');
+    // Schemas stay byte-identical to the routed request; execute handlers must not ride along.
+    expect(call.tools.probe).toEqual({ description: 'probe', inputSchema: {} });
+    expect(call.temperature).toBe(0.1);
+    expect(call.maxOutputTokens).toBe(320);
+    expect(result).toEqual({ summary: 'plain summary', model: { ...conversationModel } });
+    expect(disposeLanguageModelMock).toHaveBeenCalledWith({ fake: 'model' });
+  });
+
+  it('keeps the standalone tool-model call when the cache prefix routes elsewhere', async () => {
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: 'standalone summary' }),
+    } as never);
+
+    const result = await generateThreadSummary({
+      messages: [{ role: 'user', content: 'dropped middle' }],
+      cachePrefix,
+    });
+
+    expect(generateTextMock).not.toHaveBeenCalled();
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalled();
+    expect(result?.summary).toBe('standalone summary');
+  });
+
+  it('falls back to the standalone call when the replayed prefix produces no text', async () => {
+    getToolModelMock.mockReturnValue({ ...conversationModel });
+    generateTextMock.mockResolvedValue({ text: '```text\n   \n```' });
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: 'fallback summary' }),
+    } as never);
+
+    const result = await generateThreadSummary({
+      messages: [{ role: 'user', content: 'dropped middle' }],
+      cachePrefix,
+    });
+
+    expect(createSimplePromptTextGeneratorMock).toHaveBeenCalled();
+    expect(result).toEqual({ summary: 'fallback summary', model: { ...conversationModel } });
+  });
+
+  it('falls back to the standalone call when the replayed prefix request fails', async () => {
+    getToolModelMock.mockReturnValue({ ...conversationModel });
+    generateTextMock.mockRejectedValue(new Error('aux request down'));
+    createSimplePromptTextGeneratorMock.mockReturnValue({
+      generate: vi.fn().mockResolvedValue({ response: 'fallback summary' }),
+    } as never);
+
+    const result = await generateThreadSummary({
+      messages: [{ role: 'user', content: 'dropped middle' }],
+      cachePrefix,
+    });
+
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'thread.summary.cache_prefix',
+        outcome: 'failed',
+      })
+    );
+    expect(result?.summary).toBe('fallback summary');
+  });
+
+  it('rethrows aborts from the replayed prefix request', async () => {
+    getToolModelMock.mockReturnValue({ ...conversationModel });
+    const abortError = new DOMException('cancelled', 'AbortError');
+    generateTextMock.mockRejectedValue(abortError);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      generateThreadSummary({
+        messages: [{ role: 'user', content: 'dropped middle' }],
+        cachePrefix,
+        abortSignal: controller.signal,
+      })
+    ).rejects.toBe(abortError);
+    expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
   });
 });

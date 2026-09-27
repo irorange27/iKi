@@ -9,10 +9,12 @@ const {
   streamTextMock,
   smoothStreamMock,
   stepCountIsMock,
+  generateThreadSummaryMock,
 } = vi.hoisted(() => ({
   streamTextMock: vi.fn(),
   smoothStreamMock: vi.fn(),
   stepCountIsMock: vi.fn(),
+  generateThreadSummaryMock: vi.fn(),
 }));
 
 vi.mock('ai', () => ({
@@ -21,6 +23,10 @@ vi.mock('ai', () => ({
   smoothStream: smoothStreamMock,
   stepCountIs: stepCountIsMock,
   hasToolCall: vi.fn(() => () => false),
+}));
+
+vi.mock('@iki/backend/runtimes/thread_summary', () => ({
+  generateThreadSummary: generateThreadSummaryMock,
 }));
 
 // ── Factory mocks ──────────────────────────────────────────────────────────
@@ -787,6 +793,145 @@ describe('SimpleAgentRunner — characterization tests', () => {
       const messages = captured?.messages ?? [];
       const last = messages.at(-1) as { providerOptions?: unknown };
       expect(last.providerOptions).toBeUndefined();
+    });
+  });
+
+  describe('request prefix stability across prepare steps', () => {
+    const drain = async (gen: AsyncGenerator<unknown>) => {
+      for await (const _step of gen) {
+        // drain
+      }
+    };
+
+    const getPrepareStep = () => {
+      const lastCall = streamTextMock.mock.calls.at(-1);
+      if (!lastCall) throw new Error('streamText was not called');
+      return (lastCall[0] as {
+        prepareStep: (params: { messages: unknown[] }) => Promise<{ messages: Array<Record<string, any>> }>;
+      }).prepareStep;
+    };
+
+    const markersOf = (messages: Array<Record<string, any>>) =>
+      messages.filter(message => message.providerOptions?.anthropic?.cacheControl).length;
+
+    // Sequence prefix: strip the JSON array brackets so a shorter history is a
+    // literal string prefix of the grown one (the array terminator would break that).
+    const plain = (messages: Array<Record<string, any>>) =>
+      JSON.stringify(messages.map(message => ({ role: message.role, content: message.content }))).slice(1, -1);
+
+    it('grows append-only across steps and keeps exactly one rolling breakpoint', async () => {
+      setupAll(makeStreamTextResult(), { providerType: 'anthropic' });
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'test',
+        tools: [],
+        providerType: 'anthropic',
+        providerId: '',
+        model: 'claude-3-5-sonnet',
+      });
+      await gen.next();
+
+      const prepareStep = getPrepareStep();
+      const marked = (content: string) => ({
+        role: 'user',
+        content,
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      });
+      // The SDK feeds the previous request's marked messages back in.
+      const stepOne = [{ role: 'user', content: 'u1' }, marked('a1')];
+      const out1 = await prepareStep({ messages: stepOne });
+      const out2 = await prepareStep({ messages: [...stepOne, { role: 'user', content: 'u2' }] });
+
+      // Each request is a content-prefix extension of its predecessor (cache markers excluded).
+      expect(
+        plain(out2.messages).startsWith(plain(out1.messages)),
+        `out1=${plain(out1.messages)} out2=${plain(out2.messages)}`,
+      ).toBe(true);
+
+      expect(markersOf(out1.messages)).toBe(1);
+      expect(out1.messages.at(-1)?.providerOptions?.anthropic?.cacheControl).toEqual({ type: 'ephemeral' });
+      // The breakpoint moved: the previously marked message must be stripped.
+      expect(markersOf(out2.messages)).toBe(1);
+      expect(out2.messages.at(-1)?.content).toBe('u2');
+      expect(out2.messages[1].providerOptions?.anthropic?.cacheControl).toBeUndefined();
+
+      await drain(gen);
+    });
+
+    it('hands the summarizer a marker-free replay of the routed prefix when compaction fires', async () => {
+      generateThreadSummaryMock.mockReset().mockResolvedValue({ summary: 'ok' });
+      setupAll(makeStreamTextResult(), { providerType: 'anthropic' });
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'current task',
+        tools: [],
+        providerType: 'anthropic',
+        providerId: '',
+        model: 'claude-3-5-sonnet',
+        maxInputTokens: 150,
+      });
+      await gen.next();
+
+      const prepareStep = getPrepareStep();
+      const stepOne = [
+        { role: 'user', content: 'token '.repeat(150) },
+        { role: 'assistant', content: 'ok' },
+        {
+          role: 'user',
+          content: 'current task',
+          providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        },
+      ];
+      await prepareStep({ messages: stepOne });
+
+      expect(generateThreadSummaryMock).toHaveBeenCalledTimes(1);
+      const call = generateThreadSummaryMock.mock.calls[0][0] as Record<string, any>;
+      expect(call.messages[0].content).toContain('token');
+      expect(call.cachePrefix).toBeDefined();
+      expect(call.cachePrefix.providerType).toBe('anthropic');
+      expect(call.cachePrefix.model).toBe('claude-3-5-sonnet');
+      // The replay must carry the routed request's system prompt, never the summarizer's own.
+      const routedSystem = (streamTextMock.mock.calls.at(-1)?.[0] as { system?: string } | undefined)?.system;
+      expect(call.cachePrefix.systemPrompt).toBe(routedSystem);
+      expect(call.cachePrefix.systemPrompt).not.toContain('rolling thread summary');
+      expect(call.cachePrefix.history).toHaveLength(3);
+      for (const message of call.cachePrefix.history) {
+        expect(message.providerOptions?.anthropic?.cacheControl).toBeUndefined();
+      }
+
+      await drain(gen);
+    });
+
+    it('does not pass a replay prefix for custom-model runs', async () => {
+      generateThreadSummaryMock.mockReset().mockResolvedValue({ summary: 'ok' });
+      setupAll(makeStreamTextResult(), { providerType: 'anthropic' });
+      const runner = new SimpleAgentRunner({ modelFactory: () => fakeModel });
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'current task',
+        tools: [],
+        providerType: 'anthropic',
+        providerId: '',
+        model: 'claude-3-5-sonnet',
+        maxInputTokens: 150,
+      });
+      await gen.next();
+
+      const prepareStep = getPrepareStep();
+      await prepareStep({
+        messages: [
+          { role: 'user', content: 'token '.repeat(150) },
+          { role: 'assistant', content: 'ok' },
+          { role: 'user', content: 'current task' },
+        ],
+      });
+
+      expect(generateThreadSummaryMock).toHaveBeenCalledTimes(1);
+      expect((generateThreadSummaryMock.mock.calls[0][0] as Record<string, any>).cachePrefix).toBeUndefined();
+
+      await drain(gen);
     });
   });
 
