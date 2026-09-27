@@ -1,6 +1,6 @@
 {
   "name": "@iki/desktop",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "productName": "iki",
   "private": true,
   "main": ".vite/build/main.js",

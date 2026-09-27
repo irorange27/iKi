@@ -12,6 +12,8 @@ import type {
 export interface FauxResponse {
   /** Raw provider stream parts to emit, in order. */
   parts: LanguageModelV3StreamPart[];
+  /** Usage reported by doGenerate; stream usage rides the finish part. */
+  usage?: LanguageModelV3Usage;
 }
 
 // ── Zero usage ─────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ export class FauxModelProvider implements LanguageModelV3 {
     return Promise.resolve({
       content,
       finishReason,
-      usage: ZERO_USAGE,
+      usage: response.usage ?? ZERO_USAGE,
       warnings: [],
     });
   }
@@ -139,7 +141,10 @@ let _nextId = 0;
 const uid = (prefix: string): string => `${prefix}-${++_nextId}`;
 
 /** Build a minimal text-only response. */
-export function fauxText(text: string, opts?: { finishReason?: string }): FauxResponse {
+export function fauxText(
+  text: string,
+  opts?: { finishReason?: string; usage?: LanguageModelV3Usage }
+): FauxResponse {
   const id = uid('txt');
   const parts: LanguageModelV3StreamPart[] = [
     { type: 'text-start', id },
@@ -148,7 +153,7 @@ export function fauxText(text: string, opts?: { finishReason?: string }): FauxRe
     {
       type: 'finish',
       finishReason: { unified: 'stop', raw: opts?.finishReason ?? 'stop' },
-      usage: ZERO_USAGE,
+      usage: opts?.usage ?? ZERO_USAGE,
     },
   ];
   return { parts };
@@ -158,7 +163,7 @@ export function fauxText(text: string, opts?: { finishReason?: string }): FauxRe
 export function fauxToolCall(
   toolName: string,
   input: Record<string, unknown>,
-  opts?: { id?: string; textBefore?: string },
+  opts?: { id?: string; textBefore?: string; usage?: LanguageModelV3Usage }
 ): FauxResponse {
   const parts: LanguageModelV3StreamPart[] = [];
 
@@ -187,7 +192,7 @@ export function fauxToolCall(
     {
       type: 'finish',
       finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
-      usage: ZERO_USAGE,
+      usage: opts?.usage ?? ZERO_USAGE,
     },
   );
 
