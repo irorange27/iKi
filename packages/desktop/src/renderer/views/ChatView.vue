@@ -700,20 +700,18 @@ electronAPI.onFocusThread?.(threadId => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 0;
+  gap: 4px;
   pointer-events: none;
 }
 
-/* Mark hit areas are contiguous: padding supplies the target size (26×24px),
-   the 14×2px span is the only visible part. */
 .turn-rail-mark {
   pointer-events: auto;
   flex: 0 0 auto;
   display: block;
-  padding: 11px 6px;
+  padding: 3px 3px;
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   opacity: 0.45;
   transition:
