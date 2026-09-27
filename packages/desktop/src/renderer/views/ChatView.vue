@@ -1,7 +1,7 @@
 <template>
   <div class="flex h-full min-h-0 app-background app-text">
     <Sidebar
-      ref="sidebarRef"
+      :workspace-locked="isWorkspaceLocked"
       @thread-selected="selectThread"
       @new-chat="handleNewChat"
       @new-work="handleNewWork"
@@ -9,7 +9,7 @@
     />
 
     <!-- Main Content -->
-    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div class="chat-content-column flex min-h-0 min-w-0 flex-1 flex-col">
       <!-- Header -->
       <div v-if="showHeaderMeta" class="flex items-center justify-center p-4">
         <div class="ui-text-secondary flex items-center gap-1 text-sm">
@@ -65,13 +65,14 @@
         </button>
       </div>
       <TrajectoryView
-        v-if="showRunPanel"
+        v-if="trajectoryMounted"
+        v-show="showRunPanel"
+        :active="showRunPanel"
         id="trajectory-panel"
         role="tabpanel"
         aria-labelledby="trajectory-tab"
         class="min-h-0 min-w-0 flex-1"
         :thread-id="currentThread?.id ?? null"
-        :electronAPI="electronAPI"
         @close="showRunPanel = false"
       />
 
@@ -104,7 +105,7 @@
             <div class="messages-container" @click="handleMarkdownClick">
               <ChatMessageItem
                 v-for="(m, index) in chatMessages"
-                :key="m.id ? m.id : index"
+                :key="m.id"
                 :message="m"
                 :message-index="index"
                 :active-assistant-message-id="chatInstance.activeAssistantMessageId.value"
@@ -155,8 +156,8 @@
           ref="chatInputRef"
           :thread-id="currentThread?.id || ''"
           :approval-policy="currentApprovalPolicy"
-          :workspace-locked="isWorkspaceLocked"
           :latest-token-usage="latestAssistantTokenUsage"
+          :session-perf-stats="sessionPerfStats"
           :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
           :submit-turn="submitTurn"
@@ -177,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
@@ -188,10 +189,10 @@ import TurnPreviewCard from '../components/chat/TurnPreviewCard.vue';
 import TrajectoryView from './TrajectoryView.vue';
 import { FolderOpen } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
-import { buildSessionPerfStats, getTokenUsageSummary } from '../modules/chat/ui_message_references';
+import { useChatUsage } from '../composables/useChatUsage';
 import { createChatInstance } from '../modules/chat/chat_instance';
 import { createPrefixedId } from '@iki/backend/utils/id';
-import { extractTextFromMessageParts } from '@iki/backend/message/message_parts';
+import { useTurnRail } from '../composables/useTurnRail';
 import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';
 import { useThreadSessionStore } from '../store/thread_session';
@@ -265,9 +266,12 @@ const persistence = chatInstance.persistence;
 const messageStore = chatInstance.messageStore;
 const chatMessages = computed<ChatUiMessage[]>(() => chat.messages);
 const messagesContainer = ref<HTMLElement | null>(null);
-const sidebarRef = ref<InstanceType<typeof Sidebar> | null>(null);
 const chatInputRef = ref<ChatInputExpose | null>(null);
 const showRunPanel = ref(false);
+const trajectoryMounted = ref(false);
+watch(showRunPanel, visible => {
+  if (visible) trajectoryMounted.value = true;
+});
 const focusViewTab = (id: string) => {
   void nextTick(() => document.getElementById(id)?.focus());
 };
@@ -279,14 +283,20 @@ const focusViewTab = (id: string) => {
 // chunk, hence the deferred bump; the status->ready watch is the guaranteed
 // end-of-turn pass.
 const usageChunkTick = ref(0);
-chatInstance.transport.onChunk(chunk => {
-  if (chunk.type !== 'data-token-usage') return;
-  setTimeout(() => {
+let usageRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+const removeUsageListener = chatInstance.transport.onChunk(chunk => {
+  if (chunk.type !== 'data-token-usage' || usageRefreshTimer !== null) return;
+  usageRefreshTimer = setTimeout(() => {
+    usageRefreshTimer = null;
     usageChunkTick.value += 1;
   }, 0);
 });
+onBeforeUnmount(() => {
+  removeUsageListener();
+  if (usageRefreshTimer !== null) clearTimeout(usageRefreshTimer);
+});
 watch(chatInstance.status, status => {
-  if (status === 'ready') usageChunkTick.value += 1;
+  if (status === 'ready' || status === 'error') usageChunkTick.value += 1;
 });
 
 const createMessageId = () => createPrefixedId('msg');
@@ -295,33 +305,20 @@ const { loadToolSources, getMcpServerLabel } = useToolMetadata({
   electronAPI,
 });
 
-const latestAssistantTokenUsage = computed(() => {
-  // Dependency on the usage-chunk tick: live usage parts mutate a message in
-  // place and would otherwise not re-run this scan.
-  void usageChunkTick.value;
-  const messages = Array.isArray(chat.messages) ? [...chat.messages] : [];
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (!message || message.role !== 'assistant') continue;
-
-    const summary = getTokenUsageSummary(message);
-    if (summary && summary.inputTokens !== null) return summary;
-  }
-
-  return null;
-});
-
-// Session-cumulative perf stats for the bar under the composer. Message
-// parts carry per-turn usage, so this survives reloads for free.
-const sessionPerfStats = computed(() => {
-  void usageChunkTick.value;
-  return buildSessionPerfStats(Array.isArray(chat.messages) ? chat.messages : []);
-});
+const { latestAssistantTokenUsage, sessionPerfStats } = useChatUsage(
+  () => chat.messages,
+  () => messageStore.revision,
+  usageChunkTick
+);
 
 const showMessageCount = computed(() => chatMessages.value.length > 0);
 const showHeaderMeta = computed(() => showMessageCount.value || Boolean(currentThread.value));
 const showWelcomeScreen = computed(() => showWelcome.value && chatMessages.value.length === 0);
+// A work thread's project binding is immutable once the conversation has
+// started — switching mid-flight would silently move the tool roots.
+const isWorkspaceLocked = computed(
+  () => Boolean(currentThread.value?.id) && chatMessages.value.length > 0
+);
 
 const currentThreadOrigin = computed(() =>
   currentThread.value ? getThreadOriginInfo(currentThread.value) : null
@@ -335,10 +332,6 @@ const externalThreadNotice = computed(() => {
     origin.channelLabel || origin.sourceLabel || t('chat.external.defaultChannelLabel');
   return t('chat.external.notice', { channel: channelLabel });
 });
-
-const isWorkspaceLocked = computed(
-  () => Boolean(currentThread.value?.id) && chatMessages.value.length > 0
-);
 
 const handleToolApprovalEvent = (payload: {
   approved: boolean;
@@ -379,143 +372,12 @@ const scrollToBottom = () => {
   });
 };
 
-// ── Fixed turn rail (Codex-style outline scrubber) ─────────────────────
-// A strip pinned to the conversation's left edge carries one lines-marker per
-// user message, stacked as a vertically centered column regardless of scroll.
-// Hovering a marker previews the turn; clicking the marker or the preview card
-// smooth-scrolls back to the turn's first message. The rail only appears once
-// the conversation actually overflows.
-const TURN_PREVIEW_HIDE_DELAY_MS = 220;
-const TURN_RAIL_MIN_OVERFLOW_PX = 80;
-// A rail over a short conversation is noise — it earns its place once there
-// are enough turns to navigate between (and the thread actually overflows).
-const TURN_RAIL_MIN_TURNS = 5;
-
-const turnPreview = ref<{
-  messageId: string;
-  anchor: { top: number; left: number };
-  messages: ChatUiMessage[];
-} | null>(null);
-const turnMarkers = ref<Array<string>>([]);
-const turnHighlightIds = ref<Set<string> | null>(null);
-let turnPreviewHideTimer: ReturnType<typeof setTimeout> | null = null;
-let railResizeObserver: ResizeObserver | null = null;
-let observedRailContent: HTMLElement | null = null;
-
-const cancelTurnPreviewHide = () => {
-  if (turnPreviewHideTimer) {
-    clearTimeout(turnPreviewHideTimer);
-    turnPreviewHideTimer = null;
-  }
-};
-
-const hideTurnPreview = () => {
-  cancelTurnPreviewHide();
-  turnPreview.value = null;
-  turnHighlightIds.value = null;
-};
-
-const scheduleTurnPreviewHide = () => {
-  cancelTurnPreviewHide();
-  turnPreviewHideTimer = setTimeout(() => {
-    turnPreviewHideTimer = null;
-    hideTurnPreview();
-  }, TURN_PREVIEW_HIDE_DELAY_MS);
-};
-
-const buildTurnMessages = (messageId: string): ChatUiMessage[] => {
-  const startIndex = chatMessages.value.findIndex(message => message.id === messageId);
-  if (startIndex < 0) return [];
-  const turnMessages: ChatUiMessage[] = [];
-  for (let index = startIndex; index < chatMessages.value.length; index += 1) {
-    const message = chatMessages.value[index];
-    if (index > startIndex && message.role === 'user') break;
-    turnMessages.push(message);
-  }
-  return turnMessages;
-};
-
-const showTurnPreviewFromRail = (event: MouseEvent, messageId: string) => {
-  cancelTurnPreviewHide();
-  const turnMessages = buildTurnMessages(messageId);
-  if (!turnMessages.some(message => extractTextFromMessageParts(message.parts).trim())) {
-    return;
-  }
-  const target = event.currentTarget as HTMLElement | null;
-  if (!target) return;
-  const rect = target.getBoundingClientRect();
-  turnPreview.value = {
-    messageId,
-    anchor: { top: rect.top - 6, left: rect.right + 6 },
-    messages: turnMessages,
-  };
-  turnHighlightIds.value = new Set(turnMessages.map(message => message.id));
-};
-
-const scrollToMessage = (messageId: string) => {
-  if (!messagesContainer.value) return;
-  messagesContainer.value
-    .querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)
-    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
-
-const jumpToTurn = (messageId: string) => {
-  hideTurnPreview();
-  scrollToMessage(messageId);
-};
-
-const activateTurnPreview = () => {
-  const messageId = turnPreview.value?.messageId;
-  hideTurnPreview();
-  if (messageId) scrollToMessage(messageId);
-};
-
-const attachRailResizeObserver = (content: HTMLElement | null) => {
-  if (!content) {
-    railResizeObserver?.disconnect();
-    observedRailContent = null;
-    return;
-  }
-  if (observedRailContent === content) return;
-  railResizeObserver?.disconnect();
-  observedRailContent = content;
-  railResizeObserver?.observe(content);
-};
-
-const measureTurnMarkers = () => {
-  const container = messagesContainer.value;
-  const content = container?.querySelector<HTMLElement>('.messages-container') ?? null;
-  attachRailResizeObserver(content);
-  if (
-    !container ||
-    !content ||
-    container.scrollHeight <= container.clientHeight + TURN_RAIL_MIN_OVERFLOW_PX
-  ) {
-    turnMarkers.value = [];
-    return;
-  }
-  const markerIds: Array<string> = [];
-  content.querySelectorAll<HTMLElement>('.message-wrapper.user[data-message-id]').forEach(node => {
-    const messageId = node.dataset.messageId;
-    if (messageId) markerIds.push(messageId);
-  });
-  turnMarkers.value = markerIds.length >= TURN_RAIL_MIN_TURNS ? markerIds : [];
-};
-
 onBeforeUnmount(() => {
-  railResizeObserver?.disconnect();
-  railResizeObserver = null;
   if (followScrollRaf !== null) cancelAnimationFrame(followScrollRaf);
-  followScrollRaf = null;
 });
 
-const {
-  currentThread,
-  currentModel,
-  currentProviderId,
-  currentApprovalPolicy,
-  showWelcome,
-} = storeToRefs(threadSession);
+const { currentThread, currentModel, currentProviderId, currentApprovalPolicy, showWelcome } =
+  storeToRefs(threadSession);
 const {
   dismissWelcome,
   refreshThreads,
@@ -536,16 +398,20 @@ watch(
   { flush: 'sync' }
 );
 
-onMounted(() => {
-  railResizeObserver = new ResizeObserver(() => measureTurnMarkers());
-  nextTick(measureTurnMarkers);
-});
-
-watch(
-  () => [chatMessages.value.length, currentThread.value?.id],
-  () => {
-    nextTick(measureTurnMarkers);
-  }
+const {
+  turnPreview,
+  turnMarkers,
+  turnHighlightIds,
+  cancelTurnPreviewHide,
+  scheduleTurnPreviewHide,
+  showTurnPreviewFromRail,
+  jumpToTurn,
+  activateTurnPreview,
+} = useTurnRail(
+  chatMessages,
+  messagesContainer,
+  computed(() => currentThread.value?.id),
+  computed(() => !showRunPanel.value)
 );
 const handleThreadDeletedBase = threadSession.handleThreadDeleted;
 const handleNewChatBase = threadSession.handleNewChat;
@@ -559,7 +425,6 @@ threadSession.initRuntime({
   electronAPI,
   messageStore,
   persistence,
-  sidebarRef,
   scrollToBottom,
   preferredDraftModel,
   preferredDraftProviderId,
@@ -682,11 +547,19 @@ electronAPI.onFocusThread?.(threadId => {
   margin: 0 auto;
 }
 
+.chat-content-column {
+  /* Conversation column follows the window: grows from the 860px reading
+     width up to 1600px, holding ~82% of the chat area in between. Lives on
+     the shared column so the composer below the panel tracks the same
+     width as the messages. */
+  --chat-column-max: clamp(860px, 82%, 1600px);
+}
+
 .chat-main-wrap {
   min-width: 0;
-  /* Conversation column follows the window: grows from the 860px reading
-     width up to 1600px, holding ~82% of the chat area in between. */
-  --chat-column-max: clamp(860px, 82%, 1600px);
+  /* Rail visibility keys off the chat area, not the viewport: the sidebar is
+     drag-resizable, so the same window width leaves very different rooms. */
+  container-type: inline-size;
 }
 
 .turn-rail {
@@ -768,6 +641,8 @@ electronAPI.onFocusThread?.(threadId => {
 
 .composer-area {
   width: 100%;
+  max-width: var(--chat-column-max);
+  margin: 0 auto;
 }
 
 .edit-banner {
@@ -813,6 +688,15 @@ electronAPI.onFocusThread?.(threadId => {
 
   .messages-container {
     max-width: 100%;
+  }
+}
+
+/* The rail borrows the left gutter; once the chat area narrows past the
+   point where the gutter holds it beside the text, drop it entirely. Same
+   narrow threshold the trajectory view collapses its detail chrome at. */
+@container (max-width: 720px) {
+  .turn-rail {
+    display: none;
   }
 }
 </style>

@@ -61,7 +61,7 @@ const { t } = useI18n();
   right: 0;
   bottom: 0;
   z-index: var(--z-modal);
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   backdrop-filter: blur(4px);
 }
 

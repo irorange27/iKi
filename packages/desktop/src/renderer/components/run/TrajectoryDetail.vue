@@ -188,7 +188,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { X } from 'lucide-vue-next';
 import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/backend/types/agent_run';
-import type { ElectronApi } from '@iki/backend/types/electron_api';
+import { getElectronAPI } from '../../services/electron_api';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { useI18n } from '../../i18n';
 import {
@@ -197,10 +197,10 @@ import {
   type LedgerEntry,
   type TurnLedger,
 } from '../../modules/run/trajectory_ledger';
+const electronAPI = getElectronAPI();
 const props = defineProps<{
   entry: LedgerEntry | null;
   ledger: TurnLedger;
-  electronAPI: Pick<ElectronApi, 'chat'>;
   busy: boolean;
 }>();
 const emit = defineEmits<{
@@ -244,7 +244,7 @@ watch(
     labelError.value = '';
     labelBusy.value = true;
     try {
-      const result = await props.electronAPI.chat.runs.eval.listLabels(runId);
+      const result = await electronAPI.chat.runs.eval.listLabels(runId);
       if (request === generation) labels.value = result;
     } catch (error) {
       if (request === generation) labelError.value = getErrorMessage(error);
@@ -270,7 +270,7 @@ const changeLabels = async (operation: (runId: string, stepId: string) => Promis
   labelError.value = '';
   try {
     await operation(runId, stepId);
-    const result = await props.electronAPI.chat.runs.eval.listLabels(runId);
+    const result = await electronAPI.chat.runs.eval.listLabels(runId);
     if (request === generation) labels.value = result;
   } catch (error) {
     if (request === generation) labelError.value = getErrorMessage(error);
@@ -279,7 +279,7 @@ const changeLabels = async (operation: (runId: string, stepId: string) => Promis
   }
 };
 const remove = async (id: string) => {
-  const result = await props.electronAPI.chat.runs.eval.deleteLabel(id);
+  const result = await electronAPI.chat.runs.eval.deleteLabel(id);
   if (!result.success) throw new Error(t('chat.runs.actionFailed'));
 };
 const toggleLabel = (label: AgentEvalLabelType) => {
@@ -287,7 +287,7 @@ const toggleLabel = (label: AgentEvalLabelType) => {
   return changeLabels(async (runId, stepId) => {
     if (existing.length) {
       for (const item of existing) await remove(item.id);
-    } else await props.electronAPI.chat.runs.eval.addLabel({ runId, stepId, label });
+    } else await electronAPI.chat.runs.eval.addLabel({ runId, stepId, label });
   });
 };
 const saveNote = () => {
@@ -296,7 +296,7 @@ const saveNote = () => {
   return changeLabels(async (runId, stepId) => {
     // Create before removing the old note: a failed write must not destroy it.
     if (note.trim())
-      await props.electronAPI.chat.runs.eval.addLabel({ runId, stepId, label: 'note', note });
+      await electronAPI.chat.runs.eval.addLabel({ runId, stepId, label: 'note', note });
     for (const item of existing) await remove(item.id);
   });
 };

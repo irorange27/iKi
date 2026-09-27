@@ -242,7 +242,6 @@ const ChatInputStub = defineComponent({
     approvalPolicy: { type: String, default: '' },
     isIncognito: { type: Boolean, default: false },
     selectedWorkspaceId: { type: String, default: null },
-    workspaceLocked: { type: Boolean, default: false },
     latestTokenUsage: { type: Object, default: null },
     todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
@@ -387,7 +386,7 @@ describe('ChatView', () => {
       todoPlan: { value: null, __v_isRef: true as const },
     }));
 
-    getTokenUsageSummaryMock.mockImplementation(() => null);
+    getTokenUsageSummaryMock.mockImplementation(() => ({ inputTokens: null }));
     buildSessionPerfStatsMock.mockImplementation(() => null);
   });
 
@@ -404,13 +403,17 @@ describe('ChatView', () => {
     expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
 
     await wrapper.get('#chat-tab').trigger('click');
-    expect(wrapper.find('trajectory-view-stub').exists()).toBe(false);
+    expect((wrapper.find('trajectory-view-stub').element as HTMLElement).style.display).toBe(
+      'none'
+    );
     expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
 
     await wrapper.get('#trajectory-tab').trigger('click');
     useThreadSessionStore().currentThread = null;
     await flushPromises();
-    expect(wrapper.find('trajectory-view-stub').exists()).toBe(false);
+    expect((wrapper.find('trajectory-view-stub').element as HTMLElement).style.display).toBe(
+      'none'
+    );
     expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
     wrapper.unmount();
   });
@@ -595,21 +598,6 @@ describe('ChatView', () => {
     const chatInput = wrapper.findComponent(ChatInputStub);
 
     expect(chatInput.props('todoPlan')).toEqual(activePlan);
-  });
-
-  it('locks workspace switching once the selected thread already has messages', async () => {
-    chatState.messages = [
-      {
-        id: 'user_1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'First turn' }],
-      },
-    ];
-
-    const wrapper = await mountChatView();
-    const chatInput = wrapper.findComponent(ChatInputStub);
-
-    expect(chatInput.props('workspaceLocked')).toBe(true);
   });
 
   it('hydrates the composer when the welcome flow emits a starter prompt', async () => {

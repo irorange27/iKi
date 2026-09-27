@@ -40,7 +40,7 @@ const { t } = useI18n();
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.78);
+  background: var(--scrim-image);
   backdrop-filter: blur(12px);
   animation: imageViewerFadeIn 0.18s ease;
 }

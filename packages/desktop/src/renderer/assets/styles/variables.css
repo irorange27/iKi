@@ -21,6 +21,14 @@
   --z-modal: 1000;
   --z-overlay: 1100;
 
+  --scrim: rgba(0, 0, 0, 0.5);
+  --scrim-soft: rgba(8, 10, 18, 0.24);
+  --image-overlay-control-bg: rgba(0, 0, 0, 0.55);
+  --image-overlay-control-ink: #fff;
+  --scrim-image: rgba(0, 0, 0, 0.78);
+  --switch-thumb-bg: #fff;
+  --switch-thumb-shadow: 0 2px 6px rgba(15, 23, 42, 0.28);
+
   --chat-content-padding: 24px;
   --chat-composer-padding: 10px;
   --chat-bubble-padding-x: 16px;
@@ -37,7 +45,9 @@
   --theme-bg-secondary: #22272c;
   --theme-bg-tertiary: #2e3036;
   --theme-bg-hover: #3a3d45;
-  --theme-bg-active: #4e5256;
+  /* Same derivation as the theme generator: selection tint = accent mixed
+     into bg-hover, so it follows the theme accent instead of a fixed hue. */
+  --theme-bg-active: color-mix(in srgb, var(--theme-accent-color) 14%, var(--theme-bg-hover));
   --theme-surface-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --theme-surface-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.18);
   --theme-surface-shadow-md: 0 8px 20px rgba(0, 0, 0, 0.18);
@@ -49,7 +59,7 @@
   --theme-accent-color: #61afef;
   --theme-accent-hover: #5ba2dc;
   --theme-accent-contrast: #ffffff;
-  --theme-accent-rgb: 96, 165, 250;
+  --theme-accent-rgb: 97, 175, 239;
   --theme-reference-inline-color: #8eabc4;
   --theme-reference-inline-hover: #b4c9db;
   --theme-reference-inline-underline: rgba(142, 171, 196, 0.45);
@@ -138,6 +148,7 @@
   --sidebar-primary-foreground: var(--accent-contrast);
   --sidebar-accent: var(--bg-hover);
   --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-active: var(--bg-active);
   --sidebar-border: var(--border-color);
   --sidebar-ring: var(--accent-color);
   --app-shell-border-color: var(--theme-app-shell-border-color);
@@ -206,7 +217,7 @@
   --theme-bg-secondary: #f3f4f6;
   --theme-bg-tertiary: #ffffff;
   --theme-bg-hover: #e5e7eb;
-  --theme-bg-active: #dbeafe;
+  --theme-bg-active: color-mix(in srgb, var(--theme-accent-color) 8%, var(--theme-bg-hover));
   --theme-surface-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   --theme-surface-shadow-sm: 0 2px 6px rgba(148, 163, 184, 0.1);
   --theme-surface-shadow-md: 0 8px 20px rgba(148, 163, 184, 0.12);
@@ -218,7 +229,7 @@
   --theme-accent-color: #7299a0;
   --theme-accent-hover: #81a4aa;
   --theme-accent-contrast: #ffffff;
-  --theme-accent-rgb: 59, 130, 246;
+  --theme-accent-rgb: 114, 153, 160;
   --theme-reference-inline-color: #7f98aa;
   --theme-reference-inline-hover: #668397;
   --theme-reference-inline-underline: rgba(127, 152, 170, 0.42);

@@ -87,9 +87,13 @@
             <Brain class="message-reasoning-icon" aria-hidden="true" />
             <span class="message-reasoning-label">{{ getReasoningLabel(segment.part) }}</span>
             <span
-              v-if="!isReasoningPartExpanded(segment.part, segment.index) && getReasoningPreview(segment.part)"
+              v-if="
+                !isReasoningPartExpanded(segment.part, segment.index) &&
+                reasoningPreviews.get(segment.index)
+              "
               class="message-reasoning-preview"
-            >· {{ getReasoningPreview(segment.part) }}</span>
+              >· {{ reasoningPreviews.get(segment.index) }}</span
+            >
           </summary>
           <div class="message-reasoning-body">{{ getTextPartContent(segment.part) }}</div>
         </details>
@@ -137,7 +141,10 @@ import {
 } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
-import { segmentMessageParts, type MessagePartSegment } from '../../modules/chat/ui_message_tool_groups';
+import {
+  segmentMessageParts,
+  type MessagePartSegment,
+} from '../../modules/chat/ui_message_tool_groups';
 import ToolCallPart from './ToolCallPart.vue';
 import ToolCallGroup from './ToolCallGroup.vue';
 import ImageViewerOverlay from '../ImageViewerOverlay.vue';
@@ -196,7 +203,8 @@ const emit = defineEmits<{
       approved: boolean;
       message: ChatUiMessage;
       part: unknown;
-    }];
+    },
+  ];
 }>();
 
 const viewerSrc = ref('');
@@ -209,6 +217,17 @@ const getRenderableParts = (parts: ChatUiMessage['parts']): ChatUiMessage['parts
 const segments = computed<MessagePartSegment[]>(() =>
   segmentMessageParts(getRenderableParts(props.message.parts))
 );
+
+const reasoningPreviews = computed(() => {
+  const previews = new Map<number, string>();
+  for (const segment of segments.value) {
+    if (segment.kind !== 'tool-call-group' && isReasoningPart(segment.part) &&
+        !isReasoningPartExpanded(segment.part, segment.index)) {
+      previews.set(segment.index, getReasoningPreview(segment.part));
+    }
+  }
+  return previews;
+});
 
 // User-sent text longer than five lines starts collapsed; the toggle under it
 // reveals the rest. Assistant output is never clamped.
@@ -227,13 +246,13 @@ const isUserTextCollapsible = computed(() => {
   if (!isUserMessage.value) return false;
   const totalLines = props.message.parts.reduce(
     (total, part) => (isTextPart(part) ? total + countTextLines(getTextPartContent(part)) : total),
-    0,
+    0
   );
   return totalLines > USER_TEXT_COLLAPSE_LINES;
 });
 
 const isUserTextClamped = computed(
-  () => isUserMessage.value && isUserTextCollapsible.value && !userTextExpanded.value,
+  () => isUserMessage.value && isUserTextCollapsible.value && !userTextExpanded.value
 );
 
 const toggleUserTextExpanded = () => {
@@ -241,7 +260,7 @@ const toggleUserTextExpanded = () => {
 };
 
 const userTextToggleLabel = computed(() =>
-  t(userTextExpanded.value ? 'chat.userText.collapse' : 'chat.userText.expand'),
+  t(userTextExpanded.value ? 'chat.userText.collapse' : 'chat.userText.expand')
 );
 
 const getPartType = (part: unknown): string =>
@@ -287,8 +306,12 @@ const isFilePart = (part: unknown): part is { type: 'file'; url: string; mediaTy
   typeof part.url === 'string' &&
   typeof part.mediaType === 'string';
 
-const isFileAnImage = (part: { type: 'file'; url: string; mediaType: string; filename?: string }): boolean =>
-  part.mediaType.startsWith('image/');
+const isFileAnImage = (part: {
+  type: 'file';
+  url: string;
+  mediaType: string;
+  filename?: string;
+}): boolean => part.mediaType.startsWith('image/');
 
 const getComposerInvocationTokens = (part: unknown) =>
   getComposerInvocationPartData(part)?.tokens ?? [];
@@ -646,7 +669,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
   padding: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-base);
   overflow-x: auto;
 }
 
@@ -655,7 +678,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
   font-size: 0.9em;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--control-radius-sm);
   padding: 1px 6px;
 }
 
@@ -672,7 +695,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
 .message-text.markdown-content :deep(.md-code-block) {
   margin: 10px 0;
   border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-base);
   overflow: hidden;
   background: var(--bg-secondary);
 }
@@ -705,7 +728,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
   color: var(--text-muted);
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--control-radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;

@@ -1,9 +1,11 @@
+import { ref } from 'vue';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 
 export type ChatMessageStore = ReturnType<typeof createChatMessageStore>;
 
 export const createChatMessageStore = (chat: { messages: unknown[] }) => {
   const messages = chat.messages as ChatUiMessage[];
+  const revision = ref(0);
 
   const findIndexById = (id: string | null | undefined): number => {
     if (!id) return -1;
@@ -20,6 +22,7 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
 
   const append = (message: ChatUiMessage) => {
     messages.push(message);
+    revision.value += 1;
   };
 
   const replaceAt = (index: number, message: ChatUiMessage) => {
@@ -28,11 +31,13 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
     } else {
       messages.push(message);
     }
+    revision.value += 1;
   };
 
   const removeAt = (index: number) => {
     if (index >= 0) {
       messages.splice(index, 1);
+      revision.value += 1;
     }
   };
 
@@ -50,16 +55,20 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
 
   const clear = () => {
     messages.splice(0, messages.length);
+    revision.value += 1;
   };
 
   const setAll = (next: ChatUiMessage[]) => {
     messages.splice(0, messages.length, ...next);
+    revision.value += 1;
   };
 
   const truncateAfterIndex = (index: number): ChatUiMessage[] => {
     const start = Math.max(index + 1, 0);
     if (start >= messages.length) return [];
-    return messages.splice(start, messages.length - start) as ChatUiMessage[];
+    const removed = messages.splice(start, messages.length - start) as ChatUiMessage[];
+    revision.value += 1;
+    return removed;
   };
 
   const hasId = (id: string | null | undefined): boolean => findIndexById(id) >= 0;
@@ -77,6 +86,9 @@ export const createChatMessageStore = (chat: { messages: unknown[] }) => {
   };
 
   return {
+    get revision() {
+      return revision.value;
+    },
     messages,
     getById,
     getAt,

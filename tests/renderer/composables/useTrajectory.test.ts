@@ -61,13 +61,14 @@ const wrappers: Array<{ unmount: () => void }> = [];
 const mountHarness = (
   threadId: Ref<string | null>,
   runs: Pick<ElectronApi, 'chat'>['chat']['runs'],
-  onRunStatus?: (callback: (event: RunStatusEvent) => void) => () => void
+  onRunStatus?: (callback: (event: RunStatusEvent) => void) => () => void,
+  active?: Ref<boolean>
 ) => {
   const state = { value: null as ReturnType<typeof useTrajectory> | null };
   const Harness = defineComponent({
     name: 'UseTrajectoryHarness',
     setup() {
-      state.value = useTrajectory(threadId, { chat: { runs, onRunStatus } } as never);
+      state.value = useTrajectory(threadId, { chat: { runs, onRunStatus } } as never, active);
       return () => h('div');
     },
   });
@@ -77,6 +78,26 @@ const mountHarness = (
 };
 
 describe('useTrajectory', () => {
+  it('suspends hidden polling and reuses completed traces when reopened', async () => {
+    vi.useFakeTimers();
+    const active = ref(true);
+    const run = makeRun('done');
+    const list = vi.fn().mockResolvedValue([run]);
+    const getTrace = vi.fn().mockResolvedValue(makeTrace(run));
+    const { state } = mountHarness(ref('thread_a'), { list, getTrace } as never, undefined, active);
+    await flushPromises();
+    const traces = state.value!.traces.value;
+    active.value = false;
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(list).toHaveBeenCalledTimes(1);
+    active.value = true;
+    await flushPromises();
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(getTrace).toHaveBeenCalledTimes(1);
+    expect(state.value!.traces.value).toBe(traces);
+  });
+
   afterEach(() => {
     for (const wrapper of wrappers.splice(0)) wrapper.unmount();
     document.body.innerHTML = '';

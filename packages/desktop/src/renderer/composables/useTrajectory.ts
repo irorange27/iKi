@@ -22,7 +22,8 @@ type RefreshCycle = {
 
 export const useTrajectory = (
   threadId: Ref<string | null>,
-  electronAPI: Pick<ElectronApi, 'chat'>
+  electronAPI: Pick<ElectronApi, 'chat'>,
+  active: Ref<boolean> = ref(true)
 ) => {
   const traces = shallowRef<AgentRunTrace[]>([]);
   const loading = ref(false);
@@ -56,7 +57,7 @@ export const useTrajectory = (
     mounted && currentCycle === cycle && cycle.generation === generation;
 
   const schedulePoll = () => {
-    if (!mounted || currentCycle === null || pollTimer !== null) return;
+    if (!mounted || !active.value || currentCycle === null || pollTimer !== null) return;
     // With the status bridge, run events restart refreshes on their own —
     // keep the timer only while a run is in flight (or on older builds
     // without the bridge, where polling is the only update channel).
@@ -119,7 +120,7 @@ export const useTrajectory = (
   };
 
   const refreshCycle = (cycle: RefreshCycle | null): Promise<void> => {
-    if (!mounted || cycle === null || !isCurrent(cycle)) return Promise.resolve();
+    if (!mounted || !active.value || cycle === null || !isCurrent(cycle)) return Promise.resolve();
     clearPollTimer();
 
     if (cycle.running) {
@@ -135,7 +136,7 @@ export const useTrajectory = (
 
     const promise = (async () => {
       try {
-        while (cycle.queued && isCurrent(cycle)) {
+        while (cycle.queued && active.value && isCurrent(cycle)) {
           cycle.queued = false;
           await loadCycle(cycle);
         }
@@ -170,6 +171,11 @@ export const useTrajectory = (
     },
     { flush: 'sync' }
   );
+
+  watch(active, visible => {
+    clearPollTimer();
+    if (visible) void refreshCycle(currentCycle);
+  });
 
   onMounted(() => {
     mounted = true;

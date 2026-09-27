@@ -1,7 +1,8 @@
+import type { ChatUiMessage, SkillUsageEntry } from '@iki/backend/message/message_parts';
 import type {
-  ChatUiMessage,
-  SkillUsageEntry,
-} from '@iki/backend/message/message_parts';
+  ContextCompositionCategory,
+  ContextCompositionSummary,
+} from '@iki/backend/turn_prep/context_types';
 import { isAffectLabel, type AffectLabel } from '@iki/backend/types/affect';
 import { normalizeModelCapabilityLimits } from '@iki/backend/utils/provider_models';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
@@ -22,6 +23,8 @@ import {
   getParsedToolOutput,
   getToolCallIdFromPart,
   getToolName,
+  getToolInput,
+  getToolOutput,
   isTranscriptHiddenToolPart,
   isToolPart,
   normalizeToolNameKey,
@@ -103,6 +106,39 @@ export type TokenUsageSummary = {
   firstTokenSamples: number | null;
   steps: number | null;
   toolCalls: number | null;
+  /** Estimated per-category context assembly breakdown — null on legacy messages. */
+  contextComposition: ContextCompositionSummary | null;
+};
+
+export type ContextCompositionRow = {
+  key: ContextCompositionCategory;
+  tokens: number;
+  percent: number;
+};
+
+/**
+ * Normalized category rows for the context-usage panel: shares of the locally
+ * estimated assembled context, largest first, zero categories dropped.
+ */
+export const buildContextCompositionRows = (
+  summary: TokenUsageSummary | null
+): ContextCompositionRow[] => {
+  const composition = summary?.contextComposition ?? null;
+  if (!composition) return [];
+
+  const rows: ContextCompositionRow[] = [];
+  const total = composition.estimatedTotalTokens;
+  for (const [key, tokens] of Object.entries(composition.categories) as Array<
+    [ContextCompositionCategory, number]
+  >) {
+    if (!Number.isFinite(tokens) || tokens <= 0) continue;
+    rows.push({
+      key,
+      tokens: Math.round(tokens),
+      percent: total > 0 ? Math.round((tokens / total) * 100) : 0,
+    });
+  }
+  return rows.sort((a, b) => b.tokens - a.tokens);
 };
 
 export type ContextUsageIndicator = {
@@ -242,9 +278,7 @@ const normalizeSkillItems = (rawSkills: unknown): SkillReferenceItem[] => {
     });
 };
 
-export const getToolReferenceSummary = (
-  message: ChatUiMessage | unknown
-): ToolReferenceSummary => {
+const buildToolReferenceSummary = (message: ChatUiMessage | unknown): ToolReferenceSummary => {
   const parts = getMessageParts(message);
   const orderedToolNameKeys: string[] = [];
   const toolNamesSeen = new Set<string>();
@@ -300,7 +334,7 @@ export const getToolReferenceSummary = (
   };
 };
 
-export const getSelectedSkillReferenceSummary = (
+const buildSelectedSkillReferenceSummary = (
   message: ChatUiMessage | unknown
 ): Pick<SkillReferenceSummary, 'mode' | 'selectedItems'> => {
   const parts = getMessageParts(message);
@@ -319,11 +353,9 @@ export const getSelectedSkillReferenceSummary = (
   };
 };
 
-export const getSkillReferenceSummary = (
-  message: ChatUiMessage | unknown
-): SkillReferenceSummary => {
+const buildSkillReferenceSummary = (message: ChatUiMessage | unknown): SkillReferenceSummary => {
   const parts = getMessageParts(message);
-  const selectedSummary = getSelectedSkillReferenceSummary(message);
+  const selectedSummary = buildSelectedSkillReferenceSummary(message);
   const selectedById = new Map(selectedSummary.selectedItems.map(item => [item.id, item] as const));
 
   const loadedById = new Map<string, SkillReferenceItem>();
@@ -361,9 +393,7 @@ export const getSkillReferenceSummary = (
   };
 };
 
-export const getMemoryReferenceSummary = (
-  message: ChatUiMessage | unknown
-): MemoryReferenceSummary => {
+const buildMemoryReferenceSummary = (message: ChatUiMessage | unknown): MemoryReferenceSummary => {
   const parts = getMessageParts(message);
   const memoryPart = parts.find(part => isMemoryPart(part));
 
@@ -398,9 +428,7 @@ export const getMemoryReferenceSummary = (
   };
 };
 
-export const getAffectReferenceSummary = (
-  message: ChatUiMessage | unknown
-): AffectReferenceSummary => {
+const buildAffectReferenceSummary = (message: ChatUiMessage | unknown): AffectReferenceSummary => {
   const parts = getMessageParts(message);
   const affectPart = parts.find(part => isAffectSignalPart(part));
 
@@ -440,9 +468,7 @@ export const getAffectReferenceSummary = (
   };
 };
 
-export const getTokenUsageSummary = (
-  message: ChatUiMessage | unknown
-): TokenUsageSummary => {
+const buildTokenUsageSummary = (message: ChatUiMessage | unknown): TokenUsageSummary => {
   const parts = getMessageParts(message);
   const usagePart = parts.find(part => isTokenUsagePart(part));
 
@@ -460,13 +486,14 @@ export const getTokenUsageSummary = (
       model: '',
       providerType: '',
       providerId: '',
-      llmMs: null,
-      toolMs: null,
-      firstTokenMs: null,
-      firstTokenSamples: null,
-      steps: null,
-      toolCalls: null,
-    };
+    llmMs: null,
+    toolMs: null,
+    firstTokenMs: null,
+    firstTokenSamples: null,
+    steps: null,
+    toolCalls: null,
+    contextComposition: null,
+  };
   }
 
   const usageData = getTokenUsagePartData(usagePart);
@@ -492,7 +519,99 @@ export const getTokenUsageSummary = (
     firstTokenSamples: toScore(usageData?.firstTokenSamples),
     steps: toScore(usageData?.steps),
     toolCalls: toScore(usageData?.toolCalls),
+    contextComposition: usageData?.contextComposition ?? null,
   };
+};
+
+// SDK writes mutate parts off-proxy. Cache against the relevant payload sources,
+// never just the message/parts identity; text deltas do not change these sources.
+type SummaryCache<T> = WeakMap<object, { sources: unknown[]; value: T }>;
+const reuseSummary = <T>(
+  cache: SummaryCache<T>,
+  key: object,
+  sources: unknown[],
+  build: () => T
+): T => {
+  const previous = cache.get(key);
+  if (
+    previous &&
+    previous.sources.length === sources.length &&
+    sources.every((source, index) => Object.is(source, previous.sources[index]))
+  ) {
+    return previous.value;
+  }
+  const value = build();
+  cache.set(key, { sources, value });
+  return value;
+};
+const toolSummaryCache: SummaryCache<ToolReferenceSummary> = new WeakMap();
+const skillSummaryCache: SummaryCache<SkillReferenceSummary> = new WeakMap();
+const memorySummaryCache: SummaryCache<MemoryReferenceSummary> = new WeakMap();
+const affectSummaryCache: SummaryCache<AffectReferenceSummary> = new WeakMap();
+const selectedSkillSummaryCache: SummaryCache<
+  Pick<SkillReferenceSummary, 'mode' | 'selectedItems'>
+> = new WeakMap();
+const usageSummaryCache: SummaryCache<TokenUsageSummary> = new WeakMap();
+
+export const getReferenceSummaries = (message: unknown) => {
+  const parts = getMessageParts(message);
+  const tools: unknown[] = [];
+  const skills: unknown[] = [];
+  const memories: unknown[] = [];
+  const affects: unknown[] = [];
+  const toolSources: unknown[] = [];
+  const skillSources: unknown[] = [];
+  for (const part of parts) {
+    if (isToolPart(part)) {
+      tools.push(part);
+      toolSources.push(getToolName(part), getToolCallIdFromPart(part));
+      if (normalizeToolNameKey(getToolName(part)) === 'load_skill') {
+        skills.push(part);
+        skillSources.push(getToolName(part), getToolInput(part), getToolOutput(part));
+      }
+    } else if (isSkillUsagePart(part)) {
+      skills.push(part);
+      skillSources.push(getSkillUsagePartData(part));
+    } else if (isMemoryPart(part)) {
+      memories.push(part);
+    } else if (isAffectSignalPart(part)) {
+      affects.push(part);
+    }
+  }
+  return {
+    tool: reuseSummary(toolSummaryCache, parts, toolSources, () =>
+      buildToolReferenceSummary({ parts: tools })
+    ),
+    skill: reuseSummary(skillSummaryCache, parts, skillSources, () =>
+      buildSkillReferenceSummary({ parts: skills })
+    ),
+    memory: reuseSummary(memorySummaryCache, parts, memories.map(getMemoryPartData), () =>
+      buildMemoryReferenceSummary({ parts: memories })
+    ),
+    affect: reuseSummary(affectSummaryCache, parts, affects.map(getAffectSignalPartData), () =>
+      buildAffectReferenceSummary({ parts: affects })
+    ),
+  };
+};
+export const getToolReferenceSummary = (message: unknown) => getReferenceSummaries(message).tool;
+export const getSkillReferenceSummary = (message: unknown) => getReferenceSummaries(message).skill;
+export const getSelectedSkillReferenceSummary = (message: unknown) => {
+  const parts = getMessageParts(message);
+  const part = parts.find(isSkillUsagePart);
+  return reuseSummary(selectedSkillSummaryCache, parts, [part && getSkillUsagePartData(part)], () =>
+    buildSelectedSkillReferenceSummary({ parts: part ? [part] : [] })
+  );
+};
+export const getMemoryReferenceSummary = (message: unknown) =>
+  getReferenceSummaries(message).memory;
+export const getAffectReferenceSummary = (message: unknown) =>
+  getReferenceSummaries(message).affect;
+export const getTokenUsageSummary = (message: unknown): TokenUsageSummary => {
+  const parts = getMessageParts(message);
+  const part = parts.find(isTokenUsagePart);
+  return reuseSummary(usageSummaryCache, parts, [part && getTokenUsagePartData(part)], () =>
+    buildTokenUsageSummary({ parts: part ? [part] : [] })
+  );
 };
 
 export const formatTokenCount = (tokens: number | null): string => {
@@ -635,10 +754,8 @@ export const buildTokenUsageIndicator = (
 };
 
 export const hasReferenceSummary = (message: ChatUiMessage | unknown): boolean => {
-  const toolSummary = getToolReferenceSummary(message);
-  if (toolSummary.callCount > 0) return true;
-  if (getSkillReferenceSummary(message).items.length > 0) return true;
-  if (getMemoryReferenceSummary(message).items.length > 0) return true;
-  if (getAffectReferenceSummary(message).label) return true;
-  return false;
+  const { tool, skill, memory, affect } = getReferenceSummaries(message);
+  return (
+    tool.callCount > 0 || skill.items.length > 0 || memory.items.length > 0 || Boolean(affect.label)
+  );
 };

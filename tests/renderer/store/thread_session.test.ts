@@ -112,8 +112,6 @@ const createHarness = (
 
   const getThread = vi.fn(async (id: string) => threadsById.get(id) ?? null);
   const listMessages = vi.fn(async () => []);
-  const refreshSidebar = vi.fn(async () => undefined);
-  const setCurrentThread = vi.fn();
   const messageStore = {
     append: vi.fn(),
     clear: vi.fn(),
@@ -147,10 +145,6 @@ const createHarness = (
     persistence: {
       resetPersistedMessageIds: vi.fn(),
     } as never,
-    sidebarRef: ref({
-      refresh: refreshSidebar,
-      setCurrentThread,
-    }),
     scrollToBottom,
     preferredDraftModel,
     preferredDraftProviderId,
@@ -191,8 +185,6 @@ const createHarness = (
     listMessages,
     messageStore,
     scrollToBottom,
-    refreshSidebar,
-    setCurrentThread,
     generateTitle,
     preferredDraftModel,
     preferredDraftProviderId,
@@ -368,9 +360,7 @@ describe('threadSession store', () => {
       prompt_app_id: 'prompt_summarize',
       skill_ids: '["codex:frontend-dev"]',
     });
-    const { state, clearThread, refreshSidebar, setCurrentThread } = createHarness([
-      existingThread,
-    ]);
+    const { state, clearThread } = createHarness([existingThread]);
 
     await state.selectThread(existingThread.id);
     const clearedThread = await state.clearCurrentThread();
@@ -400,8 +390,8 @@ describe('threadSession store', () => {
     expect(state.currentModel.value).toBe('deepseek-chat');
     expect(state.isIncognito.value).toBe(true);
     expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
-    expect(refreshSidebar).toHaveBeenCalled();
-    expect(setCurrentThread).toHaveBeenLastCalledWith('thread_clear_me');
+    expect(state.threadListRevision.value).toBeGreaterThan(0);
+    expect(state.currentThread.value?.id).toBe('thread_clear_me');
   });
 
   it('syncs the active composer model from the selected thread', async () => {
@@ -659,8 +649,6 @@ describe('threadSession store', () => {
       setAll: vi.fn(),
     };
 
-    const sidebarRef = { refresh: vi.fn(), setCurrentThread: vi.fn() };
-
     setActivePinia(createPinia());
     const store = useThreadSessionStore();
     store.initRuntime({
@@ -680,7 +668,6 @@ describe('threadSession store', () => {
       } as never,
       messageStore: messageStore as never,
       persistence: { resetPersistedMessageIds: vi.fn() } as never,
-      sidebarRef: ref(sidebarRef) as never,
       scrollToBottom: vi.fn(),
       preferredDraftModel: ref(''),
       preferredDraftProviderId: ref(null),
@@ -757,7 +744,6 @@ describe('threadSession store', () => {
         setAll: vi.fn(),
       } as never,
       persistence: { resetPersistedMessageIds: vi.fn() } as never,
-      sidebarRef: ref({ refresh: vi.fn(), setCurrentThread: vi.fn() }) as never,
       scrollToBottom: vi.fn(),
       preferredDraftModel: ref(''),
       preferredDraftProviderId: ref(null),

@@ -60,8 +60,9 @@ const createView = async (records: AgentRunTrace[] = traces) => {
       },
     },
   } as unknown as Pick<ElectronApi, 'chat'>;
+  Object.defineProperty(window, 'electronAPI', { configurable: true, value: api });
   const view = mount(TrajectoryView, {
-    props: { threadId: 'thread', electronAPI: api },
+    props: { threadId: 'thread' },
     attachTo: document.body,
   });
   wrappers.push(view);
@@ -91,7 +92,7 @@ describe('trajectory browser', () => {
     if (!cancel) throw new Error('Queued run must expose Cancel');
     await cancel.trigger('click');
     await flushPromises();
-    expect(view.props('electronAPI').chat.runs.cancel).toHaveBeenCalledWith('pending');
+    expect(window.electronAPI.chat.runs.cancel).toHaveBeenCalledWith('pending');
     await view.get('#trajectory-tab-raw').trigger('click');
     expect(JSON.parse(view.get('[role="tabpanel"]').text())).toMatchObject({
       id: 'pending',

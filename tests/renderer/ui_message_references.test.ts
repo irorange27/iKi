@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
 
 import {
+  buildContextCompositionRows,
   buildSessionPerfStats,
   getAffectReferenceSummary,
   buildTokenUsageIndicator,
@@ -303,6 +304,7 @@ describe('ui_message_references', () => {
       model: 'gpt-5-mini',
       providerType: 'openai',
       providerId: 'provider_openai',
+      contextComposition: null,
       llmMs: 2100,
       toolMs: 300,
       firstTokenMs: 10800,
@@ -310,6 +312,55 @@ describe('ui_message_references', () => {
       steps: 4,
       toolCalls: 3,
     });
+  });
+
+  it('extracts context composition and builds normalized rows', () => {
+    const summary = getTokenUsageSummary({
+      id: 'assistant_1',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'data-token-usage',
+          data: {
+            inputTokens: 6400,
+            cacheReadTokens: 6330,
+            contextComposition: {
+              estimatedTotalTokens: 6400,
+              categories: {
+                messages: 5760,
+                tools: 440,
+                mcpTools: 120,
+                memory: 80,
+                other: 0,
+              },
+            },
+          },
+        },
+      ],
+    } as never);
+
+    expect(buildContextCompositionRows(summary)).toEqual([
+      { key: 'messages', tokens: 5760, percent: 90 },
+      { key: 'tools', tokens: 440, percent: 7 },
+      { key: 'mcpTools', tokens: 120, percent: 2 },
+      { key: 'memory', tokens: 80, percent: 1 },
+    ]);
+  });
+
+  it('returns empty composition rows for messages without the breakdown', () => {
+    const summary = getTokenUsageSummary({
+      id: 'assistant_1',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'data-token-usage',
+          data: { inputTokens: 640 },
+        },
+      ],
+    } as never);
+
+    expect(buildContextCompositionRows(summary)).toEqual([]);
+    expect(buildContextCompositionRows(null)).toEqual([]);
   });
 
   it('parses affect signals for reference inspection', () => {

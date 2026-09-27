@@ -119,7 +119,6 @@
           <TrajectoryDetail
             :entry="selectedEntry"
             :ledger="selectedTurn"
-            :electronAPI="electronAPI"
             :busy="actionBusy"
             :style="{ '--detail-width': `${detailWidth}%` }"
             @close="select(null)"
@@ -134,7 +133,7 @@
 <script setup lang="ts">
 import { computed, ref, toRef, watch } from 'vue';
 import { Clock3, ListCollapse, RefreshCw, Search, Wrench } from 'lucide-vue-next';
-import type { ElectronApi } from '@iki/backend/types/electron_api';
+import { getElectronAPI } from '../services/electron_api';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { useI18n } from '../i18n';
 import { useTrajectory } from '../composables/useTrajectory';
@@ -148,12 +147,16 @@ import {
   type TimelineMode,
   type TimelineRange,
 } from '../modules/run/trajectory_ledger';
-const props = defineProps<{ threadId: string | null; electronAPI: Pick<ElectronApi, 'chat'> }>();
+const props = withDefaults(defineProps<{ threadId: string | null; active?: boolean }>(), {
+  active: true,
+});
+const electronAPI = getElectronAPI();
 const emit = defineEmits<{ close: [] }>();
 const { t } = useI18n();
 const { traces, loading, error, refresh } = useTrajectory(
   toRef(props, 'threadId'),
-  props.electronAPI
+  electronAPI,
+  toRef(props, 'active')
 );
 const selectedId = ref<string | null>(null);
 const selectedRunId = ref<string | null>(null);
@@ -277,7 +280,7 @@ const runAction = async (action: 'cancel' | 'retry' | 'export', runId: string) =
   actionError.value = '';
   notice.value = '';
   try {
-    const api = props.electronAPI.chat.runs;
+    const api = electronAPI.chat.runs;
     const result =
       action === 'cancel'
         ? await api.cancel(runId)

@@ -198,7 +198,7 @@ const handleAdvancedColorUpdate = (key: keyof AdvancedThemeSeed, value: string) 
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background: rgba(8, 10, 18, 0.24);
+  background: var(--scrim-soft);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
   display: flex;

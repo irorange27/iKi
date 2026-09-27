@@ -5,7 +5,8 @@
       :disabled="isStopping"
       @steer="handleSteer"
     />
-    <div class="mx-auto max-w-4xl">
+    <!-- Width is owned by the parent (.composer-area tracks the chat column). -->
+    <div>
       <ChatTodoPlan v-if="props.todoPlan" class="chat-input-plan" :plan="props.todoPlan" />
       <ChatComposerShell
         :set-input-ref="setInputRef"
@@ -144,35 +145,70 @@
           </PopoverRoot>
           <ChatComposerSelectors
             class="composer-context-row"
-            :thread-id="props.threadId ?? null"
-            :workspace-locked="props.workspaceLocked"
-            :show-workspace="isWorkThread"
             v-model:autonomous-active="isAutonomousMode"
             v-model:autonomous-max-iterations="autonomousMaxIterations"
           />
         </template>
 
         <template #toolbar-right>
-          <div
-            v-if="composerContextUsage"
-            class="composer-context-ring"
-            :class="contextRingToneClass"
-            role="status"
-            :aria-label="t('chat.input.contextUsage')"
-            :title="composerContextUsage.tooltip"
-          >
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <circle class="composer-context-ring-track" cx="10" cy="10" r="8" />
-              <circle
-                class="composer-context-ring-arc"
-                cx="10"
-                cy="10"
-                r="8"
-                :stroke-dasharray="contextRingCircumference"
-                :stroke-dashoffset="contextRingOffset"
-              />
-            </svg>
-          </div>
+          <HoverCardRoot v-if="composerContextUsage" :open-delay="150" :close-delay="80">
+            <HoverCardTrigger as-child>
+              <div
+                class="composer-context-ring"
+                :class="contextRingToneClass"
+                role="status"
+                :aria-label="t('chat.input.contextUsage')"
+                tabindex="0"
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <circle class="composer-context-ring-track" cx="10" cy="10" r="8" />
+                  <circle
+                    class="composer-context-ring-arc"
+                    cx="10"
+                    cy="10"
+                    r="8"
+                    :stroke-dasharray="contextRingCircumference"
+                    :stroke-dashoffset="contextRingOffset"
+                  />
+                </svg>
+              </div>
+            </HoverCardTrigger>
+            <HoverCardPortal>
+              <HoverCardContent class="context-usage-panel" side="top" align="end" :side-offset="10">
+                <div class="context-usage-panel-header">
+                  <span class="context-usage-panel-title">{{ t('chat.contextUsage.panelTitle') }}</span>
+                  <span class="context-usage-panel-total">{{ composerContextUsage.tokenLabel }}</span>
+                </div>
+                <div class="context-usage-panel-bar" role="presentation">
+                  <div
+                    class="context-usage-panel-bar-fill"
+                    :class="contextRingToneClass"
+                    :style="{ width: contextPanelBarWidth }"
+                  ></div>
+                </div>
+                <ul v-if="contextCompositionRows.length > 0" class="context-usage-panel-rows">
+                  <li
+                    v-for="row in contextCompositionRows"
+                    :key="row.key"
+                    class="context-usage-panel-row"
+                  >
+                    <span class="context-usage-row-label">{{ t(`chat.contextUsage.category.${row.key}`) }}</span>
+                    <span class="context-usage-row-values">
+                      <span class="context-usage-row-tokens">{{ formatTokenCount(row.tokens) }}</span>
+                      <span class="context-usage-row-percent">{{ row.percent }}%</span>
+                    </span>
+                  </li>
+                </ul>
+                <p v-if="contextCacheHitRate !== null" class="context-usage-panel-cache">
+                  <span>{{ t('chat.contextUsage.cacheHitRate') }}</span>
+                  <span class="context-usage-row-percent">{{ contextCacheHitRate }}%</span>
+                </p>
+                <p v-if="contextCompositionRows.length > 0" class="context-usage-panel-note">
+                  {{ t('chat.contextUsage.estimatedNote') }}
+                </p>
+              </HoverCardContent>
+            </HoverCardPortal>
+          </HoverCardRoot>
           <ChatModelSelector
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
@@ -246,7 +282,10 @@ import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
 import type { Provider } from '@iki/backend/types/provider';
 import type { TaskPlan } from '@iki/backend/types/task_plan';
 import {
+  buildContextCompositionRows,
   buildTokenUsageIndicator,
+  formatTokenCount,
+  type SessionPerfStats,
   type TokenUsageSummary,
 } from '../modules/chat/ui_message_references';
 import type {
@@ -274,6 +313,12 @@ import { useRunStatus } from '../composables/useRunStatus';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useConfigStore } from '../store/config';
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
+import {
+  HoverCardContent,
+  HoverCardPortal,
+  HoverCardRoot,
+  HoverCardTrigger,
+} from 'reka-ui';
 import {
   parseApprovalPolicy,
   type ThreadApprovalPolicy,
@@ -343,8 +388,8 @@ const {
   selectedWorkspaceId: sessionSelectedWorkspaceId,
 } = storeToRefs(threadSession);
 
-// Plain chats have no workspace concept — the selector only makes sense for
-// work threads bound to a project folder.
+// Plain chats have no workspace concept — the composer no longer renders a
+// picker, but work threads still need one, so the send-guard below remains.
 const isWorkThread = computed(() => resolveThreadWorkMode(currentThread.value) === 'work');
 const emit = defineEmits<{
   'new-chat-requested': [];
@@ -353,11 +398,11 @@ const emit = defineEmits<{
 
 const props = defineProps<{
   threadId?: string;
-  workspaceLocked?: boolean;
   approvalPolicy?: string;
   prepareMessageSend?: (payload: PrepareMessageSendPayload) => Promise<PreparedMessageSend | null>;
   submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
+  sessionPerfStats?: SessionPerfStats | null;
   todoPlan?: TaskPlan | null;
 }>();
 
@@ -604,6 +649,7 @@ const composerContextUsage = computed(() => {
     firstTokenSamples: latestUsage?.firstTokenSamples ?? null,
     steps: latestUsage?.steps ?? null,
     toolCalls: latestUsage?.toolCalls ?? null,
+    contextComposition: latestUsage?.contextComposition ?? null,
   });
 });
 
@@ -621,6 +667,19 @@ const contextRingToneClass = computed(() => {
   if (percent >= 70) return 'is-warning';
   return '';
 });
+const contextCompositionRows = computed(() =>
+  buildContextCompositionRows(props.latestTokenUsage ?? null)
+);
+// Session-cumulative weighted average (same aggregation as the stats bar).
+const contextCacheHitRate = computed(() => {
+  const percent = props.sessionPerfStats?.cacheHitPercent ?? null;
+  return percent === null ? null : Math.round(percent);
+});
+const contextPanelBarWidth = computed(() => {
+  const percent = composerContextUsage.value?.percent;
+  if (percent === null || percent === undefined) return '0%';
+  return `${Math.min(100, Math.max(0, percent))}%`;
+});
 
 useChatComposerLifecycle({
   electronAPI,
@@ -635,11 +694,6 @@ const handleProviderModelSelect = (payload: { provider: Provider; model: string 
   dismissComposerFeedback();
   selectProviderModel(payload);
   threadSession.handleModelSelected(payload);
-};
-
-const handleWorkspaceChanged = (workspaceId: string | null) => {
-  if (props.workspaceLocked) return;
-  void threadSession.setWorkspace(workspaceId);
 };
 
 const handleReasoningEffortChanged = (effort: string) => {
@@ -957,8 +1011,8 @@ defineExpose({
   height: 18px;
   border-radius: 999px;
   border: 0;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  background: var(--image-overlay-control-bg);
+  color: var(--image-overlay-control-ink);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;

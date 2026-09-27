@@ -4,9 +4,11 @@
     :class="{
       'm-1 border-2': !sidebar.isCollapsed.value,
       'm-0 border-0 sidebar-shell-collapsed': sidebar.isCollapsed.value,
+      'sidebar-resizing': isResizing,
     }"
     :style="{
       width: sidebar.isCollapsed.value ? '0px' : `${sidebar.width.value}px`,
+      '--sidebar-width': `${sidebar.width.value}px`,
     }"
   >
     <!-- Collapsed: fixed mini toolbar in the top-left corner -->
@@ -22,7 +24,7 @@
       </button>
     </div>
 
-    <template v-if="sidebar.isExpanded.value">
+    <template v-if="contentVisible">
       <!-- Header row -->
       <div class="flex flex-shrink-0 items-center pl-20 pr-3 pt-2.5">
         <button class="sidebar-tool-btn icon-btn" @click="sidebar.toggle" :aria-label="t('chat.sidebar.toggle')">
@@ -119,24 +121,101 @@
       <!-- Thread list -->
       <div class="flex-1 px-2.5 py-2 min-w-48 overflow-y-scroll custom-scrollbar overscroll-contain">
         <template v-for="section in threadSections" :key="section.key">
-          <button
+          <div
             v-if="section.name !== null"
-            type="button"
-            class="sidebar-section-header sidebar-section-toggle"
-            :aria-expanded="!collapsedGroups[section.key]"
-            @click="toggleGroupCollapsed(section.key)"
+            class="sidebar-section-header sidebar-section-header--project"
           >
-            <span class="sidebar-section-toggle-lead">
-              <ChevronDown
-                :size="12"
-                class="sidebar-section-chevron"
-                :class="{ 'is-collapsed': collapsedGroups[section.key] }"
-              />
-              <Folder :size="13" class="sidebar-section-folder" />
-              <span class="sidebar-section-name">{{ section.name }}</span>
-            </span>
-            <span class="sidebar-section-count">{{ section.threads.length }}</span>
-          </button>
+            <button
+              type="button"
+              class="sidebar-section-toggle"
+              :aria-expanded="!collapsedGroups[section.key]"
+              @click="toggleGroupCollapsed(section.key)"
+            >
+              <span class="sidebar-section-toggle-lead">
+                <ChevronDown
+                  :size="12"
+                  class="sidebar-section-chevron"
+                  :class="{ 'is-collapsed': collapsedGroups[section.key] }"
+                />
+                <Folder :size="13" class="sidebar-section-folder" />
+                <span class="sidebar-section-name">{{ section.name }}</span>
+              </span>
+            </button>
+            <PopoverRoot
+              v-if="!props.workspaceLocked"
+              :open="projectSwitcherSection === section.key"
+              @update:open="handleProjectSwitcherOpen(section.key, $event)"
+            >
+              <PopoverTrigger as-child>
+                <button
+                  type="button"
+                  class="sidebar-project-switch-btn"
+                  :aria-label="t('chat.workspace.switchTitle')"
+                  :title="t('chat.workspace.switchTitle')"
+                >
+                  <ArrowLeftRight :size="12" />
+                </button>
+              </PopoverTrigger>
+              <PopoverPortal>
+                <PopoverContent
+                  class="sidebar-project-panel"
+                  side="bottom"
+                  align="end"
+                  :side-offset="6"
+                >
+                  <div class="sidebar-project-header">
+                    <span class="sidebar-project-title">{{ t('chat.workspace.title') }}</span>
+                    <button
+                      type="button"
+                      class="sidebar-project-add-btn"
+                      :disabled="isPickingProjectDirectory"
+                      @click.stop="pickProjectDirectory"
+                    >
+                      {{ isPickingProjectDirectory ? t('chat.workspace.adding') : t('common.addFolder') }}
+                    </button>
+                  </div>
+                  <div class="sidebar-project-list">
+                    <button
+                      type="button"
+                      class="sidebar-project-option"
+                      :class="{ 'is-selected': !sessionSelectedWorkspaceId }"
+                      @click="selectProject(null)"
+                    >
+                      <span class="sidebar-project-option-copy">
+                        <span class="sidebar-project-option-name">{{ t('chat.workspace.noWorkspace') }}</span>
+                      </span>
+                      <Check
+                        v-if="!sessionSelectedWorkspaceId"
+                        class="sidebar-project-option-check"
+                        :size="14"
+                      />
+                    </button>
+                    <div v-if="switchableWorkspaces.length === 0" class="sidebar-project-empty">
+                      {{ t('chat.workspace.noneVisible') }}
+                    </div>
+                    <button
+                      v-for="workspace in switchableWorkspaces"
+                      :key="workspace.id"
+                      type="button"
+                      class="sidebar-project-option"
+                      :class="{ 'is-selected': sessionSelectedWorkspaceId === workspace.id }"
+                      @click="selectProject(workspace.id)"
+                    >
+                      <span class="sidebar-project-option-copy">
+                        <span class="sidebar-project-option-name">{{ workspace.name }}</span>
+                        <span class="sidebar-project-option-path">{{ workspace.path }}</span>
+                      </span>
+                      <Check
+                        v-if="sessionSelectedWorkspaceId === workspace.id"
+                        class="sidebar-project-option-check"
+                        :size="14"
+                      />
+                    </button>
+                  </div>
+                </PopoverContent>
+              </PopoverPortal>
+            </PopoverRoot>
+          </div>
           <template v-if="section.name === null || !collapsedGroups[section.key]">
             <div
               v-for="chat in visibleThreadsFor(section)"
@@ -188,7 +267,9 @@
               {{
                 expandedSections.has(section.key)
                   ? t('chat.sidebar.showLess')
-                  : t('chat.sidebar.showMore', { count: section.threads.length - visibleThreadLimitFor(section) })
+                  : t('chat.sidebar.showMore', {
+                      count: section.threads.length - visibleThreadLimitFor(section),
+                    })
               }}
             </button>
           </template>
@@ -329,6 +410,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   AlarmClock,
+  ArrowLeftRight,
   Check,
   ChevronDown,
   Download,
@@ -354,17 +436,60 @@ import {
   DropdownMenuRoot,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  PopoverContent,
+  PopoverPortal,
+  PopoverRoot,
+  PopoverTrigger,
 } from 'reka-ui';
+import { storeToRefs } from 'pinia';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 import type { ThreadContentMatch } from '@iki/backend/message/thread_content_search';
+import { useThreadSessionStore } from '../store/thread_session';
 import { useSidebar } from '../composables/useSidebar';
 import { confirmAction } from '../composables/useConfirm';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
-import { getElectronApiMethod, getElectronApiSlice, getElectronApiSliceMethod } from '../services/electron_api';
+import {
+  getElectronApiMethod,
+  getElectronApiSlice,
+  getElectronApiSliceMethod,
+} from '../services/electron_api';
 
 const sidebar = useSidebar();
+const threadSession = useThreadSessionStore();
+const { selectedWorkspaceId: sessionSelectedWorkspaceId } = storeToRefs(threadSession);
 const { t } = useI18n();
 const sidebarLogger = createLogger({ module: 'sidebar' });
+
+// Content stays mounted through the shell's collapse transition so it clips
+// out with the panel instead of vanishing in a single frame.
+const SIDEBAR_TRANSITION_MS = 320;
+const contentVisible = ref(sidebar.isExpanded.value);
+let contentHideTimer: ReturnType<typeof setTimeout> | null = null;
+watch(
+  () => sidebar.isExpanded.value,
+  expanded => {
+    if (contentHideTimer) {
+      clearTimeout(contentHideTimer);
+      contentHideTimer = null;
+    }
+    if (expanded) {
+      contentVisible.value = true;
+      return;
+    }
+    contentHideTimer = setTimeout(() => {
+      contentVisible.value = false;
+    }, SIDEBAR_TRANSITION_MS);
+  },
+);
+onBeforeUnmount(() => {
+  if (contentHideTimer) {
+    clearTimeout(contentHideTimer);
+  }
+});
+
+// While drag-resizing, the shell's width transition must be off so the panel
+// tracks the cursor 1:1 instead of lagging behind it.
+const isResizing = ref(false);
 
 interface ChatThread {
   id: string;
@@ -382,6 +507,7 @@ interface WorkspaceInfo {
   name: string;
   path: string;
   is_temporary?: number;
+  show_in_list?: number;
 }
 
 const chatApi = getElectronApiSlice('chat');
@@ -391,7 +517,7 @@ const openSettingsWindow = getElectronApiMethod('openSettings');
 
 const chatThreads = ref<ChatThread[]>([]);
 const workspaces = ref<WorkspaceInfo[]>([]);
-const currentThreadId = ref<string | null>(null);
+const currentThreadId = computed(() => threadSession.currentThread?.id ?? null);
 const deletingThreadIds = ref<Record<string, boolean>>({});
 const collapsedGroups = ref<Record<string, boolean>>({});
 const expandedSections = ref<Set<string>>(new Set());
@@ -416,6 +542,12 @@ const menuPosition = ref({
 });
 let menuCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Locked while the active thread already has messages — its project binding
+// is what the tools are rooted at.
+const props = defineProps<{
+  workspaceLocked?: boolean;
+}>();
+
 // Emit events to parent
 const emit = defineEmits<{
   'thread-selected': [threadId: string];
@@ -424,11 +556,14 @@ const emit = defineEmits<{
   'thread-deleted': [threadId: string];
 }>();
 
-// Load chat threads from database
+// Ignore an older refresh when a later thread mutation has requested another.
+let threadLoadGeneration = 0;
 const loadChatThreads = async () => {
+  const generation = ++threadLoadGeneration;
   if (workspacesApi?.list) {
     try {
       const list = await workspacesApi.list();
+      if (generation !== threadLoadGeneration) return;
       workspaces.value = Array.isArray(list) ? (list as WorkspaceInfo[]) : [];
     } catch (error) {
       sidebarLogger.event({
@@ -442,6 +577,7 @@ const loadChatThreads = async () => {
   if (!chatApi?.threads?.list) return;
   try {
     const threads = await chatApi.threads.list();
+    if (generation !== threadLoadGeneration) return;
     chatThreads.value = Array.isArray(threads) ? (threads as ChatThread[]) : [];
   } catch (error) {
     sidebarLogger.event({
@@ -455,7 +591,6 @@ const loadChatThreads = async () => {
 
 // Select a thread
 const selectThread = (threadId: string) => {
-  currentThreadId.value = threadId;
   emit('thread-selected', threadId);
 };
 
@@ -493,7 +628,6 @@ const closeSearch = () => {
 
 // Handle new chat button
 const handleNewChat = () => {
-  currentThreadId.value = null;
   emit('new-chat');
 };
 
@@ -503,7 +637,6 @@ const handleNewWork = async () => {
   try {
     const workspace = (await pickWorkspaceDirectory()) as { id?: string } | null;
     if (!workspace?.id) return;
-    currentThreadId.value = null;
     emit('new-work', workspace.id);
   } catch (error) {
     sidebarLogger.event({
@@ -512,6 +645,50 @@ const handleNewWork = async () => {
       outcome: 'failed',
       error,
     });
+  }
+};
+
+// Project switcher: the button lives on each project section header; picking
+// a project rebinds the active thread — or seeds the next "new chat" when no
+// thread is open. The switcher hides entirely while the thread is locked.
+const projectSwitcherSection = ref<string | null>(null);
+const isPickingProjectDirectory = ref(false);
+
+const switchableWorkspaces = computed(() =>
+  workspaces.value.filter(
+    workspace => workspace.is_temporary !== 1 && workspace.show_in_list !== 0
+  )
+);
+
+const handleProjectSwitcherOpen = (sectionKey: string, open: boolean) => {
+  projectSwitcherSection.value = open ? sectionKey : null;
+  if (open) void loadChatThreads();
+};
+
+const selectProject = (workspaceId: string | null) => {
+  void threadSession.setWorkspace(workspaceId);
+  projectSwitcherSection.value = null;
+};
+
+const pickProjectDirectory = async () => {
+  if (typeof pickWorkspaceDirectory !== 'function') return;
+  isPickingProjectDirectory.value = true;
+  try {
+    const workspace = (await pickWorkspaceDirectory()) as { id?: string } | null;
+    if (workspace?.id) {
+      void threadSession.setWorkspace(workspace.id);
+      projectSwitcherSection.value = null;
+    }
+    void loadChatThreads();
+  } catch (error) {
+    sidebarLogger.event({
+      level: 'warn',
+      event: 'chat.workspaces.pick',
+      outcome: 'failed',
+      error,
+    });
+  } finally {
+    isPickingProjectDirectory.value = false;
   }
 };
 
@@ -565,9 +742,6 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
   try {
     await chatApi.threads.delete(thread.id);
     chatThreads.value = chatThreads.value.filter(chat => chat.id !== thread.id);
-    if (currentThreadId.value === thread.id) {
-      currentThreadId.value = null;
-    }
     emit('thread-deleted', thread.id);
   } catch (error) {
     sidebarLogger.event({
@@ -707,7 +881,11 @@ const VISIBLE_PROJECT_THREADS = 5;
 const visibleThreadLimitFor = (section: { key: string; name: string | null }): number =>
   section.name === null ? VISIBLE_DEFAULT_THREADS : VISIBLE_PROJECT_THREADS;
 
-const visibleThreadsFor = (section: { key: string; name: string | null; threads: ChatThread[] }): ChatThread[] => {
+const visibleThreadsFor = (section: {
+  key: string;
+  name: string | null;
+  threads: ChatThread[];
+}): ChatThread[] => {
   const limit = visibleThreadLimitFor(section);
   if (expandedSections.value.has(section.key)) return section.threads;
   return section.threads.slice(0, limit);
@@ -776,18 +954,17 @@ const toggleExternalChats = () => {
   sidebar.toggleExternalChats();
 };
 
-// Expose refresh function for parent
-defineExpose({
-  refresh: loadChatThreads,
-  setCurrentThread: (id: string | null) => {
-    currentThreadId.value = id;
-  },
-});
+watch(
+  () => threadSession.threadListRevision,
+
+  () => {
+    void loadChatThreads();
+  }
+);
 
 onMounted(() => {
   loadChatThreads();
 });
-
 
 const MIN_WIDTH = 210; // 最小宽度 (Tailwind w-64)
 const MAX_WIDTH = 500; // 最大宽度
@@ -801,6 +978,7 @@ interface StartResizeEvent extends Partial<MouseEvent>, Partial<TouchEvent> {
 
 const startResize = (e: StartResizeEvent) => {
   e.preventDefault?.();
+  isResizing.value = true;
 
   // 类型守卫：区分鼠标和触摸事件
   const isTouch = e.type.startsWith('touch');
@@ -828,6 +1006,7 @@ const startResize = (e: StartResizeEvent) => {
   };
 
   const handleEnd = () => {
+    isResizing.value = false;
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleEnd);
     document.removeEventListener('touchmove', handleTouchMove);
