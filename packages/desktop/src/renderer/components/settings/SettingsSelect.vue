@@ -159,8 +159,8 @@ const props = withDefaults(
 const { t } = useI18n();
 
 const emit = defineEmits<{
-  (event: 'update:modelValue', value: string): void;
-  (event: 'change', value: string): void;
+  'update:modelValue': [value: string];
+  change: [value: string];
 }>();
 
 const rootRef = ref<HTMLElement | null>(null);

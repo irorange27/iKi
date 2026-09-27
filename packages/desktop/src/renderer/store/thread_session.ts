@@ -30,11 +30,6 @@ import type { ThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
 
 export type ChatThread = StoredChatThread;
 
-type SidebarController = {
-  refresh?: () => Promise<void> | void;
-  setCurrentThread?: (id: string | null) => void;
-};
-
 type DraftComposerSelection = {
   model: string;
   providerId: string | null;
@@ -50,7 +45,6 @@ type ThreadSessionRuntime = {
   electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
   messageStore: ChatMessageStore;
   persistence: UiMessagePersistence;
-  sidebarRef: Ref<SidebarController | null>;
   scrollToBottom: () => void;
   preferredDraftModel?: Pick<Ref<string | null | undefined>, 'value'>;
   preferredDraftProviderId?: Pick<Ref<string | null | undefined>, 'value'>;
@@ -211,10 +205,9 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     { immediate: true }
   );
 
+  const threadListRevision = ref(0);
   const refreshThreads = async () => {
-    if (runtime?.sidebarRef.value?.refresh) {
-      await runtime.sidebarRef.value.refresh();
-    }
+    threadListRevision.value += 1;
   };
 
   const buildClearedThreadInput = (thread: ChatThread): Partial<ChatThread> => ({
@@ -376,7 +369,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     mode?: ThreadWorkMode;
     workspaceId?: string | null;
   }) => {
-    const { electronAPI, messageStore, persistence, sidebarRef } = requireRuntime();
+    const { electronAPI, messageStore, persistence } = requireRuntime();
     const mode: ThreadWorkMode = options?.mode === 'work' ? 'work' : 'chat';
     const model = options?.model;
     try {
@@ -408,12 +401,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       resetToolUiStateMap();
       showWelcome.value = false;
 
-      if (sidebarRef.value?.refresh) {
-        await sidebarRef.value.refresh();
-      }
-      if (sidebarRef.value?.setCurrentThread) {
-        sidebarRef.value.setCurrentThread(thread.id);
-      }
+      await refreshThreads();
 
       return thread;
     } catch (error) {
@@ -464,7 +452,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const selectThread = async (threadId: string) => {
-    const { electronAPI, sidebarRef } = requireRuntime();
+    const { electronAPI } = requireRuntime();
     try {
       if (currentThread.value?.id === threadId) {
         return;
@@ -494,10 +482,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncApprovalPolicyState(thread);
       showWelcome.value = false;
       await loadThreadMessages(threadId);
-
-      if (sidebarRef.value?.setCurrentThread) {
-        sidebarRef.value.setCurrentThread(threadId);
-      }
     } catch (error) {
       threadSessionLogger.event({
         level: 'error',
@@ -512,7 +496,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const handleThreadDeleted = async (threadId: string) => {
-    const { messageStore, persistence, sidebarRef } = requireRuntime();
+    const { messageStore, persistence } = requireRuntime();
     if (currentThread.value?.id !== threadId) return;
 
     currentThread.value = null;
@@ -526,10 +510,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     resetToolUiStateMap();
     showWelcome.value = true;
     restoreDraftComposerSelection();
-
-    if (sidebarRef.value?.setCurrentThread) {
-      sidebarRef.value.setCurrentThread(null);
-    }
   };
 
   const handleNewChat = async () => {
@@ -545,7 +525,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const clearCurrentThread = async () => {
-    const { electronAPI, messageStore, persistence, sidebarRef } = requireRuntime();
+    const { electronAPI, messageStore, persistence } = requireRuntime();
     const activeThread = currentThread.value;
     if (!activeThread) return null;
 
@@ -572,9 +552,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       showWelcome.value = false;
 
       await refreshThreads();
-      if (sidebarRef.value?.setCurrentThread) {
-        sidebarRef.value.setCurrentThread(recreatedThread.id);
-      }
 
       return recreatedThread;
     } catch (error) {
@@ -912,6 +889,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
   return {
     // state
+    threadListRevision,
     currentThread,
     currentModel,
     currentProviderId,

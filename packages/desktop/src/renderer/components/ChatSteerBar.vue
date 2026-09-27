@@ -33,7 +33,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'steer', message: string): void;
+  steer: [message: string];
 }>();
 
 const text = ref('');

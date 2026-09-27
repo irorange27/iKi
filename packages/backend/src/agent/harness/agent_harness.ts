@@ -6,6 +6,7 @@ import type { AgentResult } from '@iki/backend/agent/types';
 
 import { createSimpleAgentRunner } from '../runners/simple_agent_runner';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../../workspaces/thread_workspace';
+import { estimateToolSchemaTokens } from '../context_budget';
 import {
   resolveTools,
   createApprovalPolicyBox,
@@ -54,6 +55,8 @@ export class AgentHarness {
 
     this.activeRunner = runner;
     this.runTracker = input.runTracker ?? null;
+
+    const toolSchemaTokens = estimateToolSchemaTokens(tools);
 
     const agentGen = runner.run({
       config: {
@@ -130,6 +133,7 @@ export class AgentHarness {
       text: agentResult?.response ?? '',
       usage: agentResult?.usage,
       ...(agentResult?.perf ? { perf: agentResult.perf } : {}),
+      ...(tools.length > 0 ? { toolSchemaTokens } : {}),
       requiresApproval: agentResult?.requiresApproval ?? false,
       finishReason: agentResult?.finishReason,
       ...(agentResult?.toolCalls

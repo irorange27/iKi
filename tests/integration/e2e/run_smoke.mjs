@@ -14,11 +14,12 @@ import { fileURLToPath } from 'node:url';
 import { connect, findRendererTarget } from './cdp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const CDP_PORT = 18731;
+const CDP_PORT = Number(process.env.CDP_PORT || 18731);
 // Private daemon port (IKI_DAEMON_PORT override) so the gate can run while
 // the user's real app holds the default 6127.
-const DAEMON_PORT = 16127;
-const FAUX_PORT = 18730;
+const DAEMON_PORT = Number(process.env.IKI_E2E_DAEMON_PORT || 16127);
+const FAUX_PORT = Number(process.env.IKI_E2E_FAUX_PORT || 18730);
+const VITE_PORT = Number(process.env.IKI_VITE_PORT || 5173);
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite');
 
@@ -41,11 +42,6 @@ const step = name => {
 
 const cleanup = () => {
   if (fauxServer) fauxServer.kill('SIGKILL');
-  for (const pid of launchedPids) {
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {}
-  }
   if (workDir) killAppByUserDataDir();
   // Keep the scene for post-mortem when the gate fails; remove on pass.
   if (workDir && !process.exitCode) {
@@ -72,7 +68,7 @@ const watchdog = setTimeout(() => {
 watchdog.unref?.();
 
 const portsFree = async () => {
-  for (const port of [CDP_PORT, 5173, DAEMON_PORT]) {
+  for (const port of [CDP_PORT, VITE_PORT, DAEMON_PORT, FAUX_PORT]) {
     try {
       const out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
       if (out.trim()) return false;
@@ -81,23 +77,12 @@ const portsFree = async () => {
   return true;
 };
 
-// A previous run's Electron/vite children outlive their npx parents; a new
-// boot then flashes (port taken) and the CDP driver silently attaches to the
-// stale instance. Refuse to start until the ports are actually free.
+// An occupied port does not establish ownership. Never stop another dev app
+// or provider to make room for the gate; use a separate checkout and ports.
 const preflightPortsFree = async () => {
-  for (let i = 0; i < 15; i++) {
-    if (await portsFree()) return;
-    log(`ports busy (attempt ${i + 1}); killing stale e2e instances`);
-    try {
-      const out = execFileSync('pgrep', ['-f', `remote-debugging-port=${CDP_PORT}`], { encoding: 'utf8' });
-      for (const pid of out.split('\n').filter(Boolean)) {
-        try { process.kill(Number(pid), 'SIGKILL'); } catch {}
-      }
-    } catch {}
-    try { execFileSync('pkill', ['-9', '-f', 'electron-forge start']); } catch {}
-    await sleep(2000);
+  if (!(await portsFree())) {
+    throw new Error('e2e ports are busy; use free CDP_PORT, IKI_VITE_PORT, IKI_E2E_DAEMON_PORT and IKI_E2E_FAUX_PORT values');
   }
-  throw new Error('e2e ports still busy after cleanup; another iKi dev instance may be running');
 };
 
 const waitForCdpPortFree = async () => {
@@ -112,12 +97,13 @@ const waitForCdpPortFree = async () => {
 };
 
 const killAppByUserDataDir = () => {
-  // The user-data-dir is unique per run, so the pattern targets exactly this
-  // app instance (forge's electron child outlives its parent on kill).
-  // Chromium helpers normalize the temp path through /private/var while the
-  // main process keeps the raw argv, so match both spellings plus the forge
-  // parent chain — leftovers hold the ports and the next boot flash-dies
-  // into a dual-instance race.
+  // Each launch owns a POSIX process group, including npx/forge/Vite. Clear
+  // the handles after stopping it so repeated cleanup cannot target a reused ID.
+  for (const pid of launchedPids.splice(0)) {
+    try { process.kill(-pid, 'SIGKILL'); } catch {}
+  }
+  // Electron helpers may detach; only the unique test profile establishes
+  // ownership. Never use a global process-name pattern as a fallback.
   for (const pattern of [`user-data-dir=${workDir}/userdata`, `user-data-dir=/private${workDir}/userdata`]) {
     try {
       const out = execFileSync('pgrep', ['-f', pattern], { encoding: 'utf8' });
@@ -126,7 +112,6 @@ const killAppByUserDataDir = () => {
       }
     } catch {}
   }
-  try { execFileSync('pkill', ['-9', '-f', 'electron-forge start']); } catch {}
 };
 
 const launchApp = async label => {
@@ -135,18 +120,26 @@ const launchApp = async label => {
     ['electron-forge', 'start', '--', `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${workDir}/userdata`],
     {
       cwd: path.join(ROOT, 'packages/desktop'),
-      env: { ...process.env, IKI_DAEMON_PORT: String(DAEMON_PORT) },
+      env: {
+        ...process.env,
+        IKI_DAEMON_PORT: String(DAEMON_PORT),
+        IKI_VITE_PORT: String(VITE_PORT),
+        MAIN_WINDOW_VITE_DEV_SERVER_URL: `http://127.0.0.1:${VITE_PORT}`,
+      },
       stdio: ['ignore', 'inherit', 'inherit'],
-      detached: false,
+      detached: true,
     }
   );
   launchedPids.push(child.pid);
-  const cdp = await waitForCdp(label);
+  const cdp = await waitForCdp(label, child);
   return cdp;
 };
 
-const waitForCdp = async label => {
+const waitForCdp = async (label, child) => {
   for (let i = 0; i < 90; i++) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`app (${label}) exited before exposing CDP: ${child.exitCode ?? child.signalCode}`);
+    }
     try {
       const target = await findRendererTarget();
       if (target) {

@@ -320,7 +320,7 @@ import { useI18n } from '../../i18n';
 import { useMcpSettings } from '../../composables/useMcpSettings';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
+  'config-change': [];
 }>();
 
 const { t } = useI18n();

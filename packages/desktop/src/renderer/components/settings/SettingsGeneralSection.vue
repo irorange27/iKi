@@ -254,8 +254,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
-  (event: 'reset'): void;
+  'config-change': [];
+  reset: [];
 }>();
 
 const { t } = useI18n();

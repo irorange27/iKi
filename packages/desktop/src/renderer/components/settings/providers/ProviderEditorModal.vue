@@ -113,10 +113,10 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'cancel'): void;
-  (event: 'save'): void;
-  (event: 'update:type', value: string): void;
-  (event: 'update:api-format', value: string): void;
+  cancel: [];
+  save: [];
+  'update:type': [value: string];
+  'update:api-format': [value: string];
 }>();
 
 const { t } = useI18n();

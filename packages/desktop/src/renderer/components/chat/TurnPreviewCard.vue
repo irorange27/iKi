@@ -53,9 +53,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'activate'): void;
-  (event: 'mouse-enter'): void;
-  (event: 'mouse-leave'): void;
+  activate: [];
+  'mouse-enter': [];
+  'mouse-leave': [];
 }>();
 
 const previewItems = computed(() => {
@@ -99,7 +99,7 @@ const cardStyle = computed(() => {
 <style scoped>
 .turn-preview-card {
   position: fixed;
-  z-index: 90;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
   padding: 10px 12px;

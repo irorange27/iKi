@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createLogger } from '@iki/backend/logger';
 import { maybeOpenDevTools } from './devtools_policy';
 import { loadRendererEntry } from './renderer';
+import { attachViewportResyncGuard } from './viewport_resync';
 import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
 
 const windowLogger = createLogger({ module: 'main_window' });
@@ -27,8 +28,8 @@ export const createMainWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 680,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: 480,
+    minHeight: 640,
     backgroundColor: resolveWindowBootstrapBackgroundColor(),
     // Start shadow-free until the renderer resolves the active theme and opts in for light mode.
     hasShadow: false,
@@ -43,6 +44,8 @@ export const createMainWindow = (): BrowserWindow => {
   });
 
   mainWindowRef = mainWindow;
+
+  attachViewportResyncGuard(mainWindow);
 
   void loadRendererEntry(mainWindow, { isPackaged: app.isPackaged });
 

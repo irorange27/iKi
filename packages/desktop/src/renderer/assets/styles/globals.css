@@ -37,6 +37,7 @@
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-active: var(--sidebar-active);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
@@ -121,6 +122,30 @@
 
   .ui-scrollbar::-webkit-scrollbar-corner {
     background: transparent;
+  }
+
+  /* Underline tab shared by the view-level and panel-level tab rows. */
+  .ui-tab {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .ui-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .ui-tab[aria-selected='true'] {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
+  }
+
+  .ui-tab:focus-visible {
+    outline: 1px solid var(--accent-color);
+    outline-offset: -2px;
   }
 
   .composer-control-btn {
@@ -255,6 +280,117 @@
   .permission-option-desc {
     font-size: 11px;
     line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  .context-usage-panel {
+    z-index: var(--z-panel);
+    width: 264px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-primary);
+    box-shadow: var(--surface-shadow-lg);
+    padding: 12px;
+  }
+
+  .context-usage-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .context-usage-panel-title {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .context-usage-panel-total {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .context-usage-panel-bar {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--bg-hover);
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  .context-usage-panel-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent-color);
+  }
+
+  .context-usage-panel-bar-fill.is-warning {
+    background: var(--warning-color);
+  }
+
+  .context-usage-panel-bar-fill.is-danger {
+    background: var(--danger-color);
+  }
+
+  .context-usage-panel-rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .context-usage-panel-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .context-usage-row-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .context-usage-row-values {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .context-usage-row-tokens {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .context-usage-row-percent {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 34px;
+    text-align: right;
+  }
+
+  .context-usage-panel-cache {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 10px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .context-usage-panel-note {
+    margin: 8px 0 0;
+    font-size: 11px;
     color: var(--text-muted);
   }
 
@@ -573,4 +709,262 @@
     font-weight: 700;
     color: var(--composer-workspace-badge-foreground);
   }
+
+  /* ── Trajectory view shared chrome (run ledger, timing, detail) ──
+     TrajectoryView.vue carries no scoped styles; the detail pane receives
+     its width from the parent as the --detail-width custom property. */
+  .traj-root {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    container-type: inline-size;
+  }
+
+  .traj-toolbar {
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .traj-search {
+    border: 1px solid var(--border-color);
+    border-radius: var(--control-radius-sm);
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
+  .traj-search:focus-within {
+    border-color: var(--accent-color);
+  }
+
+  .traj-search input {
+    background: transparent;
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .traj-resize {
+    border-left: 1px solid var(--border-color);
+  }
+
+  .traj-resize:hover,
+  .traj-resize:focus-visible {
+    background: var(--accent-color);
+    outline: none;
+  }
+
+  .trajectory-control {
+    padding: 3px 5px;
+    border: 0;
+    border-radius: var(--control-radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 18px;
+    cursor: pointer;
+  }
+
+  .trajectory-control:hover,
+  .trajectory-control[aria-pressed='true'] {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .trajectory-control:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .trajectory-control:focus-visible {
+    outline: 1px solid var(--accent-color);
+    outline-offset: 1px;
+  }
+
+  /* Entry-kind accent consumed by tags and timing bars via --trajectory-color. */
+  .traj-root [data-kind] {
+    --trajectory-color: var(--text-secondary);
+  }
+
+  .traj-root [data-kind='user'] {
+    --trajectory-color: var(--accent-color);
+  }
+
+  .traj-root [data-kind='model'] {
+    --trajectory-color: var(--chart-4);
+  }
+
+  .traj-root [data-kind='tool-call'],
+  .traj-root [data-kind='tool-result'] {
+    --trajectory-color: var(--warning-color);
+  }
+
+  .traj-root [data-kind='approval-request'],
+  .traj-root [data-kind='approval-response'] {
+    --trajectory-color: var(--chart-2);
+  }
+
+  .traj-root [data-error='true'],
+  .traj-root [data-kind='error'] {
+    --trajectory-color: var(--danger-color);
+  }
+
+  .trajectory-tag {
+    display: inline-block;
+    min-width: 54px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 10px;
+    line-height: 15px;
+    text-align: center;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--trajectory-color) 45%, var(--text-primary));
+    background: color-mix(in srgb, var(--trajectory-color) 10%, var(--bg-primary));
+  }
+
+  .detail-pane {
+    width: var(--detail-width, 38%);
+    background: var(--bg-primary);
+  }
+
+  @container (max-width: 720px) {
+    .has-detail .ledger-scroll,
+    .has-detail .traj-resize {
+      display: none;
+    }
+    .has-detail .detail-pane {
+      width: 100%;
+    }
+  }
+}
+
+/* Reduced motion (WCAG 2.3.3): transitions and decorative/entrance animation
+   collapse app-wide. Functional busy indicators — spinners, the transcribing
+   pulse, the indeterminate progress bar — are deliberately not listed: a
+   frozen "loading" state reads as a hang. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .image-viewer-backdrop,
+  .image-viewer-img,
+  .run-dot {
+    animation: none !important;
+  }
+}
+
+/* Project switcher popover (teleported to body by reka-ui, so it lives here
+   next to the other popover surfaces instead of the scoped sidebar.css). */
+.sidebar-project-panel {
+  width: 264px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 12px;
+  background: var(--sidebar-background);
+  box-shadow: var(--surface-shadow-md);
+  padding: 6px;
+}
+
+.sidebar-project-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px 7px;
+}
+
+.sidebar-project-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.sidebar-project-add-btn {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.sidebar-project-add-btn:hover:not(:disabled) {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+}
+
+.sidebar-project-add-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sidebar-project-list {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-project-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.sidebar-project-option:hover {
+  background: var(--sidebar-accent);
+}
+
+.sidebar-project-option.is-selected {
+  background: var(--sidebar-active);
+}
+
+.sidebar-project-option-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.sidebar-project-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.sidebar-project-option-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Paths read tail-first: keep the deepest folder visible when truncated. */
+  direction: rtl;
+  text-align: left;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sidebar-project-option-check {
+  flex-shrink: 0;
+  color: var(--sidebar-primary);
+}
+
+.sidebar-project-empty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
 }

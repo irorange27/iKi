@@ -312,20 +312,20 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'toggle-enabled', enabled: boolean): void;
-  (event: 'toggle-api-key-visibility'): void;
-  (event: 'update-acp-api-provider-id', providerId: string): void;
-  (event: 'toggle-acp-mcp-server', payload: { serverId: string; checked: boolean }): void;
-  (event: 'update-acp-auth-method-id', methodId: string): void;
-  (event: 'toggle-models-panel'): void;
-  (event: 'fetch-models'): void;
-  (event: 'fetch-acp-auth-methods'): void;
-  (event: 'toggle-model', modelId: string): void;
-  (event: 'edit-model-options', modelId: string): void;
-  (event: 'add-model', payload: { modelId: string; displayName: string }): void;
-  (event: 'reset-draft'): void;
-  (event: 'save-config'): void;
-  (event: 'remove-config'): void;
+  'toggle-enabled': [enabled: boolean];
+  'toggle-api-key-visibility': [];
+  'update-acp-api-provider-id': [providerId: string];
+  'toggle-acp-mcp-server': [payload: { serverId: string; checked: boolean }];
+  'update-acp-auth-method-id': [methodId: string];
+  'toggle-models-panel': [];
+  'fetch-models': [];
+  'fetch-acp-auth-methods': [];
+  'toggle-model': [modelId: string];
+  'edit-model-options': [modelId: string];
+  'add-model': [payload: { modelId: string; displayName: string }];
+  'reset-draft': [];
+  'save-config': [];
+  'remove-config': [];
 }>();
 
 const { t } = useI18n();

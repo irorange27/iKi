@@ -6,6 +6,8 @@ import {
   getToolDurationMs,
   getToolName,
   getToolInput,
+  getToolStateKind,
+  getToolStateLabel,
   isApprovalRequestedPart,
   isTranscriptHiddenToolPart,
   normalizeToolNameKey,
@@ -59,6 +61,7 @@ export const getToolCallVerb = (part: unknown): ToolCallVerb => {
 };
 
 export const getToolCallVerbLabel = (part: unknown): string => {
+  if (getToolStateKind(part) !== 'success') return getToolStateLabel(part) || translate('toolCall.group.verb.call');
   const verb = getToolCallVerb(part);
   return translate(`toolCall.group.verb.${verb}` as Parameters<typeof translate>[0]);
 };
@@ -123,7 +126,7 @@ export const getToolCallGroupMeta = (parts: unknown[]): ToolCallGroupMeta => {
   const verbs = new Set<ToolCallVerb>();
 
   for (const part of parts) {
-    const kind = getPartStateKind(part);
+    const kind = getToolStateKind(part);
     if (kind === 'running' || kind === 'pending') hasActive = true;
     if (kind === 'error' || kind === 'denied') hasFailed = true;
     if (kind !== 'success' && kind !== 'error' && kind !== 'denied') allSettled = false;
@@ -149,21 +152,6 @@ export const getToolCallGroupTotalDurationLabel = (parts: unknown[]): string => 
     if (duration !== null) total = (total ?? 0) + duration;
   }
   return total === null ? '' : formatDurationMs(total);
-};
-
-// Local state-kind probe kept independent of the pill helper surface —
-// grouping only needs the coarse running/pending/settled distinction.
-const getPartStateKind = (part: unknown): string => {
-  if (!isObjectRecord(part) || typeof part.state !== 'string') return 'neutral';
-  const state = part.state;
-  if (state === 'output-available' || state === 'done') return 'success';
-  if (state === 'output-error') return 'error';
-  if (state === 'output-denied') return 'denied';
-  if (state === 'approval-requested') return 'pending';
-  if (state === 'input-streaming' || state === 'input-available' || state === 'approval-responded') {
-    return 'running';
-  }
-  return 'neutral';
 };
 
 /**

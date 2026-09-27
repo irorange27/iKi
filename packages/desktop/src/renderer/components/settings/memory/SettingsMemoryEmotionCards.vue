@@ -225,7 +225,7 @@ import { useConfigStore } from '../../../store/config';
 import type { AppConfig } from '@iki/backend/types/config';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
+  'config-change': [];
 }>();
 
 const { t } = useI18n();

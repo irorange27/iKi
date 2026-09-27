@@ -141,15 +141,14 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'cancel'): void;
-  (
-    event: 'save',
+  cancel: [];
+  save: [
     payload: {
       providerId: string;
       modelId: string;
       options: ProviderModelOptions | null;
-    }
-  ): void;
+    },
+  ];
 }>();
 
 const { t } = useI18n();
@@ -214,7 +213,7 @@ const save = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   display: flex;
   justify-content: center;
   align-items: center;

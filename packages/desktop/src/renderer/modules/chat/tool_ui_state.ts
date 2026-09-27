@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { shallowReactive } from 'vue';
 
 import type { ChatUiMessageChunk } from '@iki/backend/message/message_parts';
 
@@ -11,14 +11,13 @@ export type ToolUiState = {
 
 export type ToolUiStatePatch = Partial<ToolUiState>;
 
-const toolUiStateMap = ref<Record<string, ToolUiState>>({});
+const toolUiStateMap = shallowReactive<Record<string, ToolUiState>>({});
 
-export const getToolUiStateMap = (): Readonly<Record<string, ToolUiState>> =>
-  toolUiStateMap.value;
+export const getToolUiStateMap = (): Readonly<Record<string, ToolUiState>> => toolUiStateMap;
 
 export const getToolUiState = (toolCallId: string | null | undefined): ToolUiState | undefined => {
   if (!toolCallId) return undefined;
-  return toolUiStateMap.value[toolCallId];
+  return toolUiStateMap[toolCallId];
 };
 
 export const updateToolUiState = (
@@ -27,7 +26,7 @@ export const updateToolUiState = (
 ): ToolUiState | undefined => {
   if (!toolCallId) return undefined;
 
-  const current = toolUiStateMap.value[toolCallId] ?? {};
+  const current = toolUiStateMap[toolCallId] ?? {};
   const next: ToolUiState = { ...current, ...patch };
 
   for (const key of Object.keys(patch) as Array<keyof ToolUiState>) {
@@ -37,16 +36,13 @@ export const updateToolUiState = (
     }
   }
 
-  toolUiStateMap.value = {
-    ...toolUiStateMap.value,
-    [toolCallId]: next,
-  };
+  toolUiStateMap[toolCallId] = next;
 
   return next;
 };
 
 export const resetToolUiStateMap = () => {
-  toolUiStateMap.value = {};
+  for (const key of Object.keys(toolUiStateMap)) delete toolUiStateMap[key];
 };
 
 // Group-level collapse (keyed by a stable group id, same `collapsed` field as

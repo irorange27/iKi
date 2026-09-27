@@ -207,7 +207,7 @@ const { t } = useI18n();
   border-radius: 14px;
   background: color-mix(in srgb, var(--bg-primary) 84%, transparent);
   color: var(--text-primary);
-  font-family: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.95em;
 }
 

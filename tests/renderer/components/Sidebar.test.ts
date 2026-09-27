@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 
+import { createPinia, setActivePinia } from 'pinia';
+import { useThreadSessionStore } from '../../../packages/desktop/src/renderer/store/thread_session';
 import { createSidebar } from '../../../packages/desktop/src/renderer/composables/useSidebar';
 
 const setElectronApi = (api: unknown) => {
@@ -15,6 +17,7 @@ const setElectronApi = (api: unknown) => {
 const mountSidebar = async (options?: {
   threads?: Array<Record<string, unknown>>;
   workspaces?: Array<Record<string, unknown>>;
+  workspaceLocked?: boolean;
 }) => {
   const list = vi.fn(async () => options?.threads ?? []);
   const del = vi.fn(async () => ({ success: true }));
@@ -40,7 +43,9 @@ const mountSidebar = async (options?: {
 
   const Sidebar = (await import('../../../packages/desktop/src/renderer/components/Sidebar.vue'))
     .default;
+  setActivePinia(createPinia());
   const wrapper = mount(Sidebar, {
+    props: { workspaceLocked: options?.workspaceLocked ?? false },
     global: {
       stubs: {
         PanelLeftDashed: true,
@@ -88,6 +93,27 @@ describe('Sidebar', () => {
     localStorage.clear();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+  });
+
+  it('subscribes to session selection and list invalidation without a component controller', async () => {
+    const { wrapper, list } = await mountSidebar({
+      threads: [{ id: 'one', title: 'One', updated_at: new Date().toISOString(), metadata: '{}' }],
+    });
+    const store = useThreadSessionStore();
+    store.currentThread = { id: 'one', title: 'One' } as never;
+    await flushPromises();
+    expect(wrapper.find('.chat-item-active').text()).toContain('One');
+    list.mockResolvedValue([
+      { id: 'one', title: 'Renamed', updated_at: new Date().toISOString(), metadata: '{}' },
+    ]);
+    await store.refreshThreads();
+    await flushPromises();
+    expect(wrapper.find('.chat-item-active').text()).toContain('Renamed');
+    expect(list).toHaveBeenCalledTimes(2);
+    store.currentThread = null;
+    await flushPromises();
+    expect(wrapper.find('.chat-item-active').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('keeps external bridge threads out of the default desktop list and emits selection for visible items', async () => {
@@ -345,10 +371,7 @@ describe('Sidebar', () => {
       'Alpha',
       'iKi',
     ]);
-    expect(headers.map(header => header.attributes('aria-expanded'))).toEqual([
-      'true',
-      'true',
-    ]);
+    expect(headers.map(header => header.attributes('aria-expanded'))).toEqual(['true', 'true']);
     // Projects view hides plain chats — loose threads live in the recent view.
     expect(wrapper.findAll('.chat-item')).toHaveLength(3);
     expect(wrapper.text()).not.toContain('Loose thread');
@@ -362,6 +385,67 @@ describe('Sidebar', () => {
     expect(collapsedHeader.attributes('aria-expanded')).toBe('false');
     await collapsedHeader.trigger('click');
     expect(wrapper.findAll('.chat-item')).toHaveLength(3);
+  });
+
+  it('switches the active project from the section-header picker', async () => {
+    const { wrapper } = await mountSidebar({
+      threads: [
+        {
+          id: 'thread_iki_a',
+          title: 'iKi fix sidebar',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          workspace_id: 'ws_iki',
+          metadata: '{}',
+        },
+      ],
+      workspaces: [
+        { id: 'ws_iki', name: 'iKi', path: '/dev/iki' },
+        { id: 'ws_alpha', name: 'Alpha', path: '/dev/alpha' },
+      ],
+    });
+
+    const projectsTab = wrapper
+      .findAll('.sidebar-group-tab')
+      .find(button => button.text().includes('Projects'));
+    await projectsTab!.trigger('click');
+
+    await wrapper.find('.sidebar-project-switch-btn').trigger('click');
+    await flushPromises();
+
+    const items = Array.from(document.querySelectorAll('.sidebar-project-option')).map(
+      element => new DOMWrapper(element as Element)
+    );
+    const alphaItem = items.find(item => item.text().includes('Alpha'));
+    expect(alphaItem).toBeDefined();
+
+    await alphaItem!.trigger('click');
+    await flushPromises();
+
+    expect(useThreadSessionStore().selectedWorkspaceId).toBe('ws_alpha');
+    expect(document.querySelector('.sidebar-project-panel')).toBeNull();
+  });
+
+  it('hides the project switcher while the active thread is locked', async () => {
+    const { wrapper } = await mountSidebar({
+      workspaceLocked: true,
+      threads: [
+        {
+          id: 'thread_iki_a',
+          title: 'iKi fix sidebar',
+          updated_at: '2026-03-22T00:00:00.000Z',
+          workspace_id: 'ws_iki',
+          metadata: '{}',
+        },
+      ],
+      workspaces: [{ id: 'ws_iki', name: 'iKi', path: '/dev/iki' }],
+    });
+
+    const projectsTab = wrapper
+      .findAll('.sidebar-group-tab')
+      .find(button => button.text().includes('Projects'));
+    await projectsTab!.trigger('click');
+
+    expect(wrapper.find('.sidebar-project-switch-btn').exists()).toBe(false);
   });
 
   it('shows relative timestamps and caps the default list with a show-more toggle', async () => {

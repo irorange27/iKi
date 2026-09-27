@@ -171,7 +171,7 @@ import type { SkillSummary } from '@iki/backend/types/skill';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
+  'config-change': [];
 }>();
 
 const props = defineProps<{
@@ -541,9 +541,7 @@ watch(
 .skill-id {
   color: var(--text-secondary);
   font-size: 0.82em;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

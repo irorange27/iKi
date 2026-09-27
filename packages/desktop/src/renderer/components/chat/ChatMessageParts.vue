@@ -36,16 +36,40 @@
             <span class="message-invocation-token-label">{{ token.label }}</span>
           </span>
         </div>
-        <div v-else-if="isStreamingTextPart(segment.part)" class="message-text">
-          {{ getTextPartContent(segment.part) }}
-        </div>
-        <div v-else-if="isTextPart(segment.part)" class="message-text markdown-content">
-          <VueMarkdown
-            :source="getTextPartContent(segment.part)"
-            :options="markdownOptions"
-            :plugins="markdownPlugins"
-          />
-        </div>
+        <template v-else-if="isStreamingTextPart(segment.part) || isTextPart(segment.part)">
+          <div
+            v-if="isStreamingTextPart(segment.part)"
+            class="message-text"
+            :class="{ 'is-text-collapsed': isUserTextClamped }"
+          >
+            {{ getTextPartContent(segment.part) }}
+          </div>
+          <div
+            v-else
+            class="message-text markdown-content"
+            :class="{ 'is-text-collapsed': isUserTextClamped }"
+          >
+            <VueMarkdown
+              :source="getTextPartContent(segment.part)"
+              :options="markdownOptions"
+              :plugins="markdownPlugins"
+            />
+          </div>
+          <button
+            v-if="isUserTextCollapsible"
+            class="user-text-toggle"
+            type="button"
+            :aria-expanded="userTextExpanded"
+            @click="toggleUserTextExpanded"
+          >
+            <span>{{ userTextToggleLabel }}</span>
+            <ChevronDown
+              class="user-text-toggle-chevron"
+              :class="{ 'is-open': userTextExpanded }"
+              aria-hidden="true"
+            />
+          </button>
+        </template>
         <details
           v-else-if="isReasoningPart(segment.part)"
           class="message-reasoning"
@@ -63,9 +87,13 @@
             <Brain class="message-reasoning-icon" aria-hidden="true" />
             <span class="message-reasoning-label">{{ getReasoningLabel(segment.part) }}</span>
             <span
-              v-if="!isReasoningPartExpanded(segment.part, segment.index) && getReasoningPreview(segment.part)"
+              v-if="
+                !isReasoningPartExpanded(segment.part, segment.index) &&
+                reasoningPreviews.get(segment.index)
+              "
               class="message-reasoning-preview"
-            >· {{ getReasoningPreview(segment.part) }}</span>
+              >· {{ reasoningPreviews.get(segment.index) }}</span
+            >
           </summary>
           <div class="message-reasoning-body">{{ getTextPartContent(segment.part) }}</div>
         </details>
@@ -113,7 +141,10 @@ import {
 } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
-import { segmentMessageParts, type MessagePartSegment } from '../../modules/chat/ui_message_tool_groups';
+import {
+  segmentMessageParts,
+  type MessagePartSegment,
+} from '../../modules/chat/ui_message_tool_groups';
 import ToolCallPart from './ToolCallPart.vue';
 import ToolCallGroup from './ToolCallGroup.vue';
 import ImageViewerOverlay from '../ImageViewerOverlay.vue';
@@ -168,14 +199,12 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (
-    event: 'approve-tool',
-    payload: {
+  'approve-tool': [payload: {
       approved: boolean;
       message: ChatUiMessage;
       part: unknown;
-    }
-  ): void;
+    },
+  ];
 }>();
 
 const viewerSrc = ref('');
@@ -189,6 +218,51 @@ const segments = computed<MessagePartSegment[]>(() =>
   segmentMessageParts(getRenderableParts(props.message.parts))
 );
 
+const reasoningPreviews = computed(() => {
+  const previews = new Map<number, string>();
+  for (const segment of segments.value) {
+    if (segment.kind !== 'tool-call-group' && isReasoningPart(segment.part) &&
+        !isReasoningPartExpanded(segment.part, segment.index)) {
+      previews.set(segment.index, getReasoningPreview(segment.part));
+    }
+  }
+  return previews;
+});
+
+// User-sent text longer than five lines starts collapsed; the toggle under it
+// reveals the rest. Assistant output is never clamped.
+const USER_TEXT_COLLAPSE_LINES = 5;
+
+const userTextExpanded = ref(false);
+
+const isUserMessage = computed(() => props.message.role === 'user');
+
+const countTextLines = (text: string): number => {
+  if (!text.trim()) return 0;
+  return text.replace(/\s+$/, '').split('\n').length;
+};
+
+const isUserTextCollapsible = computed(() => {
+  if (!isUserMessage.value) return false;
+  const totalLines = props.message.parts.reduce(
+    (total, part) => (isTextPart(part) ? total + countTextLines(getTextPartContent(part)) : total),
+    0
+  );
+  return totalLines > USER_TEXT_COLLAPSE_LINES;
+});
+
+const isUserTextClamped = computed(
+  () => isUserMessage.value && isUserTextCollapsible.value && !userTextExpanded.value
+);
+
+const toggleUserTextExpanded = () => {
+  userTextExpanded.value = !userTextExpanded.value;
+};
+
+const userTextToggleLabel = computed(() =>
+  t(userTextExpanded.value ? 'chat.userText.collapse' : 'chat.userText.expand')
+);
+
 const getPartType = (part: unknown): string =>
   isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
 
@@ -199,18 +273,12 @@ const getSegmentRenderKey = (segment: MessagePartSegment): string => {
     // first member only.
     return `${messageId}-tool-call-group-${segment.startIndex}`;
   }
-  const part = segment.part;
-  const partIndex = segment.index;
-  const partType = getPartType(part);
-  // Reasoning parts need a stable key: the <details> block must not remount
-  // (and lose its open state) on every streamed delta.
-  if (isReasoningPart(part)) {
-    return `${messageId}-${partType}-${partIndex}`;
-  }
-  if (isTextPart(part)) {
-    return `${messageId}-${partType}-${partIndex}-${part.text.length}`;
-  }
-  return `${messageId}-${partType}-${partIndex}`;
+  // Keys must stay stable across streamed deltas: streaming text renders
+  // through a reactive interpolation and finalized text through VueMarkdown's
+  // source computed, so both update in place. A churning key would remount the
+  // segment per delta and discard rendered output (hljs highlighting); for
+  // reasoning it would also drop the <details> open state.
+  return `${messageId}-${getPartType(segment.part)}-${segment.index}`;
 };
 
 const getTextPartContent = (part: unknown): string => {
@@ -238,8 +306,12 @@ const isFilePart = (part: unknown): part is { type: 'file'; url: string; mediaTy
   typeof part.url === 'string' &&
   typeof part.mediaType === 'string';
 
-const isFileAnImage = (part: { type: 'file'; url: string; mediaType: string; filename?: string }): boolean =>
-  part.mediaType.startsWith('image/');
+const isFileAnImage = (part: {
+  type: 'file';
+  url: string;
+  mediaType: string;
+  filename?: string;
+}): boolean => part.mediaType.startsWith('image/');
 
 const getComposerInvocationTokens = (part: unknown) =>
   getComposerInvocationPartData(part)?.tokens ?? [];
@@ -281,15 +353,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
 
 .message-invocation-token-prefix,
 .message-invocation-token-label {
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    Liberation Mono,
-    Courier New,
-    monospace;
+  font-family: var(--font-mono);
 }
 
 .message-invocation-token-prefix {
@@ -336,13 +400,68 @@ const getComposerInvocationToneClass = (kind?: string) => {
 }
 
 .message-text {
+  --message-text-line: 1.72;
   color: var(--text-primary);
   font-size: var(--font-size);
-  line-height: 1.72;
+  line-height: var(--message-text-line);
   letter-spacing: 0.01em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Long user messages clamp to five lines with a fade into the bubble, plus a
+   toggle row that reveals the rest. */
+.message-text.is-text-collapsed {
+  position: relative;
+  max-height: calc(var(--message-text-line) * 5 * 1em);
+  overflow: hidden;
+}
+
+.message-text.is-text-collapsed::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.6em;
+  background: linear-gradient(to bottom, transparent, var(--chat-user-bubble-background));
+  pointer-events: none;
+}
+
+.user-text-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--chat-user-bubble-text) 72%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.user-text-toggle:hover,
+.user-text-toggle:focus-visible {
+  color: var(--chat-user-bubble-text);
+  background: color-mix(in srgb, var(--chat-user-bubble-text) 10%, transparent);
+  outline: none;
+}
+
+.user-text-toggle-chevron {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.18s ease;
+}
+
+.user-text-toggle-chevron.is-open {
+  transform: rotate(180deg);
 }
 
 .message-reasoning {
@@ -550,7 +669,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
   padding: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-base);
   overflow-x: auto;
 }
 
@@ -559,7 +678,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
   font-size: 0.9em;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--control-radius-sm);
   padding: 1px 6px;
 }
 
@@ -576,7 +695,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
 .message-text.markdown-content :deep(.md-code-block) {
   margin: 10px 0;
   border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-base);
   overflow: hidden;
   background: var(--bg-secondary);
 }
@@ -609,7 +728,7 @@ const getComposerInvocationToneClass = (kind?: string) => {
   color: var(--text-muted);
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--control-radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -675,8 +794,8 @@ const getComposerInvocationToneClass = (kind?: string) => {
 
 @media (max-width: 768px) {
   .message-text {
+    --message-text-line: 1.68;
     font-size: calc(var(--font-size) - 1px);
-    line-height: 1.68;
   }
 
   .message-file-image {

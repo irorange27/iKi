@@ -232,8 +232,8 @@ import { useI18n } from '../../i18n';
 import { useSettingsSpeechSection } from '../../composables/useSettingsSpeechSection';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
-  (event: 'reset'): void;
+  'config-change': [];
+  reset: [];
 }>();
 
 const props = defineProps<{

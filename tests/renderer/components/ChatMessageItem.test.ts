@@ -13,8 +13,10 @@ const createUserMessage = (): UIMessage =>
     parts: [{ type: 'text', text: 'Need repo help' }],
   }) as unknown as UIMessage;
 
-const mountChatMessageItem = (message = createUserMessage()) =>
+const mountChatMessageItem = (message = createUserMessage(), attachTo = false) =>
   mount(ChatMessageItem, {
+    // Focus assertions need a connected tree; detached VTU roots drop focus().
+    attachTo: attachTo ? document.body : undefined,
     props: {
       message,
       messageIndex: 0,
@@ -118,6 +120,41 @@ describe('ChatMessageItem', () => {
       'Regenerate',
       'Edit',
     ]);
+  });
+
+  it('opens the overflow menu with ArrowDown on the trigger and focuses the first item', async () => {
+    const wrapper = mountChatMessageItem(createUserMessage(), true);
+    const moreButton = wrapper.findAll('.message-action-btn')[3];
+
+    await moreButton.trigger('keydown', { key: 'ArrowDown' });
+
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+    expect(document.activeElement).toBe(wrapper.findAll('[role="menuitem"]')[0].element);
+    wrapper.unmount();
+  });
+
+  it('cycles menuitem focus with arrow keys and closes on Escape', async () => {
+    const wrapper = mountChatMessageItem(createUserMessage(), true);
+
+    await wrapper.findAll('.message-action-btn')[3].trigger('click');
+    const items = wrapper.findAll('[role="menuitem"]');
+    expect(document.activeElement).toBe(items[0].element);
+
+    await items[0].trigger('keydown', { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1].element);
+
+    await items[1].trigger('keydown', { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[2].element);
+
+    await items[2].trigger('keydown', { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[0].element);
+
+    await items[0].trigger('keydown', { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items[2].element);
+
+    await items[2].trigger('keydown', { key: 'Escape' });
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('keeps actions visible while focus remains inside the message shell', async () => {

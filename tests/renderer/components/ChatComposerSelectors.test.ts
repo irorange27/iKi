@@ -7,24 +7,6 @@ import { createPinia } from 'pinia';
 
 import ChatComposerSelectors from '../../../packages/desktop/src/renderer/components/ChatComposerSelectors.vue';
 
-// Workspace selection lives in the thread session store now, so the cluster
-// only forwards the locked flag; the store-connected internals are stubbed out.
-const WorkspaceSelectorStub = defineComponent({
-  name: 'WorkspaceSelector',
-  props: {
-    locked: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  template: `
-    <div
-      class="workspace-selector-stub"
-      :data-locked="String(locked)"
-    />
-  `,
-});
-
 const ReasoningSelectorStub = defineComponent({
   name: 'ReasoningSelector',
   template: `<div class="reasoning-selector-stub" />`,
@@ -58,15 +40,12 @@ const AutonomousSelectorStub = defineComponent({
 const mountComponent = () =>
   mount(ChatComposerSelectors, {
     props: {
-      workspaceLocked: true,
-      showWorkspace: true,
       autonomousActive: false,
       autonomousMaxIterations: 10,
     },
     global: {
       plugins: [createPinia()],
       stubs: {
-        WorkspaceSelector: WorkspaceSelectorStub,
         ReasoningSelector: ReasoningSelectorStub,
         AutonomousSelector: AutonomousSelectorStub,
       },
@@ -76,9 +55,6 @@ const mountComponent = () =>
 describe('ChatComposerSelectors', () => {
   it('passes current selector state through to the owned selector cluster', () => {
     const wrapper = mountComponent();
-
-    const workspaceSelector = wrapper.find('.workspace-selector-stub');
-    expect(workspaceSelector.attributes('data-locked')).toBe('true');
 
     const autonomousSelector = wrapper.find('.autonomous-selector-stub');
     expect(autonomousSelector.attributes('data-active')).toBe('false');

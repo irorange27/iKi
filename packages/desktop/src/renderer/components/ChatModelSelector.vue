@@ -169,13 +169,10 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (
-    event: 'select',
-    payload: {
+  select: [payload: {
       provider: Provider;
       model: string;
-    }
-  ): void;
+    }];
 }>();
 
 const { t } = useI18n();

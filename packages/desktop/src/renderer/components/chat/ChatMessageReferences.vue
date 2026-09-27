@@ -39,13 +39,7 @@ import { Brain, Heart, Sparkles, Wrench } from 'lucide-vue-next';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import { useI18n } from '../../i18n';
 
-import {
-  getAffectReferenceSummary,
-  getMemoryReferenceSummary,
-  getSkillReferenceSummary,
-  getToolReferenceSummary,
-  hasReferenceSummary,
-} from '../../modules/chat/ui_message_references';
+import { getReferenceSummaries } from '../../modules/chat/ui_message_references';
 
 const props = defineProps<{
   message: ChatUiMessage;
@@ -53,13 +47,19 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
+const summaries = computed(() => getReferenceSummaries(props.message));
+const toolSummary = computed(() => summaries.value.tool);
+const skillSummary = computed(() => summaries.value.skill);
+const memorySummary = computed(() => summaries.value.memory);
+const affectSummary = computed(() => summaries.value.affect);
 const hasSummary = computed(
-  () => props.message.role === 'assistant' && hasReferenceSummary(props.message)
+  () =>
+    props.message.role === 'assistant' &&
+    (toolSummary.value.callCount > 0 ||
+      skillSummary.value.items.length > 0 ||
+      memorySummary.value.items.length > 0 ||
+      Boolean(affectSummary.value.label))
 );
-const toolSummary = computed(() => getToolReferenceSummary(props.message));
-const skillSummary = computed(() => getSkillReferenceSummary(props.message));
-const memorySummary = computed(() => getMemoryReferenceSummary(props.message));
-const affectSummary = computed(() => getAffectReferenceSummary(props.message));
 
 const toolTooltip = computed(() => {
   return t('chat.references.toolTooltip', { names: toolSummary.value.names.join(', ') });

@@ -148,6 +148,8 @@ export const AgentResultSchema = z.object({
   toolApprovalRequests: z.array(ToolApprovalRequestSchema).optional(),
   usage: AgentUsageSchema.optional(),
   perf: AgentTurnPerfSchema.optional(),
+  /** Estimated tokens of the resolved tool schemas (set by the harness). */
+  toolSchemaTokens: z.object({ builtin: z.number(), mcp: z.number() }).optional(),
   iterations: z.number().int().nonnegative(),
   requiresApproval: z.boolean().optional(),
   finishReason: z.string().optional(),

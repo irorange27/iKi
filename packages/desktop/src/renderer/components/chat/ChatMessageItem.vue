@@ -72,11 +72,18 @@
             aria-haspopup="menu"
             :aria-expanded="isMoreMenuOpen"
             @click.stop="toggleMoreMenu"
+            @keydown.down.prevent="openMoreMenu"
           >
             <MoreHorizontal class="message-action-icon" :size="14" />
           </button>
 
-          <div v-if="isMoreMenuOpen" class="message-more-menu" role="menu">
+          <div
+            v-if="isMoreMenuOpen"
+            ref="moreMenuEl"
+            class="message-more-menu"
+            role="menu"
+            @keydown="handleMoreMenuKeydown"
+          >
             <button
               class="message-more-menu-item"
               type="button"
@@ -115,7 +122,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';import { Copy, MoreHorizontal, Pencil, RotateCcw } from 'lucide-vue-next';
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
+import { Copy, MoreHorizontal, Pencil, RotateCcw } from 'lucide-vue-next';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import { copyTextToClipboard } from '../../composables/useMarkdownCopy';
 import { useI18n } from '../../i18n';
@@ -137,21 +145,19 @@ const props = defineProps<{
 const isTurnHighlighted = computed(() => props.turnHighlightIds?.has(props.message.id) ?? false);
 
 const emit = defineEmits<{
-  (
-    event: 'approve-tool',
-    payload: {
+  'approve-tool': [payload: {
       approved: boolean;
       message: ChatUiMessage;
       part: unknown;
-    }
-  ): void;
-  (event: 'regenerate-user-message', message: ChatUiMessage): void;
-  (event: 'edit-user-message', message: ChatUiMessage): void;
+    }];
+  'regenerate-user-message': [message: ChatUiMessage];
+  'edit-user-message': [message: ChatUiMessage];
 }>();
 
 const { t } = useI18n();
 const ACTIONS_HIDE_DELAY_MS = 360;
 const isMoreMenuOpen = ref(false);
+const moreMenuEl = ref<HTMLElement | null>(null);
 const areActionsVisible = ref(false);
 const copyFeedbackVisible = ref(false);
 const messageText = computed(() => extractTextFromMessage(props.message));
@@ -194,9 +200,40 @@ const closeMoreMenu = () => {
   isMoreMenuOpen.value = false;
 };
 
-const toggleMoreMenu = () => {
+const openMoreMenu = () => {
   showActions();
-  isMoreMenuOpen.value = !isMoreMenuOpen.value;
+  isMoreMenuOpen.value = true;
+  // Menu-button pattern: activation lands focus on the first item.
+  nextTick(() => {
+    moreMenuEl.value?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  });
+};
+
+const toggleMoreMenu = () => {
+  if (isMoreMenuOpen.value) {
+    closeMoreMenu();
+    return;
+  }
+  openMoreMenu();
+};
+
+// Arrow keys cycle focus within the open menu (WAI-ARIA menu pattern).
+const handleMoreMenuKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  event.preventDefault();
+  const items = Array.from(
+    moreMenuEl.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []
+  );
+  if (items.length === 0) return;
+  const current = items.findIndex(item => item === document.activeElement);
+  const step = event.key === 'ArrowDown' ? 1 : -1;
+  const next =
+    current === -1
+      ? step === 1
+        ? 0
+        : items.length - 1
+      : (current + step + items.length) % items.length;
+  items[next]?.focus();
 };
 
 const handleCopyMessage = async () => {
@@ -297,7 +334,7 @@ onBeforeUnmount(() => {
 }
 
 .message-wrapper.assistant .message-shell {
-  max-width: min(100%, 760px);
+  max-width: 100%;
   margin-right: clamp(0px, 4vw, 56px);
 }
 

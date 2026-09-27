@@ -77,10 +77,7 @@
             aria-hidden="true"
           />
         </button>
-        <div
-          v-if="isRowOpen(entry, entryIndex)"
-          class="tool-call-row-detail-body"
-        >
+        <div v-if="isRowOpen(entry, entryIndex)" class="tool-call-row-detail-body">
           <ToolCallPart
             embedded
             :approval-processing="approvalProcessingFor(entry)"
@@ -97,14 +94,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import {
-  CheckCircle,
-  ChevronDown,
-  CircleHelp,
-  Loader2,
-  ShieldBan,
-  XCircle,
-} from 'lucide-vue-next';
+import { CheckCircle, ChevronDown, CircleHelp, Loader2, ShieldBan, XCircle } from 'lucide-vue-next';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 
 import ToolCallPart from './ToolCallPart.vue';
@@ -138,10 +128,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (
-    event: 'approve-tool',
-    payload: { approved: boolean; message: ChatUiMessage; part: unknown }
-  ): void;
+  'approve-tool': [payload: { approved: boolean; message: ChatUiMessage; part: unknown }];
 }>();
 
 const { t } = useI18n();
@@ -149,16 +136,16 @@ const { t } = useI18n();
 const meta = computed(() => getToolCallGroupMeta(props.parts));
 
 const groupVerbLabel = computed(() =>
-  t(`toolCall.group.verb.${meta.value.verb}` as Parameters<typeof t>[0])
+  meta.value.hasFailed
+    ? t('toolCall.state.failed')
+    : meta.value.hasActive
+      ? t('toolCall.state.running')
+      : t(`toolCall.group.verb.${meta.value.verb}` as Parameters<typeof t>[0])
 );
 
-const countLabel = computed(() =>
-  getToolCallGroupCountLabel(meta.value.verb, props.parts.length)
-);
+const countLabel = computed(() => getToolCallGroupCountLabel(meta.value.verb, props.parts.length));
 
-const totalDurationLabel = computed(() =>
-  getToolCallGroupTotalDurationLabel(props.parts)
-);
+const totalDurationLabel = computed(() => getToolCallGroupTotalDurationLabel(props.parts));
 
 const summaryIcon = computed(() => getToolIconComponent(props.parts[0]));
 

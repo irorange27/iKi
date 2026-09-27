@@ -139,8 +139,8 @@ import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 
 const emit = defineEmits<{
-  (event: 'config-change'): void;
-  (event: 'reset'): void;
+  'config-change': [];
+  reset: [];
 }>();
 
 const props = defineProps<{

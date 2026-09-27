@@ -44,6 +44,16 @@ describe('ToolCallGroup', () => {
     resetToolUiStateMap();
   });
 
+  it('shows failure rather than claiming a failed write succeeded, including its embedded reason', () => {
+    const wrapper = mountGroup([readCall('failed_write', {
+      toolName: 'write_file', state: 'output-error', output: undefined,
+      errorText: "Model tried to call unavailable tool 'write_file'.",
+    })]);
+    expect(wrapper.get('.tool-call-group-summary').text()).toContain('Failed');
+    expect(wrapper.get('.tool-call-row-main').text()).not.toContain('Wrote');
+    expect(wrapper.get('.tool-call-row-detail-body').text()).toContain("Model tried to call unavailable tool 'write_file'.");
+  });
+
   it('keeps a fully settled group collapsed until the summary is clicked', async () => {
     const wrapper = mountGroup([readCall('call_1'), readCall('call_2')]);
 

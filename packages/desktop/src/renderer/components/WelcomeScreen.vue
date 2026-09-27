@@ -34,19 +34,6 @@
         </button>
       </div>
     </div>
-
-    <div class="welcome-stage">
-      <div class="welcome-figure" aria-hidden="true">
-        <div class="welcome-core">
-          <div class="welcome-core-halo"></div>
-          <div class="welcome-core-ring welcome-core-ring-outer"></div>
-          <div class="welcome-core-ring welcome-core-ring-inner"></div>
-          <div class="welcome-core-spark welcome-core-spark-a"></div>
-          <div class="welcome-core-spark welcome-core-spark-b"></div>
-          <div class="welcome-core-center"></div>
-        </div>
-      </div>
-    </div>
   </section>
 </template>
 
@@ -61,7 +48,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'compose-starter', text: string): void;
+  'compose-starter': [text: string];
 }>();
 
 const { t } = useI18n();

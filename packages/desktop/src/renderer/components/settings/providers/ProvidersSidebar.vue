@@ -50,7 +50,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: 'select-provider', providerId: string): void;
+  'select-provider': [providerId: string];
 }>();
 
 const { t } = useI18n();

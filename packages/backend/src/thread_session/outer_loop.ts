@@ -25,6 +25,8 @@ export type OuterLoopStreamResult = {
   usage?: import('@iki/backend/agent').AgentResult['usage'];
   /** Perf metrics accumulated across all outer batches of the turn. */
   perf?: AgentTurnPerf;
+  /** Estimated tokens of the resolved tool schemas (from the harness turn). */
+  toolSchemaTokens?: { builtin: number; mcp: number };
   handoff?: { summary: string; nextSteps: string; reason: string };
 };
 
@@ -254,6 +256,9 @@ export const runOuterLoop = async (
                       toolApprovalRequests: output.toolApprovalRequests,
                       usage: output.usage,
                       ...(output.perf ? { perf: output.perf } : {}),
+                      ...(output.toolSchemaTokens
+                        ? { toolSchemaTokens: output.toolSchemaTokens }
+                        : {}),
                       iterations: 0,
                       requiresApproval: output.requiresApproval,
                       finishReason: output.finishReason,
@@ -321,6 +326,9 @@ export const runOuterLoop = async (
           response: agentResult.response,
           usage: agentResult.usage,
           perf: accumulatedPerf,
+          ...(agentResult.toolSchemaTokens
+            ? { toolSchemaTokens: agentResult.toolSchemaTokens }
+            : {}),
         };
         state.isAwaitingApproval = true;
         break;
@@ -339,6 +347,9 @@ export const runOuterLoop = async (
           : {}),
         usage: agentResult?.usage,
         perf: accumulatedPerf,
+        ...(agentResult?.toolSchemaTokens
+          ? { toolSchemaTokens: agentResult.toolSchemaTokens }
+          : {}),
         ...(terminalToolName === 'handoff' && handoff
           ? {
               handoff: {

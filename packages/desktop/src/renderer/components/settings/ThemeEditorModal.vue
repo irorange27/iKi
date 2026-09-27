@@ -163,14 +163,14 @@ const props = defineProps<{
 const { t } = useI18n();
 
 const emit = defineEmits<{
-  (event: 'close'): void;
-  (event: 'save'): void;
-  (event: 'update-label', value: string): void;
-  (event: 'set-editor-mode', value: ThemeEditorMode): void;
-  (event: 'set-editor-type', value: ThemeVariant): void;
-  (event: 'apply-quick-start', value: string): void;
-  (event: 'update-simple-color', payload: { key: keyof SimpleThemeSeed; value: string }): void;
-  (event: 'update-advanced-color', payload: { key: keyof AdvancedThemeSeed; value: string }): void;
+  close: [];
+  save: [];
+  'update-label': [value: string];
+  'set-editor-mode': [value: ThemeEditorMode];
+  'set-editor-type': [value: ThemeVariant];
+  'apply-quick-start': [value: string];
+  'update-simple-color': [payload: { key: keyof SimpleThemeSeed; value: string }];
+  'update-advanced-color': [payload: { key: keyof AdvancedThemeSeed; value: string }];
 }>();
 
 const handleLabelInput = (event: Event) => {
@@ -197,8 +197,8 @@ const handleAdvancedColorUpdate = (key: keyof AdvancedThemeSeed, value: string) 
 .theme-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1200;
-  background: rgba(8, 10, 18, 0.24);
+  z-index: var(--z-modal);
+  background: var(--scrim-soft);
   backdrop-filter: blur(20px) saturate(140%);
   -webkit-backdrop-filter: blur(20px) saturate(140%);
   display: flex;

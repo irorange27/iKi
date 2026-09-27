@@ -69,18 +69,6 @@ const buildProvider = (
   acp_model_mapping: overrides.acp_model_mapping,
 });
 
-const buildWorkspace = (
-  overrides: Partial<Workspace> & Pick<Workspace, 'id' | 'name' | 'path'>
-): Workspace => ({
-  id: overrides.id,
-  name: overrides.name,
-  path: overrides.path,
-  is_temporary: overrides.is_temporary ?? 0,
-  show_in_list: overrides.show_in_list ?? 1,
-  created_at: overrides.created_at ?? '2026-03-21T00:00:00.000Z',
-  updated_at: overrides.updated_at ?? '2026-03-21T00:00:00.000Z',
-});
-
 const buildPromptApp = (
   overrides: Partial<PromptApp> & Pick<PromptApp, 'id' | 'name' | 'prompt_template'>
 ): PromptApp => ({
@@ -943,7 +931,12 @@ describe('ChatInput', () => {
       },
     });
 
-    expect(wrapper.find('.composer-context-ring').attributes('title')).toContain('1%');
+    // The tooltip moved into the hover panel; the percent is encoded on the
+    // ring arc as stroke-dashoffset = circumference × (1 − percent/100), r=8.
+    const ringCircumference = 2 * Math.PI * 8;
+    expect(
+      Number(wrapper.find('.composer-context-ring-arc').attributes('stroke-dashoffset'))
+    ).toBeCloseTo(ringCircumference * 0.99, 2);
 
     await wrapper.find('.chat-input-field').setValue('Need help with the repo');
     await wrapper.find('.send-btn').trigger('click');
@@ -993,7 +986,12 @@ describe('ChatInput', () => {
       },
     });
 
-    expect(wrapper.find('.composer-context-ring').attributes('title')).toContain('0%');
+    // The tooltip moved into the hover panel; the percent is encoded on the
+    // ring arc as stroke-dashoffset = circumference × (1 − percent/100), r=8.
+    const ringCircumference = 2 * Math.PI * 8;
+    expect(
+      Number(wrapper.find('.composer-context-ring-arc').attributes('stroke-dashoffset'))
+    ).toBeCloseTo(ringCircumference, 2);
 
     await wrapper.find('.chat-input-field').setValue('Use the default limit');
     await wrapper.find('.send-btn').trigger('click');
@@ -1118,165 +1116,6 @@ describe('ChatInput', () => {
     await flushPromises();
 
     expect(threadSession.isIncognito).toBe(false);
-  });
-
-  it('shows the selected workspace and applies explicit workspace changes to the session store', async () => {
-    const docsWorkspace = buildWorkspace({
-      id: 'workspace_docs',
-      name: 'Docs',
-      path: '/tmp/docs',
-    });
-    const appWorkspace = buildWorkspace({
-      id: 'workspace_app',
-      name: 'App',
-      path: '/tmp/app',
-    });
-
-    const { wrapper, threadSession } = await mountChatInput({
-      workspaces: [docsWorkspace, appWorkspace],
-      session: {
-        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_docs' },
-        selectedWorkspaceId: 'workspace_docs',
-      },
-    });
-
-    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
-    expect(workspaceTrigger.exists()).toBe(true);
-    expect(workspaceTrigger.attributes('title')).toContain('Docs');
-    expect(workspaceTrigger.find('.selector-badge').text()).toBe('1');
-
-    await workspaceTrigger.trigger('click');
-    await flushPromises();
-
-    const workspaceItems = Array.from(document.querySelectorAll('.selector-item')).map(
-      element => new DOMWrapper(element as Element)
-    );
-    const appOption = workspaceItems.find(option => option.text().includes('App'));
-    expect(appOption).toBeDefined();
-    if (!appOption) {
-      throw new Error('Expected App workspace option to be rendered');
-    }
-
-    await appOption.trigger('click');
-    await flushPromises();
-
-    expect(threadSession.selectedWorkspaceId).toBe('workspace_app');
-  });
-
-  it('marks temporary workspaces with a T badge on the composer trigger', async () => {
-    const tempWorkspace = buildWorkspace({
-      id: 'workspace_thread_1',
-      name: 'Thread Scratch',
-      path: '/tmp/thread-1',
-      is_temporary: 1,
-      show_in_list: 0,
-    });
-
-    const { wrapper } = await mountChatInput({
-      workspaces: [tempWorkspace],
-      session: {
-        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_thread_1' },
-        selectedWorkspaceId: 'workspace_thread_1',
-      },
-    });
-
-    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
-    expect(workspaceTrigger.find('.selector-badge').text()).toBe('T');
-    expect(workspaceTrigger.attributes('title')).toContain('Temporary workspace');
-  });
-
-  it('disables workspace switching once the thread workspace is locked', async () => {
-    const docsWorkspace = buildWorkspace({
-      id: 'workspace_docs',
-      name: 'Docs',
-      path: '/tmp/docs',
-    });
-
-    const { wrapper } = await mountChatInput({
-      workspaces: [docsWorkspace],
-      session: {
-        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_docs' },
-        selectedWorkspaceId: 'workspace_docs',
-      },
-      props: {
-        workspaceLocked: true,
-      },
-    });
-
-    const workspaceTrigger = wrapper.find('.workspace-selector-trigger');
-    expect(workspaceTrigger.attributes('disabled')).toBeDefined();
-    expect(workspaceTrigger.attributes('title')).toContain('locked');
-
-    await workspaceTrigger.trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.workspace-selector-panel').exists()).toBe(false);
-    expect(wrapper.emitted('workspace-changed')).toBeUndefined();
-  });
-
-  it('shows a rich workspace tip for locked temporary workspace bindings', async () => {
-    const tempWorkspace = buildWorkspace({
-      id: 'workspace_thread_1',
-      name: 'Temp Workspace',
-      path: '/tmp/thread-1',
-      is_temporary: 1,
-      show_in_list: 0,
-    });
-
-    const { wrapper } = await mountChatInput({
-      workspaces: [tempWorkspace],
-      session: {
-        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}', workspace_id: 'workspace_thread_1' },
-        selectedWorkspaceId: 'workspace_thread_1',
-      },
-      props: {
-        workspaceLocked: true,
-      },
-    });
-
-    await wrapper.find('.workspace-selector-root').trigger('mouseenter');
-    await flushPromises();
-
-    const tip = wrapper.find('.workspace-selector-tip');
-    expect(tip.exists()).toBe(true);
-    expect(tip.text()).toContain('Temp Workspace');
-    expect(tip.text()).toContain('/tmp/thread-1');
-    expect(tip.text()).toContain('(Temp)');
-    expect(tip.text()).toContain('Hidden from global list');
-    expect(tip.text()).toContain('Workspace cannot be changed after sending messages');
-  });
-
-  it('can add a workspace directly from the workspace selector panel', async () => {
-    const pickedWorkspace = buildWorkspace({
-      id: 'workspace_new',
-      name: 'Repo',
-      path: '/tmp/repo',
-    });
-
-    const { wrapper, api, threadSession } = await mountChatInput({
-      workspaces: [],
-      pickedWorkspace,
-      session: {
-        currentThread: { id: 'thread_ws', title: 'Work thread', metadata: '{"mode":"work"}' },
-      },
-    });
-
-    await wrapper.find('.workspace-selector-trigger').trigger('click');
-    await flushPromises();
-
-    const addFolderButton = Array.from(document.querySelectorAll('button'))
-      .map(element => new DOMWrapper(element))
-      .find(button => button.text().includes('Add Folder'));
-    expect(addFolderButton).toBeDefined();
-    if (!addFolderButton) {
-      throw new Error('Expected Add Folder button to be rendered');
-    }
-
-    await addFolderButton.trigger('click');
-    await flushPromises();
-
-    expect(api.workspaces.pickDirectory).toHaveBeenCalledTimes(1);
-    expect(threadSession.selectedWorkspaceId).toBe('workspace_new');
   });
 
   it('waits for the send-preparation promise before starting IPC streaming', async () => {

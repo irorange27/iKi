@@ -49,6 +49,8 @@ export type TurnOutput = {
   usage?: AgentUsage;
   /** Wall-clock perf metrics measured by the runner (llm/tool time, TTFT, steps). */
   perf?: AgentTurnPerf;
+  /** Estimated tokens of the resolved tool schemas sent with the request. */
+  toolSchemaTokens?: { builtin: number; mcp: number };
   toolCalls?: AgentResult['toolCalls'];
   requiresApproval: boolean;
   finishReason?: string;

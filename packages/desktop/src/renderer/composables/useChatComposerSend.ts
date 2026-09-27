@@ -91,7 +91,8 @@ export const useChatComposerSend = (deps: {
       if (nextValue !== previousValue && composerFeedback.value) {
         dismissComposerFeedback();
       }
-    }
+    },
+    { flush: 'sync' }
   );
 
   const stopStreaming = async () => {

@@ -51,6 +51,16 @@ const createReasoningMessage = (state: string): UIMessage =>
     ],
   }) as unknown as UIMessage;
 
+const createUserTextMessage = (text: string): UIMessage =>
+  ({
+    id: 'user_text',
+    role: 'user',
+    parts: [{ type: 'text', text }],
+  }) as unknown as UIMessage;
+
+const linesOf = (count: number): string =>
+  Array.from({ length: count }, (_, index) => `line ${index + 1}`).join('\n');
+
 describe('ChatMessageParts', () => {
   it('hides data parts from the rendered message body', () => {
     const wrapper = mount(ChatMessageParts, {
@@ -200,5 +210,123 @@ describe('ChatMessageParts', () => {
     expect(wrapper.find('details.message-reasoning').attributes('open')).toBeDefined();
     expect(wrapper.find('.message-reasoning-preview').exists()).toBe(false);
     expect(wrapper.text()).toContain('Second line has more detail.');
+  });
+
+  it('applies streamed text deltas in place without remounting the segment', async () => {
+    const mountMessage = (text: string): UIMessage =>
+      ({
+        id: 'assistant_stream',
+        role: 'assistant',
+        parts: [{ type: 'text', state: 'streaming', text }],
+      }) as unknown as UIMessage;
+
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: mountMessage('Hel'),
+        messageIndex: 0,
+        activeAssistantMessageId: 'assistant_stream',
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    const segment = wrapper.find('.message-text').element;
+
+    await wrapper.setProps({ message: mountMessage('Hello world') });
+
+    // Stable render key: the delta must patch the text node, not remount the
+    // segment (which would discard rendered markdown/hljs output per delta).
+    expect(wrapper.find('.message-text').element).toBe(segment);
+    expect(wrapper.find('.message-text').text()).toBe('Hello world');
+  });
+
+  it('keeps the segment element when a streamed text part finalizes into markdown', async () => {
+    const mountMessage = (part: Record<string, unknown>): UIMessage =>
+      ({
+        id: 'assistant_stream',
+        role: 'assistant',
+        parts: [part],
+      }) as unknown as UIMessage;
+
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: mountMessage({ type: 'text', state: 'streaming', text: 'Hello **world**' }),
+        messageIndex: 0,
+        activeAssistantMessageId: 'assistant_stream',
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    const segment = wrapper.find('.message-part').element;
+
+    await wrapper.setProps({
+      message: mountMessage({ type: 'text', text: 'Hello **world**' }),
+    });
+
+    // Branch switch (plain interpolation → VueMarkdown) must be an in-place
+    // patch under the same key, not a segment remount.
+    expect(wrapper.find('.message-part').element).toBe(segment);
+    expect(wrapper.find('.markdown-content').exists()).toBe(true);
+  });
+
+  it('collapses user text past five lines behind a toggle and expands on click', async () => {
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: createUserTextMessage(linesOf(6)),
+        messageIndex: 0,
+        activeAssistantMessageId: null,
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    const text = wrapper.find('.message-text');
+    expect(text.classes()).toContain('is-text-collapsed');
+    expect(text.text()).toContain('line 6');
+    expect(wrapper.find('.user-text-toggle').exists()).toBe(true);
+
+    await wrapper.find('.user-text-toggle').trigger('click');
+
+    expect(wrapper.find('.message-text').classes()).not.toContain('is-text-collapsed');
+    expect(wrapper.find('.user-text-toggle').attributes('aria-expanded')).toBe('true');
+
+    await wrapper.find('.user-text-toggle').trigger('click');
+
+    expect(wrapper.find('.message-text').classes()).toContain('is-text-collapsed');
+  });
+
+  it('keeps user text of five lines or fewer fully expanded', () => {
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: createUserTextMessage(linesOf(5)),
+        messageIndex: 0,
+        activeAssistantMessageId: null,
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    expect(wrapper.find('.message-text').classes()).not.toContain('is-text-collapsed');
+    expect(wrapper.find('.user-text-toggle').exists()).toBe(false);
+  });
+
+  it('never collapses long assistant text', () => {
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: {
+          id: 'assistant_long',
+          role: 'assistant',
+          parts: [{ type: 'text', text: linesOf(8) }],
+        } as unknown as UIMessage,
+        messageIndex: 0,
+        activeAssistantMessageId: null,
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    expect(wrapper.find('.message-text').classes()).not.toContain('is-text-collapsed');
+    expect(wrapper.find('.user-text-toggle').exists()).toBe(false);
   });
 });

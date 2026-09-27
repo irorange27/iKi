@@ -196,7 +196,7 @@ const resolveSettingsSection = (value?: string): string => {
 const props = defineProps<{
   initialSection?: string;
 }>();
-const emit = defineEmits(['close']);
+const emit = defineEmits<{ close: [] }>();
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
 

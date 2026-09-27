@@ -106,7 +106,7 @@ describe('createChatStreaming integration', () => {
       fauxText('stream done'),
     ]));
     prepareChatTurnMock.mockResolvedValue({
-      report: { totalEstimatedTokens: 1 },
+      report: { totalEstimatedTokens: 1, blocks: [] },
       usedSkills: [],
       selectedSkillIds: [],
       skillMode: 'manual',
@@ -208,7 +208,7 @@ describe('createChatStreaming integration', () => {
   const setupLoop = (faux: FauxModelProvider, toolNames: string[] = []) => {
     createModelMock.mockReturnValue(faux);
     prepareChatTurnMock.mockResolvedValue({
-      report: { totalEstimatedTokens: 1 }, usedSkills: [], selectedSkillIds: [], skillMode: 'manual',
+      report: { totalEstimatedTokens: 1, blocks: [] }, usedSkills: [], selectedSkillIds: [], skillMode: 'manual',
       finalMessages: [{ role: 'user', content: 'original task' }], history: [], prompt: 'original task',
       guardActive: false, requireApproval: false, autoApproveToolRequests: false,
       affectSignal: null, interventionPolicy: null, guardedTools: toolNames, enableTools: toolNames.length > 0,

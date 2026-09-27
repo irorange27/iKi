@@ -13,7 +13,10 @@ import type { ChatInputMessage } from '../thread_session/types';
 import type {
   AssembleChatContextResult,
   ContextBlockKind,
+  ContextCompositionCategory,
+  ContextCompositionSummary,
   ContextConfig,
+  ContextReport,
   ContextReportBlock,
 } from './context_types';
 
@@ -59,6 +62,42 @@ export const buildDroppedBlock = (kind: ContextBlockKind, reason: string): Conte
   charCount: 0,
   reason,
 });
+
+const CONTEXT_COMPOSITION_BLOCK_CATEGORIES: Record<ContextBlockKind, ContextCompositionCategory> = {
+  'recent-history': 'messages',
+  identity: 'systemPrompt',
+  skills: 'skills',
+  memory: 'memory',
+  'thread-summary': 'other',
+  affect: 'other',
+  clipboard: 'other',
+};
+
+export const summarizeContextComposition = (params: {
+  report: ContextReport;
+  toolSchemaTokens?: { builtin: number; mcp: number } | null;
+}): ContextCompositionSummary => {
+  const categories: Partial<Record<ContextCompositionCategory, number>> = {};
+  const add = (category: ContextCompositionCategory, tokens: number): void => {
+    if (!Number.isFinite(tokens) || tokens <= 0) return;
+    categories[category] = (categories[category] ?? 0) + Math.round(tokens);
+  };
+
+  for (const block of params.report.blocks) {
+    add(
+      CONTEXT_COMPOSITION_BLOCK_CATEGORIES[block.kind] ?? 'other',
+      block.estimatedTokens
+    );
+  }
+  add('tools', params.toolSchemaTokens?.builtin ?? 0);
+  add('mcpTools', params.toolSchemaTokens?.mcp ?? 0);
+
+  const estimatedTotalTokens = Object.values(categories).reduce(
+    (sum, value) => sum + (value ?? 0),
+    0
+  );
+  return { estimatedTotalTokens, categories };
+};
 
 /**
  * Volatile per-turn context rides with the newest user message rather than the

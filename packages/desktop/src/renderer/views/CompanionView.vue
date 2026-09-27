@@ -373,7 +373,7 @@ onUnmounted(() => {
 <style scoped>
 .companion-root {
   --companion-accent: oklch(0.76 0.018 150);
-  --companion-ink: color-mix(in oklch, var(--companion-accent) 12%, oklch(0.34 0.015 72));
+  --companion-ink: color-mix(in oklch, var(--companion-accent) 12%, var(--text-primary));
   position: relative;
   width: 100%;
   height: 100%;
@@ -478,8 +478,8 @@ onUnmounted(() => {
   margin: 2px 4px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: color-mix(in oklch, var(--companion-accent) 18%, oklch(0.18 0.01 260 / 0.62));
-  border: 1px solid color-mix(in oklch, var(--companion-accent) 22%, oklch(0.5 0.02 260 / 0.18));
+  background: color-mix(in oklch, var(--companion-accent) 18%, var(--bg-secondary));
+  border: 1px solid color-mix(in oklch, var(--companion-accent) 22%, var(--border-color));
   -webkit-app-region: no-drag;
   max-height: 4.2em;
   overflow: hidden;
@@ -489,7 +489,7 @@ onUnmounted(() => {
   display: block;
   font-size: 11.5px;
   line-height: 1.4;
-  color: color-mix(in oklch, var(--companion-accent) 42%, oklch(0.92 0.006 100));
+  color: var(--text-primary);
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -499,17 +499,6 @@ onUnmounted(() => {
 
 .preview-text-tool {
   -webkit-line-clamp: 2;
-}
-
-@media (prefers-color-scheme: dark) {
-  .companion-preview {
-    background: color-mix(in oklch, var(--companion-accent) 22%, oklch(0.25 0.01 260 / 0.68));
-    border-color: color-mix(in oklch, var(--companion-accent) 28%, oklch(0.55 0.02 260 / 0.22));
-  }
-
-  .companion-label {
-    color: color-mix(in oklch, var(--companion-accent) 58%, oklch(0.88 0.006 100));
-  }
 }
 
 .companion-dismiss {

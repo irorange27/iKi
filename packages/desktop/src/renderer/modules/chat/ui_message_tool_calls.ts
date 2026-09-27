@@ -702,11 +702,19 @@ export const getToolDiffStat = (part: unknown): ToolDiffStat => {
 };
 
 // Output for the raw-JSON section: hide `diff` when it is rendered as a dedicated view.
+// Diff-stripped output views are rebuilt on every streaming re-render of an
+// expanded card; cache per part, invalidated when the raw output reference
+// moves (same freshness rule as toolPayloadCache).
+const displayOutputCache = new WeakMap<object, { source: unknown; value: unknown }>();
+
 export const getToolOutputForDisplay = (part: unknown): unknown => {
   const output = getToolOutput(part);
   if (output !== undefined) {
-    if (!hasToolDiff(part) || !isObjectRecord(output)) return output;
+    if (!hasToolDiff(part) || !isObjectRecord(part) || !isObjectRecord(output)) return output;
+    const cached = displayOutputCache.get(part);
+    if (cached && cached.source === output) return cached.value;
     const { diff: _diff, ...rest } = output;
+    displayOutputCache.set(part, { source: output, value: rest });
     return rest;
   }
   // Error results carry their reason in errorText — the Output section falls
@@ -753,18 +761,41 @@ export const hasDisplayValue = (value: unknown): boolean => {
   return true;
 };
 
+// Expanded tool cards re-render on every stream chunk; formatting large
+// payloads is the hot cost. Sources are treated as immutable: new content
+// always arrives as a new reference, so reference-keyed caches stay fresh.
+const formatJsonObjectCache = new WeakMap<object, string>();
+const formatJsonStringCache = new Map<string, string>();
+const FORMAT_JSON_STRING_CACHE_LIMIT = 200;
+
 export const formatJson = (value: unknown): string => {
   if (value === undefined) return '';
   if (typeof value === 'string') {
+    const cached = formatJsonStringCache.get(value);
+    if (cached !== undefined) return cached;
+    let formatted: string;
     try {
-      return JSON.stringify(JSON.parse(value), null, 2);
+      formatted = JSON.stringify(JSON.parse(value), null, 2);
     } catch {
-      return value;
+      formatted = value;
     }
+    if (formatJsonStringCache.size >= FORMAT_JSON_STRING_CACHE_LIMIT) {
+      formatJsonStringCache.clear();
+    }
+    formatJsonStringCache.set(value, formatted);
+    return formatted;
   }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+  if (typeof value === 'object' && value !== null) {
+    const cached = formatJsonObjectCache.get(value);
+    if (cached !== undefined) return cached;
+    let formatted: string;
+    try {
+      formatted = JSON.stringify(value, null, 2) ?? String(value);
+    } catch {
+      formatted = String(value);
+    }
+    formatJsonObjectCache.set(value, formatted);
+    return formatted;
   }
+  return String(value);
 };
