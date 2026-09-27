@@ -116,16 +116,18 @@ jobs:
 
       - name: Rebuild native modules for Electron
         run: pnpm exec electron-rebuild
+        working-directory: packages/desktop
 
       - name: Build distributables
         run: pnpm exec electron-forge make --targets @electron-forge/maker-zip,@electron-forge/maker-dmg
+        working-directory: packages/desktop
         env:
           CI: "1"
 
       - name: Generate SHA256 manifest
         shell: bash
         run: |
-          cd out/make
+          cd packages/desktop/out/make
           find . -type f ! -name 'SHA256SUMS.txt' -print0 \
             | sort -z \
             | xargs -0 shasum -a 256 > SHA256SUMS.txt
@@ -150,7 +152,7 @@ jobs:
           body_path: ${{ steps.notes.outputs.path }}
           draft: true
           files: |
-            out/make/**/*
+            packages/desktop/out/make/**/*
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
