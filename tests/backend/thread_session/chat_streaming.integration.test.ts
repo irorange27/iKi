@@ -64,6 +64,8 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
+import type { LanguageModelV3Usage } from '@ai-sdk/provider';
+
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
@@ -204,6 +206,93 @@ describe('createChatStreaming integration', () => {
     expect(chunks.findIndex(chunk => chunk.type === 'finish')).toBeGreaterThan(
       chunks.indexOf(usageChunk)
     );
+  });
+  it('propagates provider cache usage through the turn boundary', async () => {
+    // Acceptance gate for prompt-cache accounting (audit P2): a provider that
+    // reports cache read/write per inference must surface the summed values
+    // in both the persisted usage event and the renderer's data-token-usage
+    // chunk. Real SDK usage normalization — only the model is scripted.
+    const cacheUsage = (noCache: number, read: number, write: number): LanguageModelV3Usage => ({
+      inputTokens: { total: noCache + read + write, noCache, cacheRead: read, cacheWrite: write },
+      outputTokens: { total: 16, text: 16, reasoning: 0 },
+    });
+
+    defaultToolRegistry.register(createTool({
+      name: toolName,
+      type: 'function',
+      description: 'Probe streaming runtime context',
+      paramSchema: z.object({}),
+      handler: async () => 'ok',
+    }));
+    createModelMock.mockReturnValue(new FauxModelProvider([
+      fauxToolCall(toolName, {}, { usage: cacheUsage(72, 400, 28) }),
+      fauxText('stream done', { usage: cacheUsage(272, 128, 0) }),
+    ]));
+    prepareChatTurnMock.mockResolvedValue({
+      report: { totalEstimatedTokens: 1, blocks: [] },
+      usedSkills: [],
+      selectedSkillIds: [],
+      skillMode: 'manual',
+      finalMessages: [{ role: 'user', content: 'cache probe' }],
+      history: [],
+      prompt: 'cache probe',
+      guardActive: false,
+      requireApproval: false,
+      autoApproveToolRequests: false,
+      affectSignal: null,
+      interventionPolicy: null,
+      guardedTools: [toolName],
+      enableTools: true,
+    });
+
+    const streamCoordinator = createThreadStreamCoordinator();
+    const usage = { recordUsageEvent: vi.fn() };
+    const target = { id: 7, send: vi.fn() };
+
+    const streaming = createChatStreaming({
+      streamCoordinator,
+      memory: {} as never,
+      usage,
+      approvals: {
+        ensurePendingApprovalSession: vi.fn(),
+        registerApprovalBatch: vi.fn(),
+        cleanupPendingSessionsForSender: vi.fn(),
+      },
+      getThreadTitle: () => 'Thread',
+    });
+
+    const result = await streaming.stream(target, {
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'gpt-4o-mini',
+      threadId: 'thread_cache',
+      messages: [{ role: 'user', content: 'cache probe' }],
+      tools: [toolName],
+      maxIterations: 10,
+    });
+    if (!result.success) throw new Error(result.error);
+
+    // Summed across the two inferences: cacheRead 400 + 128, cacheWrite 28.
+    expect(usage.recordUsageEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'chat.stream',
+      threadId: 'thread_cache',
+      usage: expect.objectContaining({
+        inputTokens: 900,
+        outputTokens: 32,
+        cacheReadTokens: 528,
+        cacheWriteTokens: 28,
+      }),
+    }));
+
+    const usageChunk = target.send.mock.calls
+      .map(call => call[1])
+      .find(chunk => chunk.type === 'data-token-usage');
+    expect(usageChunk).toBeDefined();
+    expect(usageChunk!.data).toMatchObject({
+      inputTokens: 900,
+      cacheReadTokens: 528,
+      cacheWriteTokens: 28,
+    });
   });
   const setupLoop = (faux: FauxModelProvider, toolNames: string[] = []) => {
     createModelMock.mockReturnValue(faux);
