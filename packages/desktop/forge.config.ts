@@ -5,14 +5,19 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
-import { createRuntimeAsarConfig, createVitePackagingIgnore } from './src/build/runtime_packaging';
+import { createRuntimeAsarConfig, createRuntimePackageCopier, createVitePackagingIgnore } from './src/build/runtime_packaging';
 
 const config: ForgeConfig = {
   packagerConfig: {
     // Vite only packages `/.vite` by default. The main bundle still resolves a
     // small set of runtime externals, so those files must travel with the app.
+    // Their installed real paths live in the pnpm store outside this project
+    // dir, so the packager's own walk can never include them — stage them via
+    // afterCopy, and skip pruning (it would drop the staged packages again).
     asar: createRuntimeAsarConfig(__dirname),
     ignore: createVitePackagingIgnore(__dirname),
+    afterCopy: [createRuntimePackageCopier(__dirname)],
+    prune: false,
     icon: 'assets/icon/iki-icon',
   },
   rebuildConfig: {},
