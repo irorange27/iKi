@@ -73,6 +73,8 @@ export const en = defineCatalog({
   'chat.reasoning.low': 'Low',
   'chat.reasoning.medium': 'Medium',
   'chat.reasoning.high': 'High',
+  'chat.userText.expand': 'Show more',
+  'chat.userText.collapse': 'Show less',
   'chat.newChat': 'New Chat',
   'chat.messagesCount': ({ count }) => `${asCount(count)} messages`,
   'chat.welcome.settings': 'Settings',

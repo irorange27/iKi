@@ -71,6 +71,8 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.reasoning.low': '低',
   'chat.reasoning.medium': '中',
   'chat.reasoning.high': '高',
+  'chat.userText.expand': '展开全部',
+  'chat.userText.collapse': '收起',
   'chat.newChat': '新对话',
   'chat.messagesCount': ({ count }) => `${asCount(count)} 条消息`,
   'chat.welcome.settings': '设置',

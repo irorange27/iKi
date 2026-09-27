@@ -36,16 +36,40 @@
             <span class="message-invocation-token-label">{{ token.label }}</span>
           </span>
         </div>
-        <div v-else-if="isStreamingTextPart(segment.part)" class="message-text">
-          {{ getTextPartContent(segment.part) }}
-        </div>
-        <div v-else-if="isTextPart(segment.part)" class="message-text markdown-content">
-          <VueMarkdown
-            :source="getTextPartContent(segment.part)"
-            :options="markdownOptions"
-            :plugins="markdownPlugins"
-          />
-        </div>
+        <template v-else-if="isStreamingTextPart(segment.part) || isTextPart(segment.part)">
+          <div
+            v-if="isStreamingTextPart(segment.part)"
+            class="message-text"
+            :class="{ 'is-text-collapsed': isUserTextClamped }"
+          >
+            {{ getTextPartContent(segment.part) }}
+          </div>
+          <div
+            v-else
+            class="message-text markdown-content"
+            :class="{ 'is-text-collapsed': isUserTextClamped }"
+          >
+            <VueMarkdown
+              :source="getTextPartContent(segment.part)"
+              :options="markdownOptions"
+              :plugins="markdownPlugins"
+            />
+          </div>
+          <button
+            v-if="isUserTextCollapsible"
+            class="user-text-toggle"
+            type="button"
+            :aria-expanded="userTextExpanded"
+            @click="toggleUserTextExpanded"
+          >
+            <span>{{ userTextToggleLabel }}</span>
+            <ChevronDown
+              class="user-text-toggle-chevron"
+              :class="{ 'is-open': userTextExpanded }"
+              aria-hidden="true"
+            />
+          </button>
+        </template>
         <details
           v-else-if="isReasoningPart(segment.part)"
           class="message-reasoning"
@@ -186,6 +210,40 @@ const segments = computed<MessagePartSegment[]>(() =>
   segmentMessageParts(getRenderableParts(props.message.parts))
 );
 
+// User-sent text longer than five lines starts collapsed; the toggle under it
+// reveals the rest. Assistant output is never clamped.
+const USER_TEXT_COLLAPSE_LINES = 5;
+
+const userTextExpanded = ref(false);
+
+const isUserMessage = computed(() => props.message.role === 'user');
+
+const countTextLines = (text: string): number => {
+  if (!text.trim()) return 0;
+  return text.replace(/\s+$/, '').split('\n').length;
+};
+
+const isUserTextCollapsible = computed(() => {
+  if (!isUserMessage.value) return false;
+  const totalLines = props.message.parts.reduce(
+    (total, part) => (isTextPart(part) ? total + countTextLines(getTextPartContent(part)) : total),
+    0,
+  );
+  return totalLines > USER_TEXT_COLLAPSE_LINES;
+});
+
+const isUserTextClamped = computed(
+  () => isUserMessage.value && isUserTextCollapsible.value && !userTextExpanded.value,
+);
+
+const toggleUserTextExpanded = () => {
+  userTextExpanded.value = !userTextExpanded.value;
+};
+
+const userTextToggleLabel = computed(() =>
+  t(userTextExpanded.value ? 'chat.userText.collapse' : 'chat.userText.expand'),
+);
+
 const getPartType = (part: unknown): string =>
   isObjectRecord(part) && typeof part.type === 'string' ? part.type : 'unknown';
 
@@ -319,13 +377,68 @@ const getComposerInvocationToneClass = (kind?: string) => {
 }
 
 .message-text {
+  --message-text-line: 1.72;
   color: var(--text-primary);
   font-size: var(--font-size);
-  line-height: 1.72;
+  line-height: var(--message-text-line);
   letter-spacing: 0.01em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Long user messages clamp to five lines with a fade into the bubble, plus a
+   toggle row that reveals the rest. */
+.message-text.is-text-collapsed {
+  position: relative;
+  max-height: calc(var(--message-text-line) * 5 * 1em);
+  overflow: hidden;
+}
+
+.message-text.is-text-collapsed::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.6em;
+  background: linear-gradient(to bottom, transparent, var(--chat-user-bubble-background));
+  pointer-events: none;
+}
+
+.user-text-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--chat-user-bubble-text) 72%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.user-text-toggle:hover,
+.user-text-toggle:focus-visible {
+  color: var(--chat-user-bubble-text);
+  background: color-mix(in srgb, var(--chat-user-bubble-text) 10%, transparent);
+  outline: none;
+}
+
+.user-text-toggle-chevron {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.18s ease;
+}
+
+.user-text-toggle-chevron.is-open {
+  transform: rotate(180deg);
 }
 
 .message-reasoning {
@@ -658,8 +771,8 @@ const getComposerInvocationToneClass = (kind?: string) => {
 
 @media (max-width: 768px) {
   .message-text {
+    --message-text-line: 1.68;
     font-size: calc(var(--font-size) - 1px);
-    line-height: 1.68;
   }
 
   .message-file-image {
