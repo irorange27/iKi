@@ -27,6 +27,7 @@ import {
 import { startAppUpdateService } from './main/services/update/auto_update_service';
 import { companionService } from './main/services/companion/companion_service';
 import { createMainWindow } from './main/windows/main_window';
+import { setDevDockIcon } from './main/windows/dev_dock_icon';
 import { syncCompanionWindowToConfig } from './main/windows/companion_window';
 
 const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
@@ -157,6 +158,7 @@ if (isDaemonMode) {
     startBackgroundRuntime();
     startAppUpdateService(getAppConfig());
     void startDesktopDaemon();
+    setDevDockIcon();
     createMainWindow();
     syncCompanionWindowToConfig(getAppConfig());
     companionService.refreshAvailability();

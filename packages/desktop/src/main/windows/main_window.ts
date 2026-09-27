@@ -28,8 +28,8 @@ export const createMainWindow = (): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 680,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: 480,
+    minHeight: 640,
     backgroundColor: resolveWindowBootstrapBackgroundColor(),
     // Start shadow-free until the renderer resolves the active theme and opts in for light mode.
     hasShadow: false,
