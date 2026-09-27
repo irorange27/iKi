@@ -201,4 +201,62 @@ describe('ChatMessageParts', () => {
     expect(wrapper.find('.message-reasoning-preview').exists()).toBe(false);
     expect(wrapper.text()).toContain('Second line has more detail.');
   });
+
+  it('applies streamed text deltas in place without remounting the segment', async () => {
+    const mountMessage = (text: string): UIMessage =>
+      ({
+        id: 'assistant_stream',
+        role: 'assistant',
+        parts: [{ type: 'text', state: 'streaming', text }],
+      }) as unknown as UIMessage;
+
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: mountMessage('Hel'),
+        messageIndex: 0,
+        activeAssistantMessageId: 'assistant_stream',
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    const segment = wrapper.find('.message-text').element;
+
+    await wrapper.setProps({ message: mountMessage('Hello world') });
+
+    // Stable render key: the delta must patch the text node, not remount the
+    // segment (which would discard rendered markdown/hljs output per delta).
+    expect(wrapper.find('.message-text').element).toBe(segment);
+    expect(wrapper.find('.message-text').text()).toBe('Hello world');
+  });
+
+  it('keeps the segment element when a streamed text part finalizes into markdown', async () => {
+    const mountMessage = (part: Record<string, unknown>): UIMessage =>
+      ({
+        id: 'assistant_stream',
+        role: 'assistant',
+        parts: [part],
+      }) as unknown as UIMessage;
+
+    const wrapper = mount(ChatMessageParts, {
+      props: {
+        message: mountMessage({ type: 'text', state: 'streaming', text: 'Hello **world**' }),
+        messageIndex: 0,
+        activeAssistantMessageId: 'assistant_stream',
+        approvalProcessing: () => false,
+        getMcpServerLabel: () => '',
+      },
+    });
+
+    const segment = wrapper.find('.message-part').element;
+
+    await wrapper.setProps({
+      message: mountMessage({ type: 'text', text: 'Hello **world**' }),
+    });
+
+    // Branch switch (plain interpolation → VueMarkdown) must be an in-place
+    // patch under the same key, not a segment remount.
+    expect(wrapper.find('.message-part').element).toBe(segment);
+    expect(wrapper.find('.markdown-content').exists()).toBe(true);
+  });
 });

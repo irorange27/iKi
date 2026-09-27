@@ -196,18 +196,12 @@ const getSegmentRenderKey = (segment: MessagePartSegment): string => {
     // first member only.
     return `${messageId}-tool-call-group-${segment.startIndex}`;
   }
-  const part = segment.part;
-  const partIndex = segment.index;
-  const partType = getPartType(part);
-  // Reasoning parts need a stable key: the <details> block must not remount
-  // (and lose its open state) on every streamed delta.
-  if (isReasoningPart(part)) {
-    return `${messageId}-${partType}-${partIndex}`;
-  }
-  if (isTextPart(part)) {
-    return `${messageId}-${partType}-${partIndex}-${part.text.length}`;
-  }
-  return `${messageId}-${partType}-${partIndex}`;
+  // Keys must stay stable across streamed deltas: streaming text renders
+  // through a reactive interpolation and finalized text through VueMarkdown's
+  // source computed, so both update in place. A churning key would remount the
+  // segment per delta and discard rendered output (hljs highlighting); for
+  // reasoning it would also drop the <details> open state.
+  return `${messageId}-${getPartType(segment.part)}-${segment.index}`;
 };
 
 const getTextPartContent = (part: unknown): string => {
