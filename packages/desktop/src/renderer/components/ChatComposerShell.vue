@@ -21,6 +21,7 @@
             :value="props.modelValue"
             :placeholder="props.placeholder"
             class="chat-input-field ui-text-primary placeholder-muted focus:outline-none"
+            :class="{ 'is-expanded': isExpanded, 'has-expand-toggle': showExpandToggle }"
             @input="emitModelValue"
             @keydown="emit('keydown', $event)"
             @keydown.enter="emit('keydownEnter', $event)"
@@ -29,6 +30,19 @@
             @paste="handlePaste"
           />
         </div>
+        <button
+          v-if="showExpandToggle"
+          type="button"
+          class="composer-control-btn composer-expand-toggle h-8 w-8 rounded-lg flex items-center justify-center ui-text-secondary"
+          :class="{ 'is-expanded': isExpanded }"
+          :aria-pressed="isExpanded"
+          :aria-label="expandToggleLabel"
+          :title="expandToggleLabel"
+          @click="toggleExpanded"
+        >
+          <Minimize2 v-if="isExpanded" class="h-4 w-4" />
+          <Maximize2 v-else class="h-4 w-4" />
+        </button>
         <slot name="input-overlay" />
       </div>
 
@@ -64,7 +78,8 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Maximize2, Minimize2 } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 
 type ComposerTextControl = HTMLTextAreaElement;
@@ -93,17 +108,36 @@ const { t } = useI18n();
 const inputRef = ref<ComposerTextControl | null>(null);
 const MIN_INPUT_HEIGHT_PX = 48;
 const MAX_INPUT_HEIGHT_PX = 220;
+const EXPANDED_INPUT_HEIGHT_PX = 480;
+const EXPAND_TOGGLE_CHAR_THRESHOLD = 200;
+
+const isExpanded = ref(false);
+const isOverflowClamped = ref(false);
+
+const expandedInputHeight = () => {
+  const viewportCap = Math.floor(window.innerHeight * 0.55);
+  return Math.min(EXPANDED_INPUT_HEIGHT_PX, Math.max(MIN_INPUT_HEIGHT_PX, viewportCap));
+};
 
 const resizeInputField = () => {
   const input = inputRef.value;
   if (!input) return;
+
+  if (isExpanded.value) {
+    input.style.height = `${expandedInputHeight()}px`;
+    input.style.overflowY = 'auto';
+    isOverflowClamped.value = false;
+    return;
+  }
+
   input.style.height = '0px';
   const nextHeight = Math.min(
     Math.max(input.scrollHeight, MIN_INPUT_HEIGHT_PX),
     MAX_INPUT_HEIGHT_PX
   );
   input.style.height = `${nextHeight}px`;
-  input.style.overflowY = input.scrollHeight > MAX_INPUT_HEIGHT_PX ? 'auto' : 'hidden';
+  isOverflowClamped.value = input.scrollHeight > MAX_INPUT_HEIGHT_PX;
+  input.style.overflowY = isOverflowClamped.value ? 'auto' : 'hidden';
 };
 
 const queueResize = () => {
@@ -181,14 +215,48 @@ const handleDrop = (event: DragEvent) => {
 
 watch(
   () => props.modelValue,
-  () => {
+  nextValue => {
+    if (nextValue.length === 0) {
+      isExpanded.value = false;
+      isOverflowClamped.value = false;
+    }
     queueResize();
   },
   { flush: 'post' }
 );
 
+const showExpandToggle = computed(
+  () =>
+    isExpanded.value ||
+    isOverflowClamped.value ||
+    props.modelValue.length >= EXPAND_TOGGLE_CHAR_THRESHOLD
+);
+
+const expandToggleLabel = computed(() =>
+  isExpanded.value ? t('chat.input.collapseComposer') : t('chat.input.expandComposer')
+);
+
+const toggleExpanded = () => {
+  isExpanded.value = !isExpanded.value;
+  queueResize();
+  const input = inputRef.value;
+  if (!input) return;
+  input.focus();
+  const caret = input.value.length;
+  input.setSelectionRange(caret, caret);
+};
+
+const handleViewportResize = () => {
+  queueResize();
+};
+
 onMounted(() => {
   queueResize();
+  window.addEventListener('resize', handleViewportResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleViewportResize);
 });
 </script>
 
@@ -288,6 +356,15 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
+.chat-input-field.is-expanded {
+  max-height: none;
+}
+
+/* keeps typed text clear of the floating expand toggle in the top-right corner */
+.chat-input-field.has-expand-toggle {
+  padding-right: 36px;
+}
+
 .chat-input-field::-webkit-scrollbar {
   width: 8px;
 }
@@ -300,12 +377,14 @@ onMounted(() => {
 .composer-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 8px 14px;
   padding: 6px 12px 10px;
   border-radius: 0 0 12px 12px;
-  background: var(--chat-composer-toolbar-background);
+  /* stays transparent so the container's composer background (a gradient in
+     light themes) shows through — an opaque fill would seam against it */
+  background: transparent;
 }
 
 .composer-toolbar-slot {
@@ -320,9 +399,23 @@ onMounted(() => {
 .composer-toolbar-slot-right {
   flex: 1 1 auto;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   /* keeps the actions pinned to the right edge even when the toolbar wraps */
+  justify-content: flex-end;
   margin-left: auto;
+}
+
+.composer-expand-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}
+
+.composer-expand-toggle.is-expanded {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-color);
 }
 
 .placeholder-muted::placeholder {

@@ -2,7 +2,7 @@
 
 import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import ChatComposerShell from '../../../packages/desktop/src/renderer/components/ChatComposerShell.vue';
 
@@ -80,5 +80,59 @@ describe('ChatComposerShell', () => {
     await wrapper.find('.composer-feedback-dismiss').trigger('click');
 
     expect(wrapper.emitted('dismissFeedback')).toEqual([[]]);
+  });
+
+  it('keeps the expand toggle hidden for short drafts', () => {
+    const { wrapper } = mountComponent({ modelValue: 'short draft' });
+
+    expect(wrapper.find('.composer-expand-toggle').exists()).toBe(false);
+  });
+
+  it('offers the expand toggle once the draft passes the length threshold', () => {
+    const { wrapper } = mountComponent({ modelValue: 'x'.repeat(220) });
+
+    const toggle = wrapper.find('.composer-input-region .composer-expand-toggle');
+    expect(toggle.exists()).toBe(true);
+    expect(toggle.attributes('aria-pressed')).toBe('false');
+  });
+
+  it('expands the field into a taller editing surface and back', async () => {
+    const { wrapper, inputRef } = mountComponent({ modelValue: 'x'.repeat(220) });
+    const focusSpy = vi.spyOn(inputRef.value!, 'focus');
+    const toggle = wrapper.find('.composer-expand-toggle');
+
+    await toggle.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    const field = wrapper.find('.chat-input-field');
+    const style = field.attributes('style') ?? '';
+    const height = Number.parseFloat(/height:\s*([\d.]+)px/.exec(style)?.[1] ?? '0');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    expect(field.classes()).toContain('is-expanded');
+    expect(height).toBeGreaterThan(220);
+    expect(style).toContain('overflow-y: auto');
+    expect(focusSpy).toHaveBeenCalled();
+
+    await toggle.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    const collapsedStyle = field.attributes('style') ?? '';
+    const collapsedHeight = Number.parseFloat(
+      /height:\s*([\d.]+)px/.exec(collapsedStyle)?.[1] ?? '0'
+    );
+    expect(toggle.attributes('aria-pressed')).toBe('false');
+    expect(collapsedHeight).toBeLessThanOrEqual(220);
+    expect(collapsedStyle).toContain('overflow-y: hidden');
+  });
+
+  it('collapses automatically when the draft is cleared', async () => {
+    const { wrapper } = mountComponent({ modelValue: 'x'.repeat(220) });
+
+    await wrapper.find('.composer-expand-toggle').trigger('click');
+    await wrapper.setProps({ modelValue: '' });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.composer-expand-toggle').exists()).toBe(false);
+    expect(wrapper.find('.chat-input-field').classes()).not.toContain('is-expanded');
   });
 });
