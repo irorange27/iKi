@@ -11,6 +11,7 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../turn_pre
 import { createApprovalRecoveryContext } from '../turn_prep/approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from '../turn_prep/run_tracker';
+import { summarizeContextComposition } from '../turn_prep/context_helpers';
 import { startTurnHarness } from '../agent/harness';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
@@ -354,6 +355,10 @@ export const createChatStreaming = (deps: {
           providerType: options.providerType,
           ...(options.providerId ? { providerId: options.providerId } : {}),
           ...(streamResult.perf ?? {}),
+          contextComposition: summarizeContextComposition({
+            report: preparedTurn.report,
+            toolSchemaTokens: streamResult.toolSchemaTokens ?? null,
+          }),
         });
       }
 

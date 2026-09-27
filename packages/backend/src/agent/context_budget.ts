@@ -1,6 +1,8 @@
 import { countTokens, decode, encode } from 'gpt-tokenizer';
 import type { ModelMessage } from 'ai';
 
+import type { AgentTool } from './types';
+
 
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const TOOL_MESSAGE_OVERHEAD_TOKENS = 8;
@@ -43,6 +45,22 @@ export const clipTextToTokenBudget = (
 
   const truncated = decode(encoded.slice(0, availableTokens));
   return { text: `${truncated}${TRUNCATION_SUFFIX}`, truncated: true };
+};
+
+/** Estimated tokens of the JSON schemas sent to the provider, split by origin. */
+export const estimateToolSchemaTokens = (tools: AgentTool[]): { builtin: number; mcp: number } => {
+  const totals = { builtin: 0, mcp: 0 };
+  for (const tool of tools) {
+    const tokens = estimateTextTokens(
+      [tool.description, JSON.stringify(tool.parameters ?? {})].filter(Boolean).join('\n')
+    );
+    if (tool.source?.kind === 'mcp') {
+      totals.mcp += tokens;
+    } else {
+      totals.builtin += tokens;
+    }
+  }
+  return totals;
 };
 
 export const AUTO_COMPACT_THRESHOLD = 0.8;

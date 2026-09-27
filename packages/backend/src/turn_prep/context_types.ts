@@ -34,6 +34,26 @@ export type ContextReport = {
   blocks: ContextReportBlock[];
 };
 
+/** Composition categories shown in the renderer's context-usage panel. */
+export type ContextCompositionCategory =
+  | 'messages'
+  | 'systemPrompt'
+  | 'skills'
+  | 'memory'
+  | 'tools'
+  | 'mcpTools'
+  | 'other';
+
+/**
+ * Estimated per-category token breakdown of one turn's assembled context.
+ * Category values come from the local tokenizer; only the provider-reported
+ * usage totals are exact, so consumers must treat this as an estimate.
+ */
+export type ContextCompositionSummary = {
+  estimatedTotalTokens: number;
+  categories: Partial<Record<ContextCompositionCategory, number>>;
+};
+
 export type AssembleChatContextResult = {
   messages: ChatInputMessage[];
   usedSkills: SkillSummary[];

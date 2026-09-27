@@ -7,6 +7,7 @@ import {
   type AffectSignalSource,
 } from '@iki/backend/types/affect';
 import type { SkillSource } from '@iki/backend/types/skill';
+import type { ContextCompositionSummary } from '@iki/backend/turn_prep/context_types';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 
 export { isObjectRecord };
@@ -94,6 +95,13 @@ export type TokenUsagePartData = {
   firstTokenSamples?: number;
   steps?: number;
   toolCalls?: number;
+  /** Estimated per-category context assembly breakdown (absent on legacy messages). */
+  contextComposition?: ContextCompositionSummary;
+};
+
+const isContextCompositionSummary = (value: unknown): value is ContextCompositionSummary => {
+  if (!isObjectRecord(value) || !isObjectRecord(value.categories)) return false;
+  return typeof value.estimatedTotalTokens === 'number';
 };
 
 export type ChatUiDataTypes = {
@@ -508,6 +516,9 @@ export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart |
         ...(typeof part.model === 'string' ? { model: part.model } : {}),
         ...(typeof part.providerType === 'string' ? { providerType: part.providerType } : {}),
         ...(typeof part.providerId === 'string' ? { providerId: part.providerId } : {}),
+        ...(isContextCompositionSummary(part.contextComposition)
+          ? { contextComposition: part.contextComposition }
+          : {}),
       });
     }
   }

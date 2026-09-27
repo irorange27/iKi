@@ -370,6 +370,9 @@ export const createUiChunkEmitter = (
           : {}),
         ...(typeof payload?.steps === 'number' ? { steps: payload.steps } : {}),
         ...(typeof payload?.toolCalls === 'number' ? { toolCalls: payload.toolCalls } : {}),
+        ...(payload?.contextComposition
+          ? { contextComposition: payload.contextComposition }
+          : {}),
       };
       emitChunk({
         type: 'data-token-usage',
