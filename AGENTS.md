@@ -11,6 +11,7 @@
 3. `pnpm run ci:quality` must pass before declaring done. UI changes: click through in the running app — type-check ≠ feature-correct. Cross-layer wiring (renderer→IPC→backend→SDK→tools→persistence): run `pnpm run test:e2e` (real app + scripted provider; entry `tests/integration/e2e/run_smoke.mjs`).
 4. Commit only when the user asks (`pnpm run commit`). Never `--no-verify`. Single test file: `pnpm vitest run <path>`.
 5. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
+6. Release tags trigger the full macOS build (`release-build.yml`) and must match the root `package.json` version. Before pushing a tag: package locally (`cd packages/desktop && pnpm exec electron-forge package`) and launch `out/iki-darwin-arm64/iki.app` once — the packaged asar is the real consumer boundary. Runbook: `docs/design/packaging-release.md`.
 
 ## Commands
 
@@ -66,6 +67,7 @@ postmortem/        ← incident write-ups
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
 | New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |
 | Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |
+| Package the app / cut a release | `packages/desktop/forge.config.ts` + `src/build/runtime_packaging.ts`; runbook: `docs/design/packaging-release.md` |
 
 ## Details live here (read on demand)
 
