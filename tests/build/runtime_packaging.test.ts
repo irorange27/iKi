@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { createRequire } from 'node:module';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -35,6 +37,11 @@ const writeJson = (filePath: string, value: unknown) => {
 const writeText = (filePath: string, value = '') => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, value);
+};
+
+const symlinkDirectory = (targetPath: string, linkPath: string) => {
+  fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+  fs.symlinkSync(targetPath, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
 };
 
 const seedRootPackages = (rootDir: string) => {
@@ -247,12 +254,155 @@ describe('runtime_packaging', () => {
 
     copyRuntimePackagesInto(projectDir, buildPath, 'darwin');
 
-    expect(
-      fs.existsSync(path.join(buildPath, 'node_modules/branch-a/node_modules/ws/index.js'))
-    ).toBe(true);
-    expect(
-      fs.existsSync(path.join(buildPath, 'node_modules/branch-b/node_modules/ws/index.js'))
-    ).toBe(true);
+    // Each branch must resolve its own physical ws@2 copy — existence alone
+    // would not catch a shared-wrong-source or root-version regression.
+    for (const branch of ['branch-a', 'branch-b']) {
+      const branchDir = path.join(buildPath, 'node_modules', branch);
+      const stagedManifest = JSON.parse(
+        fs.readFileSync(path.join(branchDir, 'node_modules/ws/package.json'), 'utf8')
+      );
+      expect(stagedManifest.version).toBe('2.0.0');
+
+      const branchRequire = createRequire(path.join(branchDir, 'index.js'));
+      const resolvedRealPath = fs.realpathSync(branchRequire.resolve('ws'));
+      expect(resolvedRealPath).toBe(
+        path.join(fs.realpathSync(branchDir), 'node_modules/ws/index.js')
+      );
+    }
+  });
+
+  it('keeps same-version physical installs and their peer contexts isolated', () => {
+    const { rootDir, projectDir } = createFixture();
+    seedRootPackages(rootDir);
+    writeJson(path.join(rootDir, 'node_modules/peer-context/package.json'), {
+      name: 'peer-context',
+      version: '1.0.0',
+    });
+    writeText(path.join(rootDir, 'node_modules/peer-context/index.js'), 'module.exports = "root";');
+    writeBuildFixture(projectDir, 'main-test.js', [
+      'require("ws");',
+      'require("branch-a");',
+      'require("branch-b");',
+      'require("peer-context");',
+    ]);
+
+    for (const [branch, peerValue] of [
+      ['branch-a', 'peer-a'],
+      ['branch-b', 'peer-b'],
+    ]) {
+      const branchStore = path.join(rootDir, `node_modules/.pnpm/${branch}/node_modules`);
+      const wsStore = path.join(rootDir, `node_modules/.pnpm/${branch}-ws/node_modules`);
+      const branchPackage = path.join(branchStore, branch);
+      const wsPackage = path.join(wsStore, 'ws');
+      const peerPackage = path.join(wsStore, 'peer-context');
+
+      writeJson(path.join(branchPackage, 'package.json'), {
+        name: branch,
+        version: '1.0.0',
+        dependencies: { ws: '^2.0.0' },
+      });
+      writeText(path.join(branchPackage, 'index.js'), 'module.exports = require("ws");');
+      writeJson(path.join(wsPackage, 'package.json'), {
+        name: 'ws',
+        version: '2.0.0',
+        peerDependencies: { 'peer-context': '^2.0.0' },
+      });
+      writeText(path.join(wsPackage, 'index.js'), 'module.exports = require("peer-context");');
+      writeJson(path.join(peerPackage, 'package.json'), {
+        name: 'peer-context',
+        version: '2.0.0',
+      });
+      writeText(path.join(peerPackage, 'index.js'), `module.exports = "${peerValue}";`);
+
+      symlinkDirectory(branchPackage, path.join(rootDir, `node_modules/${branch}`));
+      symlinkDirectory(wsPackage, path.join(branchStore, 'ws'));
+    }
+
+    const buildPath = path.join(rootDir, 'build-staging');
+    copyRuntimePackagesInto(projectDir, buildPath, 'darwin');
+
+    for (const [branch, expectedPeerValue] of [
+      ['branch-a', 'peer-a'],
+      ['branch-b', 'peer-b'],
+    ]) {
+      const branchDir = path.join(buildPath, 'node_modules', branch);
+      const branchRequire = createRequire(path.join(branchDir, 'index.js'));
+      const resolvedWs = branchRequire.resolve('ws');
+      const stagedManifest = JSON.parse(
+        fs.readFileSync(path.join(path.dirname(resolvedWs), 'package.json'), 'utf8')
+      );
+
+      expect(stagedManifest.version).toBe('2.0.0');
+      expect(branchRequire('ws')).toBe(expectedPeerValue);
+    }
+  });
+
+  it('shares deep diamond dependencies at their common safe ancestor', () => {
+    const { rootDir, projectDir } = createFixture();
+    seedRootPackages(rootDir);
+    const rootPackages = ['shared', 'left', 'right', 'leaf'];
+    for (const name of rootPackages) {
+      writeJson(path.join(rootDir, `node_modules/${name}/package.json`), {
+        name,
+        version: '1.0.0',
+      });
+      writeText(path.join(rootDir, `node_modules/${name}/index.js`), `module.exports = "${name}-v1";`);
+    }
+    writeBuildFixture(projectDir, 'main-test.js', [
+      'require("branch-a");',
+      'require("branch-b");',
+      ...rootPackages.map(name => `require("${name}");`),
+    ]);
+
+    const branchStoreRoot = path.join(rootDir, 'node_modules/.pnpm/branches/node_modules');
+    const sharedStoreRoot = path.join(rootDir, 'node_modules/.pnpm/runtime-v2/node_modules');
+    const sharedPackage = path.join(sharedStoreRoot, 'shared');
+    for (const branch of ['branch-a', 'branch-b']) {
+      const branchPackage = path.join(branchStoreRoot, branch);
+      writeJson(path.join(branchPackage, 'package.json'), {
+        name: branch,
+        version: '1.0.0',
+        dependencies: { shared: '^2.0.0' },
+      });
+      writeText(path.join(branchPackage, 'index.js'), 'module.exports = require("shared");');
+      symlinkDirectory(branchPackage, path.join(rootDir, `node_modules/${branch}`));
+    }
+
+    for (const [name, dependencies, source] of [
+      ['shared', { left: '^2.0.0', right: '^2.0.0' }, 'module.exports = [require("left"), require("right")];'],
+      ['left', { leaf: '^2.0.0' }, 'module.exports = require("leaf");'],
+      ['right', { leaf: '^2.0.0' }, 'module.exports = require("leaf");'],
+      ['leaf', {}, 'module.exports = "leaf-v2";'],
+    ] as const) {
+      const packageDir = path.join(sharedStoreRoot, name);
+      writeJson(path.join(packageDir, 'package.json'), { name, version: '2.0.0', dependencies });
+      writeText(path.join(packageDir, 'index.js'), source);
+    }
+    symlinkDirectory(sharedPackage, path.join(branchStoreRoot, 'shared'));
+
+    const buildPath = path.join(rootDir, 'build-staging');
+    const { placements } = resolveRuntimePackagingPlan(projectDir, 'darwin');
+    const leafV2Targets = placements
+      .filter(
+        placement =>
+          placement.targetRelative !== 'node_modules/leaf' &&
+          placement.targetRelative.endsWith('/node_modules/leaf')
+      )
+      .map(placement => placement.targetRelative)
+      .sort();
+
+    expect(leafV2Targets).toEqual([
+      'node_modules/branch-a/node_modules/leaf',
+      'node_modules/branch-b/node_modules/leaf',
+    ]);
+
+    copyRuntimePackagesInto(projectDir, buildPath, 'darwin');
+    for (const branch of ['branch-a', 'branch-b']) {
+      const branchRequire = createRequire(
+        path.join(buildPath, 'node_modules', branch, 'index.js')
+      );
+      expect(branchRequire('shared')).toEqual(['leaf-v2', 'leaf-v2']);
+    }
   });
 
   it('keeps only the vite bundles and the manifest in the project walk', () => {
