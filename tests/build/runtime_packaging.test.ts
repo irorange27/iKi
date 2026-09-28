@@ -218,6 +218,43 @@ describe('runtime_packaging', () => {
     );
   });
 
+  it('stages a non-hoisted version under every consumer, not just the first branch', () => {
+    const { rootDir, projectDir } = createFixture();
+    seedRootPackages(rootDir);
+    writeBuildFixture(projectDir, 'main-test.js', [
+      'require("ws");',
+      'require("branch-a");',
+      'require("branch-b");',
+    ]);
+    // Two independent consumers on different branches share ws@2 while ws@1
+    // owns the root slot — each branch needs its own resolvable copy.
+    for (const branch of ['branch-a', 'branch-b']) {
+      writeJson(path.join(rootDir, `node_modules/${branch}/package.json`), {
+        name: branch,
+        version: '1.0.0',
+        dependencies: {
+          ws: '^2.0.0',
+        },
+      });
+      writeText(path.join(rootDir, `node_modules/${branch}/index.js`), 'module.exports = {};');
+      writeJson(path.join(rootDir, `node_modules/${branch}/node_modules/ws/package.json`), {
+        name: 'ws',
+        version: '2.0.0',
+      });
+      writeText(path.join(rootDir, `node_modules/${branch}/node_modules/ws/index.js`), 'nested');
+    }
+    const buildPath = path.join(rootDir, 'build-staging');
+
+    copyRuntimePackagesInto(projectDir, buildPath, 'darwin');
+
+    expect(
+      fs.existsSync(path.join(buildPath, 'node_modules/branch-a/node_modules/ws/index.js'))
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(buildPath, 'node_modules/branch-b/node_modules/ws/index.js'))
+    ).toBe(true);
+  });
+
   it('keeps only the vite bundles and the manifest in the project walk', () => {
     const { rootDir, projectDir } = createFixture();
     seedRootPackages(rootDir);
