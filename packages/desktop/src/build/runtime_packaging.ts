@@ -229,57 +229,45 @@ export const resolveRuntimePackagingPlan = (
     ...collectBuiltRuntimePackageNames(projectDir),
   ]);
 
-  // Three passes over the closure: (1) BFS every distinct `name@version`
-  // once, recording its shallowest consumer; (2) hoist the shallowest version
-  // of each name to the app's node_modules root, npm-style; (3) stage each
-  // node — a version that lost the root slot nests under its consumer, so
-  // multi-version packages keep their isolation while everything resolves
-  // through plain files (no symlinks inside the asar).
+  // A package's install name and physical path together identify a node:
+  // distinct store copies of the same name@version can carry different peer
+  // contexts, while aliases can expose one physical path under two names.
   type ClosureNode = {
     key: string;
     name: string;
     version: string;
     realpath: string;
     depth: number;
-    consumerKey: string | null;
-    consumerRealPath: string | null;
   };
 
   const nodes = new Map<string, ClosureNode>();
   const edges = new Map<string, Set<string>>();
 
   const queue: Array<ClosureNode> = [];
-  const enqueueNode = (
-    name: string,
-    realpath: string,
-    depth: number,
-    consumerKey: string | null,
-    consumerRealPath: string | null
-  ): string | null => {
-    const manifest = readInstalledPackageManifest(realpath);
-    const version = manifest.version ?? 'unknown';
-    const key = `${name}@${version}`;
+  const enqueueNode = (name: string, realpath: string, depth: number): string | null => {
+    const key = JSON.stringify([name, realpath]);
     const existing = nodes.get(key);
-    if (existing) {
-      if (depth < existing.depth) {
-        existing.depth = depth;
-        existing.consumerKey = consumerKey;
-        existing.consumerRealPath = consumerRealPath;
-      }
-      return key;
-    }
-    const node: ClosureNode = { key, name, version, realpath, depth, consumerKey, consumerRealPath };
+    if (existing) return existing.key;
+    const manifest = readInstalledPackageManifest(realpath);
+    const node: ClosureNode = {
+      key,
+      name,
+      version: manifest.version ?? 'unknown',
+      realpath,
+      depth,
+    };
     nodes.set(key, node);
     queue.push(node);
-    return key;
+    return node.key;
   };
 
   for (const root of roots) {
     const rootRealPath = resolvePackageRealPath(projectDir, root);
-    if (rootRealPath) enqueueNode(root, rootRealPath, 0, null, null);
+    if (rootRealPath) enqueueNode(root, rootRealPath, 0);
   }
   while (queue.length > 0) {
-    const node = queue.shift()!;
+    const node = queue.shift();
+    if (!node) continue;
     // Binary-drop packages ship only the files from their include rule — their
     // JS dependency closure (whisper's ML stack alone is hundreds of MB) never
     // loads inside the packaged app.
@@ -298,44 +286,71 @@ export const resolveRuntimePackagingPlan = (
       if (dependencyName === 'electron') continue;
       const childRealPath = resolvePackageRealPath(node.realpath, dependencyName);
       if (!childRealPath) continue;
-      const childKey = enqueueNode(dependencyName, childRealPath, node.depth + 1, node.key, node.realpath);
+      const childKey = enqueueNode(dependencyName, childRealPath, node.depth + 1);
       if (childKey) childKeys.add(childKey);
     }
     if (childKeys.size > 0) edges.set(node.key, childKeys);
   }
+  // Hoist the shallowest install of each name. Other installs go at the
+  // shallowest safe resolution directory; a nearer conflicting install splits
+  // consumers into separate scopes. This shares valid ancestors without
+  // recursively copying every descendant into every branch.
+  const MAX_RUNTIME_PACKAGE_PLACEMENTS = 2000;
 
-  // Hoisting rule: a name with a single installed version always stages at
-  // the app's node_modules root; a name with several versions keeps its
-  // shallowest at the root and nests the others under the consumers that
-  // pull them. Only conflicting names need per-consumer copies, which keeps
-  // the staged tree bounded while every consumer resolves its own version.
-  const versionsByName = new Map<string, Map<string, ClosureNode>>();
-  for (const node of nodes.values()) {
-    if (!versionsByName.has(node.name)) versionsByName.set(node.name, new Map());
-    versionsByName.get(node.name)!.set(node.version, node);
+  const depthSorted = Array.from(nodes.values()).sort(
+    (left, right) => left.depth - right.depth || left.key.localeCompare(right.key)
+  );
+  const rootNodesByName = new Map<string, ClosureNode>();
+  for (const node of depthSorted) {
+    if (!rootNodesByName.has(node.name)) {
+      rootNodesByName.set(node.name, node);
+    }
   }
-  const rootVersions = new Map<string, string>();
-  for (const [name, byVersion] of versionsByName) {
-    const shallowest = Array.from(byVersion.values()).sort(
-      (left, right) => left.depth - right.depth || left.key.localeCompare(right.key)
-    )[0];
-    if (shallowest) rootVersions.set(name, shallowest.version);
-  }
-  const isHoisted = (node: ClosureNode): boolean =>
-    versionsByName.get(node.name)!.size === 1 || rootVersions.get(node.name) === node.version;
 
+  // Every node_modules directory on a consumer target's resolution chain,
+  // deepest first, always ending at the app root.
+  const resolutionChainDirs = (targetRelative: string): string[] => {
+    const segments = targetRelative.split('/');
+    const dirs: string[] = [`${segments.join('/')}/node_modules`];
+    for (let index = segments.length - 1; index >= 0; index -= 1) {
+      if (segments[index] === 'node_modules') {
+        dirs.push(segments.slice(0, index + 1).join('/'));
+      }
+    }
+    return dirs;
+  };
+
+  const targets = new Map<string, Set<string>>();
+  const occupancy = new Map<string, string>();
   const placements = new Map<string, RuntimePlacement>();
   const unpackPaths = new Set<string>();
-  const stagedTargets = new Set<string>();
+  let packagePlacementCount = 0;
 
-  const stageNode = (
-    node: ClosureNode,
-    targetRelative: string,
-    visibleKeys: ReadonlySet<string>
-  ): void => {
-    const dedupeKey = `${node.key}\u0000${targetRelative}`;
-    if (stagedTargets.has(dedupeKey)) return;
-    stagedTargets.add(dedupeKey);
+  const addPlacement = (node: ClosureNode, targetRelative: string): boolean => {
+    const nodeTargets = targets.get(node.key);
+    if (nodeTargets?.has(targetRelative)) return false;
+
+    const occupant = occupancy.get(targetRelative);
+    if (occupant === node.key) {
+      nodeTargets?.add(targetRelative);
+      return false;
+    }
+    if (occupant !== undefined) {
+      const conflictingNode = nodes.get(occupant);
+      throw new Error(
+        `Runtime dependency staging collision at "${targetRelative}": "${conflictingNode?.name ?? occupant}@${conflictingNode?.version ?? 'unknown'}" and "${node.name}@${node.version}" both claim it.`
+      );
+    }
+    if (packagePlacementCount >= MAX_RUNTIME_PACKAGE_PLACEMENTS) {
+      throw new Error(
+        `Runtime dependency staging exceeded ${MAX_RUNTIME_PACKAGE_PLACEMENTS} package placements — the dependency graph is too nested to package safely.`
+      );
+    }
+
+    packagePlacementCount += 1;
+    occupancy.set(targetRelative, node.key);
+    if (!nodeTargets) targets.set(node.key, new Set([targetRelative]));
+    else nodeTargets.add(targetRelative);
 
     const rule = specialRules[node.name];
     const sources: RuntimePlacement[] = rule
@@ -352,23 +367,122 @@ export const resolveRuntimePackagingPlan = (
     for (const unpackPath of rule?.unpack ?? []) {
       unpackPaths.add(`${targetRelative}/${unpackPath}`);
     }
-
-    const nextVisible = new Set(visibleKeys);
-    nextVisible.add(node.key);
-    for (const childKey of edges.get(node.key) ?? []) {
-      const child = nodes.get(childKey);
-      if (!child) continue;
-      // Hoisted versions resolve at the root; versions already visible on the
-      // chain resolve through their earlier placement.
-      if (isHoisted(child)) continue;
-      if (visibleKeys.has(childKey)) continue;
-      stageNode(child, `${targetRelative}/node_modules/${child.name}`, nextVisible);
-    }
+    return true;
   };
 
-  for (const [name, byVersion] of versionsByName) {
-    const rootNode = byVersion.get(rootVersions.get(name)!);
-    if (rootNode) stageNode(rootNode, `node_modules/${name}`, new Set([rootNode.key]));
+  const getResolvedNodeKey = (consumerTarget: string, packageName: string): string | null => {
+    for (const directory of resolutionChainDirs(consumerTarget)) {
+      const nodeKey = occupancy.get(`${directory}/${packageName}`);
+      if (nodeKey !== undefined) return nodeKey;
+    }
+    return null;
+  };
+
+  type PlacementCandidate = { directory: string; coverage: string[] };
+  const findPlacementCandidate = (
+    node: ClosureNode,
+    consumerTargets: ReadonlySet<string>
+  ): PlacementCandidate | null => {
+    const chains = Array.from(consumerTargets, consumerTarget => ({
+      consumerTarget,
+      directories: resolutionChainDirs(consumerTarget),
+    }));
+    const candidateDirectories = new Set(chains.flatMap(({ directories }) => directories));
+    const candidates: PlacementCandidate[] = [];
+
+    for (const directory of candidateDirectories) {
+      const packageTarget = `${directory}/${node.name}`;
+      const occupant = occupancy.get(packageTarget);
+      if (occupant !== undefined && occupant !== node.key) continue;
+
+      const coverage = chains
+        .filter(({ directories }) => {
+          const candidateIndex = directories.indexOf(directory);
+          if (candidateIndex === -1) return false;
+          return directories.slice(0, candidateIndex).every(nearerDirectory => {
+            const nearerOccupant = occupancy.get(`${nearerDirectory}/${node.name}`);
+            return nearerOccupant === undefined || nearerOccupant === node.key;
+          });
+        })
+        .map(({ consumerTarget }) => consumerTarget);
+
+      if (coverage.length > 0) candidates.push({ directory, coverage });
+    }
+
+    candidates.sort(
+      (left, right) =>
+        left.directory.split('/').length - right.directory.split('/').length ||
+        right.coverage.length - left.coverage.length ||
+        left.directory.localeCompare(right.directory)
+    );
+    return candidates[0] ?? null;
+  };
+
+  for (const node of rootNodesByName.values()) {
+    addPlacement(node, `node_modules/${node.name}`);
+  }
+
+  const collectDemands = (): Map<string, Set<string>> => {
+    const demands = new Map<string, Set<string>>();
+    for (const [consumerKey, childKeys] of edges) {
+      for (const consumerTarget of targets.get(consumerKey) ?? []) {
+        for (const childKey of childKeys) {
+          const child = nodes.get(childKey);
+          if (!child || getResolvedNodeKey(consumerTarget, child.name) === childKey) continue;
+          const consumerTargets = demands.get(childKey) ?? new Set<string>();
+          consumerTargets.add(consumerTarget);
+          demands.set(childKey, consumerTargets);
+        }
+      }
+    }
+    return demands;
+  };
+
+  // Process graph edges from the root placements. A package can have several
+  // staged copies, so every consumer destination must flow to its dependencies.
+  // Shared installs go in a safe common directory. If a conflict shadows only
+  // part of the consumer paths, the remaining scopes receive their own copy.
+  let demands = collectDemands();
+  while (demands.size > 0) {
+    let madeProgress = false;
+    for (const [childKey, consumerTargets] of demands) {
+      const child = nodes.get(childKey);
+      if (!child) continue;
+
+      let pendingTargets = new Set(
+        Array.from(consumerTargets).filter(
+          consumerTarget => getResolvedNodeKey(consumerTarget, child.name) !== childKey
+        )
+      );
+      while (pendingTargets.size > 0) {
+        const candidate = findPlacementCandidate(child, pendingTargets);
+        if (!candidate) {
+          const consumerTarget = pendingTargets.values().next().value as string | undefined;
+          throw new Error(
+            `Cannot stage runtime dependency "${child.name}@${child.version}" for "${consumerTarget ?? 'unknown consumer'}": every Node resolution path is shadowed by another installed copy.`
+          );
+        }
+
+        const added = addPlacement(child, `${candidate.directory}/${child.name}`);
+        madeProgress ||= added;
+        const nextPendingTargets = new Set(
+          Array.from(pendingTargets).filter(
+            consumerTarget => getResolvedNodeKey(consumerTarget, child.name) !== childKey
+          )
+        );
+        if (!added && nextPendingTargets.size === pendingTargets.size) {
+          throw new Error(
+            `Runtime dependency staging made no progress for "${child.name}@${child.version}" at "${candidate.directory}".`
+          );
+        }
+        pendingTargets = nextPendingTargets;
+      }
+    }
+
+    if (!madeProgress) {
+      throw new Error('Runtime dependency staging could not satisfy all package resolution edges.');
+    }
+    demands = collectDemands();
   }
 
   return {
