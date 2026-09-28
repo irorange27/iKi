@@ -112,6 +112,7 @@
     "ffmpeg-static": "^5.2.0",
     "gpt-tokenizer": "^3.4.0",
     "highlight.js": "^11.11.1",
+    "katex": "^0.18.9",
     "pinia": "^3.0.4",
     "reka-ui": "^2.10.4",
     "tailwindcss": "^4.1.18",
