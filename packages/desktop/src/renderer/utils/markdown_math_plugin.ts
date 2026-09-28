@@ -1,6 +1,15 @@
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
+import type {
+  EscapeHtml,
+  MarkdownBlockRule,
+  MarkdownCoreWithRulers,
+  MarkdownInlineRule,
+  MarkdownInlineState,
+  MarkdownPlugin,
+} from './markdown_plugin_contract';
+
 /**
  * Markdown-it math support for rendered message content.
  *
@@ -14,63 +23,6 @@ import 'katex/dist/katex.min.css';
  * dollar. Malformed math never swallows content: it falls back to the raw
  * source in a `<code>` element.
  */
-
-type MarkdownToken = {
-  content: string;
-  markup: string;
-  block?: boolean;
-};
-
-type EscapeHtml = (value: string) => string;
-
-type MarkdownInlineState = {
-  src: string;
-  pos: number;
-  posMax: number;
-  push: (type: string, tag: string, nesting: number) => MarkdownToken;
-};
-
-type MarkdownBlockState = {
-  src: string;
-  bMarks: number[];
-  eMarks: number[];
-  tShift: number[];
-  line: number;
-  push: (type: string, tag: string, nesting: number) => MarkdownToken;
-};
-
-type MarkdownInlineRule = (state: MarkdownInlineState, silent: boolean) => boolean;
-
-type MarkdownBlockRule = (
-  state: MarkdownBlockState,
-  startLine: number,
-  endLine: number,
-  silent: boolean
-) => boolean;
-
-// ponytail: markdown-it 14 passes (tokens, idx, options, env, self) but `self`
-// no longer carries `utils` — only read it in the first two parameters. The
-// sibling markdown_code_block_plugin type still advertises `self.utils`; copying
-// that shape here throws on every message.
-type MarkdownRendererRule = (tokens: MarkdownToken[], idx: number) => string;
-
-type MarkdownPlugin = (md: {
-  utils: { escapeHtml: EscapeHtml };
-  inline: {
-    ruler: { before: (anchor: string, name: string, rule: MarkdownInlineRule) => void };
-  };
-  block: {
-    ruler: {
-      before: (
-        anchor: string,
-        name: string,
-        rule: MarkdownBlockRule,
-        options?: { alt: string[] }
-      ) => void;
-    };
-  };
-  renderer: { rules: Record<string, MarkdownRendererRule | undefined> };
-}) => void;
 
 type Delimiter = {
   open: string;
@@ -238,7 +190,7 @@ const blockMath: MarkdownBlockRule = (state, startLine, endLine, silent) => {
   return true;
 };
 
-export const markdownMathPlugin: MarkdownPlugin = md => {
+export const markdownMathPlugin: MarkdownPlugin<MarkdownCoreWithRulers> = md => {
   // Registered before `escape` so `\(` / `\[` are read as math delimiters
   // instead of being unescaped into literal brackets.
   md.inline.ruler.before('escape', 'math_inline', inlineMath);
@@ -249,12 +201,14 @@ export const markdownMathPlugin: MarkdownPlugin = md => {
   // Escape through the markdown-it instance, matching the code-block plugin.
   const escapeHtml = md.utils.escapeHtml;
 
+  // `content` is optional on the shared token type; the rules above always set
+  // it, so the fallback is unreachable but keeps the contract honest.
   md.renderer.rules.math_inline = (tokens, idx) =>
-    inlineMathHtml(tokens[idx].content, escapeHtml);
+    inlineMathHtml(tokens[idx].content ?? '', escapeHtml);
 
   md.renderer.rules.math_display = (tokens, idx) =>
-    displayMathHtml(tokens[idx].content, escapeHtml, 'span');
+    displayMathHtml(tokens[idx].content ?? '', escapeHtml, 'span');
 
   md.renderer.rules.math_block = (tokens, idx) =>
-    displayMathHtml(tokens[idx].content, escapeHtml, 'div');
+    displayMathHtml(tokens[idx].content ?? '', escapeHtml, 'div');
 };
