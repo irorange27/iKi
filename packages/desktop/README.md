@@ -26,7 +26,7 @@ The Vite main bundle keeps a small set of runtime externals (`VITE_EXTERNAL_RUNT
 - The staged closure stays ~100 MB. A far-larger asar means the closure leaked (the `electron` npm package alone is 800 MB — at runtime it resolves to the builtin module and is excluded by the resolver).
 - Regression owner: `tests/build/runtime_packaging.test.ts` — hoisting, per-consumer nesting for conflicting versions, LCA sharing on diamond graphs, and the packaging ignore rules.
 
-The packaged app is the real consumer boundary for packaging changes: `pnpm exec electron-forge package` inside `packages/desktop`, then launch `out/iki-darwin-arm64/iki.app` once and watch stderr. Release steps: `docs/design/packaging-release.md` (local).
+The packaged app is the real consumer boundary for packaging changes: `pnpm exec electron-forge package` inside `packages/desktop`, then launch the bundle's executable from a terminal — `out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` (arm64 machines: `out/iki-darwin-arm64`) — and watch stderr. Release steps: `docs/design/packaging-release.md` (local).
 
 ## Trajectory presentation
 
