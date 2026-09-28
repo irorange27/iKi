@@ -304,27 +304,38 @@ export const resolveRuntimePackagingPlan = (
     if (childKeys.size > 0) edges.set(node.key, childKeys);
   }
 
-  const rootVersions = new Map<string, string>();
-  for (const node of Array.from(nodes.values()).sort((left, right) =>
-    left.depth - right.depth || left.key.localeCompare(right.key)
-  )) {
-    if (!rootVersions.has(node.name)) rootVersions.set(node.name, node.version);
+  // Hoisting rule: a name with a single installed version always stages at
+  // the app's node_modules root; a name with several versions keeps its
+  // shallowest at the root and nests the others under the consumers that
+  // pull them. Only conflicting names need per-consumer copies, which keeps
+  // the staged tree bounded while every consumer resolves its own version.
+  const versionsByName = new Map<string, Map<string, ClosureNode>>();
+  for (const node of nodes.values()) {
+    if (!versionsByName.has(node.name)) versionsByName.set(node.name, new Map());
+    versionsByName.get(node.name)!.set(node.version, node);
   }
+  const rootVersions = new Map<string, string>();
+  for (const [name, byVersion] of versionsByName) {
+    const shallowest = Array.from(byVersion.values()).sort(
+      (left, right) => left.depth - right.depth || left.key.localeCompare(right.key)
+    )[0];
+    if (shallowest) rootVersions.set(name, shallowest.version);
+  }
+  const isHoisted = (node: ClosureNode): boolean =>
+    versionsByName.get(node.name)!.size === 1 || rootVersions.get(node.name) === node.version;
 
-  const targets = new Map<string, string>();
   const placements = new Map<string, RuntimePlacement>();
   const unpackPaths = new Set<string>();
-  for (const node of Array.from(nodes.values()).sort((left, right) =>
-    left.depth - right.depth || left.key.localeCompare(right.key)
-  )) {
-    const hoisted = rootVersions.get(node.name) === node.version;
-    const consumerTarget = node.consumerKey ? targets.get(node.consumerKey) : null;
-    const targetRelative = hoisted
-      ? `node_modules/${node.name}`
-      : consumerTarget
-        ? `${consumerTarget}/node_modules/${node.name}`
-        : `node_modules/${node.name}`;
-    targets.set(node.key, targetRelative);
+  const stagedTargets = new Set<string>();
+
+  const stageNode = (
+    node: ClosureNode,
+    targetRelative: string,
+    visibleKeys: ReadonlySet<string>
+  ): void => {
+    const dedupeKey = `${node.key}\u0000${targetRelative}`;
+    if (stagedTargets.has(dedupeKey)) return;
+    stagedTargets.add(dedupeKey);
 
     const rule = specialRules[node.name];
     const sources: RuntimePlacement[] = rule
@@ -341,6 +352,23 @@ export const resolveRuntimePackagingPlan = (
     for (const unpackPath of rule?.unpack ?? []) {
       unpackPaths.add(`${targetRelative}/${unpackPath}`);
     }
+
+    const nextVisible = new Set(visibleKeys);
+    nextVisible.add(node.key);
+    for (const childKey of edges.get(node.key) ?? []) {
+      const child = nodes.get(childKey);
+      if (!child) continue;
+      // Hoisted versions resolve at the root; versions already visible on the
+      // chain resolve through their earlier placement.
+      if (isHoisted(child)) continue;
+      if (visibleKeys.has(childKey)) continue;
+      stageNode(child, `${targetRelative}/node_modules/${child.name}`, nextVisible);
+    }
+  };
+
+  for (const [name, byVersion] of versionsByName) {
+    const rootNode = byVersion.get(rootVersions.get(name)!);
+    if (rootNode) stageNode(rootNode, `node_modules/${name}`, new Set([rootNode.key]));
   }
 
   return {
