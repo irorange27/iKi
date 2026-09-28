@@ -13,8 +13,20 @@ Electron shell. Three layers:
 - Don't put business logic in `main/`. Anything more than "translate IPC arg → backend call → return result" belongs in `@iki/backend`.
 - Don't use `ipcMain.on` for anything that can throw — it doesn't catch exceptions. Use `ipcMain.handle`. See repo `postmortem/backend-bugs-2026-04.md` Bug #2.
 - Don't bundle native or OTel deps into the Vite main chunk. Add them to `VITE_EXTERNAL_RUNTIME_DEPS` in `src/build/runtime_packaging.ts`.
+- Don't style teleported reka-ui popover/panel roots with scoped CSS — the portal mounts on `<body>` outside the component subtree, so the parent's scope attributes never reach it. Global styles own those surfaces (`assets/styles/globals.css`: `selector-panel`, `permission-panel`, `sidebar-project-panel`, …).
 
 See repo root [AGENTS.md](../../AGENTS.md).
+
+## Packaging (what the asar actually contains)
+
+The Vite main bundle keeps a small set of runtime externals (`VITE_EXTERNAL_RUNTIME_DEPS` in `src/build/runtime_packaging.ts`): otel/langfuse (see the Don't above), whisper-node, ffmpeg-static. Those packages' installed real paths live outside this project dir (monorepo root `node_modules`), so the packager's own file walk can never include them — `forge.config.ts` stages the resolved closure with an `afterCopy` hook and runs with `prune: false`.
+
+- Adding a runtime external: add it to `VITE_EXTERNAL_RUNTIME_DEPS`. A name with a single installed version hoists to the app's `node_modules` root; a second version of the same name nests under the consumer that pulls it (hoisting/LCA/placement-cap rules live in `runtime_packaging.ts`).
+- Binary-drop packages (whisper-node, ffmpeg-static) stage only their include list from `getRuntimePackageRules` and must declare `unpack` entries — executables cannot load from inside the asar.
+- The staged closure stays ~100 MB. A far-larger asar means the closure leaked (the `electron` npm package alone is 800 MB — at runtime it resolves to the builtin module and is excluded by the resolver).
+- Regression owner: `tests/build/runtime_packaging.test.ts` — hoisting, per-consumer nesting for conflicting versions, LCA sharing on diamond graphs, and the packaging ignore rules.
+
+The packaged app is the real consumer boundary for packaging changes: `pnpm exec electron-forge package` inside `packages/desktop`, then launch `out/iki-darwin-arm64/iki.app` once and watch stderr. Release steps: `docs/design/packaging-release.md` (local).
 
 ## Trajectory presentation
 
