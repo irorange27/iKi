@@ -25,6 +25,7 @@ import {
   injectReasoningContentIntoMessages,
 } from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
+import { withoutCacheMarkers, withCacheBreakpoint } from '../cache_markers';
 import { parseToolInputFromText } from '@iki/backend/message/tool_parts';
 import {
   appendResponseMessages,
@@ -60,56 +61,6 @@ import type {
 } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'simple_agent_runner' });
-
-const ANTHROPIC_CACHE_PROVIDER_TYPES = new Set(['anthropic', 'anthropic-compatible']);
-
-/**
- * Anthropic prompt caching: mark the last message as an ephemeral cache
- * breakpoint so the system prompt, tool definitions and the growing history
- * prefix are cache-served on subsequent steps/batches instead of being
- * re-billed as fresh input tokens (SWE-agent's CacheControl equivalent).
- * Stale breakpoints on earlier messages are stripped first: prepareStep feeds
- * the previous step's marked messages back in, so a leftover marker would pin
- * one of Anthropic's four breakpoint slots to a prefix that no longer grows.
- * The caller's history array is never mutated.
- */
-const stripCacheMarker = (message: ModelMessage): ModelMessage => {
-  const source = message as ModelMessage & { providerOptions?: Record<string, any> };
-  const anthropicOptions = source.providerOptions?.anthropic;
-  if (anthropicOptions?.cacheControl === undefined) return message;
-  const { cacheControl: _stale, ...rest } = anthropicOptions;
-  return {
-    ...source,
-    providerOptions: { ...source.providerOptions, anthropic: rest },
-  } as ModelMessage;
-};
-
-const withCacheBreakpoint = (providerType: string, messages: ModelMessage[]): ModelMessage[] => {
-  if (!ANTHROPIC_CACHE_PROVIDER_TYPES.has(providerType) || messages.length === 0) {
-    return messages;
-  }
-
-  return messages.map((message, index) => {
-    if (index !== messages.length - 1) return stripCacheMarker(message);
-    const source = message as ModelMessage & { providerOptions?: Record<string, any> };
-    return {
-      ...source,
-      providerOptions: {
-        ...source.providerOptions,
-        anthropic: { ...source.providerOptions?.anthropic, cacheControl: { type: 'ephemeral' } },
-      },
-    } as ModelMessage;
-  });
-};
-
-/**
- * Marker-free copies for auxiliary calls (the compaction summarizer replays
- * the routed request's content prefix): a leftover ephemeral marker would make
- * the aux call pay cache-write pricing on a boundary owned by the routed
- * request's breakpoint discipline.
- */
-const withoutCacheMarkers = (messages: ModelMessage[]): ModelMessage[] =>
-  messages.map(stripCacheMarker);
 
 const TERMINAL_TOOL_NAMES = new Set(['handoff']);
 
@@ -297,8 +248,9 @@ export class SimpleAgentRunner {
               const planned = autoCompactHistory({ history: stepContext, maxInputTokens: budget });
               if (planned.compacted) {
                 // The aux summarizer call rides the routed request's exact
-                // prefix (same model, system, tool schemas, marker-free
-                // history) so the provider's KV cache serves it instead of
+                // prefix (same model, system, tool schemas, history handed
+                // over marker-free and re-marked at the prefix tail by the
+                // summarizer) so the provider's KV cache serves it instead of
                 // re-billing the omitted history as fresh input. Custom-model
                 // runs bypass factory-created models and get no replay
                 // context — the summarizer falls back to its standalone call.
