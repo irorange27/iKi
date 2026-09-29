@@ -1,5 +1,4 @@
 import { createLogger } from '@iki/backend/logger';
-import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import {
@@ -7,7 +6,6 @@ import {
 } from '@iki/backend/agent';
 import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
 import { cloneModelMessages, rehydrateHarness } from '../agent/harness';
-import type { AgentRun } from '@iki/backend/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
@@ -17,10 +15,8 @@ import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_appr
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
-import {
-  DEFAULT_TOOL_CALL_MAX_ITERATIONS,
-  resolveToolCallMaxIterations,
-} from './constants';
+import { DEFAULT_TOOL_CALL_MAX_ITERATIONS } from './constants';
+import { deriveRunTurnPlan } from './run_rehydrator';
 import {
   createAgentRunTracker,
   rehydrateAgentRunTracker,
@@ -51,12 +47,6 @@ const parseStringArray = (value: string | null | undefined): string[] => {
   } catch {
     return [];
   }
-};
-
-const getRunMaxIterations = (run: AgentRun | null | undefined): number | undefined => {
-  const value = run?.input?.metadata?.maxIterations;
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-  return Math.max(1, Math.trunc(value));
 };
 
 export const createChatApproval = (deps: {
@@ -317,13 +307,18 @@ export const createChatApproval = (deps: {
 
     if (!inputMessages || inputMessages.length === 0) return null;
 
-    const toolNames =
-      runSnapshot?.enabledTools ?? parseStringArray(approvalSession.enabled_tools);
-    const availableSkillIds =
-      runSnapshot?.availableSkillIds ?? parseStringArray(approvalSession.available_skill_ids);
+    const plan = deriveRunTurnPlan(runSnapshot, {
+      providerType: approvalSession.provider_type,
+      providerId: approvalSession.provider_id,
+      model: approvalSession.model,
+      systemPrompt: approvalSession.system_prompt,
+      enabledTools: parseStringArray(approvalSession.enabled_tools),
+      availableSkillIds: parseStringArray(approvalSession.available_skill_ids),
+      maxIterations: approvalSession.max_iterations ?? undefined,
+    });
     const resolvedToolNames =
-      toolNames.length > 0
-        ? toolNames
+      plan.enabledTools.length > 0
+        ? plan.enabledTools
         : Array.from(
           new Set(
             [...fallbackToolNames, ...activeApprovals.map(record => record.tool_name ?? '')]
@@ -331,9 +326,6 @@ export const createChatApproval = (deps: {
               .filter(Boolean)
           )
         );
-    const maxIterations = resolveToolCallMaxIterations(
-      getRunMaxIterations(runSnapshot) ?? approvalSession.max_iterations ?? undefined
-    );
 
     const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
     const collectedApprovalResponses = new Map<string, ToolApprovalResponse>();
@@ -361,26 +353,21 @@ export const createChatApproval = (deps: {
         threadId,
         assistantMessageId: approvalSession.assistant_message_id,
         ...(storedRunId ? { runId: storedRunId } : {}),
-        providerType: runSnapshot?.providerType ?? approvalSession.provider_type,
-        ...((runSnapshot?.providerId ?? approvalSession.provider_id) &&
-        typeof (runSnapshot?.providerId ?? approvalSession.provider_id) === 'string' &&
-        (runSnapshot?.providerId ?? approvalSession.provider_id)?.trim()
-          ? { providerId: (runSnapshot?.providerId ?? approvalSession.provider_id)?.trim() }
-          : {}),
-        model: runSnapshot?.model ?? approvalSession.model,
-        systemPrompt: runSnapshot?.systemPrompt ?? approvalSession.system_prompt,
+        providerType: plan.providerType,
+        ...(plan.providerId ? { providerId: plan.providerId } : {}),
+        model: plan.model,
+        systemPrompt: plan.systemPrompt,
         ...(typeof approvalSession.max_input_tokens === 'number'
           ? { maxInputTokens: approvalSession.max_input_tokens }
           : {}),
         ...(typeof approvalSession.max_output_tokens === 'number'
           ? { maxOutputTokens: approvalSession.max_output_tokens }
           : {}),
-        maxIterations,
-        approvalPolicy: parseApprovalPolicy(runSnapshot?.input?.metadata?.approvalPolicy) ?? undefined,
-        requireApproval: typeof runSnapshot?.input?.metadata?.requireApproval === 'boolean'
-          ? runSnapshot.input.metadata.requireApproval : true,
+        maxIterations: plan.maxIterations,
+        approvalPolicy: plan.approvalPolicy,
+        requireApproval: plan.requireApproval,
         enabledTools: resolvedToolNames,
-        availableSkillIds,
+        availableSkillIds: plan.availableSkillIds,
       },
       pendingApprovalIds,
       collectedApprovalResponses,

@@ -12,6 +12,7 @@ import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';
+import { deriveResumeStreamOptions } from './run_rehydrator';
 import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
 
@@ -74,53 +75,39 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     }
 
     if (run.status === 'queued') {
-      const result = await streaming.stream(target, {
-        providerType: run.providerType,
-        providerId: run.providerId ?? undefined,
-        model: run.model,
-        messages: [],
-        threadId: run.threadId,
-        tools: run.enabledTools,
-        skillIds: run.availableSkillIds,
-        runConfig: {
+      const result = await streaming.stream(
+        target,
+        deriveResumeStreamOptions(run, {
           kind: 'chat-turn',
           parentRunId: run.parentRunId ?? undefined,
-          rootRunId: run.rootRunId,
           metadata: {
             source: 'execute-queued',
             originalRunId: run.id,
           },
-        },
-      });
+        })
+      );
       return { success: true, ...(result as Record<string, unknown>) };
     }
 
-    const result = await streaming.stream(target, {
-      providerType: run.providerType,
-      providerId: run.providerId ?? undefined,
-      model: run.model,
-      messages: [],
-      threadId: run.threadId,
-      tools: run.enabledTools,
-      skillIds: run.availableSkillIds,
-      runConfig: {
+    const result = await streaming.stream(
+      target,
+      deriveResumeStreamOptions(run, {
         kind: 'handoff-resume',
         parentRunId: run.id,
-        rootRunId: run.rootRunId,
         metadata: {
           source: 'resume',
           originalRunId: run.id,
           blockedAt: run.updatedAt,
           ...(run.working.lastStepIndex > 0 ? { resumeFromStep: run.working.lastStepIndex } : {}),
         },
-      },
-      autonomous: run.working.pendingApprovalIds.length > 0
-        ? {
-            maxIterations: 10,
-            continuePrompt: 'Continue the work that was interrupted.',
-          }
-        : undefined,
-    });
+        autonomous: run.working.pendingApprovalIds.length > 0
+          ? {
+              maxIterations: 10,
+              continuePrompt: 'Continue the work that was interrupted.',
+            }
+          : undefined,
+      })
+    );
 
     return { success: true, ...(result as Record<string, unknown>) };
   };
@@ -142,24 +129,17 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       return { success: false, error: 'Original run has no thread ID' };
     }
 
-    const result = await streaming.stream(target, {
-      providerType: newRun.providerType,
-      providerId: newRun.providerId ?? undefined,
-      model: newRun.model,
-      messages: [],
-      threadId: newRun.threadId,
-      tools: newRun.enabledTools,
-      skillIds: newRun.availableSkillIds,
-      runConfig: {
+    const result = await streaming.stream(
+      target,
+      deriveResumeStreamOptions(newRun, {
         kind: 'chat-turn',
         parentRunId: runId,
-        rootRunId: newRun.rootRunId,
         metadata: {
           source: 'retry',
           originalRunId: runId,
         },
-      },
-    });
+      })
+    );
 
     return { success: true, newRunId: retryResult.newRunId, ...(result as Record<string, unknown>) };
   };
