@@ -259,6 +259,15 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
       continue;
     }
 
+    if (step.type === 'approval-response') {
+      trajectorySteps.push({
+        ...base,
+        message: step.summary,
+        extra: { ...extra, approval_response: stepInput(step) },
+      });
+      continue;
+    }
+
     if (step.type === 'child-run') {
       trajectorySteps.push({
         ...base,

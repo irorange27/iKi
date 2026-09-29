@@ -5,15 +5,13 @@ import type { AffectState } from '@iki/backend/affect/affect_state';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider_models';
 import { resolveSkillsSystemPrompt } from '../thread_session/skills';
-import { getClipboardContextMessage, getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../thread_session/platform';
+import { getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../thread_session/platform';
 import { getPromptFromMessage } from '../thread_session/ui_messages';
 import type { ContinuityMemoryPreview } from '@iki/backend/chat_platform';
 import type { ChatMemory } from '../thread_session/memory';
 import type {
   AssembleChatContextParams,
-  ClipboardContext,
   ContextConfig,
   ContextReportBlock,
   IdentityContext,
@@ -301,69 +299,6 @@ export const buildSkillContext = async (params: {
 export const buildQueryFromMessages = (messages: ChatInputMessage[]): string => {
   const lastMessage = messages[messages.length - 1];
   return getPromptFromMessage(lastMessage);
-};
-
-export const buildClipboardContext = (
-  contextConfig: ContextConfig,
-  modelCapability?: { maxInputTokens?: number } | null,
-  maxEntries = 8
-): ClipboardContext => {
-  if (!contextConfig.enabled) {
-    return {
-      systemMessage: '',
-      block: {
-        kind: 'clipboard',
-        status: 'dropped',
-        estimatedTokens: 0,
-        charCount: 0,
-        reason: 'context assembly disabled',
-      },
-    };
-  }
-
-  try {
-    const message = getClipboardContextMessage(maxEntries);
-
-    if (!message) {
-      return {
-        systemMessage: '',
-        block: {
-          kind: 'clipboard',
-          status: 'dropped',
-          estimatedTokens: 0,
-          charCount: 0,
-          reason: 'no recent clipboard entries',
-        },
-      };
-    }
-
-    const tokens = estimateTextTokens(message);
-    const maxTokens = modelCapability?.maxInputTokens ?? DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
-    const budget = Math.floor(maxTokens * 0.02); // 2% budget for clipboard context
-    const clipped = clipTextToTokenBudget(message, budget);
-    const systemMessage = clipped.text;
-
-    return {
-      systemMessage,
-      block: {
-        kind: 'clipboard',
-        status: clipped.truncated ? 'truncated' : 'included',
-        estimatedTokens: estimateTextTokens(systemMessage),
-        charCount: systemMessage.length,
-      },
-    };
-  } catch {
-    return {
-      systemMessage: '',
-      block: {
-        kind: 'clipboard',
-        status: 'dropped',
-        estimatedTokens: 0,
-        charCount: 0,
-        reason: 'clipboard monitor not available',
-      },
-    };
-  }
 };
 
 export { buildDroppedBlock };

@@ -253,6 +253,27 @@ describe('generateThreadSummary — cache-aware prefix replay', () => {
     }
   });
 
+  it('reuses the conversation OpenAI cache key for the compaction replay', async () => {
+    const openaiModel = { ...conversationModel, providerType: 'openai', model: 'gpt-4o-mini' };
+    getToolModelMock.mockReturnValue({ ...openaiModel });
+    generateTextMock.mockResolvedValue({ text: 'plain summary' });
+    createModelMock.mockReturnValue({ fake: 'model' });
+
+    await generateThreadSummary({
+      messages: [{ role: 'user', content: 'dropped middle' }],
+      cachePrefix: {
+        ...cachePrefix,
+        ...openaiModel,
+        openAIPromptCacheKey: 'iki-thread-opaque-key',
+      },
+    });
+
+    const call = generateTextMock.mock.calls[0][0] as Record<string, any>;
+    expect(call.providerOptions).toEqual({
+      openai: { promptCacheKey: 'iki-thread-opaque-key' },
+    });
+  });
+
   it('keeps the standalone tool-model call when the cache prefix routes elsewhere', async () => {
     createSimplePromptTextGeneratorMock.mockReturnValue({
       generate: vi.fn().mockResolvedValue({ response: 'standalone summary' }),

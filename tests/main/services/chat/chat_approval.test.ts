@@ -9,6 +9,7 @@ vi.mock('@iki/backend/db/tool_call_approval', () => ({
   getActiveToolCallApprovalsBySession: vi.fn(),
   answerToolCallApproval: vi.fn(),
   consumeToolCallApprovalSession: vi.fn(),
+  expirePendingToolCallApprovalsByRunIds: vi.fn(() => []),
 }));
 
 vi.mock('@iki/backend/db/chat_message', () => ({
@@ -51,16 +52,17 @@ vi.mock('@iki/backend/agent/harness', () => ({
   cloneModelMessages: (messages: unknown[]) => structuredClone(messages),
 }));
 
-vi.mock('@iki/backend/turn_prep/run_tracker', () => ({
+vi.mock('@iki/backend/thread_session/run_tracker', () => ({
   createAgentRunTracker: vi.fn(),
+  rehydrateAgentRunTracker: vi.fn(() => null),
 }));
 
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { createChatApproval } from '@iki/backend/turn_prep/approval';
-import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
+import { createChatApproval } from '@iki/backend/thread_session/approval';
+import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { rehydrateHarness } from '@iki/backend/agent/harness';
 
 const rehydrateHarnessMock = vi.mocked(rehydrateHarness);
@@ -80,6 +82,9 @@ const getActiveToolCallApprovalsBySessionMock = vi.mocked(
 const answerToolCallApprovalMock = vi.mocked(toolCallApprovalDb.answerToolCallApproval);
 const consumeToolCallApprovalSessionMock = vi.mocked(
   toolCallApprovalDb.consumeToolCallApprovalSession
+);
+const expirePendingToolCallApprovalsByRunIdsMock = vi.mocked(
+  toolCallApprovalDb.expirePendingToolCallApprovalsByRunIds
 );
 
 beforeEach(() => {
@@ -107,7 +112,7 @@ beforeEach(() => {
       id: 'run_resume_1',
       getRun: () => ({ status }),
       syncModelMessages: vi.fn(() => ({ status })),
-      recordToolEvent: vi.fn(),
+      recordAgentStep: vi.fn(),
       markCompleted: vi.fn(() => {
         status = 'completed';
         return { status };
@@ -129,6 +134,48 @@ beforeEach(() => {
 });
 
 describe('createChatApproval', () => {
+  it('expires run-scoped approvals and timers when a blocked run is cancelled', () => {
+    vi.useFakeTimers();
+    expirePendingToolCallApprovalsByRunIdsMock.mockReturnValue(['isolated'] as never);
+    const coordinator = createThreadStreamCoordinator();
+    const approvals = createChatApproval({
+      streams: {
+        tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
+        peek: coordinator.peekStream,
+        attach: coordinator.attachStream,
+        detach: coordinator.detachStream,
+      },
+      memory: {} as never,
+      usage: { recordUsageEvent: vi.fn() },
+    });
+    approvals.registerApprovalBatch(
+      [{ approvalId: 'isolated', toolCallId: 'call', toolCall: { toolName: 'shell', args: {} } }],
+      {
+        target: { id: 99, send: vi.fn() },
+        history: [{ role: 'user', content: 'task' }],
+        recoveryContext: {
+          sessionId: 'session_a',
+          assistantMessageId: 'session_a',
+          threadId: 'thread_a',
+          runId: 'run_1',
+          providerType: 'openai',
+          model: 'test',
+          systemPrompt: 'system',
+          enabledTools: ['shell'],
+        },
+      }
+    );
+
+    try {
+      expect(vi.getTimerCount()).toBe(1);
+      expect(approvals.cancelPendingApprovalsForRun('run_1')).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(expirePendingToolCallApprovalsByRunIdsMock).toHaveBeenCalledWith(['run_1']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps approval decisions pending while a turn owns the thread and resumes once', async () => {
     const coordinator = createThreadStreamCoordinator();
     const approvals = createChatApproval({

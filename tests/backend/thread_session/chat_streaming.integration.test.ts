@@ -23,6 +23,27 @@ vi.mock('@iki/backend/db/thread_todos', () => ({
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
+  appendAgentRunStepAndUpdateRun: vi.fn((
+    step: { runId: string; stepIndex: number },
+    updates: Record<string, unknown>
+  ) => ({
+    id: step.runId,
+    kind: 'chat-turn',
+    status: updates.status ?? 'running',
+    threadId: 'thread_1',
+    rootRunId: step.runId,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    updatedAt: '2026-06-20T00:00:00.000Z',
+    working: {
+      modelMessages: [],
+      accumulatedText: '',
+      pendingApprovalIds: [],
+      lastStepIndex: step.stepIndex,
+      ...((updates.working as Record<string, unknown> | undefined) ?? {}),
+    },
+    output: updates.output ?? null,
+    error: updates.error ?? null,
+  })),
   createAgentRun: vi.fn((run: Record<string, unknown>) => ({
     ...run,
     createdAt: '2026-06-20T00:00:00.000Z',
@@ -30,6 +51,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
   createAgentRunCheckpoint: vi.fn(),
   getAgentRun: vi.fn(() => null),
+  listAgentRunSteps: vi.fn(() => []),
   getLatestAgentRunCheckpoint: vi.fn(() => null),
   updateAgentRun: vi.fn((id: string, updates: Record<string, unknown>) => ({
     id,
@@ -66,6 +88,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 
 import type { LanguageModelV3Usage } from '@ai-sdk/provider';
 
+import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
@@ -207,6 +230,77 @@ describe('createChatStreaming integration', () => {
       chunks.indexOf(usageChunk)
     );
   });
+
+  it('persists pending approval IDs on the blocked streaming run', async () => {
+    defaultToolRegistry.register(createTool({
+      name: toolName,
+      type: 'function',
+      description: 'Probe approval persistence',
+      paramSchema: z.object({}),
+      handler: async () => 'must not execute',
+    }));
+    createModelMock.mockReturnValue(new FauxModelProvider([
+      fauxToolCall(toolName, {}, { id: 'approval-call-1' }),
+    ]));
+    prepareChatTurnMock.mockResolvedValue({
+      report: { totalEstimatedTokens: 1, blocks: [] },
+      usedSkills: [],
+      selectedSkillIds: [],
+      skillMode: 'manual',
+      finalMessages: [{ role: 'user', content: 'request approval' }],
+      history: [],
+      prompt: 'request approval',
+      guardActive: false,
+      requireApproval: true,
+      autoApproveToolRequests: false,
+      affectSignal: null,
+      interventionPolicy: null,
+      guardedTools: [toolName],
+      enableTools: true,
+    });
+
+    const approvalRegistration = vi.fn();
+    const streaming = createChatStreaming({
+      streamCoordinator: createThreadStreamCoordinator(),
+      memory: {} as never,
+      usage: { recordUsageEvent: vi.fn() },
+      approvals: {
+        ensurePendingApprovalSession: vi.fn(),
+        registerApprovalBatch: approvalRegistration,
+        cleanupPendingSessionsForSender: vi.fn(),
+      },
+      getThreadTitle: () => 'Thread',
+    });
+
+    const result = await streaming.stream(
+      { id: 51, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'gpt-4o-mini',
+        threadId: 'thread_approval_snapshot',
+        messages: [{ role: 'user', content: 'request approval' }],
+        tools: [toolName],
+        approvalPolicy: 'always',
+      }
+    );
+
+    expect(result).toMatchObject({ success: true, awaitingApproval: true });
+    const approvalId = approvalRegistration.mock.calls[0]?.[0]?.[0]?.approvalId;
+    expect(approvalId).toEqual(expect.any(String));
+
+    const blockedUpdate = vi.mocked(agentRunDb.updateAgentRun).mock.calls
+      .map(([, updates]) => updates)
+      .filter(updates => updates.status === 'blocked')
+      .at(-1);
+    expect(blockedUpdate?.working).toMatchObject({
+      pendingApprovalIds: [approvalId],
+    });
+    expect(
+      blockedUpdate?.working?.modelMessages.some(message => message.role === 'assistant')
+    ).toBe(true);
+  });
+
   it('propagates provider cache usage through the turn boundary', async () => {
     // Acceptance gate for prompt-cache accounting (audit P2): a provider that
     // reports cache read/write per inference must surface the summed values
@@ -290,6 +384,9 @@ describe('createChatStreaming integration', () => {
     expect(usageChunk).toBeDefined();
     expect(usageChunk!.data).toMatchObject({
       inputTokens: 900,
+      // The last inference's billed input (272 noCache + 128 cacheRead) — the
+      // renderer's context-occupancy signal, distinct from the turn total.
+      lastStepInputTokens: 400,
       cacheReadTokens: 528,
       cacheWriteTokens: 28,
     });
@@ -416,6 +513,13 @@ describe('createChatStreaming integration', () => {
     const { run } = setupLoop(faux, [toolName]);
     expect(await run(1, 2)).toMatchObject({ success: true });
     expect(faux.remaining).toBe(1);
+    const completedUpdate = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
+      .map(([, updates]) => updates)
+      .filter(updates => updates.status === 'completed')
+      .at(-1);
+    expect(completedUpdate?.output).toMatchObject({
+      finishReason: 'budget-exhausted',
+    });
   });
 
   it('preserves observations and the latest human feedback during steering', async () => {

@@ -7,10 +7,10 @@ import {
   resolveToolCallMaxIterations,
 } from './constants';
 import type { ChatMemory } from './memory';
-import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../turn_prep/approval_types';
-import { createApprovalRecoveryContext } from '../turn_prep/approval_types';
+import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
+import { createApprovalRecoveryContext } from './approval_types';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { createAgentRunTracker } from '../turn_prep/run_tracker';
+import { createAgentRunTracker } from './run_tracker';
 import { summarizeContextComposition } from '../turn_prep/context_helpers';
 import { startTurnHarness } from '../agent/harness';
 import { createChatStreamingModels } from './models';
@@ -24,7 +24,7 @@ import { getCompanion } from './platform';
 import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
-import { runOuterLoop, type OuterLoopState } from './outer_loop';
+import { createTurnDriver, type TurnDriverHandle } from './outer_loop';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -120,12 +120,9 @@ export const createChatStreaming = (deps: {
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
     coordinator.registerStream(senderId, streamState);
 
-    // Mutable loop state; runOuterLoop drives it across batches while this
-    // scope owns setup, finalization, and cleanup. Declared before the try so
-    // catch/finally and notifyRunStatus always read the latest run.
-    let state: OuterLoopState | null = null;
+    let driver: TurnDriverHandle | null = null;
     const notifyRunStatus = () => {
-      const run = state?.runTracker?.getRun();
+      const run = driver?.getRunTracker().getRun();
       if (!run) return;
       target.send('chat:run-status', {
         runId: run.id,
@@ -297,21 +294,13 @@ export const createChatStreaming = (deps: {
 
       getCompanion().beginThinking(companionThinkingKey);
 
-      const loopState: OuterLoopState = {
+      const activeDriver = createTurnDriver({
         harness,
         runTracker,
         approvalContext,
         streamHistory,
         streamPrompt,
-        accumulatedResponse: '',
-        outerBatch: 0,
-        handoffChain: 0,
-        turnHadToolCalls: false,
-        isAwaitingApproval: false,
-      };
-      state = loopState;
-
-      const streamResult = await runOuterLoop(loopState, {
+      }, {
         target,
         options,
         preparedTurn,
@@ -324,12 +313,15 @@ export const createChatStreaming = (deps: {
         drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
         approvals: deps.approvals,
       });
+      driver = activeDriver;
+
+      const streamResult = await activeDriver.run();
 
       if (!streamResult) {
         throw new Error('Unreachable: stream loop produced no result');
       }
 
-      if (!streamResult.cancelled) {
+      if (streamResult.outcome !== 'cancelled') {
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           messageId: uiChunkEmitter.messageId,
@@ -338,9 +330,11 @@ export const createChatStreaming = (deps: {
           usage: streamResult.usage,
           source: 'chat.stream',
           metadata: {
-            awaitingApproval: streamResult.awaitingApproval,
+            awaitingApproval: streamResult.outcome === 'awaiting-approval',
             contextTokens: preparedTurn.report.totalEstimatedTokens,
-            ...(loopState.outerBatch > 0 ? { autonomousBatches: loopState.outerBatch + 1 } : {}),
+            ...(activeDriver.getOuterBatchCount() > 0
+              ? { autonomousBatches: activeDriver.getOuterBatchCount() + 1 }
+              : {}),
           },
         });
 
@@ -349,6 +343,9 @@ export const createChatStreaming = (deps: {
         // message). Must run before finish()/abort() terminates the emitter.
         uiChunkEmitter.emitTokenUsage({
           ...(streamResult.usage ?? {}),
+          ...(typeof streamResult.lastStepInputTokens === 'number'
+            ? { lastStepInputTokens: streamResult.lastStepInputTokens }
+            : {}),
           maxInputTokens: preparedTurn.maxInputTokens,
           maxOutputTokens: preparedTurn.maxOutputTokens,
           model: options.model,
@@ -362,57 +359,63 @@ export const createChatStreaming = (deps: {
         });
       }
 
-      const finalResponse = loopState.accumulatedResponse || streamResult.response;
+      const finalResponse =
+        activeDriver.getAccumulatedResponse() || streamResult.response;
+      const finalRunTracker = activeDriver.getRunTracker();
 
-      if (streamResult.cancelled) {
-        loopState.runTracker.markCancelled({
+      if (streamResult.outcome === 'cancelled') {
+        finalRunTracker.markCancelled({
           ...(finalResponse ? { text: finalResponse } : {}),
         });
         notifyRunStatus();
-      } else if (streamResult.partialFailure) {
-        loopState.runTracker.markFailed({
+      } else if (streamResult.outcome === 'partial-failure') {
+        finalRunTracker.markFailed({
           message: 'Autonomous iteration failed; partial progress saved.',
           retryable: true,
         });
         notifyRunStatus();
-      } else if (streamResult.awaitingApproval) {
-        loopState.runTracker.markBlocked({
+      } else if (streamResult.outcome === 'awaiting-approval') {
+        finalRunTracker.markBlocked({
           ...(finalResponse ? { text: finalResponse } : {}),
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
         });
         notifyRunStatus();
-      } else if (streamResult.handoff) {
+      } else if (streamResult.outcome === 'handoff') {
         const handoffResponse =
           (finalResponse ? finalResponse + '\n\n' : '') +
           `[Handoff] ${streamResult.handoff.summary}\n\nNext steps: ${streamResult.handoff.nextSteps}`;
-        loopState.runTracker.markCompleted({
+        finalRunTracker.markCompleted({
           text: handoffResponse.trim() || undefined,
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
           finishReason: 'handoff',
         });
         notifyRunStatus();
       } else {
-        loopState.runTracker.markCompleted({
+        finalRunTracker.markCompleted({
           ...(finalResponse ? { text: finalResponse } : {}),
           usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          finishReason: streamResult.finished ? 'completed' : 'completed',
+          finishReason:
+            streamResult.outcome === 'budget-exhausted'
+              ? 'budget-exhausted'
+              : 'completed',
         });
         notifyRunStatus();
       }
-      if (!streamResult.awaitingApproval) {
+      if (streamResult.outcome !== 'awaiting-approval') {
         uiChunkEmitter.finish();
       }
       return {
         success: true,
-        awaitingApproval: streamResult.awaitingApproval,
+        awaitingApproval: streamResult.outcome === 'awaiting-approval',
         ...(finalResponse ? { text: finalResponse } : {}),
         stopped: streamState.stoppedByUser,
       };
     } catch (error: unknown) {
       if (streamState.cancelled) {
         if (coordinator.peekStream(senderId) === streamState) uiChunkEmitter.abort();
-        if (state?.runTracker && state.runTracker.getRun().status === 'running') {
-          state.runTracker.markCancelled();
+        const activeRunTracker = driver?.getRunTracker();
+        if (activeRunTracker?.getRun().status === 'running') {
+          activeRunTracker.markCancelled();
           notifyRunStatus();
         }
         return { success: true, stopped: streamState.stoppedByUser };
@@ -432,8 +435,9 @@ export const createChatStreaming = (deps: {
           user_facing_error: message,
         },
       });
-      if (state?.runTracker && state.runTracker.getRun().status === 'running') {
-        state.runTracker.markFailed({ message });
+      const activeRunTracker = driver?.getRunTracker();
+      if (activeRunTracker?.getRun().status === 'running') {
+        activeRunTracker.markFailed({ message });
         notifyRunStatus();
       }
       uiChunkEmitter.error(message);
@@ -441,12 +445,15 @@ export const createChatStreaming = (deps: {
     } finally {
       getCompanion().clearConversationPreview();
       getCompanion().endThinking(companionThinkingKey);
-      if (state?.turnHadToolCalls && !streamState.cancelled) {
+      if (driver?.hasToolCalls() && !streamState.cancelled) {
         const threadLabel =
           options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
         getCompanion().notifyReplyComplete(threadLabel);
       }
-      if (coordinator.peekStream(senderId) === streamState && !state?.isAwaitingApproval) {
+      if (
+        coordinator.peekStream(senderId) === streamState &&
+        !driver?.isAwaitingApproval()
+      ) {
         deps.approvals.cleanupPendingSessionsForSender(senderId, uiChunkEmitter.messageId);
       }
       if (coordinator.peekStream(senderId) === streamState && options.threadId) {

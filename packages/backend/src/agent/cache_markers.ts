@@ -6,8 +6,9 @@ export const ANTHROPIC_CACHE_PROVIDER_TYPES = new Set(['anthropic', 'anthropic-c
 /**
  * Anthropic prompt caching: mark the last message as an ephemeral cache
  * breakpoint so the system prompt, tool definitions and the growing history
- * prefix are cache-served on subsequent steps/batches instead of being
- * re-billed as fresh input tokens (SWE-agent's CacheControl equivalent).
+ * prefix are eligible for provider cache reuse on subsequent steps/batches.
+ * A local marker cannot guarantee that Anthropic retains or serves a cache
+ * entry; usage metrics report whether a particular request got a hit.
  * Stale breakpoints on earlier messages are stripped first: prepareStep feeds
  * the previous step's marked messages back in, so a leftover marker would pin
  * one of Anthropic's four breakpoint slots to a prefix that no longer grows.

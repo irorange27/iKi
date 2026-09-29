@@ -6,7 +6,8 @@ import { createRequire } from 'node:module';
 
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
-import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import { startTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
@@ -74,6 +75,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       delegatedAgentRuntime: {
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
+        createHarness: startTurnHarness,
       },
     });
     const mcpManager = getMcpManager();

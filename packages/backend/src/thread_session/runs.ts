@@ -8,11 +8,13 @@ import type {
   ReviewQueueItem,
 } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { rehydrateAgentRunTracker } from './run_tracker';
 import { buildRunTrajectory, type AtifTrajectory } from './atif_export';
 
 type ChatRunsDeps = {
   /** Aborts the active stream running a run id (owned by the stream coordinator). */
-  abortActiveStream: (runId: string) => void;
+  abortActiveStream: (runId: string) => boolean;
+  cancelPendingApprovalsForRun?: (runId: string) => number;
 };
 
 const REVIEW_QUEUE_KINDS: AgentRunKind[] = ['proactive-task', 'awaiter-wake'];
@@ -78,14 +80,13 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
       return { success: false, error: `Run is already ${run.status}` };
     }
 
-    agentRunDb.updateAgentRun(runId, {
-      status: 'cancelled',
-      output: run.output
-        ? { ...run.output, finishReason: 'cancelled' }
-        : { text: '', finishReason: 'cancelled' },
-    });
-
-    deps.abortActiveStream(runId);
+    if (!deps.abortActiveStream(runId)) {
+      const tracker = rehydrateAgentRunTracker(runId);
+      tracker?.markCancelled({
+        text: run.output?.text ?? run.working.accumulatedText,
+      });
+    }
+    deps.cancelPendingApprovalsForRun?.(runId);
 
     return { success: true };
   },

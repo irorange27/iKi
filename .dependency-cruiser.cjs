@@ -1,5 +1,5 @@
 /**
- * Package boundary rules — see docs/design/architecture-factoring.md (P1) and
+ * Package boundary rules — see docs/process/architecture-factoring.md (P1) and
  * docs/conventions.md. Enforcement for what ADR-003 left as convention.
  *
  * R1–R4 are fully strict: P2 resolved the provider/tools exemptions (leaf moves +

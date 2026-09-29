@@ -15,23 +15,23 @@ const getNestedToolEventField = (
   event: ChatStreamEvent,
   field: 'toolCallId' | 'toolName'
 ): unknown => {
-  if (field in event) {
-    const value = event[field];
+  if (field === 'toolCallId' && 'toolCallId' in event) {
+    const value = event.toolCallId;
     if (typeof value === 'string' && value.length > 0) return value;
-    // Empty or non-string value shadows nested toolCall — fall through.
   }
-  const nestedToolCall = event.toolCall;
-  if (!isObjectRecord(nestedToolCall)) return undefined;
-  return nestedToolCall[field];
+  if (field === 'toolName' && 'toolName' in event) {
+    const value = event.toolName;
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  if (event.type !== 'tool-approval-request') return undefined;
+  return event.toolCall?.[field];
 };
 
 const getToolCallIdFromEvent = (event: ChatStreamEvent): string => {
   const candidate =
     typeof getNestedToolEventField(event, 'toolCallId') === 'string'
       ? (getNestedToolEventField(event, 'toolCallId') as string)
-      : typeof event.id === 'string'
-        ? event.id
-        : '';
+      : '';
 
   if (candidate.length > 0) return candidate;
   return createPrefixedId('tool_call');
@@ -83,7 +83,7 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
     return {
       type: 'tool-input-delta',
       toolCallId,
-      inputTextDelta: typeof event.delta === 'string' ? event.delta : '',
+      inputTextDelta: event.delta,
     };
   }
   if (event.type === 'tool-input-end') {
@@ -267,9 +267,12 @@ export const createUiChunkEmitter = (
         event.type === 'tool-approval-request'
       ) {
         const toolName = getToolNameFromEvent(event);
-        const input = isObjectRecord(event.toolCall)
-          ? (isObjectRecord(event.toolCall.args) ? event.toolCall.args : event.toolCall.input)
-          : undefined;
+        const input =
+          event.type === 'tool-approval-request' && event.toolCall
+            ? (isObjectRecord(event.toolCall.args)
+                ? event.toolCall.args
+                : event.toolCall.input)
+            : undefined;
         ensureToolPartSeeded(toolCallId, toolName, input ?? {});
       }
       const uiChunk = toUiChunkFromToolEvent(event);
@@ -348,6 +351,9 @@ export const createUiChunkEmitter = (
           : {}),
         ...(typeof payload?.estimatedCostUsd === 'number'
           ? { estimatedCostUsd: payload.estimatedCostUsd }
+          : {}),
+        ...(typeof payload?.lastStepInputTokens === 'number'
+          ? { lastStepInputTokens: payload.lastStepInputTokens }
           : {}),
         ...(typeof payload?.maxInputTokens === 'number'
           ? { maxInputTokens: payload.maxInputTokens }

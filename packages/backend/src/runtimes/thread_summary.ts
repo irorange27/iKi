@@ -22,15 +22,16 @@ export type ThreadSummaryResult = {
  * call is expensive because it must read the omitted history; when the tool
  * model routes to the same provider/model as the conversation, resending the
  * routed request's exact prefix (system, tool schemas, history re-marked with
- * a single breakpoint at the prefix tail) lets the provider's KV cache serve
- * that read instead of re-billing it. A different model has never seen the
- * prefix and would pay full price, so callers must only supply this when the
- * routes match.
+ * a single breakpoint at the prefix tail) makes that read eligible for
+ * provider-cache reuse. A different model has never seen the prefix and would
+ * pay full price, so callers must only supply this when the routes match.
  */
 export type ThreadSummaryCachePrefix = {
   providerType: string;
   providerId?: string;
   model: string;
+  /** Preserve the conversation's OpenAI cache-routing affinity for prefix replay. */
+  openAIPromptCacheKey?: string;
   systemPrompt: string;
   history: ModelMessage[];
   tools?: ToolSet;
@@ -130,6 +131,9 @@ const generateCacheAwareSummary = async (params: {
       messages: [...withCacheBreakpoint(prefix.providerType, prefix.history), { role: 'user', content: params.prompt }],
       ...(prefix.tools && Object.keys(prefix.tools).length > 0
         ? { tools: stripToolExecutes(prefix.tools) }
+        : {}),
+      ...(prefix.openAIPromptCacheKey
+        ? { providerOptions: { openai: { promptCacheKey: prefix.openAIPromptCacheKey } } }
         : {}),
       temperature: 0.1,
       maxOutputTokens: 320,

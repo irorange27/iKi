@@ -15,6 +15,7 @@ const {
   resolveSkillsSystemPromptMock,
   getAssistantProfileContextMessageMock,
   retrieveRelevantContinuityMock,
+  getClipboardContextMessageMock,
   getThreadWorkspaceSelectionMock,
 } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
@@ -27,6 +28,7 @@ const {
   resolveSkillsSystemPromptMock: vi.fn(),
   getAssistantProfileContextMessageMock: vi.fn(),
   retrieveRelevantContinuityMock: vi.fn(),
+  getClipboardContextMessageMock: vi.fn(),
   getThreadWorkspaceSelectionMock: vi.fn(() => null),
 }));
 
@@ -63,7 +65,9 @@ vi.mock('@iki/backend/thread_session/skills', () => ({
 vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,
   retrieveRelevantContinuity: retrieveRelevantContinuityMock,
-  getClipboardContextMessage: () => undefined,
+  // Kept as a sentinel mock so the regression below also fails if context
+  // assembly starts depending on a clipboard platform hook again.
+  getClipboardContextMessage: getClipboardContextMessageMock,
 }));
 
 import { createChatContextAssembler } from '@iki/backend/turn_prep/context';
@@ -157,6 +161,21 @@ describe('chat_context assembler', () => {
     expect(resolveSkillsSystemPromptMock).not.toHaveBeenCalled();
     expect(memory.retrieveRelevantMemory).not.toHaveBeenCalled();
     expect(memory.getAffectContextMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not read clipboard history or inject it into agent context', async () => {
+    getClipboardContextMessageMock.mockReturnValue('clipboard_secret_sentinel');
+    const { assembler } = createAssembler();
+
+    const result = await assembler.assemble({
+      memoryContextConfig: baseConfig.memory.context,
+      threadId: 'thread_without_clipboard',
+      messages: [{ role: 'user', content: 'Answer this question.' }],
+    });
+
+    expect(getClipboardContextMessageMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(result.messages)).not.toContain('clipboard_secret_sentinel');
+    expect(result.report.blocks.map(block => block.kind)).not.toContain('clipboard');
   });
 
 

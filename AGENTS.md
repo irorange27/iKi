@@ -1,6 +1,6 @@
 # AGENTS.md — iKi orientation
 
-**iKi**: macOS Electron chat client that wraps third-party LLM APIs with local tool-calling, SQLite persistence, and an optional headless daemon (QQ-bot bridge). Not itself an AI — intelligence comes from the wired provider (OpenAI / Anthropic / DeepSeek / Kimi / MiniMax / Ollama / ACP).
+**iKi**: macOS Electron chat client that wraps third-party LLM APIs with local tool-calling, SQLite persistence, and an optional headless daemon (QQ-bot bridge). 
 
 **Golden rule:** all business logic lives in `packages/backend` (pure Node/TS). `desktop/` (Electron) and `daemon/` (headless HTTP+WS) are thin shells; dependencies point one way only: `desktop`/`daemon` → `backend`.
 
@@ -65,7 +65,7 @@ postmortem/        ← incident write-ups
 | Change context budget / compaction | `packages/backend/src/agent/context_budget.ts` + runner `prepareStep`; see backend contract |
 | Change prompt assembly | `packages/backend/src/turn_prep/context.ts`, `context_blocks.ts` |
 | LLM-call surface / add a provider | `packages/backend/src/provider/llm/factory.ts` |
-| Tool approval UX | `packages/backend/src/turn_prep/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
+| Tool approval UX | `packages/backend/src/thread_session/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
 | New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |
 | Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |

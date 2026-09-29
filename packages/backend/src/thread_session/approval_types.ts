@@ -1,7 +1,7 @@
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { ModelMessage } from 'ai';
 import type { AgentResult, ToolApprovalRequest } from '@iki/backend/agent';
-import type { ChatStreamTarget } from '../thread_session/types';
+import type { ChatStreamTarget } from './types';
 
 export type ApprovalRecoveryContext = {
   sessionId: string;

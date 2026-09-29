@@ -13,12 +13,14 @@ import type { ChatInputMessage } from '../thread_session/types';
 import type {
   AssembleChatContextResult,
   ContextBlockKind,
-  ContextCompositionCategory,
-  ContextCompositionSummary,
   ContextConfig,
   ContextReport,
   ContextReportBlock,
 } from './context_types';
+import type {
+  ContextCompositionCategory,
+  ContextCompositionSummary,
+} from '@iki/backend/types/context_composition';
 
 export const getContextConfig = (
   configured?: AppConfig['memory']['context'] | null
@@ -70,7 +72,6 @@ const CONTEXT_COMPOSITION_BLOCK_CATEGORIES: Record<ContextBlockKind, ContextComp
   memory: 'memory',
   'thread-summary': 'other',
   affect: 'other',
-  clipboard: 'other',
 };
 
 export const summarizeContextComposition = (params: {

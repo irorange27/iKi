@@ -363,6 +363,15 @@ const main = async () => {
   if (written !== 'e2e-written-by-agent') throw new Error('file content mismatch: ' + written);
   const second = fs.readFileSync(path.join(workDir, 'ws/e2e/second.txt'), 'utf8');
   if (second !== 'e2e-second-approval') throw new Error('second file content mismatch: ' + second);
+  const blockedAfterApproval = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
+    .prepare("SELECT id FROM agent_runs WHERE status = 'blocked'")
+    .all();
+  if (blockedAfterApproval.length !== 0) {
+    throw new Error(
+      'approved run segments remained blocked after continuation started: ' +
+        JSON.stringify(blockedAfterApproval)
+    );
+  }
   step('crash + restart');
   log('approved writes landed on disk');
 

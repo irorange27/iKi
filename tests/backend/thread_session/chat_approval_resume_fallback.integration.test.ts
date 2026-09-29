@@ -30,6 +30,28 @@ vi.mock('@iki/backend/db/chat_message', () => ({
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
+  appendAgentRunStepAndUpdateRun: vi.fn((
+    step: { runId: string; stepIndex: number },
+    updates: Record<string, unknown>
+  ) => ({
+    id: step.runId,
+    kind: 'approval-resume',
+    status: updates.status ?? 'running',
+    threadId: 'thread_1',
+    parentRunId: 'run_blocked_1',
+    rootRunId: 'run_blocked_1',
+    createdAt: '2026-06-20T00:00:00.000Z',
+    updatedAt: '2026-06-20T00:00:00.000Z',
+    working: {
+      modelMessages: [],
+      accumulatedText: '',
+      pendingApprovalIds: [],
+      lastStepIndex: step.stepIndex,
+      ...((updates.working as Record<string, unknown> | undefined) ?? {}),
+    },
+    output: updates.output ?? null,
+    error: updates.error ?? null,
+  })),
   createAgentRun: vi.fn((run: Record<string, unknown>) => ({
     ...run,
     createdAt: '2026-06-20T00:00:00.000Z',
@@ -37,6 +59,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
   createAgentRunCheckpoint: vi.fn(),
   getAgentRun: vi.fn(() => null),
+  listAgentRunSteps: vi.fn(() => []),
   updateAgentRun: vi.fn((id: string, updates: Record<string, unknown>) => ({
     id,
     kind: 'approval-resume',
@@ -48,7 +71,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
 
 import * as approvalDb from '@iki/backend/db/tool_call_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
-import { createChatApproval } from '@iki/backend/turn_prep/approval';
+import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';

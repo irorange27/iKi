@@ -745,6 +745,36 @@ describe('llm factory', () => {
     });
   });
 
+  it('uses the current AI SDK provider key for OpenAI-compatible options', () => {
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'provider_gateway',
+        type: 'openai-compatible',
+        enabled: true,
+        api_key: 'sk-gateway',
+        base_url: 'https://gateway.example.com/v1',
+        models: JSON.stringify(['gateway-model']),
+        model_options: JSON.stringify({
+          'gateway-model': {
+            providerOptions: {
+              reasoningEffort: 'medium',
+              parallelToolCalls: true,
+            },
+          },
+        }),
+      },
+    ]);
+
+    expect(getModelCallSettings('openai-compatible', 'gateway-model', 'provider_gateway')).toEqual({
+      providerOptions: {
+        openaiCompatible: {
+          parallelToolCalls: true,
+          reasoningEffort: 'medium',
+        },
+      },
+    });
+  });
+
   it('omits temperature for OpenAI reasoning-model calls while preserving provider options', () => {
     getProvidersMock.mockReturnValue([
       {

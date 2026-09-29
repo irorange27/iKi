@@ -5,10 +5,10 @@ import type { ConversationPreview } from '@iki/backend/types/companion';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { rehydrateHarness, type AgentHarness } from '../agent/harness';
-import type { AgentRunTracker } from '../turn_prep/run_tracker';
-import { createAgentRunTracker } from '../turn_prep/run_tracker';
-import type { ApprovalRecoveryContext, RegisterApprovalBatch } from '../turn_prep/approval_types';
-import { createApprovalRecoveryContext } from '../turn_prep/approval_types';
+import type { AgentRunTracker } from './run_tracker';
+import { createAgentRunTracker } from './run_tracker';
+import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
+import { createApprovalRecoveryContext } from './approval_types';
 import type { ChatTurnOptions, PreparedChatTurn } from '../turn_prep/turn_preparer';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
@@ -16,26 +16,34 @@ import { writeThreadTodoPlan } from '../db/thread_todos';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
 
-export type OuterLoopStreamResult = {
-  awaitingApproval: boolean;
-  cancelled?: boolean;
-  finished?: boolean;
-  partialFailure?: boolean;
+type OuterLoopStreamResultBase = {
   response?: string;
   usage?: import('@iki/backend/agent').AgentResult['usage'];
+  /** Billed input of the final SDK step — the real context size the model last saw. */
+  lastStepInputTokens?: number;
   /** Perf metrics accumulated across all outer batches of the turn. */
   perf?: AgentTurnPerf;
   /** Estimated tokens of the resolved tool schemas (from the harness turn). */
   toolSchemaTokens?: { builtin: number; mcp: number };
-  handoff?: { summary: string; nextSteps: string; reason: string };
 };
+
+type HandoffResult = { summary: string; nextSteps: string; reason: string };
+
+export type OuterLoopStreamResult =
+  | (OuterLoopStreamResultBase & { outcome: 'continuing' })
+  | (OuterLoopStreamResultBase & { outcome: 'completed' })
+  | (OuterLoopStreamResultBase & { outcome: 'budget-exhausted' })
+  | (OuterLoopStreamResultBase & { outcome: 'awaiting-approval' })
+  | (OuterLoopStreamResultBase & { outcome: 'cancelled' })
+  | (OuterLoopStreamResultBase & { outcome: 'partial-failure' })
+  | (OuterLoopStreamResultBase & { outcome: 'handoff'; handoff: HandoffResult });
 
 /**
  * Mutable per-stream state the outer loop drives across batches. The caller
  * builds it after turn preparation and reads the final values for finalize
  * and cleanup.
  */
-export type OuterLoopState = {
+type TurnDriverState = {
   harness: AgentHarness;
   runTracker: AgentRunTracker;
   approvalContext?: ApprovalRecoveryContext;
@@ -72,6 +80,20 @@ export type OuterLoopDeps = {
   };
 };
 
+export type TurnDriverSetup = Pick<
+  TurnDriverState,
+  'harness' | 'runTracker' | 'approvalContext' | 'streamHistory' | 'streamPrompt'
+>;
+
+export type TurnDriverHandle = {
+  run: () => Promise<OuterLoopStreamResult | undefined>;
+  getRunTracker: () => AgentRunTracker;
+  getAccumulatedResponse: () => string;
+  getOuterBatchCount: () => number;
+  hasToolCalls: () => boolean;
+  isAwaitingApproval: () => boolean;
+};
+
 const MAX_OUTER_AUTONOMOUS_BATCHES = 50;
 const MAX_HANDOFF_CHAIN = 5;
 
@@ -81,8 +103,8 @@ const MAX_HANDOFF_CHAIN = 5;
  * chaining, and batch-boundary auto-compaction. Mutates `state` in place;
  * the caller owns catch/finally and run finalization.
  */
-export const runOuterLoop = async (
-  state: OuterLoopState,
+const runOuterLoop = async (
+  state: TurnDriverState,
   deps: OuterLoopDeps,
 ): Promise<OuterLoopStreamResult | undefined> => {
   const { target, options, preparedTurn, streamState, uiChunkEmitter } = deps;
@@ -111,7 +133,7 @@ export const runOuterLoop = async (
     }, 300);
   };
 
-  /** Convert AgentStep to ChatStreamEvent for runTracker + UI emitter. */
+  /** Project AgentStep facts into the UI stream event shape. */
   const forwardAgentStep = (step: AgentStep) => {
     // Reasoning streams into its own reasoning part (live "thinking" block);
     // only `kind: 'text'` deltas belong to the answer text.
@@ -129,7 +151,7 @@ export const runOuterLoop = async (
       return;
     }
 
-    // Convert AgentStep → ChatStreamEvent-like shape for runTracker and UI
+    // Convert AgentStep to the typed UI projection event.
     let event: ChatStreamEvent | null = null;
 
     if (step.type === 'tool_execution_start') {
@@ -198,7 +220,7 @@ export const runOuterLoop = async (
     }
 
     if (event) {
-      state.runTracker?.recordToolEvent(event);
+      state.runTracker.recordAgentStep(step);
       uiChunkEmitter.emitToolEvent(event);
     }
   };
@@ -240,7 +262,7 @@ export const runOuterLoop = async (
                 for await (const event of state.harness.turn({
                   prompt: state.streamPrompt,
                   history: state.streamHistory,
-                  runTracker: state.runTracker,
+                  onInference: record => state.runTracker.recordModelStep(record),
                   abortSignal: streamState.abortController.signal,
                 })) {
                   if (event.event === 'step') {
@@ -255,6 +277,9 @@ export const runOuterLoop = async (
                       toolCalls: output.toolCalls,
                       toolApprovalRequests: output.toolApprovalRequests,
                       usage: output.usage,
+                      ...(output.lastStepInputTokens != null
+                        ? { lastStepInputTokens: output.lastStepInputTokens }
+                        : {}),
                       ...(output.perf ? { perf: output.perf } : {}),
                       ...(output.toolSchemaTokens
                         ? { toolSchemaTokens: output.toolSchemaTokens }
@@ -306,7 +331,7 @@ export const runOuterLoop = async (
       }
 
       if (cancelled) {
-        streamResult = { awaitingApproval: false, cancelled: true };
+        streamResult = { outcome: 'cancelled' };
         break;
       }
 
@@ -316,15 +341,23 @@ export const runOuterLoop = async (
 
       // Check for approval requests in result
       if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
+        state.runTracker.syncModelMessages(state.harness.getHistory() ?? state.streamHistory);
         deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
           target,
           history: state.harness.getHistory() ?? state.streamHistory,
           ...(state.approvalContext ? { recoveryContext: state.approvalContext } : {}),
         });
+        state.runTracker.recordAgentStep({
+          type: 'approval_request',
+          requests: agentResult.toolApprovalRequests,
+        });
         streamResult = {
-          awaitingApproval: true,
+          outcome: 'awaiting-approval',
           response: agentResult.response,
           usage: agentResult.usage,
+          ...(agentResult.lastStepInputTokens != null
+            ? { lastStepInputTokens: agentResult.lastStepInputTokens }
+            : {}),
           perf: accumulatedPerf,
           ...(agentResult.toolSchemaTokens
             ? { toolSchemaTokens: agentResult.toolSchemaTokens }
@@ -338,38 +371,37 @@ export const runOuterLoop = async (
       const handoff = agentResult?.toolCalls?.find(
         tc => tc.toolName === 'handoff'
       );
-      const terminalToolName = handoff ? 'handoff' : undefined;
 
-      streamResult = {
-        awaitingApproval: false,
+      const resultBase: OuterLoopStreamResultBase = {
         ...(agentResult?.response?.trim()
           ? { response: agentResult.response }
           : {}),
         usage: agentResult?.usage,
+        ...(agentResult?.lastStepInputTokens != null
+          ? { lastStepInputTokens: agentResult.lastStepInputTokens }
+          : {}),
         perf: accumulatedPerf,
         ...(agentResult?.toolSchemaTokens
           ? { toolSchemaTokens: agentResult.toolSchemaTokens }
           : {}),
-        ...(terminalToolName === 'handoff' && handoff
-          ? {
-              handoff: {
-                summary:
-                  typeof (handoff.args as Record<string, unknown>)?.summary === 'string'
-                    ? (handoff.args as Record<string, unknown>).summary as string
-                    : '',
-                nextSteps:
-                  typeof (handoff.args as Record<string, unknown>)?.next_steps === 'string'
-                    ? (handoff.args as Record<string, unknown>).next_steps as string
-                    : '',
-                reason:
-                  typeof (handoff.args as Record<string, unknown>)?.reason === 'string'
-                    ? (handoff.args as Record<string, unknown>).reason as string
-                    : 'other',
-              },
-            }
-          : {}),
-        finished: !handoff && agentResult?.finishReason !== 'tool-calls',
       };
+      if (handoff) {
+        const args = handoff.args as Record<string, unknown>;
+        streamResult = {
+          ...resultBase,
+          outcome: 'handoff',
+          handoff: {
+            summary: typeof args.summary === 'string' ? args.summary : '',
+            nextSteps: typeof args.next_steps === 'string' ? args.next_steps : '',
+            reason: typeof args.reason === 'string' ? args.reason : 'other',
+          },
+        };
+      } else {
+        streamResult = {
+          ...resultBase,
+          outcome: agentResult?.finishReason === 'tool-calls' ? 'continuing' : 'completed',
+        };
+      }
 
       if (streamResult.response) {
         state.accumulatedResponse = state.accumulatedResponse
@@ -384,12 +416,14 @@ export const runOuterLoop = async (
 
       state.runTracker.syncModelMessages(state.harness.getHistory() ?? state.streamHistory);
 
-      if (streamResult.cancelled) break;
-      if (streamResult.awaitingApproval) break;
-      if (streamResult.partialFailure) break;
-      if (streamResult.finished) break;
+      if (
+        streamResult.outcome === 'cancelled' ||
+        streamResult.outcome === 'awaiting-approval' ||
+        streamResult.outcome === 'partial-failure' ||
+        streamResult.outcome === 'completed'
+      ) break;
 
-      if (streamResult.handoff) {
+      if (streamResult.outcome === 'handoff') {
         const handoffText =
           (streamResult.response ? streamResult.response + '\n\n' : '') +
           `[Handoff #${state.handoffChain + 1}] ${streamResult.handoff.summary}`;
@@ -505,6 +539,9 @@ export const runOuterLoop = async (
       state.streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
     }
 
+    if (streamResult?.outcome === 'continuing') {
+      streamResult = { ...streamResult, outcome: 'budget-exhausted' };
+    }
     return streamResult;
   } finally {
     if (previewDebounceTimer) {
@@ -512,4 +549,26 @@ export const runOuterLoop = async (
       previewDebounceTimer = null;
     }
   }
+};
+
+export const createTurnDriver = (
+  setup: TurnDriverSetup,
+  deps: OuterLoopDeps
+): TurnDriverHandle => {
+  const state: TurnDriverState = {
+    ...setup,
+    accumulatedResponse: '',
+    outerBatch: 0,
+    handoffChain: 0,
+    turnHadToolCalls: false,
+    isAwaitingApproval: false,
+  };
+  return {
+    run: () => runOuterLoop(state, deps),
+    getRunTracker: () => state.runTracker,
+    getAccumulatedResponse: () => state.accumulatedResponse,
+    getOuterBatchCount: () => state.outerBatch,
+    hasToolCalls: () => state.turnHadToolCalls,
+    isAwaitingApproval: () => state.isAwaitingApproval,
+  };
 };

@@ -4,13 +4,14 @@ import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/backend/logger';
 import { registerStandardTools } from '@iki/backend/tools';
+import { startTurnHarness } from '@iki/backend/agent/harness';
 import { getMcpManager } from '@iki/backend/mcp';
 import {
   initLangfuseTracing,
   shutdownLangfuseTracing,
 } from '@iki/backend/observability/langfuse';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
-import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { startDaemonServer } from '@iki/daemon/server';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
@@ -131,6 +132,7 @@ if (isDaemonMode) {
     delegatedAgentRuntime: {
       createRunTracker: createAgentRunTracker,
       getConversationToolModel: getToolModel,
+      createHarness: startTurnHarness,
     },
   });
   void getMcpManager().initialize();

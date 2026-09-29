@@ -1,13 +1,4 @@
 import { getDb } from './database';
-import { getChatMessages, updateChatMessage } from './chat_message';
-import { expirePendingToolCallApprovalsByRunIds } from './tool_call_approval';
-import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
-import {
-  interruptedToolPartErrorText,
-  isObjectRecord,
-  isTerminalDynamicToolPart,
-  toInterruptedToolPart,
-} from '@iki/backend/message/tool_parts';
 import type {
   AgentRun,
   AgentRunError,
@@ -272,10 +263,11 @@ export const listAgentRunsByStatus = (
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
 
-  normalizedStatuses.forEach((status, index) => {
-    conditions.push(`status = @status_${index}`);
+  const statusPlaceholders = normalizedStatuses.map((status, index) => {
     params[`status_${index}`] = status;
+    return `@status_${index}`;
   });
+  conditions.push(`status IN (${statusPlaceholders.join(', ')})`);
 
   if (opts?.clientId) {
     conditions.push('thread_id IN (SELECT id FROM chat_threads WHERE client_id = @client_id)');
@@ -462,6 +454,21 @@ export const appendAgentRunStep = (step: AgentRunStep): AgentRunStep => {
   return step;
 };
 
+export const appendAgentRunStepAndUpdateRun = (
+  step: AgentRunStep,
+  updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>
+): AgentRun => {
+  const db = getDb();
+  return db.transaction(() => {
+    appendAgentRunStep(step);
+    const updated = updateAgentRun(step.runId, updates);
+    if (!updated) {
+      throw new Error('Cannot update missing agent run "' + step.runId + '"');
+    }
+    return updated;
+  })();
+};
+
 export const listAgentRunSteps = (runId: string): AgentRunStep[] => {
   const rows = getDb()
     .prepare('SELECT * FROM agent_run_steps WHERE run_id = ? ORDER BY step_index ASC')
@@ -511,114 +518,6 @@ export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
     run,
     steps: listAgentRunSteps(normalizedRunId),
     children: listAgentRunsByParentRunId(normalizedRunId),
-  };
-};
-
-export type RunRecoveryResult = {
-  failedRuns: number;
-  blockedRuns: number;
-  totalRuns: number;
-  expiredApprovals: number;
-  interruptedToolParts: number;
-};
-
-// Restart reconciliation for runs that died mid-flight: mark the runs failed,
-// expire approval cards that can never be answered, and record the
-// interruption as the persisted tool parts' terminal error so the UI shows a
-// final state and the next turn feeds the error to the model as the tool
-// result (the loop continues instead of silently dead-ending).
-export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
-  const stuckStatuses: AgentRun['status'][] = ['running', 'blocked'];
-  const statusPlaceholders = stuckStatuses.map(() => '?').join(', ');
-
-  const rows = getDb()
-    .prepare(
-      `SELECT id, status, thread_id FROM agent_runs WHERE status IN (${statusPlaceholders})`
-    )
-    .all(...stuckStatuses) as { id: string; status: string; thread_id?: string | null }[];
-
-  let failedRuns = 0;
-  let blockedRuns = 0;
-
-  for (const row of rows) {
-    const normalizedStatus = normalizeWhitespace(row.status);
-    if (normalizedStatus === 'running') {
-      getDb()
-        .prepare(
-          `UPDATE agent_runs SET status = 'failed', error_json = @error_json, updated_at = @updated_at WHERE id = @id`
-        )
-        .run({
-          id: row.id,
-          error_json: JSON.stringify({
-            message: 'Run interrupted by process restart',
-            code: 'PROCESS_RESTART',
-            retryable: true,
-          }),
-          updated_at: toIsoNow(),
-        });
-      failedRuns += 1;
-    } else if (normalizedStatus === 'blocked') {
-      getDb()
-        .prepare(
-          `UPDATE agent_runs SET status = 'failed', error_json = @error_json, updated_at = @updated_at WHERE id = @id`
-        )
-        .run({
-          id: row.id,
-          error_json: JSON.stringify({
-            message: 'Run blocked at restart — approval session lost',
-            code: 'APPROVAL_SESSION_LOST',
-            retryable: true,
-          }),
-          updated_at: toIsoNow(),
-        });
-      blockedRuns += 1;
-    }
-  }
-
-  const killedRunIds = rows.map(row => row.id);
-  const expiredApprovals =
-    killedRunIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(killedRunIds).length : 0;
-
-  const threadIds = Array.from(
-    new Set(rows.map(row => row.thread_id).filter((id): id is string => typeof id === 'string'))
-  );
-  let interruptedToolParts = 0;
-  for (const threadId of threadIds) {
-    for (const messageRow of getChatMessages(threadId)) {
-      if (!messageRow.message.includes('"dynamic-tool"')) continue;
-      let parsed: { parts?: unknown[] } | null = null;
-      try {
-        parsed = JSON.parse(messageRow.message);
-      } catch {
-        continue;
-      }
-      if (!Array.isArray(parsed?.parts)) continue;
-
-      let changed = false;
-      const parts = parsed.parts.map(part => {
-        if (!isObjectRecord(part) || part.type !== 'dynamic-tool') return part;
-        if (isTerminalDynamicToolPart(part)) return part;
-        changed = true;
-        interruptedToolParts += 1;
-        return toInterruptedToolPart(
-          part as unknown as DynamicToolPart,
-          interruptedToolPartErrorText(part as unknown as DynamicToolPart)
-        );
-      });
-      if (!changed) continue;
-
-      updateChatMessage(messageRow.id, {
-        message: JSON.stringify({ ...parsed, parts }),
-      });
-    }
-  }
-
-  return {
-    failedRuns,
-    blockedRuns,
-    totalRuns: rows.length,
-    expiredApprovals,
-    interruptedToolParts,
   };
 };
 

@@ -22,6 +22,27 @@ vi.mock('@iki/backend/db/thread_todos', () => ({
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
+  appendAgentRunStepAndUpdateRun: vi.fn((
+    step: { runId: string; stepIndex: number },
+    updates: Record<string, unknown>
+  ) => ({
+    id: step.runId,
+    kind: 'chat-turn',
+    status: updates.status ?? 'running',
+    threadId: 'thread_1',
+    rootRunId: step.runId,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    updatedAt: '2026-06-20T00:00:00.000Z',
+    working: {
+      modelMessages: [],
+      accumulatedText: '',
+      pendingApprovalIds: [],
+      lastStepIndex: step.stepIndex,
+      ...((updates.working as Record<string, unknown> | undefined) ?? {}),
+    },
+    output: updates.output ?? null,
+    error: updates.error ?? null,
+  })),
   createAgentRun: vi.fn((run: Record<string, unknown>) => ({
     ...run,
     createdAt: '2026-06-20T00:00:00.000Z',
@@ -29,6 +50,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
   createAgentRunCheckpoint: vi.fn(),
   getAgentRun: vi.fn(() => null),
+  listAgentRunSteps: vi.fn(() => []),
   updateAgentRun: vi.fn((id: string, updates: Record<string, unknown>) => ({
     id,
     kind: 'chat-turn',
@@ -41,6 +63,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
 }));
 
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
+import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
@@ -128,5 +151,35 @@ describe('createMessageSend integration', () => {
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
     expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
     expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
+    const recordedSteps = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
+      .map(([step]) => step);
+    expect(recordedSteps.some(step => step.type === 'tool-call' && !step.input?.toolCallId)).toBe(false);
+    expect(
+      recordedSteps.some(step =>
+        step.type === 'model' &&
+        step.output?.inference === true &&
+        Array.isArray(step.output.content) &&
+        step.output.content.some(part =>
+          typeof part === 'object' &&
+          part !== null &&
+          'type' in part &&
+          part.type === 'tool-call' &&
+          'toolCallId' in part
+        )
+      )
+    ).toBe(true);
+    expect(
+      recordedSteps.some(step =>
+        step.type === 'model' &&
+        step.output?.inference === true &&
+        Array.isArray(step.output.content) &&
+        step.output.content.some(part =>
+          typeof part === 'object' &&
+          part !== null &&
+          'type' in part &&
+          part.type === 'tool-result'
+        )
+      )
+    ).toBe(true);
   });
 });

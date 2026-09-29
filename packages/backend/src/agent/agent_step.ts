@@ -1,4 +1,13 @@
 import type { AgentUsage, ToolApprovalRequest } from './types';
+import type { ModelMessage } from 'ai';
+
+export type ModelInferenceRecord = {
+  messages: ModelMessage[];
+  systemPrompt: string;
+  content: unknown[];
+  finishReason?: string;
+  usage: AgentUsage;
+};
 
 /**
  * Agent step vocabulary — what `AgentHarness.turn()` yields inside its

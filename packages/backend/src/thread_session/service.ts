@@ -2,7 +2,7 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { noopPlatformDeps } from '@iki/backend/chat_platform';
 import type { ChatStreamTarget } from './types';
-import { createChatApproval } from '../turn_prep/approval';
+import { createChatApproval } from './approval';
 import { createChatMemory } from './memory';
 import { createChatPersistence } from '../turn_prep/persistence';
 import { createChatRuns } from './runs';
@@ -42,7 +42,10 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     },
   });
   const persistence = createChatPersistence({ memory });
-  const runs = createChatRuns({ abortActiveStream: streamCoordinator.abortStreamByRunId });
+  const runs = createChatRuns({
+    abortActiveStream: streamCoordinator.abortStreamByRunId,
+    cancelPendingApprovalsForRun: approvals.cancelPendingApprovalsForRun,
+  });
   const eval_ = createChatEval({ exportTrace: deps.exportTrace });
   const streaming = createChatStreaming({
     streamCoordinator,

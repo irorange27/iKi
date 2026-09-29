@@ -2,10 +2,17 @@ import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { ChatContextMode } from '@iki/backend/message/intervention_policy';
 import type { AffectState } from '@iki/backend/affect/affect_state';
 import type { AppConfig } from '@iki/backend/types/config';
+import type { ModelMessage } from 'ai';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { SkillSummary } from '@iki/backend/types/skill';
-import type { ChatInputMessage } from '../thread_session/types';
 import type { EffectiveContextConfig } from './context_budget';
+
+export type {
+  ContextCompositionCategory,
+  ContextCompositionSummary,
+} from '@iki/backend/types/context_composition';
+
+type ChatInputMessage = ModelMessage;
 
 export type ContextBlockKind =
   | 'recent-history'
@@ -13,8 +20,7 @@ export type ContextBlockKind =
   | 'thread-summary'
   | 'memory'
   | 'affect'
-  | 'skills'
-  | 'clipboard';
+  | 'skills';
 
 export type ContextBlockStatus = 'included' | 'truncated' | 'dropped';
 
@@ -32,26 +38,6 @@ export type ContextReport = {
   retainedRecentMessages: number;
   compactedMessages: number;
   blocks: ContextReportBlock[];
-};
-
-/** Composition categories shown in the renderer's context-usage panel. */
-export type ContextCompositionCategory =
-  | 'messages'
-  | 'systemPrompt'
-  | 'skills'
-  | 'memory'
-  | 'tools'
-  | 'mcpTools'
-  | 'other';
-
-/**
- * Estimated per-category token breakdown of one turn's assembled context.
- * Category values come from the local tokenizer; only the provider-reported
- * usage totals are exact, so consumers must treat this as an estimate.
- */
-export type ContextCompositionSummary = {
-  estimatedTotalTokens: number;
-  categories: Partial<Record<ContextCompositionCategory, number>>;
 };
 
 export type AssembleChatContextResult = {
@@ -107,10 +93,5 @@ export type SkillContext = {
   systemMessage: string;
   usedSkills: SkillSummary[];
   skillMode: 'manual' | 'auto';
-  block: ContextReportBlock;
-};
-
-export type ClipboardContext = {
-  systemMessage: string;
   block: ContextReportBlock;
 };

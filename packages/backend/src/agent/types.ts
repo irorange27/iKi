@@ -147,6 +147,8 @@ export const AgentResultSchema = z.object({
   toolCalls: z.array(ToolCallSchema).optional(),
   toolApprovalRequests: z.array(ToolApprovalRequestSchema).optional(),
   usage: AgentUsageSchema.optional(),
+  /** Billed input of the final SDK step — the real context size the model last saw. */
+  lastStepInputTokens: z.number().optional(),
   perf: AgentTurnPerfSchema.optional(),
   /** Estimated tokens of the resolved tool schemas (set by the harness). */
   toolSchemaTokens: z.object({ builtin: z.number(), mcp: z.number() }).optional(),
@@ -162,8 +164,3 @@ export type AgentResult = z.infer<typeof AgentResultSchema>;
 export const PartialAgentConfigSchema = AgentConfigSchema.partial();
 
 export type PartialAgentConfig = z.infer<typeof PartialAgentConfigSchema>;
-
-export type ChatStreamEvent = {
-  type: string;
-  [key: string]: unknown;
-};

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { autoCompactHistory, estimateMessageTokens, estimateTextTokens } from '../context_budget';
 import { generateThreadSummary } from '../../runtimes/thread_summary';
 import {
@@ -63,6 +64,58 @@ import type {
 const logger = createLogger({ module: 'simple_agent_runner' });
 
 const TERMINAL_TOOL_NAMES = new Set(['handoff']);
+
+const withOpenAIThreadCacheKey = (
+  settings: ReturnType<typeof getModelGenerationSettings>,
+  threadId: string | undefined,
+  modelId: string,
+): ReturnType<typeof getModelGenerationSettings> => {
+  const providerOptions = settings.providerOptions ?? {};
+  const openaiOptions = providerOptions.openai as Record<string, unknown> | undefined;
+  if (
+    typeof openaiOptions?.promptCacheKey === 'string' &&
+    openaiOptions.promptCacheKey.trim().length > 0
+  ) {
+    return settings;
+  }
+
+  // GPT-5.6+ routes prompt caches automatically. Adding a distinct key to
+  // every thread would unnecessarily partition reuse on those models.
+  const modelMatch = /^gpt-(\d+)(?:\.(\d+))?/i.exec(modelId.trim());
+  const majorVersion = modelMatch ? Number(modelMatch[1]) : null;
+  const minorVersion = modelMatch ? Number(modelMatch[2] ?? 0) : null;
+  const hasAutomaticCacheRouting =
+    majorVersion !== null &&
+    (majorVersion > 5 || (majorVersion === 5 && (minorVersion ?? 0) >= 6));
+  if (!threadId || hasAutomaticCacheRouting) return settings;
+
+  // OpenAI uses this stable routing hint to improve prefix-cache locality on
+  // older models. Hash the local thread ID so it is not sent as request metadata.
+  const promptCacheKey = `iki-thread-${createHash('sha256')
+    .update(threadId)
+    .digest('hex')
+    .slice(0, 32)}`;
+
+  return {
+    ...settings,
+    providerOptions: {
+      ...providerOptions,
+      openai: { ...openaiOptions, promptCacheKey },
+    },
+  };
+};
+
+const getOpenAIPromptCacheKey = (
+  settings: ReturnType<typeof getModelGenerationSettings>
+): string | undefined => {
+  const openaiOptions = settings.providerOptions?.openai as
+    | Record<string, unknown>
+    | undefined;
+  const promptCacheKey = openaiOptions?.promptCacheKey;
+  return typeof promptCacheKey === 'string' && promptCacheKey.trim().length > 0
+    ? promptCacheKey
+    : undefined;
+};
 
 const EMPTY_USAGE: AgentUsage = {
   inputTokens: 0,
@@ -222,18 +275,26 @@ export class SimpleAgentRunner {
           providerId: config.providerId,
           model: config.model,
         });
+        const generationSettings = getModelGenerationSettings({
+          providerType: config.providerType,
+          modelId: config.model,
+          providerId: config.providerId,
+          temperature: config.temperature,
+          reasoningEffort: request.reasoningEffort,
+        });
+        const providerSettings =
+          config.providerType === 'openai'
+            ? withOpenAIThreadCacheKey(generationSettings, request.threadId, config.model)
+            : generationSettings;
+        const openAIPromptCacheKey =
+          config.providerType === 'openai' ? getOpenAIPromptCacheKey(providerSettings) : undefined;
+
         const result = streamText({
           model,
           system: systemPrompt,
           messages: injectReasoningContentIntoMessages(messages),
           tools,
-          ...getModelGenerationSettings({
-            providerType: config.providerType,
-            modelId: config.model,
-            providerId: config.providerId,
-            temperature: config.temperature,
-            reasoningEffort: request.reasoningEffort,
-          }),
+          ...providerSettings,
           maxOutputTokens: config.maxTokens,
           stopWhen: [
             stepCountIs(config.enableTools ? Math.max(1, maxIterations - totalSteps) : 1),
@@ -250,8 +311,8 @@ export class SimpleAgentRunner {
                 // The aux summarizer call rides the routed request's exact
                 // prefix (same model, system, tool schemas, history handed
                 // over marker-free and re-marked at the prefix tail by the
-                // summarizer) so the provider's KV cache serves it instead of
-                // re-billing the omitted history as fresh input. Custom-model
+                // summarizer) so the omitted history is eligible for provider
+                // cache reuse. Custom-model
                 // runs bypass factory-created models and get no replay
                 // context — the summarizer falls back to its standalone call.
                 const summary = await generateThreadSummary({
@@ -272,6 +333,7 @@ export class SimpleAgentRunner {
                           systemPrompt,
                           tools,
                           history: withoutCacheMarkers(stepContext),
+                          ...(openAIPromptCacheKey ? { openAIPromptCacheKey } : {}),
                         },
                       }),
                 });
@@ -617,6 +679,18 @@ export class SimpleAgentRunner {
           [] as Awaited<typeof result.steps>,
         );
 
+        // The turn's summed inputTokens counts every step's re-send (billing),
+        // not context size. The last step's billed input is what the model
+        // actually saw on the final request — the renderer's occupancy signal.
+        const lastStep = steps.at(-1);
+        const lastStepUsage = lastStep
+          ? normalizeLanguageModelUsage(lastStep.usage)
+          : undefined;
+        const lastStepInputTokens =
+          lastStepUsage && lastStepUsage.inputTokens > 0
+            ? lastStepUsage.inputTokens
+            : undefined;
+
         cumulativeUsage = addUsage(cumulativeUsage, {
           ...EMPTY_USAGE,
           ...totalUsage,
@@ -752,6 +826,7 @@ export class SimpleAgentRunner {
             ? { toolCalls: allToolCalls }
             : {}),
           usage: cumulativeUsage,
+          ...(lastStepInputTokens !== undefined ? { lastStepInputTokens } : {}),
           ...(cumulativePerf ? { perf: cumulativePerf } : {}),
           iterations: totalSteps,
           finishReason,

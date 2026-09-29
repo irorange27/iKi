@@ -4,7 +4,6 @@ import { dialog } from 'electron';
 import { createChatService } from '@iki/backend/thread_session';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { companionService } from '../companion/companion_service';
-import { getClipboardContextMessage } from '../context/clipboard_monitor';
 import {
   getAssistantProfileContextMessage,
   retrieveRelevantContinuity,
@@ -71,7 +70,6 @@ const platformDeps: ChatServicePlatformDeps = {
       return { success: false, error: String(err) };
     }
   },
-  getClipboardContextMessage,
   getAssistantProfileContextMessage,
   retrieveRelevantContinuity,
   onMessagePersisted: onContinuityMessagePersisted,

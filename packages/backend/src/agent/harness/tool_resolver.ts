@@ -10,8 +10,8 @@ const logger = createLogger({ module: 'tool_resolver' });
 
 /**
  * Session/turn-level approval policy (ADR 005). 'never' is a legitimate
- * headless mode (evals, daemon automation); 'trustWorkspace' upgrades to
- * action-risk classification once utils/action_risk.ts lands.
+ * headless mode (evals, daemon automation); 'trustWorkspace' uses action-risk
+ * classification plus exact-argument allow rules.
  */
 export type ApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'always';
 
