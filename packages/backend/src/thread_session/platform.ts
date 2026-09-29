@@ -16,9 +16,6 @@ export const getCompanion = (): ChatCompanionBridge => _platform.companion ?? no
 
 export const getExportTrace = (): ChatServicePlatformDeps['exportTrace'] => _platform.exportTrace;
 
-export const getClipboardContextMessage = (maxEntries: number): string | undefined =>
-  _platform.getClipboardContextMessage?.(maxEntries);
-
 export const getAssistantProfileContextMessage = (): string =>
   _platform.getAssistantProfileContextMessage?.() ?? '';
 

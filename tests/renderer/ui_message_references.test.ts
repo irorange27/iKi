@@ -276,6 +276,7 @@ describe('ui_message_references', () => {
             cacheReadTokens: 128,
             reasoningTokens: 44,
             estimatedCostUsd: 0.0123,
+            lastStepInputTokens: 220,
             maxInputTokens: 128000,
             model: 'gpt-5-mini',
             providerType: 'openai',
@@ -299,6 +300,7 @@ describe('ui_message_references', () => {
       cacheWriteTokens: null,
       reasoningTokens: 44,
       estimatedCostUsd: 0.0123,
+      lastStepInputTokens: 220,
       maxInputTokens: 128000,
       maxOutputTokens: null,
       model: 'gpt-5-mini',
@@ -455,6 +457,7 @@ describe('ui_message_references', () => {
         cacheWriteTokens: null,
         reasoningTokens: null,
         estimatedCostUsd: null,
+        lastStepInputTokens: null,
         maxInputTokens: 4600,
         maxOutputTokens: null,
         model: 'gpt-5-mini',
@@ -493,6 +496,7 @@ describe('ui_message_references', () => {
       cacheWriteTokens: null,
       reasoningTokens: null,
       estimatedCostUsd: null,
+      lastStepInputTokens: null,
       maxInputTokens: null,
       maxOutputTokens: null,
       model: 'gpt-unknown',
@@ -563,6 +567,7 @@ describe('ui_message_references', () => {
         cacheWriteTokens: null,
         reasoningTokens: null,
         estimatedCostUsd: null,
+        lastStepInputTokens: null,
         maxInputTokens: null,
         maxOutputTokens: null,
         model: '',
@@ -576,6 +581,65 @@ describe('ui_message_references', () => {
         toolCalls: null,
       })
     ).toBeNull();
+  });
+
+  it('uses the final step input as occupancy instead of the turn-cumulative total', () => {
+    const indicator = buildTokenUsageIndicator({
+      inputTokens: 2_803_828,
+      outputTokens: 39_600,
+      totalTokens: 2_843_428,
+      cacheReadTokens: 2_600_000,
+      cacheWriteTokens: 120_000,
+      reasoningTokens: null,
+      estimatedCostUsd: null,
+      lastStepInputTokens: 106_688,
+      maxInputTokens: 1_000_000,
+      maxOutputTokens: null,
+      model: 'deepseek-flash',
+      providerType: 'deepseek',
+      providerId: 'deepseek_main',
+      llmMs: null,
+      toolMs: null,
+      firstTokenMs: null,
+      firstTokenSamples: null,
+      steps: 25,
+      toolCalls: null,
+    });
+
+    expect(indicator).toEqual(
+      expect.objectContaining({
+        usedTokens: 106_688,
+        budgetTokens: 1_000_000,
+        percent: 11,
+        percentLabel: '11%',
+      })
+    );
+  });
+
+  it('does not show cumulative input as occupancy for legacy multi-step messages', () => {
+    const indicator = buildTokenUsageIndicator({
+      inputTokens: 2_803_828,
+      outputTokens: 39_600,
+      totalTokens: 2_843_428,
+      cacheReadTokens: 2_600_000,
+      cacheWriteTokens: 120_000,
+      reasoningTokens: null,
+      estimatedCostUsd: null,
+      lastStepInputTokens: null,
+      maxInputTokens: 1_000_000,
+      maxOutputTokens: null,
+      model: 'deepseek-flash',
+      providerType: 'deepseek',
+      providerId: 'deepseek_main',
+      llmMs: null,
+      toolMs: null,
+      firstTokenMs: null,
+      firstTokenSamples: null,
+      steps: 25,
+      toolCalls: null,
+    });
+
+    expect(indicator).toBeNull();
   });
 });
 

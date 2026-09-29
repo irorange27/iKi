@@ -1,4 +1,3 @@
-import type { ChatStreamEvent } from '@iki/backend/agent';
 import type {
   ChatUiMessage,
   SkillUsageEntry,
@@ -28,7 +27,39 @@ export type ActiveStreamState = {
   steered?: boolean;
 };
 
-export type { ChatStreamEvent };
+export type ChatStreamEvent =
+  | { type: 'tool-input-start'; toolCallId: string; toolName: string }
+  | { type: 'tool-input-delta'; toolCallId: string; delta: string }
+  | { type: 'tool-input-end'; toolCallId: string }
+  | {
+      type: 'tool-call';
+      toolCallId: string;
+      toolName: string;
+      input?: Record<string, unknown>;
+      invalid?: boolean;
+      error?: unknown;
+    }
+  | {
+      type: 'tool-result';
+      toolCallId: string;
+      toolName?: string;
+      output?: unknown;
+      preliminary?: boolean;
+    }
+  | { type: 'tool-error'; toolCallId: string; toolName?: string; error?: unknown }
+  | { type: 'tool-output-denied'; toolCallId: string; toolName?: string; error?: unknown }
+  | {
+      type: 'tool-approval-request';
+      approvalId: string;
+      toolCallId?: string;
+      toolName?: string;
+      toolCall?: {
+        toolName?: string;
+        toolCallId?: string;
+        args?: Record<string, unknown>;
+        input?: Record<string, unknown>;
+      };
+    };
 
 export type RunStatusEvent = {
   runId: string;

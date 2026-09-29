@@ -4,15 +4,16 @@ Electron shell. Three layers:
 
 - **`src/main/`** — Electron main process. IPC handlers (`ipc/`), window management (`windows/`), platform services (`services/`). Should be thin: register handlers, delegate to `@iki/backend`.
 - **`src/preload/`** — `contextBridge` exposing the typed `electronAPI` to renderer. The contract is `packages/backend/src/types/electron_api.ts` (imported as `@iki/backend/types/electron_api`); the renderer-side accessor copy is `src/renderer/services/electron_api.ts`.
-- **`src/renderer/`** — Vue 3 + Tailwind SPA. All DOM interaction goes through composables (`composables/`), views (`views/`). Chat state lives in an `@ai-sdk/vue` `Chat` store (`modules/chat/`); Pinia (`store/`) holds config only.
+- **`src/renderer/`** — Vue 3 + Tailwind SPA. All DOM interaction goes through composables (`composables/`), views (`views/`). Chat state is the AI SDK's vanilla `AbstractChat` (`ai` package), wired in `modules/chat/`; Pinia (`store/`) holds config and the selected-thread store (`thread_session`).
 
-**`src/main.ts`** is the single entry. With `--daemon` it bootstraps `@iki/daemon` headlessly instead of opening windows.
+**`src/main.ts`** is the single entry. With `--iki-daemon` it bootstraps `@iki/daemon` headlessly instead of opening windows.
 
 ## Don't
 
 - Don't put business logic in `main/`. Anything more than "translate IPC arg → backend call → return result" belongs in `@iki/backend`.
 - Don't use `ipcMain.on` for anything that can throw — it doesn't catch exceptions. Use `ipcMain.handle`. See repo `postmortem/backend-bugs-2026-04.md` Bug #2.
 - Don't bundle native or OTel deps into the Vite main chunk. Add them to `VITE_EXTERNAL_RUNTIME_DEPS` in `src/build/runtime_packaging.ts`.
+- Don't poll or persist the system clipboard for automatic agent context. Explicit paste into the composer remains user supplied message content.
 - Don't style teleported reka-ui popover/panel roots with scoped CSS — the portal mounts on `<body>` outside the component subtree, so the parent's scope attributes never reach it. Global styles own those surfaces (`assets/styles/globals.css`: `selector-panel`, `permission-panel`, `sidebar-project-panel`, …).
 
 See repo root [AGENTS.md](../../AGENTS.md).
@@ -26,7 +27,7 @@ The Vite main bundle keeps a small set of runtime externals (`VITE_EXTERNAL_RUNT
 - The staged closure stays ~100 MB. A far-larger asar means the closure leaked (the `electron` npm package alone is 800 MB — at runtime it resolves to the builtin module and is excluded by the resolver).
 - Regression owner: `tests/build/runtime_packaging.test.ts` — hoisting, per-consumer nesting for conflicting versions, LCA sharing on diamond graphs, and the packaging ignore rules.
 
-The packaged app is the real consumer boundary for packaging changes: `pnpm exec electron-forge package` inside `packages/desktop`, then launch `out/iki-darwin-arm64/iki.app` once and watch stderr. Release steps: `docs/design/packaging-release.md` (local).
+The packaged app is the real consumer boundary for packaging changes: `pnpm exec electron-forge package` inside `packages/desktop`, then launch the bundle's executable from a terminal — `out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` (arm64 machines: `out/iki-darwin-arm64`) — and watch stderr. Release steps: `docs/design/packaging-release.md` (local).
 
 ## Trajectory presentation
 
@@ -51,4 +52,4 @@ The E2E gate uses its own profile and process groups. Occupied ports fail withou
 - `thread_session` owns selected-thread state and a thread-list invalidation revision, never a Sidebar component instance. Sidebar subscribes to both and ignores superseded list responses.
 - Trajectory mounts on first use, preserves its UI/cache across tab switches and pauses polling while hidden. Reopening refreshes the run list and reuses unchanged completed traces. Components obtain Electron services from `services/electron_api`; composables accept explicit service dependencies.
 
-Boundary regressions: `useChatUsage.test.ts` exercises real SDK state replacements and store history replacement; `chat_render_cache.test.ts` covers source freshness and per-key subscriptions; `useTurnRail.test.ts` covers frame coalescing and disposal. Sidebar, trajectory and ChatView suites cover subscription and view lifetime behavior.
+Boundary regressions: `useChatUsage.test.ts` exercises real SDK state replacements and store history replacement; `ui_reference_caches.test.ts` covers source freshness and per-key subscriptions; `useTurnRail.test.ts` covers frame coalescing and disposal. Sidebar, trajectory and ChatView suites cover subscription and view lifetime behavior.

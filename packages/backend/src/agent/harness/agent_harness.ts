@@ -16,7 +16,6 @@ import {
   getToolRuntimeContext,
   bindToolRuntimeContextToGenerator,
 } from '../../utils/runtime_context';
-import type { AgentRunTracker } from '../../turn_prep/run_tracker';
 import type { HarnessConfig, TurnInput, TurnOutput, TurnEvent } from './harness_types';
 
 export const cloneModelMessages = (messages?: ModelMessage[]): ModelMessage[] => {
@@ -27,7 +26,6 @@ export const cloneModelMessages = (messages?: ModelMessage[]): ModelMessage[] =>
 export class AgentHarness {
   private config_: HarnessConfig;
   private history: ModelMessage[] = [];
-  private runTracker: AgentRunTracker | null = null;
   private activeRunner: ReturnType<typeof createSimpleAgentRunner> | null = null;
 
   constructor(config: HarnessConfig) {
@@ -54,7 +52,6 @@ export class AgentHarness {
     const runner = createSimpleAgentRunner({ modelFactory: this.config_.modelFactory });
 
     this.activeRunner = runner;
-    this.runTracker = input.runTracker ?? null;
 
     const toolSchemaTokens = estimateToolSchemaTokens(tools);
 
@@ -81,10 +78,13 @@ export class AgentHarness {
       onModelStep: (step, messages, systemPrompt) => {
         // End of one SDK step = start of the next policy snapshot.
         advanceApprovalPolicySnapshot(policyBox, this.config_.approvalPolicy);
-        input.runTracker?.recordModelStep?.(
-          { messages, systemPrompt },
-          { inference: true, content: step.content, finishReason: step.finishReason, usage: normalizeLanguageModelUsage(step.usage) },
-        );
+        input.onInference?.({
+          messages,
+          systemPrompt,
+          content: step.content,
+          finishReason: step.finishReason,
+          usage: normalizeLanguageModelUsage(step.usage),
+        });
       },
     });
 
@@ -125,13 +125,15 @@ export class AgentHarness {
       }
       this.activeRunner = null;
       this.history = cloneModelMessages(runner.getHistory());
-      this.runTracker?.syncModelMessages(this.history);
     }
 
     // Build turn output
     const output: TurnOutput = {
       text: agentResult?.response ?? '',
       usage: agentResult?.usage,
+      ...(agentResult?.lastStepInputTokens != null
+        ? { lastStepInputTokens: agentResult.lastStepInputTokens }
+        : {}),
       ...(agentResult?.perf ? { perf: agentResult.perf } : {}),
       ...(tools.length > 0 ? { toolSchemaTokens } : {}),
       requiresApproval: agentResult?.requiresApproval ?? false,

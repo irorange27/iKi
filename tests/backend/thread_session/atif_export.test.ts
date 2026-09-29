@@ -139,6 +139,30 @@ describe('buildRunTrajectory', () => {
     expect(validateAtifTrajectory(buildRunTrajectory(fixtureRun(), steps))).toEqual([]);
   });
 
+  it('projects persisted approval decisions into the trajectory', () => {
+    const trajectory = buildRunTrajectory(fixtureRun(), [
+      fixtureStep(1, 'approval-request', { approvalId: 'appr_1', toolName: 'shell' }, null),
+      fixtureStep(2, 'approval-response', {
+        approvalId: 'appr_1',
+        toolCallId: 'call_1',
+        approved: false,
+        reason: 'Denied by user',
+      }, null),
+    ]);
+
+    expect(trajectory.steps[2]).toMatchObject({
+      message: 'step 2',
+      extra: {
+        approval_response: {
+          approvalId: 'appr_1',
+          toolCallId: 'call_1',
+          approved: false,
+          reason: 'Denied by user',
+        },
+      },
+    });
+  });
+
   it('falls back to a system step when the run input has no user message', () => {
     const run = { ...fixtureRun(), input: {} };
     const trajectory = buildRunTrajectory(run, []);

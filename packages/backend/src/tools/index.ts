@@ -61,9 +61,8 @@ export type StandardToolRegistrationOptions = {
   delegatedAgentRuntime: DelegatedAgentRuntime;
 };
 
-// Lazy: tools/index sits in an import cycle (agent_tools -> agent/harness ->
-// tool_resolver -> tools barrel), so tool instances must not be constructed at
-// module-load time — only after evaluation of every module in the cycle.
+// Construct only during explicit registration so importing the barrel never
+// mutates the global registry as a module-load side effect.
 const buildStandardTools = () => [
   new ReadFileTool(),
   new EditFileTool(),

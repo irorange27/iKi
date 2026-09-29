@@ -49,8 +49,7 @@ describe('context composition summary', () => {
         { kind: 'identity', status: 'included', estimatedTokens: 900, charCount: 0 },
         { kind: 'skills', status: 'included', estimatedTokens: 300, charCount: 0 },
         { kind: 'memory', status: 'included', estimatedTokens: 80, charCount: 0 },
-        { kind: 'affect', status: 'dropped', estimatedTokens: 0, charCount: 0 },
-        { kind: 'clipboard', status: 'included', estimatedTokens: 40, charCount: 0 },
+        { kind: 'affect', status: 'included', estimatedTokens: 40, charCount: 0 },
       ]),
       toolSchemaTokens: { builtin: 440, mcp: 120 },
     });

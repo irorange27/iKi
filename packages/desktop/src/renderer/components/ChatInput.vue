@@ -634,6 +634,7 @@ const composerContextUsage = computed(() => {
     cacheWriteTokens: latestUsage?.cacheWriteTokens ?? null,
     reasoningTokens: latestUsage?.reasoningTokens ?? null,
     estimatedCostUsd: latestUsage?.estimatedCostUsd ?? null,
+    lastStepInputTokens: latestUsage?.lastStepInputTokens ?? null,
     maxInputTokens:
       modelCapability?.maxInputTokens ??
       modelCapability?.contextWindow ??

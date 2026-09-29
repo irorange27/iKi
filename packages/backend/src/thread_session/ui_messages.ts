@@ -130,9 +130,36 @@ export const toModelInputMessages = async (
       throw new Error(`Invalid UI messages: ${getErrorMessage(error)}`);
     }
 
+    // The SDK's converter drops `approval-requested` parts outright, but the
+    // approval-resume fallback needs the live request in the model history so
+    // the decision appended by the approval layer pairs with it. Re-stamping
+    // the state for conversion only makes the converter emit the assistant
+    // tool-call + tool-approval-request pair; with no `approval.approved` on
+    // the part it emits neither a response nor a tool result, so the real
+    // decision still rides in the tool message appended by thread_session/approval.
+    const stampLiveApprovalRequests = (messages: ChatUiMessage[]): ChatUiMessage[] =>
+      messages.map(message => ({
+        ...message,
+        parts: message.parts.map((part): UiMessagePart => {
+          if (part.type !== 'dynamic-tool' || part.state !== 'approval-requested') return part;
+          // Cannot go through the typed approval-responded variant: its
+          // `approved` flag would make the converter emit a fabricated
+          // response. The converter only reads `state` + `approval.id` here,
+          // so the bridge casts the record the same way validateUIMessages
+          // already accepted it.
+          const stamped = { ...part, state: 'approval-responded' };
+          return stamped as unknown as UiMessagePart;
+        }),
+      }));
+
+    const conversionReady =
+      options?.repairInterruptedTools === false
+        ? stampLiveApprovalRequests(normalizedUiMessages)
+        : normalizedUiMessages;
+
     try {
       return await convertToModelMessages(
-        normalizedUiMessages.map(message => {
+        conversionReady.map(message => {
           const { id, ...rest } = message;
           void id;
           return rest;

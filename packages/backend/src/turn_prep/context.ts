@@ -2,7 +2,6 @@ import { deriveModelAwareContextConfig } from './context_budget';
 import type { ChatMemory } from '../thread_session/memory';
 import {
   buildAffectBlock,
-  buildClipboardContext,
   buildDroppedBlock,
   buildDroppedMemoryContext,
   buildIdentityContext,
@@ -107,21 +106,13 @@ export const createChatContextAssembler = (deps: {
       )
     );
 
-    const clipboardContext = benchmarkCleanContext
-      ? {
-          systemMessage: '',
-          block: buildDroppedBlock('clipboard', 'disabled for benchmark clean mode'),
-        }
-      : buildClipboardContext(contextConfig, params.modelCapability);
-    blocks.push(clipboardContext.block);
-
     // Identity and skills are stable instruction blocks and stay in the system
-    // prefix. Memory, affect and clipboard are per-turn data: they ride with the
-    // newest user message so a change to them cannot invalidate the cached
-    // history prefix.
+    // prefix. Memory and affect are per-turn data: they ride with the newest
+    // user message so a change to them cannot invalidate the cached history
+    // prefix.
     const baseWithVolatile = appendContextToLastUserMessage(
       baseMessages,
-      [memoryContext.systemMessage, affectContext.message, clipboardContext.systemMessage]
+      [memoryContext.systemMessage, affectContext.message]
         .filter(part => part.trim().length > 0)
         .join('\n\n')
     );

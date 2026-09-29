@@ -7,7 +7,7 @@ import {
   type AffectSignalSource,
 } from '@iki/backend/types/affect';
 import type { SkillSource } from '@iki/backend/types/skill';
-import type { ContextCompositionSummary } from '@iki/backend/turn_prep/context_types';
+import type { ContextCompositionSummary } from '@iki/backend/types/context_composition';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 
 export { isObjectRecord };
@@ -83,6 +83,8 @@ export type TokenUsagePartData = {
   cacheWriteTokens?: number;
   reasoningTokens?: number;
   estimatedCostUsd?: number;
+  /** Billed input of the final SDK step — the real context size the model last saw (absent on legacy messages). */
+  lastStepInputTokens?: number;
   maxInputTokens?: number;
   maxOutputTokens?: number;
   model?: string;

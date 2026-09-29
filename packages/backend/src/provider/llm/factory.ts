@@ -316,20 +316,24 @@ const shouldOmitTemperatureForModelCall = (params: {
   );
 };
 
+const getProviderOptionsKey = (providerType: string): string =>
+  providerType === 'openai-compatible' ? 'openaiCompatible' : providerType;
+
 const mergeReasoningEffortOverride = (
   providerType: string,
   callSettings: { providerOptions?: SharedV3ProviderOptions },
   reasoningEffort: string
 ): { providerOptions?: SharedV3ProviderOptions } => {
   const providerOptions = { ...(callSettings.providerOptions ?? {}) };
+  const providerOptionsKey = getProviderOptionsKey(providerType);
   const perProvider = {
-    ...((providerOptions[providerType] as Record<string, JSONValue> | undefined) ?? {}),
+    ...((providerOptions[providerOptionsKey] as Record<string, JSONValue> | undefined) ?? {}),
     reasoningEffort,
   };
   return {
     providerOptions: {
       ...providerOptions,
-      [providerType]: perProvider,
+      [providerOptionsKey]: perProvider,
     },
   };
 };
@@ -354,7 +358,7 @@ export const getModelCallSettings = (
 
   return {
     providerOptions: {
-      [providerType]: merged,
+      [getProviderOptionsKey(providerType)]: merged,
     },
   };
 };

@@ -223,6 +223,8 @@ describe('generateThreadSummary — cache-aware prefix replay', () => {
     expect(call.system).toBe('routed system prompt');
     expect(call.messages).toHaveLength(3);
     expect(call.messages[0]).toEqual({ role: 'user', content: 'old question' });
+    // The replay re-marks the prefix tail so the aux read matches the routed request's cached prefix.
+    expect(call.messages[1].providerOptions?.anthropic?.cacheControl).toEqual({ type: 'ephemeral' });
     expect(call.messages[2].role).toBe('user');
     expect(call.messages[2].content).toContain('Conversation delta:');
     expect(call.messages[2].content).toContain('dropped middle');
@@ -232,6 +234,44 @@ describe('generateThreadSummary — cache-aware prefix replay', () => {
     expect(call.maxOutputTokens).toBe(320);
     expect(result).toEqual({ summary: 'plain summary', model: { ...conversationModel } });
     expect(disposeLanguageModelMock).toHaveBeenCalledWith({ fake: 'model' });
+  });
+
+  it('replays without anthropic markers when the route is not breakpoint-driven', async () => {
+    const openaiModel = { ...conversationModel, providerType: 'openai', model: 'gpt-4o-mini' };
+    getToolModelMock.mockReturnValue({ ...openaiModel });
+    generateTextMock.mockResolvedValue({ text: 'plain summary' });
+    createModelMock.mockReturnValue({ fake: 'model' });
+
+    await generateThreadSummary({
+      messages: [{ role: 'user', content: 'dropped middle' }],
+      cachePrefix: { ...cachePrefix, ...openaiModel },
+    });
+
+    const call = generateTextMock.mock.calls[0][0] as Record<string, any>;
+    for (const message of call.messages) {
+      expect(message.providerOptions?.anthropic?.cacheControl).toBeUndefined();
+    }
+  });
+
+  it('reuses the conversation OpenAI cache key for the compaction replay', async () => {
+    const openaiModel = { ...conversationModel, providerType: 'openai', model: 'gpt-4o-mini' };
+    getToolModelMock.mockReturnValue({ ...openaiModel });
+    generateTextMock.mockResolvedValue({ text: 'plain summary' });
+    createModelMock.mockReturnValue({ fake: 'model' });
+
+    await generateThreadSummary({
+      messages: [{ role: 'user', content: 'dropped middle' }],
+      cachePrefix: {
+        ...cachePrefix,
+        ...openaiModel,
+        openAIPromptCacheKey: 'iki-thread-opaque-key',
+      },
+    });
+
+    const call = generateTextMock.mock.calls[0][0] as Record<string, any>;
+    expect(call.providerOptions).toEqual({
+      openai: { promptCacheKey: 'iki-thread-opaque-key' },
+    });
   });
 
   it('keeps the standalone tool-model call when the cache prefix routes elsewhere', async () => {

@@ -30,6 +30,28 @@ vi.mock('@iki/backend/db/chat_message', () => ({
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
+  appendAgentRunStepAndUpdateRun: vi.fn((
+    step: { runId: string; stepIndex: number },
+    updates: Record<string, unknown>
+  ) => ({
+    id: step.runId,
+    kind: 'approval-resume',
+    status: updates.status ?? 'running',
+    threadId: 'thread_1',
+    parentRunId: 'run_blocked_1',
+    rootRunId: 'run_blocked_1',
+    createdAt: '2026-06-20T00:00:00.000Z',
+    updatedAt: '2026-06-20T00:00:00.000Z',
+    working: {
+      modelMessages: [],
+      accumulatedText: '',
+      pendingApprovalIds: [],
+      lastStepIndex: step.stepIndex,
+      ...((updates.working as Record<string, unknown> | undefined) ?? {}),
+    },
+    output: updates.output ?? null,
+    error: updates.error ?? null,
+  })),
   createAgentRun: vi.fn((run: Record<string, unknown>) => ({
     ...run,
     createdAt: '2026-06-20T00:00:00.000Z',
@@ -37,6 +59,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   })),
   createAgentRunCheckpoint: vi.fn(),
   getAgentRun: vi.fn(() => null),
+  listAgentRunSteps: vi.fn(() => []),
   updateAgentRun: vi.fn((id: string, updates: Record<string, unknown>) => ({
     id,
     kind: 'approval-resume',
@@ -62,7 +85,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
 
 import * as approvalDb from '@iki/backend/db/tool_call_approval';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { createChatApproval } from '@iki/backend/turn_prep/approval';
+import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { AgentHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
@@ -233,6 +256,22 @@ describe('createChatApproval resume integration', () => {
 
     expect(result).toEqual({ success: true, awaitingApproval: repeat, stopped: false });
     expect(executions).toBe(approved ? 1 : 0);
+    expect(
+      vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
+        .map(([step]) => step)
+        .some(step =>
+          step.type === 'approval-response' &&
+          step.input?.approvalId === approvedId &&
+          step.input?.approved === approved
+      )
+    ).toBe(true);
+    const resumedSegments = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
+      .filter(([step, updates]) =>
+        step.type === 'finalize' &&
+        typeof step.input?.childRunId === 'string' &&
+        updates.status === 'completed'
+      );
+    expect(resumedSegments.length).toBeGreaterThan(0);
     if (repeat) {
       const saved = vi.mocked(approvalDb.upsertToolCallApprovals).mock.calls.at(-1)?.[0];
       expect(saved).toHaveLength(1);

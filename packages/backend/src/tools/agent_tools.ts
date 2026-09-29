@@ -3,9 +3,14 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-import type { AgentResult, AgentTool } from '@iki/backend/agent/types';
-import type { createAgentRunTracker } from '../turn_prep/run_tracker';
-import { startTurnHarness } from '../agent/harness';
+import type { AgentResult, AgentTool, AgentUsage } from '@iki/backend/agent/types';
+import type { AgentHarness, TurnHarnessAssembly } from '@iki/backend/agent/harness';
+import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
+import type {
+  AgentRunInput,
+  AgentRunKind,
+  AgentRunWorkingState,
+} from '@iki/backend/types/agent_run';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { BaseTool } from '@iki/backend/tools/base';
@@ -25,16 +30,42 @@ const AGENT_TOOL_NAME = 'agent';
 const DEFAULT_AGENT_MAX_TOKENS = 2000;
 const MAX_TOOL_NAMES_IN_ERROR = 10;
 
-type DelegatedAgentRunTracker = ReturnType<typeof createAgentRunTracker>;
-type DelegatedAgentRunTrackerParams = Parameters<typeof createAgentRunTracker>[0];
+type DelegatedAgentRunTrackerParams = {
+  kind: AgentRunKind;
+  threadId?: string;
+  parentRunId?: string;
+  rootRunId?: string;
+  providerType: string;
+  providerId?: string;
+  model: string;
+  systemPrompt: string;
+  enabledTools: string[];
+  availableSkillIds: string[];
+  input: AgentRunInput;
+  working: AgentRunWorkingState;
+};
+
+type DelegatedAgentRunTracker = {
+  id: string;
+  recordModelStep: (record: ModelInferenceRecord) => void;
+  recordAgentStep: (step: AgentStep) => void;
+  syncModelMessages: (messages: unknown[]) => unknown;
+  markCompleted: (params: {
+    text?: string;
+    finishReason?: string;
+    usage?: AgentUsage;
+  }) => unknown;
+  markFailed: (error: { message: string; code?: string; retryable?: boolean }) => unknown;
+};
 
 /**
  * Backend pieces the delegated-agent tool needs at execution time, injected at
- * registration (registerStandardTools) so tools/ stays below turn_prep/provider.
+ * registration so tools/ stays below orchestration and persistence.
  */
 export type DelegatedAgentRuntime = {
   createRunTracker: (params: DelegatedAgentRunTrackerParams) => DelegatedAgentRunTracker;
   getConversationToolModel: () => ToolModelConfig | null;
+  createHarness: (assembly: TurnHarnessAssembly) => AgentHarness;
 };
 
 let delegatedAgentRuntime: DelegatedAgentRuntime | null = null;
@@ -298,7 +329,7 @@ export class DelegatedAgentTool extends BaseTool {
         ? Math.trunc(conversationModel.maxTokens)
         : DEFAULT_AGENT_MAX_TOKENS;
 
-    const harness = startTurnHarness({
+    const harness = requireDelegatedAgentRuntime().createHarness({
       providerType: conversationModel.providerType,
       ...(typeof conversationModel.providerId === 'string' && conversationModel.providerId.trim()
         ? { providerId: conversationModel.providerId.trim() }
@@ -369,17 +400,17 @@ export class DelegatedAgentTool extends BaseTool {
           for await (const event of harness.turn({
             prompt,
             toolsOverride: delegatedTools,
+            onInference: record => runTracker.recordModelStep(record),
             abortSignal: runtimeContext.abortSignal,
-            runTracker,
           })) {
+            if (event.event === 'step') runTracker.recordAgentStep(event.step);
             if (event.event === 'done') return event.output;
           }
           throw new Error('Delegated agent produced no output');
         }
       );
       if (!turnOutput) throw new Error('Delegated agent produced no output');
-      runTracker.recordToolCalls(turnOutput.toolCalls);
-      // harness.turn() already calls runTracker.syncModelMessages() internally
+      runTracker.syncModelMessages(harness.getHistory());
     } catch (error) {
       runTracker.markFailed({
         message: error instanceof Error ? error.message : String(error),

@@ -103,6 +103,53 @@ describe('chat_ui message conversion', () => {
       expect(interruptedResult).toBeDefined();
     });
 
+    it('keeps a live approval-requested call as a tool-call + tool-approval-request pair when repair is off', async () => {
+      const converted = await toModelInputMessages(
+        [
+          {
+            id: 'user_1',
+            role: 'user',
+            parts: [{ type: 'text', text: 'Run the probe.' }],
+          },
+          {
+            id: 'assistant_1',
+            role: 'assistant',
+            parts: [
+              { type: 'text', text: 'I will run the probe.' },
+              {
+                type: 'dynamic-tool',
+                toolCallId: 'toolu_live_approval',
+                toolName: 'approval_probe',
+                state: 'approval-requested',
+                input: {},
+                approval: { id: 'approval_live_1' },
+              },
+            ],
+          },
+        ],
+        { repairInterruptedTools: false },
+      );
+
+      const assistant = converted.find(message => message.role === 'assistant');
+      const content = (assistant?.content ?? []) as Array<{
+        type: string;
+        toolCallId?: string;
+        toolName?: string;
+        approvalId?: string;
+      }>;
+      expect(content.find(part => part.type === 'tool-call')).toMatchObject({
+        toolCallId: 'toolu_live_approval',
+        toolName: 'approval_probe',
+      });
+      expect(content.find(part => part.type === 'tool-approval-request')).toMatchObject({
+        approvalId: 'approval_live_1',
+        toolCallId: 'toolu_live_approval',
+      });
+      // No fabricated response or result: the real decision rides in the tool
+      // message appended by the approval layer.
+      expect(converted.some(message => message.role === 'tool')).toBe(false);
+    });
+
     it('keeps an issued-but-unrecorded tool call visible instead of silently dropping it', async () => {
       const converted = await toModelInputMessages([
         {

@@ -247,7 +247,7 @@ describe('AgentHarness', () => {
     expect(history2.length).toBeGreaterThan(history.length);
   });
 
-  it('accepts runTracker from caller and syncs model messages', async () => {
+  it('forwards model inference records to the orchestration callback', async () => {
     const faux = new FauxModelProvider([fauxText('ok')]);
     const harness = new AgentHarness({
       providerType: 'faux',
@@ -261,18 +261,21 @@ describe('AgentHarness', () => {
       modelFactory: () => faux,
     });
 
-    const mockTracker = {
-      id: 'mock-run-id',
-      syncModelMessages: vi.fn(),
-    } as any;
-
+    const inferenceRecords: Array<Record<string, unknown>> = [];
     const events: TurnEvent[] = [];
-    for await (const event of harness.turn({ prompt: 'test', runTracker: mockTracker })) {
+    for await (const event of harness.turn({
+      prompt: 'test',
+      onInference: record => inferenceRecords.push(record as unknown as Record<string, unknown>),
+    })) {
       events.push(event);
     }
 
-    // runTracker should be the one we passed in
-    expect(mockTracker.syncModelMessages).toHaveBeenCalled();
+    expect(inferenceRecords).toHaveLength(1);
+    expect(inferenceRecords[0]).toMatchObject({
+      systemPrompt: 'Test agent.',
+      content: expect.any(Array),
+      usage: expect.objectContaining({ totalTokens: expect.any(Number) }),
+    });
   });
 
   it('sees undefined conversationModel when context is not populated', async () => {
@@ -379,7 +382,6 @@ describe('AgentHarness', () => {
         for await (const event of harness.turn({
           prompt: 'check context',
           toolsOverride: [contextTool],
-          runTracker,
         })) {
           events.push(event);
         }

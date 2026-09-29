@@ -11,6 +11,7 @@ import {
   getAgentRunTree,
   listAgentRunsByParentRunId,
   listAgentRunsByRootRunId,
+  listAgentRunsByStatus,
   listAgentRunSteps,
   updateAgentRun,
 } from '@iki/backend/db/agent_runs';
@@ -22,6 +23,22 @@ beforeEach(() => {
 });
 
 describe('agent_runs db', () => {
+  it('matches any requested status when listing multiple statuses', () => {
+    const allMock = vi.fn(() => []);
+    const prepareMock = vi.fn(() => ({ all: allMock }));
+    getDbMock.mockReturnValue({ prepare: prepareMock } as unknown as ReturnType<typeof getDb>);
+
+    listAgentRunsByStatus(['running', 'blocked']);
+
+    expect(prepareMock.mock.calls[0]?.[0]).toContain(
+      'status IN (@status_0, @status_1)'
+    );
+    expect(allMock).toHaveBeenCalledWith({
+      status_0: 'running',
+      status_1: 'blocked',
+    });
+  });
+
   it('serializes structured run payloads on insert', () => {
     const runMock = vi.fn();
     const prepareMock = vi.fn(() => ({ run: runMock }));

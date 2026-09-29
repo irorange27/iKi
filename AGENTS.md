@@ -1,6 +1,6 @@
 # AGENTS.md — iKi orientation
 
-**iKi**: macOS Electron chat client that wraps third-party LLM APIs with local tool-calling, SQLite persistence, and an optional headless daemon (QQ-bot bridge). Not itself an AI — intelligence comes from the wired provider (OpenAI / Anthropic / DeepSeek / Kimi / MiniMax / Ollama / ACP).
+**iKi**: macOS Electron chat client that wraps third-party LLM APIs with local tool-calling, SQLite persistence, and an optional headless daemon (QQ-bot bridge). 
 
 **Golden rule:** all business logic lives in `packages/backend` (pure Node/TS). `desktop/` (Electron) and `daemon/` (headless HTTP+WS) are thin shells; dependencies point one way only: `desktop`/`daemon` → `backend`.
 
@@ -11,7 +11,9 @@
 3. `pnpm run ci:quality` must pass before declaring done. UI changes: click through in the running app — type-check ≠ feature-correct. Cross-layer wiring (renderer→IPC→backend→SDK→tools→persistence): run `pnpm run test:e2e` (real app + scripted provider; entry `tests/integration/e2e/run_smoke.mjs`).
 4. Commit only when the user asks (`pnpm run commit`). Never `--no-verify`. Single test file: `pnpm vitest run <path>`.
 5. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
-6. Release tags trigger the full macOS build (`release-build.yml`) and must match the root `package.json` version. Before pushing a tag: package locally (`cd packages/desktop && pnpm exec electron-forge package`) and launch `out/iki-darwin-arm64/iki.app` once — the packaged asar is the real consumer boundary. Runbook: `docs/design/packaging-release.md`.
+6. Release tags trigger the full macOS build (`release-build.yml`) and must match the root `package.json` version. Before pushing a tag: package locally (`cd packages/desktop && pnpm exec electron-forge package`), then launch the bundle's executable from a terminal — `out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` (arm64 machines: `out/iki-darwin-arm64`) — and watch stderr; the packaged asar is the real consumer boundary. Runbook: `docs/design/packaging-release.md`.
+7. Bot reviews (Sourcery) are part of the review: the check can pass while the review body carries blocking findings — read the body, address or explicitly resolve every blocking finding before merging.
+8. After any rework, capture the lesson per `docs/conventions.md` § Lessons: a regression test that fails on the old code first, an ownership-map row if a boundary moved, prose last.
 
 ## Commands
 
@@ -63,7 +65,7 @@ postmortem/        ← incident write-ups
 | Change context budget / compaction | `packages/backend/src/agent/context_budget.ts` + runner `prepareStep`; see backend contract |
 | Change prompt assembly | `packages/backend/src/turn_prep/context.ts`, `context_blocks.ts` |
 | LLM-call surface / add a provider | `packages/backend/src/provider/llm/factory.ts` |
-| Tool approval UX | `packages/backend/src/turn_prep/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
+| Tool approval UX | `packages/backend/src/thread_session/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
 | New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |
 | Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |

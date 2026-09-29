@@ -1,8 +1,7 @@
 import type { LanguageModel, ModelMessage } from 'ai';
 
-import type { AgentStep } from '@iki/backend/agent/agent_step';
+import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
 import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult, AgentTurnPerf } from '@iki/backend/agent/types';
-import type { AgentRunTracker } from '../../turn_prep/run_tracker';
 import type { ApprovalPolicy } from './tool_resolver';
 
 // ── Harness configuration ─────────────────────────────────────────────
@@ -39,14 +38,16 @@ export type TurnInput = {
   history?: ModelMessage[];
   /** Pre-resolved tools (used by DelegatedAgentTool). */
   toolsOverride?: AgentTool[];
-  /** Optional run tracker (harness owns lifecycle, caller provides instance). */
-  runTracker?: AgentRunTracker;
+  /** Persistable model facts are returned to the orchestration owner. */
+  onInference?: (record: ModelInferenceRecord) => void;
   abortSignal?: AbortSignal;
 };
 
 export type TurnOutput = {
   text: string;
   usage?: AgentUsage;
+  /** Billed input of the final SDK step — the real context size the model last saw. */
+  lastStepInputTokens?: number;
   /** Wall-clock perf metrics measured by the runner (llm/tool time, TTFT, steps). */
   perf?: AgentTurnPerf;
   /** Estimated tokens of the resolved tool schemas sent with the request. */

@@ -16,9 +16,15 @@ vi.mock('@iki/backend/platform', () => ({
 
 const database = await import('@iki/backend/db/database');
 const { getDb } = await import('@iki/backend/db/database');
-const { createAgentRun, getAgentRun, recoverStuckRunsOnStartup } = await import(
-  '@iki/backend/db/agent_runs'
-);
+const {
+  appendAgentRunStepAndUpdateRun,
+  createAgentRun,
+  getAgentRun,
+  getAgentRunTrace,
+  listAgentRunSteps,
+  listAgentRunsByStatus,
+} = await import('@iki/backend/db/agent_runs');
+const { recoverStuckRunsOnStartup } = await import('@iki/backend/thread_session/run_tracker');
 const {
   getToolCallApproval,
   upsertToolCallApprovalSession,
@@ -187,7 +193,43 @@ describe('recoverStuckRunsOnStartup tool-error reconciliation', () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
+  it('rolls back an audit step when the paired working-snapshot update fails', () => {
+    const run = createAgentRun({
+      id: 'run_atomic',
+      kind: 'chat-turn',
+      status: 'completed',
+      threadId: 'thread_control',
+      rootRunId: 'run_atomic',
+      providerType: 'openai',
+      model: 'test-model',
+      systemPrompt: 'system prompt',
+      input: {},
+      working: { modelMessages: [], accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
+    } as never);
+    const step = {
+      id: 'step_atomic',
+      runId: run.id,
+      stepIndex: 1,
+      type: 'model' as const,
+      status: 'completed' as const,
+      summary: 'Atomicity probe',
+      input: null,
+      output: null,
+      startedAt: now(),
+      finishedAt: now(),
+    };
+    const invalidWorking: Record<string, unknown> = {};
+    invalidWorking.self = invalidWorking;
+
+    expect(() =>
+      appendAgentRunStepAndUpdateRun(step, { working: invalidWorking as never })
+    ).toThrow();
+    expect(listAgentRunSteps(run.id)).toEqual([]);
+    expect(getAgentRun(run.id)?.working.lastStepIndex).toBe(0);
+  });
+
   it('marks the killed run failed, expires only its approvals, and records terminal errors on its tool parts', () => {
+    expect(listAgentRunsByStatus(['running', 'blocked'])).toHaveLength(1);
     const result = recoverStuckRunsOnStartup();
 
     expect(result).toMatchObject({
@@ -198,6 +240,11 @@ describe('recoverStuckRunsOnStartup tool-error reconciliation', () => {
       interruptedToolParts: 2,
     });
     expect(getAgentRun('run_stuck')?.status).toBe('failed');
+    expect(getAgentRunTrace('run_stuck')?.steps.at(-1)).toMatchObject({
+      type: 'error',
+      status: 'failed',
+      output: { code: 'APPROVAL_SESSION_LOST' },
+    });
     // The pending card is closed as a system rejection with an explicit
     // reason (same shape as the approval-timeout path).
     expect(getToolCallApproval('appr_stuck')).toMatchObject({

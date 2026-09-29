@@ -1,10 +1,10 @@
-import { createAgentRunTracker } from '../turn_prep/run_tracker';
+import { createAgentRunTracker } from './run_tracker';
 import { startTurnHarness } from '../agent/harness';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { getStreamErrorMessage } from '@iki/backend/utils/errors';
-import { describeApprovalRequiredTools } from '../turn_prep/approval_types';
+import { describeApprovalRequiredTools } from './approval_types';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,
@@ -83,7 +83,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         .filter(part => part.trim().length > 0)
         .join('\n\n');
 
-      runTracker = createAgentRunTracker({
+      const activeRunTracker = createAgentRunTracker({
         kind: options.runConfig?.kind ?? 'chat-turn',
         threadId: options.threadId,
         parentRunId: options.runConfig?.parentRunId,
@@ -113,6 +113,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           lastStepIndex: 0,
         },
       });
+      runTracker = activeRunTracker;
 
       if (preparedTurn.enableTools) {
         if (!preparedTurn.prompt.trim()) {
@@ -143,8 +144,8 @@ export const createMessageSend = (deps: MessageSendDeps) => {
 
         const output = await runWithToolRuntimeContext(
           {
-            runId: runTracker.id,
-            runTracker,
+            runId: activeRunTracker.id,
+            runTracker: activeRunTracker,
             threadId: options.threadId,
             conversationModel: {
               providerType: options.providerType,
@@ -156,16 +157,18 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             for await (const event of harness.turn({
               prompt: preparedTurn.prompt,
               history: preparedTurn.history,
-              runTracker,
+              onInference: record => activeRunTracker.recordModelStep(record),
             })) {
+              if (event.event === 'step') {
+                activeRunTracker.recordAgentStep(event.step);
+              }
               if (event.event === 'done') return event.output;
             }
             throw new Error('Agent harness produced no output');
           }
         );
 
-        runTracker.recordToolCalls(output.toolCalls);
-        // harness.turn() already calls runTracker.syncModelMessages() internally
+        activeRunTracker.syncModelMessages(harness.getHistory());
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,

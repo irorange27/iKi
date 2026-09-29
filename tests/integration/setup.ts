@@ -3,7 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { registerStandardTools, defaultToolRegistry } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/turn_prep/run_tracker';
+import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import { startTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
 import { type AgentTool } from '@iki/backend/agent';
@@ -29,6 +30,7 @@ const ensureTools = () => {
       delegatedAgentRuntime: {
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
+        createHarness: startTurnHarness,
       },
     });
     toolsRegistered = true;

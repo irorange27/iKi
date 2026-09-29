@@ -5,6 +5,7 @@ import { createLogger } from '@iki/backend/logger';
 import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { createModel, disposeLanguageModel } from '../provider/llm/factory';
+import { withCacheBreakpoint } from '../agent/cache_markers';
 
 export type ThreadSummaryMessage = {
   role: 'user' | 'assistant';
@@ -20,15 +21,17 @@ export type ThreadSummaryResult = {
  * Optional replay context for cache-aware summarization. The compaction aux
  * call is expensive because it must read the omitted history; when the tool
  * model routes to the same provider/model as the conversation, resending the
- * routed request's exact prefix (system, tool schemas, marker-free history)
- * lets the provider's KV cache serve that read instead of re-billing it. A
- * different model has never seen the prefix and would pay full price, so
- * callers must only supply this when the routes match.
+ * routed request's exact prefix (system, tool schemas, history re-marked with
+ * a single breakpoint at the prefix tail) makes that read eligible for
+ * provider-cache reuse. A different model has never seen the prefix and would
+ * pay full price, so callers must only supply this when the routes match.
  */
 export type ThreadSummaryCachePrefix = {
   providerType: string;
   providerId?: string;
   model: string;
+  /** Preserve the conversation's OpenAI cache-routing affinity for prefix replay. */
+  openAIPromptCacheKey?: string;
   systemPrompt: string;
   history: ModelMessage[];
   tools?: ToolSet;
@@ -124,9 +127,13 @@ const generateCacheAwareSummary = async (params: {
       model,
       abortSignal: params.abortSignal,
       system: prefix.systemPrompt,
-      messages: [...prefix.history, { role: 'user', content: params.prompt }],
+      // Re-mark the prefix tail so the aux read matches the routed request's cached prefix.
+      messages: [...withCacheBreakpoint(prefix.providerType, prefix.history), { role: 'user', content: params.prompt }],
       ...(prefix.tools && Object.keys(prefix.tools).length > 0
         ? { tools: stripToolExecutes(prefix.tools) }
+        : {}),
+      ...(prefix.openAIPromptCacheKey
+        ? { providerOptions: { openai: { promptCacheKey: prefix.openAIPromptCacheKey } } }
         : {}),
       temperature: 0.1,
       maxOutputTokens: 320,

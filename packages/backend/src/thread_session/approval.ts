@@ -3,11 +3,10 @@ import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import {
-  type AgentStep,
   type AgentResult,
 } from '@iki/backend/agent';
 import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
-import { cloneModelMessages } from '../agent/harness';
+import { cloneModelMessages, rehydrateHarness } from '../agent/harness';
 import type { AgentRun } from '@iki/backend/types/agent_run';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
@@ -16,19 +15,20 @@ import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { createPrefixedId } from '../utils/id';
 import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { ChatMemory } from '../thread_session/memory';
+import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
 import {
   DEFAULT_TOOL_CALL_MAX_ITERATIONS,
   resolveToolCallMaxIterations,
-} from '../thread_session/constants';
-import { createAgentRunTracker } from '../turn_prep/run_tracker';
-import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from '../thread_session/types';
-import { createUiChunkEmitter } from '../thread_session/ui_stream';
-import { toModelInputMessages } from '../thread_session/ui_messages';
+} from './constants';
+import {
+  createAgentRunTracker,
+  rehydrateAgentRunTracker,
+} from './run_tracker';
+import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from './types';
+import { createUiChunkEmitter } from './ui_stream';
+import { toModelInputMessages } from './ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
-import { rehydrateHarness } from '../agent/harness';
-import type { TurnOutput } from '../agent/harness/harness_types';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -429,10 +429,22 @@ export const createChatApproval = (deps: {
       reason: reason ?? (approved ? 'User approved tool execution.' : 'User rejected tool execution.'),
     };
 
+    const recordApprovalResponse = () => {
+      const runId = session?.recoveryContext?.runId;
+      if (!runId) return;
+      rehydrateAgentRunTracker(runId)?.recordApprovalResponse({
+        approvalId,
+        ...(storedApproval?.tool_call_id ? { toolCallId: storedApproval.tool_call_id } : {}),
+        approved,
+        reason: approvalResponse.reason,
+      });
+    };
+
     if (session.collectedApprovalResponses.has(approvalId)) {
       const existing = session.collectedApprovalResponses.get(approvalId);
       // Idempotent: if the same decision was already recorded, treat as success
       if (existing && existing.approved === approved) {
+        recordApprovalResponse();
         return { success: true };
       }
       return {
@@ -444,6 +456,7 @@ export const createChatApproval = (deps: {
     session.collectedApprovalResponses.set(approvalId, approvalResponse);
     const decision: ToolCallApprovalDecision = approved ? 'approved' : 'rejected';
     toolCallApprovalDb.answerToolCallApproval(approvalId, decision, approvalResponse.reason);
+    recordApprovalResponse();
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
       id => !session.collectedApprovalResponses.has(id)
@@ -527,6 +540,11 @@ export const createChatApproval = (deps: {
           },
         })
       : null;
+    if (resumeRunTracker && baseApprovalContext?.runId) {
+      rehydrateAgentRunTracker(baseApprovalContext.runId)?.markResumed({
+        childRunId: resumeRunTracker.id,
+      });
+    }
     const nextApprovalContext = baseApprovalContext
       ? {
           ...baseApprovalContext,
@@ -601,7 +619,7 @@ export const createChatApproval = (deps: {
           for await (const turnEvent of approvalHarness.turn({
             prompt: '',
             history: streamHistory,
-            runTracker: resumeRunTracker ?? undefined,
+            onInference: record => resumeRunTracker?.recordModelStep(record),
             abortSignal: streamState.abortController.signal,
           })) {
             if (streamState.cancelled) {
@@ -612,6 +630,9 @@ export const createChatApproval = (deps: {
 
             if (turnEvent.event === 'step') {
               const step = turnEvent.step;
+              if (step.type !== 'approval_request') {
+                resumeRunTracker?.recordAgentStep(step);
+              }
               if (step.type === 'message_update') {
                 if (step.kind === 'reasoning') {
                   uiChunkEmitter.emitReasoningDelta(step.text);
@@ -626,7 +647,6 @@ export const createChatApproval = (deps: {
                   toolName: step.toolName,
                   input: step.input,
                 };
-                resumeRunTracker?.recordToolEvent(event);
                 uiChunkEmitter.emitToolEvent(event);
               } else if (step.type === 'tool_execution_end') {
                 if (step.outcome === 'success') {
@@ -635,7 +655,6 @@ export const createChatApproval = (deps: {
                     toolCallId: step.toolCallId,
                     output: step.output,
                   };
-                  resumeRunTracker?.recordToolEvent(event);
                   uiChunkEmitter.emitToolEvent(event);
                 } else {
                   const event: ChatStreamEvent = {
@@ -643,7 +662,6 @@ export const createChatApproval = (deps: {
                     toolCallId: step.toolCallId,
                     error: step.error ?? 'Tool execution failed',
                   };
-                  resumeRunTracker?.recordToolEvent(event);
                   uiChunkEmitter.emitToolEvent(event);
                 }
               } else if (step.type === 'approval_request') {
@@ -709,13 +727,10 @@ export const createChatApproval = (deps: {
               history: resolvedHistory,
               recoveryContext: nextApprovalContext,
             });
-            for (const request of agentResult.toolApprovalRequests) {
-              resumeRunTracker?.recordToolEvent({
-                type: 'tool-approval-request',
-                approvalId: request.approvalId,
-                toolCallId: request.toolCallId ?? '',
-              });
-            }
+            resumeRunTracker?.recordAgentStep({
+              type: 'approval_request',
+              requests: agentResult.toolApprovalRequests,
+            });
           }
 
           return result;
@@ -816,7 +831,28 @@ export const createChatApproval = (deps: {
     }
   };
 
-  return { approveTool, ensurePendingApprovalSession, registerApprovalBatch, cleanupPendingSessionsForSender };
+  const cancelPendingApprovalsForRun = (runId: string): number => {
+    const normalizedRunId = runId.trim();
+    if (!normalizedRunId) return 0;
+
+    const sessions = new Set(pendingApprovalSessions.values());
+    for (const session of sessions) {
+      if (session.recoveryContext?.runId !== normalizedRunId) continue;
+      clearApprovalTimeouts(session);
+      for (const approvalId of session.pendingApprovalIds) {
+        pendingApprovalSessions.delete(approvalId);
+      }
+    }
+    return toolCallApprovalDb.expirePendingToolCallApprovalsByRunIds([normalizedRunId]).length;
+  };
+
+  return {
+    approveTool,
+    ensurePendingApprovalSession,
+    registerApprovalBatch,
+    cleanupPendingSessionsForSender,
+    cancelPendingApprovalsForRun,
+  };
 };
 
 export type ChatApproval = ReturnType<typeof createChatApproval>;

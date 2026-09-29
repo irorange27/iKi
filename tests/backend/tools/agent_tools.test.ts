@@ -19,6 +19,7 @@ vi.mock('@iki/backend/agent/runners/simple_agent_runner', () => ({
 }));
 
 import { DelegatedAgentTool, setDelegatedAgentRuntime } from '@iki/backend/tools/agent_tools';
+import { startTurnHarness } from '@iki/backend/agent/harness';
 import { defaultToolRegistry } from '@iki/backend/tools/base';
 import { ReadFileTool, WriteFileTool, UndoEditTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
@@ -44,10 +45,10 @@ describe('DelegatedAgentTool', () => {
     createAgentRunTrackerMock.mockReturnValue({
       id: 'run_child_1',
       getRun: vi.fn(() => ({ status: 'running' })),
+      recordModelStep: vi.fn(),
       syncModelMessages: vi.fn(),
-      recordToolEvent: vi.fn(),
+      recordAgentStep: vi.fn(),
       recordChildRun: vi.fn(),
-      recordToolCalls: vi.fn(),
       markCompleted: vi.fn(),
       markBlocked: vi.fn(),
       markFailed: vi.fn(),
@@ -56,6 +57,7 @@ describe('DelegatedAgentTool', () => {
     setDelegatedAgentRuntime({
       createRunTracker: createAgentRunTrackerMock,
       getConversationToolModel: getToolModelMock,
+      createHarness: startTurnHarness,
     });
   });
 
@@ -133,10 +135,6 @@ describe('DelegatedAgentTool', () => {
         childKind: 'delegated-agent',
       })
     );
-    expect(createAgentRunTrackerMock.mock.results[0]?.value.recordToolCalls).toHaveBeenCalledWith([
-      { toolName: 'read_file', args: {} },
-      { toolName: 'read_file', args: {} },
-    ]);
     expect(createAgentRunTrackerMock.mock.results[0]?.value.syncModelMessages).toHaveBeenCalledWith(
       [{ role: 'assistant', content: 'delegated history' }]
     );

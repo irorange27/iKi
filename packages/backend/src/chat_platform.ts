@@ -36,7 +36,6 @@ export interface ChatServicePlatformDeps {
     filePath?: string;
     error?: string;
   }>;
-  getClipboardContextMessage?: (maxEntries: number) => string | undefined;
   getAssistantProfileContextMessage?: () => string;
   retrieveRelevantContinuity?: (query: string) => ContinuityRetrievalPayload | null;
   onMessagePersisted?: (params: { threadId: string; messageId: string; messageJson: string }) => Promise<void>;

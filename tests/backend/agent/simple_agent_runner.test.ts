@@ -226,6 +226,7 @@ function setupAll(result: StreamTextResult, configOverrides?: Record<string, unk
 describe('SimpleAgentRunner — characterization tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getModelGenerationSettingsMock.mockReturnValue({});
   });
 
   describe('stream failures', () => {
@@ -726,6 +727,39 @@ describe('SimpleAgentRunner — characterization tests', () => {
     });
   });
 
+  describe('turn usage', () => {
+    it('reports the final step input as the context occupancy signal', async () => {
+      setupAll(makeStreamTextResult({
+        steps: [
+          { text: 'first', toolCalls: [], usage: { inputTokens: 500, outputTokens: 10, totalTokens: 510 } },
+          { text: 'second', toolCalls: [], usage: { inputTokens: 900, outputTokens: 8, totalTokens: 908 } },
+        ],
+        usage: { inputTokens: 1400, outputTokens: 18, totalTokens: 1418 },
+      }));
+      setupAgentConfig();
+      setupModel();
+
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'test',
+        tools: [],
+        providerType: 'openai',
+        providerId: '',
+        model: 'gpt-4o-mini',
+      });
+      let next = await gen.next();
+      while (!next.done) {
+        next = await gen.next();
+      }
+      const agentResult = next.value as { lastStepInputTokens?: number };
+
+      // The turn total is 1400 (every step re-sends the history); occupancy is
+      // what the model saw on the final request.
+      expect(agentResult.lastStepInputTokens).toBe(900);
+    });
+  });
+
   describe('RefusalError and retryability', () => {
     it('isRetryableError returns true for RefusalError', () => {
       const refusal = new RefusalError('Content blocked', 'content-filter');
@@ -793,6 +827,69 @@ describe('SimpleAgentRunner — characterization tests', () => {
       const messages = captured?.messages ?? [];
       const last = messages.at(-1) as { providerOptions?: unknown };
       expect(last.providerOptions).toBeUndefined();
+    });
+  });
+
+  describe('OpenAI prompt cache routing', () => {
+    const runForThread = async (threadId: string, model = 'gpt-4o-mini') => {
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'test',
+        tools: [],
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model,
+        threadId,
+      });
+      for await (const _step of gen) {
+        // drain
+      }
+      const call = streamTextMock.mock.calls.at(-1)?.[0] as
+        | { providerOptions?: { openai?: { promptCacheKey?: string } } }
+        | undefined;
+      return call?.providerOptions?.openai?.promptCacheKey;
+    };
+
+    it('uses a stable opaque key per thread for provider cache routing', async () => {
+      setupAll(makeStreamTextResult());
+      setupModel();
+
+      const first = await runForThread('thread_reused');
+      const sameThread = await runForThread('thread_reused');
+      const otherThread = await runForThread('thread_other');
+
+      expect(first).toMatch(/^iki-thread-[a-f0-9]{32}$/);
+      expect(sameThread).toBe(first);
+      expect(otherThread).not.toBe(first);
+      expect(first).not.toContain('thread_reused');
+    });
+
+    it('preserves a configured OpenAI prompt cache key', async () => {
+      getModelGenerationSettingsMock.mockReturnValue({
+        providerOptions: { openai: { promptCacheKey: 'configured-cache-group' } },
+      });
+      setupAll(makeStreamTextResult());
+      setupModel();
+
+      await runForThread('thread_configured');
+
+      const call = streamTextMock.mock.calls.at(-1)?.[0] as
+        | { providerOptions?: { openai?: { promptCacheKey?: string } } }
+        | undefined;
+      expect(call?.providerOptions?.openai?.promptCacheKey).toBe('configured-cache-group');
+    });
+
+    it('does not add a per-thread key to GPT-5.6+ automatic cache routing', async () => {
+      setupAll(makeStreamTextResult());
+      setupModel();
+
+      await runForThread('thread_auto_routing', 'gpt-5.6');
+
+      const call = streamTextMock.mock.calls.at(-1)?.[0] as
+        | { providerOptions?: { openai?: { promptCacheKey?: string } } }
+        | undefined;
+      expect(call?.providerOptions?.openai?.promptCacheKey).toBeUndefined();
     });
   });
 
@@ -900,6 +997,44 @@ describe('SimpleAgentRunner — characterization tests', () => {
       for (const message of call.cachePrefix.history) {
         expect(message.providerOptions?.anthropic?.cacheControl).toBeUndefined();
       }
+
+      await drain(gen);
+    });
+
+    it('passes the conversation OpenAI cache key to the compaction replay', async () => {
+      generateThreadSummaryMock.mockReset().mockResolvedValue({ summary: 'ok' });
+      setupAll(makeStreamTextResult(), { providerType: 'openai' });
+      const runner = new SimpleAgentRunner();
+      const gen = runner.run({
+        config: { enabled: true },
+        prompt: 'current task',
+        tools: [],
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'gpt-4o-mini',
+        threadId: 'thread_replay_key',
+        maxInputTokens: 150,
+      });
+      await gen.next();
+
+      await getPrepareStep()({
+        messages: [
+          { role: 'user', content: 'token '.repeat(150) },
+          { role: 'assistant', content: 'ok' },
+          { role: 'user', content: 'current task' },
+        ],
+      });
+
+      const routedCall = streamTextMock.mock.calls.at(-1)?.[0] as {
+        providerOptions?: { openai?: { promptCacheKey?: string } };
+      };
+      const summaryCall = generateThreadSummaryMock.mock.calls[0][0] as {
+        cachePrefix?: { openAIPromptCacheKey?: string };
+      };
+      expect(summaryCall.cachePrefix?.openAIPromptCacheKey).toBe(
+        routedCall.providerOptions?.openai?.promptCacheKey
+      );
+      expect(summaryCall.cachePrefix?.openAIPromptCacheKey).toMatch(/^iki-thread-[a-f0-9]{32}$/);
 
       await drain(gen);
     });
