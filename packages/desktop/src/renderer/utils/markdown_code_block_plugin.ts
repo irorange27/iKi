@@ -1,27 +1,7 @@
 import hljs from 'highlight.js/lib/common';
 import 'highlight.js/styles/atom-one-dark.css';
 import { translate } from '../i18n';
-
-type MarkdownToken = { info?: string; content?: string };
-type MarkdownFenceRenderer = (
-  tokens: MarkdownToken[],
-  idx: number,
-  options: unknown,
-  env: unknown,
-  self: unknown
-) => string;
-
-type MarkdownPlugin = (md: {
-  renderer: {
-    rules: {
-      fence?: MarkdownFenceRenderer;
-      [key: string]: MarkdownFenceRenderer | undefined;
-    };
-  };
-  utils: {
-    escapeHtml: (value: string) => string;
-  };
-}) => void;
+import type { MarkdownPlugin } from './markdown_plugin_contract';
 
 type MarkdownHighlightResult = {
   html: string;

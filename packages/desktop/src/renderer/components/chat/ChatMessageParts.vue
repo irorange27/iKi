@@ -141,6 +141,7 @@ import {
 } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
+import { markdownMathPlugin } from '../../utils/markdown_math_plugin';
 import {
   segmentMessageParts,
   type MessagePartSegment,
@@ -150,7 +151,7 @@ import ToolCallGroup from './ToolCallGroup.vue';
 import ImageViewerOverlay from '../ImageViewerOverlay.vue';
 import { useI18n } from '../../i18n';
 
-const markdownPlugins = [markdownCodeBlockPlugin];
+const markdownPlugins = [markdownMathPlugin, markdownCodeBlockPlugin];
 // Single newlines render as breaks (ChatGPT-style), so finalized markdown
 // keeps the same line shape the streaming view showed.
 const markdownOptions = { breaks: true } as const;
@@ -780,6 +781,47 @@ const getComposerInvocationToneClass = (kind?: string) => {
   background: transparent;
   margin: 0;
   padding: 0 !important;
+}
+
+/* KaTeX: formulas inherit the bubble text color, and display math scrolls
+   horizontally instead of stretching the message column. */
+.message-text.markdown-content :deep(.katex) {
+  font-size: 1.05em;
+  color: inherit;
+}
+
+.message-text.markdown-content :deep(.md-math-display),
+.message-text.markdown-content :deep(.md-math-block) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.message-text.markdown-content :deep(.md-math-display) {
+  margin: 0.7em 0;
+}
+
+.message-text.markdown-content :deep(.md-math-block) {
+  margin: 0.9em 0;
+  padding: 2px 0;
+}
+
+.message-text.markdown-content :deep(.md-math-display .katex-display),
+.message-text.markdown-content :deep(.md-math-block .katex-display) {
+  margin: 0;
+}
+
+/* Unsupported LaTeX falls back to its source instead of vanishing. */
+.message-text.markdown-content :deep(.md-math-display.is-fallback),
+.message-text.markdown-content :deep(.md-math-block.is-fallback) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message-text.markdown-content :deep(.md-math-fallback) {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
 }
 
 .message-file-image {

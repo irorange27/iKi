@@ -94,6 +94,8 @@ export type TokenUsageSummary = {
   cacheWriteTokens: number | null;
   reasoningTokens: number | null;
   estimatedCostUsd: number | null;
+  /** Billed input of the final SDK step — the real context size the model last saw (null on legacy messages). */
+  lastStepInputTokens: number | null;
   maxInputTokens: number | null;
   maxOutputTokens: number | null;
   model: string;
@@ -481,6 +483,7 @@ const buildTokenUsageSummary = (message: ChatUiMessage | unknown): TokenUsageSum
       cacheWriteTokens: null,
       reasoningTokens: null,
       estimatedCostUsd: null,
+      lastStepInputTokens: null,
       maxInputTokens: null,
       maxOutputTokens: null,
       model: '',
@@ -506,6 +509,7 @@ const buildTokenUsageSummary = (message: ChatUiMessage | unknown): TokenUsageSum
     cacheWriteTokens: toScore(usageData?.cacheWriteTokens),
     reasoningTokens: toScore(usageData?.reasoningTokens),
     estimatedCostUsd: toScore(usageData?.estimatedCostUsd),
+    lastStepInputTokens: toScore(usageData?.lastStepInputTokens),
     maxInputTokens: toScore(usageData?.maxInputTokens),
     maxOutputTokens: toScore(usageData?.maxOutputTokens),
     model: typeof usageData?.model === 'string' ? normalizeWhitespace(usageData.model) : '',
@@ -699,7 +703,23 @@ export const buildTokenUsageIndicator = (
     return null;
   }
 
-  const usedTokens = Math.max(0, Math.trunc(summary.inputTokens));
+  // Older multi-step records only have the sum of every request's input. That
+  // cannot describe context occupancy, so avoid presenting it as one request.
+  if (
+    summary.lastStepInputTokens === null &&
+    summary.steps !== null &&
+    summary.steps > 1
+  ) {
+    return null;
+  }
+
+  // Occupancy is the final SDK step's billed input — the context size the
+  // model actually saw. The turn-level inputTokens sums every step's re-send
+  // (billing), which for multi-step turns is a multiple of the window and
+  // meaningless as occupancy. Legacy single-step messages can use the turn
+  // total because only one inference contributed to it.
+  const occupancyTokens = summary.lastStepInputTokens ?? summary.inputTokens;
+  const usedTokens = Math.max(0, Math.trunc(occupancyTokens));
   const budgetTokens = normalizeModelCapabilityLimits({
     maxInputTokens: summary.maxInputTokens,
   }).maxInputTokens;

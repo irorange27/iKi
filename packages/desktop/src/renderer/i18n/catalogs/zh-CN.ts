@@ -346,7 +346,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.contextUsage.outputTokens': ({ tokens }) => `输出 Token：${asText(tokens)}`,
   'chat.contextUsage.totalTokens': ({ tokens }) => `总 Token：${asText(tokens)}`,
   'chat.contextUsage.model': ({ model }) => `模型：${asText(model)}`,
-  'chat.contextUsage.panelTitle': '上下文容量',
+  'chat.contextUsage.panelTitle': '上下文占用',
   'chat.contextUsage.cacheHitRate': '平均缓存命中率',
   'chat.contextUsage.estimatedNote': '分类占比为本地估算。',
   'chat.contextUsage.category.messages': '消息',
