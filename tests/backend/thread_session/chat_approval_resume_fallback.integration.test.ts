@@ -207,7 +207,15 @@ describe('createChatApproval resume from UI history fallback', () => {
 
     const result = await approvals.approveTool(target, approvalId, approved);
 
-    expect(result).toEqual({ success: true, awaitingApproval: false, stopped: false });
+    // The completion result exposes the continuation thread + reply so hosts
+    // that own conversation persistence (daemon WS) can record it.
+    expect(result).toMatchObject({
+      success: true,
+      awaitingApproval: false,
+      stopped: false,
+      threadId: 'thread_1',
+      text: 'resumed from ui history',
+    });
     // The approved decision must still execute the pending tool call; a
     // rejection must not execute it.
     expect(executions).toBe(approved ? 1 : 0);

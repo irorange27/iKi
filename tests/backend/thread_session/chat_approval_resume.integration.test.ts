@@ -254,7 +254,14 @@ describe('createChatApproval resume integration', () => {
 
     const result = await approvals.approveTool(target, approvedId, approved);
 
-    expect(result).toEqual({ success: true, awaitingApproval: repeat, stopped: false });
+    // The completion result exposes the continuation thread + reply so hosts
+    // that own conversation persistence (daemon WS) can record it.
+    expect(result).toMatchObject({
+      success: true,
+      awaitingApproval: repeat,
+      stopped: false,
+      threadId: 'thread_1',
+    });
     expect(executions).toBe(approved ? 1 : 0);
     expect(
       vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls

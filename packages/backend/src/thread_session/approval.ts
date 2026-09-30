@@ -767,6 +767,11 @@ export const createChatApproval = (deps: {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
         stopped: streamState.stoppedByUser,
+        // Exposed so hosts that own conversation persistence (daemon WS) can
+        // durably record the completed continuation reply; the desktop
+        // renderer persists the same message from the UI stream and ignores it.
+        ...(session.recoveryContext?.threadId ? { threadId: session.recoveryContext.threadId } : {}),
+        ...(streamResult.response ? { text: streamResult.response } : {}),
       };
     } catch (error: unknown) {
       const message = getErrorMessage(error);

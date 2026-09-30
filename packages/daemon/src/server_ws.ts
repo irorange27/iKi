@@ -49,6 +49,39 @@ const sendDaemonError = (ws: DaemonSocket, error: string) => {
   sendDaemonPayload(ws, { type: 'error', error });
 };
 
+type PersistableTurnResult = {
+  success?: boolean;
+  awaitingApproval?: boolean;
+  threadId?: unknown;
+  text?: unknown;
+};
+
+/**
+ * Persist the assistant reply of a completed turn driven over the daemon WS
+ * path (stream start, approval continuation). This path has no client-side
+ * persistence (unlike the desktop renderer or the NapCat adapter): without
+ * this the turn output never reaches chat_messages and the memory/emotion
+ * pipelines never fire on replies. User messages stay client-owned via
+ * POST /v1/chat/messages, matching the HTTP path contract. Approval-pending
+ * turns are skipped: their next continuation persists on its own completion.
+ */
+const persistAssistantReply = async (
+  deps: ConfigureDaemonWebSocketsDeps,
+  threadIdOverride: string | undefined,
+  result: PersistableTurnResult
+): Promise<void> => {
+  const threadId =
+    threadIdOverride ?? (typeof result?.threadId === 'string' ? result.threadId : undefined);
+  if (!threadId || !result?.success || result.awaitingApproval) return;
+  const text = typeof result.text === 'string' ? result.text.trim() : '';
+  if (!text) return;
+  await deps.chatService.createMessage({
+    thread_id: threadId,
+    message: { role: 'assistant', parts: [{ type: 'text', text }] },
+    metadata: '{}',
+  });
+};
+
 const logWsFailure = (deps: ConfigureDaemonWebSocketsDeps, session: WsSession, input: {
   error: unknown;
   message: string;
@@ -184,6 +217,18 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             runConfig: payload.runConfig,
           });
 
+          try {
+            await persistAssistantReply(deps, threadId, result);
+          } catch (error) {
+            logDaemonHandlerFailure({
+              logger: deps.logger,
+              event: 'daemon.server.ws.assistant_persist',
+              message: 'Failed to persist the daemon stream assistant reply.',
+              error,
+              data: { thread_id: threadId ?? null },
+            });
+          }
+
           sendDaemonPayload(ws, {
             type: 'stream-result',
             request_id: parsed.request_id || null,
@@ -213,6 +258,19 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             parsed.approval_id,
             parsed.approved
           );
+
+          try {
+            await persistAssistantReply(deps, undefined, result);
+          } catch (error) {
+            logDaemonHandlerFailure({
+              logger: deps.logger,
+              event: 'daemon.server.ws.assistant_persist',
+              message: 'Failed to persist the approval continuation assistant reply.',
+              error,
+              data: { approval_id: parsed.approval_id },
+            });
+          }
+
           sendDaemonPayload(ws, {
             type: 'approve-result',
             approval_id: parsed.approval_id,
