@@ -15,7 +15,6 @@ import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
 import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
-import { createPrefixedId } from '../utils/id';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
@@ -71,8 +70,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
-      persistUserTurnMessage(deps.conversation, options);
-
       if (options.threadId) {
         const rateCheck = deps.checkThreadRunRate(options.threadId);
         if (!rateCheck.allowed) {
@@ -82,6 +79,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           };
         }
       }
+
+      // After admission: a rejected request must not leave a durable row.
+      persistUserTurnMessage(deps.conversation, options);
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
       const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
@@ -221,11 +221,14 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           finishReason: 'completed',
         });
         if (options.threadId && output.text.trim()) {
+          // Deterministic per-run id: a duplicate persist of the same turn
+          // converges on one row and the message joins back to its run.
+          // Retries are separate runs and legitimately separate rows.
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,
             {
-              id: createPrefixedId('assistant'),
+              id: `assistant_${activeRunTracker.id}`,
               role: 'assistant',
               parts: [{ type: 'text', text: output.text, state: 'done' }],
             },
@@ -266,11 +269,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         finishReason: 'completed',
       });
       if (options.threadId && llmResult.text.trim()) {
+        // Deterministic per-run id (see the tool path above).
         await persistAssistantTurnMessage(
           deps.conversation,
           options.threadId,
           {
-            id: createPrefixedId('assistant'),
+            id: `assistant_${activeRunTracker.id}`,
             role: 'assistant',
             parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
           },
