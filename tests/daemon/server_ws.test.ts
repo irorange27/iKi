@@ -137,6 +137,10 @@ const createHarness = (clientOverrides: Partial<DaemonClientLike> = {}) => {
     stream: vi.fn(async () => ({ success: true, stream_id: 'stream_1' })),
     approveTool: vi.fn(async () => ({ success: true })),
     stopStream: vi.fn(() => ({ success: true })),
+    createMessage: vi.fn(async (message: Record<string, unknown>) => ({
+      id: 'msg_new',
+      ...message,
+    })),
   };
   const napcatBridge = {
     handleUpgrade: vi.fn(() => false),
@@ -441,6 +445,95 @@ describe('configureDaemonWebSockets', () => {
         text: 'ok',
       },
     });
+  });
+
+  it('persists the assistant reply of a completed thread-backed stream turn', async () => {
+    const harness = createHarness({ scopes: ['chat:write'] });
+    harness.chatService.stream.mockResolvedValueOnce({ success: true, text: '  hello world  ' });
+
+    await harness.ws.emitMessage(
+      JSON.stringify({
+        type: 'start',
+        request_id: 'req_2',
+        payload: {
+          providerType: 'openai',
+          model: 'gpt-4.1',
+          messages: [{ role: 'user', content: 'hi' }],
+          thread_id: 'thread_owned',
+        },
+      })
+    );
+
+    expect(harness.chatService.createMessage).toHaveBeenCalledWith({
+      thread_id: 'thread_owned',
+      message: { role: 'assistant', parts: [{ type: 'text', text: 'hello world' }] },
+      metadata: '{}',
+    });
+  });
+
+  it('does not persist approval-pending or thread-less stream turns', async () => {
+    const harness = createHarness({ scopes: ['chat:write'] });
+
+    harness.chatService.stream.mockResolvedValueOnce({
+      success: true,
+      awaitingApproval: true,
+      text: 'partial',
+    });
+    await harness.ws.emitMessage(
+      JSON.stringify({
+        type: 'start',
+        payload: {
+          providerType: 'openai',
+          model: 'gpt-4.1',
+          messages: [],
+          thread_id: 'thread_owned',
+        },
+      })
+    );
+    expect(harness.chatService.createMessage).not.toHaveBeenCalled();
+
+    harness.chatService.stream.mockResolvedValueOnce({ success: true, text: 'no thread' });
+    await harness.ws.emitMessage(
+      JSON.stringify({
+        type: 'start',
+        payload: {
+          providerType: 'openai',
+          model: 'gpt-4.1',
+          messages: [],
+        },
+      })
+    );
+    expect(harness.chatService.createMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps streaming the result when assistant persistence fails', async () => {
+    const harness = createHarness({ scopes: ['chat:write'] });
+    harness.chatService.stream.mockResolvedValueOnce({ success: true, text: 'ok' });
+    harness.chatService.createMessage.mockRejectedValueOnce(new Error('db down'));
+
+    await harness.ws.emitMessage(
+      JSON.stringify({
+        type: 'start',
+        request_id: 'req_3',
+        payload: {
+          providerType: 'openai',
+          model: 'gpt-4.1',
+          messages: [],
+          thread_id: 'thread_owned',
+        },
+      })
+    );
+
+    expect(parseDaemonPayload(harness.ws.sent.at(-1) || '')).toMatchObject({
+      channel: 'daemon',
+      payload: { type: 'stream-result', request_id: 'req_3', success: true, text: 'ok' },
+    });
+    expect(loggerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'error',
+        event: 'daemon.server.ws.assistant_persist',
+      })
+    );
   });
 
   it('logs and returns a dedicated error when stream startup fails unexpectedly', async () => {

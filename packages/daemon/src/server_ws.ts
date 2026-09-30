@@ -49,6 +49,33 @@ const sendDaemonError = (ws: DaemonSocket, error: string) => {
   sendDaemonPayload(ws, { type: 'error', error });
 };
 
+type StreamResult = Awaited<ReturnType<ChatService['stream']>>;
+
+/**
+ * Persist the assistant reply of a completed WS stream turn. The daemon stream
+ * path has no client-side persistence (unlike the desktop renderer or the
+ * NapCat adapter): without this the turn output never reaches chat_messages
+ * and the memory/emotion pipelines never fire on replies. User messages stay
+ * client-owned via POST /v1/chat/messages, matching the HTTP path contract.
+ * Approval-pending turns are skipped: their continuation streams under the
+ * same assistant message and is persisted once it completes.
+ */
+const persistAssistantReply = async (
+  deps: ConfigureDaemonWebSocketsDeps,
+  threadId: string | undefined,
+  result: StreamResult
+): Promise<void> => {
+  if (!threadId || !result?.success || !('text' in result)) return;
+  if (result.awaitingApproval) return;
+  const text = typeof result.text === 'string' ? result.text.trim() : '';
+  if (!text) return;
+  await deps.chatService.createMessage({
+    thread_id: threadId,
+    message: { role: 'assistant', parts: [{ type: 'text', text }] },
+    metadata: '{}',
+  });
+};
+
 const logWsFailure = (deps: ConfigureDaemonWebSocketsDeps, session: WsSession, input: {
   error: unknown;
   message: string;
@@ -183,6 +210,18 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
             autonomous: payload.autonomous,
             runConfig: payload.runConfig,
           });
+
+          try {
+            await persistAssistantReply(deps, threadId, result);
+          } catch (error) {
+            logDaemonHandlerFailure({
+              logger: deps.logger,
+              event: 'daemon.server.ws.assistant_persist',
+              message: 'Failed to persist the daemon stream assistant reply.',
+              error,
+              data: { thread_id: threadId ?? null },
+            });
+          }
 
           sendDaemonPayload(ws, {
             type: 'stream-result',
