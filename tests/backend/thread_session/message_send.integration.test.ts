@@ -224,10 +224,12 @@ describe('createMessageSend integration', () => {
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
       threadId: 'thread_1',
-      messages: [{ role: 'user', content: 'rate limited' }],
+      messages: [{ id: 'msg_rate_probe', role: 'user', content: 'rate limited' }],
     });
 
     expect(result.success).toBe(false);
+    // With a client id present, a persist that runs before admission would
+    // call createMessage — the assertion below is what pins the ordering.
     expect(conversation.createMessage).not.toHaveBeenCalled();
     expect(conversation.upsertTurnMessage).not.toHaveBeenCalled();
   });

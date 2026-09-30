@@ -18,7 +18,10 @@ const files = git(['diff', '--name-status', range]).trim();
 const stat = git(['diff', '--stat', range]).trim();
 const diff = git(['diff', range]);
 
-const fileList = files.split('\n').filter(Boolean);
+const fileList = files
+  .split('\n')
+  .filter(Boolean)
+  .map(line => line.split('\t').slice(1).join('\t'));
 const backendSrc = fileList.filter(f => f.includes('packages/backend/src'));
 const testFiles = fileList.filter(f => f.startsWith('tests/'));
 const mapUpdated = fileList.some(f => f.endsWith('packages/backend/README.md'));
