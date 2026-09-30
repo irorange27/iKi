@@ -506,6 +506,26 @@ describe('configureDaemonWebSockets', () => {
     expect(harness.chatService.createMessage).not.toHaveBeenCalled();
   });
 
+  it('persists the approval continuation reply when the turn completes', async () => {
+    const harness = createHarness({ scopes: ['chat:write', 'tools:approve'] });
+    harness.chatService.approveTool.mockResolvedValueOnce({
+      success: true,
+      awaitingApproval: false,
+      threadId: 'thread_owned',
+      text: 'continuation done',
+    });
+
+    await harness.ws.emitMessage(
+      JSON.stringify({ type: 'approve-tool', approval_id: 'appr_1', approved: true })
+    );
+
+    expect(harness.chatService.createMessage).toHaveBeenCalledWith({
+      thread_id: 'thread_owned',
+      message: { role: 'assistant', parts: [{ type: 'text', text: 'continuation done' }] },
+      metadata: '{}',
+    });
+  });
+
   it('keeps streaming the result when assistant persistence fails', async () => {
     const harness = createHarness({ scopes: ['chat:write'] });
     harness.chatService.stream.mockResolvedValueOnce({ success: true, text: 'ok' });
