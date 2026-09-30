@@ -29,6 +29,20 @@ import { resolveToolNames } from './tool_guard';
 import { getPromptFromMessage, toModelInputMessages } from '../thread_session/ui_messages';
 import { TODO_PLANNING_TOOL_NAME } from '../thread_session/todo_planning';
 
+/**
+ * Rehydration paths pass an explicit requireApproval to reproduce the approval
+ * contract the original turn ran under; ordinary turns leave it unset so the
+ * affect-guard derivation stays authoritative.
+ */
+export const resolveRequireApproval = (
+  explicit: boolean | undefined,
+  guardActive: boolean,
+  emotionConfig?: { toolGuard?: { requireApproval?: boolean } } | null
+): boolean =>
+  typeof explicit === 'boolean'
+    ? explicit
+    : guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
+
 export type ChatTurnOptions = {
   providerType: string;
   providerId?: string;
@@ -288,10 +302,11 @@ export const createChatTurnPreparer = (deps: {
     const affectContextMode = experimentalAffectMode === 'no_affect' ? 'disabled' : 'default';
     const guardState = experimentalModeActive ? null : storedAffectState;
     const guardActive = shouldRequireGuardedTools(guardState, emotionConfig);
-    const requireApproval =
-      typeof options.requireApproval === 'boolean'
-        ? options.requireApproval
-        : guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
+    const requireApproval = resolveRequireApproval(
+      options.requireApproval,
+      guardActive,
+      emotionConfig
+    );
     const autoApproveToolRequests = runtimeConfig.autoApproveToolRequests;
     const affectSignal = experimentalModeActive
       ? rawAffectEnabled

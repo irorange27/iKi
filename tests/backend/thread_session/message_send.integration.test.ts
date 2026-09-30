@@ -103,11 +103,15 @@ describe('createMessageSend integration', () => {
       fauxText('done'),
     ]));
 
+    const conversation = {
+      createMessage: vi.fn(),
+      upsertTurnMessage: vi.fn(),
+    };
     const send = createMessageSend({
       tryAcquireThreadRun: () => () => undefined,
       checkThreadRunRate: () => ({ allowed: true }),
       usage: { recordUsageEvent: vi.fn() },
-      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
+      conversation,
 
       turnPreparer: {
         prepareChatTurn: vi.fn(async () => ({
@@ -134,7 +138,7 @@ describe('createMessageSend integration', () => {
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
       threadId: 'thread_1',
-      messages: [{ role: 'user', content: 'run probe' }],
+      messages: [{ id: 'msg_user_probe', role: 'user', content: 'run probe' }],
       tools: [toolName],
       maxIterations: 10,
     });
@@ -153,6 +157,19 @@ describe('createMessageSend integration', () => {
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
     expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
     expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
+    // Retro-review regressions: user message create-only, assistant output
+    // upserted under the run-derived id.
+    expect(conversation.createMessage).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'msg_user_probe',
+      thread_id: 'thread_1',
+    }));
+    expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
+    const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
+    expect(turnRow.id).toMatch(/^assistant_run_/);
+    expect(turnRow.message).toMatchObject({
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'done', state: 'done' }],
+    });
     const recordedSteps = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
       .map(([step]) => step);
     expect(recordedSteps.some(step => step.type === 'tool-call' && !step.input?.toolCallId)).toBe(false);
@@ -183,5 +200,37 @@ describe('createMessageSend integration', () => {
         )
       )
     ).toBe(true);
+  });
+
+  it('leaves no durable rows when the thread rate limit rejects the send', async () => {
+    const conversation = {
+      createMessage: vi.fn(),
+      upsertTurnMessage: vi.fn(),
+    };
+    const send = createMessageSend({
+      tryAcquireThreadRun: () => () => undefined,
+      checkThreadRunRate: () => ({ allowed: false, retryAfterMs: 1000 }),
+      usage: { recordUsageEvent: vi.fn() },
+      turnPreparer: {
+        prepareChatTurn: vi.fn(async () => {
+          throw new Error('must not reach turn preparation');
+        }),
+      },
+      conversation,
+    } as never).send;
+
+    const result = await send({
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'gpt-4o-mini',
+      threadId: 'thread_1',
+      messages: [{ id: 'msg_rate_probe', role: 'user', content: 'rate limited' }],
+    });
+
+    expect(result.success).toBe(false);
+    // With a client id present, a persist that runs before admission would
+    // call createMessage — the assertion below is what pins the ordering.
+    expect(conversation.createMessage).not.toHaveBeenCalled();
+    expect(conversation.upsertTurnMessage).not.toHaveBeenCalled();
   });
 });

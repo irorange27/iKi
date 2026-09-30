@@ -26,6 +26,13 @@ vi.mock('@iki/backend/db/tool_call_approval', () => ({
 
 vi.mock('@iki/backend/db/chat_message', () => ({
   getChatMessages: vi.fn(),
+  getChatMessage: vi.fn(() => ({
+    id: 'assistant_1',
+    message: JSON.stringify({
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'before pause', state: 'done' }],
+    }),
+  })),
 }));
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
@@ -242,6 +249,10 @@ describe('createChatApproval resume integration', () => {
     const streamCoordinator = createThreadStreamCoordinator();
     const usage = { recordUsageEvent: vi.fn() };
     const target = { id: 7, send: vi.fn() };
+    const conversationMocks = {
+      createMessage: vi.fn(),
+      upsertTurnMessage: vi.fn(),
+    };
     const approvals = createChatApproval({
       streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
         peek: streamCoordinator.peekStream,
@@ -249,7 +260,7 @@ describe('createChatApproval resume integration', () => {
         detach: streamCoordinator.detachStream,
       },
       memory: { injectMemoryIntoMessages: vi.fn(messages => messages) } as never,
-      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
+      conversation: conversationMocks,
       usage,
     });
 
@@ -295,6 +306,19 @@ describe('createChatApproval resume integration', () => {
       approved ? 'User approved tool execution.' : 'User rejected tool execution.'
     );
     expect(approvalDb.consumeToolCallApprovalSession).toHaveBeenCalledWith('assistant_1');
+    // Retro-review regression: the backend must durably persist the seeded,
+    // completed continuation under the resumed message id.
+    expect(conversationMocks.upsertTurnMessage).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'assistant_1',
+      thread_id: 'thread_1',
+      message: expect.objectContaining({
+        role: 'assistant',
+        parts: expect.arrayContaining([
+          expect.objectContaining({ text: 'before pause' }),
+          expect.objectContaining({ text: 'approval resumed' }),
+        ]),
+      }),
+    }));
     expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
     if (approved) {
     expect(observedContext).toMatchObject({

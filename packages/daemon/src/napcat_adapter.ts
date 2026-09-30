@@ -480,11 +480,6 @@ const buildUserMessageWithComposerInvocations = (
   };
 };
 
-const buildAssistantMessage = (text: string): StoredUiTextMessage => ({
-  role: 'assistant',
-  parts: [{ type: 'text', text }],
-});
-
 const formatNapCatOutboundText = (text: string): string => {
   const normalized = renderMarkdownToPlainText(text).trim();
   return normalized || text.trim();
@@ -1037,24 +1032,11 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       return;
     }
 
-    try {
-      options.chatService.createMessage({
-        thread_id: threadId,
-        message: buildAssistantMessage(outboundText),
-        metadata: '{}',
-      });
-    } catch (error) {
-      napcatLogger.event({
-        level: 'warn',
-        event: 'napcat.message.persist',
-        outcome: 'failed',
-        error,
-        entity: {
-          thread_id: threadId,
-          role: 'assistant',
-        },
-      });
-    }
+    // The assistant reply is durably persisted by the backend turn-output
+    // seam under a run-derived id (chat.send path) — persisting the
+    // QQ-normalized text here as well created a second row per reply and
+    // double-fired the memory pipeline. The normalized text is what the QQ
+    // side displays; the raw model reply is what the conversation keeps.
 
     try {
       await sendBridgeReply(ws, event, outboundText);

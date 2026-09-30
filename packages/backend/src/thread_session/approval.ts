@@ -789,9 +789,9 @@ export const createChatApproval = (deps: {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
         stopped: streamState.stoppedByUser,
-        // Exposed so hosts that own conversation persistence can durably
-        // record the completed continuation reply; the desktop renderer
-        // persists the same message from the UI stream and ignores it.
+        // Exposed as the approve-result wire payload (the continuation reply
+        // is already durably persisted by the backend turn-persistence seam
+        // above, under the same assistant message id).
         ...(session.recoveryContext?.threadId ? { threadId: session.recoveryContext.threadId } : {}),
         ...(streamResult.response ? { text: streamResult.response } : {}),
       };
