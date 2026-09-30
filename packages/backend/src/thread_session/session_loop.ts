@@ -116,7 +116,7 @@ export const createChatStreaming = (deps: {
       }
     }
 
-    persistUserTurnMessage(deps.conversation, options);
+    const userTurnMessageId = persistUserTurnMessage(deps.conversation, options);
 
     coordinator.supersedeActiveStream(senderId);
     if (options.threadId) {
@@ -306,6 +306,19 @@ export const createChatStreaming = (deps: {
 
       getCompanion().beginThinking(companionThinkingKey);
 
+      const persistTurnProgress = () => {
+        if (!options.threadId) return;
+        void uiChunkEmitter.buildPersistedMessage().then(persisted => {
+          if (!persisted) return;
+          return persistAssistantTurnMessage(
+            deps.conversation,
+            options.threadId as string,
+            persisted,
+            'stream-progress',
+            userTurnMessageId
+          );
+        });
+      };
       const activeDriver = createTurnDriver({
         harness,
         runTracker,
@@ -323,6 +336,7 @@ export const createChatStreaming = (deps: {
         uiChunkEmitter,
         notifyRunStatus,
         drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
+        onToolActivity: persistTurnProgress,
         approvals: deps.approvals,
       });
       driver = activeDriver;
@@ -428,6 +442,7 @@ export const createChatStreaming = (deps: {
             parts: [],
           },
           'stream',
+          userTurnMessageId
         );
       }
       return {
@@ -449,6 +464,7 @@ export const createChatStreaming = (deps: {
               parts: [],
             },
             'stream-abort',
+            userTurnMessageId
           );
         }
         const activeRunTracker = driver?.getRunTracker();

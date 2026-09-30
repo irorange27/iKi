@@ -22,16 +22,20 @@ export type ConversationStore = {
 
 export const UI_MESSAGE_METADATA_FORMAT = 'ai-ui-message-v1';
 
-/** Durable record of the user message that started the turn. */
+/**
+ * Durable record of the user message that started the turn. Returns the
+ * persisted message id (undefined when nothing was written) so the assistant
+ * row can reference it as parent.
+ */
 export const persistUserTurnMessage = (
   conversation: Pick<ConversationStore, 'createMessage'>,
   options: ChatTurnOptions
-): void => {
-  if (!options.threadId) return;
+): string | undefined => {
+  if (!options.threadId) return undefined;
   const lastUser = [...options.messages].reverse().find(message => message.role === 'user');
-  if (!lastUser) return;
+  if (!lastUser) return undefined;
   const id = typeof (lastUser as { id?: unknown }).id === 'string' ? (lastUser as { id: string }).id : '';
-  if (!id.trim()) return;
+  if (!id.trim()) return undefined;
   try {
     conversation.createMessage({
       id,
@@ -39,6 +43,7 @@ export const persistUserTurnMessage = (
       message: lastUser,
       metadata: JSON.stringify({ format: UI_MESSAGE_METADATA_FORMAT }),
     });
+    return id;
   } catch (error) {
     logger.event({
       level: 'warn',
@@ -49,6 +54,7 @@ export const persistUserTurnMessage = (
       data: { thread_id: options.threadId },
     });
   }
+  return undefined;
 };
 
 /** Durable record of the assistant turn output (partial or completed). */
@@ -56,12 +62,14 @@ export const persistAssistantTurnMessage = async (
   conversation: Pick<ConversationStore, 'upsertTurnMessage'>,
   threadId: string,
   message: { id: string; role: 'assistant'; parts: unknown[] },
-  transport: string
+  transport: string,
+  parentId?: string
 ): Promise<void> => {
   try {
     await conversation.upsertTurnMessage({
       id: message.id,
       thread_id: threadId,
+      ...(parentId ? { parent_id: parentId } : {}),
       message,
       metadata: JSON.stringify({ format: UI_MESSAGE_METADATA_FORMAT, transport }),
     });

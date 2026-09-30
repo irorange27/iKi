@@ -26,7 +26,6 @@ export const registerChatIpc = (): void => {
   // Chat Message Management
   ipcMain.handle('chat:messages:list', (_, threadId) => chatService.listMessages(threadId));
   ipcMain.handle('chat:messages:get', (_, id) => chatService.getMessage(id));
-  ipcMain.handle('chat:messages:create', (_, message) => chatService.createMessage(message));
   ipcMain.handle('chat:messages:update', (_, id, message) =>
     chatService.updateMessage(id, message)
   );

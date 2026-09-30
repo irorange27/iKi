@@ -67,6 +67,9 @@ export type OuterLoopDeps = {
   uiChunkEmitter: UiChunkEmitter;
   notifyRunStatus: () => void;
   drainSteerMessages: () => string[];
+  /** Called after each completed tool execution so the durable assistant
+   *  record carries mid-turn tool progress (crash recovery relies on it). */
+  onToolActivity?: () => void;
   approvals: {
     ensurePendingApprovalSession: (
       approvalId: string,
@@ -222,6 +225,9 @@ const runOuterLoop = async (
     if (event) {
       state.runTracker.recordAgentStep(step);
       uiChunkEmitter.emitToolEvent(event);
+      if (event.type === 'tool-result' || event.type === 'tool-error') {
+        deps.onToolActivity?.();
+      }
     }
   };
 

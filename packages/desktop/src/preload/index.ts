@@ -135,7 +135,6 @@ const electronApi: ElectronApi = {
     messages: {
       list: (threadId: string) => ipcRenderer.invoke('chat:messages:list', threadId),
       get: (id: string) => ipcRenderer.invoke('chat:messages:get', id),
-      create: (message: ChatMessageInput) => ipcRenderer.invoke('chat:messages:create', message),
       update: (id: string, message: ChatMessageInput) =>
         ipcRenderer.invoke('chat:messages:update', id, message),
       delete: (id: string) => ipcRenderer.invoke('chat:messages:delete', id),

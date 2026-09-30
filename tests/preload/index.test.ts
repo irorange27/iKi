@@ -207,7 +207,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.threads.delete('thread_1');
     await exposedApi.chat.messages.list('thread_1');
     await exposedApi.chat.messages.get('message_1');
-    await exposedApi.chat.messages.create({ thread_id: 'thread_1', message: '{}' });
     await exposedApi.chat.messages.update('message_1', { message: '{}' });
     await exposedApi.chat.messages.delete('message_1');
     await exposedApi.chat.runs.list('thread_1');
@@ -331,7 +330,6 @@ describe('preload task IPC payload serialization', () => {
         'chat:threads:delete',
         'chat:messages:list',
         'chat:messages:get',
-        'chat:messages:create',
         'chat:messages:update',
         'chat:messages:delete',
         'chat:runs:list',

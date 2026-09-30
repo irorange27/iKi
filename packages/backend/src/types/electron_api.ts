@@ -203,7 +203,6 @@ export interface ElectronApi {
     messages: {
       list: (threadId: string) => Promise<ChatMessage[]>;
       get: (id: string) => Promise<ChatMessage | null>;
-      create: (message: ChatMessageInput) => Promise<ChatMessage | null>;
       update: (id: string, message: ChatMessageInput) => Promise<unknown>;
       delete: (id: string) => Promise<unknown>;
     };

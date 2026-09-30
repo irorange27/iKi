@@ -262,7 +262,6 @@ const chatInstance = createChatInstance({
   onStreamActivity: () => scheduleFollowScroll(),
 });
 const chat = chatInstance.chat;
-const persistence = chatInstance.persistence;
 const messageStore = chatInstance.messageStore;
 const chatMessages = computed<ChatUiMessage[]>(() => chat.messages);
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -424,7 +423,6 @@ const handleNewWork = async (workspaceId: string) => {
 threadSession.initRuntime({
   electronAPI,
   messageStore,
-  persistence,
   scrollToBottom,
   preferredDraftModel,
   preferredDraftProviderId,
@@ -443,7 +441,6 @@ const streaming = useChatStreaming({
   electronAPI,
   chatInstance,
   messageStore,
-  persistence,
   createMessageId,
   scrollToBottom,
   getCurrentThreadId,

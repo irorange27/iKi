@@ -241,21 +241,28 @@ describe('createChatStreaming integration', () => {
       id: 'msg_user_probe',
       thread_id: 'thread_1',
     }));
-    expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
-    const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
-    expect(turnRow).toMatchObject({
-      thread_id: 'thread_1',
-      message: { role: 'assistant', parts: expect.any(Array) },
-    });
-    const persistedParts =
-      (turnRow.message as { parts: Array<Record<string, unknown>> }).parts;
+    // Two durable writes: the mid-turn tool-progress upsert (crash recovery
+    // relies on it) and the finalize upsert — both parented to the user row.
+    expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(2);
+    for (const [turnRow] of conversation.upsertTurnMessage.mock.calls as Array<
+      [Record<string, unknown>]
+    >) {
+      expect(turnRow).toMatchObject({
+        thread_id: 'thread_1',
+        parent_id: 'msg_user_probe',
+        message: { role: 'assistant', parts: expect.any(Array) },
+      });
+    }
+    const [progressRow, finalRow] = conversation.upsertTurnMessage.mock.calls.map(
+      ([row]) => row as { message: { parts: Array<Record<string, unknown>> } }
+    );
     expect(
-      persistedParts.some(
+      progressRow.message.parts.some(
         part => part.type === 'dynamic-tool' && part.state === 'output-available'
       )
     ).toBe(true);
     expect(
-      persistedParts.some(part => part.type === 'text' && part.state === 'done')
+      finalRow.message.parts.some(part => part.type === 'text' && part.state === 'done')
     ).toBe(true);
   });
 
