@@ -335,6 +335,27 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
     createMessageWithProcessing,
     updateMessage,
     deleteMessage,
+    /**
+     * Turn-output write: create the row or update it in place when an earlier
+     * write (renderer dual-write, an approval-pending partial) already created
+     * it. Unlike createMessage this never silently keeps a stale partial.
+     */
+    upsertTurnMessage: (input: unknown) => {
+      const id = isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
+        ? (input as { id: string }).id.trim()
+        : '';
+      const existing = id ? chatMessageDb.getChatMessage(id) : null;
+      if (existing && id) {
+        // Normalize object message payloads to the sanitized JSON string the
+        // column stores, mirroring createMessage.
+        const rawMessage = isObjectRecord(input) ? (input as { message?: unknown }).message : undefined;
+        const payload = rawMessage !== undefined && typeof rawMessage !== 'string'
+          ? { ...(input as Record<string, unknown>), message: JSON.stringify(rawMessage) }
+          : input;
+        return updateMessage(id, payload);
+      }
+      return createMessage(input);
+    },
   };
 };
 

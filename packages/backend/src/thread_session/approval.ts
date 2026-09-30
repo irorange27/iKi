@@ -18,6 +18,10 @@ import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_t
 import { DEFAULT_TOOL_CALL_MAX_ITERATIONS } from './constants';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import {
+  loadPersistedAssistantParts,
+  persistAssistantTurnMessage,
+} from './turn_persistence';
+import {
   createAgentRunTracker,
   rehydrateAgentRunTracker,
 } from './run_tracker';
@@ -58,6 +62,9 @@ export const createChatApproval = (deps: {
     detach: (senderId: number, streamState: ActiveStreamState) => void;
   };
   memory: ChatMemory;
+  conversation: {
+    upsertTurnMessage: (input: unknown) => unknown;
+  };
   usage: {
     recordUsageEvent: (params: {
       threadId?: string;
@@ -763,13 +770,28 @@ export const createChatApproval = (deps: {
           });
         }
       }
+      if (baseApprovalContext?.threadId) {
+        // Seed the reduction with the already-persisted pre-pause parts so the
+        // accumulated message stays whole across the pause, then upsert.
+        const persisted = await uiChunkEmitter.buildPersistedMessage(
+          loadPersistedAssistantParts(uiChunkEmitter.messageId)
+        );
+        if (persisted) {
+          await persistAssistantTurnMessage(
+            deps.conversation,
+            baseApprovalContext.threadId,
+            persisted,
+            'approval-resume'
+          );
+        }
+      }
       return {
         success: true,
         awaitingApproval: streamResult.awaitingApproval,
         stopped: streamState.stoppedByUser,
-        // Exposed so hosts that own conversation persistence (daemon WS) can
-        // durably record the completed continuation reply; the desktop
-        // renderer persists the same message from the UI stream and ignores it.
+        // Exposed so hosts that own conversation persistence can durably
+        // record the completed continuation reply; the desktop renderer
+        // persists the same message from the UI stream and ignores it.
         ...(session.recoveryContext?.threadId ? { threadId: session.recoveryContext.threadId } : {}),
         ...(streamResult.response ? { text: streamResult.response } : {}),
       };

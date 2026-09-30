@@ -156,9 +156,14 @@ describe('createChatStreaming integration', () => {
     };
     const target = { id: 42, send: vi.fn() };
 
+    const conversation = {
+      createMessage: vi.fn(),
+      upsertTurnMessage: vi.fn(),
+    };
     const streaming = createChatStreaming({
       streamCoordinator,
       memory: {} as never,
+      conversation,
       usage,
       approvals,
       getThreadTitle: () => 'Thread',
@@ -169,7 +174,7 @@ describe('createChatStreaming integration', () => {
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
       threadId: 'thread_1',
-      messages: [{ role: 'user', content: 'run stream probe' }],
+      messages: [{ id: 'msg_user_probe', role: 'user', content: 'run stream probe' }],
       tools: [toolName],
       maxIterations: 10,
     });
@@ -229,6 +234,29 @@ describe('createChatStreaming integration', () => {
     expect(chunks.findIndex(chunk => chunk.type === 'finish')).toBeGreaterThan(
       chunks.indexOf(usageChunk)
     );
+
+    // ConversationStore: the user turn message is recorded (create-only), the
+    // assistant turn output is upserted with the reduced SDK message parts.
+    expect(conversation.createMessage).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'msg_user_probe',
+      thread_id: 'thread_1',
+    }));
+    expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
+    const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
+    expect(turnRow).toMatchObject({
+      thread_id: 'thread_1',
+      message: { role: 'assistant', parts: expect.any(Array) },
+    });
+    const persistedParts =
+      (turnRow.message as { parts: Array<Record<string, unknown>> }).parts;
+    expect(
+      persistedParts.some(
+        part => part.type === 'dynamic-tool' && part.state === 'output-available'
+      )
+    ).toBe(true);
+    expect(
+      persistedParts.some(part => part.type === 'text' && part.state === 'done')
+    ).toBe(true);
   });
 
   it('persists pending approval IDs on the blocked streaming run', async () => {
@@ -263,6 +291,7 @@ describe('createChatStreaming integration', () => {
     const streaming = createChatStreaming({
       streamCoordinator: createThreadStreamCoordinator(),
       memory: {} as never,
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
       usage: { recordUsageEvent: vi.fn() },
       approvals: {
         ensurePendingApprovalSession: vi.fn(),
@@ -346,6 +375,7 @@ describe('createChatStreaming integration', () => {
     const streaming = createChatStreaming({
       streamCoordinator,
       memory: {} as never,
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
       usage,
       approvals: {
         ensurePendingApprovalSession: vi.fn(),
@@ -402,6 +432,7 @@ describe('createChatStreaming integration', () => {
     const coordinator = createThreadStreamCoordinator();
     const streaming = createChatStreaming({
       streamCoordinator: coordinator, memory: {} as never,
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
       usage: { recordUsageEvent: vi.fn() },
       approvals: {
         ensurePendingApprovalSession: vi.fn(), registerApprovalBatch: vi.fn(),

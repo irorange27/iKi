@@ -202,6 +202,7 @@ describe('createChatApproval resume from UI history fallback', () => {
         detach: streamCoordinator.detachStream,
       },
       memory: { injectMemoryIntoMessages: vi.fn(messages => messages) } as never,
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
       usage: { recordUsageEvent: vi.fn() },
     });
 

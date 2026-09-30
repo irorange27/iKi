@@ -15,6 +15,11 @@ import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
 import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
+import { createPrefixedId } from '../utils/id';
+import {
+  persistAssistantTurnMessage,
+  persistUserTurnMessage,
+} from './turn_persistence';
 
 const logger = createLogger({ module: 'message_send' });
 
@@ -53,6 +58,10 @@ export type MessageSendDeps = {
   };
   tryAcquireThreadRun: (threadId?: string) => (() => void) | null;
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
+  conversation: {
+    createMessage: (input: unknown) => unknown;
+    upsertTurnMessage: (input: unknown) => unknown;
+  };
 };
 
 export const createMessageSend = (deps: MessageSendDeps) => {
@@ -62,6 +71,8 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
+      persistUserTurnMessage(deps.conversation, options);
+
       if (options.threadId) {
         const rateCheck = deps.checkThreadRunRate(options.threadId);
         if (!rateCheck.allowed) {
@@ -209,6 +220,18 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           usage: output.usage ? { ...output.usage } : undefined,
           finishReason: 'completed',
         });
+        if (options.threadId && output.text.trim()) {
+          await persistAssistantTurnMessage(
+            deps.conversation,
+            options.threadId,
+            {
+              id: createPrefixedId('assistant'),
+              role: 'assistant',
+              parts: [{ type: 'text', text: output.text, state: 'done' }],
+            },
+            'send',
+          );
+        }
         return {
           success: true,
           text: output.text,
@@ -242,6 +265,18 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         usage: llmResult.usage ? { ...llmResult.usage } : undefined,
         finishReason: 'completed',
       });
+      if (options.threadId && llmResult.text.trim()) {
+        await persistAssistantTurnMessage(
+          deps.conversation,
+          options.threadId,
+          {
+            id: createPrefixedId('assistant'),
+            role: 'assistant',
+            parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
+          },
+          'send',
+        );
+      }
       return {
         success: true,
         text: llmResult.text,

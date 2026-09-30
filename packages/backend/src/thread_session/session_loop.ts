@@ -23,6 +23,11 @@ import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
+import {
+  persistAssistantTurnMessage,
+  persistUserTurnMessage,
+} from './turn_persistence';
+import type { UiChunkEmitter } from './types';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createTurnDriver, type TurnDriverHandle } from './outer_loop';
 
@@ -50,6 +55,10 @@ export const createChatStreaming = (deps: {
       source?: string;
       metadata?: Record<string, unknown>;
     }) => void;
+  };
+  conversation: {
+    createMessage: (input: unknown) => unknown;
+    upsertTurnMessage: (input: unknown) => unknown;
   };
   approvals: {
     ensurePendingApprovalSession: (
@@ -87,6 +96,7 @@ export const createChatStreaming = (deps: {
     usage: deps.usage,
     checkThreadRunRate: coordinator.checkThreadRunRate,
     tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
+    conversation: deps.conversation,
   });
 
   const stream = async (target: ChatStreamTarget, options: ChatTurnOptions) => {
@@ -105,6 +115,8 @@ export const createChatStreaming = (deps: {
         return { success: false, error: `Too many requests on this thread. Retry in ${delaySec}s.` };
       }
     }
+
+    persistUserTurnMessage(deps.conversation, options);
 
     coordinator.supersedeActiveStream(senderId);
     if (options.threadId) {
@@ -404,6 +416,20 @@ export const createChatStreaming = (deps: {
       if (streamResult.outcome !== 'awaiting-approval') {
         uiChunkEmitter.finish();
       }
+      if (options.threadId) {
+        // Durable assistant record — partial (approval-pending) or completed.
+        // Upsert converges with the renderer's dual write on the same id.
+        await persistAssistantTurnMessage(
+          deps.conversation,
+          options.threadId,
+          (await uiChunkEmitter.buildPersistedMessage()) ?? {
+            id: uiChunkEmitter.messageId,
+            role: 'assistant',
+            parts: [],
+          },
+          'stream',
+        );
+      }
       return {
         success: true,
         awaitingApproval: streamResult.outcome === 'awaiting-approval',
@@ -413,6 +439,18 @@ export const createChatStreaming = (deps: {
     } catch (error: unknown) {
       if (streamState.cancelled) {
         if (coordinator.peekStream(senderId) === streamState) uiChunkEmitter.abort();
+        if (options.threadId) {
+          await persistAssistantTurnMessage(
+            deps.conversation,
+            options.threadId,
+            (await uiChunkEmitter.buildPersistedMessage()) ?? {
+              id: uiChunkEmitter.messageId,
+              role: 'assistant',
+              parts: [],
+            },
+            'stream-abort',
+          );
+        }
         const activeRunTracker = driver?.getRunTracker();
         if (activeRunTracker?.getRun().status === 'running') {
           activeRunTracker.markCancelled();

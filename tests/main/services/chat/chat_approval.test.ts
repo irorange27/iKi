@@ -146,6 +146,7 @@ describe('createChatApproval', () => {
         detach: coordinator.detachStream,
       },
       memory: {} as never,
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
       usage: { recordUsageEvent: vi.fn() },
     });
     approvals.registerApprovalBatch(
@@ -180,7 +181,7 @@ describe('createChatApproval', () => {
     const coordinator = createThreadStreamCoordinator();
     const approvals = createChatApproval({
       streams: { tryAcquireThreadRun: coordinator.tryAcquireThreadRun, peek: coordinator.peekStream, attach: coordinator.attachStream, detach: coordinator.detachStream },
-      memory: {} as never, usage: { recordUsageEvent: vi.fn() },
+      memory: {} as never, conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() }, usage: { recordUsageEvent: vi.fn() },
     });
     const target = { id: 99, send: vi.fn() };
     approvals.registerApprovalBatch([{ approvalId: 'isolated', toolCallId: 'call', toolCall: { toolName: 'shell', args: {} } }], {
@@ -202,7 +203,7 @@ describe('createChatApproval', () => {
     vi.useFakeTimers();
     const approvals = createChatApproval({
       streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun, peek: vi.fn(), attach: vi.fn(), detach: vi.fn() },
-      memory: {} as never, usage: { recordUsageEvent: vi.fn() },
+      memory: {} as never, conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() }, usage: { recordUsageEvent: vi.fn() },
     });
     try {
       for (const id of ['a', 'b']) approvals.ensurePendingApprovalSession(id, {
@@ -222,7 +223,7 @@ describe('createChatApproval', () => {
     vi.useFakeTimers();
     const approvals = createChatApproval({
       streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun, peek: vi.fn(), attach: vi.fn(), detach: vi.fn() },
-      memory: {} as never, usage: { recordUsageEvent: vi.fn() },
+      memory: {} as never, conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() }, usage: { recordUsageEvent: vi.fn() },
     });
     const requests = Array.from({ length: count }, (_, index) => ({
       approvalId: `timeout_${index}`, toolCallId: `call_${index}`,
