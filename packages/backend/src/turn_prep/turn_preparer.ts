@@ -39,6 +39,12 @@ export type ChatTurnOptions = {
   personality?: string;
   /** Session-level tool approval policy; validated downstream. */
   approvalPolicy?: string;
+  /**
+   * Explicit override of the guard-derived requireApproval. Rehydration paths
+   * set it to reproduce the approval contract the original turn ran under;
+   * ordinary turns leave it unset so the affect guard stays authoritative.
+   */
+  requireApproval?: boolean;
   modelCapability?: {
     contextWindow?: number | null;
     maxInputTokens?: number | null;
@@ -282,7 +288,10 @@ export const createChatTurnPreparer = (deps: {
     const affectContextMode = experimentalAffectMode === 'no_affect' ? 'disabled' : 'default';
     const guardState = experimentalModeActive ? null : storedAffectState;
     const guardActive = shouldRequireGuardedTools(guardState, emotionConfig);
-    const requireApproval = guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
+    const requireApproval =
+      typeof options.requireApproval === 'boolean'
+        ? options.requireApproval
+        : guardActive && Boolean(emotionConfig?.toolGuard?.requireApproval);
     const autoApproveToolRequests = runtimeConfig.autoApproveToolRequests;
     const affectSignal = experimentalModeActive
       ? rawAffectEnabled

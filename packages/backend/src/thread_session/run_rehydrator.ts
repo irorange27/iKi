@@ -19,7 +19,13 @@ export type RunTurnPlan = {
   enabledTools: string[];
   availableSkillIds: string[];
   approvalPolicy?: ApprovalPolicy;
-  requireApproval: boolean;
+  /**
+   * The stored requireApproval decision — undefined when the run never stored
+   * one. Callers apply their own default: stream options omit the field (the
+   * guard derivation stays authoritative), approval recovery falls back to
+   * true (its pre-rehydrator default).
+   */
+  requireApproval?: boolean;
   maxIterations: number;
 };
 
@@ -56,7 +62,7 @@ export const deriveRunTurnPlan = (
 ): RunTurnPlan => {
   const metadata = run?.input?.metadata ?? {};
   const requireApproval =
-    typeof metadata.requireApproval === 'boolean' ? metadata.requireApproval : true;
+    typeof metadata.requireApproval === 'boolean' ? metadata.requireApproval : undefined;
 
   return {
     providerType:
@@ -102,6 +108,7 @@ export const deriveResumeStreamOptions = (
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
     model: plan.model,
     ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
+    ...(plan.requireApproval !== undefined ? { requireApproval: plan.requireApproval } : {}),
     maxIterations: plan.maxIterations,
     messages: [],
     threadId: run.threadId ?? undefined,

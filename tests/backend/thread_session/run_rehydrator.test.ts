@@ -70,7 +70,7 @@ describe('deriveRunTurnPlan', () => {
     expect(plan.enabledTools).toEqual(['web']);
     expect(plan.availableSkillIds).toEqual([]);
     expect(plan.approvalPolicy).toBeUndefined();
-    expect(plan.requireApproval).toBe(true);
+    expect(plan.requireApproval).toBeUndefined();
     expect(plan.maxIterations).toBe(5);
   });
 
@@ -95,9 +95,10 @@ describe('deriveResumeStreamOptions', () => {
       autonomous: { maxIterations: 10, continuePrompt: 'Continue.' },
     });
 
-    // Regression: the pre-rehydrator inline assembly dropped both fields,
+    // Regression: the pre-rehydrator inline assembly dropped these fields,
     // degrading resumed turns to legacy approval flags.
     expect(options.approvalPolicy).toBe('trustWorkspace');
+    expect(options.requireApproval).toBe(false);
     expect(options.maxIterations).toBe(12);
     expect(options.providerType).toBe('openai');
     expect(options.providerId).toBe('prov_1');
@@ -125,6 +126,7 @@ describe('deriveResumeStreamOptions', () => {
     const options = deriveResumeStreamOptions(run, { kind: 'chat-turn' });
     expect(options).not.toHaveProperty('providerId');
     expect(options).not.toHaveProperty('approvalPolicy');
+    expect(options).not.toHaveProperty('requireApproval');
     expect(options.threadId).toBeUndefined();
     expect(options.autonomous).toBeUndefined();
     expect(options.runConfig).toEqual({ kind: 'chat-turn', rootRunId: 'run_1' });
@@ -139,5 +141,17 @@ describe('deriveResumeStreamOptions', () => {
     expect(options.skillIds).toEqual(plan.availableSkillIds);
     expect(options.approvalPolicy).toBe(plan.approvalPolicy);
     expect(options.maxIterations).toBe(plan.maxIterations);
+  });
+
+  it('restores requireApproval=false even without a stored policy (Sourcery finding)', () => {
+    const run = {
+      ...baseRun,
+      input: { metadata: { requireApproval: false } },
+    } as unknown as AgentRun;
+    const plan = deriveRunTurnPlan(run);
+    expect(plan.approvalPolicy).toBeUndefined();
+    expect(plan.requireApproval).toBe(false);
+    const options = deriveResumeStreamOptions(run, { kind: 'chat-turn' });
+    expect(options.requireApproval).toBe(false);
   });
 });

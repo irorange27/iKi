@@ -365,7 +365,7 @@ export const createChatApproval = (deps: {
           : {}),
         maxIterations: plan.maxIterations,
         approvalPolicy: plan.approvalPolicy,
-        requireApproval: plan.requireApproval,
+        requireApproval: plan.requireApproval ?? true,
         enabledTools: resolvedToolNames,
         availableSkillIds: plan.availableSkillIds,
       },
