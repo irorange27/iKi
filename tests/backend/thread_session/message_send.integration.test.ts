@@ -107,6 +107,8 @@ describe('createMessageSend integration', () => {
       tryAcquireThreadRun: () => () => undefined,
       checkThreadRunRate: () => ({ allowed: true }),
       usage: { recordUsageEvent: vi.fn() },
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
+
       turnPreparer: {
         prepareChatTurn: vi.fn(async () => ({
           report: { totalEstimatedTokens: 1 },

@@ -30,6 +30,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     crossProcessThreadRun: (threadId, options) =>
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
+  const persistence = createChatPersistence({ memory });
   const approvals = createChatApproval({
     streams: {
       tryAcquireThreadRun: streamCoordinator.tryAcquireThreadRun,
@@ -38,11 +39,11 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       detach: streamCoordinator.detachStream,
     },
     memory,
+    conversation: persistence,
     usage: {
       recordUsageEvent: usage.recordUsageEvent,
     },
   });
-  const persistence = createChatPersistence({ memory });
   const runs = createChatRuns({
     abortActiveStream: streamCoordinator.abortStreamByRunId,
     cancelPendingApprovalsForRun: approvals.cancelPendingApprovalsForRun,
@@ -51,6 +52,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const streaming = createChatStreaming({
     streamCoordinator,
     memory,
+    conversation: persistence,
     getThreadTitle: (id: string) => persistence.getThread(id)?.title,
     usage: {
       recordUsageEvent: usage.recordUsageEvent,

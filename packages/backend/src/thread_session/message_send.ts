@@ -15,6 +15,10 @@ import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
 import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
+import {
+  persistAssistantTurnMessage,
+  persistUserTurnMessage,
+} from './turn_persistence';
 
 const logger = createLogger({ module: 'message_send' });
 
@@ -53,6 +57,10 @@ export type MessageSendDeps = {
   };
   tryAcquireThreadRun: (threadId?: string) => (() => void) | null;
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
+  conversation: {
+    createMessage: (input: unknown) => unknown;
+    upsertTurnMessage: (input: unknown) => unknown;
+  };
 };
 
 export const createMessageSend = (deps: MessageSendDeps) => {
@@ -71,6 +79,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           };
         }
       }
+
+      // After admission: a rejected request must not leave a durable row.
+      persistUserTurnMessage(deps.conversation, options);
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
       const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
@@ -209,6 +220,21 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           usage: output.usage ? { ...output.usage } : undefined,
           finishReason: 'completed',
         });
+        if (options.threadId && output.text.trim()) {
+          // Deterministic per-run id: a duplicate persist of the same turn
+          // converges on one row and the message joins back to its run.
+          // Retries are separate runs and legitimately separate rows.
+          await persistAssistantTurnMessage(
+            deps.conversation,
+            options.threadId,
+            {
+              id: `assistant_${activeRunTracker.id}`,
+              role: 'assistant',
+              parts: [{ type: 'text', text: output.text, state: 'done' }],
+            },
+            'send',
+          );
+        }
         return {
           success: true,
           text: output.text,
@@ -242,6 +268,19 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         usage: llmResult.usage ? { ...llmResult.usage } : undefined,
         finishReason: 'completed',
       });
+      if (options.threadId && llmResult.text.trim()) {
+        // Deterministic per-run id (see the tool path above).
+        await persistAssistantTurnMessage(
+          deps.conversation,
+          options.threadId,
+          {
+            id: `assistant_${activeRunTracker.id}`,
+            role: 'assistant',
+            parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
+          },
+          'send',
+        );
+      }
       return {
         success: true,
         text: llmResult.text,

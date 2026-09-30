@@ -68,6 +68,13 @@ export type RunStatusEvent = {
   timestamp: string;
 };
 
+/** The durable assistant-message projection built from a turn's UI chunk log. */
+export type PersistedTurnMessage = {
+  id: string;
+  role: 'assistant';
+  parts: unknown[];
+};
+
 export type UiChunkEmitter = {
   messageId: string;
   emitTextDelta: (delta: string) => void;
@@ -83,6 +90,16 @@ export type UiChunkEmitter = {
   }) => void;
   emitAffectSignal: (payload: AffectSignal) => void;
   emitTokenUsage: (payload: TokenUsagePartData) => void;
+  /**
+   * Reduce the turn's chunk log into the durable assistant message. `seedParts`
+   * continues an approval-resumed message: the pre-pause parts are the
+   * reduction starting point, matching how the renderer's AI SDK client keeps
+   * one accumulated message across the resume. Returns null when the turn
+   * never started a message.
+   */
+  buildPersistedMessage: (
+    seedParts?: unknown[]
+  ) => Promise<PersistedTurnMessage | null>;
   finish: () => void;
   abort: () => void;
   error: (errorText: string) => void;
