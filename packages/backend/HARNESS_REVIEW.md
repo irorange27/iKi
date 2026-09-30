@@ -34,3 +34,36 @@ Current behavior and limitations stay in the ownership map; incident evidence be
 
 Compare the current code against this checklist before editing. The prior review's findings are
 regression scenarios to reproduce, not a verdict on code written after them.
+
+## PR review protocol (replaces the bot review)
+
+The former Sourcery bot review reviewed only the first push of a PR — later fix
+commits were never re-reviewed, and its check gate covered security findings
+only. Reviews now run in-repo under these rules:
+
+1. **Review of record.** Every PR gets a review pass before merge, and every
+   push after that pass invalidates it: the review of record must postdate the
+   branch HEAD. A green CI check is not a review, and never was one.
+2. **Independent reviewer.** The pass runs on the diff with fresh context (a
+   subagent spawned for the review, or a human), not by the authoring session
+   alone.
+3. **Brief first.** `node scripts/pr_review_brief.mjs [base...head]` emits the
+   commits, changed files, full diff path, and risk-surface warnings (backend
+   behavior without tests, source change without an ownership-map update).
+4. **Checklist.** Review against the acceptance cases above, plus the defect
+   patterns the bot review actually caught here:
+   - *Contract coverage*: every entry path sharing the changed contract still
+     honors it (stream / send / approval resume / recovery / delegation).
+   - *Admission ordering*: durable writes sit behind the lease and rate checks;
+     a rejected request leaves no row.
+   - *Durable identity*: persisted ids are deterministic per turn and converge
+     under duplicate delivery; random per-write ids cannot converge.
+   - *Derived-data propagation*: values derived for the run (policy, budgets,
+     requireApproval, iterations) survive every rebuild path.
+   - *Ownership map*: behavior changed without a map row update and a boundary
+     regression is incomplete.
+5. **Findings.** Post on the PR: severity (blocking / should-fix / note),
+   file:line, trigger → consequence, suggested fix. Address every blocking
+   finding or explicitly resolve it with justification before merging — and
+   re-run the pass after the fix push; the fix commit itself is unreviewed
+   until then.

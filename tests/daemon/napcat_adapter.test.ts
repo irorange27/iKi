@@ -459,12 +459,9 @@ describe('createNapCatReverseBridge', () => {
         thread_id: 'napcat_10001_private_20002',
       })
     );
-    expect(chatService.createMessage).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        thread_id: 'napcat_10001_private_20002',
-      })
-    );
+    // The assistant reply is persisted by the backend turn-output seam (run
+    // derived id), not by the adapter — no second createMessage here.
+    expect(chatService.createMessage).toHaveBeenCalledTimes(1);
   });
 
   it('filters NapCat tools down to the safe non-interactive web subset', async () => {
@@ -1034,22 +1031,10 @@ describe('createNapCatReverseBridge', () => {
 
     await Promise.resolve();
 
-    expect(chatService.createMessage).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        thread_id: 'napcat_10001_private_20002',
-        metadata: '{}',
-        message: expect.objectContaining({
-          role: 'assistant',
-          parts: [
-            {
-              type: 'text',
-              text: 'Daily Brief\n• BBC\n• OpenAI (https://openai.com)',
-            },
-          ],
-        }),
-      })
-    );
+    // Only the user message is persisted by the adapter; the assistant reply
+    // is persisted by the backend turn-output seam (raw markdown, run-derived
+    // id). The QQ-normalized text is the display payload below.
+    expect(chatService.createMessage).toHaveBeenCalledTimes(1);
 
     const outbound = JSON.parse(socket.sent[0]);
     expect(outbound).toMatchObject({

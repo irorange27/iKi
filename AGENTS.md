@@ -12,7 +12,7 @@
 4. Commit only when the user asks (`pnpm run commit`). Never `--no-verify`. Single test file: `pnpm vitest run <path>`.
 5. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
 6. Release tags trigger the full macOS build (`release-build.yml`) and must match the root `package.json` version. Before pushing a tag: package locally (`cd packages/desktop && pnpm exec electron-forge package`), then launch the bundle's executable from a terminal — `out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` (arm64 machines: `out/iki-darwin-arm64`) — and watch stderr; the packaged asar is the real consumer boundary. Runbook: `docs/design/packaging-release.md`.
-7. Bot reviews (Sourcery) are part of the review: the check can pass while the review body carries blocking findings — read the body, address or explicitly resolve every blocking finding before merging.
+7. Reviews gate merges. Run the PR review protocol (`packages/backend/HARNESS_REVIEW.md` § PR review protocol — the in-repo replacement for the former Sourcery bot, which reviewed only a PR's first push): generate the brief (`node scripts/pr_review_brief.mjs`), have a fresh-context reviewer pass over the diff, and address or explicitly resolve every blocking finding before merging. The review of record must postdate the branch HEAD — a push after it invalidates it, and a green CI check was never a review.
 8. After any rework, capture the lesson per `docs/conventions.md` § Lessons: a regression test that fails on the old code first, an ownership-map row if a boundary moved, prose last.
 
 ## Commands

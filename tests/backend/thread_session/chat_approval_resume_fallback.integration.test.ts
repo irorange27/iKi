@@ -26,6 +26,13 @@ vi.mock('@iki/backend/db/tool_call_approval', () => ({
 
 vi.mock('@iki/backend/db/chat_message', () => ({
   getChatMessages: vi.fn(),
+  getChatMessage: vi.fn(() => ({
+    id: 'assistant_fb_1',
+    message: JSON.stringify({
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'before pause', state: 'done' }],
+    }),
+  })),
 }));
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
@@ -194,6 +201,10 @@ describe('createChatApproval resume from UI history fallback', () => {
 
     const streamCoordinator = createThreadStreamCoordinator();
     const target = { id: 7, send: vi.fn() };
+    const conversationMocks = {
+      createMessage: vi.fn(),
+      upsertTurnMessage: vi.fn(),
+    };
     const approvals = createChatApproval({
       streams: {
         tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
@@ -202,7 +213,7 @@ describe('createChatApproval resume from UI history fallback', () => {
         detach: streamCoordinator.detachStream,
       },
       memory: { injectMemoryIntoMessages: vi.fn(messages => messages) } as never,
-      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
+      conversation: conversationMocks,
       usage: { recordUsageEvent: vi.fn() },
     });
 
@@ -221,6 +232,18 @@ describe('createChatApproval resume from UI history fallback', () => {
     // rejection must not execute it.
     expect(executions).toBe(approved ? 1 : 0);
     expect(approvalDb.consumeToolCallApprovalSession).toHaveBeenCalledWith('assistant_fb_1');
+    // Retro-review regression: seeded continuation upsert under the resumed id.
+    expect(conversationMocks.upsertTurnMessage).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'assistant_fb_1',
+      thread_id: 'thread_1',
+      message: expect.objectContaining({
+        role: 'assistant',
+        parts: expect.arrayContaining([
+          expect.objectContaining({ text: 'before pause' }),
+          expect.objectContaining({ text: 'resumed from ui history' }),
+        ]),
+      }),
+    }));
 
     const chunks = target.send.mock.calls
       .filter(call => call[0] === 'chat:ui-chunk')
