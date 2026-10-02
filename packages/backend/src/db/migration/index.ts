@@ -28,12 +28,13 @@ export const initializeMigrations = () => {
   // create the schema from scratch. config/providers/migrations are excluded
   // because database.ts bootstrap-creates them before migrations run.
   // hasPreBaselineSchema detection must ignore every table initCoreTables
-  // bootstrap-creates (config, providers, thread_run_locks, migrations) or a
-  // fresh database gets misread as pre-squash and skips the baseline.
+  // bootstrap-creates (config, providers, thread_run_locks, session_events,
+  // migrations) or a fresh database gets misread as pre-squash and skips the
+  // baseline.
   const hasPreBaselineSchema = Boolean(
     getDb()
       .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('config', 'providers', 'thread_run_locks', 'migrations') LIMIT 1"
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('config', 'providers', 'thread_run_locks', 'session_events', 'migrations') LIMIT 1"
       )
       .get()
   );

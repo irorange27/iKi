@@ -23,6 +23,21 @@ export type ConversationStore = {
 export const UI_MESSAGE_METADATA_FORMAT = 'ai-ui-message-v1';
 
 /**
+ * The user message that started the turn: the last user entry with a
+ * client-supplied id. Both the durable row and the session-log fact use this
+ * one selection.
+ */
+export const pickUserTurnMessage = (
+  options: ChatTurnOptions
+): { messageId: string; message: unknown } | undefined => {
+  const lastUser = [...options.messages].reverse().find(message => message.role === 'user');
+  if (!lastUser) return undefined;
+  const id = typeof (lastUser as { id?: unknown }).id === 'string' ? (lastUser as { id: string }).id : '';
+  if (!id.trim()) return undefined;
+  return { messageId: id, message: lastUser };
+};
+
+/**
  * Durable record of the user message that started the turn. Returns the
  * persisted message id (undefined when nothing was written) so the assistant
  * row can reference it as parent.
@@ -32,10 +47,9 @@ export const persistUserTurnMessage = (
   options: ChatTurnOptions
 ): string | undefined => {
   if (!options.threadId) return undefined;
-  const lastUser = [...options.messages].reverse().find(message => message.role === 'user');
-  if (!lastUser) return undefined;
-  const id = typeof (lastUser as { id?: unknown }).id === 'string' ? (lastUser as { id: string }).id : '';
-  if (!id.trim()) return undefined;
+  const picked = pickUserTurnMessage(options);
+  if (!picked) return undefined;
+  const { messageId: id, message: lastUser } = picked;
   try {
     conversation.createMessage({
       id,
