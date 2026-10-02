@@ -64,6 +64,17 @@ const initCoreTables = (database: SqliteDatabase) => {
       acp_model_mapping TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS session_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(thread_id, revision)
+    );
+    CREATE INDEX IF NOT EXISTS idx_session_events_thread ON session_events(thread_id, revision);
     CREATE TABLE IF NOT EXISTS thread_run_locks (
       thread_id TEXT PRIMARY KEY,
       token TEXT NOT NULL,

@@ -27,7 +27,13 @@ import { writeThreadTodoPlan } from '../db/thread_todos';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
+  pickUserTurnMessage,
 } from './turn_persistence';
+import {
+  asChatUiMessage,
+  recordTurnEvents,
+  turnFactsToEvents,
+} from './session_log';
 import type { UiChunkEmitter } from './types';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createTurnDriver, finalizeRunForOutcome, type TurnDriverHandle } from './outer_loop';
@@ -277,6 +283,19 @@ export const createChatStreaming = (deps: {
       );
       streamState.runId = runTracker.id;
 
+      // Session log: the accepted input and the turn's frozen plan are
+      // business facts, recorded before execution begins (stage C slice 1 —
+      // migration period, degrades to a warning on failure).
+      const userTurnInput = pickUserTurnMessage(options);
+      const acceptedInput =
+        userTurnInput && asChatUiMessage(userTurnInput.message)
+          ? { messageId: userTurnInput.messageId, message: asChatUiMessage(userTurnInput.message)! }
+          : undefined;
+      recordTurnEvents(options.threadId ?? '', turnFactsToEvents({
+        ...(acceptedInput ? { input: acceptedInput } : {}),
+        started: { runId: runTracker.id, kind: plan.kind, plan },
+      }));
+
       const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
             plan,
@@ -401,17 +420,44 @@ export const createChatStreaming = (deps: {
         turnPersistFinalized = true;
         // Durable assistant record — partial (approval-pending) or completed.
         // Upsert converges with any late progress write on the same id.
+        const settledMessage = (await uiChunkEmitter.buildPersistedMessage()) ?? {
+          id: uiChunkEmitter.messageId,
+          role: 'assistant' as const,
+          parts: [],
+        };
         await persistAssistantTurnMessage(
           deps.conversation,
           options.threadId,
-          (await uiChunkEmitter.buildPersistedMessage()) ?? {
-            id: uiChunkEmitter.messageId,
-            role: 'assistant',
-            parts: [],
-          },
+          settledMessage,
           'stream',
           userTurnMessageId
         );
+        // Session log: committed output + how the turn ended. An approval
+        // pause is not terminal — its continuation records its own facts.
+        const runStatus = finalRunTracker.getRun().status;
+        recordTurnEvents(options.threadId, turnFactsToEvents({
+          committed: {
+            runId: finalRunTracker.id,
+            messageId: settledMessage.id,
+            message: settledMessage as never,
+            transport: 'stream',
+          },
+          ...(runStatus === 'completed' || runStatus === 'failed' || runStatus === 'cancelled'
+            ? {
+                terminal: {
+                  runId: finalRunTracker.id,
+                  status: runStatus,
+                  ...(streamResult.outcome === 'handoff' ||
+                    streamResult.outcome === 'budget-exhausted'
+                    ? { finishReason: streamResult.outcome }
+                    : {}),
+                  ...(runStatus === 'failed' && streamResult.outcome === 'partial-failure'
+                    ? { errorText: 'Autonomous iteration failed; partial progress saved.' }
+                    : {}),
+                },
+              }
+            : {}),
+        }));
       }
       return {
         success: true,
@@ -424,17 +470,33 @@ export const createChatStreaming = (deps: {
         if (coordinator.peekStream(senderId) === streamState) uiChunkEmitter.abort();
         if (options.threadId) {
           turnPersistFinalized = true;
+          const abortedMessage = (await uiChunkEmitter.buildPersistedMessage()) ?? {
+            id: uiChunkEmitter.messageId,
+            role: 'assistant' as const,
+            parts: [],
+          };
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,
-            (await uiChunkEmitter.buildPersistedMessage()) ?? {
-              id: uiChunkEmitter.messageId,
-              role: 'assistant',
-              parts: [],
-            },
+            abortedMessage,
             'stream-abort',
             userTurnMessageId
           );
+          const cancelledTracker = driver?.getRunTracker();
+          if (cancelledTracker) {
+            recordTurnEvents(options.threadId, turnFactsToEvents({
+              committed: {
+                runId: cancelledTracker.id,
+                messageId: abortedMessage.id,
+                message: abortedMessage as never,
+                transport: 'stream-abort',
+              },
+              terminal: {
+                runId: cancelledTracker.id,
+                status: cancelledTracker.getRun().status === 'running' ? 'cancelled' : cancelledTracker.getRun().status,
+              },
+            }));
+          }
         }
         const activeRunTracker = driver?.getRunTracker();
         if (activeRunTracker?.getRun().status === 'running') {
