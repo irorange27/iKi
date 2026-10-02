@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { deleteSessionEvents } from './session_events';
 import { ChatThread } from '@iki/backend/types/chat';
 import { buildSetClause } from './utils';
 
@@ -140,7 +141,10 @@ export const touchChatThread = (id: string) => {
 };
 
 export const deleteChatThread = (id: string) => {
-  // Messages will be deleted automatically due to CASCADE
+  // Messages will be deleted automatically due to CASCADE; the session log
+  // has no FK — its stream is removed explicitly so a deleted conversation
+  // leaves no orphaned plaintext payloads.
+  deleteSessionEvents(id);
   return getDb().prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
 };
 

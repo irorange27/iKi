@@ -36,11 +36,8 @@ describe('session_events store', () => {
   });
 
   afterAll(async () => {
-    await rm(dataDir, { recursive: true, force: true });
-  });
-
-  afterAll(() => {
     closeDatabase();
+    await rm(dataDir, { recursive: true, force: true });
   });
 
   it('assigns consecutive revisions and rejects a stale expectation atomically', () => {

@@ -44,6 +44,12 @@ export const getSessionEvents = (threadId: string): StoredSessionEvent[] => {
   }));
 };
 
+/** Remove a thread's stream — conversation deletion must take its log with
+ *  it (the table has no FK cascade; payloads are plaintext). */
+export const deleteSessionEvents = (threadId: string): void => {
+  getDb().prepare('DELETE FROM session_events WHERE thread_id = ?').run(threadId);
+};
+
 export const getSessionEventRevision = (threadId: string): number => {
   const row = getDb()
     .prepare('SELECT MAX(revision) AS revision FROM session_events WHERE thread_id = ?')

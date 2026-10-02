@@ -58,16 +58,13 @@ export type TurnTerminalPayload = {
   errorText?: string;
 };
 
-const isTerminalEvent = (type: string): boolean =>
-  type === TURN_COMPLETED || type === TURN_FAILED || type === TURN_CANCELLED;
-
 /**
  * Append turn facts to a thread's stream. Migration-period behavior: a
  * failing append degrades to a warning and never fails the turn — the legacy
  * tables are still the serving authority until the log takes over. The
- * caller passes the stream revision it observed; the helper re-reads it at
- * write time (turn recording is a single writer per turn in practice; a
- * lost race only costs these appended facts, which the warn surfaces).
+ * helper re-reads the stream head at write time (turn recording is a single
+ * writer per turn in practice; a lost race only costs these appended facts,
+ * which the warn surfaces).
  */
 export const recordTurnEvents = (
   threadId: string,
@@ -196,13 +193,12 @@ export const rebuildThreadViewFromEvents = (threadId: string): RebuiltThreadView
         const turn = turns.get(runId) ?? { runId, kind: 'chat-turn', status: 'running' as const };
         turns.set(runId, {
           ...turn,
-          status: isTerminalEvent(event.type)
-            ? (event.type === TURN_COMPLETED
+          status:
+            event.type === TURN_COMPLETED
               ? 'completed'
               : event.type === TURN_CANCELLED
                 ? 'cancelled'
-                : 'failed')
-            : turn.status,
+                : 'failed',
           ...(typeof payload.finishReason === 'string' ? { finishReason: payload.finishReason } : {}),
           ...(typeof payload.errorText === 'string' ? { errorText: payload.errorText } : {}),
         });

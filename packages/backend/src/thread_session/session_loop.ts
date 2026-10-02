@@ -433,7 +433,8 @@ export const createChatStreaming = (deps: {
           userTurnMessageId
         );
         // Session log: committed output + how the turn ended. An approval
-        // pause is not terminal — its continuation records its own facts.
+        // pause is not terminal — its continuation's facts land in a later
+        // slice (send/approval-resume entries are not wired yet).
         const runStatus = finalRunTracker.getRun().status;
         recordTurnEvents(options.threadId, turnFactsToEvents({
           committed: {
@@ -493,7 +494,11 @@ export const createChatStreaming = (deps: {
               },
               terminal: {
                 runId: cancelledTracker.id,
-                status: cancelledTracker.getRun().status === 'running' ? 'cancelled' : cancelledTracker.getRun().status,
+                status:
+                  cancelledTracker.getRun().status === 'running' ||
+                  cancelledTracker.getRun().status === 'blocked'
+                    ? 'cancelled'
+                    : cancelledTracker.getRun().status,
               },
             }));
           }
@@ -524,6 +529,17 @@ export const createChatStreaming = (deps: {
       if (activeRunTracker?.getRun().status === 'running') {
         activeRunTracker.markFailed({ message });
         notifyRunStatus();
+      }
+      if (options.threadId && activeRunTracker) {
+        // Session log: a failed turn is a terminal fact even though no
+        // assistant row is persisted on this path.
+        recordTurnEvents(options.threadId, turnFactsToEvents({
+          terminal: {
+            runId: activeRunTracker.id,
+            status: 'failed',
+            errorText: message,
+          },
+        }));
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };

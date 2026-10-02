@@ -74,7 +74,6 @@ const initCoreTables = (database: SqliteDatabase) => {
       created_at TEXT NOT NULL,
       UNIQUE(thread_id, revision)
     );
-    CREATE INDEX IF NOT EXISTS idx_session_events_thread ON session_events(thread_id, revision);
     CREATE TABLE IF NOT EXISTS thread_run_locks (
       thread_id TEXT PRIMARY KEY,
       token TEXT NOT NULL,
