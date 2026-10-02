@@ -533,6 +533,10 @@ const runOuterLoop = async (
       ) break;
 
       if (streamResult.outcome === 'handoff') {
+        // Defensive: the runner yields the handoff step after the stream
+        // loop, so the buffer is empty here today — the flush keeps the
+        // runId-at-flush invariant local instead of pinned to that order.
+        flushCommittedText();
         const handoffText =
           (streamResult.response ? streamResult.response + '\n\n' : '') +
           `[Handoff #${state.handoffChain + 1}] ${streamResult.handoff.summary}`;

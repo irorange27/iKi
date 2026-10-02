@@ -231,8 +231,8 @@ describe('streamed text commit gate', () => {
     expect(result).toMatchObject({ success: true, stopped: true });
 
     // Crash cut: the events alone rebuild exactly the published prefix. The
-    // abort path records its own committed output (transport stream-abort);
-    // nothing beyond what was shown ever enters the log.
+    // kill settles through the normal cancelled path; the boundary flush had
+    // already committed the shown text before the tool ran.
     const view = rebuildThreadViewFromEvents('thread_commit_kill');
     expect(view.turns.at(-1)).toMatchObject({ status: 'cancelled' });
     expect(committedTextConcat('thread_commit_kill')).toBe('shown before the kill. ');
