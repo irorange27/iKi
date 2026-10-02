@@ -60,7 +60,7 @@ vi.mock('@iki/backend/daemon_logs', () => ({
   },
 }));
 
-vi.mock('@iki/backend/thread_session/ui_messages', () => ({
+vi.mock('@iki/backend/message/ui_messages', () => ({
   parseStoredUiMessageRow: vi.fn((row: { message: string }) => JSON.parse(row.message)),
 }));
 

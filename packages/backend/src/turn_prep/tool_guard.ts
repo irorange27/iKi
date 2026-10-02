@@ -4,11 +4,11 @@ import type { AffectState } from '@iki/backend/affect/affect_state';
 import { selectToolsWithAgent } from '../provider/tool_selection';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
+import { TODO_PLANNING_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 
 type ToolResolveMode = 'manual' | 'auto';
 type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[number];
 const AGENT_TOOL_NAME = 'agent';
-const TODO_TOOL_NAME = 'todo';
 const TODO_EXPLICIT_REQUEST_PATTERN =
   /\b(todo|to-do|checklist|plan|planning|progress|roadmap|milestone|step|steps|track)\b|待办|计划|规划|进度|路线图|里程碑|步骤|拆解/u;
 const TODO_MULTI_STEP_PATTERN =
@@ -94,9 +94,9 @@ const countComplexTodoActionMatches = (value: string): number => {
 };
 
 const shouldRetainTodoTool = (messages: ChatInputMessage[], selectedTools: string[]): boolean => {
-  if (!selectedTools.includes(TODO_TOOL_NAME)) return true;
+  if (!selectedTools.includes(TODO_PLANNING_TOOL_NAME)) return true;
 
-  const nonTodoTools = selectedTools.filter(toolName => toolName !== TODO_TOOL_NAME);
+  const nonTodoTools = selectedTools.filter(toolName => toolName !== TODO_PLANNING_TOOL_NAME);
   const llmMessages = toLlmChatMessages(messages);
   const latestUserText =
     [...llmMessages].reverse().find(message => message.role === 'user')?.content.trim() ?? '';
@@ -120,7 +120,7 @@ const filterOvereagerTodoSelection = (
 ): string[] => {
   if (!Array.isArray(messages) || messages.length === 0) return selectedTools;
   if (shouldRetainTodoTool(messages, selectedTools)) return selectedTools;
-  return selectedTools.filter(toolName => toolName !== TODO_TOOL_NAME);
+  return selectedTools.filter(toolName => toolName !== TODO_PLANNING_TOOL_NAME);
 };
 
 const filterUnsupportedAgentSelection = (
