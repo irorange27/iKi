@@ -11,6 +11,7 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_
 import { createApprovalRecoveryContext, reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
 import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
+import { MODEL_TEXT_COMMITTED, recordSessionEvents, SESSION_EVENT_VERSION } from './session_log';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
@@ -109,6 +110,14 @@ const MAX_OUTER_AUTONOMOUS_BATCHES = 50;
 const MAX_HANDOFF_CHAIN = 5;
 
 /**
+ * How long streamed text may stay in the commit buffer before it is written
+ * to the session log and only then published (D22: shown ⊆ committed). The
+ * batch granularity trades display latency for write frequency — the draft
+ * leaves it to measurement, this is the initial value.
+ */
+const TEXT_COMMIT_INTERVAL_MS = 250;
+
+/**
  * The authoritative terminal-outcome mapping: one place decides what each
  * OuterLoopStreamResult outcome means for the run row. Every entry that runs
  * the driver finalizes through this — adding a terminal outcome means
@@ -191,6 +200,40 @@ const runOuterLoop = async (
     }, 300);
   };
 
+  // ── Text commit gate (D22) ──────────────────────────────────────────
+  // Streamed text lands in a buffer first; a flush writes it to the session
+  // log and only then publishes the chunks to the subscriber. Shown text is
+  // therefore always already committed. Flushes fire at segment boundaries
+  // (tool/approval/handoff steps), on the interval, and before the turn's
+  // result returns — a crash can lose at most the unpublished buffer tail,
+  // never anything the subscriber saw.
+  let pendingText = '';
+  let pendingTextSeq = 0;
+  let lastTextFlushAt = Date.now();
+  const flushCommittedText = () => {
+    if (!pendingText) return;
+    const text = pendingText;
+    pendingText = '';
+    lastTextFlushAt = Date.now();
+    recordSessionEvents(threadId, [
+      {
+        type: MODEL_TEXT_COMMITTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          runId: state.runTracker.id,
+          messageId: uiChunkEmitter.messageId,
+          seq: pendingTextSeq++,
+          text,
+        },
+      },
+    ]);
+    uiChunkEmitter.emitTextDelta(text);
+  };
+  const bufferStreamedText = (text: string) => {
+    pendingText += text;
+    if (Date.now() - lastTextFlushAt >= TEXT_COMMIT_INTERVAL_MS) flushCommittedText();
+  };
+
   /** Project AgentStep facts into the UI stream event shape. */
   const forwardAgentStep = (step: AgentStep) => {
     // Reasoning streams into its own reasoning part (live "thinking" block);
@@ -201,13 +244,17 @@ const runOuterLoop = async (
     }
     // Emit text deltas via the dedicated ui chunk emitter path
     if (step.type === 'message_update') {
-      uiChunkEmitter.emitTextDelta(step.text);
+      bufferStreamedText(step.text);
       if (step.kind === 'text') {
         previewText = previewText + step.text;
         debouncedTextPreview(previewText);
       }
       return;
     }
+
+    // Segment boundary: everything buffered is committed and published
+    // before a non-text fact (tool, approval, handoff) hits the stream.
+    flushCommittedText();
 
     // Convert AgentStep to the typed UI projection event.
     let event: ChatStreamEvent | null = null;
@@ -373,6 +420,7 @@ const runOuterLoop = async (
       }
 
       if (steered) {
+        flushCommittedText();
         streamState.steered = false;
         state.streamHistory = state.harness.getHistory();
         const drained = deps.drainSteerMessages();
@@ -485,6 +533,10 @@ const runOuterLoop = async (
       ) break;
 
       if (streamResult.outcome === 'handoff') {
+        // Defensive: the runner yields the handoff step after the stream
+        // loop, so the buffer is empty here today — the flush keeps the
+        // runId-at-flush invariant local instead of pinned to that order.
+        flushCommittedText();
         const handoffText =
           (streamResult.response ? streamResult.response + '\n\n' : '') +
           `[Handoff #${state.handoffChain + 1}] ${streamResult.handoff.summary}`;
@@ -562,11 +614,20 @@ const runOuterLoop = async (
       state.streamPrompt = plan.autonomous?.continuePrompt || 'Continue with the next step.';
     }
 
+    // Segment boundary: the turn's final buffered text commits before the
+    // result (and any settle persistence) is produced.
+    flushCommittedText();
+
     if (streamResult?.outcome === 'continuing') {
       streamResult = { ...streamResult, outcome: 'budget-exhausted' };
     }
     return streamResult;
   } finally {
+    // Error paths (provider failure, cancellation) exit through here with
+    // text still buffered. Flushing keeps the invariant on the failure path:
+    // whatever gets published around the error was committed first, and the
+    // log covers the subscriber's final view.
+    flushCommittedText();
     if (previewDebounceTimer) {
       clearTimeout(previewDebounceTimer);
       previewDebounceTimer = null;

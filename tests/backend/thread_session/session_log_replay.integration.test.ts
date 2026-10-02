@@ -53,6 +53,7 @@ import {
   rebuildThreadViewFromEvents,
   INPUT_ACCEPTED,
   TURN_STARTED,
+  MODEL_TEXT_COMMITTED,
   MODEL_OUTPUT_COMMITTED,
   TURN_COMPLETED,
 } from '@iki/backend/thread_session/session_log';
@@ -164,10 +165,12 @@ describe('session log turn facts and pure replay', () => {
     const view = rebuildThreadViewFromEvents('thread_log');
     expect(createModelMock).not.toHaveBeenCalled();
 
-    // Event order: input → start → committed output → terminal.
+    // Event order: input → start → committed text → committed output →
+    // terminal. The streamed answer goes through the D22 commit gate.
     expect(view.events.map(event => event.type)).toEqual([
       INPUT_ACCEPTED,
       TURN_STARTED,
+      MODEL_TEXT_COMMITTED,
       MODEL_OUTPUT_COMMITTED,
       TURN_COMPLETED,
     ]);
