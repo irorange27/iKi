@@ -297,7 +297,6 @@ const mountChatInput = async (options?: {
   threadSession.initRuntime({
     electronAPI: api as never,
     messageStore: { setMessages: vi.fn(), getMessages: vi.fn(async () => []) } as never,
-    persistence: { resetPersistedMessageIds: vi.fn() } as never,
     sidebarRef: ref(null),
     scrollToBottom: vi.fn(),
   });
@@ -396,6 +395,12 @@ describe('ChatInput', () => {
     });
 
     await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+
+    // The menu opens on the root pane; models live behind the drill-in cell.
+    const menuCells = wrapper.findAll('.model-menu-cell');
+    expect(menuCells.length).toBeGreaterThan(0);
+    await menuCells[0].trigger('click');
     await flushPromises();
 
     const searchInput = wrapper.find('.model-selector-search-input');
@@ -504,6 +509,13 @@ describe('ChatInput', () => {
     expect(api.providers.list).toHaveBeenCalledTimes(2);
 
     await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+
+    // Drill into the provider pane the same way ChatModelSelector's own
+    // tests do for the new root-pane menu.
+    const updateMenuCells = wrapper.findAll('.model-menu-cell');
+    expect(updateMenuCells.length).toBeGreaterThan(0);
+    await updateMenuCells[0].trigger('click');
     await flushPromises();
 
     expect(wrapper.findAll('.model-provider-group')).toHaveLength(2);

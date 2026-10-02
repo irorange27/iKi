@@ -1,6 +1,14 @@
-import { ref, computed, readonly } from 'vue';
+import { ref, computed, readonly, onScopeDispose, getCurrentScope } from 'vue';
 
 let globalSidebarState: ReturnType<typeof createSidebarState> | null = null;
+
+// Below this window width the sidebar folds itself away so the conversation
+// keeps its ground (DSH collapses at the same 1024px mark); it only comes
+// back once the window clears the restore mark, so a width hovering around
+// the threshold cannot make the panel flap. Both transitions ride the shell's
+// existing width transition + content fade, so the fold is animated.
+const AUTO_COLLAPSE_BELOW = 1024;
+const AUTO_RESTORE_ABOVE = AUTO_COLLAPSE_BELOW + 96;
 
 function createSidebarState(initialState = true) {
   const width = ref<number>(200);
@@ -11,20 +19,59 @@ function createSidebarState(initialState = true) {
   };
 
   const isExpanded = ref<boolean>(initialState);
+  // True while the folded state was caused by the window-width watcher and the
+  // user has not touched the toggle since — only then may the watcher restore.
+  let autoCollapsed = false;
 
   const isCollapsed = computed<boolean>(() => !isExpanded.value);
 
   const expand = (): void => {
+    autoCollapsed = false;
     isExpanded.value = true;
   };
 
   const collapse = (): void => {
+    autoCollapsed = false;
     isExpanded.value = false;
   };
 
   const toggle = (): void => {
+    autoCollapsed = false;
     isExpanded.value = !isExpanded.value;
   };
+
+  // Act on crossings of the threshold, not on every resize event: after a
+  // manual expand at a narrow width, resizing within the narrow range must
+  // not yank the panel shut again. The first call counts as a crossing so a
+  // app booted on a small window starts folded.
+  let belowThreshold: boolean | null = null;
+
+  const applyResponsiveCollapse = (): void => {
+    const below = window.innerWidth < AUTO_COLLAPSE_BELOW;
+    if (belowThreshold !== null && below === belowThreshold) return;
+    belowThreshold = below;
+    if (below) {
+      if (isExpanded.value && !autoCollapsed) {
+        autoCollapsed = true;
+        isExpanded.value = false;
+      }
+      return;
+    }
+    if (autoCollapsed && !isExpanded.value && window.innerWidth >= AUTO_RESTORE_ABOVE) {
+      autoCollapsed = false;
+      isExpanded.value = true;
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', applyResponsiveCollapse);
+    applyResponsiveCollapse();
+    if (getCurrentScope()) {
+      onScopeDispose(() => {
+        window.removeEventListener('resize', applyResponsiveCollapse);
+      });
+    }
+  }
 
   const setShowExternalChats = (nextValue: boolean): void => {
     showExternalChats.value = Boolean(nextValue);

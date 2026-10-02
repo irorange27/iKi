@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import {
+  flushPromises,
+  mount,
+  type DOMWrapper,
+  type VueWrapper,
+} from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import McpSettings from '../../../packages/desktop/src/renderer/components/settings/McpSettings.vue';
@@ -38,6 +43,20 @@ const findLabelByText = (wrapper: VueWrapper, text: string) => {
   }
 
   return match;
+};
+
+// Boolean settings are switch rows now (copy left, switch right) — toggle by
+// row text instead of hunting a checkbox input inside a label.
+const toggleSettingsSwitch = async (
+  scope: VueWrapper | DOMWrapper<Element>,
+  text: string
+) => {
+  const rows = scope.findAll('.settings-switch-row');
+  const match = rows.find(row => row.text().replace(/\s+/g, ' ').includes(text));
+  if (!match) {
+    throw new Error(`Switch row not found: ${text}`);
+  }
+  await match.find('.settings-switch').trigger('click');
 };
 
 const selectSettingsOption = async (wrapper: VueWrapper, labelText: string, optionText: string) => {
@@ -110,7 +129,7 @@ describe('McpSettings', () => {
 
     expect(wrapper.text()).toContain('Remote servers are blocked unless you enable this toggle.');
 
-    await findLabelByText(wrapper, 'Allow remote MCP servers').find('input').setValue(true);
+    await toggleSettingsSwitch(wrapper, 'Allow remote MCP servers');
     await flushPromises();
 
     expect(store.config.mcp.allowRemoteServers).toBe(true);
@@ -128,7 +147,7 @@ describe('McpSettings', () => {
     const formCard = cards[cards.length - 1];
 
     await formCard.find('input[placeholder="Local tools"]').setValue('Local Tools');
-    await findLabelByText(formCard, 'Enabled').find('input').setValue(true);
+    await toggleSettingsSwitch(formCard, 'Enabled');
     await selectSettingsOption(formCard, 'Approval mode override', 'Always require approval');
     await findLabelByText(formCard, 'Tool allowlist').find('textarea').setValue('web\nfetch');
     await findLabelByText(formCard, 'Command').find('input').setValue('node');

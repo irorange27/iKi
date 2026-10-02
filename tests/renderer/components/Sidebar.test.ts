@@ -245,7 +245,7 @@ describe('Sidebar', () => {
   });
 
   it('opens settings from the footer action', async () => {
-    const { wrapper, openSettings } = await mountSidebar({
+    const { wrapper } = await mountSidebar({
       threads: [],
     });
 
@@ -254,7 +254,8 @@ describe('Sidebar', () => {
     expect(settingsButton).not.toBeNull();
     (settingsButton as HTMLButtonElement).click();
 
-    expect(openSettings).toHaveBeenCalledTimes(1);
+    // Settings open inside the main window via hash routing (no extra window).
+    expect(window.location.hash).toBe('#settings');
   });
 
   it('filters threads by title from the search box and restores the list on close', async () => {

@@ -2,6 +2,7 @@
   <div class="flex h-full min-h-0 app-background app-text">
     <Sidebar
       :workspace-locked="isWorkspaceLocked"
+      :hide-collapsed-toolbar="showHeaderMeta"
       @thread-selected="selectThread"
       @new-chat="handleNewChat"
       @new-work="handleNewWork"
@@ -10,27 +11,52 @@
 
     <!-- Main Content -->
     <div class="chat-content-column flex min-h-0 min-w-0 flex-1 flex-col">
-      <!-- Header -->
-      <div v-if="showHeaderMeta" class="flex items-center justify-center p-4">
-        <div class="ui-text-secondary flex items-center gap-1 text-sm">
-          <span v-if="showMessageCount">{{
-            t('chat.messagesCount', { count: chatMessages.length })
-          }}</span>
-          <span v-if="showMessageCount && currentThread">·</span>
-          <FolderOpen v-if="currentThread" :size="12" />
-          <span v-if="currentThread">{{ currentThread.title }}</span>
+      <!-- Header: conversation title row + view tabs. The hairline under the
+           block closes the header, mirroring the sidebar's quiet separation.
+           With the sidebar folded, the collapsed toolbar's controls move into
+           this row as a leading cluster (DSH's leading seat) — they and the
+           title share one line past the macOS traffic lights. -->
+      <header
+        v-if="showHeaderMeta"
+        class="chat-header"
+        :class="{ 'chat-header-leading-clear': sidebar.isCollapsed.value }"
+      >
+        <div class="chat-header-title-row">
+          <template v-if="sidebar.isCollapsed.value">
+            <button
+              class="chat-header-tool-btn"
+              type="button"
+              :aria-label="t('chat.sidebar.toggle')"
+              @click="sidebar.toggle"
+            >
+              <PanelLeftDashed :size="16" />
+            </button>
+            <button
+              class="chat-header-tool-btn"
+              type="button"
+              :aria-label="t('chat.sidebar.newChat')"
+              @click="handleNewChat"
+            >
+              <SquarePen :size="16" />
+            </button>
+          </template>
+          <h1 v-if="currentThread" class="chat-header-title" :title="currentThread.title">
+            {{ currentThread.title }}
+          </h1>
           <span v-if="currentThreadOrigin?.isExternal" class="thread-origin-chip">
             {{ currentThreadOrigin.channelLabel || currentThreadOrigin.sourceLabel || 'External' }}
           </span>
+          <span v-if="showMessageCount" class="chat-header-meta">
+            {{ t('chat.messagesCount', { count: chatMessages.length }) }}
+          </span>
         </div>
-      </div>
 
-      <div
-        v-if="currentThread"
-        class="chat-view-tabs flex h-9 shrink-0 items-end gap-5 px-4"
-        role="tablist"
-        :aria-label="t('chat.runs.views')"
-      >
+        <div
+          v-if="currentThread"
+          class="chat-view-tabs flex h-9 shrink-0 items-end gap-5"
+          role="tablist"
+          :aria-label="t('chat.runs.views')"
+        >
         <button
           id="chat-tab"
           type="button"
@@ -63,7 +89,8 @@
         >
           {{ t('chat.runs.title') }}
         </button>
-      </div>
+        </div>
+      </header>
       <TrajectoryView
         v-if="trajectoryMounted"
         v-show="showRunPanel"
@@ -179,15 +206,16 @@
 
 <script setup lang="ts">
 import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue';
+import { PanelLeftDashed, SquarePen } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
+import { useSidebar } from '../composables/useSidebar';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import ChatSessionStatsBar from '../components/chat/ChatSessionStatsBar.vue';
 import TurnPreviewCard from '../components/chat/TurnPreviewCard.vue';
 import TrajectoryView from './TrajectoryView.vue';
-import { FolderOpen } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 import { useChatUsage } from '../composables/useChatUsage';
 import { createChatInstance } from '../modules/chat/chat_instance';
@@ -300,6 +328,7 @@ watch(chatInstance.status, status => {
 
 const createMessageId = () => createPrefixedId('msg');
 const { handleMarkdownClick } = useMarkdownCopy();
+const sidebar = useSidebar();
 const { loadToolSources, getMcpServerLabel } = useToolMetadata({
   electronAPI,
 });
@@ -513,8 +542,75 @@ electronAPI.onFocusThread?.(threadId => {
 </script>
 
 <style scoped>
+/* Conversation header (DSH ConversationHeader): title row over the view tabs,
+   one hairline closing the block. The title is the page's h1; message count
+   and origin ride after it as quiet metadata. */
+.chat-header {
+  flex: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+}
+
+.chat-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 10px var(--chat-content-padding, 24px) 0;
+}
+
+/* Sidebar folded: the chat column reaches the window edge, and hiddenInset
+   traffic lights (20,20) overlay the leading zone. The collapsed toolbar's
+   controls render inline in this row, so one indent clears the lights for
+   the whole line. */
+.chat-header-leading-clear .chat-header-title-row {
+  padding-left: 84px;
+}
+
+.chat-header-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.chat-header-tool-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.chat-header-title {
+  margin: 0;
+  min-width: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.chat-header-meta {
+  flex: none;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
 .chat-view-tabs {
-  border-bottom: 1px solid var(--border-color);
+  padding: 0 var(--chat-content-padding, 24px);
 }
 
 /* Messages styles */
@@ -564,26 +660,28 @@ electronAPI.onFocusThread?.(threadId => {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 26px;
+  width: 16px;
   z-index: 19;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   pointer-events: none;
 }
 
+/* Rest state is nearly invisible — a faint 8px hairline stack; only hovering
+   a mark makes it prominent (lengthens, tints accent). */
 .turn-rail-mark {
   pointer-events: auto;
   flex: 0 0 auto;
   display: block;
-  padding: 3px 3px;
+  padding: 3px 4px;
   border: none;
   background: transparent;
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0.45;
+  opacity: 0.3;
   transition:
     opacity 0.15s ease,
     background-color 0.15s ease;
@@ -591,10 +689,10 @@ electronAPI.onFocusThread?.(threadId => {
 
 .turn-rail-mark span {
   display: block;
-  width: 14px;
+  width: 8px;
   height: 2px;
   border-radius: 1px;
-  background: var(--text-secondary);
+  background: var(--text-muted);
   transition:
     width 0.15s ease,
     background-color 0.15s ease;
@@ -609,15 +707,16 @@ electronAPI.onFocusThread?.(threadId => {
 
 .turn-rail-mark:hover span,
 .turn-rail-mark:focus-visible span {
-  width: 20px;
+  width: 16px;
   background: var(--accent-color);
 }
 
 .thread-origin-chip {
+  flex: none;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  background: transparent;
+  color: var(--text-muted);
   padding: 2px 8px;
   font-size: 11px;
   line-height: 1.2;

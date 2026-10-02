@@ -31,14 +31,11 @@
         <span class="network-summary-pill">{{ proxySummary }}</span>
       </div>
 
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.network.proxy.enable"
-          @change="updateProxy('enable', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.network.proxy.enable') }}
-      </label>
+      <SettingsSwitch
+        :model-value="config.network.proxy.enable"
+        :title="t('settings.network.proxy.enable')"
+        @update:model-value="updateProxy('enable', $event)"
+      />
 
       <div v-if="config.network.proxy.enable" class="config-grid">
         <label class="input-label">
@@ -197,6 +194,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';

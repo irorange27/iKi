@@ -2,18 +2,13 @@
   <section class="config-section">
     <div class="config-group">
       <h3>{{ t('settings.security.dataProtection') }}</h3>
-      <label
+      <SettingsSwitch
         v-for="key in ['encryptApikeys', 'requirePassword'] as const"
         :key="key"
-        class="checkbox-label"
-      >
-        <input
-          type="checkbox"
-          :checked="config.security[key]"
-          @change="updateSecurity(key, ($event.target as HTMLInputElement).checked)"
-        />
-        {{ formatSecurityLabel(key) }}
-      </label>
+        :model-value="config.security[key]"
+        :title="formatSecurityLabel(key)"
+        @update:model-value="updateSecurity(key, $event)"
+      />
     </div>
 
     <div class="config-group">
@@ -35,14 +30,11 @@
 
     <div class="config-group">
       <h3>{{ t('settings.security.logging') }}</h3>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.security.enableLogging"
-          @change="updateSecurity('enableLogging', getCheckedValue($event))"
-        />
-        {{ t('settings.security.enableLogging') }}
-      </label>
+      <SettingsSwitch
+        :model-value="config.security.enableLogging"
+        :title="t('settings.security.enableLogging')"
+        @update:model-value="updateSecurity('enableLogging', $event)"
+      />
       <div v-if="config.security.enableLogging" class="input-label">
         <span>{{ t('settings.security.level') }}</span>
         <SettingsSelect
@@ -62,6 +54,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 

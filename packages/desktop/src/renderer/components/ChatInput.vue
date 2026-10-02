@@ -1,10 +1,5 @@
 <template>
   <div class="chat-input-outer">
-    <ChatSteerBar
-      :visible="isLoading && isAutonomousMode"
-      :disabled="isStopping"
-      @steer="handleSteer"
-    />
     <!-- Width is owned by the parent (.composer-area tracks the chat column). -->
     <div>
       <ChatTodoPlan v-if="props.todoPlan" class="chat-input-plan" :plan="props.todoPlan" />
@@ -143,11 +138,6 @@
 
             </PopoverPortal>
           </PopoverRoot>
-          <ChatComposerSelectors
-            class="composer-context-row"
-            v-model:autonomous-active="isAutonomousMode"
-            v-model:autonomous-max-iterations="autonomousMaxIterations"
-          />
         </template>
 
         <template #toolbar-right>
@@ -213,7 +203,9 @@
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
             :selected-model="selectedModel"
+            :reasoning-effort="currentReasoningEffort"
             @select="handleProviderModelSelect"
+            @update:reasoning-effort="handleReasoningEffortChanged"
           />
           <ChatComposerActions
             :is-incognito="isIncognito"
@@ -229,7 +221,6 @@
             :speech-status-tone-class="speechStatusToneClass"
             :run-active="runStatusState.isActive.value"
             :run-status="runStatusState.currentStatus.value"
-            :autonomous-active="isAutonomousMode"
             @toggle-incognito="toggleIncognitoMode"
             @toggle-voice-input="toggleVoiceInput"
             @send-message="sendMessage"
@@ -296,9 +287,7 @@ import type { SubmitTurnParams, SubmitTurnResult } from '../composables/useChatC
 import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatModelSelector from './ChatModelSelector.vue';
-import ChatComposerSelectors from './ChatComposerSelectors.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
-import ChatSteerBar from './ChatSteerBar.vue';
 import ImageViewerOverlay from './ImageViewerOverlay.vue';
 import { useChatComposerDraft } from '../composables/useChatComposerDraft';
 import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
@@ -432,8 +421,6 @@ const showVisionWarning = computed(
   () => attachedImages.value.length > 0 && !modelSupportsVision.value
 );
 const isBusy = ref(false);
-const isAutonomousMode = ref(false);
-const autonomousMaxIterations = ref(20);
 
 const runStatusState = useRunStatus({ electronAPI });
 
@@ -533,8 +520,6 @@ const {
   message,
   isRecording,
   isTranscribing,
-  isAutonomousMode,
-  autonomousMaxIterations,
   reasoningEffort: currentReasoningEffort,
   personality: currentPersonality,
   approvalPolicy: computed(() => props.approvalPolicy ?? ''),
@@ -697,8 +682,9 @@ const handleProviderModelSelect = (payload: { provider: Provider; model: string 
   threadSession.handleModelSelected(payload);
 };
 
-const handleReasoningEffortChanged = (effort: string) => {
-  void threadSession.setReasoningEffort(effort);
+const toggleIncognitoMode = () => {
+  if (isBusy.value || isStopping.value) return;
+  void threadSession.setIncognito(!isIncognito.value);
 };
 
 const handleComposerKeydown = (event: KeyboardEvent) => {
@@ -724,17 +710,8 @@ const shouldShowSkillSectionLabel = (index: number) => {
   return previousCommand?.kind !== 'skill';
 };
 
-const handleSteer = async (message: string) => {
-  try {
-    await electronAPI.chat.steerStream(props.threadId, message);
-  } catch {
-    // steer failed silently — the stream may have already ended
-  }
-};
-
-const toggleIncognitoMode = () => {
-  if (isBusy.value || isStopping.value) return;
-  void threadSession.setIncognito(!isIncognito.value);
+const handleReasoningEffortChanged = (effort: string) => {
+  void threadSession.setReasoningEffort(effort);
 };
 
 defineExpose({

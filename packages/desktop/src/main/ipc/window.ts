@@ -41,6 +41,28 @@ export const registerWindowIpc = (): void => {
     }
   });
 
+  ipcMain.on('minimize-window', event => {
+    try {
+      BrowserWindow.fromWebContents(event.sender)?.minimize();
+    } catch {
+      // Prevent unhandled exceptions from crashing the main process.
+    }
+  });
+
+  ipcMain.on('toggle-maximize-window', event => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) return;
+      if (win.isMaximized()) {
+        win.unmaximize();
+      } else {
+        win.maximize();
+      }
+    } catch {
+      // Prevent unhandled exceptions from crashing the main process.
+    }
+  });
+
   ipcMain.on('window:set-shadow', (event, enabled: boolean) => {
     try {
       const win = BrowserWindow.fromWebContents(event.sender);

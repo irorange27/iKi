@@ -25,7 +25,6 @@ export const createChatComposerStreamPayload = (params: {
   personality?: string;
   /** Session-level tool approval policy; empty = global default (omitted). */
   approvalPolicy?: string;
-  autonomous?: { maxIterations: number; continuePrompt?: string };
 }): ChatComposerInvocationBody | null => {
   if (!params.threadId) {
     return null;
@@ -53,6 +52,5 @@ export const createChatComposerStreamPayload = (params: {
     skillMode: params.isAutoSkillMode ? 'auto' : 'manual',
     skillIds: params.isAutoSkillMode ? undefined : clonePlainData(params.selectedSkillIds),
     threadId: params.threadId,
-    ...(params.autonomous ? { autonomous: params.autonomous } : {}),
   };
 };

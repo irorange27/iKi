@@ -30,88 +30,92 @@
           <span>{{ saved ? t('settings.saved.all') : t('settings.saved.unsaved') }}</span>
         </div>
       </div>
-      <SettingsGeneralSection
-        v-show="activeSection === 'general'"
-        :providers="providers"
-        @config-change="autoSave"
-        @reset="resetSection('general')"
-      />
+      <!-- 通用: lightweight preferences live together on one page. -->
+      <section v-show="activeSection === 'general'" class="settings-page">
+        <SettingsGeneralSection
+          :providers="providers"
+          @config-change="autoSave"
+          @reset="resetSection('general')"
+        />
 
-      <ProvidersSettings v-show="activeSection === 'provider'" />
+        <h2 class="settings-page-title">{{ t('settings.menu.ui') }}</h2>
+        <SettingsUiSection @config-change="autoSave" @reset="resetSection('ui')" />
 
-      <McpSettings v-show="activeSection === 'mcp'" @config-change="autoSave" />
+        <h2 class="settings-page-title">{{ t('settings.menu.speech') }}</h2>
+        <SettingsSpeechSection
+          :active="activeSection === 'general'"
+          @config-change="autoSave"
+          @reset="resetSection('speech')"
+        />
 
-      <NapCatSettings
-        :active="activeSection === 'bridges'"
-        v-show="activeSection === 'bridges'"
-        @config-change="autoSave"
-        @reset="resetBridgeSection"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.colorScheme') }}</h2>
+        <SettingsColorSchemeSection
+          :active="activeSection === 'general'"
+          @config-change="autoSave"
+          @reset="resetColorSchemeSection"
+        />
 
-      <SettingsSpeechSection
-        v-show="activeSection === 'speech'"
-        :active="activeSection === 'speech'"
-        @config-change="autoSave"
-        @reset="resetSection('speech')"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.network') }}</h2>
+        <SettingsNetworkSection
+          :active="activeSection === 'general'"
+          @config-change="autoSave"
+          @reset="resetSection('network')"
+        />
 
-      <SettingsColorSchemeSection
-        v-show="activeSection === 'colorScheme'"
-        :active="activeSection === 'colorScheme'"
-        @config-change="autoSave"
-        @reset="resetColorSchemeSection"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.security') }}</h2>
+        <SettingsSecuritySection @config-change="autoSave" @reset="resetSection('security')" />
 
-      <SettingsUiSection
-        v-show="activeSection === 'ui'"
-        @config-change="autoSave"
-        @reset="resetSection('ui')"
-      />
+        <SettingsKeybindingsSection
+          v-show="activeSection === 'keybindings'"
+          @config-change="autoSave"
+          @reset="resetSection('keybindings')"
+        />
+      </section>
 
-      <SettingsNetworkSection
-        v-show="activeSection === 'network'"
-        :active="activeSection === 'network'"
-        @config-change="autoSave"
-        @reset="resetSection('network')"
-      />
+      <!-- 模型与工具: providers, MCP servers, and API usage. -->
+      <section v-show="activeSection === 'models'" class="settings-page">
+        <h2 class="settings-page-title">{{ t('settings.menu.provider') }}</h2>
+        <ProvidersSettings />
 
-      <SettingsSecuritySection
-        v-show="activeSection === 'security'"
-        @config-change="autoSave"
-        @reset="resetSection('security')"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.mcp') }}</h2>
+        <McpSettings @config-change="autoSave" />
 
+        <h2 class="settings-page-title">{{ t('settings.menu.usage') }}</h2>
+        <SettingsUsageSection :active="activeSection === 'models'" />
+      </section>
 
-      <SettingsKeybindingsSection
-        v-show="activeSection === 'keybindings'"
-        @config-change="autoSave"
-        @reset="resetSection('keybindings')"
-      />
+      <!-- 记忆与技能: what the agent remembers and can do. -->
+      <section v-show="activeSection === 'intelligence'" class="settings-page">
+        <h2 class="settings-page-title">{{ t('settings.menu.memory') }}</h2>
+        <SettingsMemorySection
+          :active="activeSection === 'intelligence'"
+          :providers="providers"
+          @config-change="autoSave"
+          @reset="resetSection('memory')"
+        />
 
-      <SettingsMemorySection
-        v-show="activeSection === 'memory'"
-        :active="activeSection === 'memory'"
-        :providers="providers"
-        @config-change="autoSave"
-        @reset="resetSection('memory')"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.skills') }}</h2>
+        <SettingsSkillsSection
+          :active="activeSection === 'intelligence'"
+          @config-change="autoSave"
+        />
+      </section>
 
-      <SettingsTasksSection
-        v-show="activeSection === 'tasks'"
-        :active="activeSection === 'tasks'"
-        :providers="availableProvidersWithModels"
-      />
+      <!-- 自动化: unattended entry points (QQ bridge, proactive tasks). -->
+      <section v-show="activeSection === 'automation'" class="settings-page">
+        <h2 class="settings-page-title">{{ t('settings.menu.bridges') }}</h2>
+        <NapCatSettings
+          :active="activeSection === 'automation'"
+          @config-change="autoSave"
+          @reset="resetBridgeSection"
+        />
 
-      <SettingsUsageSection
-        v-show="activeSection === 'usage'"
-        :active="activeSection === 'usage'"
-      />
-
-      <SettingsSkillsSection
-        v-show="activeSection === 'skills'"
-        :active="activeSection === 'skills'"
-        @config-change="autoSave"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.tasks') }}</h2>
+        <SettingsTasksSection
+          :active="activeSection === 'automation'"
+          :providers="availableProvidersWithModels"
+        />
+      </section>
 
       <!-- Footer operabar -->
       <div class="settings-footer">
@@ -128,19 +132,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import {
-  Cog,
-  Palette,
-  Mic,
-  Brain,
-  Bot,
-  BarChart3,
-  AlarmClock,
-  Globe,
-  Wand2,
-  Plug,
-  SlidersHorizontal,
-} from 'lucide-vue-next';
+import { AlarmClock, Bot, Brain, Cog } from 'lucide-vue-next';
 
 import SettingsGeneralSection from '../components/settings/SettingsGeneralSection.vue';
 import SettingsUiSection from '../components/settings/SettingsUiSection.vue';
@@ -170,27 +162,31 @@ const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
 const { t } = useI18n();
 
-const SETTINGS_SECTION_KEYS = new Set([
-  'general',
-  'provider',
-  'mcp',
-  'bridges',
-  'usage',
-  'skills',
-  'memory',
-  'network',
-  'ui',
-  'colorScheme',
-  'speech',
-  'tasks',
-  'security',
-  'keybindings',
-]);
+const SETTINGS_SECTION_KEYS = new Set(['general', 'models', 'intelligence', 'automation']);
+
+// Deep links (e.g. `#settings/tasks` from the sidebar automations entry) may
+// still use the pre-merge section names; each maps onto its merged section.
+const SETTINGS_SECTION_ALIASES: Record<string, string> = {
+  provider: 'models',
+  mcp: 'models',
+  usage: 'models',
+  memory: 'intelligence',
+  skills: 'intelligence',
+  bridges: 'automation',
+  tasks: 'automation',
+  ui: 'general',
+  colorScheme: 'general',
+  speech: 'general',
+  network: 'general',
+  security: 'general',
+  keybindings: 'general',
+};
 
 const resolveSettingsSection = (value?: string): string => {
   if (typeof value !== 'string') return 'general';
   const trimmed = value.trim();
-  return SETTINGS_SECTION_KEYS.has(trimmed) ? trimmed : 'general';
+  if (SETTINGS_SECTION_KEYS.has(trimmed)) return trimmed;
+  return SETTINGS_SECTION_ALIASES[trimmed] ?? 'general';
 };
 
 const props = defineProps<{
@@ -251,17 +247,9 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
 
 const menuItems = computed(() => [
   { key: 'general', label: t('settings.menu.general'), icon: Cog },
-  { key: 'provider', label: t('settings.menu.provider'), icon: Bot },
-  { key: 'mcp', label: t('settings.menu.mcp'), icon: Plug },
-  { key: 'bridges', label: t('settings.menu.bridges'), icon: Bot },
-  { key: 'usage', label: t('settings.menu.usage'), icon: BarChart3 },
-  { key: 'skills', label: t('settings.menu.skills'), icon: Wand2 },
-  { key: 'memory', label: t('settings.menu.memory'), icon: Brain },
-  { key: 'network', label: t('settings.menu.network'), icon: Globe },
-  { key: 'ui', label: t('settings.menu.ui'), icon: SlidersHorizontal },
-  { key: 'colorScheme', label: t('settings.menu.colorScheme'), icon: Palette },
-  { key: 'speech', label: t('settings.menu.speech'), icon: Mic },
-  { key: 'tasks', label: t('settings.menu.tasks'), icon: AlarmClock },
+  { key: 'models', label: t('settings.menu.models'), icon: Bot },
+  { key: 'intelligence', label: t('settings.menu.intelligence'), icon: Brain },
+  { key: 'automation', label: t('settings.menu.automation'), icon: AlarmClock },
 ]);
 
 const activeSectionMeta = computed(() => {
