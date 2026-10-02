@@ -2,8 +2,8 @@ import { createAgentRunTracker } from './run_tracker';
 import { startTurnHarness } from '../agent/harness';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
-import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { getStreamErrorMessage } from '@iki/backend/utils/errors';
+import type { ToolApprovalRequest } from '@iki/backend/agent';
 import {
   createApprovalRecoveryContext,
   describeApprovalRequiredTools,
@@ -11,22 +11,19 @@ import {
   type RegisterApprovalBatch,
 } from './approval_types';
 import {
-  NO_TOOLS_SYSTEM_PROMPT,
-  TOOL_AGENT_SYSTEM_PROMPT,
-  resolveToolCallMaxIterations,
-} from './constants';
+  assembleExecutionPlan,
+  planToHarnessConfig,
+  planToRunTrackerParams,
+} from './execution_plan';
+import { createTurnDriver, finalizeRunForOutcome } from './outer_loop';
+import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
-import { getPersonalityStylePrompt } from '../message/personality';
-import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
-import {
-  persistAssistantTurnMessage,
-  persistUserTurnMessage,
-} from './turn_persistence';
+import { persistAssistantTurnMessage, persistUserTurnMessage } from './turn_persistence';
 import { createUiChunkEmitter } from './ui_stream';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
-import type { ChatStreamEvent, ChatStreamTarget } from './types';
+import type { ActiveStreamState, ChatStreamTarget } from './types';
 
 const logger = createLogger({ module: 'message_send' });
 
@@ -98,7 +95,14 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       onExecutionAbort: () => executionAbort.abort('thread-lease-lost'),
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
+
+    // Turn-start workspace binding (D30), resolved at admission like the
+    // streaming path — before preparation awaits can observe a switch.
+    const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
+    // Set once the driver exists; the catch paths must consult the driver's
+    // CURRENT tracker (a handoff chain swaps it mid-turn).
+    let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
 
     try {
       if (options.threadId) {
@@ -116,48 +120,30 @@ export const createMessageSend = (deps: MessageSendDeps) => {
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
       executionAbort.signal.throwIfAborted();
-      const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
-      const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
 
-      const systemPrompt = [
-        preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
-        getPersonalityStylePrompt(options.personality),
-      ]
-        .filter(part => part.trim().length > 0)
-        .join('\n\n');
-
-      const activeRunTracker = createAgentRunTracker({
-        kind: options.runConfig?.kind ?? 'chat-turn',
-        threadId: options.threadId,
-        parentRunId: options.runConfig?.parentRunId,
-        rootRunId: options.runConfig?.rootRunId,
-        providerType: options.providerType,
-        providerId: options.providerId,
-        model: options.model,
-        systemPrompt,
-        enabledTools: preparedTurn.guardedTools,
-        availableSkillIds: preparedTurn.selectedSkillIds,
-        input: {
-          ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
-          messages: preparedTurn.finalMessages,
-          metadata: {
-            ...(options.runConfig?.metadata ?? {}),
-            transport: 'send',
-            approvalPolicy,
-            requireApproval: preparedTurn.requireApproval,
-            contextTokens: preparedTurn.report.totalEstimatedTokens,
-            skillMode: preparedTurn.skillMode,
-            maxIterations,
-            enableTools: preparedTurn.enableTools,
-          },
-        },
-        working: {
-          modelMessages: preparedTurn.history,
-          accumulatedText: '',
-          pendingApprovalIds: [],
-          lastStepIndex: 0,
-        },
+      // The plan is the single definition of this execution (same assembly
+      // the streaming path uses).
+      const plan = assembleExecutionPlan({
+        options,
+        preparedTurn,
+        transport: 'send',
+        workspaceSelection: turnStartWorkspace,
       });
+
+      const activeRunTracker = createAgentRunTracker(
+        planToRunTrackerParams(plan, {
+          input: {
+            ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
+            messages: preparedTurn.finalMessages,
+          },
+          working: {
+            modelMessages: preparedTurn.history,
+            accumulatedText: '',
+            pendingApprovalIds: [],
+            lastStepIndex: 0,
+          },
+        })
+      );
       runTracker = activeRunTracker;
 
       if (preparedTurn.enableTools) {
@@ -165,27 +151,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        // Turn-start workspace binding (D30), same rule as the streaming path.
-        const workspaceSelection = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
-
-        const harness = startTurnHarness({
-          providerType: options.providerType,
-          providerId: options.providerId,
-          model: options.model,
-          systemPrompt,
-          enableTools: true,
-          enabledToolNames: preparedTurn.guardedTools,
-          availableSkillIds: preparedTurn.selectedSkillIds,
-          guardActive: preparedTurn.guardActive,
-          requireApproval: preparedTurn.requireApproval,
-          autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
-          maxIterations,
-          threadId: options.threadId,
-          maxOutputTokens: preparedTurn.maxOutputTokens,
-          maxInputTokens: preparedTurn.maxInputTokens,
-          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-          ...(approvalPolicy ? { approvalPolicy } : {}),
-        });
+        const harness = startTurnHarness(planToHarnessConfig(plan));
 
         // ponytail: clear stale todo plan from previous turn
         writeThreadTodoPlan({ threadId: options.threadId, items: [] });
@@ -197,122 +163,92 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const uiChunkEmitter = createUiChunkEmitter(wireTarget, `assistant_${activeRunTracker.id}`);
         const assistantMessageId = uiChunkEmitter.messageId;
 
-        const output = await runWithToolRuntimeContext(
+        // Send is a waiter on the same turn driver the streaming path runs —
+        // same lifecycle, same step projection, same approval registration —
+        // with a no-op subscriber and no steering/preview surface.
+        const streamState: ActiveStreamState = {
+          cancelled: false,
+          stoppedByUser: false,
+          abortController: executionAbort,
+        };
+        const registeredApprovalRequests: ToolApprovalRequest[] = [];
+        const driver = createTurnDriver(
           {
-            runId: activeRunTracker.id,
+            harness,
             runTracker: activeRunTracker,
-            threadId: options.threadId,
-            conversationModel: {
-              providerType: options.providerType,
-              providerId: options.providerId,
-              model: options.model,
-            },
-            workspaceSelectionBox: { selection: workspaceSelection },
+            approvalContext: createApprovalRecoveryContext({
+              plan,
+              sessionId: assistantMessageId,
+              runId: activeRunTracker.id,
+            }),
+            streamHistory: preparedTurn.history,
+            streamPrompt: preparedTurn.prompt,
+            workspaceSelectionBox: { selection: plan.workspaceSelection },
           },
-          async () => {
-            for await (const event of harness.turn({
-              prompt: preparedTurn.prompt,
-              history: preparedTurn.history,
-              onInference: record => activeRunTracker.recordModelStep(record),
-              abortSignal: executionAbort.signal,
-            })) {
-              if (event.event === 'step') {
-                activeRunTracker.recordAgentStep(event.step);
-                const step = event.step;
-                if (step.type === 'message_update') {
-                  if (step.kind === 'reasoning') uiChunkEmitter.emitReasoningDelta(step.text);
-                  else uiChunkEmitter.emitTextDelta(step.text);
-                } else if (step.type === 'tool_execution_start') {
-                  const uiEvent: ChatStreamEvent = {
-                    type: 'tool-call',
-                    toolCallId: step.toolCallId,
-                    toolName: step.toolName,
-                    input: step.input,
-                  };
-                  uiChunkEmitter.emitToolEvent(uiEvent);
-                } else if (step.type === 'tool_execution_end') {
-                  const uiEvent: ChatStreamEvent =
-                    step.outcome === 'success'
-                      ? { type: 'tool-result', toolCallId: step.toolCallId, output: step.output }
-                      : {
-                          type: 'tool-error',
-                          toolCallId: step.toolCallId,
-                          error: step.error ?? 'Tool execution failed',
-                        };
-                  uiChunkEmitter.emitToolEvent(uiEvent);
-                } else if (step.type === 'approval_request') {
-                  for (const request of step.requests) {
-                    if (!request.approvalId) continue;
-                    uiChunkEmitter.emitToolEvent({
-                      type: 'tool-approval-request',
-                      approvalId: request.approvalId,
-                      toolCallId: request.toolCallId || '',
-                      ...(request.toolCall
-                        ? {
-                            toolCall: {
-                              toolName: request.toolCall.toolName,
-                              toolCallId: request.toolCallId || '',
-                              args: request.toolCall.args ?? {},
-                            },
-                          }
-                        : {}),
-                    });
-                  }
-                }
-              }
-              if (event.event === 'done') return event.output;
-            }
-            throw new Error('Agent harness produced no output');
+          {
+            target: wireTarget,
+            plan,
+            streamState,
+            uiChunkEmitter,
+            notifyRunStatus: () => undefined,
+            drainSteerMessages: () => [],
+            conversationPreview: false,
+            approvals: {
+              ensurePendingApprovalSession:
+                deps.approvals?.ensurePendingApprovalSession ?? (() => undefined),
+              registerApprovalBatch: (requests, session) => {
+                registeredApprovalRequests.push(...requests);
+                deps.approvals?.registerApprovalBatch(requests, session);
+              },
+            },
           }
         );
 
-        activeRunTracker.syncModelMessages(harness.getHistory());
+        driverHandle = driver;
+        const result = await driver.run();
+        if (!result) throw new Error('Unreachable: send driver produced no result');
+
+        // The driver's CURRENT tracker/harness, not the setup's: a handoff
+        // chain finalizes the child segment, not the completed parent.
+        const finalTracker = driver.getRunTracker();
+        const finalHarness = driver.getHarness();
+
+        if (result.outcome === 'cancelled') {
+          // The only cancel source on this transport is a lost thread lease
+          // (send has no stream membership, so nothing else aborts it).
+          const message = 'Thread run lease was lost; the send was interrupted.';
+          if (finalTracker.getRun().status === 'running') {
+            finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
+          }
+          return {
+            success: false,
+            error: message,
+            ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
+          };
+        }
+
+        finalTracker.syncModelMessages(finalHarness.getHistory());
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
           model: options.model,
-          usage: output.usage,
+          usage: result.usage,
           source: 'chat.send.tools',
           metadata: {
             contextTokens: preparedTurn.report.totalEstimatedTokens,
-            approvalRequestCount: output.toolApprovalRequests?.length ?? 0,
+            approvalRequestCount: registeredApprovalRequests.length,
           },
         });
-        if (output.toolApprovalRequests && output.toolApprovalRequests.length > 0) {
-          const approvalError = describeApprovalRequiredTools(output.toolApprovalRequests);
-          activeRunTracker.markBlocked({
-            text: output.text,
-            usage: output.usage ? { ...output.usage } : undefined,
-            pendingApprovalIds: output.toolApprovalRequests.map(request => request.approvalId),
-          });
-          if (deps.approvals) {
-            // Durable decision handle: same registration the streaming path
-            // performs, so this pause is resumable through approveTool (and
-            // recoverable after a restart) instead of name-only "blocked".
-            const recoveryContext = createApprovalRecoveryContext({
-              threadId: options.threadId,
-              sessionId: assistantMessageId,
-              runId: activeRunTracker.id,
-              providerType: options.providerType,
-              providerId: options.providerId,
-              model: options.model,
-              systemPrompt,
-              maxOutputTokens: preparedTurn.maxOutputTokens,
-              maxInputTokens: preparedTurn.maxInputTokens,
-              maxIterations,
-              requireApproval: preparedTurn.requireApproval,
-              enabledTools: preparedTurn.guardedTools,
-              availableSkillIds: preparedTurn.selectedSkillIds,
-              workspaceSelection,
-              ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-              ...(approvalPolicy ? { approvalPolicy } : {}),
-            });
-            deps.approvals.registerApprovalBatch(output.toolApprovalRequests, {
-              target: wireTarget,
-              history: harness.getHistory() ?? preparedTurn.history,
-              recoveryContext,
-            });
-          } else {
+
+        const finalResponse = driver.getAccumulatedResponse() || result.response || '';
+        finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
+
+        if (result.outcome === 'awaiting-approval') {
+          // Durable decision handle: registered by the driver through
+          // deps.approvals, so this pause is resumable through approveTool
+          // (and recoverable after a restart) instead of name-only "blocked".
+          const approvalError = describeApprovalRequiredTools(registeredApprovalRequests);
+          if (!deps.approvals) {
             logger.event({
               level: 'warn',
               event: 'chat.send.approval_required',
@@ -320,7 +256,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               message: approvalError,
               data: {
                 thread_id: options.threadId || null,
-                tool_names: output.toolApprovalRequests
+                tool_names: registeredApprovalRequests
                   .map(request => request.toolCall?.toolName)
                   .filter(
                     (toolName): toolName is string =>
@@ -342,14 +278,10 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             success: false,
             error: approvalError,
             awaitingApproval: Boolean(deps.approvals),
-            ...(options.runConfig?.kind ? { runId: activeRunTracker.id } : {}),
+            ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
           };
         }
-        activeRunTracker.markCompleted({
-          text: output.text,
-          usage: output.usage ? { ...output.usage } : undefined,
-          finishReason: 'completed',
-        });
+
         uiChunkEmitter.finish();
         if (options.threadId) {
           // Deterministic per-run id: a duplicate persist of the same turn
@@ -362,15 +294,17 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             persisted ?? {
               id: assistantMessageId,
               role: 'assistant',
-              parts: [{ type: 'text', text: output.text, state: 'done' }],
+              parts: [{ type: 'text', text: finalResponse, state: 'done' }],
             },
             'send',
           );
         }
         return {
           success: true,
-          text: output.text,
-          ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
+          text: finalResponse,
+          // Same rule as the other branches: the identity that finished the
+          // turn (identical to the setup run unless a handoff chain ran).
+          ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
         };
       }
 
@@ -435,13 +369,14 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         };
       }
       const message = getStreamErrorMessage(error);
-      if (runTracker && runTracker.getRun().status === 'running') {
-        runTracker.markFailed({ message });
+      const failingTracker = driverHandle?.getRunTracker() ?? runTracker;
+      if (failingTracker && failingTracker.getRun().status === 'running') {
+        failingTracker.markFailed({ message });
       }
       return {
         success: false,
         error: message,
-        ...(options.runConfig?.kind && runTracker ? { runId: runTracker.id } : {}),
+        ...(options.runConfig?.kind && failingTracker ? { runId: failingTracker.id } : {}),
       };
     } finally {
       release();

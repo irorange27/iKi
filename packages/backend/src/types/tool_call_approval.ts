@@ -19,6 +19,10 @@ export interface ToolCallApprovalSession {
   /** Turn-start workspace selection snapshot (JSON string | null) — approval
    *  recovery rebinds this world instead of the thread's current selection. */
   workspace_selection?: string | null;
+  /** Full ExecutionPlan snapshot (JSON string | null) — the authority a
+   *  restart-recovered resume runs under; the per-column fields above are the
+   *  legacy projection for rows written before this column existed. */
+  plan_json?: string | null;
   created_at: string;
   updated_at: string;
 }

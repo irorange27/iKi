@@ -1,6 +1,27 @@
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ExecutionPlan } from '@iki/backend/thread_session/execution_plan';
+
+/** Minimal plan fixture matching what the stream/send entries assemble. */
+const makePlan = (overrides: Partial<ExecutionPlan> = {}): ExecutionPlan => ({
+  providerType: 'openai',
+  model: 'test',
+  enableTools: true,
+  enabledTools: [],
+  availableSkillIds: [],
+  guardActive: false,
+  requireApproval: true,
+  autoApproveToolRequests: false,
+  maxIterations: 20,
+  systemPrompt: 'system',
+  skillMode: 'manual',
+  kind: 'chat-turn',
+  runMetadata: {},
+  transport: 'stream',
+  ...overrides,
+});
+
 vi.mock('@iki/backend/db/tool_call_approval', () => ({
   upsertToolCallApprovalSession: vi.fn(),
   upsertToolCallApprovals: vi.fn(),
@@ -155,14 +176,10 @@ describe('createChatApproval', () => {
         target: { id: 99, send: vi.fn() },
         history: [{ role: 'user', content: 'task' }],
         recoveryContext: {
+          plan: makePlan({ enabledTools: ['shell'], threadId: 'thread_a' }),
           sessionId: 'session_a',
           assistantMessageId: 'session_a',
-          threadId: 'thread_a',
           runId: 'run_1',
-          providerType: 'openai',
-          model: 'test',
-          systemPrompt: 'system',
-          enabledTools: ['shell'],
         },
       }
     );
@@ -186,7 +203,7 @@ describe('createChatApproval', () => {
     const target = { id: 99, send: vi.fn() };
     approvals.registerApprovalBatch([{ approvalId: 'isolated', toolCallId: 'call', toolCall: { toolName: 'shell', args: {} } }], {
       target, history: [{ role: 'user', content: 'task' }],
-      recoveryContext: { sessionId: 'session_a', assistantMessageId: 'session_a', threadId: 'thread_a', providerType: 'openai', model: 'test', systemPrompt: 'system', enabledTools: ['shell'] },
+      recoveryContext: { plan: makePlan({ enabledTools: ['shell'], threadId: 'thread_a' }), sessionId: 'session_a', assistantMessageId: 'session_a' },
     });
     const release = coordinator.tryAcquireThreadRun('thread_a')!;
     expect(await approvals.approveTool(target, 'isolated', true)).toMatchObject({ success: false });
@@ -207,7 +224,7 @@ describe('createChatApproval', () => {
     });
     try {
       for (const id of ['a', 'b']) approvals.ensurePendingApprovalSession(id, {
-        target: { id: 7, send: vi.fn() }, recoveryContext: { sessionId: id, assistantMessageId: id, threadId: id, providerType: 'openai', model: 'test', systemPrompt: '', enabledTools: [] },
+        target: { id: 7, send: vi.fn() }, recoveryContext: { plan: makePlan({ systemPrompt: '', threadId: id }), sessionId: id, assistantMessageId: id },
       });
       approvals.cleanupPendingSessionsForSender(7, 'a');
       expect(vi.getTimerCount()).toBe(1);
@@ -234,8 +251,8 @@ describe('createChatApproval', () => {
         target: { id: 99, send: vi.fn() },
         history: [{ role: 'user', content: 'task' }],
         recoveryContext: {
-          sessionId: 'timeout_session', assistantMessageId: 'timeout_session', threadId: 'thread_timeout',
-          providerType: 'openai', model: 'test', systemPrompt: 'system', enabledTools: ['shell'],
+          plan: makePlan({ enabledTools: ['shell'], threadId: 'thread_timeout' }),
+          sessionId: 'timeout_session', assistantMessageId: 'timeout_session',
         },
       });
       await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
@@ -284,19 +301,19 @@ describe('createChatApproval', () => {
         harness,
         target,
         recoveryContext: {
+          plan: makePlan({
+            providerId: 'primary-openai',
+            model: 'gpt-4o-mini',
+            systemPrompt: 'system prompt',
+            maxInputTokens: 128000,
+            maxOutputTokens: 640,
+            maxIterations: 12,
+            enabledTools: ['web'],
+            threadId: 'thread_1',
+          }),
           sessionId: 'assistant_1',
-          threadId: 'thread_1',
           assistantMessageId: 'assistant_1',
           runId: 'run_1',
-          providerType: 'openai',
-          providerId: 'primary-openai',
-          model: 'gpt-4o-mini',
-          systemPrompt: 'system prompt',
-          maxInputTokens: 128000,
-          maxOutputTokens: 640,
-          maxIterations: 12,
-          enabledTools: ['web'],
-          availableSkillIds: [],
         },
       }
     );
@@ -318,6 +335,9 @@ describe('createChatApproval', () => {
       // Turn-start workspace binding rides with the session row (D30); this
       // fixture records none, so the column stays null.
       workspace_selection: null,
+      // The full ExecutionPlan snapshot rides with the row so a
+      // restart-recovered resume restores every field exactly.
+      plan_json: expect.any(String),
     });
     expect(upsertToolCallApprovalsMock).toHaveBeenCalledWith([
       {
