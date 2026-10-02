@@ -130,11 +130,7 @@ describe('cross-process recovery is owner-aware and recorded', () => {
       }, 20);
     });
 
-    // eslint-disable-next-line no-console
-    console.log('LOCKS:', JSON.stringify(getDb().prepare('SELECT * FROM thread_run_locks').all()));
     const result = recoverStuckRunsOnStartup();
-    // eslint-disable-next-line no-console
-    console.log('XPROC:', JSON.stringify(result), 'flag:', fs.existsSync(flagPath));
     expect(result).toMatchObject({ totalRuns: 0, failedRuns: 0, blockedRuns: 0 });
     expect(result.skippedLiveLease).toBe(1);
 
