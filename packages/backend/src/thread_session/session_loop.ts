@@ -155,6 +155,9 @@ export const createChatStreaming = (deps: {
     coordinator.registerStream(senderId, streamState);
 
     let driver: TurnDriverHandle | null = null;
+    // The run tracker exists before the driver does; a failure in the
+    // pre-driver window must still record the turn's terminal fact.
+    let sessionLogTracker: import('./run_tracker').AgentRunTracker | null = null;
     // Set once the settle/abort persist runs: late progress writes must not
     // follow it (the per-message chain serializes, this bounds the ordering).
     let turnPersistFinalized = false;
@@ -282,6 +285,7 @@ export const createChatStreaming = (deps: {
         })
       );
       streamState.runId = runTracker.id;
+      sessionLogTracker = runTracker;
 
       // Session log: the accepted input and the turn's frozen plan are
       // business facts, recorded before execution begins (stage C slice 1 —
@@ -484,6 +488,9 @@ export const createChatStreaming = (deps: {
             userTurnMessageId
           );
           const cancelledTracker = driver?.getRunTracker();
+          // A cancel while blocked records turn_cancelled while the run row
+          // stays blocked (the approval remains resumable) — intentional
+          // until the resume slice unifies the two.
           if (cancelledTracker) {
             recordTurnEvents(options.threadId, turnFactsToEvents({
               committed: {
@@ -530,12 +537,14 @@ export const createChatStreaming = (deps: {
         activeRunTracker.markFailed({ message });
         notifyRunStatus();
       }
-      if (options.threadId && activeRunTracker) {
-        // Session log: a failed turn is a terminal fact even though no
-        // assistant row is persisted on this path.
+      // Session log: a failed turn is a terminal fact even when no assistant
+      // row is persisted on this path. The user-facing outcome is the failure
+      // regardless of which segment reached it.
+      const failedTracker = activeRunTracker ?? sessionLogTracker;
+      if (options.threadId && failedTracker) {
         recordTurnEvents(options.threadId, turnFactsToEvents({
           terminal: {
-            runId: activeRunTracker.id,
+            runId: failedTracker.id,
             status: 'failed',
             errorText: message,
           },

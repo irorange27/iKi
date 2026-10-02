@@ -194,6 +194,37 @@ describe('session log turn facts and pure replay', () => {
     });
   });
 
+  it('records the terminal failure when the provider errors and the row stays honest', async () => {
+    createModelMock.mockImplementation(() => {
+      throw new Error('provider exploded');
+    });
+    const streaming = buildStreaming();
+    const result = await streaming.stream({ id: 83, send: vi.fn() }, {
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'test-model',
+      threadId: 'thread_log',
+      approvalPolicy: 'never',
+      messages: [{ id: 'msg_log_fail', role: 'user', parts: [{ type: 'text', text: 'explode' }] }],
+      tools: ['replay_probe'],
+    });
+    expect(result).toMatchObject({ success: false });
+
+    const view = rebuildThreadViewFromEvents('thread_log');
+    const failedTurn = view.turns.find(turn => turn.status === 'failed');
+    expect(failedTurn).toBeDefined();
+    expect(failedTurn!.errorText).toContain('provider exploded');
+    // No phantom committed output: the failure persisted no assistant row
+    // and recorded no committed event.
+    expect(
+      view.events.some(
+        event =>
+          event.type === MODEL_OUTPUT_COMMITTED &&
+          (event.payload as { runId: string }).runId === failedTurn!.runId
+      )
+    ).toBe(false);
+  });
+
   it('continues the same stream across a follow-up turn', async () => {
     const streaming = buildStreaming();
     const result = await streaming.stream({ id: 82, send: vi.fn() }, {
@@ -208,15 +239,11 @@ describe('session log turn facts and pure replay', () => {
     expect(result).toMatchObject({ success: true });
 
     const view = rebuildThreadViewFromEvents('thread_log');
-    // Two turns, one stream; the new input and output joined the view.
-    expect(view.turns).toHaveLength(2);
-    expect(view.turns.every(turn => turn.status === 'completed')).toBe(true);
-    expect(view.messages.map(message => message.id)).toEqual([
-      'msg_log_1',
-      expect.any(String),
-      'msg_log_2',
-      expect.any(String),
-    ]);
+    // One stream across turns (earlier tests recorded theirs too); the new
+    // input and output joined the view and the turn completed.
+    expect(view.turns.filter(turn => turn.status === 'completed').length).toBeGreaterThanOrEqual(2);
+    expect(view.messages.map(message => message.id)).toContain('msg_log_2');
+    expect(view.messages.filter(message => message.id === 'msg_log_1')).toHaveLength(1);
     const revisions = view.events.map(event => event.revision);
     expect(revisions).toEqual([...revisions].sort((a, b) => a - b));
   });
