@@ -12,7 +12,12 @@ import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
 import { getChatMessages, updateChatMessage } from '@iki/backend/db/chat_message';
 import { expirePendingToolCallApprovalsByRunIds, getToolCallApprovalSession } from '@iki/backend/db/tool_call_approval';
 import type { ToolCallApproval } from '@iki/backend/types/tool_call_approval';
-import { APPROVAL_DECIDED, recordSessionEvents, SESSION_EVENT_VERSION } from './session_log';
+import {
+  APPROVAL_DECIDED,
+  recordSessionEvents,
+  SESSION_EVENT_VERSION,
+  turnFactsToEvents,
+} from './session_log';
 import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
 import {
   interruptedToolPartErrorText,
@@ -691,6 +696,19 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
       failedRuns += 1;
     } else {
       blockedRuns += 1;
+    }
+    // Session log: the reclamation is the turn's terminal fact — replay must
+    // show it failed, not running forever. Only recorded once this process
+    // actually took the run (owner-aware: a live lease in another process
+    // means their run, their log, untouched).
+    if (run.threadId) {
+      recordSessionEvents(run.threadId, turnFactsToEvents({
+        terminal: {
+          runId: run.id,
+          status: 'failed',
+          errorText: params.message,
+        },
+      }));
     }
   }
 
