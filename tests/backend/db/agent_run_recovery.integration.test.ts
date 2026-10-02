@@ -32,7 +32,7 @@ const {
   upsertToolCallApprovals,
 } = await import('@iki/backend/db/tool_call_approval');
 const { addChatMessage, getChatMessages } = await import('@iki/backend/db/chat_message');
-const { toModelInputMessages } = await import('@iki/backend/thread_session/ui_messages');
+const { toModelInputMessages } = await import('@iki/backend/message/ui_messages');
 const {
   APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT,
   TOOL_INTERRUPTED_ERROR_TEXT,

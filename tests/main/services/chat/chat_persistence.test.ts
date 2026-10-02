@@ -72,7 +72,7 @@ vi.mock('@iki/backend/workspaces/thread_workspace', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
 
-vi.mock('@iki/backend/thread_session/ui_messages', () => ({
+vi.mock('@iki/backend/message/ui_messages', () => ({
   sanitizeUiMessageJsonForStorage: vi.fn((value: string) => value),
 }));
 

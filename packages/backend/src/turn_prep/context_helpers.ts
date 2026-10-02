@@ -9,7 +9,7 @@ import {
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import type { ChatInputMessage } from '../thread_session/types';
+import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import type {
   AssembleChatContextResult,
   ContextBlockKind,

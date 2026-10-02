@@ -23,11 +23,11 @@ import type { SkillSummary } from '@iki/backend/types/skill';
 import { ensureModelCapability } from '@iki/backend/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './context';
 import type { ChatMemory } from '../thread_session/memory';
-import type { ChatInputMessage, ChatTransportMessage } from '../thread_session/types';
+import type { ChatInputMessage, ChatTransportMessage } from '@iki/backend/message/chat_message_types';
 import { persistThreadRuntimeHints } from './thread_hints';
 import { resolveToolNames } from './tool_guard';
-import { getPromptFromMessage, toModelInputMessages } from '../thread_session/ui_messages';
-import { TODO_PLANNING_TOOL_NAME } from '../thread_session/todo_planning';
+import { getPromptFromMessage, toModelInputMessages } from '@iki/backend/message/ui_messages';
+import { TODO_PLANNING_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 
 /**
  * Rehydration paths pass an explicit requireApproval to reproduce the approval

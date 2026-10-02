@@ -7,7 +7,7 @@ import { normalizeWhitespace } from '@iki/backend/utils/text';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import { resolveSkillsSystemPrompt } from '../thread_session/skills';
 import { getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../thread_session/platform';
-import { getPromptFromMessage } from '../thread_session/ui_messages';
+import { getPromptFromMessage } from '@iki/backend/message/ui_messages';
 import type { ContinuityMemoryPreview } from '@iki/backend/chat_platform';
 import type { ChatMemory } from '../thread_session/memory';
 import type {
@@ -23,7 +23,7 @@ import {
   clipTextToTokenBudget,
   estimateTextTokens,
 } from './context_helpers';
-import type { ChatInputMessage } from '../thread_session/types';
+import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 
 const AGENT_INSTRUCTIONS_FILENAMES = ['AGENTS.md', 'IKI.md'];
 

@@ -35,7 +35,7 @@ import {
 } from './run_tracker';
 import type { ActiveStreamState, ChatStreamTarget } from './types';
 import { createUiChunkEmitter } from './ui_stream';
-import { toModelInputMessages } from './ui_messages';
+import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;

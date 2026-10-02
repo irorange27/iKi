@@ -21,7 +21,7 @@ import type { AudioEmotionResult } from '@iki/backend/types/speech';
 import { parseJsonStringArray } from '@iki/backend/utils/json';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatInputMessage } from './types';
-import { getPromptFromMessage } from './ui_messages';
+import { getPromptFromMessage } from '@iki/backend/message/ui_messages';
 
 const chatMemoryLogger = createLogger({ module: 'chat_memory' });
 

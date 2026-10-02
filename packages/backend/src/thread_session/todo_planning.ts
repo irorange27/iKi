@@ -1,6 +1,6 @@
 import { generateText } from 'ai';
 
-const TODO_TOOL_NAME = 'todo';
+import { TODO_PLANNING_TOOL_NAME as TODO_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 const TODO_REMINDER_AFTER_STEPS = 3;
 const TODO_REMINDER_TEXT = '<reminder>Update your todos.</reminder>';
 

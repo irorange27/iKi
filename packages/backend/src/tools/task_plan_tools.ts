@@ -7,8 +7,11 @@ import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import { getToolRuntimeContext } from '../utils/runtime_context';
 import { TodoToolInputSchema, TodoToolOutputSchema } from './schemas';
 
+/** The turn-planning tool's name — shared by the tool, turn_prep's filter and the todo planner. */
+export const TODO_PLANNING_TOOL_NAME = 'todo';
+
 export class TodoTool extends BaseTool {
-  override name = 'todo';
+  override name = TODO_PLANNING_TOOL_NAME;
   override displayName = 'Todo';
   override type = 'function';
   override autoAllowed = true;
