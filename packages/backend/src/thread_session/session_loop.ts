@@ -350,7 +350,10 @@ export const createChatStreaming = (deps: {
           if (!progressPending || turnPersistFinalized) return;
           progressPending = false;
           void uiChunkEmitter.buildPersistedMessage().then(persisted => {
-            if (!persisted) return;
+            // The reduce started before the check above; the settle may have
+            // finalized while it ran. Re-check before enqueueing so a late
+            // progress write cannot follow the settle upsert.
+            if (!persisted || turnPersistFinalized) return;
             return persistAssistantTurnMessage(
               deps.conversation,
               options.threadId as string,

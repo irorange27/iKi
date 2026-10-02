@@ -194,14 +194,24 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
    * Recovery-only conditional finalize: the step and terminal run update are
    * written only while the run row is still in one of `expectedStatuses`.
    * Returns null (nothing written) when another writer finalized or reclaimed
-   * the run first.
+   * the run first. The transition guard checks `expectedStatuses` statically
+   * — not the in-memory `currentRun`, which a concurrent finalizer may have
+   * made stale between listing and this call; the DB claim is the real gate.
    */
   const appendStepIfStatus = (
     params: Parameters<typeof appendStep>[0],
     updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
     expectedStatuses: readonly AgentRunStatus[]
   ): AgentRunStep | null => {
-    if (updates.status) assertRunStatusTransition(currentRun, updates.status);
+    if (updates.status) {
+      for (const status of expectedStatuses) {
+        if (!ALLOWED_STATUS_TRANSITIONS[status].includes(updates.status)) {
+          throw new Error(
+            'Invalid agent run status transition: ' + status + ' -> ' + updates.status
+          );
+        }
+      }
+    }
     const startedAt = toIsoNow();
     const stepIndex = currentRun.working.lastStepIndex + 1;
     const step: AgentRunStep = {

@@ -67,7 +67,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const resumeRun = async (
     target: ChatStreamTarget,
     runId: string
-  ): Promise<{ success: boolean; error?: string }> => {    const run = agentRunDb.getAgentRun(runId);
+  ): Promise<{ success: boolean; error?: string }> => {
+    const run = agentRunDb.getAgentRun(runId);
     if (!run) return { success: false, error: 'Run not found' };
     if (run.status !== 'blocked' && run.status !== 'queued') {
       return { success: false, error: `Cannot resume a run with status ${run.status}` };
