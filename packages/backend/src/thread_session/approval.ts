@@ -15,6 +15,14 @@ import { reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
 import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
 import { parseExecutionPlan, serializeExecutionPlan } from './execution_plan_codec';
+import {
+  recordSessionEvents,
+  turnFactsToEvents,
+  APPROVAL_REQUESTED,
+  APPROVAL_DECIDED,
+  SESSION_EVENT_VERSION,
+  type ApprovalDecidedPayload,
+} from './session_log';
 import { createTurnDriver, finalizeRunForOutcome } from './outer_loop';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import {
@@ -129,7 +137,13 @@ export const createChatApproval = (deps: {
     const timeoutId = setTimeout(() => {
       if (session.collectedApprovalResponses.has(approvalId)) return;
       session.timeouts.delete(approvalId);
-      void approveTool(session.target, approvalId, false, 'Approval timed out after 30 minutes')
+      void approveTool(
+        session.target,
+        approvalId,
+        false,
+        'Approval timed out after 30 minutes',
+        'timeout'
+      )
         .then(result => {
           if (!result.success && pendingApprovalSessions.get(approvalId) === session) {
             scheduleApprovalTimeout(approvalId, session, 1000);
@@ -235,6 +249,25 @@ export const createChatApproval = (deps: {
           state: 'pending',
         }))
       );
+
+      // Session log: each pending approval is a business fact.
+      if (recoveryContext.plan.threadId) {
+        recordSessionEvents(
+          recoveryContext.plan.threadId,
+          approvalRequests.map(request => ({
+            type: APPROVAL_REQUESTED,
+            version: SESSION_EVENT_VERSION,
+            payload: {
+              approvalId: request.approvalId,
+              sessionId: recoveryContext.sessionId,
+              ...(recoveryContext.runId ? { runId: recoveryContext.runId } : {}),
+              ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
+              ...(request.toolCall?.toolName ? { toolName: request.toolCall.toolName } : {}),
+              ...(request.toolCall?.args ? { args: request.toolCall.args } : {}),
+            },
+          }))
+        );
+      }
     }
 
     let existingSession: PendingApprovalSession | undefined;
@@ -456,7 +489,8 @@ export const createChatApproval = (deps: {
     approvalId: string,
     approved: boolean,
     reason?: string,
-    executionAbort?: { current: (() => void) | null; lost: boolean }
+    executionAbort?: { current: (() => void) | null; lost: boolean },
+    source: ApprovalDecidedPayload['source'] = 'user'
   ) => {
     const storedApproval = toolCallApprovalDb.getToolCallApproval(approvalId);
     let session = pendingApprovalSessions.get(approvalId);
@@ -514,6 +548,30 @@ export const createChatApproval = (deps: {
     const decision: ToolCallApprovalDecision = approved ? 'approved' : 'rejected';
     toolCallApprovalDb.answerToolCallApproval(approvalId, decision, approvalResponse.reason);
     recordApprovalResponse();
+
+    // Session log: the decision is a business fact, whoever made it.
+    const decidedThreadId =
+      session.recoveryContext?.plan.threadId ??
+      (() => {
+        const stored = toolCallApprovalDb.getToolCallApprovalSession(
+          toolCallApprovalDb.getToolCallApproval(approvalId)?.session_id ?? ''
+        );
+        return stored?.thread_id ?? null;
+      })();
+    if (decidedThreadId) {
+      recordSessionEvents(decidedThreadId, [
+        {
+          type: APPROVAL_DECIDED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            approvalId,
+            approved,
+            ...(approvalResponse.reason ? { reason: approvalResponse.reason } : {}),
+            source,
+          },
+        },
+      ]);
+    }
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
       id => !session.collectedApprovalResponses.has(id)
@@ -615,6 +673,12 @@ export const createChatApproval = (deps: {
         }
       : undefined;
     streamState.runId = resumeRunTracker?.id;
+    if (resumePlan?.threadId) {
+      // Session log: the continuation is its own run under the paused plan.
+      recordSessionEvents(resumePlan.threadId, turnFactsToEvents({
+        started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
+      }));
+    }
     deps.streams.attach(resumedSenderId, streamState);
     let isAwaitingApproval = false;
     // Set once the driver exists; the catch path must consult the driver's
@@ -747,6 +811,32 @@ export const createChatApproval = (deps: {
             'approval-resume'
           );
         }
+        // Session log: the continuation's committed output; a re-pause is not
+        // terminal (its next continuation records its own facts).
+        const resumedStatus = driver.getRunTracker().getRun().status;
+        recordSessionEvents(
+          baseApprovalContext.plan.threadId,
+          turnFactsToEvents({
+            ...(persisted
+              ? {
+                  committed: {
+                    runId: resumeRunTracker.id,
+                    messageId: persisted.id,
+                    message: persisted as never,
+                    transport: 'approval-resume',
+                  },
+                }
+              : {}),
+            ...(resumedStatus === 'completed' || resumedStatus === 'failed' || resumedStatus === 'cancelled'
+              ? {
+                  terminal: {
+                    runId: resumeRunTracker.id,
+                    status: resumedStatus,
+                  },
+                }
+              : {}),
+          })
+        );
       }
       return {
         success: true,
@@ -771,6 +861,12 @@ export const createChatApproval = (deps: {
       if (failingTracker && failingTracker.getRun().status === 'running') {
         failingTracker.markFailed({ message });
       }
+      const failedThreadId = failingTracker?.getRun().threadId;
+      if (failedThreadId) {
+        recordSessionEvents(failedThreadId, turnFactsToEvents({
+          terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
+        }));
+      }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
     } finally {
@@ -785,7 +881,8 @@ export const createChatApproval = (deps: {
     target: ChatStreamTarget,
     approvalId: string,
     approved: boolean,
-    reason?: string
+    reason?: string,
+    source: ApprovalDecidedPayload['source'] = 'user'
   ) => {
     const pending = pendingApprovalSessions.get(approvalId);
     const record = toolCallApprovalDb.getToolCallApproval(approvalId);
@@ -808,7 +905,7 @@ export const createChatApproval = (deps: {
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
     try {
-      return await resumeApproval(target, approvalId, approved, reason, executionAbort);
+      return await resumeApproval(target, approvalId, approved, reason, executionAbort, source);
     } finally {
       release();
     }

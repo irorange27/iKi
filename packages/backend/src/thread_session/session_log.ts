@@ -27,6 +27,8 @@ export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
 export const TURN_COMPLETED = 'turn_completed';
 export const TURN_FAILED = 'turn_failed';
 export const TURN_CANCELLED = 'turn_cancelled';
+export const APPROVAL_REQUESTED = 'approval_requested';
+export const APPROVAL_DECIDED = 'approval_decided';
 
 /** Payload schema version — bump when a payload's shape changes. */
 export const SESSION_EVENT_VERSION = 1;
@@ -58,15 +60,31 @@ export type TurnTerminalPayload = {
   errorText?: string;
 };
 
+export type ApprovalRequestedPayload = {
+  approvalId: string;
+  sessionId: string;
+  runId?: string;
+  toolCallId?: string | null;
+  toolName?: string | null;
+  args?: Record<string, unknown> | null;
+};
+
+export type ApprovalDecidedPayload = {
+  approvalId: string;
+  approved: boolean;
+  reason?: string;
+  source: 'user' | 'timeout' | 'system';
+};
+
 /**
- * Append turn facts to a thread's stream. Migration-period behavior: a
+ * Append facts to a thread's stream. Migration-period behavior: a
  * failing append degrades to a warning and never fails the turn — the legacy
  * tables are still the serving authority until the log takes over. The
  * helper re-reads the stream head at write time (turn recording is a single
  * writer per turn in practice; a lost race only costs these appended facts,
  * which the warn surfaces).
  */
-export const recordTurnEvents = (
+export const recordSessionEvents = (
   threadId: string,
   events: NewSessionEvent[]
 ): void => {
@@ -135,11 +153,24 @@ export type RebuiltTurn = {
   errorText?: string;
 };
 
+export type RebuiltApproval = {
+  approvalId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  sessionId?: string;
+  runId?: string;
+  toolName?: string;
+  toolCallId?: string;
+  args?: Record<string, unknown>;
+  decisionReason?: string;
+  decisionSource?: ApprovalDecidedPayload['source'];
+};
+
 export type RebuiltThreadView = {
   messageId: string;
   events: StoredSessionEvent[];
   messages: ChatUiMessage[];
   turns: RebuiltTurn[];
+  approvals: RebuiltApproval[];
 };
 
 /** Structural guard for message payloads — replay and recording share it. */
@@ -162,6 +193,7 @@ export const rebuildThreadViewFromEvents = (threadId: string): RebuiltThreadView
   const events = getSessionEvents(threadId);
   const messages: ChatUiMessage[] = [];
   const turns = new Map<string, RebuiltTurn>();
+  const approvals = new Map<string, RebuiltApproval>();
 
   for (const event of events) {
     const payload = event.payload as Record<string, unknown>;
@@ -173,6 +205,36 @@ export const rebuildThreadViewFromEvents = (threadId: string): RebuiltThreadView
         const existing = messages.findIndex(item => item.id === message.id);
         if (existing >= 0) messages[existing] = message;
         else messages.push(message);
+        break;
+      }
+      case APPROVAL_REQUESTED: {
+        const approvalId = typeof payload.approvalId === 'string' ? payload.approvalId : '';
+        if (!approvalId) break;
+        approvals.set(approvalId, {
+          approvalId,
+          status: 'pending',
+          ...(typeof payload.sessionId === 'string' ? { sessionId: payload.sessionId } : {}),
+          ...(typeof payload.runId === 'string' ? { runId: payload.runId } : {}),
+          ...(typeof payload.toolName === 'string' ? { toolName: payload.toolName } : {}),
+          ...(typeof payload.toolCallId === 'string' ? { toolCallId: payload.toolCallId } : {}),
+          ...(payload.args && typeof payload.args === 'object'
+            ? { args: payload.args as Record<string, unknown> }
+            : {}),
+        });
+        break;
+      }
+      case APPROVAL_DECIDED: {
+        const approvalId = typeof payload.approvalId === 'string' ? payload.approvalId : '';
+        if (!approvalId) break;
+        const approval = approvals.get(approvalId) ?? { approvalId, status: 'pending' as const };
+        approvals.set(approvalId, {
+          ...approval,
+          status: payload.approved === true ? 'approved' : 'rejected',
+          ...(typeof payload.reason === 'string' ? { decisionReason: payload.reason } : {}),
+          ...(typeof payload.source === 'string'
+            ? { decisionSource: payload.source as ApprovalDecidedPayload['source'] }
+            : {}),
+        });
         break;
       }
       case TURN_STARTED: {
@@ -216,5 +278,6 @@ export const rebuildThreadViewFromEvents = (threadId: string): RebuiltThreadView
     events,
     messages,
     turns: [...turns.values()],
+    approvals: [...approvals.values()],
   };
 };

@@ -31,7 +31,7 @@ import {
 } from './turn_persistence';
 import {
   asChatUiMessage,
-  recordTurnEvents,
+  recordSessionEvents,
   turnFactsToEvents,
 } from './session_log';
 import type { UiChunkEmitter } from './types';
@@ -295,7 +295,7 @@ export const createChatStreaming = (deps: {
         userTurnInput && asChatUiMessage(userTurnInput.message)
           ? { messageId: userTurnInput.messageId, message: asChatUiMessage(userTurnInput.message)! }
           : undefined;
-      recordTurnEvents(options.threadId ?? '', turnFactsToEvents({
+      recordSessionEvents(options.threadId ?? '', turnFactsToEvents({
         ...(acceptedInput ? { input: acceptedInput } : {}),
         started: { runId: runTracker.id, kind: plan.kind, plan },
       }));
@@ -440,7 +440,7 @@ export const createChatStreaming = (deps: {
         // pause is not terminal — its continuation's facts land in a later
         // slice (send/approval-resume entries are not wired yet).
         const runStatus = finalRunTracker.getRun().status;
-        recordTurnEvents(options.threadId, turnFactsToEvents({
+        recordSessionEvents(options.threadId, turnFactsToEvents({
           committed: {
             runId: finalRunTracker.id,
             messageId: settledMessage.id,
@@ -492,7 +492,7 @@ export const createChatStreaming = (deps: {
           // stays blocked (the approval remains resumable) — intentional
           // until the resume slice unifies the two.
           if (cancelledTracker) {
-            recordTurnEvents(options.threadId, turnFactsToEvents({
+            recordSessionEvents(options.threadId, turnFactsToEvents({
               committed: {
                 runId: cancelledTracker.id,
                 messageId: abortedMessage.id,
@@ -542,7 +542,7 @@ export const createChatStreaming = (deps: {
       // regardless of which segment reached it.
       const failedTracker = activeRunTracker ?? sessionLogTracker;
       if (options.threadId && failedTracker) {
-        recordTurnEvents(options.threadId, turnFactsToEvents({
+        recordSessionEvents(options.threadId, turnFactsToEvents({
           terminal: {
             runId: failedTracker.id,
             status: 'failed',
