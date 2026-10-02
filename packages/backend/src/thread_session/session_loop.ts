@@ -115,6 +115,12 @@ export const createChatStreaming = (deps: {
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
 
+    // Turn-start workspace binding (D30), resolved at admission — before any
+    // await (preparation, memory retrieval) can observe a mid-turn switch.
+    // The plan, the executing harness world and the approval recovery context
+    // all share this one snapshot.
+    const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
+
     const uiChunkEmitter = createUiChunkEmitter(target);
 
     if (options.threadId) {
@@ -234,14 +240,14 @@ export const createChatStreaming = (deps: {
         }
       }
 
-      // Turn-start workspace binding (D30). The plan is the single definition
-      // of this execution: harness config, run-row identity/metadata and the
+      // Turn-start workspace binding (D30): the plan is the single definition
+      // of this execution — harness config, run-row identity/metadata and the
       // approval recovery context below are all derived from it.
       const plan = assembleExecutionPlan({
         options,
         preparedTurn,
         transport: 'stream',
-        workspaceSelection: resolveThreadWorkspaceSelectionSnapshot(options.threadId),
+        workspaceSelection: turnStartWorkspace,
       });
 
       const runTracker = createAgentRunTracker(

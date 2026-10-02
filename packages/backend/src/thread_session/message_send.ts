@@ -94,6 +94,10 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       onExecutionAbort: () => executionAbort.abort('thread-lease-lost'),
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
+
+    // Turn-start workspace binding (D30), resolved at admission like the
+    // streaming path — before preparation awaits can observe a switch.
+    const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
 
     try {
@@ -114,13 +118,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       executionAbort.signal.throwIfAborted();
 
       // The plan is the single definition of this execution (same assembly
-      // the streaming path uses); the workspace binding is resolved at the
-      // same post-prepare point the tool path used before.
+      // the streaming path uses).
       const plan = assembleExecutionPlan({
         options,
         preparedTurn,
         transport: 'send',
-        workspaceSelection: resolveThreadWorkspaceSelectionSnapshot(options.threadId),
+        workspaceSelection: turnStartWorkspace,
       });
 
       const activeRunTracker = createAgentRunTracker(
