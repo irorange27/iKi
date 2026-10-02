@@ -15,12 +15,17 @@ import {
   planToHarnessConfig,
   planToRunTrackerParams,
 } from './execution_plan';
+import { asChatUiMessage, recordSessionEvents, turnFactsToEvents } from './session_log';
 import { createTurnDriver, finalizeRunForOutcome } from './outer_loop';
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
 import { writeThreadTodoPlan } from '../db/thread_todos';
-import { persistAssistantTurnMessage, persistUserTurnMessage } from './turn_persistence';
+import {
+  persistAssistantTurnMessage,
+  persistUserTurnMessage,
+  pickUserTurnMessage,
+} from './turn_persistence';
 import { createUiChunkEmitter } from './ui_stream';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
 import type { ActiveStreamState, ChatStreamTarget } from './types';
@@ -157,6 +162,19 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       );
       runTracker = activeRunTracker;
 
+      // Session log: same facts as streaming, from the waiter transport.
+      const sendUserInput = pickUserTurnMessage(options);
+      const sendAcceptedInput =
+        sendUserInput && asChatUiMessage(sendUserInput.message)
+          ? { messageId: sendUserInput.messageId, message: asChatUiMessage(sendUserInput.message)! }
+          : undefined;
+      if (options.threadId) {
+        recordSessionEvents(options.threadId, turnFactsToEvents({
+          ...(sendAcceptedInput ? { input: sendAcceptedInput } : {}),
+          started: { runId: activeRunTracker.id, kind: plan.kind, plan },
+        }));
+      }
+
       if (preparedTurn.enableTools) {
         if (!preparedTurn.prompt.trim()) {
           throw new Error('No user prompt provided for tool-enabled chat');
@@ -231,6 +249,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           if (finalTracker.getRun().status === 'running') {
             finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
           }
+          if (options.threadId) {
+            // Session log: a lease loss ends the turn even here.
+            recordSessionEvents(options.threadId, turnFactsToEvents({
+              terminal: { runId: finalTracker.id, status: 'failed', errorText: message },
+            }));
+          }
           return {
             success: false,
             error: message,
@@ -284,6 +308,16 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               persisted,
               'send',
             );
+            // Session log: the pause's partial output; its continuation
+            // (through approveTool) records its own facts.
+            recordSessionEvents(options.threadId, turnFactsToEvents({
+              committed: {
+                runId: finalTracker.id,
+                messageId: persisted.id,
+                message: persisted as never,
+                transport: 'send',
+              },
+            }));
           }
           return {
             success: false,
@@ -299,16 +333,33 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           // converges on one row and the message joins back to its run.
           // Retries are separate runs and legitimately separate rows.
           const persisted = await uiChunkEmitter.buildPersistedMessage();
+          const settledMessage = persisted ?? {
+            id: assistantMessageId,
+            role: 'assistant' as const,
+            parts: [{ type: 'text', text: finalResponse, state: 'done' }],
+          };
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,
-            persisted ?? {
-              id: assistantMessageId,
-              role: 'assistant',
-              parts: [{ type: 'text', text: finalResponse, state: 'done' }],
-            },
+            settledMessage,
             'send',
           );
+          // Session log: committed output + terminal completion.
+          recordSessionEvents(options.threadId, turnFactsToEvents({
+            committed: {
+              runId: finalTracker.id,
+              messageId: settledMessage.id,
+              message: settledMessage as never,
+              transport: 'send',
+            },
+            terminal: {
+              runId: finalTracker.id,
+              status: finalTracker.getRun().status,
+              ...(result.outcome === 'budget-exhausted' || result.outcome === 'handoff'
+                ? { finishReason: result.outcome }
+                : {}),
+            },
+          }));
         }
         return {
           success: true,
@@ -348,16 +399,30 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       });
       if (options.threadId && llmResult.text.trim()) {
         // Deterministic per-run id (see the tool path above).
+        const settledMessage = {
+          id: `assistant_${activeRunTracker.id}`,
+          role: 'assistant' as const,
+          parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
+        };
         await persistAssistantTurnMessage(
           deps.conversation,
           options.threadId,
-          {
-            id: `assistant_${activeRunTracker.id}`,
-            role: 'assistant',
-            parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
-          },
+          settledMessage,
           'send',
         );
+        recordSessionEvents(options.threadId, turnFactsToEvents({
+          committed: {
+            runId: activeRunTracker.id,
+            messageId: settledMessage.id,
+            message: settledMessage as never,
+            transport: 'send',
+          },
+          terminal: { runId: activeRunTracker.id, status: 'completed' },
+        }));
+      } else if (options.threadId) {
+        recordSessionEvents(options.threadId, turnFactsToEvents({
+          terminal: { runId: activeRunTracker.id, status: 'completed' },
+        }));
       }
       return {
         success: true,
@@ -373,6 +438,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         if (runTracker && runTracker.getRun().status === 'running') {
           runTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
         }
+        if (options.threadId && runTracker) {
+          // Session log: both lease-loss shapes end the turn.
+          recordSessionEvents(options.threadId, turnFactsToEvents({
+            terminal: { runId: runTracker.id, status: 'failed', errorText: message },
+          }));
+        }
         return {
           success: false,
           error: message,
@@ -383,6 +454,11 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       const failingTracker = driverHandle?.getRunTracker() ?? runTracker;
       if (failingTracker && failingTracker.getRun().status === 'running') {
         failingTracker.markFailed({ message });
+      }
+      if (options.threadId && failingTracker) {
+        recordSessionEvents(options.threadId, turnFactsToEvents({
+          terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
+        }));
       }
       return {
         success: false,
