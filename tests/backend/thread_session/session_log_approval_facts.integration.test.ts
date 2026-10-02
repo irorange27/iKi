@@ -77,20 +77,6 @@ describe('session log approval facts across entries', () => {
       usage: { recordUsageEvent: vi.fn() },
     });
 
-  const buildStreaming = () =>
-    createChatStreaming({
-      streamCoordinator: coordinator,
-      memory: memory as never,
-      conversation: conversation as never,
-      usage: { recordUsageEvent: vi.fn() },
-      approvals: {
-        ensurePendingApprovalSession: buildApprovals().ensurePendingApprovalSession,
-        registerApprovalBatch: buildApprovals().registerApprovalBatch,
-        cleanupPendingSessionsForSender: buildApprovals().cleanupPendingSessionsForSender,
-      },
-      getThreadTitle: () => 'Facts',
-    });
-
   beforeAll(async () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-session-facts-'));
     initializeDatabase({ dbPath: path.join(dataDir, 'facts.db') });

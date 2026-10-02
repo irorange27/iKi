@@ -812,15 +812,18 @@ export const createChatApproval = (deps: {
           );
         }
         // Session log: the continuation's committed output; a re-pause is not
-        // terminal (its next continuation records its own facts).
-        const resumedStatus = driver.getRunTracker().getRun().status;
+        // terminal (its next continuation records its own facts). The final
+        // tracker's identity pairs with the final status — a handoff chain
+        // finishes in the child segment.
+        const finalResumeTracker = driver.getRunTracker();
+        const resumedStatus = finalResumeTracker.getRun().status;
         recordSessionEvents(
           baseApprovalContext.plan.threadId,
           turnFactsToEvents({
             ...(persisted
               ? {
                   committed: {
-                    runId: resumeRunTracker.id,
+                    runId: finalResumeTracker.id,
                     messageId: persisted.id,
                     message: persisted as never,
                     transport: 'approval-resume',
@@ -830,7 +833,7 @@ export const createChatApproval = (deps: {
             ...(resumedStatus === 'completed' || resumedStatus === 'failed' || resumedStatus === 'cancelled'
               ? {
                   terminal: {
-                    runId: resumeRunTracker.id,
+                    runId: finalResumeTracker.id,
                     status: resumedStatus,
                   },
                 }
@@ -932,7 +935,34 @@ export const createChatApproval = (deps: {
         pendingApprovalSessions.delete(approvalId);
       }
     }
-    return toolCallApprovalDb.expirePendingToolCallApprovalsByRunIds([normalizedRunId]).length;
+    const expired = toolCallApprovalDb.expirePendingToolCallApprovalsByRunIds([normalizedRunId]);
+    // Session log: the run's cancellation is a system decision on each of its
+    // pending approvals — replay must not keep them pending forever.
+    const expiredThreadId = expired
+      .map(record => record.session_id)
+      .filter((sessionId): sessionId is string => Boolean(sessionId))
+      .map(sessionId => toolCallApprovalDb.getToolCallApprovalSession(sessionId)?.thread_id)
+      .find(threadId => Boolean(threadId));
+    const threadId =
+      (typeof expiredThreadId === 'string' ? expiredThreadId : undefined) ??
+      [...sessions.values()].find(session => session.recoveryContext?.runId === normalizedRunId)
+        ?.recoveryContext?.plan.threadId;
+    if (threadId && expired.length > 0) {
+      recordSessionEvents(
+        threadId,
+        expired.map(record => ({
+          type: APPROVAL_DECIDED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            approvalId: record.approval_id,
+            approved: false,
+            reason: 'Run cancelled; pending approval expired.',
+            source: 'system' as const,
+          },
+        }))
+      );
+    }
+    return expired.length;
   };
 
   return {

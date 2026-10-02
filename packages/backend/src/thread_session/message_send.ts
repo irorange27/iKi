@@ -249,6 +249,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           if (finalTracker.getRun().status === 'running') {
             finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
           }
+          if (options.threadId) {
+            // Session log: a lease loss ends the turn even here.
+            recordSessionEvents(options.threadId, turnFactsToEvents({
+              terminal: { runId: finalTracker.id, status: 'failed', errorText: message },
+            }));
+          }
           return {
             success: false,
             error: message,
@@ -348,7 +354,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             },
             terminal: {
               runId: finalTracker.id,
-              status: finalTracker.getRun().status === 'completed' ? 'completed' : finalTracker.getRun().status,
+              status: finalTracker.getRun().status,
               ...(result.outcome === 'budget-exhausted' || result.outcome === 'handoff'
                 ? { finishReason: result.outcome }
                 : {}),

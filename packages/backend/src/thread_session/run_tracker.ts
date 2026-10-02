@@ -10,7 +10,9 @@ import {
 import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
 import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
 import { getChatMessages, updateChatMessage } from '@iki/backend/db/chat_message';
-import { expirePendingToolCallApprovalsByRunIds } from '@iki/backend/db/tool_call_approval';
+import { expirePendingToolCallApprovalsByRunIds, getToolCallApprovalSession } from '@iki/backend/db/tool_call_approval';
+import type { ToolCallApproval } from '@iki/backend/types/tool_call_approval';
+import { recordSessionEvents } from './session_log';
 import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
 import {
   interruptedToolPartErrorText,
@@ -604,8 +606,32 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   });
 
   const runIds = reclaimable.map(run => run.id);
-  const expiredApprovals =
-    runIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(runIds).length : 0;
+  const expiredApprovalRecords =
+    runIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(runIds) : [];
+  const expiredApprovals = expiredApprovalRecords.length;
+  // Session log: the reclamation is a system decision on each expired
+  // approval — replay must not keep them pending forever. The run rows above
+  // already recorded their own terminal facts. Each record's own session row
+  // decides which thread's stream carries it.
+  for (const record of expiredApprovalRecords as ToolCallApproval[]) {
+    const sessionId = record.session_id;
+    const threadId = sessionId
+      ? getToolCallApprovalSession(sessionId)?.thread_id
+      : null;
+    if (!threadId) continue;
+    recordSessionEvents(threadId, [
+      {
+        type: 'approval_decided',
+        version: 1,
+        payload: {
+          approvalId: record.approval_id,
+          approved: false,
+          reason: 'Run reclaimed by startup recovery; pending approval expired.',
+          source: 'system',
+        },
+      },
+    ]);
+  }
   const threadIds = Array.from(
     new Set(reclaimable.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
   );

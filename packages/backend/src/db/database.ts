@@ -130,7 +130,13 @@ const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
   transaction:
     <TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult) =>
     (...args: TArgs): TResult => {
-      raw.exec('BEGIN');
+      // IMMEDIATE, not deferred: a deferred transaction that reads first and
+      // writes later tries to upgrade its lock mid-transaction, and SQLite
+      // refuses that upgrade instantly WITHOUT invoking busy_timeout (its
+      // deadlock guard) — cross-process contention would fail every write.
+      // Taking the write lock up front is what makes busy_timeout queue
+      // writers instead (verified: BEGIN IMMEDIATE waited out a held lock).
+      raw.exec('BEGIN IMMEDIATE');
       try {
         const result = fn(...args);
         raw.exec('COMMIT');
@@ -152,7 +158,13 @@ export const initializeDatabase = (options?: { dbPath?: string }) => {
 
   initializing = true;
   const dbPath = resolveDbPath();
-  db = wrapDatabase(new DatabaseSync(dbPath));
+  const raw = new DatabaseSync(dbPath);
+  // Writers wait for a held lock instead of failing immediately: desktop and
+  // daemon share this database across processes, and short appends (session
+  // log facts) must queue behind another process's transaction rather than
+  // erroring. Session-log writes exposed the missing timeout (issue #48).
+  raw.exec('PRAGMA busy_timeout = 5000');
+  db = wrapDatabase(raw);
   initCoreTables(db);
   initialized = true;
   initializeMigrations();
