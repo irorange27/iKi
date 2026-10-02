@@ -96,6 +96,9 @@ export type TurnDriverSetup = Pick<
 export type TurnDriverHandle = {
   run: () => Promise<OuterLoopStreamResult | undefined>;
   getRunTracker: () => AgentRunTracker;
+  /** The harness the final batch ran on (differs from the setup's after a
+   *  handoff chain) — the entry's history sync must read this one. */
+  getHarness: () => AgentHarness;
   getAccumulatedResponse: () => string;
   getOuterBatchCount: () => number;
   hasToolCalls: () => boolean;
@@ -586,6 +589,7 @@ export const createTurnDriver = (
   return {
     run: () => runOuterLoop(state, deps),
     getRunTracker: () => state.runTracker,
+    getHarness: () => state.harness,
     getAccumulatedResponse: () => state.accumulatedResponse,
     getOuterBatchCount: () => state.outerBatch,
     hasToolCalls: () => state.turnHadToolCalls,

@@ -65,7 +65,12 @@ const parseStoredPlan = (stored: string | null | undefined): ExecutionPlan | nul
     if (
       typeof candidate.providerType !== 'string' ||
       typeof candidate.model !== 'string' ||
+      typeof candidate.systemPrompt !== 'string' ||
+      typeof candidate.enableTools !== 'boolean' ||
+      typeof candidate.requireApproval !== 'boolean' ||
+      typeof candidate.autoApproveToolRequests !== 'boolean' ||
       !Array.isArray(candidate.enabledTools) ||
+      !Array.isArray(candidate.availableSkillIds) ||
       typeof candidate.maxIterations !== 'number'
     ) {
       return null;
@@ -725,7 +730,10 @@ export const createChatApproval = (deps: {
         uiChunkEmitter.finish();
       }
 
-      resumeRunTracker.syncModelMessages(resolvedHistory ?? session.history ?? []);
+      // The driver's CURRENT tracker/harness: a handoff chain finalizes the
+      // child segment, not the completed parent.
+      const finalTracker = driver.getRunTracker();
+      finalTracker.syncModelMessages(driver.getHarness().getHistory() ?? session.history ?? []);
       if (streamResult.outcome !== 'cancelled' && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.plan.threadId,
@@ -740,7 +748,7 @@ export const createChatApproval = (deps: {
           },
         });
       }
-      finalizeRunForOutcome(resumeRunTracker, streamResult, {
+      finalizeRunForOutcome(finalTracker, streamResult, {
         text: driver.getAccumulatedResponse() || streamResult.response,
       });
       if (baseApprovalContext?.plan.threadId) {

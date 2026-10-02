@@ -204,21 +204,26 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const result = await driver.run();
         if (!result) throw new Error('Unreachable: send driver produced no result');
 
+        // The driver's CURRENT tracker/harness, not the setup's: a handoff
+        // chain finalizes the child segment, not the completed parent.
+        const finalTracker = driver.getRunTracker();
+        const finalHarness = driver.getHarness();
+
         if (result.outcome === 'cancelled') {
           // The only cancel source on this transport is a lost thread lease
           // (send has no stream membership, so nothing else aborts it).
           const message = 'Thread run lease was lost; the send was interrupted.';
-          if (activeRunTracker.getRun().status === 'running') {
-            activeRunTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
+          if (finalTracker.getRun().status === 'running') {
+            finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
           }
           return {
             success: false,
             error: message,
-            ...(options.runConfig?.kind ? { runId: activeRunTracker.id } : {}),
+            ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
           };
         }
 
-        activeRunTracker.syncModelMessages(harness.getHistory());
+        finalTracker.syncModelMessages(finalHarness.getHistory());
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -232,7 +237,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         });
 
         const finalResponse = driver.getAccumulatedResponse() || result.response || '';
-        finalizeRunForOutcome(activeRunTracker, result, { text: finalResponse });
+        finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
 
         if (result.outcome === 'awaiting-approval') {
           // Durable decision handle: registered by the driver through
@@ -269,7 +274,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             success: false,
             error: approvalError,
             awaitingApproval: Boolean(deps.approvals),
-            ...(options.runConfig?.kind ? { runId: activeRunTracker.id } : {}),
+            ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
           };
         }
 

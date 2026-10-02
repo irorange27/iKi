@@ -66,7 +66,7 @@ import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
-import { createTool, defaultToolRegistry } from '@iki/backend/tools';
+import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools';
 
 const toolName = 'message_send_context_probe';
 
@@ -264,6 +264,65 @@ describe('createMessageSend integration', () => {
       .filter(updates => updates.status === 'completed')
       .at(-1);
     expect(completedUpdate?.output).toMatchObject({ finishReason: 'budget-exhausted' });
+  });
+
+  it('finalizes a send that calls handoff with the handoff outcome and composed text', async () => {
+    // Declared stage-B change: send rides the shared driver, so a model that
+    // invokes the handoff tool ends with the driver's handoff outcome —
+    // finishReason 'handoff' and the '[Handoff] …' block in the reply — the
+    // same terminal contract the streaming path already had (the old inline
+    // loop stamped 'completed' and dropped the handoff framing).
+    defaultToolRegistry.register(new HandoffTool());
+    createModelMock.mockReturnValue(new FauxModelProvider([
+      fauxToolCall('handoff', { summary: 'Found the leak', next_steps: 'Patch it', reason: 'context_limit' }),
+      fauxText('must not run'),
+    ]));
+
+    const send = createMessageSend({
+      tryAcquireThreadRun: () => () => undefined,
+      checkThreadRunRate: () => ({ allowed: true }),
+      usage: { recordUsageEvent: vi.fn() },
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
+      turnPreparer: {
+        prepareChatTurn: vi.fn(async () => ({
+          report: { totalEstimatedTokens: 1 },
+          usedSkills: [],
+          selectedSkillIds: [],
+          skillMode: 'manual' as const,
+          finalMessages: [{ role: 'user' as const, content: 'hand off the work' }],
+          history: [],
+          prompt: 'hand off the work',
+          guardActive: false,
+          requireApproval: false,
+          autoApproveToolRequests: false,
+          affectSignal: null,
+          interventionPolicy: null,
+          guardedTools: ['handoff'],
+          enableTools: true,
+        })),
+      } as never,
+    }).send;
+
+    const result = await send({
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'gpt-4o-mini',
+      threadId: 'thread_handoff',
+      messages: [{ id: 'msg_handoff', role: 'user', content: 'hand off the work' }],
+      tools: ['handoff'],
+    });
+    expect(result).toMatchObject({ success: true });
+    // Reply text carries the in-turn handoff framing (same as streaming's
+    // accumulated response), and the run row records the handoff outcome
+    // with the composed next-steps block — not a plain 'completed'.
+    expect(result.text).toContain('[Handoff #1] Found the leak');
+
+    const completedUpdate = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
+      .map(([, updates]) => updates)
+      .filter(updates => updates.status === 'completed')
+      .at(-1);
+    expect(completedUpdate?.output).toMatchObject({ finishReason: 'handoff' });
+    expect(String(completedUpdate?.output?.text)).toContain('Next steps: Patch it');
   });
 
   it('leaves no durable rows when the thread rate limit rejects the send', async () => {

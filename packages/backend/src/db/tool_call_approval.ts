@@ -114,7 +114,7 @@ export const upsertToolCallApprovalSession = (session: UpsertToolCallApprovalSes
           enabled_tools = excluded.enabled_tools,
           available_skill_ids = excluded.available_skill_ids,
           workspace_selection = excluded.workspace_selection,
-          plan_json = excluded.plan_json,
+          plan_json = COALESCE(excluded.plan_json, plan_json),
           updated_at = excluded.updated_at
       `
     )

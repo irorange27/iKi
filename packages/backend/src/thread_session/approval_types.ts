@@ -64,7 +64,11 @@ export const createApprovalRecoveryContext = (params: {
 };
 
 /** Re-identify a plan for a child run (approval resume / handoff) without
- *  touching its supply, tool selection, policy, budgets or world binding. */
+ *  touching its supply, tool selection, policy, budgets or world binding.
+ *  `adoptRunId` is deliberately NOT carried over: a re-identified child
+ *  always executes under its own identity — carrying the parent's adopted
+ *  queued-row id would make the resume re-claim a row that is no longer
+ *  claimable (it is `blocked`, not `queued`), stranding the decision. */
 export const reidentifyPlan = (
   plan: ExecutionPlan,
   identity: {
@@ -73,10 +77,14 @@ export const reidentifyPlan = (
     adoptRunId?: string;
     transport?: ExecutionPlan['transport'];
   }
-): ExecutionPlan => ({
-  ...plan,
-  kind: identity.kind,
-  ...(identity.parentRunId ? { parentRunId: identity.parentRunId } : {}),
-  ...(identity.adoptRunId ? { adoptRunId: identity.adoptRunId } : {}),
-  ...(identity.transport ? { transport: identity.transport } : {}),
-});
+): ExecutionPlan => {
+  const child: ExecutionPlan = {
+    ...plan,
+    kind: identity.kind,
+    ...(identity.parentRunId ? { parentRunId: identity.parentRunId } : {}),
+    ...(identity.transport ? { transport: identity.transport } : {}),
+  };
+  delete child.adoptRunId;
+  if (identity.adoptRunId) child.adoptRunId = identity.adoptRunId;
+  return child;
+};

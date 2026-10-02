@@ -20,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -189,5 +190,93 @@ describe('approval resume restores the persisted plan after a restart', () => {
       call => (call[0] as { reasoningEffort?: string })?.reasoningEffort === 'low'
     );
     expect(resumedSettings.length).toBeGreaterThan(0);
+  });
+
+  it('does not re-claim the parent’s adopted queued row when approving a paused retry', async () => {
+    // A queued-resume/retry turn executes inside its adopted run id
+    // (plan.adoptRunId). When that turn pauses on an approval, the approval
+    // resume must run under its own NEW identity: re-claiming the adopted
+    // row would fail the conditional claim (the row is `blocked`, not
+    // `queued`), throw after the decision was already consumed, and strand
+    // the run blocked forever.
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe adopted-turn resume',
+        paramSchema: z.object({}),
+        needsApproval: false,
+        handler: async () => 'observed',
+      })
+    );
+    const approvals = buildApprovals();
+    const harness = new AgentHarness({
+      providerType: 'openai',
+      model: 'test-model',
+      systemPrompt: 'system prompt',
+      enableTools: true,
+      enabledToolNames: [toolName],
+      availableSkillIds: [],
+      guardActive: false,
+      approvalPolicy: 'always',
+      maxIterations: 10,
+      modelFactory: () =>
+        new FauxModelProvider([fauxToolCall(toolName, {}, { id: 'call_paused_adopted' })]),
+    });
+    let approvalId = '';
+    await runWithToolRuntimeContext(
+      { threadId: 'thread_plan', runId: 'run_adopted_queue' },
+      async () => {
+        for await (const event of harness.turn({ prompt: 'run the probe' })) {
+          if (event.event === 'done') {
+            const requests = event.output.toolApprovalRequests;
+            if (!requests?.length) throw new Error('Probe did not receive an approval request');
+            approvalId = requests[0].approvalId;
+            conversation.createMessage({
+              id: 'assistant_adopted',
+              thread_id: 'thread_plan',
+              message: {
+                id: 'assistant_adopted',
+                role: 'assistant',
+                parts: [
+                  {
+                    type: 'dynamic-tool',
+                    toolCallId: 'call_paused_adopted',
+                    toolName,
+                    state: 'approval-requested',
+                    input: {},
+                    approval: { id: approvalId },
+                  },
+                ],
+              },
+            });
+            approvals.registerApprovalBatch(requests, {
+              target: { id: 93, send: vi.fn() },
+              history: harness.getHistory(),
+              recoveryContext: {
+                plan: { ...pausedPlan, adoptRunId: 'run_adopted_queue' },
+                sessionId: 'assistant_adopted',
+                assistantMessageId: 'assistant_adopted',
+                runId: 'run_adopted_queue',
+              },
+            });
+          }
+        }
+      }
+    );
+
+    createModelMock.mockReturnValue(
+      new FauxModelProvider([fauxText('resumed into own identity')])
+    );
+    expect(
+      await approvals.approveTool({ id: 94, send: vi.fn() }, approvalId, true)
+    ).toMatchObject({ success: true });
+
+    // The continuation owns a fresh run id — no claim of the adopted row.
+    const resumedRuns = listAgentRunsByThread('thread_plan').filter(
+      run => run.kind === 'approval-resume'
+    );
+    expect(resumedRuns).toHaveLength(1);
+    expect(resumedRuns[0]!.id).not.toBe('run_adopted_queue');
   });
 });
