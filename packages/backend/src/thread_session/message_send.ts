@@ -100,6 +100,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     // streaming path — before preparation awaits can observe a switch.
     const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
+    // Set once the driver exists; the catch paths must consult the driver's
+    // CURRENT tracker (a handoff chain swaps it mid-turn).
+    let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
 
     try {
       if (options.threadId) {
@@ -201,6 +204,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           }
         );
 
+        driverHandle = driver;
         const result = await driver.run();
         if (!result) throw new Error('Unreachable: send driver produced no result');
 
@@ -298,7 +302,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         return {
           success: true,
           text: finalResponse,
-          ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
+          // Same rule as the other branches: the identity that finished the
+          // turn (identical to the setup run unless a handoff chain ran).
+          ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
         };
       }
 
@@ -363,13 +369,14 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         };
       }
       const message = getStreamErrorMessage(error);
-      if (runTracker && runTracker.getRun().status === 'running') {
-        runTracker.markFailed({ message });
+      const failingTracker = driverHandle?.getRunTracker() ?? runTracker;
+      if (failingTracker && failingTracker.getRun().status === 'running') {
+        failingTracker.markFailed({ message });
       }
       return {
         success: false,
         error: message,
-        ...(options.runConfig?.kind && runTracker ? { runId: runTracker.id } : {}),
+        ...(options.runConfig?.kind && failingTracker ? { runId: failingTracker.id } : {}),
       };
     } finally {
       release();

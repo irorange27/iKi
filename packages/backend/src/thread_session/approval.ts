@@ -636,8 +636,10 @@ export const createChatApproval = (deps: {
       : undefined;
     streamState.runId = resumeRunTracker?.id;
     deps.streams.attach(resumedSenderId, streamState);
-    let resolvedHistory: ModelMessage[] | undefined = session.history;
     let isAwaitingApproval = false;
+    // Set once the driver exists; the catch path must consult the driver's
+    // CURRENT tracker (a handoff chain swaps it mid-turn).
+    let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
 
     try {
       const ctx = nextApprovalContext ?? session.recoveryContext;
@@ -721,7 +723,7 @@ export const createChatApproval = (deps: {
         throw new Error('Unreachable: approval resume produced no result');
       }
       const streamResult = driverResult;
-      resolvedHistory = approvalHarness.getHistory();
+      driverHandle = driver;
 
       isAwaitingApproval = streamResult.outcome === 'awaiting-approval';
       if (streamResult.outcome === 'cancelled') {
@@ -748,7 +750,7 @@ export const createChatApproval = (deps: {
           },
         });
       }
-      finalizeRunForOutcome(finalTracker, streamResult, {
+      finalizeRunForOutcome(driver.getRunTracker(), streamResult, {
         text: driver.getAccumulatedResponse() || streamResult.response,
       });
       if (baseApprovalContext?.plan.threadId) {
@@ -778,15 +780,16 @@ export const createChatApproval = (deps: {
       };
     } catch (error: unknown) {
       const message = getErrorMessage(error);
+      const failingTracker = driverHandle?.getRunTracker() ?? resumeRunTracker;
       if (streamState.cancelled) {
         uiChunkEmitter.abort();
-        if (resumeRunTracker && resumeRunTracker.getRun().status === 'running') {
-          resumeRunTracker.markCancelled();
+        if (failingTracker && failingTracker.getRun().status === 'running') {
+          failingTracker.markCancelled();
         }
         return { success: true, stopped: streamState.stoppedByUser };
       }
-      if (resumeRunTracker && resumeRunTracker.getRun().status === 'running') {
-        resumeRunTracker.markFailed({ message });
+      if (failingTracker && failingTracker.getRun().status === 'running') {
+        failingTracker.markFailed({ message });
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
