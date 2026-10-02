@@ -335,6 +335,9 @@ describe('createChatApproval', () => {
       // Turn-start workspace binding rides with the session row (D30); this
       // fixture records none, so the column stays null.
       workspace_selection: null,
+      // The full ExecutionPlan snapshot rides with the row so a
+      // restart-recovered resume restores every field exactly.
+      plan_json: expect.any(String),
     });
     expect(upsertToolCallApprovalsMock).toHaveBeenCalledWith([
       {

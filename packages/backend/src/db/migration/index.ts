@@ -8,6 +8,7 @@ import {
 import { migration as baseline } from './001_baseline';
 import { migration as renameChatToolApprovals } from './002_rename_chat_tool_approvals';
 import { migration as approvalSessionWorkspaceSelection } from './003_approval_session_workspace_selection';
+import { migration as approvalSessionPlan } from './004_approval_session_plan';
 
 // Forward-only migrations after the baseline. Add new ones above 001 in name
 // order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
@@ -17,6 +18,7 @@ export const registeredMigrations: Migration[] = [
   baseline,
   renameChatToolApprovals,
   approvalSessionWorkspaceSelection,
+  approvalSessionPlan,
 ];
 
 export const initializeMigrations = () => {

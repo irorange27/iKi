@@ -51,6 +51,31 @@ const parseStoredWorkspaceSelection = (
   }
 };
 
+/**
+ * Parse the persisted ExecutionPlan snapshot. Anything malformed or
+ * structurally not a plan falls back to the legacy per-column derivation —
+ * an unreadable snapshot must not fabricate an execution configuration.
+ */
+const parseStoredPlan = (stored: string | null | undefined): ExecutionPlan | null => {
+  if (typeof stored !== 'string' || !stored.trim()) return null;
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const candidate = parsed as Partial<ExecutionPlan>;
+    if (
+      typeof candidate.providerType !== 'string' ||
+      typeof candidate.model !== 'string' ||
+      !Array.isArray(candidate.enabledTools) ||
+      typeof candidate.maxIterations !== 'number'
+    ) {
+      return null;
+    }
+    return parsed as ExecutionPlan;
+  } catch {
+    return null;
+  }
+};
+
 type PendingApprovalSession = {
   sessionId?: string;
   target: ChatStreamTarget;
@@ -213,6 +238,9 @@ export const createChatApproval = (deps: {
           plan.workspaceSelection !== undefined
             ? JSON.stringify(plan.workspaceSelection)
             : null,
+        // The full plan snapshot: a restart-recovered resume restores every
+        // field from this instead of the lossy per-column derivation.
+        plan_json: JSON.stringify(plan),
       });
 
       toolCallApprovalDb.upsertToolCallApprovals(
@@ -345,6 +373,7 @@ export const createChatApproval = (deps: {
 
     if (!inputMessages || inputMessages.length === 0) return null;
 
+    const parsedPlan = parseStoredPlan(approvalSession.plan_json);
     const derivedPlan = deriveRunTurnPlan(runSnapshot, {
       providerType: approvalSession.provider_type,
       providerId: approvalSession.provider_id,
@@ -382,11 +411,10 @@ export const createChatApproval = (deps: {
       });
     }
 
-    // Legacy recovery: the plan is rebuilt from the run row layered over the
+    // Legacy rows: the plan is rebuilt from the run row layered over the
     // approval-session columns. Fields the columns never stored stay unset —
-    // the plan_json column (execution_plan persistence) replaces this
-    // derivation for rows written after it.
-    const plan: ExecutionPlan = {
+    // rows written after the plan_json column persist the exact plan.
+    const plan: ExecutionPlan = parsedPlan ?? {
       providerType: derivedPlan.providerType,
       ...(derivedPlan.providerId ? { providerId: derivedPlan.providerId } : {}),
       model: derivedPlan.model,
