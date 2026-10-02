@@ -438,6 +438,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         if (runTracker && runTracker.getRun().status === 'running') {
           runTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
         }
+        if (options.threadId && runTracker) {
+          // Session log: both lease-loss shapes end the turn.
+          recordSessionEvents(options.threadId, turnFactsToEvents({
+            terminal: { runId: runTracker.id, status: 'failed', errorText: message },
+          }));
+        }
         return {
           success: false,
           error: message,

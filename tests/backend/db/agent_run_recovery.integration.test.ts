@@ -25,6 +25,7 @@ const {
   listAgentRunsByStatus,
 } = await import('@iki/backend/db/agent_runs');
 const { recoverStuckRunsOnStartup } = await import('@iki/backend/thread_session/run_tracker');
+const { rebuildThreadViewFromEvents } = await import('@iki/backend/thread_session/session_log');
 const {
   getToolCallApproval,
   upsertToolCallApprovalSession,
@@ -277,6 +278,16 @@ describe('recoverStuckRunsOnStartup tool-error reconciliation', () => {
     // Idempotent: a second pass finds nothing left to reconcile.
     const second = recoverStuckRunsOnStartup();
     expect(second).toMatchObject({ totalRuns: 0, expiredApprovals: 0, interruptedToolParts: 0 });
+
+    // Session log: the reclamation is a system decision per expired approval
+    // — the replayed approval is rejected, not pending forever.
+    const view = rebuildThreadViewFromEvents('thread_stuck');
+    const approval = view.approvals.find(entry => entry.approvalId === 'appr_stuck');
+    expect(approval).toMatchObject({
+      status: 'rejected',
+      decisionSource: 'system',
+      decisionReason: expect.stringContaining('startup recovery'),
+    });
   });
 
   it('feeds the recorded errors back to the model as paired tool results on the next turn', async () => {

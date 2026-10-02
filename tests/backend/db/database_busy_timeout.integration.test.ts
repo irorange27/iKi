@@ -42,6 +42,7 @@ describe('database busy timeout', () => {
 
   it('waits out another process’s write lock instead of failing', async () => {
     // The child holds the write lock for ~300ms, then commits and exits.
+    // It signals "lock held" on stdout — no fixed sleep racing its boot.
     const holder = spawn(
       process.execPath,
       [
@@ -49,13 +50,16 @@ describe('database busy timeout', () => {
         `const { DatabaseSync } = require('node:sqlite');
          const db = new DatabaseSync(${JSON.stringify(dbPath)});
          db.exec('BEGIN IMMEDIATE');
+         process.stdout.write('LOCKED');
          setTimeout(() => { db.exec('COMMIT'); }, 300);`,
       ],
-      { stdio: 'ignore' }
+      { stdio: ['ignore', 'pipe', 'ignore'] }
     );
-    // Wait until the lock is actually held before attempting the write.
-    await new Promise(resolve => holder.on('spawn', resolve));
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise<void>(resolve => {
+      holder.stdout.on('data', chunk => {
+        if (String(chunk).includes('LOCKED')) resolve();
+      });
+    });
 
     const start = Date.now();
     const head = appendSessionEvents('thread_lock', 0, [
@@ -64,7 +68,9 @@ describe('database busy timeout', () => {
     const waited = Date.now() - start;
     expect(head).toBe(1);
     expect(getSessionEvents('thread_lock')).toHaveLength(1);
-    // The append queued on the lock instead of failing instantly.
+    // The append queued on the lock instead of failing instantly. The
+    // holder frees it ~300ms after signalling, so a sub-100ms wait means it
+    // never raced the lock at all.
     expect(waited).toBeGreaterThanOrEqual(100);
     await new Promise(resolve => holder.on('exit', resolve));
   });

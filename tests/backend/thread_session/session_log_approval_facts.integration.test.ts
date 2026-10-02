@@ -230,4 +230,56 @@ describe('session log approval facts across entries', () => {
     expect(sendRunMessages).toHaveLength(1);
     expect(JSON.stringify(sendRunMessages[0]!.parts)).toContain('send answer');
   });
+  it('records run-cancel expirations as system decisions', async () => {
+    const approvals = buildApprovals();
+    approvals.registerApprovalBatch(
+      [
+        {
+          approvalId: 'appr_cancelled',
+          toolCallId: 'call_cancelled',
+          toolCall: { toolName: 'write_file', args: { path: 'x' } },
+        },
+      ],
+      {
+        target: { id: 95, send: vi.fn() },
+        history: [],
+        recoveryContext: {
+          plan: {
+            providerType: 'openai',
+            model: 'test-model',
+            enableTools: true,
+            enabledTools: ['write_file'],
+            availableSkillIds: [],
+            guardActive: false,
+            requireApproval: true,
+            autoApproveToolRequests: false,
+            maxIterations: 20,
+            systemPrompt: 'system prompt',
+            skillMode: 'manual',
+            kind: 'chat-turn',
+            runMetadata: {},
+            transport: 'stream',
+            threadId: 'thread_facts',
+          },
+          sessionId: 'assistant_cancelled',
+          assistantMessageId: 'assistant_cancelled',
+          runId: 'run_cancelled',
+        },
+      }
+    );
+
+    // The run is cancelled: its pending approval expires as a system
+    // decision on the stream, not a pending-forever replay record.
+    expect(approvals.cancelPendingApprovalsForRun('run_cancelled')).toBe(1);
+
+    const view = rebuildThreadViewFromEvents('thread_facts');
+    const approval = view.approvals.find(entry => entry.approvalId === 'appr_cancelled');
+    expect(approval).toMatchObject({
+      status: 'rejected',
+      decisionSource: 'system',
+      decisionReason: expect.stringContaining('cancelled'),
+      runId: 'run_cancelled',
+      toolName: 'write_file',
+    });
+  });
 });
