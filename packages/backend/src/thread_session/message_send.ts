@@ -106,8 +106,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       // streaming path — synchronous, ahead of every preparation await. It
       // sits inside the try so a failing resolution (broken workspace
       // directory, profile error) flows through the cleanup path and
-      // releases the admission instead of stranding the thread.
-      const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
+      // releases the admission instead of stranding the thread. Resumed
+      // turns carry their original world in the options and rebind it.
+      const turnStartWorkspace =
+        options.workspaceSelection !== undefined
+          ? options.workspaceSelection
+          : resolveThreadWorkspaceSelectionSnapshot(options.threadId);
 
       if (options.threadId) {
         const rateCheck = deps.checkThreadRunRate(options.threadId);

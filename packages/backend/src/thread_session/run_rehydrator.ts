@@ -31,6 +31,10 @@ export type RunTurnPlan = {
    *  never stored it — callers keep their current behavior then. */
   reasoningEffort?: string;
   autonomous?: { maxIterations: number; continuePrompt?: string };
+  /** The original turn's workspace world (D30): a retry/queued-resume is the
+   *  same turn re-executing, so it rebinds this world rather than adopting
+   *  the thread's current selection. Undefined for legacy rows. */
+  workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
 };
 
 export type RunTurnPlanFallback = {
@@ -71,11 +75,17 @@ export const deriveRunTurnPlan = (
     typeof metadata.reasoningEffort === 'string' && metadata.reasoningEffort.trim()
       ? metadata.reasoningEffort.trim()
       : undefined;
+  const workspaceSelectionMetadata = metadata.workspaceSelection;
+  const workspaceSelection =
+    workspaceSelectionMetadata === null ||
+    (workspaceSelectionMetadata && typeof workspaceSelectionMetadata === 'object')
+      ? (workspaceSelectionMetadata as import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null)
+      : undefined;
   const autonomousMetadata = metadata.autonomous as
     | { maxIterations?: unknown; continuePrompt?: unknown }
     | undefined;
   const autonomous =
-    autonomousMetadata && typeof autonomousMetadata === 'object' && typeof autonomousMetadata.maxIterations === 'number'
+    autonomousMetadata && typeof autonomousMetadata === 'object' && typeof autonomousMetadata.maxIterations === 'number' && Number.isFinite(autonomousMetadata.maxIterations)
       ? {
           maxIterations: Math.max(1, Math.trunc(autonomousMetadata.maxIterations)),
           ...(typeof autonomousMetadata.continuePrompt === 'string' && autonomousMetadata.continuePrompt
@@ -102,6 +112,7 @@ export const deriveRunTurnPlan = (
     requireApproval,
     ...(reasoningEffort ? { reasoningEffort } : {}),
     ...(autonomous ? { autonomous } : {}),
+    ...(workspaceSelection !== undefined ? { workspaceSelection } : {}),
     maxIterations: resolveToolCallMaxIterations(
       getRunMaxIterations(run) ?? fallback?.maxIterations ?? undefined
     ),
@@ -138,6 +149,9 @@ export const deriveResumeStreamOptions = (
     ...(plan.requireApproval !== undefined ? { requireApproval: plan.requireApproval } : {}),
     ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
     ...(plan.autonomous ? { autonomous: { ...plan.autonomous } } : {}),
+    ...(plan.workspaceSelection !== undefined
+      ? { workspaceSelection: plan.workspaceSelection }
+      : {}),
     maxIterations: plan.maxIterations,
     // The recorded input is the recovery source. A run without recorded
     // messages resumes empty and fails explicitly downstream — missing input

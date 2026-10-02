@@ -173,6 +173,12 @@ export const planToRunTrackerParams = (
       // silently dropped field is neither full recovery nor a new decision.
       ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
       ...(plan.autonomous ? { autonomous: { ...plan.autonomous } } : {}),
+      // The turn-start world rides with the run row so a retry or
+      // queued-resume — the same turn executing again — rebinds it instead of
+      // silently adopting the thread's current selection.
+      ...(plan.workspaceSelection !== undefined
+        ? { workspaceSelection: plan.workspaceSelection }
+        : {}),
       ...(typeof plan.contextTokens === 'number' ? { contextTokens: plan.contextTokens } : {}),
       skillMode: plan.skillMode,
       maxIterations: plan.maxIterations,

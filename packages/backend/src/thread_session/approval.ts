@@ -14,6 +14,7 @@ import type { ApprovalRecoveryContext } from './approval_types';
 import { reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
 import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
+import { parseExecutionPlan, serializeExecutionPlan } from './execution_plan_codec';
 import { createTurnDriver, finalizeRunForOutcome } from './outer_loop';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import {
@@ -51,35 +52,11 @@ const parseStoredWorkspaceSelection = (
   }
 };
 
-/**
- * Parse the persisted ExecutionPlan snapshot. Anything malformed or
- * structurally not a plan falls back to the legacy per-column derivation —
- * an unreadable snapshot must not fabricate an execution configuration.
- */
-const parseStoredPlan = (stored: string | null | undefined): ExecutionPlan | null => {
-  if (typeof stored !== 'string' || !stored.trim()) return null;
-  try {
-    const parsed: unknown = JSON.parse(stored);
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    const candidate = parsed as Partial<ExecutionPlan>;
-    if (
-      typeof candidate.providerType !== 'string' ||
-      typeof candidate.model !== 'string' ||
-      typeof candidate.systemPrompt !== 'string' ||
-      typeof candidate.enableTools !== 'boolean' ||
-      typeof candidate.requireApproval !== 'boolean' ||
-      typeof candidate.autoApproveToolRequests !== 'boolean' ||
-      !Array.isArray(candidate.enabledTools) ||
-      !Array.isArray(candidate.availableSkillIds) ||
-      typeof candidate.maxIterations !== 'number'
-    ) {
-      return null;
-    }
-    return parsed as ExecutionPlan;
-  } catch {
-    return null;
-  }
-};
+// Persisted plan snapshots go through the versioned codec (see
+// execution_plan_codec.ts): unknown versions or structurally invalid
+// payloads fall back to the legacy per-column derivation rather than
+// fabricating an execution configuration.
+const parseStoredPlan = parseExecutionPlan;
 
 type PendingApprovalSession = {
   sessionId?: string;
@@ -245,7 +222,7 @@ export const createChatApproval = (deps: {
             : null,
         // The full plan snapshot: a restart-recovered resume restores every
         // field from this instead of the lossy per-column derivation.
-        plan_json: JSON.stringify(plan),
+        plan_json: serializeExecutionPlan(plan),
       });
 
       toolCallApprovalDb.upsertToolCallApprovals(
@@ -433,6 +410,9 @@ export const createChatApproval = (deps: {
       autoApproveToolRequests: false,
       ...(derivedPlan.approvalPolicy ? { approvalPolicy: derivedPlan.approvalPolicy } : {}),
       maxIterations: derivedPlan.maxIterations,
+      // The run row may carry config the legacy columns never stored.
+      ...(derivedPlan.reasoningEffort ? { reasoningEffort: derivedPlan.reasoningEffort } : {}),
+      ...(derivedPlan.autonomous ? { autonomous: derivedPlan.autonomous } : {}),
       ...(typeof approvalSession.max_input_tokens === 'number'
         ? { maxInputTokens: approvalSession.max_input_tokens }
         : {}),

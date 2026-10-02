@@ -131,6 +131,24 @@ export const createChatInstance = (deps: {
         event: 'chat.stream',
         outcome: 'failed',
         message: error.message,
+        data: {
+          // Reducer failures are state-dependent: dump the fed chunk
+          // sequence and the current message part states alongside.
+          chunk_traces: transport.getRecentTraces(),
+          message_parts: messageStore.messages.map(message => ({
+            id: message.id,
+            parts: (message.parts ?? [])
+              .map(part => {
+                if (!isObjectRecord(part)) return 'unknown';
+                const record = part as { type?: unknown; toolCallId?: unknown; state?: unknown };
+                const descriptor = [String(record.type ?? 'unknown')];
+                if (typeof record.toolCallId === 'string') descriptor.push(`:${record.toolCallId}`);
+                if (typeof record.state === 'string') descriptor.push(`/${record.state}`);
+                return descriptor.join('');
+              })
+              .join(','),
+          })),
+        },
       });
     },
     onFinish: ({ message, isAbort, isError }) => {

@@ -22,12 +22,28 @@ type InboundSlot = {
   fail: (error: Error) => void;
   bound: boolean;
   closed: boolean;
+  /** Compact descriptors of the chunks this slot fed — dumped on stream
+   *  processing errors so a reducer failure carries its input sequence. */
+  trace: string[];
+};
+
+const describeChunk = (chunk: ChatUiMessageChunk): string => {
+  const toolCallId = (chunk as { toolCallId?: unknown }).toolCallId;
+  const messageId = (chunk as { messageId?: unknown }).messageId;
+  return [
+    chunk.type,
+    typeof toolCallId === 'string' ? toolCallId : '',
+    typeof messageId === 'string' ? messageId : '',
+  ]
+    .filter(Boolean)
+    .join(':');
 };
 
 const createInboundSlot = (): InboundSlot => {
   const slot: InboundSlot = {
     bound: false,
     closed: false,
+    trace: [],
     stream: null as unknown as ReadableStream<ChatUiMessageChunk>,
     enqueue: () => undefined,
     close: () => undefined,
@@ -95,6 +111,8 @@ export type IpcChatTransport = ChatTransport<ChatUiMessage> & {
   getBoundThreadId: () => string | null;
   /** Observe every routed chunk (tool timing, todo-plan projection, …). */
   onChunk: (tap: ChunkTap) => () => void;
+  /** Chunk traces of the active and armed slots — error-path diagnostics. */
+  getRecentTraces: () => string[];
 };
 
 export const createIpcChatTransport = (deps: {
@@ -117,6 +135,8 @@ export const createIpcChatTransport = (deps: {
   const feed = (slot: InboundSlot, chunk: ChatUiMessageChunk) => {
     slot.bound = true;
     for (const tap of taps) tap(chunk);
+    slot.trace.push(describeChunk(chunk));
+    if (slot.trace.length > 120) slot.trace.shift();
     slot.enqueue(chunk);
     if (isTerminalChunkType(chunk.type)) {
       slot.close();
@@ -164,6 +184,11 @@ export const createIpcChatTransport = (deps: {
     },
 
     getBoundThreadId: () => boundThreadId,
+
+    getRecentTraces: () => [
+      ...(active ? [`${active.bound ? 'active' : 'unbound'}: ${active.trace.join(' | ')}`] : []),
+      ...(resume && resume !== active ? [`resume: ${resume.trace.join(' | ')}`] : []),
+    ],
 
     onChunk(tap) {
       taps.add(tap);

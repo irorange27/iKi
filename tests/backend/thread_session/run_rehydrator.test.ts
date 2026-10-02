@@ -154,4 +154,17 @@ describe('deriveResumeStreamOptions', () => {
     const options = deriveResumeStreamOptions(run, { kind: 'chat-turn' });
     expect(options.requireApproval).toBe(false);
   });
+
+  it('drops a non-finite restored autonomous iteration cap instead of clamping NaN', () => {
+    const nanRun = {
+      ...baseRun,
+      input: { metadata: { autonomous: { maxIterations: Number.NaN, continuePrompt: 'go' } } },
+    } as never;
+    expect(deriveRunTurnPlan(nanRun).autonomous).toBeUndefined();
+    const infiniteRun = {
+      ...baseRun,
+      input: { metadata: { autonomous: { maxIterations: Infinity } } },
+    } as never;
+    expect(deriveRunTurnPlan(infiniteRun).autonomous).toBeUndefined();
+  });
 });

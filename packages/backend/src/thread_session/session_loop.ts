@@ -171,8 +171,13 @@ export const createChatStreaming = (deps: {
       // through the cleanup path and releases the admission instead of
       // stranding the thread's in-memory guard and SQLite lease. The plan,
       // the executing harness world, the context projection and the approval
-      // recovery context all share this one snapshot.
-      const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
+      // recovery context all share this one snapshot. Resumed turns (retry,
+      // queued resume, blocked resume) carry their original world in the
+      // options and rebind it — they are the same turn, not a new one.
+      const turnStartWorkspace =
+        options.workspaceSelection !== undefined
+          ? options.workspaceSelection
+          : resolveThreadWorkspaceSelectionSnapshot(options.threadId);
       const preparedTurn = await turnPreparer.prepareChatTurn({
         ...options,
         workspaceSelection: turnStartWorkspace,
