@@ -35,6 +35,7 @@ import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { getAgentRun } from '@iki/backend/db/agent_runs';
 import { deriveResumeStreamOptions } from '@iki/backend/thread_session/run_rehydrator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
@@ -242,6 +243,63 @@ describe('execution plan admission boundaries', () => {
       expect(getDb().prepare('SELECT * FROM thread_run_locks').all()).toHaveLength(0);
     }
   );
+
+
+  it('rebinds the original turn world when retrying from the run row (D30 follow-up)', async () => {
+    // A retry/queued-resume is the same turn re-executing: it must rebind the
+    // original turn's world persisted on the run row, not adopt the thread's
+    // current selection (the F1 split in retry form).
+    const preparer = createChatTurnPreparer({
+      memory: memory as never,
+      getRuntimeConfig: () => ({
+        emotion: null,
+        memoryContext: null,
+        autoApproveToolRequests: false,
+      }),
+    });
+    const original = options();
+    const prepared = await preparer.prepareChatTurn(original);
+    const plan = assembleExecutionPlan({
+      options: original,
+      preparedTurn: prepared,
+      transport: 'stream',
+      workspaceSelection: resolveThreadWorkspaceSelectionSnapshot('thread_bound'),
+    });
+    const tracker = createAgentRunTracker(
+      planToRunTrackerParams(plan, {
+        input: { messages: prepared.finalMessages },
+        working: {
+          modelMessages: prepared.history,
+          accumulatedText: '',
+          pendingApprovalIds: [],
+          lastStepIndex: 0,
+        },
+      })
+    );
+    const stored = getAgentRun(tracker.id);
+    if (!stored) throw new Error('Missing recorded run');
+
+    // Simulate the world switching after the original turn was recorded.
+    conversation.updateThread('thread_bound', { workspace_id: 'workspace_wt_bound_b' });
+    const resumedOptions = deriveResumeStreamOptions(stored, { kind: 'chat-turn' });
+    expect(resumedOptions.workspaceSelection).toMatchObject({ workspaceId: 'workspace_bound_a' });
+
+    // The retry runs through the real stream entry under the restored world:
+    // the provider sees A and the file lands in A despite the switch to B.
+    const doStream = vi.spyOn(model, 'doStream');
+    const turn = streaming.stream({ id: 603, send: vi.fn() }, {
+      ...resumedOptions,
+      approvalPolicy: 'never',
+    });
+    expect(await turn).toMatchObject({ success: true });
+
+    expect(await fs.readFile(path.join(root, 'a', 'effect.txt'), 'utf8')).toBe('bound');
+    await expect(fs.stat(path.join(root, 'b', 'effect.txt'))).rejects.toThrow();
+    const request = doStream.mock.calls[0]?.[0] as { prompt?: unknown } | undefined;
+    const prompt = JSON.stringify(request?.prompt);
+    expect(prompt).toContain(`Current workspace: A (${path.join(root, 'a')})`);
+    expect(prompt).not.toContain('Current workspace: B');
+  });
 
   it('renders an explicit null world as no-workspace, not a fresh resolution', async () => {
     const preparer = createChatTurnPreparer({

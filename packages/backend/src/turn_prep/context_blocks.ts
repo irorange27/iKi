@@ -35,10 +35,10 @@ const hasMeaningfulContent = (value: string): boolean => {
 };
 
 /**
- * Project instructions from an explicit selection — the context projection
- * must read the same world the turn's tools run in, not re-resolve current
- * thread state. (threadId-based wrapper in the thread_workspace-independent
- * callers resolves fresh.)
+ * Project instructions derived from an explicit selection — the context
+ * projection must read the same world the turn's tools run in, never
+ * re-resolve current thread state. `readAgentInstructions(threadId)` is the
+ * legacy wrapper that resolves the current selection fresh.
  */
 export const readAgentInstructionsForSelection = (
   selection: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined
