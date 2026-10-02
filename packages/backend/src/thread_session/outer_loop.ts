@@ -13,7 +13,6 @@ import type { ExecutionPlan } from './execution_plan';
 import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
-import { writeThreadTodoPlan } from '../db/thread_todos';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
 
 type OuterLoopStreamResultBase = {
@@ -286,9 +285,6 @@ const runOuterLoop = async (
 
   try {
     sendConversationPreview('thinking', '');
-
-    // ponytail: clear stale todo plan from previous turn before starting fresh
-    writeThreadTodoPlan({ threadId, items: [] });
 
     // eslint-disable-next-line no-constant-condition
     while (true) {

@@ -207,6 +207,65 @@ describe('createMessageSend integration', () => {
     ).toBe(true);
   });
 
+  it('labels a send that exhausts its tool budget as budget-exhausted, not completed', async () => {
+    // The send path now finalizes through the same terminal-outcome mapping
+    // as streaming: a model that still wants tools when the iteration cap
+    // hits ends 'budget-exhausted' (the old inline loop stamped 'completed').
+    defaultToolRegistry.register(createTool({
+      name: toolName,
+      type: 'function',
+      description: 'Probe budget exhaustion',
+      paramSchema: z.object({}),
+      needsApproval: false,
+      handler: async () => 'observation',
+    }));
+    createModelMock.mockReturnValue(new FauxModelProvider([
+      fauxToolCall(toolName, {}, { id: 'call_budget' }),
+      fauxText('must not run'),
+    ]));
+
+    const send = createMessageSend({
+      tryAcquireThreadRun: () => () => undefined,
+      checkThreadRunRate: () => ({ allowed: true }),
+      usage: { recordUsageEvent: vi.fn() },
+      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
+      turnPreparer: {
+        prepareChatTurn: vi.fn(async () => ({
+          report: { totalEstimatedTokens: 1 },
+          usedSkills: [],
+          selectedSkillIds: [],
+          skillMode: 'manual' as const,
+          finalMessages: [{ role: 'user' as const, content: 'keep probing' }],
+          history: [],
+          prompt: 'keep probing',
+          guardActive: false,
+          requireApproval: false,
+          autoApproveToolRequests: false,
+          affectSignal: null,
+          interventionPolicy: null,
+          guardedTools: [toolName],
+          enableTools: true,
+        })),
+      } as never,
+    }).send;
+
+    expect(await send({
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'gpt-4o-mini',
+      threadId: 'thread_budget',
+      messages: [{ id: 'msg_budget', role: 'user', content: 'keep probing' }],
+      tools: [toolName],
+      maxIterations: 1,
+    })).toMatchObject({ success: true });
+
+    const completedUpdate = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
+      .map(([, updates]) => updates)
+      .filter(updates => updates.status === 'completed')
+      .at(-1);
+    expect(completedUpdate?.output).toMatchObject({ finishReason: 'budget-exhausted' });
+  });
+
   it('leaves no durable rows when the thread rate limit rejects the send', async () => {
     const conversation = {
       createMessage: vi.fn(),

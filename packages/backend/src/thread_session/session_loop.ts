@@ -23,6 +23,7 @@ import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
+import { writeThreadTodoPlan } from '../db/thread_todos';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
@@ -282,6 +283,9 @@ export const createChatStreaming = (deps: {
       }
 
       getCompanion().beginThinking(companionThinkingKey);
+
+      // ponytail: clear stale todo plan from previous turn before starting fresh
+      writeThreadTodoPlan({ threadId: options.threadId, items: [] });
 
       // Trailing debounce mirrors the write profile the renderer's old
       // mid-turn persist had; the settle write always supersedes the last one.

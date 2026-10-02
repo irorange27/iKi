@@ -1,26 +1,8 @@
 import type { ModelMessage } from 'ai';
 import type { AgentRunKind } from '@iki/backend/types/agent_run';
-import type { AgentResult, ToolApprovalRequest } from '@iki/backend/agent';
+import type { ToolApprovalRequest } from '@iki/backend/agent';
 import type { ExecutionPlan } from './execution_plan';
 import type { ChatStreamTarget } from './types';
-
-/**
- * Result of the approval-resume execution. Transient: once the resume rides
- * the shared turn driver this collapses into OuterLoopStreamResult.
- */
-export type ToolLoopStreamResult = {
-  awaitingApproval: boolean;
-  cancelled?: boolean;
-  finished?: boolean;
-  partialFailure?: boolean;
-  response?: string;
-  usage?: AgentResult['usage'];
-  handoff?: {
-    summary: string;
-    nextSteps: string;
-    reason: string;
-  };
-};
 
 /**
  * The durable recovery handle for an approval pause: the paused turn's

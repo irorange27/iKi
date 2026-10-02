@@ -1,23 +1,20 @@
 import { createLogger } from '@iki/backend/logger';
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
-import {
-  type AgentResult,
-} from '@iki/backend/agent';
 import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
 import { cloneModelMessages, rehydrateHarness } from '../agent/harness';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
-import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import { createPrefixedId } from '../utils/id';
 import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from './memory';
-import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
+import type { ApprovalRecoveryContext } from './approval_types';
 import { reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
 import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
+import { createTurnDriver, finalizeRunForOutcome } from './outer_loop';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import {
   loadPersistedAssistantParts,
@@ -27,7 +24,7 @@ import {
   createAgentRunTracker,
   rehydrateAgentRunTracker,
 } from './run_tracker';
-import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from './types';
+import type { ActiveStreamState, ChatStreamTarget } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import { toModelInputMessages } from './ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
@@ -611,200 +608,97 @@ export const createChatApproval = (deps: {
 
     try {
       const ctx = nextApprovalContext ?? session.recoveryContext;
-      const streamResult = await runWithToolRuntimeContext(
+      if (!ctx || !resumeRunTracker) {
+        throw new Error('Approval resume requires the paused turn\'s recovery context');
+      }
+
+      // Create a fresh harness from the recovery context. guardActive stays
+      // off: the plan's tool selection is already the guarded, post-
+      // preparation result, and re-guarding could shrink it mid-turn.
+      const approvalHarness = rehydrateHarness(
+        planToHarnessConfig(ctx.plan, { guardActive: false })
+      );
+
+      // Build history with collected approval responses
+      const responses = Array.from(session.collectedApprovalResponses.values());
+      let streamHistory = cloneModelMessages(session.history ?? []);
+      if (responses.length > 0) {
+        streamHistory = appendApprovalResponsesToHistory(
+          streamHistory,
+          responses.map(r => ({
+            type: 'tool-approval-response' as const,
+            approvalId: r.approvalId,
+            approved: r.approved,
+            ...(r.reason ? { reason: r.reason } : {}),
+          }))
+        );
+      }
+
+      // Mid-turn durable progress: a crash during a long resumed segment must
+      // leave the executed tool results in the persisted UI history for the
+      // fallback recovery branch. Seeded, or the write would replace the
+      // row's pre-pause parts with the continuation segment alone.
+      const persistResumeProgress = () => {
+        const threadId = baseApprovalContext?.plan.threadId;
+        if (!threadId) return;
+        void uiChunkEmitter
+          .buildPersistedMessage(loadPersistedAssistantParts(uiChunkEmitter.messageId))
+          .then(persisted =>
+            persisted
+              ? persistAssistantTurnMessage(deps.conversation, threadId, persisted, 'stream-progress')
+              : undefined
+          );
+      };
+
+      // The continuation rides the same turn driver as streaming — same step
+      // projection, approval registration and finalize contracts. The attach
+      // stays session-less: stoppable and run-cancellable, deliberately not
+      // steerable (the steer queue does not survive the pause yet).
+      const driver = createTurnDriver(
         {
-          runId: resumeRunTracker?.id ?? nextApprovalContext?.runId,
-          ...(resumeRunTracker ? { runTracker: resumeRunTracker } : {}),
-          threadId: ctx?.plan.threadId,
-          conversationModel: {
-            providerType: ctx?.plan.providerType ?? '',
-            providerId: ctx?.plan.providerId,
-            model: ctx?.plan.model ?? '',
-          },
-          // Rebind the ORIGINAL turn world (D30): a workspace switched while
-          // the approval was pending must not redirect the approved action.
-          ...(ctx && ctx.plan.workspaceSelection !== undefined
+          harness: approvalHarness,
+          runTracker: resumeRunTracker,
+          approvalContext: nextApprovalContext,
+          streamHistory,
+          streamPrompt: '',
+          ...(ctx.plan.workspaceSelection !== undefined
             ? { workspaceSelectionBox: { selection: ctx.plan.workspaceSelection } }
             : {}),
         },
-        async () => {
-          // Create a fresh harness from the recovery context. guardActive
-          // stays off: the plan's tool selection is already the guarded,
-          // post-preparation result, and re-guarding could shrink it mid-turn.
-          const approvalHarness = rehydrateHarness(
-            planToHarnessConfig(ctx?.plan ?? resumePlan, { guardActive: false })
-          );
-
-          // Build history with collected approval responses
-          const responses = Array.from(session.collectedApprovalResponses.values());
-          let streamHistory = cloneModelMessages(session.history ?? []);
-          if (responses.length > 0) {
-            streamHistory = appendApprovalResponsesToHistory(
-              streamHistory,
-              responses.map(r => ({
-                type: 'tool-approval-response' as const,
-                approvalId: r.approvalId,
-                approved: r.approved,
-                ...(r.reason ? { reason: r.reason } : {}),
-              }))
-            );
-          }
-
-          let awaitingApproval = false;
-          let cancelled = false;
-          let responseText = '';
-          let agentResult: AgentResult | undefined;
-
-          for await (const turnEvent of approvalHarness.turn({
-            prompt: '',
-            history: streamHistory,
-            onInference: record => resumeRunTracker?.recordModelStep(record),
-            abortSignal: streamState.abortController.signal,
-          })) {
-            if (streamState.cancelled) {
-              cancelled = true;
-              approvalHarness.cancel();
-              break;
-            }
-
-            if (turnEvent.event === 'step') {
-              const step = turnEvent.step;
-              if (step.type !== 'approval_request') {
-                resumeRunTracker?.recordAgentStep(step);
-              }
-              if (step.type === 'message_update') {
-                if (step.kind === 'reasoning') {
-                  uiChunkEmitter.emitReasoningDelta(step.text);
-                } else {
-                  responseText += step.text;
-                  uiChunkEmitter.emitTextDelta(step.text);
-                }
-              } else if (step.type === 'tool_execution_start') {
-                const event: ChatStreamEvent = {
-                  type: 'tool-call',
-                  toolCallId: step.toolCallId,
-                  toolName: step.toolName,
-                  input: step.input,
-                };
-                uiChunkEmitter.emitToolEvent(event);
-              } else if (step.type === 'tool_execution_end') {
-                if (step.outcome === 'success') {
-                  const event: ChatStreamEvent = {
-                    type: 'tool-result',
-                    toolCallId: step.toolCallId,
-                    output: step.output,
-                  };
-                  uiChunkEmitter.emitToolEvent(event);
-                } else {
-                  const event: ChatStreamEvent = {
-                    type: 'tool-error',
-                    toolCallId: step.toolCallId,
-                    error: step.error ?? 'Tool execution failed',
-                  };
-                  uiChunkEmitter.emitToolEvent(event);
-                }
-                // Mid-turn durable progress: a crash during a long resumed
-                // segment must leave the executed tool results in the
-                // persisted UI history for the fallback recovery branch.
-                // Seeded, or the write would replace the row's pre-pause
-                // parts with the continuation segment alone.
-                if (baseApprovalContext?.plan.threadId) {
-                  void uiChunkEmitter
-                    .buildPersistedMessage(
-                      loadPersistedAssistantParts(uiChunkEmitter.messageId)
-                    )
-                    .then(persisted =>
-                      persisted
-                        ? persistAssistantTurnMessage(
-                            deps.conversation,
-                            baseApprovalContext.plan.threadId,
-                            persisted,
-                            'stream-progress'
-                          )
-                        : undefined
-                    );
-                }
-              } else if (step.type === 'approval_request') {
-                awaitingApproval = true;
-                for (const req of step.requests) {
-                  if (req.approvalId) {
-                    ensurePendingApprovalSession(req.approvalId, {
-                      target: session.target,
-                      history: approvalHarness.getHistory(),
-                      recoveryContext: nextApprovalContext,
-                    });
-                  }
-                }
-                for (const req of step.requests) {
-                  if (req.approvalId) {
-                    uiChunkEmitter.emitToolEvent({
-                      type: 'tool-approval-request',
-                      approvalId: req.approvalId,
-                      toolCallId: req.toolCallId || '',
-                      ...(req.toolCall
-                        ? {
-                            toolCall: {
-                              toolName: req.toolCall.toolName,
-                              toolCallId: req.toolCallId || '',
-                              args: req.toolCall.args ?? {},
-                            },
-                          }
-                        : {}),
-                    });
-                  }
-                }
-              }
-            } else if (turnEvent.event === 'done') {
-              const output = turnEvent.output;
-              agentResult = {
-                response: output.text,
-                toolCalls: output.toolCalls,
-                toolApprovalRequests: output.toolApprovalRequests,
-                usage: output.usage,
-                iterations: 0,
-                requiresApproval: output.requiresApproval,
-              } as AgentResult;
-            }
-          }
-
-          const result: ToolLoopStreamResult = {
-            awaitingApproval:
-              awaitingApproval || (agentResult?.requiresApproval ?? false),
-            cancelled,
-            ...(agentResult?.response
-              ? { response: agentResult.response }
-              : responseText
-                ? { response: responseText }
-                : {}),
-            usage: agentResult?.usage,
-          };
-
-          // Track history for subsequent getHistory() calls
-          resolvedHistory = approvalHarness.getHistory();
-          if (agentResult?.toolApprovalRequests?.length) {
-            registerApprovalBatch(agentResult.toolApprovalRequests, {
-              target: session.target,
-              history: resolvedHistory,
-              recoveryContext: nextApprovalContext,
-            });
-            resumeRunTracker?.recordAgentStep({
-              type: 'approval_request',
-              requests: agentResult.toolApprovalRequests,
-            });
-          }
-
-          return result;
+        {
+          target: session.target,
+          plan: ctx.plan,
+          streamState,
+          uiChunkEmitter,
+          notifyRunStatus: () => undefined,
+          drainSteerMessages: () => [],
+          conversationPreview: false,
+          onToolActivity: persistResumeProgress,
+          approvals: {
+            ensurePendingApprovalSession: (approvalId, approvalSession) =>
+              ensurePendingApprovalSession(approvalId, approvalSession),
+            registerApprovalBatch: (requests, approvalSession) =>
+              registerApprovalBatch(requests, approvalSession),
+          },
         }
       );
-      isAwaitingApproval = streamResult.awaitingApproval;
-      if (streamResult.cancelled) {
+
+      const driverResult = await driver.run();
+      if (!driverResult) {
+        throw new Error('Unreachable: approval resume produced no result');
+      }
+      const streamResult = driverResult;
+      resolvedHistory = approvalHarness.getHistory();
+
+      isAwaitingApproval = streamResult.outcome === 'awaiting-approval';
+      if (streamResult.outcome === 'cancelled') {
         uiChunkEmitter.abort();
       } else if (!isAwaitingApproval) {
         uiChunkEmitter.finish();
       }
 
-      resumeRunTracker?.syncModelMessages(resolvedHistory ?? session.history ?? []);
-      if (!streamResult.cancelled && nextApprovalContext) {
+      resumeRunTracker.syncModelMessages(resolvedHistory ?? session.history ?? []);
+      if (streamResult.outcome !== 'cancelled' && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.plan.threadId,
           messageId: uiChunkEmitter.messageId,
@@ -814,28 +708,13 @@ export const createChatApproval = (deps: {
           source: 'chat.approval-stream',
           metadata: {
             sessionId: nextApprovalContext.sessionId,
-            awaitingApproval: streamResult.awaitingApproval,
+            awaitingApproval: isAwaitingApproval,
           },
         });
       }
-      if (resumeRunTracker) {
-        if (streamResult.cancelled) {
-          resumeRunTracker.markCancelled({
-            ...(streamResult.response ? { text: streamResult.response } : {}),
-          });
-        } else if (streamResult.awaitingApproval) {
-          resumeRunTracker.markBlocked({
-            ...(streamResult.response ? { text: streamResult.response } : {}),
-            usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          });
-        } else {
-          resumeRunTracker.markCompleted({
-            ...(streamResult.response ? { text: streamResult.response } : {}),
-            usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-            finishReason: 'completed',
-          });
-        }
-      }
+      finalizeRunForOutcome(resumeRunTracker, streamResult, {
+        text: driver.getAccumulatedResponse() || streamResult.response,
+      });
       if (baseApprovalContext?.plan.threadId) {
         // Seed the reduction with the already-persisted pre-pause parts so the
         // accumulated message stays whole across the pause, then upsert.
@@ -853,7 +732,7 @@ export const createChatApproval = (deps: {
       }
       return {
         success: true,
-        awaitingApproval: streamResult.awaitingApproval,
+        awaitingApproval: isAwaitingApproval,
         stopped: streamState.stoppedByUser,
         // Exposed as the approve-result wire payload (the continuation reply
         // is already durably persisted by the backend turn-persistence seam
