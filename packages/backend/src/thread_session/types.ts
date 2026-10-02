@@ -1,22 +1,20 @@
 import type {
-  ChatUiMessage,
   SkillUsageEntry,
   TokenUsagePartData,
 } from '@iki/backend/message/message_parts';
-import type { ModelMessage } from 'ai';
 import type { AffectSignal } from '@iki/backend/types/affect';
+
+// The message-type aliases live with the message codecs (message/); this
+// module keeps the turn transport's own types.
+export type {
+  ChatInputMessage,
+  ChatTransportMessage,
+  LlmChatMessage,
+} from '@iki/backend/message/chat_message_types';
 
 export type ChatStreamTarget = {
   id: number;
   send: (channel: string, ...args: unknown[]) => void;
-};
-
-export type ChatInputMessage = ModelMessage;
-export type ChatTransportMessage = ChatInputMessage | ChatUiMessage;
-
-export type LlmChatMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
 };
 
 export type ActiveStreamState = {

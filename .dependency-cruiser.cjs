@@ -38,10 +38,20 @@ module.exports = {
     },
     {
       name: 'agent-below-session-and-orchestration',
-      comment: 'R3 (loop+harness only; turn_prep -> thread_session shared-module debt is deferred, see factoring doc)',
+      comment: 'R3 (loop+harness only)',
       severity: 'error',
       from: { path: '^packages/backend/src/agent/' },
       to: { path: '^packages/backend/src/(turn_prep|thread_session)' },
+    },
+    {
+      name: 'turn-prep-below-session',
+      comment: 'R5 (stage F slice 1): shared message codecs moved to message/, tool names to tools/. The two exempted files carry the remaining F2 debt — stateful services (skills, platform) to become injected ports; no NEW turn_prep -> thread_session edge may appear.',
+      severity: 'error',
+      from: {
+        path: '^packages/backend/src/turn_prep',
+        pathNot: ['^packages/backend/src/turn_prep/(context_blocks|persistence)\\.ts$'],
+      },
+      to: { path: '^packages/backend/src/thread_session' },
     },
     {
       name: 'session-reads-no-global-config',

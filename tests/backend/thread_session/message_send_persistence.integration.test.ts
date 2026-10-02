@@ -32,7 +32,7 @@ import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { toModelInputMessages } from '@iki/backend/thread_session/ui_messages';
+import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';

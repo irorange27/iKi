@@ -11,7 +11,7 @@ import { getToolModel } from '../provider/tool_model';
 import { selectSkillsWithAgent } from '../provider/skill_selection';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import type { ChatInputMessage } from './types';
-import { toLlmChatMessages } from './ui_messages';
+import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
 import { getAutoPinnedSkillIds, recordAutoSkillSelection } from './platform';
 
 const chatSkillsLogger = createLogger({ module: 'chat_skills' });

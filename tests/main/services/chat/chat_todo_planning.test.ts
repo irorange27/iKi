@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createTodoPrepareStep,
-  TODO_PLANNING_TOOL_NAME,
   TODO_REMINDER_MESSAGE,
   TODO_REMINDER_THRESHOLD_STEPS,
 } from '@iki/backend/thread_session/todo_planning';
+import { TODO_PLANNING_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 
 describe('chat_todo_planning', () => {
   it('stays disabled when todo is not in the enabled tool set', () => {
