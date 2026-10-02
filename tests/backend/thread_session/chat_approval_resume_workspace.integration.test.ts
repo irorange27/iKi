@@ -50,15 +50,18 @@ describe('approval resume keeps the turn-start workspace', () => {
   let conversation: ReturnType<typeof createChatPersistence>;
   let coordinator: ReturnType<typeof createThreadStreamCoordinator>;
 
-  const buildApprovals = () =>
+  const buildApprovals = (
+    coordinatorOverride?: ReturnType<typeof createThreadStreamCoordinator>,
+    memoryOverride?: typeof memory
+  ) =>
     createChatApproval({
       streams: {
-        tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
-        peek: coordinator.peekStream,
-        attach: coordinator.attachStream,
-        detach: coordinator.detachStream,
+        tryAcquireThreadRun: (coordinatorOverride ?? coordinator).tryAcquireThreadRun,
+        peek: (coordinatorOverride ?? coordinator).peekStream,
+        attach: (coordinatorOverride ?? coordinator).attachStream,
+        detach: (coordinatorOverride ?? coordinator).detachStream,
       },
-      memory: memory as never,
+      memory: (memoryOverride ?? memory) as never,
       conversation: conversation as never,
       usage: { recordUsageEvent: vi.fn() },
     });
@@ -217,4 +220,51 @@ describe('approval resume keeps the turn-start workspace', () => {
     expect(await fs.readFile(path.join(a, 'approved.txt'), 'utf8')).toBe('audit');
     await expect(fs.stat(path.join(b, 'approved.txt'))).rejects.toThrow();
   });
+
+  it('replays a lease loss that fired during the recovery await onto the resumed execution', async () => {
+    // The resume path has an await gap between registering the execution
+    // hook (synchronously, with admission) and wiring it to the resumed
+    // controller (after the recovery lookups). A lease loss firing inside
+    // that gap must not be silently dropped — the wiring replays it, so the
+    // approved tool never runs. On the pre-fix code the loss fired before
+    // wiring was simply lost and the tool executed.
+    let notifyLeaseLost: (() => void) | undefined;
+    const leaseCoordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: (_threadId, options) => {
+        notifyLeaseLost = options.onLeaseLost;
+        return () => undefined;
+      },
+    });
+    const delayedMemory = {
+      onMessagePersisted: vi.fn(),
+      // Hold the recovery-path injection on a macrotask so the test can fire
+      // the lease loss deterministically inside the await gap.
+      injectMemoryIntoMessages: vi.fn(
+        (messages: unknown[]) =>
+          new Promise<typeof messages>(resolve => setTimeout(() => resolve(messages), 80))
+      ),
+      getAffectContextMessage: () => '',
+    };
+    const approvals = buildApprovals(leaseCoordinator);
+    const { approvalId } = await pauseOnApproval(approvals);
+    const a = path.join(root, 'a');
+    const b = path.join(root, 'b');
+
+    conversation.updateThread('thread_probe', { workspace_id: 'workspace_wt_probe' });
+
+    // Fresh registry, as after a restart: the resume must run the recovery
+    // lookups (through the delayed memory injection).
+    const recoveredApprovals = buildApprovals(leaseCoordinator, delayedMemory);
+    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('done')]));
+
+    const pendingResume = recoveredApprovals.approveTool({ id: 93, send: vi.fn() }, approvalId, true);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    notifyLeaseLost!();
+    expect(await pendingResume).toMatchObject({ success: true });
+
+    // The barrier held: the approved write executed nowhere.
+    await expect(fs.stat(path.join(a, 'approved.txt'))).rejects.toThrow();
+    await expect(fs.stat(path.join(b, 'approved.txt'))).rejects.toThrow();
+  });
 });
+

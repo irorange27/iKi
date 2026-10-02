@@ -430,7 +430,7 @@ export const createChatApproval = (deps: {
     approvalId: string,
     approved: boolean,
     reason?: string,
-    executionAbort?: { current: (() => void) | null }
+    executionAbort?: { current: (() => void) | null; lost: boolean }
   ) => {
     const storedApproval = toolCallApprovalDb.getToolCallApproval(approvalId);
     let session = pendingApprovalSessions.get(approvalId);
@@ -528,11 +528,13 @@ export const createChatApproval = (deps: {
     };
     if (executionAbort) {
       // The lease hook was registered synchronously with admission; wire it
-      // to this execution's controller as soon as one exists.
+      // to this execution's controller as soon as one exists. A loss that
+      // already fired during the recovery awaits replays onto the controller.
       executionAbort.current = () => {
         streamState.cancelled = true;
         streamState.abortController.abort('thread-lease-lost');
       };
+      if (executionAbort.lost) executionAbort.current();
     }
     const uiChunkEmitter = createUiChunkEmitter(session.target, resumeMessageId);
     const baseApprovalContext = session.recoveryContext
@@ -900,10 +902,18 @@ export const createChatApproval = (deps: {
     const threadId = pending?.recoveryContext?.threadId ?? storedSession?.thread_id;
     // The execution abort hook is registered synchronously with admission so
     // a lease loss during the async resume-recovery below still reaches the
-    // resumed execution once its controller exists.
-    const executionAbort: { current: (() => void) | null } = { current: null };
+    // resumed execution once its controller exists. `lost` records a loss
+    // that fired before the wiring (the holder is the only cross-await state
+    // here), so the wiring can replay it instead of silently dropping it.
+    const executionAbort: { current: (() => void) | null; lost: boolean } = {
+      current: null,
+      lost: false,
+    };
     const release = deps.streams.tryAcquireThreadRun(threadId, {
-      onExecutionAbort: () => executionAbort.current?.(),
+      onExecutionAbort: () => {
+        executionAbort.lost = true;
+        executionAbort.current?.();
+      },
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
     try {
