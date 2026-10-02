@@ -3,10 +3,8 @@
   height: 100%;
   min-height: 0;
   font-size: var(--font-size);
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   color: var(--text-primary);
-  padding: 4px 4px 0;
-  gap: 6px;
   box-sizing: border-box;
 }
 
@@ -39,55 +37,87 @@
 }
 
 .settings-nav {
+  flex: none;
   width: 220px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 18px;
-  padding: 24px 16px;
-  padding-top: 40px;
-  box-shadow: var(--surface-shadow-md);
+  background: transparent;
+  border-right: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  padding: 44px 10px 12px;
   overflow: hidden;
   min-height: 0;
   position: relative;
 }
 
 .nav-menu {
-  margin-top: 22px;
+  margin-top: 14px;
   list-style: none;
   border-color: var(--border-color);
 }
 
+/* Same row language as the main sidebar: 30px quiet rows, one shared wash
+   for hover and active, no accent fill or inset rail. */
 .nav-menu li {
-  padding: 10px 12px;
+  min-height: 30px;
+  margin-bottom: 2px;
+  padding: 4px 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
+  gap: 9px;
+  border-radius: var(--control-radius);
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.nav-menu li svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
 }
 
 .nav-menu li:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .nav-menu li.active {
-  background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-primary));
-  color: var(--accent-color);
-  box-shadow: inset 3px 0 0 var(--accent-color);
+  background: var(--bg-active);
+  color: var(--text-primary);
 }
 
 .settings-content {
   flex: 1;
-  padding: 0 22px;
+  padding: 0 var(--chat-content-padding, 24px);
   overflow-y: auto;
   background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
   min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+/* A merged settings page: one scroll, sub-sections titled along the way. */
+.settings-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-page-title {
+  margin: 24px 0 4px;
+  padding-top: 20px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-page > .settings-page-title:first-child {
+  padding-top: 16px;
+  border-top: none;
+  margin-top: 0;
 }
 
 .settings-header {
@@ -96,11 +126,11 @@
   justify-content: space-between;
   padding-top: 16px;
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 22px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  margin-bottom: 18px;
   position: sticky;
   top: 0;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   z-index: 5;
   padding-left: 6px;
   padding-right: 6px;
@@ -109,26 +139,14 @@
 .settings-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1.2em;
+  gap: 8px;
+  font-size: 15px;
   font-weight: 600;
-  position: relative;
-  padding-left: 10px;
-}
-
-.settings-header-left::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--accent-color);
+  color: var(--text-primary);
 }
 
 .settings-header-left .icon {
-  color: var(--accent-color);
+  display: none;
 }
 
 .settings-header-right {
@@ -161,12 +179,17 @@
 }
 
 .button-group button {
-  padding: 8px 16px;
+  height: 28px;
+  padding: 0 12px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--control-radius-sm);
   cursor: pointer;
-  transition: all 0.2s;
+  font-size: 12px;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .button-group button.active {
@@ -205,8 +228,8 @@
   margin-top: auto;
   bottom: 0;
   padding: 16px 0 12px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  background: var(--bg-primary);
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -233,13 +256,17 @@
 }
 
 .footer-actions button {
-  padding: 8px 20px;
-  border-radius: 8px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--control-radius);
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
   font-weight: 500;
-  font-size: 0.9em;
+  font-size: 13px;
 }
 
 .footer-actions .secondary {
@@ -261,24 +288,12 @@
 
 .footer-actions .primary:hover {
   background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--surface-shadow-md);
-}
-
-.footer-actions .primary:active {
-  transform: translateY(0);
 }
 
 @media (max-width: 980px) {
-  .settings-container {
-    gap: 4px;
-    padding: 4px 4px 0;
-  }
-
   .settings-nav {
     width: 188px;
-    padding: 20px 12px;
-    padding-top: 36px;
+    padding: 40px 8px 12px;
   }
 
   .nav-menu {

@@ -7,12 +7,17 @@ import {
 } from './runner';
 import { migration as baseline } from './001_baseline';
 import { migration as renameChatToolApprovals } from './002_rename_chat_tool_approvals';
+import { migration as approvalSessionWorkspaceSelection } from './003_approval_session_workspace_selection';
 
 // Forward-only migrations after the baseline. Add new ones above 001 in name
 // order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
 // after the squash are bootstrap-created in database.ts (initCoreTables), not
 // by migrations: post-baseline migrations must not emit CREATE TABLE.
-export const registeredMigrations: Migration[] = [baseline, renameChatToolApprovals];
+export const registeredMigrations: Migration[] = [
+  baseline,
+  renameChatToolApprovals,
+  approvalSessionWorkspaceSelection,
+];
 
 export const initializeMigrations = () => {
   // Databases created before the migration squash already carry the full

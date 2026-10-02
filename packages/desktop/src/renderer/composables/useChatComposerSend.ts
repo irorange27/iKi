@@ -54,8 +54,6 @@ export const useChatComposerSend = (deps: {
   message: Ref<string>;
   isRecording: Ref<boolean>;
   isTranscribing: Ref<boolean>;
-  isAutonomousMode: Ref<boolean>;
-  autonomousMaxIterations: Ref<number>;
   reasoningEffort: Ref<string>;
   personality: Ref<string>;
   approvalPolicy: Ref<string>;
@@ -251,9 +249,6 @@ export const useChatComposerSend = (deps: {
         reasoningEffort: deps.reasoningEffort.value,
         personality: deps.personality.value,
         approvalPolicy: deps.approvalPolicy.value,
-        ...(deps.isAutonomousMode.value
-          ? { autonomous: { maxIterations: deps.autonomousMaxIterations.value } }
-          : {}),
       });
 
       if (!body) {

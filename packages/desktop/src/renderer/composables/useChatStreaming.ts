@@ -6,7 +6,6 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import type { ChatInstance } from '../modules/chat/chat_instance';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
-import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import {
   upsertComposerInvocationIntoMessageParts,
   upsertTextIntoMessageParts,
@@ -26,7 +25,6 @@ export const useChatStreaming = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   chatInstance: ChatInstance;
   messageStore: ChatMessageStore;
-  persistence: UiMessagePersistence;
   createMessageId: () => string;
   scrollToBottom: () => void;
   getCurrentThreadId: () => string | null;
@@ -46,28 +44,20 @@ export const useChatStreaming = (deps: {
 }) => {
   const editingUserMessageId = ref<string | null>(null);
 
-  const upsertUiMessage = async (
-    message: ChatUiMessage,
-    parentId?: string,
-    source = 'unknown',
-    threadIdOverride?: string
-  ) => {
-    const threadId = threadIdOverride || deps.currentThread.value?.id || '';
-    if (!threadId) return;
+  // Turn-driven persistence lives in the backend conversation seam; the
+  // renderer keeps only user-driven history management (edit update, delete).
 
-    await deps.persistence.upsertUiMessage({
-      message,
-      threadId,
-      parentId,
-      source,
-    });
-  };
-
+  /** User-driven history rewrite: truncate the local store and the durable
+   *  rows after the edited message. */
   const truncateConversationAfterIndex = async (messageIndex: number) => {
-    await deps.persistence.truncateConversationAfterIndex({
-      messageStore: deps.messageStore,
-      messageIndex,
-    });
+    const messagesToDelete = deps.messageStore.messages.slice(messageIndex + 1);
+    deps.messageStore.truncateAfterIndex(messageIndex);
+    await Promise.allSettled(
+      messagesToDelete
+        .map(message => (message && typeof message.id === 'string' ? message.id : ''))
+        .filter(id => id.length > 0)
+        .map(id => deps.electronAPI.chat.messages.delete(id))
+    );
   };
 
   const stopActiveStreamIfNeeded = async (targetThreadId?: string) => {
@@ -222,12 +212,13 @@ export const useChatStreaming = (deps: {
           };
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
-          await upsertUiMessage(
-            updatedUserMessage,
-            undefined,
-            'user-message-edit',
-            deps.currentThread.value.id
-          );
+          // The edited row must be updated before the next turn streams — the
+          // backend stream-entry create is idempotent on this id and would
+          // otherwise keep the pre-edit text.
+          await deps.electronAPI.chat.messages.update(updatedUserMessage.id, {
+            message: JSON.stringify(updatedUserMessage),
+            metadata: JSON.stringify({ format: 'ai-ui-message-v1' }),
+          });
           await truncateConversationAfterIndex(messageIndex);
 
           editingUserMessageId.value = null;
@@ -259,7 +250,8 @@ export const useChatStreaming = (deps: {
     };
 
     const threadId = deps.currentThread.value.id;
-    await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
+    // The user message is durably recorded by the backend on stream entry
+    // (create-only, idempotent on this client-generated id).
 
     deps.scrollToBottom();
     return {

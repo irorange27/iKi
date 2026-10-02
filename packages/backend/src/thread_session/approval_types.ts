@@ -1,6 +1,7 @@
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { ModelMessage } from 'ai';
 import type { AgentResult, ToolApprovalRequest } from '@iki/backend/agent';
+import type { ThreadWorkspaceSelection } from '../workspaces/thread_workspace';
 import type { ChatStreamTarget } from './types';
 
 export type ApprovalRecoveryContext = {
@@ -15,6 +16,12 @@ export type ApprovalRecoveryContext = {
   maxInputTokens?: number;
   maxOutputTokens?: number;
   maxIterations?: number;
+  /**
+   * The turn-start workspace selection (D30). Approval recovery rebinds this
+   * world — not the thread's current selection — so an approved action always
+   * executes where the turn started. Persisted with the approval session row.
+   */
+  workspaceSelection?: ThreadWorkspaceSelection | null;
   /** Reasoning-effort override to keep across approval-resumed turns. */
   reasoningEffort?: string;
   approvalPolicy?: ApprovalPolicy;
@@ -83,6 +90,8 @@ export const createApprovalRecoveryContext = (params: {
   requireApproval?: boolean;
   enabledTools: string[];
   availableSkillIds: string[];
+  /** Turn-start workspace binding (D30) — persisted with the approval rows. */
+  workspaceSelection?: ThreadWorkspaceSelection | null;
   autonomous?: {
     maxIterations: number;
     continuePrompt?: string;
@@ -116,6 +125,9 @@ export const createApprovalRecoveryContext = (params: {
     requireApproval: params.requireApproval,
     enabledTools: [...params.enabledTools],
     availableSkillIds: [...params.availableSkillIds],
+    ...(params.workspaceSelection !== undefined
+      ? { workspaceSelection: params.workspaceSelection }
+      : {}),
     ...(params.reasoningEffort ? { reasoningEffort: params.reasoningEffort } : {}),
     ...(params.autonomous ? { autonomous: { ...params.autonomous } } : {}),
   };

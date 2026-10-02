@@ -241,10 +241,15 @@ describe('createChatStreaming integration', () => {
       id: 'msg_user_probe',
       thread_id: 'thread_1',
     }));
+    // The turn settles within the 300ms trailing debounce, so the mid-turn
+    // progress write is superseded by the finalize upsert (the same profile
+    // the renderer's old debounced persist had). Both writes would be
+    // parented to the user row; the finalize one carries the done text.
     expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
     const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
     expect(turnRow).toMatchObject({
       thread_id: 'thread_1',
+      parent_id: 'msg_user_probe',
       message: { role: 'assistant', parts: expect.any(Array) },
     });
     const persistedParts =

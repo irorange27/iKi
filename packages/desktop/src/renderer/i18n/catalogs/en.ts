@@ -3,6 +3,8 @@ import { asCount, asText, defineCatalog } from '../shared';
 export const en = defineCatalog({
   'common.save': 'Save',
   'common.close': 'Close',
+  'common.minimize': 'Minimize',
+  'common.zoom': 'Zoom',
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',
   'common.reset': 'Reset',
@@ -52,16 +54,6 @@ export const en = defineCatalog({
   'common.loading': 'Loading...',
   'language.english': 'English',
   'language.chineseSimplified': '简体中文',
-  'chat.autonomous.triggerTitle': 'Autonomous agent mode',
-  'chat.autonomous.chip': 'Auto',
-  'chat.autonomous.title': 'Autonomous Mode',
-  'chat.autonomous.description':
-    'Let the agent keep working across multiple steps without waiting for your input.',
-  'chat.autonomous.enabled': 'Enabled',
-  'chat.autonomous.disabled': 'Disabled',
-  'chat.autonomous.activeDescription':
-    'Agent will self-drive for up to the configured number of iterations.',
-  'chat.autonomous.maxIterations': 'Max iterations:',
   'chat.reasoning.triggerTitle': 'Reasoning effort',
   'chat.reasoning.title': 'Reasoning Effort',
   'chat.reasoning.chip': 'Reasoning',
@@ -322,6 +314,8 @@ export const en = defineCatalog({
   'chat.external.notice': ({ channel }) =>
     `Viewing ${asText(channel)} in the desktop control plane. Messages you send here stay local to iKi and are not delivered back to the external channel.`,
   'chat.model.selectModel': 'Select Model',
+  'chat.model.menuModel': 'Model',
+  'chat.model.menuBack': 'Back',
   'chat.model.trigger.choose': 'Choose model',
   'chat.model.searchPlaceholder': 'Search models...',
   'chat.model.noProviders': 'No providers configured.',
@@ -451,6 +445,10 @@ export const en = defineCatalog({
   'settings.select.emptyText': 'No options available.',
   'settings.select.ariaLabel': 'Select an option',
   'settings.menu.general': 'General',
+  'settings.menu.models': 'Models & Tools',
+  'settings.menu.intelligence': 'Memory & Skills',
+  'settings.menu.automation': 'Automation',
+  'settings.menu.security': 'Security',
   'settings.menu.provider': 'Providers',
   'settings.menu.mcp': 'MCP',
   'settings.menu.bridges': 'Bridges',
@@ -467,6 +465,7 @@ export const en = defineCatalog({
   'settings.saved.unsaved': 'Unsaved changes',
   'settings.footer.close': 'Close',
   'settings.footer.save': 'Save',
+  'settings.common.advanced': 'Advanced',
   'settings.general.toolModel.title': 'Tool Model',
   'settings.general.toolModel.description':
     'Used for background AI tasks separate from your main chat model. If you want faster and cheaper runs, choose a fast, lower-cost non-reasoning model.',

@@ -49,6 +49,12 @@ type TurnDriverState = {
   approvalContext?: ApprovalRecoveryContext;
   streamHistory: ModelMessage[];
   streamPrompt: string;
+  /**
+   * The turn-start workspace binding (D30), shared across every batch of the
+   * turn — including handoff-resumed harnesses — so a mid-turn workspace
+   * switch never redirects this turn's tools.
+   */
+  workspaceSelectionBox?: { selection: unknown };
   accumulatedResponse: string;
   outerBatch: number;
   handoffChain: number;
@@ -67,6 +73,9 @@ export type OuterLoopDeps = {
   uiChunkEmitter: UiChunkEmitter;
   notifyRunStatus: () => void;
   drainSteerMessages: () => string[];
+  /** Called after each completed tool execution so the durable assistant
+   *  record carries mid-turn tool progress (crash recovery relies on it). */
+  onToolActivity?: () => void;
   approvals: {
     ensurePendingApprovalSession: (
       approvalId: string,
@@ -82,7 +91,7 @@ export type OuterLoopDeps = {
 
 export type TurnDriverSetup = Pick<
   TurnDriverState,
-  'harness' | 'runTracker' | 'approvalContext' | 'streamHistory' | 'streamPrompt'
+  'harness' | 'runTracker' | 'approvalContext' | 'streamHistory' | 'streamPrompt' | 'workspaceSelectionBox'
 >;
 
 export type TurnDriverHandle = {
@@ -222,6 +231,9 @@ const runOuterLoop = async (
     if (event) {
       state.runTracker.recordAgentStep(step);
       uiChunkEmitter.emitToolEvent(event);
+      if (event.type === 'tool-result' || event.type === 'tool-error') {
+        deps.onToolActivity?.();
+      }
     }
   };
 
@@ -257,6 +269,9 @@ const runOuterLoop = async (
                   providerId: options.providerId,
                   model: options.model,
                 },
+                ...(state.workspaceSelectionBox
+                  ? { workspaceSelectionBox: state.workspaceSelectionBox }
+                  : {}),
               },
               async () => {
                 for await (const event of state.harness.turn({
@@ -513,6 +528,12 @@ const runOuterLoop = async (
               requireApproval: preparedTurn.requireApproval,
               enabledTools: preparedTurn.guardedTools,
               availableSkillIds: preparedTurn.selectedSkillIds,
+              ...(state.workspaceSelectionBox
+                ? {
+                    workspaceSelection: state.workspaceSelectionBox
+                      .selection as ApprovalRecoveryContext['workspaceSelection'],
+                  }
+                : {}),
               ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
               ...(deps.autonomousMode ? { autonomous: options.autonomous } : {}),
             })

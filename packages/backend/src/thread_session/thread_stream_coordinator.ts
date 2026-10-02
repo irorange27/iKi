@@ -48,6 +48,13 @@ export const createThreadStreamCoordinator = (deps?: {
   ) => (() => void) | null;
 }) => {
   const runningThreads = new Set<string>();
+  /**
+   * Execution abort hooks keyed by thread, one slot per held lease. Every
+   * entry that acquires a thread (stream, send, approval resume) registers
+   * one, so a lease-loss barrier reaches executions that have no stream
+   * membership at all.
+   */
+  const executionAbortHooks = new Map<string, Set<() => void>>();
   const abortThreadRunForLeaseLoss = (threadId: string) => {
     const session = sessionsByThread.get(threadId);
     const streamState = session?.streamState;
@@ -55,8 +62,14 @@ export const createThreadStreamCoordinator = (deps?: {
       streamState.cancelled = true;
       streamState.abortController.abort('thread-lease-lost');
     }
+    for (const abort of executionAbortHooks.get(threadId) ?? []) {
+      abort();
+    }
   };
-  const tryAcquireThreadRun = (threadId?: string): (() => void) | null => {
+  const tryAcquireThreadRun = (
+    threadId?: string,
+    options?: { onExecutionAbort?: () => void }
+  ): (() => void) | null => {
     if (!threadId) return () => undefined;
     if (runningThreads.has(threadId)) return null;
     const releaseCrossProcess = deps?.crossProcessThreadRun?.(threadId, {
@@ -64,11 +77,24 @@ export const createThreadStreamCoordinator = (deps?: {
     });
     if (releaseCrossProcess === null) return null;
     runningThreads.add(threadId);
+    if (options?.onExecutionAbort) {
+      let hooks = executionAbortHooks.get(threadId);
+      if (!hooks) {
+        hooks = new Set();
+        executionAbortHooks.set(threadId, hooks);
+      }
+      hooks.add(options.onExecutionAbort);
+    }
     let released = false;
     return () => {
       if (released) return;
       released = true;
       runningThreads.delete(threadId);
+      const hooks = executionAbortHooks.get(threadId);
+      if (hooks) {
+        if (options?.onExecutionAbort) hooks.delete(options.onExecutionAbort);
+        if (hooks.size === 0) executionAbortHooks.delete(threadId);
+      }
       releaseCrossProcess?.();
     };
   };

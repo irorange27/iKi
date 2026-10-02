@@ -4,14 +4,11 @@
       <h3>{{ t('settings.napcat.title') }}</h3>
       <p class="group-description">{{ t('settings.napcat.description') }}</p>
 
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="napcat.enabled"
-          @change="updateNapCat('enabled', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.napcat.enable') }}
-      </label>
+      <SettingsSwitch
+        :model-value="napcat.enabled"
+        :title="t('settings.napcat.enable')"
+        @update:model-value="updateNapCat('enabled', $event)"
+      />
 
       <label class="input-label">
         <span>{{ t('settings.napcat.accessTokenOptional') }}</span>
@@ -89,14 +86,11 @@
         {{ t('settings.napcat.duplicateProviderType') }}
       </p>
 
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="napcat.requireMention"
-          @change="updateNapCat('requireMention', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.napcat.requireMention') }}
-      </label>
+      <SettingsSwitch
+        :model-value="napcat.requireMention"
+        :title="t('settings.napcat.requireMention')"
+        @update:model-value="updateNapCat('requireMention', $event)"
+      />
 
       <label class="input-label">
         <span>{{ t('settings.napcat.allowedTools') }}</span>
@@ -299,6 +293,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { toRef } from 'vue';
 
 import SettingsSelect from './SettingsSelect.vue';

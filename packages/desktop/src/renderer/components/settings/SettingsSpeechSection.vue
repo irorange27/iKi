@@ -2,14 +2,11 @@
   <section class="config-section">
     <div class="config-group">
       <h3>{{ t('settings.speech.inputTitle') }}</h3>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.speech.enabled"
-          @change="updateSpeech('enabled', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.speech.enable') }}
-      </label>
+      <SettingsSwitch
+        :model-value="config.speech.enabled"
+        :title="t('settings.speech.enable')"
+        @update:model-value="updateSpeech('enabled', $event)"
+      />
       <p class="group-description">{{ t('settings.speech.inputDescription') }}</p>
     </div>
 
@@ -224,6 +221,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { toRefs } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 

@@ -47,6 +47,24 @@ export const createMainWindow = (): BrowserWindow => {
 
   attachViewportResyncGuard(mainWindow);
 
+  if (process.platform === 'darwin') {
+    // The traffic lights are drawn by the renderer (TrafficLights.vue): macOS
+    // 15 greys the native buttons out to near-invisible on the light sidebar
+    // when the window is not focused, and they cannot be recolored natively.
+    mainWindow.setWindowButtonVisibility(false);
+    mainWindow.on('enter-full-screen', () => {
+      mainWindow.webContents.send('window:fullscreen-changed', true);
+    });
+    mainWindow.on('leave-full-screen', () => {
+      mainWindow.webContents.send('window:fullscreen-changed', false);
+    });
+    const sendFocusChanged = () => {
+      mainWindow.webContents.send('window:focus-changed', mainWindow.isFocused());
+    };
+    mainWindow.on('focus', sendFocusChanged);
+    mainWindow.on('blur', sendFocusChanged);
+  }
+
   void loadRendererEntry(mainWindow, { isPackaged: app.isPackaged });
 
   maybeOpenDevTools(mainWindow.webContents, {

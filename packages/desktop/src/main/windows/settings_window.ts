@@ -35,6 +35,14 @@ export const createSettingsWindow = (options?: { section?: string }): BrowserWin
     },
   });
 
+  if (process.platform === 'darwin') {
+    // The renderer draws the traffic lights (TrafficLights.vue); native
+    // buttons would duplicate them. The window itself is vestigial — settings
+    // open inside the main window via `#settings` — but stays functional.
+    settingsWindow.setWindowButtonVisibility(false);
+  }
+
+
   void loadRendererEntry(settingsWindow, {
     isPackaged: app.isPackaged,
     hash: section ? `settings/${section}` : 'settings',

@@ -387,6 +387,8 @@ const main = async () => {
   for (let i = 0; i < 30 && opened !== 'OK'; i++) {
     opened = await page(cdp, `(function(){
       // Title generation may rewrite the title; pick the newest real thread.
+      const expandBtn = document.querySelector('.toolbar-container .sidebar-tool-btn');
+      if (expandBtn) { expandBtn.click(); return 'EXPANDING'; }
       const items = [...document.querySelectorAll('.chat-item')];
       const target = items.find(i => {
         const text = (i.textContent || '').trim();
@@ -430,6 +432,8 @@ const main = async () => {
   let reopened = 'NO_THREAD';
   for (let i = 0; i < 30 && reopened !== 'OK'; i++) {
     reopened = await page(cdp, `(function(){
+      const expandBtn = document.querySelector('.toolbar-container .sidebar-tool-btn');
+      if (expandBtn) { expandBtn.click(); return 'EXPANDING'; }
       const items = [...document.querySelectorAll('.chat-item')];
       const target = items.find(i => {
         const text = (i.textContent || '').trim();

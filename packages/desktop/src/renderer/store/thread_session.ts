@@ -13,7 +13,6 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import { getCurrentLocale, translateWithLocale } from '../i18n';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
-import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import {
   parseJsonRecord,
   parseThreadLlmSelectionState,
@@ -44,7 +43,6 @@ type DraftComposerSelection = {
 type ThreadSessionRuntime = {
   electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
   messageStore: ChatMessageStore;
-  persistence: UiMessagePersistence;
   scrollToBottom: () => void;
   preferredDraftModel?: Pick<Ref<string | null | undefined>, 'value'>;
   preferredDraftProviderId?: Pick<Ref<string | null | undefined>, 'value'>;
@@ -369,7 +367,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     mode?: ThreadWorkMode;
     workspaceId?: string | null;
   }) => {
-    const { electronAPI, messageStore, persistence } = requireRuntime();
+    const { electronAPI, messageStore } = requireRuntime();
     const mode: ThreadWorkMode = options?.mode === 'work' ? 'work' : 'chat';
     const model = options?.model;
     try {
@@ -397,7 +395,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
       messageStore.clear();
-      persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
       showWelcome.value = false;
 
@@ -416,7 +413,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const loadThreadMessages = async (threadId: string) => {
-    const { electronAPI, messageStore, persistence, scrollToBottom } = requireRuntime();
+    const { electronAPI, messageStore, scrollToBottom } = requireRuntime();
     try {
       const dbMessages = await electronAPI.chat.messages.list(threadId);
 
@@ -432,8 +429,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
               typeof message.message === 'string'
           )
         : [];
-      persistence.resetPersistedMessageIds(rows.map(row => row.id));
-
       const chatMessages = rows.map(row => parseStoredUiMessage(row));
       messageStore.setAll(chatMessages);
       resetToolUiStateMap();
@@ -496,7 +491,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const handleThreadDeleted = async (threadId: string) => {
-    const { messageStore, persistence } = requireRuntime();
+    const { messageStore } = requireRuntime();
     if (currentThread.value?.id !== threadId) return;
 
     currentThread.value = null;
@@ -506,7 +501,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     currentApprovalPolicy.value = '';
     selectedWorkspaceId.value = null;
     messageStore.clear();
-    persistence.resetPersistedMessageIds();
     resetToolUiStateMap();
     showWelcome.value = true;
     restoreDraftComposerSelection();
@@ -525,7 +519,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const clearCurrentThread = async () => {
-    const { electronAPI, messageStore, persistence } = requireRuntime();
+    const { electronAPI, messageStore } = requireRuntime();
     const activeThread = currentThread.value;
     if (!activeThread) return null;
 
@@ -547,7 +541,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncReasoningEffortState(recreatedThread);
       syncPersonalityState(recreatedThread);
       messageStore.clear();
-      persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
       showWelcome.value = false;
 

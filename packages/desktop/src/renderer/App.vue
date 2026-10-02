@@ -1,6 +1,7 @@
 <template>
   <div class="app-container" :data-shell="shellKind">
     <div v-if="!isCompanion" class="titlebar-drag-region"></div>
+    <TrafficLights v-if="!isCompanion" />
     <CompanionView v-if="isCompanion" />
     <SettingsView
       v-else-if="isSettings"
@@ -16,6 +17,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import SettingsView from './views/SettingsView.vue';
 import ChatView from './views/ChatView.vue';
+import TrafficLights from './components/TrafficLights.vue';
 import CompanionView from './views/CompanionView.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useAppConfig } from './composables/useAppConfig';
@@ -46,6 +48,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('hashchange', updateHash);
+  unsubscribeFocusThread?.();
+  unsubscribeFocusThread = null;
   document.documentElement.classList.remove('companion-shell-mode');
   document.body.classList.remove('companion-shell-mode');
 });
@@ -56,9 +60,24 @@ const settingsSection = computed(() => extractSettingsSection(currentHash.value)
 const shellKind = computed(() =>
   isCompanion.value ? 'companion' : isSettings.value ? 'settings' : 'main'
 );
+// Settings now live in the main window (hash `#settings`); closing returns to
+// the chat view instead of closing a dedicated window.
 const closeSettings = () => {
-  electronAPI?.closeWindow?.();
+  window.location.hash = '';
 };
+
+// A task-review "focus thread" jump should land on the chat view, not behind
+// the settings page. Re-subscribed per settings visit; cleaned up on leave.
+let unsubscribeFocusThread: (() => void) | null = null;
+watch(isSettings, enabled => {
+  unsubscribeFocusThread?.();
+  unsubscribeFocusThread = null;
+  if (!enabled) return;
+  unsubscribeFocusThread =
+    electronAPI?.onFocusThread?.(() => {
+      window.location.hash = '';
+    }) ?? null;
+});
 
 watch(
   isCompanion,

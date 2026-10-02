@@ -2,7 +2,6 @@ import { computed, ref } from 'vue';
 import { AbstractChat, type ChatState, type ChatStatus } from 'ai';
 
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import { isDynamicToolPart } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../../logger';
@@ -10,20 +9,10 @@ import { recordToolChunkTiming } from './tool_ui_state';
 import { createToolApprovalController } from './tool_approval_controller';
 import { createIpcChatTransport, type IpcChatTransport } from './ipc_chat_transport';
 import { createChatMessageStore, type ChatMessageStore } from './chat_message_store';
-import { createUiMessagePersistence, type UiMessagePersistence } from './ui_message_persistence';
 
 const chatInstanceLogger = createLogger({ module: 'chat_instance' });
 
 class IkiChat extends AbstractChat<ChatUiMessage> {}
-
-/** A message worth persisting mid-turn: any tool activity (results, approvals). */
-const hasToolActivity = (message: ChatUiMessage | undefined): boolean =>
-  Boolean(
-    message &&
-      message.role === 'assistant' &&
-      Array.isArray(message.parts) &&
-      message.parts.some(part => isDynamicToolPart(part))
-  );
 
 const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
   if (!message || !Array.isArray(message.parts)) return false;
@@ -119,53 +108,14 @@ export const createChatInstance = (deps: {
   }) => Promise<void> | void;
   onStreamActivity?: () => void;
 }) => {
-  const persistence: UiMessagePersistence = createUiMessagePersistence({
-    electronAPI: deps.electronAPI,
-  });
+  // Turn output is durably persisted by the backend conversation seam
+  // (thread_session/turn_persistence.ts) — the renderer is a view.
   const transport: IpcChatTransport = createIpcChatTransport({
     electronAPI: deps.electronAPI,
   });
 
-  const persistAssistantMessage = async (message: ChatUiMessage, source: string) => {
-    // The stream-bound thread wins (approval resumes re-bind it); fall back
-    // to the thread the view currently shows.
-    const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
-    if (!threadId) return;
-
-    const messageIndex = messageStore.findIndexById(message.id);
-    const parentMessage =
-      messageIndex >= 0 ? messageStore.findLatestUserBefore(messageIndex) : undefined;
-    const parentId =
-      parentMessage && typeof parentMessage.id === 'string' ? parentMessage.id : undefined;
-
-    try {
-      await persistence.upsertUiMessage({ message, threadId, parentId, source });
-    } catch (error) {
-      chatInstanceLogger.event({
-        level: 'warn',
-        event: 'chat.assistant.persist',
-        outcome: 'failed',
-        error,
-        entity: { thread_id: threadId },
-      });
-    }
-  };
-
-  let midTurnPersistTimer: ReturnType<typeof setTimeout> | null = null;
-  const scheduleMidTurnPersist = (message: ChatUiMessage) => {
-    if (!hasToolActivity(message)) return;
-    if (midTurnPersistTimer) clearTimeout(midTurnPersistTimer);
-    // Trailing debounce; the captured object is the live SDK state message,
-    // so the timer persists the freshest accumulated shape.
-    midTurnPersistTimer = setTimeout(() => {
-      midTurnPersistTimer = null;
-      void persistAssistantMessage(message, 'tool-progress');
-    }, 300);
-  };
-
-  const { state, messagesArray } = createReactiveChatState(message => {
+  const { state, messagesArray } = createReactiveChatState(() => {
     deps.onStreamActivity?.();
-    scheduleMidTurnPersist(message);
   });
 
   const messageStore: ChatMessageStore = createChatMessageStore({ messages: messagesArray });
@@ -184,27 +134,20 @@ export const createChatInstance = (deps: {
       });
     },
     onFinish: ({ message, isAbort, isError }) => {
-      if (midTurnPersistTimer) {
-        clearTimeout(midTurnPersistTimer);
-        midTurnPersistTimer = null;
-      }
-
       if (!hasRenderableContent(message)) {
         messageStore.removeById(message.id);
         return;
       }
 
-      const finalize = async () => {
-        await persistAssistantMessage(message, isAbort ? 'assistant-abort' : 'assistant-response');
-        if (isError || isAbort) return;
-        const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
-        if (!threadId) return;
-        await deps.onAssistantMessagePersisted?.({
-          threadId,
-          messagesSnapshot: messageStore.snapshot(),
-        });
-      };
-      void finalize();
+      // Title generation hooks the stream settle (the durable record is the
+      // backend's concern and does not gate the sidebar title).
+      if (isError || isAbort) return;
+      const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
+      if (!threadId) return;
+      void deps.onAssistantMessagePersisted?.({
+        threadId,
+        messagesSnapshot: messageStore.snapshot(),
+      });
     },
   });
 
@@ -222,7 +165,6 @@ export const createChatInstance = (deps: {
     chat,
     transport,
     messageStore,
-    persistence,
     status: computed<ChatStatus>(() => state.status),
     error: computed<Error | undefined>(() => state.error),
     activeAssistantMessageId,

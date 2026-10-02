@@ -64,6 +64,12 @@ describe('ChatModelSelector', () => {
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
+    // The menu opens on the root pane; models live behind the drill-in cell.
+    const menuCells = wrapper.findAll('.model-menu-cell');
+    expect(menuCells.length).toBe(2);
+    await menuCells[0].trigger('click');
+    await flushPromises();
+
     const searchInput = wrapper.find('.model-selector-search-input');
     expect(searchInput.exists()).toBe(true);
 
@@ -115,6 +121,8 @@ describe('ChatModelSelector', () => {
     expect(triggerIcon.attributes('data-fallback-text')).toBe('PR');
 
     await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+    await wrapper.findAll('.model-menu-cell')[0].trigger('click');
     await flushPromises();
 
     const groupIcon = wrapper.find('.model-provider-icon .lobe-icon-stub');

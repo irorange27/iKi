@@ -140,11 +140,8 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:messages:get')?.(null, 'message_1')).toEqual({
       id: 'message_1',
     });
-    expect(await ipcHandlers.get('chat:messages:create')?.(null, messagePayload)).toEqual({
-      id: 'message_new',
-      thread_id: 'thread_1',
-      message: '{}',
-    });
+    // chat:messages:create was removed with A3: turn-driven persistence is
+    // backend-owned; the renderer keeps only user-driven edit/delete channels.
     expect(
       await ipcHandlers.get('chat:messages:update')?.(null, 'message_1', messagePayload)
     ).toEqual({
@@ -213,7 +210,6 @@ describe('chat IPC', () => {
     expect(chatServiceMock.deleteThread).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.listMessages).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getMessage).toHaveBeenCalledWith('message_1');
-    expect(chatServiceMock.createMessage).toHaveBeenCalledWith(messagePayload);
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
     expect(chatServiceMock.deleteMessage).toHaveBeenCalledWith('message_1');
     expect(chatServiceMock.listRuns).toHaveBeenCalledWith('thread_1');

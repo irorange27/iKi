@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 import { createChatInstance } from '../../../packages/desktop/src/renderer/modules/chat/chat_instance';
-import { createUiMessagePersistence } from '../../../packages/desktop/src/renderer/modules/chat/ui_message_persistence';
 import { useChatStreaming } from '../../../packages/desktop/src/renderer/composables/useChatStreaming';
 import type { ChatThread } from '@iki/backend/types/chat';
 
@@ -46,6 +45,7 @@ const createHarness = (options?: {
 
   const messageCreated = vi.fn(async (input: { id: string }) => ({ id: input.id }));
   const messageUpdated = vi.fn(async () => undefined);
+  const messageDeleted = vi.fn(async () => undefined);
   const stream = vi.fn(async () => ({ success: true }));
   const stopStream = vi.fn(async () => ({ success: true }));
   const updateThread = vi.fn(async () => ({ success: true }));
@@ -86,15 +86,13 @@ const createHarness = (options?: {
       messages: {
         create: messageCreated,
         update: messageUpdated,
-        delete: vi.fn(async () => undefined),
+        delete: messageDeleted,
       },
       threads: {
         update: updateThread,
       },
     },
   } as never;
-
-  const persistence = createUiMessagePersistence({ electronAPI });
 
   const chatInstance = createChatInstance({
     electronAPI,
@@ -109,7 +107,6 @@ const createHarness = (options?: {
     electronAPI,
     chatInstance,
     messageStore,
-    persistence,
     createMessageId: () => `msg_${messageStore.messages.length + 1}`,
     scrollToBottom,
     getCurrentThreadId: () => currentThread.value?.id ?? null,
@@ -134,6 +131,7 @@ const createHarness = (options?: {
     showWelcome,
     messageCreated,
     messageUpdated,
+    messageDeleted,
     stopStream,
     updateThread,
     createNewThread,
@@ -219,7 +217,7 @@ describe('useChatStreaming', () => {
       parts: [{ type: 'text', text: 'Follow-up' }],
     };
 
-    const { state, chatInstance, messageCreated } = createHarness({
+    const { state, chatInstance, messageCreated, messageUpdated, messageDeleted } = createHarness({
       currentThread: createStoredThread({ id: 'thread_1', model: 'gpt-4.1' }),
       initialMessages: [userMessage, assistantMessage, trailingUserMessage],
     });
@@ -232,14 +230,21 @@ describe('useChatStreaming', () => {
     });
     await flushMicrotasks();
 
-    // The real persistence truncate drops everything after the edited message.
+    // The truncate drops everything after the edited message (durable rows via
+    // the admin delete channel; turn-driven writes belong to the backend).
     expect(chatInstance.messageStore.messages).toHaveLength(1);
     expect(getTextPart(chatInstance.messageStore.messages[0] as UIMessage)).toBe(
       'Updated question'
     );
-    expect(messageCreated).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'user_1', thread_id: 'thread_1' })
+    expect(messageUpdated).toHaveBeenCalledWith(
+      'user_1',
+      expect.objectContaining({
+        message: expect.stringContaining('Updated question'),
+      })
     );
+    expect(messageDeleted).toHaveBeenCalledWith('assistant_1');
+    expect(messageDeleted).toHaveBeenCalledWith('user_2');
+    expect(messageCreated).not.toHaveBeenCalled();
     expect(state.editingUserMessageId.value).toBeNull();
     expect(getTextPart(result?.userMessage as UIMessage)).toBe('Updated question');
     expect(result).toMatchObject({
@@ -248,7 +253,7 @@ describe('useChatStreaming', () => {
     });
   });
 
-  it('creates the first thread on send and persists the built user message', async () => {
+  it('creates the first thread on send and leaves turn persistence to the backend', async () => {
     const { state, chatInstance, createNewThread, showWelcome, messageCreated } =
       createHarness({
         currentThread: null,
@@ -263,11 +268,8 @@ describe('useChatStreaming', () => {
 
     expect(createNewThread).toHaveBeenCalledWith({ model: 'gpt-4.1' });
     expect(showWelcome.value).toBe(false);
-    expect(messageCreated).toHaveBeenCalledWith(
-      expect.objectContaining({
-        thread_id: 'thread_new',
-      })
-    );
+    // The user message is durably recorded by the backend on stream entry.
+    expect(messageCreated).not.toHaveBeenCalled();
     // The user message lands in the store via chat.sendMessage, not here.
     expect(chatInstance.messageStore.messages).toHaveLength(0);
     expect(getTextPart(result?.userMessage as UIMessage)).toBe('Hello from a fresh composer');
