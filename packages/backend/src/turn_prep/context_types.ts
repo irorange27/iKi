@@ -54,6 +54,14 @@ export type ContextConfig = typeof DEFAULT_APP_CONFIG.memory.context;
 export type AssembleChatContextParams = {
   messages: ChatInputMessage[];
   threadId?: string;
+  /**
+   * Explicit turn-start workspace world (D30). When present — including an
+   * explicit null, meaning the turn started with no workspace — the workspace
+   * system message and project instructions are derived from it instead of
+   * re-resolving the thread's CURRENT selection. Undefined keeps the legacy
+   * fresh-resolution for callers without a frozen world.
+   */
+  workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
   contextMode?: ChatContextMode;

@@ -168,6 +168,11 @@ export const planToRunTrackerParams = (
       transport: plan.transport,
       ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
       requireApproval: plan.requireApproval,
+      // Persisted so the run-row recovery path (retry / queued resume) can
+      // restore them — the run row is those paths' only plan source, and a
+      // silently dropped field is neither full recovery nor a new decision.
+      ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
+      ...(plan.autonomous ? { autonomous: { ...plan.autonomous } } : {}),
       ...(typeof plan.contextTokens === 'number' ? { contextTokens: plan.contextTokens } : {}),
       skillMode: plan.skillMode,
       maxIterations: plan.maxIterations,

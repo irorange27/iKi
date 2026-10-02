@@ -116,12 +116,6 @@ export const createChatStreaming = (deps: {
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
 
-    // Turn-start workspace binding (D30), resolved at admission — before any
-    // await (preparation, memory retrieval) can observe a mid-turn switch.
-    // The plan, the executing harness world and the approval recovery context
-    // all share this one snapshot.
-    const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
-
     const uiChunkEmitter = createUiChunkEmitter(target);
 
     if (options.threadId) {
@@ -170,8 +164,18 @@ export const createChatStreaming = (deps: {
     };
 
     try {
+      // Turn-start workspace binding (D30), resolved at admission — it stays
+      // synchronous and ahead of every await (preparation, memory retrieval),
+      // so a mid-turn switch cannot be observed. It sits inside the try so a
+      // failing resolution (broken workspace directory, profile error) flows
+      // through the cleanup path and releases the admission instead of
+      // stranding the thread's in-memory guard and SQLite lease. The plan,
+      // the executing harness world, the context projection and the approval
+      // recovery context all share this one snapshot.
+      const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
       const preparedTurn = await turnPreparer.prepareChatTurn({
         ...options,
+        workspaceSelection: turnStartWorkspace,
         onMemoryRetrieved: payload => {
           uiChunkEmitter.emitMemoryRetrieval({
             query: payload.query,
