@@ -23,6 +23,7 @@ const logger = createLogger({ module: 'session_log' });
 
 export const INPUT_ACCEPTED = 'input_accepted';
 export const TURN_STARTED = 'turn_started';
+export const MODEL_TEXT_COMMITTED = 'model_text_committed';
 export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
 export const TURN_COMPLETED = 'turn_completed';
 export const TURN_FAILED = 'turn_failed';
@@ -42,6 +43,14 @@ export type TurnStartedPayload = {
   runId: string;
   kind: string;
   plan: ExecutionPlan;
+};
+
+export type ModelTextCommittedPayload = {
+  runId: string;
+  messageId: string;
+  /** Within-run counter in commit order — replay concatenates in log order. */
+  seq: number;
+  text: string;
 };
 
 export type ModelOutputCommittedPayload = {
@@ -205,6 +214,24 @@ export const rebuildThreadViewFromEvents = (threadId: string): RebuiltThreadView
         const existing = messages.findIndex(item => item.id === message.id);
         if (existing >= 0) messages[existing] = message;
         else messages.push(message);
+        break;
+      }
+      case MODEL_TEXT_COMMITTED: {
+        const messageId = typeof payload.messageId === 'string' ? payload.messageId : '';
+        const text = typeof payload.text === 'string' ? payload.text : '';
+        if (!messageId || !text) break;
+        let message = messages.find(item => item.id === messageId);
+        if (!message) {
+          message = { id: messageId, role: 'assistant', parts: [] };
+          messages.push(message);
+        }
+        const parts = message.parts as Array<{ type: string; text?: string }>;
+        const lastText = parts[parts.length - 1];
+        if (parts.length > 0 && lastText?.type === 'text' && typeof lastText.text === 'string') {
+          lastText.text += text;
+        } else {
+          parts.push({ type: 'text', text });
+        }
         break;
       }
       case APPROVAL_REQUESTED: {
