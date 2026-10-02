@@ -288,6 +288,16 @@ describe('recoverStuckRunsOnStartup tool-error reconciliation', () => {
       decisionSource: 'system',
       decisionReason: expect.stringContaining('startup recovery'),
     });
+
+    // The reclaimed turn's terminal fact is on the stream too: replay shows
+    // it failed instead of running forever.
+    expect(view.turns).toEqual([
+      expect.objectContaining({
+        runId: 'run_stuck',
+        status: 'failed',
+        errorText: expect.stringContaining('approval session lost'),
+      }),
+    ]);
   });
 
   it('feeds the recorded errors back to the model as paired tool results on the next turn', async () => {
