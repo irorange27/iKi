@@ -15,7 +15,9 @@ import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_appr
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
-import { DEFAULT_TOOL_CALL_MAX_ITERATIONS } from './constants';
+import { reidentifyPlan } from './approval_types';
+import type { ExecutionPlan } from './execution_plan';
+import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import {
   loadPersistedAssistantParts,
@@ -191,25 +193,28 @@ export const createChatApproval = (deps: {
 
     if (session.recoveryContext) {
       const recoveryContext = session.recoveryContext;
+      // The plan is the authority; the per-column fields are its persisted
+      // projection (legacy readers and the legacy recovery path read them).
+      const plan = recoveryContext.plan;
       toolCallApprovalDb.upsertToolCallApprovalSession({
         session_id: recoveryContext.sessionId,
-        thread_id: recoveryContext.threadId,
+        thread_id: plan.threadId ?? null,
         assistant_message_id: recoveryContext.assistantMessageId,
         run_id: recoveryContext.runId ?? null,
-        provider_type: recoveryContext.providerType,
-        provider_id: recoveryContext.providerId ?? null,
-        model: recoveryContext.model,
-        system_prompt: recoveryContext.systemPrompt,
-        max_input_tokens: recoveryContext.maxInputTokens ?? null,
-        max_output_tokens: recoveryContext.maxOutputTokens ?? null,
-        max_iterations: recoveryContext.maxIterations ?? null,
-        enabled_tools: JSON.stringify(recoveryContext.enabledTools),
-        available_skill_ids: JSON.stringify(recoveryContext.availableSkillIds),
+        provider_type: plan.providerType,
+        provider_id: plan.providerId ?? null,
+        model: plan.model,
+        system_prompt: plan.systemPrompt,
+        max_input_tokens: plan.maxInputTokens ?? null,
+        max_output_tokens: plan.maxOutputTokens ?? null,
+        max_iterations: plan.maxIterations ?? null,
+        enabled_tools: JSON.stringify(plan.enabledTools),
+        available_skill_ids: JSON.stringify(plan.availableSkillIds),
         // Turn-start workspace binding (D30): the resumed execution must
         // rebind this world, not the thread's current selection.
         workspace_selection:
-          recoveryContext.workspaceSelection !== undefined
-            ? JSON.stringify(recoveryContext.workspaceSelection)
+          plan.workspaceSelection !== undefined
+            ? JSON.stringify(plan.workspaceSelection)
             : null,
       });
 
@@ -343,7 +348,7 @@ export const createChatApproval = (deps: {
 
     if (!inputMessages || inputMessages.length === 0) return null;
 
-    const plan = deriveRunTurnPlan(runSnapshot, {
+    const derivedPlan = deriveRunTurnPlan(runSnapshot, {
       providerType: approvalSession.provider_type,
       providerId: approvalSession.provider_id,
       model: approvalSession.model,
@@ -353,8 +358,8 @@ export const createChatApproval = (deps: {
       maxIterations: approvalSession.max_iterations ?? undefined,
     });
     const resolvedToolNames =
-      plan.enabledTools.length > 0
-        ? plan.enabledTools
+      derivedPlan.enabledTools.length > 0
+        ? derivedPlan.enabledTools
         : Array.from(
           new Set(
             [...fallbackToolNames, ...activeApprovals.map(record => record.tool_name ?? '')]
@@ -380,37 +385,48 @@ export const createChatApproval = (deps: {
       });
     }
 
+    // Legacy recovery: the plan is rebuilt from the run row layered over the
+    // approval-session columns. Fields the columns never stored stay unset —
+    // the plan_json column (execution_plan persistence) replaces this
+    // derivation for rows written after it.
+    const plan: ExecutionPlan = {
+      providerType: derivedPlan.providerType,
+      ...(derivedPlan.providerId ? { providerId: derivedPlan.providerId } : {}),
+      model: derivedPlan.model,
+      // The legacy resume always re-enabled tools (bypass tools ride along
+      // via resolveTools even with an empty selection); keep that contract.
+      enableTools: true,
+      enabledTools: resolvedToolNames,
+      availableSkillIds: derivedPlan.availableSkillIds,
+      guardActive: false,
+      requireApproval: derivedPlan.requireApproval ?? true,
+      autoApproveToolRequests: false,
+      ...(derivedPlan.approvalPolicy ? { approvalPolicy: derivedPlan.approvalPolicy } : {}),
+      maxIterations: derivedPlan.maxIterations,
+      ...(typeof approvalSession.max_input_tokens === 'number'
+        ? { maxInputTokens: approvalSession.max_input_tokens }
+        : {}),
+      ...(typeof approvalSession.max_output_tokens === 'number'
+        ? { maxOutputTokens: approvalSession.max_output_tokens }
+        : {}),
+      systemPrompt: derivedPlan.systemPrompt,
+      skillMode: 'manual',
+      threadId,
+      kind: 'chat-turn',
+      runMetadata: {},
+      transport: 'approval-resume',
+      workspaceSelection: parseStoredWorkspaceSelection(approvalSession.workspace_selection),
+    };
+
     const session: PendingApprovalSession = {
       sessionId: approvalSession.session_id,
       target,
       history: inputMessages,
       recoveryContext: {
+        plan,
         sessionId: approvalSession.session_id,
-        threadId,
         assistantMessageId: approvalSession.assistant_message_id,
         ...(storedRunId ? { runId: storedRunId } : {}),
-        providerType: plan.providerType,
-        ...(plan.providerId ? { providerId: plan.providerId } : {}),
-        model: plan.model,
-        systemPrompt: plan.systemPrompt,
-        ...(typeof approvalSession.max_input_tokens === 'number'
-          ? { maxInputTokens: approvalSession.max_input_tokens }
-          : {}),
-        ...(typeof approvalSession.max_output_tokens === 'number'
-          ? { maxOutputTokens: approvalSession.max_output_tokens }
-          : {}),
-        maxIterations: plan.maxIterations,
-        approvalPolicy: plan.approvalPolicy,
-        requireApproval: plan.requireApproval ?? true,
-        enabledTools: resolvedToolNames,
-        availableSkillIds: plan.availableSkillIds,
-        ...(parseStoredWorkspaceSelection(approvalSession.workspace_selection) !== undefined
-          ? {
-              workspaceSelection: parseStoredWorkspaceSelection(
-                approvalSession.workspace_selection
-              ),
-            }
-          : {}),
       },
       pendingApprovalIds,
       collectedApprovalResponses,
@@ -544,42 +560,37 @@ export const createChatApproval = (deps: {
           assistantMessageId: resumeMessageId,
         }
       : undefined;
-    const resumeRunTracker = baseApprovalContext
-      ? createAgentRunTracker({
+    // The resumed execution runs under the paused turn's plan, re-identified
+    // as its own child run — never a re-derivation from current config.
+    const resumePlan = baseApprovalContext
+      ? reidentifyPlan(baseApprovalContext.plan, {
           kind: 'approval-resume',
-          threadId: baseApprovalContext.threadId,
-          parentRunId: session.recoveryContext?.runId,
-          providerType: baseApprovalContext.providerType,
-          providerId: baseApprovalContext.providerId,
-          model: baseApprovalContext.model,
-          systemPrompt: baseApprovalContext.systemPrompt,
-          enabledTools: baseApprovalContext.enabledTools,
-          availableSkillIds: baseApprovalContext.availableSkillIds ?? [],
-          input: {
-            messages: session.history ?? [],
-            metadata: {
-              transport: 'approval-resume',
-              approvalPolicy: baseApprovalContext.approvalPolicy,
-              requireApproval: baseApprovalContext.requireApproval ?? true,
+          parentRunId: baseApprovalContext.runId,
+          transport: 'approval-resume',
+        })
+      : undefined;
+    const resumeRunTracker = resumePlan
+      ? createAgentRunTracker(
+          planToRunTrackerParams(resumePlan, {
+            input: {
+              messages: session.history ?? [],
+            },
+            working: {
+              modelMessages: session.history ?? [],
+              accumulatedText: '',
+              pendingApprovalIds: Array.from(session.pendingApprovalIds).filter(
+                id => !session.collectedApprovalResponses.has(id)
+              ),
+              lastStepIndex: 0,
+            },
+            metadataExtras: {
               sourceSessionId: session.sessionId ?? session.recoveryContext?.sessionId ?? null,
               sourceRunId: session.recoveryContext?.runId ?? null,
               answeredApprovalIds: Array.from(session.collectedApprovalResponses.keys()),
-              maxIterations: baseApprovalContext.maxIterations,
-              enableTools:
-                baseApprovalContext.enabledTools.length > 0 ||
-                (baseApprovalContext.availableSkillIds?.length ?? 0) > 0,
               assistantMessageId: uiChunkEmitter.messageId,
             },
-          },
-          working: {
-            modelMessages: session.history ?? [],
-            accumulatedText: '',
-            pendingApprovalIds: Array.from(session.pendingApprovalIds).filter(
-              id => !session.collectedApprovalResponses.has(id)
-            ),
-            lastStepIndex: 0,
-          },
-        })
+          })
+        )
       : null;
     if (resumeRunTracker && baseApprovalContext?.runId) {
       rehydrateAgentRunTracker(baseApprovalContext.runId)?.markResumed({
@@ -589,6 +600,7 @@ export const createChatApproval = (deps: {
     const nextApprovalContext = baseApprovalContext
       ? {
           ...baseApprovalContext,
+          ...(resumePlan ? { plan: resumePlan } : {}),
           ...(resumeRunTracker ? { runId: resumeRunTracker.id } : {}),
         }
       : undefined;
@@ -603,44 +615,25 @@ export const createChatApproval = (deps: {
         {
           runId: resumeRunTracker?.id ?? nextApprovalContext?.runId,
           ...(resumeRunTracker ? { runTracker: resumeRunTracker } : {}),
-          threadId: nextApprovalContext?.threadId ?? session.recoveryContext?.threadId,
+          threadId: ctx?.plan.threadId,
           conversationModel: {
-            providerType: ctx?.providerType ?? '',
-            providerId: ctx?.providerId,
-            model: ctx?.model ?? '',
+            providerType: ctx?.plan.providerType ?? '',
+            providerId: ctx?.plan.providerId,
+            model: ctx?.plan.model ?? '',
           },
           // Rebind the ORIGINAL turn world (D30): a workspace switched while
           // the approval was pending must not redirect the approved action.
-          ...(ctx && ctx.workspaceSelection !== undefined
-            ? { workspaceSelectionBox: { selection: ctx.workspaceSelection } }
+          ...(ctx && ctx.plan.workspaceSelection !== undefined
+            ? { workspaceSelectionBox: { selection: ctx.plan.workspaceSelection } }
             : {}),
         },
         async () => {
-          // Create a fresh harness from the recovery context
-          const approvalThreadId =
-            nextApprovalContext?.threadId ?? session.recoveryContext?.threadId;
-          const approvalHarness = rehydrateHarness({
-            providerType: ctx?.providerType ?? '',
-            providerId: ctx?.providerId,
-            model: ctx?.model ?? '',
-            systemPrompt: ctx?.systemPrompt ?? '',
-            maxInputTokens: ctx?.maxInputTokens,
-            enableTools: true,
-            enabledToolNames: ctx?.enabledTools ?? [],
-            availableSkillIds: ctx?.availableSkillIds ?? [],
-            guardActive: false,
-            approvalPolicy: ctx?.approvalPolicy,
-            requireApproval: ctx?.requireApproval ?? true,
-            // A resumed turn continues the original budget; when recovery
-            // context lacks it, fall back to the chat-turn default (not a
-            // starved legacy 10).
-            maxIterations: ctx?.maxIterations ?? DEFAULT_TOOL_CALL_MAX_ITERATIONS,
-            ...(approvalThreadId ? { threadId: approvalThreadId } : {}),
-            ...(typeof ctx?.maxOutputTokens === 'number'
-              ? { maxOutputTokens: ctx.maxOutputTokens }
-              : {}),
-            ...(ctx?.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
-          });
+          // Create a fresh harness from the recovery context. guardActive
+          // stays off: the plan's tool selection is already the guarded,
+          // post-preparation result, and re-guarding could shrink it mid-turn.
+          const approvalHarness = rehydrateHarness(
+            planToHarnessConfig(ctx?.plan ?? resumePlan, { guardActive: false })
+          );
 
           // Build history with collected approval responses
           const responses = Array.from(session.collectedApprovalResponses.values());
@@ -715,7 +708,7 @@ export const createChatApproval = (deps: {
                 // persisted UI history for the fallback recovery branch.
                 // Seeded, or the write would replace the row's pre-pause
                 // parts with the continuation segment alone.
-                if (baseApprovalContext?.threadId) {
+                if (baseApprovalContext?.plan.threadId) {
                   void uiChunkEmitter
                     .buildPersistedMessage(
                       loadPersistedAssistantParts(uiChunkEmitter.messageId)
@@ -724,7 +717,7 @@ export const createChatApproval = (deps: {
                       persisted
                         ? persistAssistantTurnMessage(
                             deps.conversation,
-                            baseApprovalContext.threadId,
+                            baseApprovalContext.plan.threadId,
                             persisted,
                             'stream-progress'
                           )
@@ -813,10 +806,10 @@ export const createChatApproval = (deps: {
       resumeRunTracker?.syncModelMessages(resolvedHistory ?? session.history ?? []);
       if (!streamResult.cancelled && nextApprovalContext) {
         deps.usage.recordUsageEvent({
-          threadId: nextApprovalContext.threadId,
+          threadId: nextApprovalContext.plan.threadId,
           messageId: uiChunkEmitter.messageId,
-          providerType: nextApprovalContext.providerType,
-          model: nextApprovalContext.model,
+          providerType: nextApprovalContext.plan.providerType,
+          model: nextApprovalContext.plan.model,
           usage: streamResult.usage,
           source: 'chat.approval-stream',
           metadata: {
@@ -843,7 +836,7 @@ export const createChatApproval = (deps: {
           });
         }
       }
-      if (baseApprovalContext?.threadId) {
+      if (baseApprovalContext?.plan.threadId) {
         // Seed the reduction with the already-persisted pre-pause parts so the
         // accumulated message stays whole across the pause, then upsert.
         const persisted = await uiChunkEmitter.buildPersistedMessage(
@@ -852,7 +845,7 @@ export const createChatApproval = (deps: {
         if (persisted) {
           await persistAssistantTurnMessage(
             deps.conversation,
-            baseApprovalContext.threadId,
+            baseApprovalContext.plan.threadId,
             persisted,
             'approval-resume'
           );
@@ -865,7 +858,7 @@ export const createChatApproval = (deps: {
         // Exposed as the approve-result wire payload (the continuation reply
         // is already durably persisted by the backend turn-persistence seam
         // above, under the same assistant message id).
-        ...(session.recoveryContext?.threadId ? { threadId: session.recoveryContext.threadId } : {}),
+        ...(session.recoveryContext?.plan.threadId ? { threadId: session.recoveryContext.plan.threadId } : {}),
         ...(streamResult.response ? { text: streamResult.response } : {}),
       };
     } catch (error: unknown) {
@@ -899,7 +892,7 @@ export const createChatApproval = (deps: {
     const pending = pendingApprovalSessions.get(approvalId);
     const record = toolCallApprovalDb.getToolCallApproval(approvalId);
     const storedSession = record ? toolCallApprovalDb.getToolCallApprovalSession(record.session_id) : null;
-    const threadId = pending?.recoveryContext?.threadId ?? storedSession?.thread_id;
+    const threadId = pending?.recoveryContext?.plan.threadId ?? storedSession?.thread_id;
     // The execution abort hook is registered synchronously with admission so
     // a lease loss during the async resume-recovery below still reaches the
     // resumed execution once its controller exists. `lost` records a loss

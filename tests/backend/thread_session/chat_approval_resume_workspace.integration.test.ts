@@ -129,19 +129,31 @@ describe('approval resume keeps the turn-start workspace', () => {
             target,
             history: harness.getHistory(),
             recoveryContext: {
+              // What session_loop assembles at turn start: the plan (with the
+              // D30 workspace binding) plus the pause identities.
+              plan: {
+                providerType: 'openai',
+                model: 'audit',
+                enableTools: true,
+                enabledTools: ['write_file'],
+                availableSkillIds: [],
+                guardActive: false,
+                requireApproval: true,
+                autoApproveToolRequests: false,
+                approvalPolicy: 'always',
+                maxIterations: 5,
+                systemPrompt: `Current workspace: ${a}`,
+                skillMode: 'manual',
+                kind: 'chat-turn',
+                runMetadata: {},
+                transport: 'stream',
+                threadId: 'thread_probe',
+                // What session_loop now records at turn start (D30 binding).
+                workspaceSelection: resolveThreadWorkspaceSelectionSnapshot('thread_probe'),
+              },
               sessionId: 'assistant_probe',
               assistantMessageId: 'assistant_probe',
-              threadId: 'thread_probe',
               runId: tracker.id,
-              providerType: 'openai',
-              model: 'audit',
-              systemPrompt: `Current workspace: ${a}`,
-              enabledTools: ['write_file'],
-              availableSkillIds: [],
-              approvalPolicy: 'always',
-              maxIterations: 5,
-              // What session_loop now records at turn start (D30 binding).
-              workspaceSelection: resolveThreadWorkspaceSelectionSnapshot('thread_probe'),
             },
           });
         }

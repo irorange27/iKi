@@ -1,14 +1,14 @@
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { getStreamErrorMessage } from '@iki/backend/utils/errors';
-import {
-  NO_TOOLS_SYSTEM_PROMPT,
-  TOOL_AGENT_SYSTEM_PROMPT,
-  resolveToolCallMaxIterations,
-} from './constants';
 import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
 import { createApprovalRecoveryContext } from './approval_types';
+import {
+  assembleExecutionPlan,
+  planToHarnessConfig,
+  planToRunTrackerParams,
+} from './execution_plan';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from './run_tracker';
 import { summarizeContextComposition } from '../turn_prep/context_helpers';
@@ -22,7 +22,6 @@ import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './type
 import { createUiChunkEmitter } from './ui_stream';
 import { getCompanion } from './platform';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
-import { getPersonalityStylePrompt } from '../message/personality';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import {
   persistAssistantTurnMessage,
@@ -30,7 +29,7 @@ import {
 } from './turn_persistence';
 import type { UiChunkEmitter } from './types';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
-import { createTurnDriver, type TurnDriverHandle } from './outer_loop';
+import { createTurnDriver, finalizeRunForOutcome, type TurnDriverHandle } from './outer_loop';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -174,9 +173,7 @@ export const createChatStreaming = (deps: {
         },
       });
       streamState.abortController.signal.throwIfAborted();
-      const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
       const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
-      const guardedTools = preparedTurn.guardedTools;
 
       if (preparedTurn.usedSkills.length > 0) {
         uiChunkEmitter.emitSkillUsage({
@@ -221,13 +218,6 @@ export const createChatStreaming = (deps: {
         });
       }
 
-      const systemPrompt = [
-        preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
-        getPersonalityStylePrompt(options.personality),
-      ]
-        .filter(part => part.trim().length > 0)
-        .join('\n\n');
-
       let streamHistory = preparedTurn.history;
       let streamPrompt = preparedTurn.prompt;
 
@@ -244,92 +234,42 @@ export const createChatStreaming = (deps: {
         }
       }
 
-      const runTracker = createAgentRunTracker({
-        kind: options.runConfig?.kind ?? 'chat-turn',
-        threadId: options.threadId,
-        parentRunId: options.runConfig?.parentRunId,
-        rootRunId: options.runConfig?.rootRunId,
-        providerType: options.providerType,
-        providerId: options.providerId,
-        model: options.model,
-        systemPrompt,
-        enabledTools: guardedTools,
-        availableSkillIds: preparedTurn.selectedSkillIds,
-        ...(options.runConfig?.adoptRunId
-          ? { adoptExistingRunId: options.runConfig.adoptRunId }
-          : {}),
-        input: {
-          ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
-          messages: preparedTurn.finalMessages,
-          metadata: {
-            ...(options.runConfig?.metadata ?? {}),
-            transport: 'stream',
-            approvalPolicy,
-            requireApproval: preparedTurn.requireApproval,
-            contextTokens: preparedTurn.report.totalEstimatedTokens,
-            skillMode: preparedTurn.skillMode,
-            maxIterations,
-            enableTools: preparedTurn.enableTools,
-            assistantMessageId: uiChunkEmitter.messageId,
-          },
-        },
-        working: {
-          modelMessages: streamHistory,
-          accumulatedText: '',
-          pendingApprovalIds: [],
-          lastStepIndex: 0,
-        },
+      // Turn-start workspace binding (D30). The plan is the single definition
+      // of this execution: harness config, run-row identity/metadata and the
+      // approval recovery context below are all derived from it.
+      const plan = assembleExecutionPlan({
+        options,
+        preparedTurn,
+        transport: 'stream',
+        workspaceSelection: resolveThreadWorkspaceSelectionSnapshot(options.threadId),
       });
-      streamState.runId = runTracker.id;
 
-      // Turn-start workspace binding (D30): resolved once here, shared by the
-      // executing harness (runtime-context box) and the approval recovery
-      // context, so a mid-turn switch never redirects this turn's tools or
-      // its later-approved actions.
-      const workspaceSelectionBox = {
-        selection: resolveThreadWorkspaceSelectionSnapshot(options.threadId),
-      };
+      const runTracker = createAgentRunTracker(
+        planToRunTrackerParams(plan, {
+          input: {
+            ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
+            messages: preparedTurn.finalMessages,
+          },
+          working: {
+            modelMessages: streamHistory,
+            accumulatedText: '',
+            pendingApprovalIds: [],
+            lastStepIndex: 0,
+          },
+          metadataExtras: { assistantMessageId: uiChunkEmitter.messageId },
+        })
+      );
+      streamState.runId = runTracker.id;
 
       const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
-            threadId: options.threadId,
+            plan,
             sessionId: uiChunkEmitter.messageId,
             runId: runTracker.id,
-            providerType: options.providerType,
-            providerId: options.providerId,
-            model: options.model,
-            systemPrompt,
-            maxOutputTokens: preparedTurn.maxOutputTokens,
-            maxInputTokens: preparedTurn.maxInputTokens,
-            maxIterations,
-            requireApproval: preparedTurn.requireApproval,
-            enabledTools: guardedTools,
-            availableSkillIds: preparedTurn.selectedSkillIds,
-            workspaceSelection: workspaceSelectionBox.selection,
-            ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-            ...(approvalPolicy ? { approvalPolicy } : {}),
-            ...(autonomousMode ? { autonomous: options.autonomous } : {}),
           })
         : undefined;
 
-      const harness = startTurnHarness({
-        providerType: options.providerType,
-        providerId: options.providerId,
-        model: options.model,
-        systemPrompt,
-        enableTools: preparedTurn.enableTools,
-        enabledToolNames: guardedTools,
-        availableSkillIds: preparedTurn.selectedSkillIds,
-        guardActive: preparedTurn.guardActive,
-        requireApproval: preparedTurn.requireApproval,
-        autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
-        maxIterations,
-        threadId: options.threadId,
-        maxOutputTokens: preparedTurn.maxOutputTokens,
-        maxInputTokens: preparedTurn.maxInputTokens,
-        ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-        ...(approvalPolicy ? { approvalPolicy } : {}),
-      });
+      const harness = startTurnHarness(planToHarnessConfig(plan));
 
       if (!preparedTurn.prompt.trim()) {
         throw new Error('No user prompt provided for streaming');
@@ -370,14 +310,10 @@ export const createChatStreaming = (deps: {
         approvalContext,
         streamHistory,
         streamPrompt,
-        workspaceSelectionBox,
+        workspaceSelectionBox: { selection: plan.workspaceSelection },
       }, {
         target,
-        options,
-        preparedTurn,
-        maxIterations,
-        autonomousMode: Boolean(autonomousMode),
-        systemPrompt,
+        plan,
         streamState,
         uiChunkEmitter,
         notifyRunStatus,
@@ -435,44 +371,10 @@ export const createChatStreaming = (deps: {
         activeDriver.getAccumulatedResponse() || streamResult.response;
       const finalRunTracker = activeDriver.getRunTracker();
 
-      if (streamResult.outcome === 'cancelled') {
-        finalRunTracker.markCancelled({
-          ...(finalResponse ? { text: finalResponse } : {}),
-        });
-        notifyRunStatus();
-      } else if (streamResult.outcome === 'partial-failure') {
-        finalRunTracker.markFailed({
-          message: 'Autonomous iteration failed; partial progress saved.',
-          retryable: true,
-        });
-        notifyRunStatus();
-      } else if (streamResult.outcome === 'awaiting-approval') {
-        finalRunTracker.markBlocked({
-          ...(finalResponse ? { text: finalResponse } : {}),
-          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-        });
-        notifyRunStatus();
-      } else if (streamResult.outcome === 'handoff') {
-        const handoffResponse =
-          (finalResponse ? finalResponse + '\n\n' : '') +
-          `[Handoff] ${streamResult.handoff.summary}\n\nNext steps: ${streamResult.handoff.nextSteps}`;
-        finalRunTracker.markCompleted({
-          text: handoffResponse.trim() || undefined,
-          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          finishReason: 'handoff',
-        });
-        notifyRunStatus();
-      } else {
-        finalRunTracker.markCompleted({
-          ...(finalResponse ? { text: finalResponse } : {}),
-          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          finishReason:
-            streamResult.outcome === 'budget-exhausted'
-              ? 'budget-exhausted'
-              : 'completed',
-        });
-        notifyRunStatus();
-      }
+      finalizeRunForOutcome(finalRunTracker, streamResult, {
+        text: finalResponse,
+        notify: notifyRunStatus,
+      });
       if (streamResult.outcome !== 'awaiting-approval') {
         uiChunkEmitter.finish();
       }

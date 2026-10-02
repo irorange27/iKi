@@ -8,12 +8,12 @@ import { rehydrateHarness, type AgentHarness } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
 import { createAgentRunTracker } from './run_tracker';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
-import { createApprovalRecoveryContext } from './approval_types';
-import type { ChatTurnOptions, PreparedChatTurn } from '../turn_prep/turn_preparer';
+import { createApprovalRecoveryContext, reidentifyPlan } from './approval_types';
+import type { ExecutionPlan } from './execution_plan';
+import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
 import { writeThreadTodoPlan } from '../db/thread_todos';
-import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
 
 type OuterLoopStreamResultBase = {
@@ -64,15 +64,15 @@ type TurnDriverState = {
 
 export type OuterLoopDeps = {
   target: ChatStreamTarget;
-  options: ChatTurnOptions;
-  preparedTurn: PreparedChatTurn;
-  maxIterations: number;
-  autonomousMode: boolean;
-  systemPrompt: string;
+  /** The typed definition of this execution (see execution_plan.ts). */
+  plan: ExecutionPlan;
   streamState: ActiveStreamState;
   uiChunkEmitter: UiChunkEmitter;
   notifyRunStatus: () => void;
   drainSteerMessages: () => string[];
+  /** Conversation-preview projection (companion UI). Entries without a
+   *  visible subscriber (send, approval resume) turn it off. */
+  conversationPreview?: boolean;
   /** Called after each completed tool execution so the durable assistant
    *  record carries mid-turn tool progress (crash recovery relies on it). */
   onToolActivity?: () => void;
@@ -107,6 +107,50 @@ const MAX_OUTER_AUTONOMOUS_BATCHES = 50;
 const MAX_HANDOFF_CHAIN = 5;
 
 /**
+ * The authoritative terminal-outcome mapping: one place decides what each
+ * OuterLoopStreamResult outcome means for the run row. Every entry that runs
+ * the driver finalizes through this — adding a terminal outcome means
+ * changing this switch and the per-transport projection adapters, not each
+ * entry's private finalize code.
+ */
+export const finalizeRunForOutcome = (
+  tracker: AgentRunTracker,
+  result: OuterLoopStreamResult,
+  params: { text?: string; notify?: () => void } = {}
+): void => {
+  const text = params.text ?? result.response;
+  if (result.outcome === 'cancelled') {
+    tracker.markCancelled({ ...(text ? { text } : {}) });
+  } else if (result.outcome === 'partial-failure') {
+    tracker.markFailed({
+      message: 'Autonomous iteration failed; partial progress saved.',
+      retryable: true,
+    });
+  } else if (result.outcome === 'awaiting-approval') {
+    tracker.markBlocked({
+      ...(text ? { text } : {}),
+      usage: result.usage ? { ...result.usage } : undefined,
+    });
+  } else if (result.outcome === 'handoff') {
+    const handoffResponse =
+      (text ? text + '\n\n' : '') +
+      `[Handoff] ${result.handoff.summary}\n\nNext steps: ${result.handoff.nextSteps}`;
+    tracker.markCompleted({
+      text: handoffResponse.trim() || undefined,
+      usage: result.usage ? { ...result.usage } : undefined,
+      finishReason: 'handoff',
+    });
+  } else {
+    tracker.markCompleted({
+      ...(text ? { text } : {}),
+      usage: result.usage ? { ...result.usage } : undefined,
+      finishReason: result.outcome === 'budget-exhausted' ? 'budget-exhausted' : 'completed',
+    });
+  }
+  params.notify?.();
+};
+
+/**
  * The outer autonomous loop (ADR 004): one harness.turn() per batch,
  * autonomous mode only, with steer restart, approval blocking, handoff
  * chaining, and batch-boundary auto-compaction. Mutates `state` in place;
@@ -116,7 +160,10 @@ const runOuterLoop = async (
   state: TurnDriverState,
   deps: OuterLoopDeps,
 ): Promise<OuterLoopStreamResult | undefined> => {
-  const { target, options, preparedTurn, streamState, uiChunkEmitter } = deps;
+  const { target, plan, streamState, uiChunkEmitter } = deps;
+  const threadId = plan.threadId;
+  const autonomousMode = Boolean(plan.autonomous && plan.autonomous.maxIterations > 1);
+  const previewEnabled = deps.conversationPreview !== false;
   let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let previewText = '';
   let lastPreviewText = '';
@@ -124,9 +171,9 @@ const runOuterLoop = async (
   let accumulatedPerf: AgentTurnPerf | undefined;
 
   const sendConversationPreview = (kind: ConversationPreview['kind'], text: string, toolName?: string) => {
-    if (!options.threadId) return;
+    if (!previewEnabled || !threadId) return;
     getCompanion().setConversationPreview({
-      threadId: options.threadId,
+      threadId,
       kind,
       text: text.slice(-200),
       ...(toolName ? { toolName } : {}),
@@ -241,7 +288,7 @@ const runOuterLoop = async (
     sendConversationPreview('thinking', '');
 
     // ponytail: clear stale todo plan from previous turn before starting fresh
-    writeThreadTodoPlan({ threadId: options.threadId, items: [] });
+    writeThreadTodoPlan({ threadId, items: [] });
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -253,21 +300,21 @@ const runOuterLoop = async (
       try {
         agentResult = await traceChatTurn(
           {
-            threadId: options.threadId,
+            threadId,
             prompt: state.streamPrompt,
-            provider: options.providerType,
-            model: options.model,
+            provider: plan.providerType,
+            model: plan.model,
           },
           () =>
             runWithToolRuntimeContext(
               {
                 runId: state.runTracker.id,
                 runTracker: state.runTracker,
-                threadId: options.threadId,
+                threadId,
                 conversationModel: {
-                  providerType: options.providerType,
-                  providerId: options.providerId,
-                  model: options.model,
+                  providerType: plan.providerType,
+                  providerId: plan.providerId,
+                  model: plan.model,
                 },
                 ...(state.workspaceSelectionBox
                   ? { workspaceSelectionBox: state.workspaceSelectionBox }
@@ -454,88 +501,44 @@ const runOuterLoop = async (
         deps.notifyRunStatus();
 
         state.handoffChain++;
-        if (state.handoffChain >= MAX_HANDOFF_CHAIN || !deps.autonomousMode) break;
+        if (state.handoffChain >= MAX_HANDOFF_CHAIN || !autonomousMode) break;
 
         const parentRunId = state.runTracker.id;
-        const rootRunId = state.runTracker.getRun().rootRunId;
 
-        state.runTracker = createAgentRunTracker({
-          kind: 'handoff-resume',
-          threadId: options.threadId,
-          parentRunId,
-          rootRunId,
-          providerType: options.providerType,
-          providerId: options.providerId,
-          model: options.model,
-          systemPrompt: deps.systemPrompt,
-          enabledTools: preparedTurn.guardedTools,
-          availableSkillIds: preparedTurn.selectedSkillIds,
-          input: {
-            prompt: streamResult.handoff.nextSteps || streamResult.handoff.summary,
-            messages: [],
-            metadata: {
-              source: 'handoff',
-              approvalPolicy: parseApprovalPolicy(options.approvalPolicy),
-              requireApproval: preparedTurn.requireApproval,
-              parentRunId,
-              summary: streamResult.handoff.summary,
-              nextSteps: streamResult.handoff.nextSteps,
-              reason: streamResult.handoff.reason,
-              handoffChain: state.handoffChain,
-            },
-          },
-          working: {
-            modelMessages: [],
-            accumulatedText: '',
-            pendingApprovalIds: [],
-            lastStepIndex: 0,
-          },
-        });
+        state.runTracker = createAgentRunTracker(
+          planToRunTrackerParams(
+            reidentifyPlan(deps.plan, { kind: 'handoff-resume', parentRunId }),
+            {
+              input: {
+                prompt: streamResult.handoff.nextSteps || streamResult.handoff.summary,
+                messages: [],
+              },
+              working: {
+                modelMessages: [],
+                accumulatedText: '',
+                pendingApprovalIds: [],
+                lastStepIndex: 0,
+              },
+              metadataExtras: {
+                source: 'handoff',
+                parentRunId,
+                summary: streamResult.handoff.summary,
+                nextSteps: streamResult.handoff.nextSteps,
+                reason: streamResult.handoff.reason,
+                handoffChain: state.handoffChain,
+              },
+            }
+          )
+        );
         streamState.runId = state.runTracker.id;
 
-        state.harness = rehydrateHarness({
-          providerType: options.providerType,
-          providerId: options.providerId,
-          model: options.model,
-          systemPrompt: deps.systemPrompt,
-          enableTools: preparedTurn.enableTools,
-          enabledToolNames: preparedTurn.guardedTools,
-          availableSkillIds: preparedTurn.selectedSkillIds,
-          guardActive: preparedTurn.guardActive,
-          requireApproval: preparedTurn.requireApproval,
-          autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
-          approvalPolicy: parseApprovalPolicy(options.approvalPolicy) ?? undefined,
-          maxIterations: deps.maxIterations,
-          threadId: options.threadId,
-          maxOutputTokens: preparedTurn.maxOutputTokens,
-          maxInputTokens: preparedTurn.maxInputTokens,
-          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-        });
+        state.harness = rehydrateHarness(planToHarnessConfig(deps.plan));
 
-        state.approvalContext = preparedTurn.enableTools
+        state.approvalContext = deps.plan.enableTools
           ? createApprovalRecoveryContext({
-              threadId: options.threadId,
+              plan: reidentifyPlan(deps.plan, { kind: 'handoff-resume', parentRunId }),
               sessionId: uiChunkEmitter.messageId,
               runId: state.runTracker.id,
-              providerType: options.providerType,
-              providerId: options.providerId,
-              model: options.model,
-              systemPrompt: deps.systemPrompt,
-              maxOutputTokens: preparedTurn.maxOutputTokens,
-              maxInputTokens: preparedTurn.maxInputTokens,
-              maxIterations: deps.maxIterations,
-              approvalPolicy: parseApprovalPolicy(options.approvalPolicy) ?? undefined,
-              requireApproval: preparedTurn.requireApproval,
-              enabledTools: preparedTurn.guardedTools,
-              availableSkillIds: preparedTurn.selectedSkillIds,
-              ...(state.workspaceSelectionBox
-                ? {
-                    workspaceSelection: state.workspaceSelectionBox
-                      .selection as ApprovalRecoveryContext['workspaceSelection'],
-                  }
-                : {}),
-              ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-              ...(deps.autonomousMode ? { autonomous: options.autonomous } : {}),
             })
           : undefined;
 
@@ -548,16 +551,16 @@ const runOuterLoop = async (
         state.streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
         continue;
       }
-      if (!deps.autonomousMode) break;
+      if (!autonomousMode) break;
 
       state.outerBatch++;
       if (state.outerBatch >= Math.min(
         MAX_OUTER_AUTONOMOUS_BATCHES,
-        options.autonomous?.maxIterations ?? MAX_OUTER_AUTONOMOUS_BATCHES,
+        plan.autonomous?.maxIterations ?? MAX_OUTER_AUTONOMOUS_BATCHES,
       )) break;
 
       state.streamHistory = state.harness.getHistory();
-      state.streamPrompt = options.autonomous?.continuePrompt || 'Continue with the next step.';
+      state.streamPrompt = plan.autonomous?.continuePrompt || 'Continue with the next step.';
     }
 
     if (streamResult?.outcome === 'continuing') {

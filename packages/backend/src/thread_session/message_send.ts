@@ -11,19 +11,15 @@ import {
   type RegisterApprovalBatch,
 } from './approval_types';
 import {
-  NO_TOOLS_SYSTEM_PROMPT,
-  TOOL_AGENT_SYSTEM_PROMPT,
-  resolveToolCallMaxIterations,
-} from './constants';
+  assembleExecutionPlan,
+  planToHarnessConfig,
+  planToRunTrackerParams,
+} from './execution_plan';
+import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
-import { getPersonalityStylePrompt } from '../message/personality';
-import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
-import {
-  persistAssistantTurnMessage,
-  persistUserTurnMessage,
-} from './turn_persistence';
+import { persistAssistantTurnMessage, persistUserTurnMessage } from './turn_persistence';
 import { createUiChunkEmitter } from './ui_stream';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
 import type { ChatStreamEvent, ChatStreamTarget } from './types';
@@ -116,48 +112,31 @@ export const createMessageSend = (deps: MessageSendDeps) => {
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
       executionAbort.signal.throwIfAborted();
-      const maxIterations = resolveToolCallMaxIterations(options.maxIterations);
-      const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
 
-      const systemPrompt = [
-        preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
-        getPersonalityStylePrompt(options.personality),
-      ]
-        .filter(part => part.trim().length > 0)
-        .join('\n\n');
-
-      const activeRunTracker = createAgentRunTracker({
-        kind: options.runConfig?.kind ?? 'chat-turn',
-        threadId: options.threadId,
-        parentRunId: options.runConfig?.parentRunId,
-        rootRunId: options.runConfig?.rootRunId,
-        providerType: options.providerType,
-        providerId: options.providerId,
-        model: options.model,
-        systemPrompt,
-        enabledTools: preparedTurn.guardedTools,
-        availableSkillIds: preparedTurn.selectedSkillIds,
-        input: {
-          ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
-          messages: preparedTurn.finalMessages,
-          metadata: {
-            ...(options.runConfig?.metadata ?? {}),
-            transport: 'send',
-            approvalPolicy,
-            requireApproval: preparedTurn.requireApproval,
-            contextTokens: preparedTurn.report.totalEstimatedTokens,
-            skillMode: preparedTurn.skillMode,
-            maxIterations,
-            enableTools: preparedTurn.enableTools,
-          },
-        },
-        working: {
-          modelMessages: preparedTurn.history,
-          accumulatedText: '',
-          pendingApprovalIds: [],
-          lastStepIndex: 0,
-        },
+      // The plan is the single definition of this execution (same assembly
+      // the streaming path uses); the workspace binding is resolved at the
+      // same post-prepare point the tool path used before.
+      const plan = assembleExecutionPlan({
+        options,
+        preparedTurn,
+        transport: 'send',
+        workspaceSelection: resolveThreadWorkspaceSelectionSnapshot(options.threadId),
       });
+
+      const activeRunTracker = createAgentRunTracker(
+        planToRunTrackerParams(plan, {
+          input: {
+            ...(preparedTurn.prompt.trim() ? { prompt: preparedTurn.prompt } : {}),
+            messages: preparedTurn.finalMessages,
+          },
+          working: {
+            modelMessages: preparedTurn.history,
+            accumulatedText: '',
+            pendingApprovalIds: [],
+            lastStepIndex: 0,
+          },
+        })
+      );
       runTracker = activeRunTracker;
 
       if (preparedTurn.enableTools) {
@@ -165,27 +144,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        // Turn-start workspace binding (D30), same rule as the streaming path.
-        const workspaceSelection = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
-
-        const harness = startTurnHarness({
-          providerType: options.providerType,
-          providerId: options.providerId,
-          model: options.model,
-          systemPrompt,
-          enableTools: true,
-          enabledToolNames: preparedTurn.guardedTools,
-          availableSkillIds: preparedTurn.selectedSkillIds,
-          guardActive: preparedTurn.guardActive,
-          requireApproval: preparedTurn.requireApproval,
-          autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
-          maxIterations,
-          threadId: options.threadId,
-          maxOutputTokens: preparedTurn.maxOutputTokens,
-          maxInputTokens: preparedTurn.maxInputTokens,
-          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-          ...(approvalPolicy ? { approvalPolicy } : {}),
-        });
+        const harness = startTurnHarness(planToHarnessConfig(plan));
 
         // ponytail: clear stale todo plan from previous turn
         writeThreadTodoPlan({ threadId: options.threadId, items: [] });
@@ -207,7 +166,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               providerId: options.providerId,
               model: options.model,
             },
-            workspaceSelectionBox: { selection: workspaceSelection },
+            workspaceSelectionBox: { selection: plan.workspaceSelection },
           },
           async () => {
             for await (const event of harness.turn({
@@ -290,22 +249,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             // performs, so this pause is resumable through approveTool (and
             // recoverable after a restart) instead of name-only "blocked".
             const recoveryContext = createApprovalRecoveryContext({
-              threadId: options.threadId,
+              plan,
               sessionId: assistantMessageId,
               runId: activeRunTracker.id,
-              providerType: options.providerType,
-              providerId: options.providerId,
-              model: options.model,
-              systemPrompt,
-              maxOutputTokens: preparedTurn.maxOutputTokens,
-              maxInputTokens: preparedTurn.maxInputTokens,
-              maxIterations,
-              requireApproval: preparedTurn.requireApproval,
-              enabledTools: preparedTurn.guardedTools,
-              availableSkillIds: preparedTurn.selectedSkillIds,
-              workspaceSelection,
-              ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-              ...(approvalPolicy ? { approvalPolicy } : {}),
             });
             deps.approvals.registerApprovalBatch(output.toolApprovalRequests, {
               target: wireTarget,
