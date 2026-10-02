@@ -2,7 +2,7 @@
   <div
     class="sidebar-shell app-text relative flex flex-col top-1 bottom-1 transition-all rounded-lg duration-300 ease-in-out"
     :class="{
-      'm-1 border-2': !sidebar.isCollapsed.value,
+      'm-1 border': !sidebar.isCollapsed.value,
       'm-0 border-0 sidebar-shell-collapsed': sidebar.isCollapsed.value,
       'sidebar-resizing': isResizing,
     }"
@@ -11,9 +11,11 @@
       '--sidebar-width': `${sidebar.width.value}px`,
     }"
   >
-    <!-- Collapsed: fixed mini toolbar in the top-left corner -->
+    <!-- Collapsed: fixed mini toolbar in the top-left corner. Hidden while the
+         chat header is visible — the header renders the same controls inline
+         (ChatView leading cluster); this seat covers the headerless welcome. -->
     <div
-      v-if="sidebar.isCollapsed.value"
+      v-if="sidebar.isCollapsed.value && !props.hideCollapsedToolbar"
       class="toolbar-container fixed top-4 left-20 z-[var(--z-chrome)] flex items-center gap-1 transition-all duration-300"
     >
       <button class="sidebar-tool-btn icon-btn" @click="sidebar.toggle" :aria-label="t('chat.sidebar.toggle')">
@@ -224,7 +226,7 @@
               :class="{ 'chat-item-row--grouped': section.name !== null }"
             >
               <button
-                class="chat-item w-full truncate rounded-lg px-3 py-2 pr-16 text-left text-[13px] leading-5 focus:outline-none"
+                class="chat-item flex h-8 w-full items-center rounded-lg px-2.5 pr-16 text-left text-[13px] leading-5"
                 :class="{ 'chat-item-active': currentThreadId === chat.id }"
                 :title="chat.title"
                 @click="selectThread(chat.id)"
@@ -288,7 +290,7 @@
             class="chat-item-row chat-item-row-external"
           >
             <button
-              class="chat-item chat-item-external w-full rounded-lg px-3 py-2 text-left text-[13px] leading-5 focus:outline-none"
+              class="chat-item chat-item-external w-full rounded-lg px-3 py-2 text-left text-[13px] leading-5"
               :class="{ 'chat-item-active': currentThreadId === chat.id }"
               :title="chat.title"
               @click="selectThread(chat.id)"
@@ -319,7 +321,7 @@
             <button
               v-for="match in contentMatches"
               :key="match.messageId"
-              class="chat-item chat-message-match w-full rounded-lg px-3 py-2 text-left text-[13px] leading-5 focus:outline-none"
+              class="chat-item chat-message-match w-full rounded-lg px-3 py-2 text-left text-[13px] leading-5"
               :title="match.snippet"
               @click="selectThread(match.threadId)"
             >
@@ -358,7 +360,7 @@
               side="top"
             >
               <DropdownMenuItem
-                class="sidebar-menu-item sidebar-menu-item-settings"
+                class="sidebar-menu-item"
                 @select="handleOpenSettings"
               >
                 <span class="sidebar-menu-item-icon">
@@ -449,7 +451,6 @@ import { useSidebar } from '../composables/useSidebar';
 import { confirmAction } from '../composables/useConfirm';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
 import {
-  getElectronApiMethod,
   getElectronApiSlice,
   getElectronApiSliceMethod,
 } from '../services/electron_api';
@@ -513,7 +514,6 @@ interface WorkspaceInfo {
 const chatApi = getElectronApiSlice('chat');
 const workspacesApi = getElectronApiSlice('workspaces');
 const pickWorkspaceDirectory = getElectronApiSliceMethod('workspaces', 'pickDirectory');
-const openSettingsWindow = getElectronApiMethod('openSettings');
 
 const chatThreads = ref<ChatThread[]>([]);
 const workspaces = ref<WorkspaceInfo[]>([]);
@@ -546,6 +546,9 @@ let menuCloseTimer: ReturnType<typeof setTimeout> | null = null;
 // is what the tools are rooted at.
 const props = defineProps<{
   workspaceLocked?: boolean;
+  /** The chat header renders the collapsed controls inline; this seat only
+   * covers the headerless welcome view. */
+  hideCollapsedToolbar?: boolean;
 }>();
 
 // Emit events to parent
@@ -916,7 +919,7 @@ const formatRelativeTime = (iso: string): string => {
 };
 
 const openAutomations = () => {
-  openSettingsWindow?.('tasks');
+  window.location.hash = 'settings/tasks';
 };
 
 const toggleGroupCollapsed = (key: string) => {
@@ -1023,7 +1026,7 @@ const startResize = (e: StartResizeEvent) => {
 };
 
 const openSettings = () => {
-  openSettingsWindow?.();
+  window.location.hash = 'settings';
 };
 </script>
 <style scoped src="./sidebar.css"></style>

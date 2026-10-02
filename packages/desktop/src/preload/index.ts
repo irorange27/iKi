@@ -135,7 +135,6 @@ const electronApi: ElectronApi = {
     messages: {
       list: (threadId: string) => ipcRenderer.invoke('chat:messages:list', threadId),
       get: (id: string) => ipcRenderer.invoke('chat:messages:get', id),
-      create: (message: ChatMessageInput) => ipcRenderer.invoke('chat:messages:create', message),
       update: (id: string, message: ChatMessageInput) =>
         ipcRenderer.invoke('chat:messages:update', id, message),
       delete: (id: string) => ipcRenderer.invoke('chat:messages:delete', id),
@@ -301,6 +300,18 @@ const electronApi: ElectronApi = {
   onFocusThread: (callback: (threadId: string) => void) => subscribe('chat:thread-activate', callback),
   closeWindow: () => ipcRenderer.send('close-window'),
   setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
+  ...(process.platform === 'darwin'
+    ? {
+        windowControls: {
+          minimize: () => ipcRenderer.send('minimize-window'),
+          toggleMaximize: () => ipcRenderer.send('toggle-maximize-window'),
+          onFullscreenChange: (callback: (fullscreen: boolean) => void) =>
+            subscribe('window:fullscreen-changed', callback),
+          onFocusChange: (callback: (focused: boolean) => void) =>
+            subscribe('window:focus-changed', callback),
+        },
+      }
+    : {}),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronApi);

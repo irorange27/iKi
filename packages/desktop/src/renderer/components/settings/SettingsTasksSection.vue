@@ -129,15 +129,12 @@
         }}
       </p>
 
-      <label class="checkbox-label">
-        <input type="checkbox" v-model="taskForm.enabled" />
-        {{ t('common.enabled') }}
-      </label>
+      <SettingsSwitch v-model="taskForm.enabled" :title="t('common.enabled')" />
 
-      <label class="checkbox-label">
-        <input type="checkbox" v-model="taskForm.notify" />
-        {{ t('settings.tasks.desktopNotification') }}
-      </label>
+      <SettingsSwitch
+        v-model="taskForm.notify"
+        :title="t('settings.tasks.desktopNotification')"
+      />
 
       <div class="task-form-actions">
         <button class="secondary-btn" @click="createProactiveTask" :disabled="taskCreateLoading">
@@ -297,6 +294,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { toRef } from 'vue';
 
 import { getElectronAPI } from '../../services/electron_api';

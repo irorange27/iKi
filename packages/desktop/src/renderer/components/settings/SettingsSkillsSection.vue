@@ -122,27 +122,17 @@
 
     <div class="settings-card">
       <div class="card-title">{{ t('settings.skills.workflowTitle') }}</div>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.workflowOptimization.enabled"
-          @change="
-            updateWorkflowOptimization('enabled', ($event.target as HTMLInputElement).checked)
-          "
-        />
-        {{ t('settings.skills.workflowEnable') }}
-      </label>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.workflowOptimization.autoPinSkills"
-          :disabled="!config.workflowOptimization.enabled"
-          @change="
-            updateWorkflowOptimization('autoPinSkills', ($event.target as HTMLInputElement).checked)
-          "
-        />
-        {{ t('settings.skills.workflowAutoPin') }}
-      </label>
+      <SettingsSwitch
+        :model-value="config.workflowOptimization.enabled"
+        :title="t('settings.skills.workflowEnable')"
+        @update:model-value="updateWorkflowOptimization('enabled', $event)"
+      />
+      <SettingsSwitch
+        :model-value="config.workflowOptimization.autoPinSkills"
+        :title="t('settings.skills.workflowAutoPin')"
+        :disabled="!config.workflowOptimization.enabled"
+        @update:model-value="updateWorkflowOptimization('autoPinSkills', $event)"
+      />
       <p class="card-help">{{ t('settings.skills.workflowDescription') }}</p>
       <div class="skills-toolbar-actions">
         <button
@@ -159,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';

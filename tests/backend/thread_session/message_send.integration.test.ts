@@ -158,7 +158,9 @@ describe('createMessageSend integration', () => {
     expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
     expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
     // Retro-review regressions: user message create-only, assistant output
-    // upserted under the run-derived id.
+    // upserted under the run-derived id. The persisted projection is the same
+    // one streaming persists: the tool exchange plus the answer text (F4 —
+    // transport must not decide which execution facts survive).
     expect(conversation.createMessage).toHaveBeenCalledWith(expect.objectContaining({
       id: 'msg_user_probe',
       thread_id: 'thread_1',
@@ -168,7 +170,10 @@ describe('createMessageSend integration', () => {
     expect(turnRow.id).toMatch(/^assistant_run_/);
     expect(turnRow.message).toMatchObject({
       role: 'assistant',
-      parts: [{ type: 'text', text: 'done', state: 'done' }],
+      parts: expect.arrayContaining([
+        expect.objectContaining({ type: 'dynamic-tool', toolCallId: expect.any(String) }),
+        expect.objectContaining({ type: 'text', text: 'done', state: 'done' }),
+      ]),
     });
     const recordedSteps = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
       .map(([step]) => step);

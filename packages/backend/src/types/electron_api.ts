@@ -203,7 +203,6 @@ export interface ElectronApi {
     messages: {
       list: (threadId: string) => Promise<ChatMessage[]>;
       get: (id: string) => Promise<ChatMessage | null>;
-      create: (message: ChatMessageInput) => Promise<ChatMessage | null>;
       update: (id: string, message: ChatMessageInput) => Promise<unknown>;
       delete: (id: string) => Promise<unknown>;
     };
@@ -358,7 +357,15 @@ export interface ElectronApi {
   openSettings: (section?: string) => void;
   /** Focus the main window and switch its chat view to the given thread. */
   focusThread: (threadId: string) => void;
-  onFocusThread: (callback: (threadId: string) => void) => void;
+  onFocusThread: (callback: (threadId: string) => void) => () => void;
   closeWindow: () => void;
   setWindowShadow: (enabled: boolean) => void;
+  /** macOS only: the renderer draws the traffic lights, so the window
+   * controls ride along with them (native buttons are hidden). */
+  windowControls?: {
+    minimize: () => void;
+    toggleMaximize: () => void;
+    onFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;
+    onFocusChange: (callback: (focused: boolean) => void) => () => void;
+  };
 }

@@ -185,12 +185,12 @@
     flex: 0 1 auto;
     min-width: 0;
     flex-wrap: wrap;
-    gap: 2px;
+    gap: 4px 2px;
     padding: 0 2px;
   }
 
   .composer-context-row .composer-chip {
-    height: 26px;
+    height: 28px;
     border: none;
     background: transparent;
     color: var(--text-muted);
@@ -405,7 +405,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 30px;
+    height: 28px;
     padding: 0 10px;
     border: none;
     border-radius: 999px;
@@ -432,7 +432,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 30px;
+    height: 28px;
     padding: 0 10px;
     border: 1px solid var(--border-color);
     border-radius: 999px;
@@ -858,7 +858,7 @@
    next to the other popover surfaces instead of the scoped sidebar.css). */
 .sidebar-project-panel {
   width: 264px;
-  border: 1px solid var(--sidebar-border);
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
   border-radius: 12px;
   background: var(--sidebar-background);
   box-shadow: var(--surface-shadow-md);

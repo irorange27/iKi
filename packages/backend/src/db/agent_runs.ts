@@ -4,6 +4,7 @@ import type {
   AgentRunError,
   AgentRunInput,
   AgentRunOutput,
+  AgentRunStatus,
   AgentRunTrace,
   AgentRunTree,
   AgentRunStep,
@@ -454,12 +455,65 @@ export const appendAgentRunStep = (step: AgentRunStep): AgentRunStep => {
   return step;
 };
 
+/**
+ * Conditionally claim a queued run for execution: only a row still in
+ * `queued` transitions to `running`, and the same row (id) keeps being the
+ * execution's identity. Returns null when another claim or a terminal state
+ * won the race, so a repeat execute command cannot double-start the work.
+ */
+export const claimQueuedAgentRun = (runId: string): AgentRun | null => {
+  const normalized = normalizeWhitespace(runId);
+  if (!normalized) return null;
+  const db = getDb();
+  return db.transaction(() => {
+    const claim = db
+      .prepare(
+        `UPDATE agent_runs SET status = 'running', updated_at = ?
+         WHERE id = ? AND status = 'queued'`
+      )
+      .run(toIsoNow(), normalized);
+    if (claim.changes === 0) return null;
+    return getAgentRun(normalized);
+  })();
+};
+
 export const appendAgentRunStepAndUpdateRun = (
   step: AgentRunStep,
   updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>
 ): AgentRun => {
   const db = getDb();
   return db.transaction(() => {
+    appendAgentRunStep(step);
+    const updated = updateAgentRun(step.runId, updates);
+    if (!updated) {
+      throw new Error('Cannot update missing agent run "' + step.runId + '"');
+    }
+    return updated;
+  })();
+};
+
+/**
+ * Atomic step+run write that first claims the run conditionally: when the
+ * run's current status is not in `expectedStatuses`, nothing is written and
+ * null is returned. Startup recovery uses this so a run that reached a
+ * terminal state (or was reclaimed by another reclaimer) between listing and
+ * reconciliation cannot be overwritten by a stale writer.
+ */
+export const appendAgentRunStepAndUpdateRunIfStatus = (
+  step: AgentRunStep,
+  updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
+  expectedStatuses: readonly AgentRunStatus[]
+): AgentRun | null => {
+  const db = getDb();
+  const placeholders = expectedStatuses.map(() => '?').join(', ');
+  return db.transaction(() => {
+    const claim = db
+      .prepare(
+        `UPDATE agent_runs SET updated_at = updated_at
+         WHERE id = ? AND status IN (${placeholders})`
+      )
+      .run(step.runId, ...expectedStatuses);
+    if (claim.changes === 0) return null;
     appendAgentRunStep(step);
     const updated = updateAgentRun(step.runId, updates);
     if (!updated) {

@@ -285,6 +285,12 @@ const mountChatView = async () => {
 
   const pinia = createPinia();
   setActivePinia(pinia);
+  // ChatView reads the sidebar singleton (collapsed-state header clearance);
+  // tests bypass App.vue, so seed it here.
+  const { createSidebar } = await import(
+    '../../../packages/desktop/src/renderer/composables/useSidebar'
+  );
+  createSidebar();
   const threadSession = useThreadSessionStore();
   threadSession.currentThread = currentThreadRef.value as never;
   threadSession.currentModel = currentModelRef.value;

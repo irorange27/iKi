@@ -16,6 +16,9 @@ export interface ToolCallApprovalSession {
   max_iterations?: number | null;
   enabled_tools: string; // JSON string
   available_skill_ids: string; // JSON string
+  /** Turn-start workspace selection snapshot (JSON string | null) — approval
+   *  recovery rebinds this world instead of the thread's current selection. */
+  workspace_selection?: string | null;
   created_at: string;
   updated_at: string;
 }

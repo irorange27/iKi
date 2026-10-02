@@ -42,6 +42,32 @@ const withImmediateTransaction = <T>(run: () => T): T => {
  * `onLeaseLost` fires exactly once so the holder can abort its run instead of
  * continuing beside the new owner.
  */
+/**
+ * True while an unexpired lease exists for the thread — i.e. some process may
+ * be actively executing a turn on it right now. Startup recovery must treat
+ * such runs as live: only executions whose lease is gone are reclaimable.
+ */
+export const hasLiveThreadRunLease = (threadId: string): boolean => {
+  try {
+    const row = getDb()
+      .prepare('SELECT 1 FROM thread_run_locks WHERE thread_id = ? AND expires_at > ? LIMIT 1')
+      .get(threadId, Date.now());
+    return row !== undefined;
+  } catch (error) {
+    lockLogger.event({
+      level: 'warn',
+      event: 'thread_run_lock.lease_probe',
+      outcome: 'degraded',
+      error,
+      entity: { thread_id: threadId },
+      message: 'Live-lease probe failed; treating the thread as live.',
+    });
+    // Fail closed: a probe error must not let recovery reclaim a possibly
+    // live execution.
+    return true;
+  }
+};
+
 export const tryAcquireCrossProcessThreadRun = (
   threadId: string,
   options?: {

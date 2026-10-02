@@ -1,7 +1,7 @@
 <template>
   <div>
     <div
-      class="relative rounded-[22px] border chat-input-container"
+      class="relative border chat-input-container"
       @dragover.prevent="emit('dragover', $event)"
       @drop.prevent="handleDrop"
     >
@@ -33,7 +33,7 @@
         <button
           v-if="showExpandToggle"
           type="button"
-          class="composer-control-btn composer-expand-toggle h-8 w-8 rounded-lg flex items-center justify-center ui-text-secondary"
+          class="composer-control-btn composer-expand-toggle h-7 w-7 rounded-lg flex items-center justify-center ui-text-secondary"
           :class="{ 'is-expanded': isExpanded }"
           :aria-pressed="isExpanded"
           :aria-label="expandToggleLabel"
@@ -265,10 +265,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   border-color: var(--chat-composer-border-color);
-  border-radius: 12px;
+  border-radius: var(--surface-radius);
   background: var(--chat-composer-background);
   box-shadow: var(--chat-composer-shadow);
   backdrop-filter: var(--chat-composer-backdrop-filter);
+  /* Toolbar degradation keys off the composer's own width (DSH:
+     Container-Over-Viewport), so a side-by-side or narrow window reflows the
+     composer smoothly instead of on viewport breakpoints. */
+  container-type: inline-size;
 }
 
 .composer-input-region {
@@ -379,9 +383,9 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 14px;
+  gap: 8px 12px;
   padding: 6px 12px 10px;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--surface-radius) var(--surface-radius);
   /* stays transparent so the container's composer background (a gradient in
      light themes) shows through — an opaque fill would seam against it */
   background: transparent;
@@ -392,17 +396,33 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+/* Both slots hug their content (no inflated flex basis): the toolbar only
+   wraps when the two groups genuinely no longer fit side by side, and the
+   second row starts at the left edge instead of after an elastic gap. */
 .composer-toolbar-slot-left {
-  flex: 1 1 320px;
+  flex: 0 1 auto;
 }
 
 .composer-toolbar-slot-right {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
+  gap: 8px;
   /* keeps the actions pinned to the right edge even when the toolbar wraps */
   justify-content: flex-end;
   margin-left: auto;
+}
+
+/* Tight container: tighten the rhythm instead of jumping layouts. */
+@container (max-width: 560px) {
+  .composer-input-region {
+    padding: 10px 10px 6px;
+  }
+
+  .composer-toolbar {
+    gap: 6px 8px;
+    padding: 6px 8px 8px;
+  }
 }
 
 .composer-expand-toggle {

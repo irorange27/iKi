@@ -100,8 +100,6 @@ const createHarness = (options?: {
     message,
     isRecording,
     isTranscribing,
-    isAutonomousMode: ref(false),
-    autonomousMaxIterations: ref(10),
     reasoningEffort: ref(''),
     personality: ref(''),
     approvalPolicy: ref(''),

@@ -8,7 +8,7 @@
 
 1. Get it running first: `pnpm run app:dev` (or `daemon:start`).
 2. Find the file via the table below; read before writing. Smallest reversible change, no speculative abstraction.
-3. `pnpm run ci:quality` must pass before declaring done. UI changes: click through in the running app — type-check ≠ feature-correct. Cross-layer wiring (renderer→IPC→backend→SDK→tools→persistence): run `pnpm run test:e2e` (real app + scripted provider; entry `tests/integration/e2e/run_smoke.mjs`).
+3. `pnpm run ci:quality` must pass before declaring done. UI changes: click through in the running app — type-check ≠ feature-correct; `pnpm run app:debug` + `pnpm run cdp` (see `scripts/app_cdp.mjs` header) is the scripted path — screenshots, hover, clicks, theme switches against the real renderer. Cross-layer wiring (renderer→IPC→backend→SDK→tools→persistence): run `pnpm run test:e2e` (real app + scripted provider; entry `tests/integration/e2e/run_smoke.mjs`).
 4. Commit only when the user asks (`pnpm run commit`). Never `--no-verify`. Single test file: `pnpm vitest run <path>`.
 5. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
 6. Release tags trigger the full macOS build (`release-build.yml`) and must match the root `package.json` version. Before pushing a tag: package locally (`cd packages/desktop && pnpm exec electron-forge package`), then launch the bundle's executable from a terminal — `out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` (arm64 machines: `out/iki-darwin-arm64`) — and watch stderr; the packaged asar is the real consumer boundary. Runbook: `docs/design/packaging-release.md`.
@@ -20,6 +20,8 @@
 | Command | Purpose |
 |---|---|
 | `pnpm run app:dev` | Desktop app in dev mode |
+| `pnpm run app:debug` | Desktop app in dev mode with CDP on `127.0.0.1:9222` |
+| `pnpm run cdp -- <cmd>` | Drive the running app over CDP: `list` / `eval` / `shot` / `hover` / `click` / `theme` |
 | `pnpm run app:preview` | Launch the latest packaged app from `out/` |
 | `pnpm run app:build` | Build distributable artifacts |
 | `pnpm run daemon:start` | Headless daemon |

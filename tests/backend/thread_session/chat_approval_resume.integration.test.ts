@@ -307,7 +307,20 @@ describe('createChatApproval resume integration', () => {
     );
     expect(approvalDb.consumeToolCallApprovalSession).toHaveBeenCalledWith('assistant_1');
     // Retro-review regression: the backend must durably persist the seeded,
-    // completed continuation under the resumed message id.
+    // completed continuation under the resumed message id. The resumed loop
+    // also writes immediate mid-turn progress after each executed tool (no
+    // debounce on this path), so expect at least two writes.
+    expect(conversationMocks.upsertTurnMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const [progressCall] = conversationMocks.upsertTurnMessage.mock.calls as Array<
+      [Record<string, unknown>]
+    >;
+    expect(progressCall[0].message).toMatchObject({
+      role: 'assistant',
+      parts: expect.arrayContaining([
+        expect.objectContaining({ text: 'before pause' }),
+        expect.objectContaining({ type: 'dynamic-tool' }),
+      ]),
+    });
     expect(conversationMocks.upsertTurnMessage).toHaveBeenCalledWith(expect.objectContaining({
       id: 'assistant_1',
       thread_id: 'thread_1',

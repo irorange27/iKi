@@ -77,6 +77,9 @@ export type ChatTurnOptions = {
     parentRunId?: string;
     rootRunId?: string;
     metadata?: Record<string, unknown>;
+    /** Execute the turn inside this already-queued run id (queued resume /
+     * retry adoption) instead of creating a new run identity. */
+    adoptRunId?: string;
   };
   autonomous?: {
     maxIterations: number;
@@ -363,7 +366,16 @@ export const createChatTurnPreparer = (deps: {
       affectState: affectStateForRouting,
       autoApproveToolRequests,
     });
-    const skillRequiredTools = collectRequiredBuiltinSkillTools(usedSkills);
+    // An explicit tools array is the caller's capability upper bound (the
+    // resolveToolNames contract: an explicit empty array disables tools).
+    // Never expand it — daemon grants, NapCat and proactive-task safe lists
+    // all arrive here pre-filtered. Only auto mode (no tools param) keeps the
+    // desktop default of an always-exposed shell; execution still requires
+    // per-command user approval.
+    const explicitToolSelection = Array.isArray(options.tools);
+    const skillRequiredTools = explicitToolSelection
+      ? []
+      : collectRequiredBuiltinSkillTools(usedSkills);
     const mergedResolvedTools = mergeToolNames(resolvedTools, skillRequiredTools);
     const guardedTools = applyToolGuard(
       mergedResolvedTools,
@@ -373,8 +385,7 @@ export const createChatTurnPreparer = (deps: {
       interventionPolicy
     ).filter(toolName => Boolean(options.threadId) || toolName !== TODO_PLANNING_TOOL_NAME);
 
-    // Shell is always available; execution still requires per-command user approval.
-    if (!guardedTools.includes('shell')) {
+    if (!explicitToolSelection && !guardedTools.includes('shell')) {
       guardedTools.push('shell');
     }
 
