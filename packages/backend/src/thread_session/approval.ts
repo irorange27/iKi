@@ -410,6 +410,9 @@ export const createChatApproval = (deps: {
       autoApproveToolRequests: false,
       ...(derivedPlan.approvalPolicy ? { approvalPolicy: derivedPlan.approvalPolicy } : {}),
       maxIterations: derivedPlan.maxIterations,
+      // The run row may carry config the legacy columns never stored.
+      ...(derivedPlan.reasoningEffort ? { reasoningEffort: derivedPlan.reasoningEffort } : {}),
+      ...(derivedPlan.autonomous ? { autonomous: derivedPlan.autonomous } : {}),
       ...(typeof approvalSession.max_input_tokens === 'number'
         ? { maxInputTokens: approvalSession.max_input_tokens }
         : {}),
