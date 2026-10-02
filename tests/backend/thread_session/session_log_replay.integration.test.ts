@@ -247,4 +247,16 @@ describe('session log turn facts and pure replay', () => {
     const revisions = view.events.map(event => event.revision);
     expect(revisions).toEqual([...revisions].sort((a, b) => a - b));
   });
+
+  it('deletes the stream with its conversation', async () => {
+    // The shared stream carries facts from the earlier tests; deleting the
+    // conversation must take every one of them with it.
+    const { deleteChatThread } = await import('@iki/backend/db/chat_thread');
+    expect(rebuildThreadViewFromEvents('thread_log').events.length).toBeGreaterThan(0);
+    deleteChatThread('thread_log');
+    const view = rebuildThreadViewFromEvents('thread_log');
+    expect(view.events).toEqual([]);
+    expect(view.messages).toEqual([]);
+    expect(view.turns).toEqual([]);
+  });
 });

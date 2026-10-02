@@ -487,7 +487,7 @@ export const createChatStreaming = (deps: {
             'stream-abort',
             userTurnMessageId
           );
-          const cancelledTracker = driver?.getRunTracker();
+          const cancelledTracker = driver?.getRunTracker() ?? sessionLogTracker;
           // A cancel while blocked records turn_cancelled while the run row
           // stays blocked (the approval remains resumable) — intentional
           // until the resume slice unifies the two.
