@@ -129,8 +129,15 @@ export const resolveThreadWorkspaceSelectionSnapshot = (
 ): ThreadWorkspaceSelection | null =>
   ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId);
 
-export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): string => {
-  const selection = ensureThreadWorkspaceSelection(threadId);
+/**
+ * Format the workspace system message from an explicit selection. Context
+ * projection must render the SAME world the turn's tools run in — callers
+ * that hold a turn-start snapshot pass it here instead of letting this
+ * re-resolve the thread's current selection.
+ */
+export const buildWorkspaceSystemMessageForSelection = (
+  selection: ThreadWorkspaceSelection | null | undefined
+): string => {
   if (!selection?.threadId || !selection.workspaceId) {
     return (
       'No workspace is selected for this conversation. Do not use filesystem or shell tools ' +
@@ -166,3 +173,8 @@ export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): str
     `Additional writable app data root: ${brainPath}. Use it for continuity files such as owner.md and memory_inbox/.`
   );
 };
+
+export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): string =>
+  buildWorkspaceSystemMessageForSelection(
+    ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId)
+  );

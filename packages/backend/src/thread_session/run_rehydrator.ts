@@ -27,6 +27,10 @@ export type RunTurnPlan = {
    */
   requireApproval?: boolean;
   maxIterations: number;
+  /** Restored execution configuration (run metadata); undefined when the row
+   *  never stored it — callers keep their current behavior then. */
+  reasoningEffort?: string;
+  autonomous?: { maxIterations: number; continuePrompt?: string };
 };
 
 export type RunTurnPlanFallback = {
@@ -63,6 +67,22 @@ export const deriveRunTurnPlan = (
   const metadata = run?.input?.metadata ?? {};
   const requireApproval =
     typeof metadata.requireApproval === 'boolean' ? metadata.requireApproval : undefined;
+  const reasoningEffort =
+    typeof metadata.reasoningEffort === 'string' && metadata.reasoningEffort.trim()
+      ? metadata.reasoningEffort.trim()
+      : undefined;
+  const autonomousMetadata = metadata.autonomous as
+    | { maxIterations?: unknown; continuePrompt?: unknown }
+    | undefined;
+  const autonomous =
+    autonomousMetadata && typeof autonomousMetadata === 'object' && typeof autonomousMetadata.maxIterations === 'number'
+      ? {
+          maxIterations: Math.max(1, Math.trunc(autonomousMetadata.maxIterations)),
+          ...(typeof autonomousMetadata.continuePrompt === 'string' && autonomousMetadata.continuePrompt
+            ? { continuePrompt: autonomousMetadata.continuePrompt }
+            : {}),
+        }
+      : undefined;
 
   return {
     providerType:
@@ -80,6 +100,8 @@ export const deriveRunTurnPlan = (
     availableSkillIds: run?.availableSkillIds ?? fallback?.availableSkillIds ?? [],
     approvalPolicy: parseApprovalPolicy(metadata.approvalPolicy) ?? undefined,
     requireApproval,
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+    ...(autonomous ? { autonomous } : {}),
     maxIterations: resolveToolCallMaxIterations(
       getRunMaxIterations(run) ?? fallback?.maxIterations ?? undefined
     ),
@@ -114,6 +136,8 @@ export const deriveResumeStreamOptions = (
     model: plan.model,
     ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
     ...(plan.requireApproval !== undefined ? { requireApproval: plan.requireApproval } : {}),
+    ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
+    ...(plan.autonomous ? { autonomous: { ...plan.autonomous } } : {}),
     maxIterations: plan.maxIterations,
     // The recorded input is the recovery source. A run without recorded
     // messages resumes empty and fails explicitly downstream — missing input

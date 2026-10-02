@@ -9,8 +9,10 @@ import {
   buildQueryFromMessages,
   buildSkillContext,
   readAgentInstructions,
+  readAgentInstructionsForSelection,
   resolveAffectMessage,
 } from './context_blocks';
+import { buildWorkspaceSystemMessageForSelection } from '../workspaces/thread_workspace';
 import {
   appendContextToLastUserMessage,
   buildAssembleResult,
@@ -60,17 +62,28 @@ export const createChatContextAssembler = (deps: {
     );
     blocks.push(recentHistory.block);
 
+    // The identity block must render the SAME world the turn executes in:
+    // when the caller holds a turn-start snapshot it wins (an explicit null
+    // means the turn started with no workspace); without one, resolve fresh.
+    const workspaceSystemMessage =
+      params.workspaceSelection !== undefined
+        ? buildWorkspaceSystemMessageForSelection(params.workspaceSelection)
+        : deps.workspaceSystemMessage?.(params.threadId) ?? '';
+    const agentInstructions =
+      params.workspaceSelection !== undefined
+        ? readAgentInstructionsForSelection(params.workspaceSelection)
+        : readAgentInstructions(params.threadId);
     const identityContext = benchmarkCleanContext
       ? {
           systemMessage: '',
           block: buildDroppedBlock('identity', 'disabled for benchmark clean mode'),
         }
       : buildIdentityContext(
-          deps.workspaceSystemMessage,
+          () => workspaceSystemMessage,
           params.threadId,
           contextConfig,
           params.modelCapability,
-          readAgentInstructions(params.threadId)
+          agentInstructions
         );
     blocks.push(identityContext.block);
 

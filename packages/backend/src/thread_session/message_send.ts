@@ -96,15 +96,19 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
 
-    // Turn-start workspace binding (D30), resolved at admission like the
-    // streaming path — before preparation awaits can observe a switch.
-    const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
     // Set once the driver exists; the catch paths must consult the driver's
     // CURRENT tracker (a handoff chain swaps it mid-turn).
     let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
 
     try {
+      // Turn-start workspace binding (D30), resolved at admission like the
+      // streaming path — synchronous, ahead of every preparation await. It
+      // sits inside the try so a failing resolution (broken workspace
+      // directory, profile error) flows through the cleanup path and
+      // releases the admission instead of stranding the thread.
+      const turnStartWorkspace = resolveThreadWorkspaceSelectionSnapshot(options.threadId);
+
       if (options.threadId) {
         const rateCheck = deps.checkThreadRunRate(options.threadId);
         if (!rateCheck.allowed) {
@@ -118,7 +122,10 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       // After admission: a rejected request must not leave a durable row.
       persistUserTurnMessage(deps.conversation, options);
 
-      const preparedTurn = await deps.turnPreparer.prepareChatTurn(options);
+      const preparedTurn = await deps.turnPreparer.prepareChatTurn({
+        ...options,
+        workspaceSelection: turnStartWorkspace,
+      });
       executionAbort.signal.throwIfAborted();
 
       // The plan is the single definition of this execution (same assembly

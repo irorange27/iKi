@@ -65,6 +65,13 @@ export type ChatTurnOptions = {
     maxOutputTokens?: number | null;
   };
   messages: ChatTransportMessage[];
+  /**
+   * The turn-start workspace world (D30), resolved by the entry at admission.
+   * Context projection renders this world — matching the tools, which run
+   * under the same snapshot — instead of re-resolving the thread's current
+   * selection after preparation awaits. Undefined = resolve fresh (legacy).
+   */
+  workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
   tools?: string[];
   mcpServerIds?: string[];
   skillIds?: string[];
@@ -326,6 +333,7 @@ export const createChatTurnPreparer = (deps: {
     const assembledContext = await contextAssembler.assemble({
       messages: modelMessages,
       threadId: options.threadId,
+      workspaceSelection: options.workspaceSelection,
       skillIds: options.skillIds,
       skillMode: options.skillMode,
       contextMode: options.experimentalContext?.contextMode,

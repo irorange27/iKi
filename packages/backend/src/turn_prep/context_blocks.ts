@@ -34,11 +34,18 @@ const hasMeaningfulContent = (value: string): boolean => {
   return stripped.length > 0;
 };
 
-export const readAgentInstructions = (threadId?: string): string => {
-  if (!threadId) return '';
+/**
+ * Project instructions from an explicit selection — the context projection
+ * must read the same world the turn's tools run in, not re-resolve current
+ * thread state. (threadId-based wrapper in the thread_workspace-independent
+ * callers resolves fresh.)
+ */
+export const readAgentInstructionsForSelection = (
+  selection: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined
+): string => {
+  if (!selection) return '';
 
-  const selection = getThreadWorkspaceSelection(threadId);
-  const workspacePath = selection?.workspace?.path;
+  const workspacePath = selection.workspace?.path;
   if (!workspacePath) return '';
 
   try {
@@ -55,6 +62,11 @@ export const readAgentInstructions = (threadId?: string): string => {
   } catch {
     return '';
   }
+};
+
+export const readAgentInstructions = (threadId?: string): string => {
+  if (!threadId) return '';
+  return readAgentInstructionsForSelection(getThreadWorkspaceSelection(threadId));
 };
 
 export const buildIdentityContext = (
