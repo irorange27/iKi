@@ -315,6 +315,9 @@ describe('createChatApproval', () => {
       max_iterations: 12,
       enabled_tools: '["web"]',
       available_skill_ids: '[]',
+      // Turn-start workspace binding rides with the session row (D30); this
+      // fixture records none, so the column stays null.
+      workspace_selection: null,
     });
     expect(upsertToolCallApprovalsMock).toHaveBeenCalledWith([
       {

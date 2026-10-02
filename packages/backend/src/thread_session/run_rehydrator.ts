@@ -91,7 +91,9 @@ type ResumeKind = NonNullable<NonNullable<ChatTurnOptions['runConfig']>['kind']>
 /**
  * Stream options for re-entering the turn loop from a run row (queued resume,
  * blocked resume, retry). Restores the plan fields the original turn ran
- * under — approval policy and iteration cap included.
+ * under — approval policy and iteration cap included — and replays the run's
+ * recorded input messages so the resumed turn targets the original task
+ * instead of an empty prompt.
  */
 export const deriveResumeStreamOptions = (
   run: AgentRun,
@@ -100,9 +102,12 @@ export const deriveResumeStreamOptions = (
     parentRunId?: string;
     metadata?: Record<string, unknown>;
     autonomous?: { maxIterations: number; continuePrompt?: string };
+    /** Adopt this run id as the executing identity (queued resume / retry). */
+    adoptRunId?: string;
   }
 ): ChatTurnOptions => {
   const plan = deriveRunTurnPlan(run);
+  const recordedMessages = Array.isArray(run.input?.messages) ? run.input.messages : [];
   return {
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
@@ -110,7 +115,10 @@ export const deriveResumeStreamOptions = (
     ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
     ...(plan.requireApproval !== undefined ? { requireApproval: plan.requireApproval } : {}),
     maxIterations: plan.maxIterations,
-    messages: [],
+    // The recorded input is the recovery source. A run without recorded
+    // messages resumes empty and fails explicitly downstream — missing input
+    // must not be fabricated.
+    messages: recordedMessages as ChatTurnOptions['messages'],
     threadId: run.threadId ?? undefined,
     tools: plan.enabledTools,
     skillIds: plan.availableSkillIds,
@@ -118,6 +126,7 @@ export const deriveResumeStreamOptions = (
       kind: overrides.kind,
       ...(overrides.parentRunId ? { parentRunId: overrides.parentRunId } : {}),
       rootRunId: run.rootRunId,
+      ...(overrides.adoptRunId ? { adoptRunId: overrides.adoptRunId } : {}),
       ...(overrides.metadata ? { metadata: overrides.metadata } : {}),
     },
     ...(overrides.autonomous ? { autonomous: overrides.autonomous } : {}),

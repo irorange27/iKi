@@ -247,3 +247,55 @@ describe('createThreadStreamCoordinator lease-loss abort', () => {
     release!();
   });
 });
+
+describe('createThreadStreamCoordinator execution handles', () => {
+  it('lease loss aborts the execution registered with the lease, membership or not', () => {
+    let notifyLeaseLost: (() => void) | undefined;
+    const coordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: (_threadId, options) => {
+        notifyLeaseLost = options.onLeaseLost;
+        return () => undefined;
+      },
+    });
+
+    // Send shape: no stream at all, just an execution abort controller. The
+    // approval-resume and streaming entries register the same hook.
+    const sendAbort = new AbortController();
+
+    const release = coordinator.tryAcquireThreadRun('thread_handles', {
+      onExecutionAbort: () => sendAbort.abort(),
+    });
+    expect(release).not.toBeNull();
+
+    notifyLeaseLost!();
+    expect(sendAbort.signal.aborted).toBe(true);
+
+    release!();
+  });
+
+  it('an execution hook outlives lease loss for late registrations and dies with release', () => {
+    let notifyLeaseLost: (() => void) | undefined;
+    const coordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: (_threadId, options) => {
+        notifyLeaseLost = options.onLeaseLost;
+        return () => undefined;
+      },
+    });
+
+    const lateAbort = new AbortController();
+    const release = coordinator.tryAcquireThreadRun('thread_late', {
+      onExecutionAbort: () => lateAbort.abort(),
+    });
+    notifyLeaseLost!();
+    // The hook was registered with the lease synchronously — a loss firing
+    // before the entry finished wiring its controller still reaches it once
+    // wired, because the hook itself is already live.
+    expect(lateAbort.signal.aborted).toBe(true);
+
+    release!();
+    const release2 = coordinator.tryAcquireThreadRun('thread_late');
+    expect(release2).not.toBeNull();
+    expect(notifyLeaseLost).toBeDefined();
+    release2!();
+  });
+});

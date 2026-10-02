@@ -550,6 +550,8 @@ export const generateChatWithModelMessages = async (options: {
   maxOutputTokens?: number;
   /** Optional thread id — forwarded to Langfuse as sessionId. */
   threadId?: string;
+  /** Cooperative cancellation (send execution aborts on lease loss). */
+  abortSignal?: AbortSignal;
 }): Promise<ChatGenerationResult> => {
   const model = createModel(options.providerType, options.modelId, options.providerId);
   const systemPrompt = [
@@ -574,6 +576,7 @@ export const generateChatWithModelMessages = async (options: {
       ...(typeof options.maxOutputTokens === 'number'
         ? { maxOutputTokens: options.maxOutputTokens }
         : {}),
+      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
       ...(telemetry ? { experimental_telemetry: telemetry } : {}),
     });
 

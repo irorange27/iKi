@@ -1,11 +1,14 @@
 import {
   appendAgentRunStepAndUpdateRun,
+  appendAgentRunStepAndUpdateRunIfStatus,
   createAgentRun,
   getAgentRun,
   listAgentRunSteps,
   listAgentRunsByStatus,
   updateAgentRun,
 } from '@iki/backend/db/agent_runs';
+import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
+import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
 import { getChatMessages, updateChatMessage } from '@iki/backend/db/chat_message';
 import { expirePendingToolCallApprovalsByRunIds } from '@iki/backend/db/tool_call_approval';
 import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
@@ -47,6 +50,13 @@ type CreateAgentRunTrackerParams = {
   availableSkillIds: string[];
   input: AgentRunInput;
   working: AgentRunWorkingState;
+  /**
+   * Adopt an existing (already claimed) run row instead of creating a new id —
+   * a queued resume or retry executes IN the queued identity. The row's own
+   * fields are authoritative; the descriptive params above are ignored.
+   * Claim via `claimQueuedAgentRun` first.
+   */
+  adoptExistingRunId?: string;
 };
 
 type FinalizeRunParams = {
@@ -121,6 +131,11 @@ export type AgentRunTracker = {
   markCompleted: (params: FinalizeRunParams) => AgentRun;
   markBlocked: (params: BlockRunParams) => AgentRun;
   markFailed: (params: FailRunParams) => AgentRun;
+  /** Conditional recovery finalize (see appendStepIfStatus). */
+  markFailedIfStatus: (
+    expectedStatuses: readonly AgentRunStatus[],
+    params: FailRunParams
+  ) => AgentRun | null;
   markCancelled: (params?: Pick<FinalizeRunParams, 'text'>) => AgentRun;
 };
 
@@ -172,6 +187,49 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
         lastStepIndex: stepIndex,
       },
     });
+    return step;
+  };
+
+  /**
+   * Recovery-only conditional finalize: the step and terminal run update are
+   * written only while the run row is still in one of `expectedStatuses`.
+   * Returns null (nothing written) when another writer finalized or reclaimed
+   * the run first.
+   */
+  const appendStepIfStatus = (
+    params: Parameters<typeof appendStep>[0],
+    updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
+    expectedStatuses: readonly AgentRunStatus[]
+  ): AgentRunStep | null => {
+    if (updates.status) assertRunStatusTransition(currentRun, updates.status);
+    const startedAt = toIsoNow();
+    const stepIndex = currentRun.working.lastStepIndex + 1;
+    const step: AgentRunStep = {
+      id: createPrefixedId('step'),
+      runId: currentRun.id,
+      stepIndex,
+      type: params.type,
+      status: params.status,
+      summary: params.summary,
+      input: params.input ?? null,
+      output: params.output ?? null,
+      startedAt,
+      finishedAt: startedAt,
+    };
+    const updated = appendAgentRunStepAndUpdateRunIfStatus(
+      step,
+      {
+        ...updates,
+        working: {
+          ...currentRun.working,
+          ...(updates.working ?? {}),
+          lastStepIndex: stepIndex,
+        },
+      },
+      expectedStatuses
+    );
+    if (!updated) return null;
+    currentRun = updated;
     return step;
   };
 
@@ -420,6 +478,26 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
       });
       return currentRun;
     },
+    markFailedIfStatus: (expectedStatuses, params) => {
+      const claimed = appendStepIfStatus({
+        type: 'error',
+        status: 'failed',
+        summary: toSummary(params.message, 'Run failed'),
+        output: {
+          message: params.message,
+          ...(typeof params.code === 'string' ? { code: params.code } : {}),
+          ...(typeof params.retryable === 'boolean' ? { retryable: params.retryable } : {}),
+        },
+      }, {
+        status: 'failed',
+        working: {
+          ...currentRun.working,
+          pendingApprovalIds: [],
+        },
+        error: params,
+      }, expectedStatuses);
+      return claimed ? currentRun : null;
+    },
     markCancelled: params => {
       appendStep({
         type: 'finalize',
@@ -446,6 +524,15 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
 export const createAgentRunTracker = (
   params: CreateAgentRunTrackerParams
 ): AgentRunTracker => {
+  if (params.adoptExistingRunId) {
+    const adopted = claimQueuedAgentRun(params.adoptExistingRunId);
+    if (!adopted) {
+      throw new Error(
+        'Queued run "' + params.adoptExistingRunId + '" was already claimed or is not claimable.'
+      );
+    }
+    return createAgentRunTrackerForRun(adopted);
+  }
   const runId = createPrefixedId('run');
   const normalizedParentRunId = normalizeWhitespace(params.parentRunId) || null;
   const resolvedRootRunId =
@@ -483,6 +570,8 @@ export type RunRecoveryResult = {
   totalRuns: number;
   expiredApprovals: number;
   interruptedToolParts: number;
+  /** Stuck runs left untouched because their thread lease is still alive. */
+  skippedLiveLease: number;
 };
 
 export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
@@ -490,12 +579,25 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   const runs = listAgentRunsByStatus(stuckStatuses);
   let failedRuns = 0;
   let blockedRuns = 0;
+  let skippedLiveLease = 0;
 
-  const runIds = runs.map(run => run.id);
+  // Recovery may only take over executions whose run right is gone. A stuck
+  // row whose thread lease is unexpired can belong to another live process
+  // sharing this database — reclaiming it (or its approvals/UI rows) would
+  // corrupt a run that is still executing.
+  const reclaimable = runs.filter(run => {
+    if (run.threadId && hasLiveThreadRunLease(run.threadId)) {
+      skippedLiveLease += 1;
+      return false;
+    }
+    return true;
+  });
+
+  const runIds = reclaimable.map(run => run.id);
   const expiredApprovals =
     runIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(runIds).length : 0;
   const threadIds = Array.from(
-    new Set(runs.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
+    new Set(reclaimable.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
   );
   let interruptedToolParts = 0;
   for (const threadId of threadIds) {
@@ -530,23 +632,28 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
 
   // Reconcile approval and UI records before making the Run terminal. If any
   // reconciliation fails, the next startup still finds the Run as stuck and
-  // can retry the remaining work.
-  for (const run of runs) {
+  // can retry the remaining work. The terminal write is conditional: a run
+  // that reached a terminal state in between is left as-is.
+  for (const run of reclaimable) {
     const tracker = rehydrateAgentRunTracker(run.id);
     if (!tracker) continue;
+    const params =
+      run.status === 'running'
+        ? ({
+            message: 'Run interrupted by process restart',
+            code: 'PROCESS_RESTART',
+            retryable: true,
+          } as const)
+        : ({
+            message: 'Run blocked at restart — approval session lost',
+            code: 'APPROVAL_SESSION_LOST',
+            retryable: true,
+          } as const);
+    const claimed = tracker.markFailedIfStatus(stuckStatuses, params);
+    if (!claimed) continue;
     if (run.status === 'running') {
-      tracker.markFailed({
-        message: 'Run interrupted by process restart',
-        code: 'PROCESS_RESTART',
-        retryable: true,
-      });
       failedRuns += 1;
-    } else if (run.status === 'blocked') {
-      tracker.markFailed({
-        message: 'Run blocked at restart — approval session lost',
-        code: 'APPROVAL_SESSION_LOST',
-        retryable: true,
-      });
+    } else {
       blockedRuns += 1;
     }
   }
@@ -554,8 +661,9 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   return {
     failedRuns,
     blockedRuns,
-    totalRuns: runs.length,
+    totalRuns: reclaimable.length,
     expiredApprovals,
     interruptedToolParts,
+    skippedLiveLease,
   };
 };

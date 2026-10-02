@@ -82,6 +82,9 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         deriveResumeStreamOptions(run, {
           kind: 'chat-turn',
           parentRunId: run.parentRunId ?? undefined,
+          // The queued row IS the executing identity: claim it instead of
+          // spawning a third run id beside a never-claimed queued record.
+          adoptRunId: run.id,
           metadata: {
             source: 'execute-queued',
             originalRunId: run.id,
@@ -89,9 +92,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         })
       );
       return { success: true, ...(result as Record<string, unknown>) };
-    }
-
-    const result = await streaming.stream(
+    }    const result = await streaming.stream(
       target,
       deriveResumeStreamOptions(run, {
         kind: 'handoff-resume',
@@ -136,6 +137,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       deriveResumeStreamOptions(newRun, {
         kind: 'chat-turn',
         parentRunId: runId,
+        // The queued retry row is adopted as the executing identity.
+        adoptRunId: retryResult.newRunId,
         metadata: {
           source: 'retry',
           originalRunId: runId,

@@ -32,6 +32,25 @@ import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
+/**
+ * Parse the stored turn-start workspace binding. `undefined` = not recorded
+ * (legacy row) — recovery then resolves fresh as before. `null` = the turn
+ * started with no workspace selected; the resume must rebind that same
+ * "no workspace" world, not the thread's current selection.
+ */
+const parseStoredWorkspaceSelection = (
+  stored: string | null | undefined
+): import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined => {
+  if (typeof stored !== 'string' || !stored.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(stored);
+    if (parsed === null) return null;
+    if (typeof parsed !== 'object') return undefined;
+    return parsed as import('../workspaces/thread_workspace').ThreadWorkspaceSelection;
+  } catch {
+    return undefined;
+  }
+};
 
 type PendingApprovalSession = {
   sessionId?: string;
@@ -57,7 +76,10 @@ const parseStringArray = (value: string | null | undefined): string[] => {
 export const createChatApproval = (deps: {
   /** Session-less stream registry access (owned by the stream coordinator). */
   streams: {
-    tryAcquireThreadRun: (threadId?: string) => (() => void) | null;
+    tryAcquireThreadRun: (
+      threadId?: string,
+      options?: { onExecutionAbort?: () => void }
+    ) => (() => void) | null;
     peek: (senderId: number) => ActiveStreamState | undefined;
     attach: (senderId: number, streamState: ActiveStreamState) => void;
     detach: (senderId: number, streamState: ActiveStreamState) => void;
@@ -183,6 +205,12 @@ export const createChatApproval = (deps: {
         max_iterations: recoveryContext.maxIterations ?? null,
         enabled_tools: JSON.stringify(recoveryContext.enabledTools),
         available_skill_ids: JSON.stringify(recoveryContext.availableSkillIds),
+        // Turn-start workspace binding (D30): the resumed execution must
+        // rebind this world, not the thread's current selection.
+        workspace_selection:
+          recoveryContext.workspaceSelection !== undefined
+            ? JSON.stringify(recoveryContext.workspaceSelection)
+            : null,
       });
 
       toolCallApprovalDb.upsertToolCallApprovals(
@@ -376,6 +404,13 @@ export const createChatApproval = (deps: {
         requireApproval: plan.requireApproval ?? true,
         enabledTools: resolvedToolNames,
         availableSkillIds: plan.availableSkillIds,
+        ...(parseStoredWorkspaceSelection(approvalSession.workspace_selection) !== undefined
+          ? {
+              workspaceSelection: parseStoredWorkspaceSelection(
+                approvalSession.workspace_selection
+              ),
+            }
+          : {}),
       },
       pendingApprovalIds,
       collectedApprovalResponses,
@@ -394,7 +429,8 @@ export const createChatApproval = (deps: {
     target: ChatStreamTarget,
     approvalId: string,
     approved: boolean,
-    reason?: string
+    reason?: string,
+    executionAbort?: { current: (() => void) | null }
   ) => {
     const storedApproval = toolCallApprovalDb.getToolCallApproval(approvalId);
     let session = pendingApprovalSessions.get(approvalId);
@@ -490,6 +526,14 @@ export const createChatApproval = (deps: {
       stoppedByUser: false,
       abortController: new AbortController(),
     };
+    if (executionAbort) {
+      // The lease hook was registered synchronously with admission; wire it
+      // to this execution's controller as soon as one exists.
+      executionAbort.current = () => {
+        streamState.cancelled = true;
+        streamState.abortController.abort('thread-lease-lost');
+      };
+    }
     const uiChunkEmitter = createUiChunkEmitter(session.target, resumeMessageId);
     const baseApprovalContext = session.recoveryContext
       ? {
@@ -854,10 +898,16 @@ export const createChatApproval = (deps: {
     const record = toolCallApprovalDb.getToolCallApproval(approvalId);
     const storedSession = record ? toolCallApprovalDb.getToolCallApprovalSession(record.session_id) : null;
     const threadId = pending?.recoveryContext?.threadId ?? storedSession?.thread_id;
-    const release = deps.streams.tryAcquireThreadRun(threadId);
+    // The execution abort hook is registered synchronously with admission so
+    // a lease loss during the async resume-recovery below still reaches the
+    // resumed execution once its controller exists.
+    const executionAbort: { current: (() => void) | null } = { current: null };
+    const release = deps.streams.tryAcquireThreadRun(threadId, {
+      onExecutionAbort: () => executionAbort.current?.(),
+    });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
     try {
-      return await resumeApproval(target, approvalId, approved, reason);
+      return await resumeApproval(target, approvalId, approved, reason, executionAbort);
     } finally {
       release();
     }
