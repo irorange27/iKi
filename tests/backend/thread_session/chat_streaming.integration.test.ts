@@ -241,28 +241,26 @@ describe('createChatStreaming integration', () => {
       id: 'msg_user_probe',
       thread_id: 'thread_1',
     }));
-    // Two durable writes: the mid-turn tool-progress upsert (crash recovery
-    // relies on it) and the finalize upsert — both parented to the user row.
-    expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(2);
-    for (const [turnRow] of conversation.upsertTurnMessage.mock.calls as Array<
-      [Record<string, unknown>]
-    >) {
-      expect(turnRow).toMatchObject({
-        thread_id: 'thread_1',
-        parent_id: 'msg_user_probe',
-        message: { role: 'assistant', parts: expect.any(Array) },
-      });
-    }
-    const [progressRow, finalRow] = conversation.upsertTurnMessage.mock.calls.map(
-      ([row]) => row as { message: { parts: Array<Record<string, unknown>> } }
-    );
+    // The turn settles within the 300ms trailing debounce, so the mid-turn
+    // progress write is superseded by the finalize upsert (the same profile
+    // the renderer's old debounced persist had). Both writes would be
+    // parented to the user row; the finalize one carries the done text.
+    expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
+    const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
+    expect(turnRow).toMatchObject({
+      thread_id: 'thread_1',
+      parent_id: 'msg_user_probe',
+      message: { role: 'assistant', parts: expect.any(Array) },
+    });
+    const persistedParts =
+      (turnRow.message as { parts: Array<Record<string, unknown>> }).parts;
     expect(
-      progressRow.message.parts.some(
+      persistedParts.some(
         part => part.type === 'dynamic-tool' && part.state === 'output-available'
       )
     ).toBe(true);
     expect(
-      finalRow.message.parts.some(part => part.type === 'text' && part.state === 'done')
+      persistedParts.some(part => part.type === 'text' && part.state === 'done')
     ).toBe(true);
   });
 

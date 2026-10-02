@@ -32,6 +32,7 @@ import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
+
 type PendingApprovalSession = {
   sessionId?: string;
   target: ChatStreamTarget;
@@ -562,6 +563,11 @@ export const createChatApproval = (deps: {
             providerId: ctx?.providerId,
             model: ctx?.model ?? '',
           },
+          // Rebind the ORIGINAL turn world (D30): a workspace switched while
+          // the approval was pending must not redirect the approved action.
+          ...(ctx && ctx.workspaceSelection !== undefined
+            ? { workspaceSelectionBox: { selection: ctx.workspaceSelection } }
+            : {}),
         },
         async () => {
           // Create a fresh harness from the recovery context
@@ -657,6 +663,27 @@ export const createChatApproval = (deps: {
                     error: step.error ?? 'Tool execution failed',
                   };
                   uiChunkEmitter.emitToolEvent(event);
+                }
+                // Mid-turn durable progress: a crash during a long resumed
+                // segment must leave the executed tool results in the
+                // persisted UI history for the fallback recovery branch.
+                // Seeded, or the write would replace the row's pre-pause
+                // parts with the continuation segment alone.
+                if (baseApprovalContext?.threadId) {
+                  void uiChunkEmitter
+                    .buildPersistedMessage(
+                      loadPersistedAssistantParts(uiChunkEmitter.messageId)
+                    )
+                    .then(persisted =>
+                      persisted
+                        ? persistAssistantTurnMessage(
+                            deps.conversation,
+                            baseApprovalContext.threadId,
+                            persisted,
+                            'stream-progress'
+                          )
+                        : undefined
+                    );
                 }
               } else if (step.type === 'approval_request') {
                 awaitingApproval = true;

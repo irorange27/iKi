@@ -133,6 +133,9 @@ export const createChatStreaming = (deps: {
     coordinator.registerStream(senderId, streamState);
 
     let driver: TurnDriverHandle | null = null;
+    // Set once the settle/abort persist runs: late progress writes must not
+    // follow it (the per-message chain serializes, this bounds the ordering).
+    let turnPersistFinalized = false;
     const notifyRunStatus = () => {
       const run = driver?.getRunTracker().getRun();
       if (!run) return;
@@ -306,18 +309,29 @@ export const createChatStreaming = (deps: {
 
       getCompanion().beginThinking(companionThinkingKey);
 
+      // Trailing debounce mirrors the write profile the renderer's old
+      // mid-turn persist had; the settle write always supersedes the last one.
+      let progressTimer: ReturnType<typeof setTimeout> | null = null;
+      let progressPending = false;
       const persistTurnProgress = () => {
-        if (!options.threadId) return;
-        void uiChunkEmitter.buildPersistedMessage().then(persisted => {
-          if (!persisted) return;
-          return persistAssistantTurnMessage(
-            deps.conversation,
-            options.threadId as string,
-            persisted,
-            'stream-progress',
-            userTurnMessageId
-          );
-        });
+        if (!options.threadId || turnPersistFinalized) return;
+        progressPending = true;
+        if (progressTimer) return;
+        progressTimer = setTimeout(() => {
+          progressTimer = null;
+          if (!progressPending || turnPersistFinalized) return;
+          progressPending = false;
+          void uiChunkEmitter.buildPersistedMessage().then(persisted => {
+            if (!persisted) return;
+            return persistAssistantTurnMessage(
+              deps.conversation,
+              options.threadId as string,
+              persisted,
+              'stream-progress',
+              userTurnMessageId
+            );
+          });
+        }, 300);
       };
       const activeDriver = createTurnDriver({
         harness,
@@ -431,8 +445,9 @@ export const createChatStreaming = (deps: {
         uiChunkEmitter.finish();
       }
       if (options.threadId) {
+        turnPersistFinalized = true;
         // Durable assistant record — partial (approval-pending) or completed.
-        // Upsert converges with the renderer's dual write on the same id.
+        // Upsert converges with any late progress write on the same id.
         await persistAssistantTurnMessage(
           deps.conversation,
           options.threadId,
@@ -455,6 +470,7 @@ export const createChatStreaming = (deps: {
       if (streamState.cancelled) {
         if (coordinator.peekStream(senderId) === streamState) uiChunkEmitter.abort();
         if (options.threadId) {
+          turnPersistFinalized = true;
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,

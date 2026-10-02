@@ -7,13 +7,13 @@ const logger = createLogger({ module: 'turn_persistence' });
 
 /**
  * The conversation-store seam between turn execution and chat_messages.
- * Backend turn paths persist through here; the desktop renderer dual-writes
- * the same message ids until A3 sheds its write path, and the rules below
- * keep both writers converging:
+ * Backend turn paths persist through here; the renderer is a view that keeps
+ * only user-driven history management (edit update, delete). The rules:
  * - user messages are create-only (a client-supplied id that already exists
- *   keeps the client's richer row),
- * - assistant turn output is upserted (an approval-pending partial or a
- *   renderer-created row is updated to the completed accumulation).
+ *   keeps the existing row),
+ * - assistant turn output is upserted (an approval-pending partial or an
+ *   older progress write is updated to the newest accumulation), serialized
+ *   per message id so a late progress write cannot land after the settle.
  */
 export type ConversationStore = {
   createMessage: (input: unknown) => unknown;
@@ -57,32 +57,45 @@ export const persistUserTurnMessage = (
   return undefined;
 };
 
-/** Durable record of the assistant turn output (partial or completed). */
-export const persistAssistantTurnMessage = async (
+/** Durable record of the assistant turn output (partial or completed).
+ *  Writes for the same message id are serialized: a late progress write must
+ *  never overtake the settle write. */
+const assistantUpsertChains = new Map<string, Promise<void>>();
+
+export const persistAssistantTurnMessage = (
   conversation: Pick<ConversationStore, 'upsertTurnMessage'>,
   threadId: string,
   message: { id: string; role: 'assistant'; parts: unknown[] },
   transport: string,
   parentId?: string
 ): Promise<void> => {
-  try {
-    await conversation.upsertTurnMessage({
-      id: message.id,
-      thread_id: threadId,
-      ...(parentId ? { parent_id: parentId } : {}),
-      message,
-      metadata: JSON.stringify({ format: UI_MESSAGE_METADATA_FORMAT, transport }),
-    });
-  } catch (error) {
-    logger.event({
-      level: 'warn',
-      event: 'chat.turn.assistant_persist',
-      outcome: 'degraded',
-      message: 'Failed to persist the assistant turn message.',
-      error,
-      data: { thread_id: threadId, message_id: message.id },
-    });
-  }
+  const run = (assistantUpsertChains.get(message.id) ?? Promise.resolve()).then(async () => {
+    try {
+      await conversation.upsertTurnMessage({
+        id: message.id,
+        thread_id: threadId,
+        ...(parentId ? { parent_id: parentId } : {}),
+        message,
+        metadata: JSON.stringify({ format: UI_MESSAGE_METADATA_FORMAT, transport }),
+      });
+    } catch (error) {
+      logger.event({
+        level: 'warn',
+        event: 'chat.turn.assistant_persist',
+        outcome: 'degraded',
+        message: 'Failed to persist the assistant turn message.',
+        error,
+        data: { thread_id: threadId, message_id: message.id },
+      });
+    }
+  });
+  assistantUpsertChains.set(
+    message.id,
+    run.finally(() => {
+      if (assistantUpsertChains.get(message.id) === run) assistantUpsertChains.delete(message.id);
+    })
+  );
+  return run;
 };
 
 /**
