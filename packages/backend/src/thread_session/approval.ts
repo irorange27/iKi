@@ -718,12 +718,12 @@ export const createChatApproval = (deps: {
         }
       );
 
+      driverHandle = driver;
       const driverResult = await driver.run();
       if (!driverResult) {
         throw new Error('Unreachable: approval resume produced no result');
       }
       const streamResult = driverResult;
-      driverHandle = driver;
 
       isAwaitingApproval = streamResult.outcome === 'awaiting-approval';
       if (streamResult.outcome === 'cancelled') {
