@@ -45,12 +45,9 @@ module.exports = {
     },
     {
       name: 'turn-prep-below-session',
-      comment: 'R5 (stage F slice 1): shared message codecs moved to message/, tool names to tools/. The two exempted files carry the remaining F2 debt — stateful services (skills, platform) to become injected ports; no NEW turn_prep -> thread_session edge may appear.',
+      comment: 'R5 (stage F2): thread_session capabilities reach turn_prep only as injected ports (skills prompt, identity profile, continuity retrieval, continuity persist). The session composition roots own the real implementations.',
       severity: 'error',
-      from: {
-        path: '^packages/backend/src/turn_prep',
-        pathNot: ['^packages/backend/src/turn_prep/(context_blocks|persistence)\\.ts$'],
-      },
+      from: { path: '^packages/backend/src/turn_prep' },
       to: { path: '^packages/backend/src/thread_session' },
     },
     {

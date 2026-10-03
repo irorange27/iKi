@@ -5,8 +5,6 @@ import type { AffectState } from '@iki/backend/affect/affect_state';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import { resolveSkillsSystemPrompt } from '../thread_session/skills';
-import { getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../thread_session/platform';
 import { getPromptFromMessage } from '@iki/backend/message/ui_messages';
 import type { ContinuityMemoryPreview } from '@iki/backend/chat_platform';
 import type { ChatMemory } from '../thread_session/memory';
@@ -74,7 +72,8 @@ export const buildIdentityContext = (
   threadId: string | undefined,
   contextConfig: ContextConfig,
   modelCapability?: ModelCapability | null,
-  agentInstructions?: string
+  agentInstructions?: string,
+  getAssistantProfileContextMessage: () => string = () => ''
 ): IdentityContext => {
   const profile = clipTextToTokenBudget(getAssistantProfileContextMessage().trim(), contextConfig.maxIdentityTokens);
   const identityClip = {
@@ -154,12 +153,13 @@ export const buildMemoryContext = async (params: {
   contextConfig: ContextConfig;
   modelCapability?: ModelCapability | null;
   onMemoryRetrieved?: AssembleChatContextParams['onMemoryRetrieved'];
+  retrieveContinuity?: (query: string) => import('@iki/backend/chat_platform').ContinuityRetrievalPayload | null;
 }): Promise<MemoryContext> => {
   if (!params.query.trim()) {
     return buildDroppedMemoryContext('no user query available');
   }
 
-  const continuityPayload = retrieveRelevantContinuity(params.query);
+  const continuityPayload = params.retrieveContinuity?.(params.query) ?? null;
   const archiveMemoryPayload =
     params.threadId && params.query.trim()
       ? await params.memory.retrieveRelevantMemory(params.threadId, params.query)
@@ -276,8 +276,12 @@ export const buildSkillContext = async (params: {
   affectState?: AffectState | null;
   contextConfig: ContextConfig;
   modelCapability?: ModelCapability | null;
+  resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
 }): Promise<SkillContext> => {
-  const { skillsSystemPrompt, usedSkills, skillMode } = await resolveSkillsSystemPrompt({
+  if (!params.resolveSkillsSystemPrompt) {
+    throw new Error('resolveSkillsSystemPrompt is required for skill context');
+  }
+  const { skillsSystemPrompt, usedSkills, skillMode } = await params.resolveSkillsSystemPrompt({
     inputMessages: params.inputMessages,
     threadId: params.threadId,
     skillIds: params.skillIds,

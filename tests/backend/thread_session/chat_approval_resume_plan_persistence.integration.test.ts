@@ -22,6 +22,7 @@ import path from 'node:path';
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
+import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import type { ExecutionPlan } from '@iki/backend/thread_session/execution_plan';
@@ -151,7 +152,10 @@ describe('approval resume restores the persisted plan after a restart', () => {
   beforeEach(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-approval-plan-'));
     initializeDatabase({ dbPath: path.join(root, 'plan.db') });
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      onContinuityMessagePersisted: onMessagePersisted,
+    });
     conversation.createThread({ id: 'thread_plan' });
     coordinator = createThreadStreamCoordinator();
   });

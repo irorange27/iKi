@@ -34,6 +34,9 @@ export type {
 export const createChatContextAssembler = (deps: {
   memory: ChatMemory;
   workspaceSystemMessage?: (threadId?: string) => string;
+  resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
+  getAssistantProfileContextMessage: () => string;
+  retrieveRelevantContinuity: (query: string) => import('@iki/backend/chat_platform').ContinuityRetrievalPayload | null;
 }) => {
   const assemble = async (params: AssembleChatContextParams) => {
     const contextConfig = deriveModelAwareContextConfig(
@@ -83,7 +86,8 @@ export const createChatContextAssembler = (deps: {
           params.threadId,
           contextConfig,
           params.modelCapability,
-          agentInstructions
+          agentInstructions,
+          deps.getAssistantProfileContextMessage
         );
     blocks.push(identityContext.block);
 
@@ -102,6 +106,7 @@ export const createChatContextAssembler = (deps: {
               contextConfig,
               modelCapability: params.modelCapability,
               onMemoryRetrieved: params.onMemoryRetrieved,
+              retrieveContinuity: deps.retrieveRelevantContinuity,
             });
     blocks.push(memoryContext.block);
 
@@ -144,6 +149,7 @@ export const createChatContextAssembler = (deps: {
           affectState: params.affectState,
           contextConfig,
           modelCapability: params.modelCapability,
+          resolveSkillsSystemPrompt: deps.resolveSkillsSystemPrompt,
         });
     blocks.push(skillContext.block);
 

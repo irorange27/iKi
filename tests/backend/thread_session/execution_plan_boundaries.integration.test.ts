@@ -27,6 +27,12 @@ import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
+import { resolveSkillsSystemPrompt } from '@iki/backend/thread_session/skills';
+import {
+  getAssistantProfileContextMessage,
+  onMessagePersisted,
+  retrieveRelevantContinuity,
+} from '@iki/backend/thread_session/platform';
 import {
   assembleExecutionPlan,
   planToRunTrackerParams,
@@ -76,7 +82,10 @@ describe('execution plan admission boundaries', () => {
     await fs.writeFile(path.join(b, 'AGENTS.md'), 'SCOPE_MARKER_B');
     addWorkspace({ id: 'workspace_bound_a', path: a, name: 'A' });
     addWorkspace({ id: 'workspace_wt_bound_b', path: b, name: 'B' });
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      onContinuityMessagePersisted: onMessagePersisted,
+    });
     conversation.createThread({
       id: 'thread_bound',
       workspace_id: 'workspace_bound_a',
@@ -135,6 +144,9 @@ describe('execution plan admission boundaries', () => {
         memoryContext: null,
         autoApproveToolRequests: false,
       }),
+      resolveSkillsSystemPrompt,
+      getAssistantProfileContextMessage,
+      retrieveRelevantContinuity,
     });
     const original = {
       ...options(),
@@ -256,6 +268,9 @@ describe('execution plan admission boundaries', () => {
         memoryContext: null,
         autoApproveToolRequests: false,
       }),
+      resolveSkillsSystemPrompt,
+      getAssistantProfileContextMessage,
+      retrieveRelevantContinuity,
     });
     const original = options();
     const prepared = await preparer.prepareChatTurn(original);
@@ -309,6 +324,9 @@ describe('execution plan admission boundaries', () => {
         memoryContext: null,
         autoApproveToolRequests: false,
       }),
+      resolveSkillsSystemPrompt,
+      getAssistantProfileContextMessage,
+      retrieveRelevantContinuity,
     });
     const prepared = await preparer.prepareChatTurn({
       ...options(),

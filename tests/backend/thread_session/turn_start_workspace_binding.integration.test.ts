@@ -30,6 +30,11 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
+  // session_loop now consumes these three as named imports; the factory must
+  // provide them or module linking fails even when the preparer is mocked out.
+  getAssistantProfileContextMessage: () => '',
+  retrieveRelevantContinuity: () => null,
+  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     setChatPolicy: vi.fn(),
     setAffect: vi.fn(),
@@ -91,7 +96,12 @@ describe('stream binds the turn workspace at admission', () => {
     await fs.mkdir(b);
     addWorkspace({ id: 'workspace_a', path: a, name: 'a' });
     addWorkspace({ id: 'workspace_wt_binding', path: b, name: 'b' });
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      // platform is module-mocked above; the real continuity hook is not
+      // under test here, so the port gets a no-op double.
+      onContinuityMessagePersisted: async () => undefined,
+    });
     conversation.createThread({
       id: 'thread_binding',
       workspace_id: 'workspace_a',

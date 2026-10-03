@@ -34,6 +34,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
+import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -83,7 +84,10 @@ describe('session log approval facts across entries', () => {
     const a = path.join(dataDir, 'a');
     await fs.mkdir(a, { recursive: true });
     addWorkspace({ id: 'workspace_facts', path: a, name: 'facts' });
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      onContinuityMessagePersisted: onMessagePersisted,
+    });
     conversation.createThread({
       id: 'thread_facts',
       workspace_id: 'workspace_facts',

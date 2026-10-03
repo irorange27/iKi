@@ -49,6 +49,13 @@ describe('turn preparer explicit tool upper bound', () => {
         memoryContext: null,
         autoApproveToolRequests: false,
       }),
+      resolveSkillsSystemPrompt: async () => ({
+        skillsSystemPrompt: '',
+        usedSkills: [],
+        skillMode: 'manual' as const,
+      }),
+      getAssistantProfileContextMessage: () => '',
+      retrieveRelevantContinuity: () => null,
     });
 
   const prepare = async (options: Record<string, unknown>) =>

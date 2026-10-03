@@ -29,6 +29,12 @@ import { getChatMessages } from '@iki/backend/db/chat_message';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
+import { resolveSkillsSystemPrompt } from '@iki/backend/thread_session/skills';
+import {
+  getAssistantProfileContextMessage,
+  onMessagePersisted,
+  retrieveRelevantContinuity,
+} from '@iki/backend/thread_session/platform';
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -64,6 +70,9 @@ describe('message_send execution-fact persistence', () => {
         memoryContext: null,
         autoApproveToolRequests: false,
       }),
+      resolveSkillsSystemPrompt,
+      getAssistantProfileContextMessage,
+      retrieveRelevantContinuity,
     });
 
   const makeSend = (deps: { tryAcquireThreadRun?: typeof coordinator.tryAcquireThreadRun } = {}) =>
@@ -96,7 +105,10 @@ describe('message_send execution-fact persistence', () => {
     addWorkspace({ id: 'ws_send', path: root, name: 'send' });
     coordinator = createThreadStreamCoordinator();
     memory.injectMemoryIntoMessages.mockClear();
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      onContinuityMessagePersisted: onMessagePersisted,
+    });
     conversation.createThread({ id: 'thread_send', workspace_id: 'ws_send' });
     approvals = createChatApproval({
       streams: {

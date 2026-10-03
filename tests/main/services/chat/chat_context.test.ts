@@ -98,6 +98,16 @@ type MemoryDoubles = {
   getAffectContextMessage: ReturnType<typeof vi.fn>;
 };
 
+// The three thread_session capabilities the assembler consumes as injected
+// ports. The vi.mock blocks above stay in place purely as tripwires: with the
+// ports in place a direct `thread_session` import in turn_prep would be a
+// review/architecture failure, and the sentinel test below proves it.
+const contextPortDoubles = () => ({
+  resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
+  getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,
+  retrieveRelevantContinuity: retrieveRelevantContinuityMock,
+});
+
 const createAssembler = (memoryOverrides: Partial<MemoryDoubles> = {}) => {
   const memory: MemoryDoubles = {
     retrieveRelevantMemory: vi.fn(() => null),
@@ -106,7 +116,10 @@ const createAssembler = (memoryOverrides: Partial<MemoryDoubles> = {}) => {
   };
 
   return {
-    assembler: createChatContextAssembler({ memory: memory as never }),
+    assembler: createChatContextAssembler({
+      memory: memory as never,
+      ...contextPortDoubles(),
+    }),
     memory,
   };
 };
@@ -194,6 +207,7 @@ describe('chat_context assembler', () => {
         })),
         getAffectContextMessage: vi.fn(() => ''),
       } as never,
+      ...contextPortDoubles(),
     });
 
     const result = await assembler.assemble({
@@ -560,6 +574,7 @@ describe('chat_context assembler', () => {
         retrieveRelevantMemory: vi.fn(() => null),
         getAffectContextMessage: vi.fn(() => ''),
       } as never,
+      ...contextPortDoubles(),
     });
 
     const latestPrompt =
@@ -731,6 +746,7 @@ describe('chat_context assembler', () => {
         retrieveRelevantMemory: vi.fn(() => null),
         getAffectContextMessage: vi.fn(() => 'Current affect: focused and calm.'),
       } as never,
+      ...contextPortDoubles(),
     });
 
     const result = await assembler.assemble({
@@ -942,6 +958,7 @@ describe('chat_context assembler', () => {
         retrieveRelevantMemory: vi.fn(() => null),
         getAffectContextMessage: vi.fn(() => ''),
       } as never,
+      ...contextPortDoubles(),
     });
 
     const result = await assembler.assemble({
@@ -974,6 +991,7 @@ describe('chat_context assembler', () => {
         retrieveRelevantMemory: vi.fn(() => null),
         getAffectContextMessage: vi.fn(() => ''),
       } as never,
+      ...contextPortDoubles(),
       workspaceSystemMessage,
     });
 
