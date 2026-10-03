@@ -14,7 +14,7 @@ vi.mock('@iki/backend/platform', () => ({
   getUserDataPath: getUserDataPathMock,
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
 import { addChatMessage, getChatMessages } from '@iki/backend/db/chat_message';
 import { addChatThread } from '@iki/backend/db/chat_thread';
 import { createAgentRun } from '@iki/backend/db/agent_runs';
@@ -195,9 +195,28 @@ describe('awaiter runner (backend)', () => {
   });
 
   it('suppresses the wake when the awaiter is cancelled but not deleted', async () => {
-    // The disposition logic is the SOLE guard here: the awaiter row still
-    // exists, so the FK backstops cannot mask a broken disposition check.
-    const { awaiterId } = seedAwaiter();
+    // The disposition logic is the first guard, and — with the wake run
+    // seeded so the run_id FK backstop cannot mask it — the SOLE guard:
+    // under a broken disposition the success path would become observable
+    // (audit row, message, notification, push, row settling to completed).
+    const { awaiterId, threadId } = seedAwaiter();
+    createAgentRun({
+      id: 'run_wake_3',
+      kind: 'awaiter-wake',
+      status: 'completed',
+      threadId,
+      rootRunId: 'run_wake_3',
+      providerType: 'openai',
+      model: 'test-model',
+      systemPrompt: 'system',
+      input: {},
+      working: {
+        modelMessages: [],
+        accumulatedText: '',
+        pendingApprovalIds: [],
+        lastStepIndex: 0,
+      },
+    } as never);
 
     const deps = buildRunner({
       sendOverride: async () => {
@@ -211,8 +230,13 @@ describe('awaiter runner (backend)', () => {
     expect(deps.createdMessages).toHaveLength(0);
     expect(deps.notifications).toHaveLength(0);
     expect(deps.pushedEvents).toHaveLength(0);
-    // The cancelled row keeps its status; no success audit row appears.
     expect(awaitersDb.getAwaiter(awaiterId)).toMatchObject({ status: 'cancelled' });
+    // The success audit row must not exist for the cancelled wake.
+    const wakeRows = (
+      getDb().prepare('SELECT outcome FROM awaiter_wake_events WHERE awaiter_id = ?').all(awaiterId) as
+      Array<{ outcome: string }>
+    ).map(row => row.outcome);
+    expect(wakeRows).not.toContain('success');
   });
 
   it('records the failure lifecycle when the wake errors', async () => {
