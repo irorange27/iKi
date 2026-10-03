@@ -77,6 +77,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import {
+  MODEL_OUTPUT_COMMITTED,
   MODEL_TEXT_COMMITTED,
   SESSION_EVENT_VERSION,
   recordSessionEvents,
@@ -250,16 +251,19 @@ describe('differential: candidate (Pi supply adapter)', () => {
     };
     expect(toolCall.name).toBe('read_file');
 
-    // The segment boundary IS a commit point: the pre-tool text lands in the
-    // log before the effect runs (the fixed owner's ordering).
+    // The segment boundary is a commit point: the pre-tool text lands in the
+    // log before the effect runs. The ordering is ENACTED by this test — the
+    // decide-on-write-result gate itself lives in the fixed owner (driver A
+    // exercises it).
     const turn1Text = turn1.deltas.join('');
-    recordSessionText(threadId, turn1Text);
+    recordSessionText(threadId, 0, turn1Text);
 
     // The REAL tool executes (shared instance, shared effect log).
     const output = await readFileTool.handler(toolCall.arguments);
 
-    // Turn 2: the candidate commits the result and asks for the answer, with
-    // the rereview-G1 commit gate (commit lands, then publish).
+    // Turn 2: the candidate commits the result and asks for the answer. The
+    // commit-then-publish ORDERING is enacted here; the decide-on-actual-
+    // write-result gate is driver A's (and the owner's) to exercise.
     server.setScript('read the scenario file', {
       chunks: [sse.delta('second segment. all done'), sse.finish('stop')],
     });
@@ -284,12 +288,12 @@ describe('differential: candidate (Pi supply adapter)', () => {
     );
     const final = turn2.final;
     const turn2Text = turn2.deltas.join('');
-    recordSessionText(threadId, turn2Text);
+    recordSessionText(threadId, 1, turn2Text);
     const published = turn1Text + turn2Text;
     // The assistant-output fact closes the turn (replay needs it).
     recordSessionEvents(threadId, [
       {
-        type: 'model_output_committed',
+        type: MODEL_OUTPUT_COMMITTED,
         version: SESSION_EVENT_VERSION,
         payload: {
           runId: 'run_diff_b',
@@ -324,7 +328,7 @@ describe('differential: candidate (Pi supply adapter)', () => {
 });
 
 // ── helpers ────────────────────────────────────────────────────────────────
-function recordSessionText(threadId: string, text: string) {
+function recordSessionText(threadId: string, seq: number, text: string) {
   // One commit for the whole (single-delta) tail — the gate ordering under
   // test lives in the fixed owner and the candidate's own scenario C; this
   // file compares contract outcomes, not flush cadence.
@@ -332,7 +336,7 @@ function recordSessionText(threadId: string, text: string) {
     {
       type: MODEL_TEXT_COMMITTED,
       version: SESSION_EVENT_VERSION,
-      payload: { runId: 'run_diff_b', messageId: 'msg_diff_b', seq: 0, text },
+      payload: { runId: 'run_diff_b', messageId: 'msg_diff_b', seq, text },
     },
   ]);
 }
