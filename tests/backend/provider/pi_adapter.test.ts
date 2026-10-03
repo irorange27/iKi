@@ -12,6 +12,8 @@ import path from 'node:path';
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { addChatThread } from '@iki/backend/db/chat_thread';
 import { addChatMessage, getChatMessages } from '@iki/backend/db/chat_message';
+import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
+import { persistAssistantTurnMessage } from '@iki/backend/thread_session/turn_persistence';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import {
@@ -86,8 +88,11 @@ describe('Pi supply adapter — projection', () => {
     expect(roles).toEqual(['user', 'assistant', 'toolResult', 'system', 'user']);
 
     const assistant = messages[1] as Extract<(typeof messages)[number], { role: 'assistant' }>;
-    // The synthesized envelope must be complete — missing fields get the
-    // message dropped by Pi's transcript transform (E1 scenario D finding).
+    // The envelope must be a VALID Pi representation (type contract). Note
+    // (rereview G6): a missing envelope alone is NOT dropped from the wire —
+    // the original E1 failure's root cause was never individually confirmed;
+    // the synthesis exists for type validity, not as a drop-guard, and its
+    // fields are compatibility assumptions, not recorded facts.
     expect(assistant.api).toBe('openai-completions');
     expect(assistant.provider).toBe('iki-custom');
     expect(assistant.model).toBe('scripted-model');
@@ -197,6 +202,89 @@ describe('Pi supply adapter — projection', () => {
     expect(serialized).toContain('real pipeline answer');
     const assistant = messages[1] as Extract<(typeof messages)[number], { role: 'assistant' }>;
     expect(assistant.api).toBe('openai-completions'); // envelope present on real shapes
+    expect(assistant.stopReason).toBe('stop');
+  });
+
+  it('projects tool-result outputs exhaustively — content text in, media refused (rereview G3)', () => {
+    const project = (output: unknown) => {
+      const history = [
+        { role: 'user', content: 'go' },
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 'call_g3', toolName: 'probe', output }],
+        },
+      ] as unknown as ChatInputMessage[];
+      return projectHistoryToPiContext(history, 'scripted-model');
+    };
+
+    // content with text parts projects; media inside content REFUSES loudly.
+    const textContent = project({
+      type: 'content',
+      value: [{ type: 'text', text: 'embedded text' }],
+    });
+    const textResult = textContent.messages[1] as Extract<
+      (typeof textContent.messages)[number],
+      { role: 'toolResult' }
+    >;
+    expect(textResult.content[0]).toMatchObject({ text: 'embedded text' });
+
+    expect(() =>
+      project({ type: 'content', value: [{ type: 'image-data', data: 'x' }] })
+    ).toThrow(/image-data/);
+
+    // json textification stays the documented protocol; error-json → isError.
+    const jsonResult = project({ type: 'json', value: { a: 1 } });
+    expect(
+      (jsonResult.messages[1] as Extract<(typeof jsonResult.messages)[number], { role: 'toolResult' }>)
+        .content[0]
+    ).toMatchObject({ text: '{"a":1}' });
+    const errorResult = project({ type: 'error-json', value: { code: 7 } });
+    expect(
+      (errorResult.messages[1] as Extract<(typeof errorResult.messages)[number], { role: 'toolResult' }>)
+        .isError
+    ).toBe(true);
+
+    // Unknown output types throw instead of being stringified.
+    expect(() => project({ type: 'audio', value: 'x' })).toThrow(/audio/);
+  });
+
+  it('projects a cancel-produced partial honestly — text survives, envelope stays a synthesized assumption (rereview G2)', async () => {
+    // The REAL producer of interrupted history: the cancel branch persists
+    // the partial assistant message with transport 'stream-abort'.
+    addChatThread({
+      id: 'thread_pi_partial',
+      title: 'partial',
+      metadata: '{}',
+      is_generating: false,
+      is_favorited: 0,
+      is_incognito: 0,
+      enable_artifacts: 0,
+    });
+    const conversation = createChatPersistence({
+      memory: {
+        onMessagePersisted: () => undefined,
+        onContinuityMessagePersisted: async () => undefined,
+      } as never,
+    });
+    await persistAssistantTurnMessage(
+      conversation as never,
+      'thread_pi_partial',
+      { id: 'msg_partial', role: 'assistant', parts: [{ type: 'text', text: 'INTERRUPTED_PARTIAL' }] },
+      'stream-abort'
+    );
+
+    const rows = getChatMessages('thread_pi_partial');
+    const uiMessages = rows
+      .map(row => parseStoredUiMessageRow({ id: row.id, message: row.message }))
+      .filter((m): m is NonNullable<typeof m> => m !== null);
+    const history = await toModelInputMessages(uiMessages);
+
+    // The partial text IS in history (the old invariant claim was false).
+    const { messages } = projectHistoryToPiContext(history, 'scripted-model');
+    const serialized = JSON.stringify(messages);
+    expect(serialized).toContain('INTERRUPTED_PARTIAL');
+    // The envelope is synthesized (compatibility assumption, not fact).
+    const assistant = messages.find(m => m.role === 'assistant') as { stopReason?: string };
     expect(assistant.stopReason).toBe('stop');
   });
 

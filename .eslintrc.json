@@ -21,24 +21,38 @@
     "import/resolver": {
       "typescript": {
         "alwaysTryTypes": true,
-        "project": ["tsconfig.json", "packages/*/tsconfig.json"]
+        "project": [
+          "tsconfig.json",
+          "packages/*/tsconfig.json"
+        ]
       }
     }
   },
   "overrides": [
     {
-      "files": ["*.vue"],
+      "files": [
+        "*.vue"
+      ],
       "parser": "vue-eslint-parser",
       "parserOptions": {
         "parser": "@typescript-eslint/parser",
-        "extraFileExtensions": [".vue"],
+        "extraFileExtensions": [
+          ".vue"
+        ],
         "ecmaVersion": "latest",
         "sourceType": "module"
       },
-      "plugins": ["vue"],
+      "plugins": [
+        "vue"
+      ],
       "rules": {
         "vue/no-parsing-error": "error"
       }
     }
+  ],
+  "ignorePatterns": [
+    "docs/",
+    "out/",
+    "node_modules/"
   ]
 }

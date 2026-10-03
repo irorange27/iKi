@@ -49,7 +49,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
 import {
   rebuildThreadViewFromEvents,
   MODEL_TEXT_COMMITTED,
@@ -118,6 +118,7 @@ describe('streamed text commit gate', () => {
     });
     conversation.createThread({ id: 'thread_commit' });
     conversation.createThread({ id: 'thread_commit_kill' });
+    conversation.createThread({ id: 'thread_commit_writereject' });
     defaultToolRegistry.register(
       createTool({
         name: 'text_commit_probe',
@@ -189,6 +190,56 @@ describe('streamed text commit gate', () => {
     const assistant = view.messages.at(-1)!;
     expect(JSON.stringify(assistant.parts)).toContain('first segment.');
     expect(JSON.stringify(assistant.parts)).toContain('second segment.');
+  });
+
+  it('withholds streamed text when the session-log WRITE fails — shown ⊆ committed survives write rejection', async () => {
+    // Rereview G1: the publish-failure path was covered; the WRITE-failure
+    // path was not. An independent SQLite trigger refuses
+    // model_text_committed inserts — the real driver must not publish text
+    // it could not commit, and must not count the cleared buffer as
+    // committed.
+    const db = getDb();
+    db.exec(
+      `CREATE TRIGGER reject_text_commit
+       BEFORE INSERT ON session_events
+       WHEN NEW.type = 'model_text_committed'
+       BEGIN SELECT RAISE(ABORT, 'write rejected'); END;`
+    );
+    try {
+      createModelMock.mockReturnValue(new FauxModelProvider([fauxText('UNCOMMITTED_REVIEW_TEXT')]));
+      const target = { id: 103, send: vi.fn() };
+      const streaming = createChatStreaming({
+        streamCoordinator: createThreadStreamCoordinator(),
+        memory: memory as never,
+        conversation: conversation as never,
+        usage: { recordUsageEvent: vi.fn() },
+        approvals: {
+          ensurePendingApprovalSession: vi.fn(),
+          registerApprovalBatch: vi.fn(),
+          cleanupPendingSessionsForSender: vi.fn(),
+        },
+        getThreadTitle: () => 'Commit',
+      });
+
+      const result = await streaming.stream(target, {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_commit_writereject',
+        approvalPolicy: 'never',
+        messages: [{ id: 'msg_commit_3', role: 'user', parts: [{ type: 'text', text: 'probe' }] }],
+        tools: [],
+      });
+      expect(result).toMatchObject({ success: true });
+
+      // The invariant is about what the subscriber SAW: nothing may be
+      // published that the log does not hold.
+      const published = publishedTextChunks(target).join('');
+      expect(published).not.toContain('UNCOMMITTED_REVIEW_TEXT');
+      expect(committedTextConcat('thread_commit_writereject')).toBe(published);
+    } finally {
+      db.exec('DROP TRIGGER IF EXISTS reject_text_commit');
+    }
   });
 
   it('at a mid-turn kill the rebuild matches exactly what was published', async () => {

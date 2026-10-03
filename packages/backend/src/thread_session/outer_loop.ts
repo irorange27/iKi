@@ -213,20 +213,26 @@ const runOuterLoop = async (
   const flushCommittedText = () => {
     if (!pendingText) return;
     const text = pendingText;
-    pendingText = '';
     lastTextFlushAt = Date.now();
-    recordSessionEvents(threadId, [
+    // The gate decides on the ACTUAL write result (rereview G1): a failed or
+    // conflict-lost append leaves the buffer intact for the next flush —
+    // uncommitted text must not reach the subscriber, and clearing the
+    // buffer would not make it committed.
+    const committed = recordSessionEvents(threadId, [
       {
         type: MODEL_TEXT_COMMITTED,
         version: SESSION_EVENT_VERSION,
         payload: {
           runId: state.runTracker.id,
           messageId: uiChunkEmitter.messageId,
-          seq: pendingTextSeq++,
+          seq: pendingTextSeq,
           text,
         },
       },
     ]);
+    if (!committed) return;
+    pendingText = '';
+    pendingTextSeq += 1;
     uiChunkEmitter.emitTextDelta(text);
   };
   const bufferStreamedText = (text: string) => {

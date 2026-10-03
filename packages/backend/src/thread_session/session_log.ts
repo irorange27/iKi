@@ -96,8 +96,8 @@ export type ApprovalDecidedPayload = {
 export const recordSessionEvents = (
   threadId: string,
   events: NewSessionEvent[]
-): void => {
-  if (!threadId || events.length === 0) return;
+): boolean => {
+  if (!threadId || events.length === 0) return true;
   try {
     const revision = appendSessionEvents(
       threadId,
@@ -113,7 +113,9 @@ export const recordSessionEvents = (
         message: 'Session log append lost the revision race; turn facts were not recorded.',
         data: { event_types: events.map(event => event.type) },
       });
+      return false;
     }
+    return true;
   } catch (error) {
     logger.event({
       level: 'warn',
@@ -123,6 +125,7 @@ export const recordSessionEvents = (
       message: 'Failed to append turn facts to the session log.',
       error,
     });
+    return false;
   }
 };
 
