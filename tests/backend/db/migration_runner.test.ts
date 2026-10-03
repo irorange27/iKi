@@ -58,14 +58,16 @@ const { dbState, execMock, prepareMock } = vi.hoisted(() => {
   };
 });
 
-vi.mock('@iki/backend/db/database', () => ({
-  getDb: () => ({
+import type { SqliteDatabase } from '@iki/backend/db/sqlite';
+import { getExecutedMigrations, runMigration } from '@iki/backend/db/migration/runner';
+
+// The runner takes the handle as a parameter (issue #91), so the fake is
+// passed in directly instead of mocking the database singleton module.
+const makeFakeDb = (): SqliteDatabase =>
+  ({
     exec: execMock,
     prepare: prepareMock,
-  }),
-}));
-
-import { getExecutedMigrations, runMigration } from '@iki/backend/db/migration/runner';
+  }) as unknown as SqliteDatabase;
 
 beforeEach(() => {
   dbState.executedRows = [];
@@ -83,7 +85,7 @@ describe('migration runner', () => {
     ];
     const up = vi.fn();
 
-    runMigration({
+    runMigration(makeFakeDb(), {
       name: '010_add_mcp_servers_table',
       aliases: ['009_add_mcp_servers_table'],
       up,
@@ -96,7 +98,7 @@ describe('migration runner', () => {
         executed_at: '2026-03-22T00:00:00.000Z',
       },
     ]);
-    expect(getExecutedMigrations()).toEqual(['010_add_mcp_servers_table']);
+    expect(getExecutedMigrations(makeFakeDb())).toEqual(['010_add_mcp_servers_table']);
   });
 
   it('records the canonical migration name when the migration executes for the first time', () => {
@@ -104,7 +106,7 @@ describe('migration runner', () => {
     vi.setSystemTime(new Date('2026-03-22T03:40:00.000Z'));
     const up = vi.fn();
 
-    runMigration({
+    runMigration(makeFakeDb(), {
       name: '011_add_proactive_tasks_cron',
       aliases: ['010_add_proactive_tasks_cron'],
       up,

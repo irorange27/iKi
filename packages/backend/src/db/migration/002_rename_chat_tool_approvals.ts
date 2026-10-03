@@ -1,4 +1,4 @@
-import { getDb } from '../database';
+import type { SqliteDatabase } from '../sqlite';
 import type { Migration } from './runner';
 
 // Tool calls are no longer a chat-scoped concept (programmatic tool calling),
@@ -9,10 +9,10 @@ import type { Migration } from './runner';
 // so the old-named indexes are recreated under their new names.
 const migration: Migration = {
   name: '002_rename_chat_tool_approvals',
-  up: () => {
+  up: (db: SqliteDatabase) => {
     const tableExists = (name: string): boolean =>
       Boolean(
-        getDb()
+        db
           .prepare(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
           )
@@ -25,7 +25,7 @@ const migration: Migration = {
           'Migration 002: both chat_tool_approval_sessions and tool_call_approval_sessions exist'
         );
       }
-      getDb().exec(
+      db.exec(
         'ALTER TABLE chat_tool_approval_sessions RENAME TO tool_call_approval_sessions'
       );
     }
@@ -35,10 +35,10 @@ const migration: Migration = {
           'Migration 002: both chat_tool_approvals and tool_call_approvals exist'
         );
       }
-      getDb().exec('ALTER TABLE chat_tool_approvals RENAME TO tool_call_approvals');
+      db.exec('ALTER TABLE chat_tool_approvals RENAME TO tool_call_approvals');
     }
 
-    getDb().exec(`
+    db.exec(`
       DROP INDEX IF EXISTS idx_chat_tool_approval_sessions_run_id;
       DROP INDEX IF EXISTS idx_chat_tool_approval_sessions_thread_id;
       DROP INDEX IF EXISTS idx_chat_tool_approvals_session_id;

@@ -1,4 +1,4 @@
-import { getDb } from '../database';
+import type { SqliteDatabase } from '../sqlite';
 import type { Migration } from './runner';
 
 // Baseline schema generated on 2026-09-04 by replaying the full legacy
@@ -527,9 +527,9 @@ const BASELINE_STATEMENTS: readonly string[] = [
 
 export const migration: Migration = {
   name: '001_baseline',
-  up: () => {
+  up: (db: SqliteDatabase) => {
     for (const statement of BASELINE_STATEMENTS) {
-      getDb().exec(statement);
+      db.exec(statement);
     }
   },
 };
