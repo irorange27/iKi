@@ -59,8 +59,8 @@ export class BudgetExceededError extends Error {}
 export const callModel = async (
   model: ScriptedPiModel,
   context: { systemPrompt: string; messages: unknown[]; tools?: CandidateTool[] },
-  options: { signal?: AbortSignal } = {}
-): Promise<{ final: AssistantMessage; events: string[] }> => {
+  options: { signal?: AbortSignal; apiKey?: string } = {}
+): Promise<{ final: AssistantMessage; events: string[]; deltas: string[] }> => {
   const eventStream = openaiCompletionsStream(
     model,
     normalizeContext({
@@ -74,10 +74,12 @@ export const callModel = async (
   );
   const resultPromise = eventStream.result();
   const events: string[] = [];
+  const deltas: string[] = [];
   for await (const event of eventStream) {
     events.push(event.type);
+    if (event.type === 'text_delta') deltas.push(event.delta);
   }
-  return { final: await resultPromise, events };
+  return { final: await resultPromise, events, deltas };
 };
 
 /**
