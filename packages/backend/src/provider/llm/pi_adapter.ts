@@ -15,26 +15,32 @@
  * pre-Pi code, because nothing Pi-shaped is stored) from irrevocable facts
  * (model calls made, tool effects executed).
  *
- * Projection rules (review F4/F5):
+ * Projection rules (review F4/F5, corrected by rereview G2/G6):
  * - Covered input domain: the text + tools subset of ModelMessage shapes —
  *   user text parts AND plain strings, assistant text/tool-call parts, tool
  *   result parts. NOT yet projected (throws, flip design must land first):
  *   reasoning parts (thinking-signature continuity undecided), approval
  *   parts (the approval-resume replay stays on the existing engine until
  *   flip), image/file parts (multimodal undecided).
- * - Assistant envelopes (api/provider/model/usage/stopReason) are synthesized
- *   at projection time. iKi history cannot contain error/aborted assistant
- *   messages: interrupted TOOL parts are repaired into paired error results
- *   (ui_messages), and stream errors never enter history because only
- *   onStepFinish appends (simple_agent_runner) — so the transform's drop
- *   rule cannot remove projected history, and the 'stop' stamp prevents a
- *   partial from replaying as complete.
+ * - Assistant envelopes are SYNTHESIZED as a compatibility assumption for
+ *   Pi's type contract — they are not recorded facts. iKi history CAN
+ *   contain partial assistant text: the cancel branch persists interrupted
+ *   messages (persistAssistantTurnMessage 'stream-abort') and they re-enter
+ *   history on the next request. Whether a partial belongs in later context
+ *   is the recovery/context owner's decision (today: it stays and is
+ *   projected); this module only projects that decision and must not fake
+ *   provenance. What history cannot contain is an assistant message in the
+ *   error/aborted STATE: interrupted tool parts are repaired into paired
+ *   error results (ui_messages), and stream errors never append because
+ *   only onStepFinish appends (simple_agent_runner). Future reasoning and
+ *   cross-model versions must carry real provenance instead of this stamp.
  * - Tool schemas are consumed as-is from the existing owner
  *   (BaseTool.parameters — plain JSON Schema). Strict normalization is NOT
  *   requested by this adapter (it never sets constrainedSampling); note that
  *   for models whose compat advertises strict support the wire still carries
  *   `strict: false` — flip-time wire diffs should expect that field.
- * - Unrepresentable parts throw PiProjectionError — never a silent drop.
+ * - Unrepresentable parts and output types throw PiProjectionError — never a
+ *   silent drop, and never a stringify that hides type semantics (G3).
  *
  * This module is UNWIRED: no production path imports callPiChat yet. Wiring
  * it into the send path is the flip decision (with its own gates).
@@ -129,9 +135,13 @@ export const projectUsageToIki = (usage: PiUsage) => ({
 /**
  * The synthesized assistant envelope. Zero usage: historical messages do not
  * contribute usage accounting (only live calls do, via projectUsageToIki).
- * stopReason 'stop' is structurally required and semantically neutral for
- * history replay — Pi's transform drops ONLY 'error'/'aborted' messages,
- * which iKi history cannot contain (repair path invariant).
+ * stopReason 'stop' is structurally required. It is NOT a guard against
+ * misjudgment: a partial stamped 'stop' presents itself as complete on the
+ * wire — the stamp is part of the synthesized assumption, nothing more. The
+ * STATE is what projection input never carries (see the module doc): tool
+ * repair pairs interrupted tool parts, and stream errors never append to
+ * history — partial TEXT however can be present (cancel-branch persistence)
+ * and is projected as-is.
  */
 const synthesizedEnvelope = (modelId: string) => ({
   api: 'openai-completions',
@@ -148,6 +158,53 @@ const synthesizedEnvelope = (modelId: string) => ({
   stopReason: 'stop' as const,
   timestamp: Date.now(),
 });
+
+/**
+ * Exhaustive projection of the AI SDK ToolResultOutput union. `json` values
+ * are textified as the documented protocol (a JSON tool result read by the
+ * model as text); `content` parts project text and REFUSE media — images and
+ * files are outside the covered text+tools domain and must never hide inside
+ * a stringified value. `execution-denied` mirrors the persisted-read path's
+ * mapping (an approval denial becomes an error tool result).
+ */
+const projectToolOutput = (output: unknown): { text: string; isError: boolean } => {
+  if (output === null || typeof output !== 'object' || !('type' in output)) {
+    throw new PiProjectionError('tool-result output must be a typed AI SDK output');
+  }
+  const o = output as { type: string; value?: unknown; reason?: unknown };
+  switch (o.type) {
+    case 'text':
+      return { text: typeof o.value === 'string' ? o.value : JSON.stringify(o.value ?? null), isError: false };
+    case 'error-text':
+      return { text: typeof o.value === 'string' ? o.value : JSON.stringify(o.value ?? null), isError: true };
+    case 'json':
+      return { text: JSON.stringify(o.value ?? null), isError: false };
+    case 'error-json':
+      return { text: JSON.stringify(o.value ?? null), isError: true };
+    case 'execution-denied':
+      return {
+        text: typeof o.reason === 'string' ? o.reason : 'Tool call execution denied.',
+        isError: true,
+      };
+    case 'content': {
+      if (!Array.isArray(o.value)) {
+        throw new PiProjectionError('content tool-result output must be a part array');
+      }
+      const texts: string[] = [];
+      for (const part of o.value) {
+        const p = part as { type?: unknown; text?: unknown };
+        if (p.type === 'text' && typeof p.text === 'string') {
+          texts.push(p.text);
+          continue;
+        }
+        throw new PiProjectionError(`unsupported tool-result content part: ${String(p.type ?? typeof part)}`);
+      }
+      return { text: texts.join(''), isError: false };
+    }
+    default:
+      throw new PiProjectionError(`unsupported tool-result output type: ${String(o.type)}`);
+  }
+};
 
 /**
  * Project iKi's prepared history (ChatInputMessage — the AI SDK ModelMessage
@@ -262,7 +319,7 @@ export const projectHistoryToPiContext = (
             type?: unknown;
             toolCallId?: unknown;
             toolName?: unknown;
-            output?: { type?: string; value?: unknown };
+            output?: unknown;
           };
           if (p.type !== 'tool-result') {
             throw new PiProjectionError(`unsupported tool part type: ${String(p.type ?? typeof part)}`);
@@ -270,10 +327,10 @@ export const projectHistoryToPiContext = (
           if (typeof p.toolCallId !== 'string' || typeof p.toolName !== 'string') {
             throw new PiProjectionError('tool-result part missing toolCallId/toolName');
           }
-          const isError = p.output?.type === 'error-text' || p.output?.type === 'error-json';
-          const outputValue = p.output && 'value' in p.output ? p.output.value : p.output;
-          const resultText =
-            typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue ?? null);
+          // Exhaustive over the AI SDK ToolResultOutput union (rereview G3):
+          // the previous draft stringified unknown outputs, which silently
+          // textified media inside `content` values.
+          const { text: resultText, isError } = projectToolOutput(p.output);
           const toolResult: ToolResultMessage = {
             role: 'toolResult',
             toolCallId: p.toolCallId,
