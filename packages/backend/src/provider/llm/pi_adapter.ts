@@ -17,11 +17,12 @@
  *
  * Projection rules (review F4/F5, corrected by rereview G2/G6):
  * - Covered input domain: the text + tools subset of ModelMessage shapes —
- *   user text parts AND plain strings, assistant text/tool-call parts, tool
- *   result parts. NOT yet projected (throws, flip design must land first):
- *   reasoning parts (thinking-signature continuity undecided), approval
- *   parts (the approval-resume replay stays on the existing engine until
- *   flip), image/file parts (multimodal undecided).
+ *   user text parts AND plain strings, assistant text/tool-call/reasoning
+ *   parts (reasoning maps to a Pi thinking block; a provider signature rides
+ *   along when the source part carries one), tool result parts. NOT yet
+ *   projected (throws): approval parts (the approval-resume replay stays on
+ *   the existing engine until flip — its continuation semantics are the
+ *   flip redesign's input), image/file parts (multimodal undecided).
  * - Assistant envelopes are SYNTHESIZED as a compatibility assumption for
  *   Pi's type contract — they are not recorded facts. iKi history CAN
  *   contain partial assistant text: the cancel branch persists interrupted
@@ -50,6 +51,7 @@ import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/ope
 import type {
   AssistantMessage,
   Message as PiMessage,
+  ThinkingContent,
   Tool as PiTool,
   ToolCall,
   ToolResultMessage,
@@ -282,9 +284,20 @@ export const projectHistoryToPiContext = (
               input?: unknown;
               toolCallId?: unknown;
               toolName?: unknown;
+              providerOptions?: { anthropic?: { signature?: unknown } };
             };
             if (p.type === 'text' && typeof p.text === 'string') {
               content.push({ type: 'text', text: p.text });
+            } else if (p.type === 'reasoning' && typeof p.text === 'string') {
+              // Reasoning projects to a Pi thinking block. A provider signature
+              // rides along when the source part carries one (best-effort
+              // provenance — flip-time work owns the full cross-model story).
+              const thinking: ThinkingContent = { type: 'thinking', thinking: p.text };
+              const signature = p.providerOptions?.anthropic?.signature;
+              if (typeof signature === 'string' && signature) {
+                thinking.thinkingSignature = signature;
+              }
+              content.push(thinking);
             } else if (p.type === 'tool-call') {
               if (typeof p.toolCallId !== 'string' || typeof p.toolName !== 'string') {
                 throw new PiProjectionError('tool-call part missing toolCallId/toolName');

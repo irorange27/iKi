@@ -9,11 +9,17 @@
  * decision and consume; no dual execution by construction).
  *
  * The crash window is handled by a candidate-owned execution journal over
- * real SQLite: journal-start (intent) → effect-start marker → effect →
- * result. A journal row with an effect-start but no result means a previous
- * attempt died mid-effect — the candidate refuses blind replay and reports
- * an unknown result to the model (D7–D9: unknown side effects are never
- * re-executed on assumption).
+ * real SQLite: journal-start (intent) → atomic claim (effect-start) →
+ * effect → result. A journal row with an effect-start but no result means
+ * a previous attempt died mid-effect OR another attempt holds the claim —
+ * the candidate refuses blind replay and reports an unknown result to the
+ * model (D7–D9: unknown side effects are never re-executed on assumption).
+ *
+ * Right-to-act v2: authorization = approved durable decision + an atomic
+ * conditional-UPDATE claim on the journal. The owner's consume is not
+ * consulted, so the registration shape (with or without recoveryContext,
+ * owner-consumed or not) does not change the protocol — the flip-time
+ * ordering divergence is resolved by construction.
  */
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -24,7 +30,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
 import { addChatThread } from '@iki/backend/db/chat_thread';
 import {
-  consumeToolCallApprovalSession,
   getToolCallApproval,
   upsertToolCallApprovalSession,
   upsertToolCallApprovals,
@@ -128,13 +133,25 @@ const candidateResume = async (approvalId: string): Promise<ResumeOutcome> => {
   }
 
   journalStart(approvalId);
-  const entry = journalGet(approvalId)!;
-  if (entry.result !== null) {
-    return { kind: 'refused', reason: 'already executed (journal has result)' };
-  }
-  if (entry.effect_started_at !== null) {
-    // A previous attempt started the effect and died before recording the
-    // result: the side-effect state is UNKNOWN — never blind-replay (D7–D9).
+
+  // Right-to-act v2: authorization = approved durable decision + an ATOMIC
+  // claim on the journal. The owner's consume is not consulted, so a
+  // flip-time owner-consumed row reads as authorized exactly like an
+  // answered one. The conditional UPDATE is the concurrency guard: exactly
+  // one contender flips effect_started_at.
+  const claim = getDb()
+    .prepare(
+      'UPDATE candidate_executions SET effect_started_at = ? WHERE approval_id = ? AND effect_started_at IS NULL AND result IS NULL'
+    )
+    .run(new Date().toISOString(), approvalId);
+  if (claim.changes === 0) {
+    const entry = journalGet(approvalId)!;
+    if (entry.result !== null) {
+      return { kind: 'refused', reason: 'already executed (journal has result)' };
+    }
+    // Claimed by another attempt (concurrent) or by an attempt that died
+    // before recording the result (crash window): the side-effect state is
+    // IN-FLIGHT-OR-UNKNOWN — never blind-replay, never assume failure.
     const { final } = await callModel(model, {
       systemPrompt: 'candidate',
       messages: [
@@ -143,7 +160,9 @@ const candidateResume = async (approvalId: string): Promise<ResumeOutcome> => {
           role: 'toolResult',
           toolCallId: approval.tool_call_id ?? 'call',
           toolName: approval.tool_name ?? 'tool',
-          content: [{ type: 'text', text: 'execution state unknown after interruption' }],
+          content: [
+            { type: 'text', text: 'execution in flight or interrupted; result unknown' },
+          ],
           isError: true,
           timestamp: Date.now(),
         },
@@ -152,18 +171,6 @@ const candidateResume = async (approvalId: string): Promise<ResumeOutcome> => {
     return { kind: 'unknown-result', wireText: JSON.stringify(final.content) };
   }
 
-  // In this registration shape the owner's consume was skipped (no
-  // recoveryContext), so the candidate holds the consume itself: the
-  // approved decision plus an untouched journal is the right to act exactly
-  // once. Flip-time registration carries a recoveryContext and the owner
-  // consumes first — the gate must then read an owner-consumed row as
-  // authorized (see the module doc note).
-  const consumed = consumeToolCallApprovalSession(approval.session_id);
-  if (consumed.changes === 0 && approval.state !== 'answered') {
-    return { kind: 'refused', reason: 'execution right unavailable' };
-  }
-
-  journalMarkEffectStarted(approvalId);
   const args = JSON.parse(approval.tool_args ?? '{}') as { path: string };
   const output = await readFileTool.handler(args);
   journalComplete(approvalId, 'ok');
@@ -321,15 +328,48 @@ describe('approval resume through the real owner with the candidate executor', (
     expect(executions).toEqual([]);
   });
 
-  it('duplicate decision at the real owner: the idempotent branch, no new effect', async () => {
+  it('duplicate decision after completion: post-completion decline, no new effect', async () => {
     executions.length = 0;
     const again = await approvals.approveTool({ id: 903, send: vi.fn() }, 'appr_ok', true, 'user approved');
     // The owner's idempotent branch exists only while the batch session is
     // registered; after completion a re-approve declines — the durable
     // decision is untouched and no effect runs.
     expect(again.success).toBe(false);
-    expect(getToolCallApproval('appr_ok')).toMatchObject({ state: 'consumed', decision: 'approved' });
+    // v2: the consume token is gone from the protocol — the durable decision
+    // stays 'answered' and the journal carries the execution record.
+    expect(getToolCallApproval('appr_ok')).toMatchObject({ state: 'answered', decision: 'approved' });
+    expect(journalGet('appr_ok')).toMatchObject({ result: 'ok' });
     expect(executions).toEqual([]);
+  });
+
+  it('owner-consumed rows read as authorized (the flip-time shape, pinned)', async () => {
+    executions.length = 0;
+    registerPendingApproval('appr_oc', 'sess_oc', 'thread_oc', 'call_oc', '/owner-consumed.txt');
+    await approvals.approveTool({ id: 906, send: vi.fn() }, 'appr_oc', true, 'user approved');
+    // The flip-time shape: the OWNER consumes (recoveryContext present) and
+    // the candidate starts with no journal intent of its own.
+    getDb()
+      .prepare("UPDATE tool_call_approvals SET state = 'consumed' WHERE approval_id = 'appr_oc'")
+      .run();
+    expect(getToolCallApproval('appr_oc')).toMatchObject({ state: 'consumed', decision: 'approved' });
+    expect(journalGet('appr_oc')).toBeUndefined();
+
+    const outcome = await candidateResume('appr_oc');
+    expect(outcome.kind).toBe('executed');
+    expect(executions).toEqual(['read_file:/owner-consumed.txt']);
+  });
+
+  it('concurrent resumes: the atomic claim lets exactly one execute', async () => {
+    executions.length = 0;
+    registerPendingApproval('appr_conc', 'sess_conc', 'thread_conc', 'call_conc', '/concurrent.txt');
+    await approvals.approveTool({ id: 905, send: vi.fn() }, 'appr_conc', true, 'user approved');
+
+    const [a, b] = await Promise.all([candidateResume('appr_conc'), candidateResume('appr_conc')]);
+    const kinds = [a.kind, b.kind].sort();
+    // The winner executes; the loser sees the claim held — in-flight-or-
+    // unknown, never a second effect.
+    expect(kinds).toEqual(['executed', 'unknown-result']);
+    expect(executions).toEqual(['read_file:/concurrent.txt']);
   });
 
   it('unknown: a journal entry with effect-start but no result refuses blind replay', async () => {

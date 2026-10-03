@@ -205,6 +205,34 @@ describe('Pi supply adapter — projection', () => {
     expect(assistant.stopReason).toBe('stop');
   });
 
+  it('projects reasoning parts to thinking blocks with best-effort signature passthrough', () => {
+    const history = [
+      { role: 'user', content: 'think it through' },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'weighing the options',
+            providerOptions: { anthropic: { signature: 'sig-abc' } },
+          },
+          { type: 'text', text: 'the answer' },
+        ],
+      },
+    ] as unknown as ChatInputMessage[];
+
+    const { messages } = projectHistoryToPiContext(history, 'scripted-model');
+    const assistant = messages[1] as Extract<(typeof messages)[number], { role: 'assistant' }>;
+    const thinking = assistant.content.find(b => b.type === 'thinking') as {
+      type: 'thinking';
+      thinking: string;
+      thinkingSignature?: string;
+    };
+    expect(thinking).toMatchObject({ type: 'thinking', thinking: 'weighing the options' });
+    expect(thinking.thinkingSignature).toBe('sig-abc');
+    expect(assistant.content.some(b => b.type === 'text' && b.text === 'the answer')).toBe(true);
+  });
+
   it('projects tool-result outputs exhaustively — content text in, media refused (rereview G3)', () => {
     const project = (output: unknown) => {
       const history = [
