@@ -147,10 +147,6 @@ const persistWakeEvent = (params: {
     });
     return true;
   } catch (error) {
-    if (process.env.IKI_DEBUG_AWAITER) {
-      // eslint-disable-next-line no-console
-      console.log('AWAITER-CATCH:', (error as Error)?.stack);
-    }
     const errorText = getErrorMessage(error);
     if (errorText.includes('FOREIGN KEY constraint failed')) {
       awaiterLogger.event({
@@ -471,10 +467,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
 
     return { success: true, runId };
   } catch (error) {
-    if (process.env.IKI_DEBUG_AWAITER) {
-      // eslint-disable-next-line no-console
-      console.log('AWAITER-CATCH:', (error as Error)?.stack);
-    }
     const errorText = getErrorMessage(error);
     const catchDisposition = transitionAwaiterIfStillWaking(awaiterId, {
       status: 'failed',

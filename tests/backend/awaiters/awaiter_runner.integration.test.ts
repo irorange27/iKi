@@ -152,10 +152,6 @@ describe('awaiter runner (backend)', () => {
 
     const deps = buildRunner();
     const result = await deps.runner.runAwaiterWake(awaiterId);
-    if (!result.success) {
-      // eslint-disable-next-line no-console
-      console.log('W1-ERR:', result.error);
-    }
     expect(result).toMatchObject({ success: true, runId: 'run_wake_1' });
 
     // The wake prompt carries the resumed context and the wake instruction.
@@ -196,6 +192,27 @@ describe('awaiter runner (backend)', () => {
     expect(deps.createdMessages).toHaveLength(0);
     expect(deps.notifications).toHaveLength(0);
     expect(deps.pushedEvents).toHaveLength(0);
+  });
+
+  it('suppresses the wake when the awaiter is cancelled but not deleted', async () => {
+    // The disposition logic is the SOLE guard here: the awaiter row still
+    // exists, so the FK backstops cannot mask a broken disposition check.
+    const { awaiterId } = seedAwaiter();
+
+    const deps = buildRunner({
+      sendOverride: async () => {
+        awaitersDb.updateAwaiter(awaiterId, { status: 'cancelled' });
+        return { success: true, text: 'late output', runId: 'run_wake_3' };
+      },
+    });
+
+    const result = await deps.runner.runAwaiterWake(awaiterId);
+    expect(result).toMatchObject({ success: false, error: 'Awaiter no longer exists' });
+    expect(deps.createdMessages).toHaveLength(0);
+    expect(deps.notifications).toHaveLength(0);
+    expect(deps.pushedEvents).toHaveLength(0);
+    // The cancelled row keeps its status; no success audit row appears.
+    expect(awaitersDb.getAwaiter(awaiterId)).toMatchObject({ status: 'cancelled' });
   });
 
   it('records the failure lifecycle when the wake errors', async () => {
