@@ -74,10 +74,12 @@ export const callModel = async (
   );
   const resultPromise = eventStream.result();
   const events: string[] = [];
+  const deltas: string[] = [];
   for await (const event of eventStream) {
     events.push(event.type);
+    if (event.type === 'text_delta') deltas.push(event.delta);
   }
-  return { final: await resultPromise, events };
+  return { final: await resultPromise, events, deltas };
 };
 
 /**
