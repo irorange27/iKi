@@ -10,7 +10,14 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { addChatThread } from '@iki/backend/db/chat_thread';
+import { addChatMessage, getChatMessages } from '@iki/backend/db/chat_message';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
+import { toModelInputMessages } from '@iki/backend/message/ui_messages';
+import {
+  parseStoredUiMessageRow,
+  sanitizeUiMessageJsonForStorage,
+} from '@iki/backend/message/ui_message_codec';
 import {
   PiProjectionError,
   buildPiModel,
@@ -119,6 +126,78 @@ describe('Pi supply adapter — projection', () => {
 
     expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(PiProjectionError);
     expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(/file/);
+  });
+
+  it('projects user PART ARRAYS — the shape convertToModelMessages actually emits', () => {
+    // The real pipeline wraps user content in a part array even for a single
+    // text part; the string form is a test/rehydration convenience only.
+    const history = [
+      { role: 'user', content: [{ type: 'text', text: 'part-array question' }] },
+    ] as unknown as ChatInputMessage[];
+
+    const { messages } = projectHistoryToPiContext(history, 'scripted-model');
+    expect(messages[0]).toMatchObject({ role: 'user', content: 'part-array question' });
+  });
+
+  it('throws on user part types outside the covered domain (image/file)', () => {
+    const history = [
+      { role: 'user', content: [{ type: 'image', image: 'data:image/png;base64,x' }] },
+    ] as unknown as ChatInputMessage[];
+
+    expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(PiProjectionError);
+    expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(/image/);
+  });
+
+  it('regression (real pipeline boundary): toModelInputMessages output projects without error', async () => {
+    // Drive the ACTUAL pipeline — persisted rows → parse → toModelInputMessages —
+    // into the projection. The committed projection tests must never be the
+    // only witnesses of their own input shapes (review B1).
+    const threadId = 'thread_pi_adapter';
+    addChatThread({
+      id: threadId,
+      title: 'adapter boundary',
+      metadata: '{}',
+      is_generating: false,
+      is_favorited: 0,
+      is_incognito: 0,
+      enable_artifacts: 0,
+    });
+    addChatMessage({
+      id: 'msg_ab_u',
+      thread_id: threadId,
+      message: sanitizeUiMessageJsonForStorage(
+        JSON.stringify({ role: 'user', parts: [{ type: 'text', text: 'real pipeline question' }] })
+      ),
+      timestamp: new Date(Date.now() - 1000).toISOString(),
+      metadata: '{}',
+    });
+    addChatMessage({
+      id: 'msg_ab_a',
+      thread_id: threadId,
+      message: sanitizeUiMessageJsonForStorage(
+        JSON.stringify({ role: 'assistant', parts: [{ type: 'text', text: 'real pipeline answer' }] })
+      ),
+      timestamp: new Date().toISOString(),
+      metadata: '{}',
+    });
+
+    const rows = getChatMessages(threadId);
+    const uiMessages = rows
+      .map(row => parseStoredUiMessageRow({ id: row.id, message: row.message }))
+      .filter((m): m is NonNullable<typeof m> => m !== null);
+    const history = await toModelInputMessages(uiMessages);
+    expect(history.length).toBe(2);
+
+    const { systemPrompt, messages } = projectHistoryToPiContext(history, 'scripted-model');
+    expect(systemPrompt).toBe('');
+    const roles = messages.map(m => m.role);
+    expect(roles).toEqual(['user', 'assistant']);
+    const serialized = JSON.stringify(messages);
+    expect(serialized).toContain('real pipeline question');
+    expect(serialized).toContain('real pipeline answer');
+    const assistant = messages[1] as Extract<(typeof messages)[number], { role: 'assistant' }>;
+    expect(assistant.api).toBe('openai-completions'); // envelope present on real shapes
+    expect(assistant.stopReason).toBe('stop');
   });
 
   it('maps Pi usage buckets onto the total-prompt convention', () => {

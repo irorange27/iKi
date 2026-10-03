@@ -16,14 +16,24 @@
  * (model calls made, tool effects executed).
  *
  * Projection rules (review F4/F5):
+ * - Covered input domain: the text + tools subset of ModelMessage shapes —
+ *   user text parts AND plain strings, assistant text/tool-call parts, tool
+ *   result parts. NOT yet projected (throws, flip design must land first):
+ *   reasoning parts (thinking-signature continuity undecided), approval
+ *   parts (the approval-resume replay stays on the existing engine until
+ *   flip), image/file parts (multimodal undecided).
  * - Assistant envelopes (api/provider/model/usage/stopReason) are synthesized
- *   at projection time; iKi history never contains error/aborted assistant
- *   messages (the repair path pairs them into text + error tool results), so
- *   nothing projected here can be dropped by Pi's transcript transform.
+ *   at projection time. iKi history cannot contain error/aborted assistant
+ *   messages: interrupted TOOL parts are repaired into paired error results
+ *   (ui_messages), and stream errors never enter history because only
+ *   onStepFinish appends (simple_agent_runner) — so the transform's drop
+ *   rule cannot remove projected history, and the 'stop' stamp prevents a
+ *   partial from replaying as complete.
  * - Tool schemas are consumed as-is from the existing owner
  *   (BaseTool.parameters — plain JSON Schema). Strict normalization is NOT
- *   enabled: Pi's strict mode rewrites optional fields to required+nullable,
- *   which iKi's zod validation would reject as an explicit null.
+ *   requested by this adapter (it never sets constrainedSampling); note that
+ *   for models whose compat advertises strict support the wire still carries
+ *   `strict: false` — flip-time wire diffs should expect that field.
  * - Unrepresentable parts throw PiProjectionError — never a silent drop.
  *
  * This module is UNWIRED: no production path imports callPiChat yet. Wiring
@@ -135,7 +145,7 @@ const synthesizedEnvelope = (modelId: string) => ({
     totalTokens: 0,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   },
-  stopReason: 'stop',
+  stopReason: 'stop' as const,
   timestamp: Date.now(),
 });
 
@@ -161,6 +171,27 @@ export const projectHistoryToPiContext = (
     );
   };
 
+  // convertToModelMessages emits user content as a PART ARRAY — even for a
+  // single text part (ai@6 dist: `content: message.parts.map(...)`). The
+  // string form never occurs from the real pipeline; it is accepted because
+  // tests (and rehydration paths) hand it to the projection directly.
+  const userContent = (content: unknown): string => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      const texts: string[] = [];
+      for (const part of content) {
+        const p = part as { type?: string; text?: unknown };
+        if (p.type === 'text' && typeof p.text === 'string') {
+          texts.push(p.text);
+          continue;
+        }
+        throw new PiProjectionError(`unsupported user part type: ${String(p.type ?? typeof part)}`);
+      }
+      return texts.join('');
+    }
+    throw new PiProjectionError(`unsupported user content shape: ${typeof content}`);
+  };
+
   for (const message of messages) {
     const m = message as { role: string; content: unknown };
     switch (m.role) {
@@ -169,14 +200,14 @@ export const projectHistoryToPiContext = (
         if (!systemPrompt) {
           systemPrompt = text;
         } else {
-          piMessages.push({ role: 'system', content: text });
+          piMessages.push({ role: 'system', content: text, timestamp: Date.now() });
         }
         break;
       }
       case 'user': {
         piMessages.push({
           role: 'user',
-          content: stringContent('user', m.content),
+          content: userContent(m.content),
           timestamp: Date.now(),
         });
         break;
