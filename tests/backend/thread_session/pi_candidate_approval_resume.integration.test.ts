@@ -342,6 +342,23 @@ describe('approval resume through the real owner with the candidate executor', (
     expect(executions).toEqual([]);
   });
 
+  it('owner-consumed rows read as authorized (the flip-time shape, pinned)', async () => {
+    executions.length = 0;
+    registerPendingApproval('appr_oc', 'sess_oc', 'thread_oc', 'call_oc', '/owner-consumed.txt');
+    await approvals.approveTool({ id: 906, send: vi.fn() }, 'appr_oc', true, 'user approved');
+    // The flip-time shape: the OWNER consumes (recoveryContext present) and
+    // the candidate starts with no journal intent of its own.
+    getDb()
+      .prepare("UPDATE tool_call_approvals SET state = 'consumed' WHERE approval_id = 'appr_oc'")
+      .run();
+    expect(getToolCallApproval('appr_oc')).toMatchObject({ state: 'consumed', decision: 'approved' });
+    expect(journalGet('appr_oc')).toBeUndefined();
+
+    const outcome = await candidateResume('appr_oc');
+    expect(outcome.kind).toBe('executed');
+    expect(executions).toEqual(['read_file:/owner-consumed.txt']);
+  });
+
   it('concurrent resumes: the atomic claim lets exactly one execute', async () => {
     executions.length = 0;
     registerPendingApproval('appr_conc', 'sess_conc', 'thread_conc', 'call_conc', '/concurrent.txt');
