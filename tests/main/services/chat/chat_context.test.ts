@@ -99,9 +99,9 @@ type MemoryDoubles = {
 };
 
 // The three thread_session capabilities the assembler consumes as injected
-// ports. The vi.mock blocks above stay in place purely as tripwires: with the
-// ports in place a direct `thread_session` import in turn_prep would be a
-// review/architecture failure, and the sentinel test below proves it.
+// ports. The vi.mock blocks above are only a tripwire (the clipboard sentinel
+// test exercises them); the actual enforcement for "no direct thread_session
+// import in turn_prep" is the arch rule turn-prep-below-session.
 const contextPortDoubles = () => ({
   resolveSkillsSystemPrompt: resolveSkillsSystemPromptMock,
   getAssistantProfileContextMessage: getAssistantProfileContextMessageMock,

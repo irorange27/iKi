@@ -71,9 +71,9 @@ export const buildIdentityContext = (
   workspaceSystemMessage: ((threadId?: string) => string) | undefined,
   threadId: string | undefined,
   contextConfig: ContextConfig,
-  modelCapability?: ModelCapability | null,
-  agentInstructions?: string,
-  getAssistantProfileContextMessage: () => string = () => ''
+  modelCapability: ModelCapability | null | undefined,
+  agentInstructions: string,
+  getAssistantProfileContextMessage: () => string
 ): IdentityContext => {
   const profile = clipTextToTokenBudget(getAssistantProfileContextMessage().trim(), contextConfig.maxIdentityTokens);
   const identityClip = {
@@ -153,13 +153,13 @@ export const buildMemoryContext = async (params: {
   contextConfig: ContextConfig;
   modelCapability?: ModelCapability | null;
   onMemoryRetrieved?: AssembleChatContextParams['onMemoryRetrieved'];
-  retrieveContinuity?: (query: string) => import('@iki/backend/chat_platform').ContinuityRetrievalPayload | null;
+  retrieveContinuity: (query: string) => import('@iki/backend/chat_platform').ContinuityRetrievalPayload | null;
 }): Promise<MemoryContext> => {
   if (!params.query.trim()) {
     return buildDroppedMemoryContext('no user query available');
   }
 
-  const continuityPayload = params.retrieveContinuity?.(params.query) ?? null;
+  const continuityPayload = params.retrieveContinuity(params.query);
   const archiveMemoryPayload =
     params.threadId && params.query.trim()
       ? await params.memory.retrieveRelevantMemory(params.threadId, params.query)
@@ -278,9 +278,6 @@ export const buildSkillContext = async (params: {
   modelCapability?: ModelCapability | null;
   resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
 }): Promise<SkillContext> => {
-  if (!params.resolveSkillsSystemPrompt) {
-    throw new Error('resolveSkillsSystemPrompt is required for skill context');
-  }
   const { skillsSystemPrompt, usedSkills, skillMode } = await params.resolveSkillsSystemPrompt({
     inputMessages: params.inputMessages,
     threadId: params.threadId,
