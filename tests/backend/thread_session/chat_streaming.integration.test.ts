@@ -73,6 +73,11 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
+  // session_loop now consumes these three as named imports; the factory must
+  // provide them or module linking fails even when the preparer is mocked out.
+  getAssistantProfileContextMessage: () => '',
+  retrieveRelevantContinuity: () => null,
+  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     setChatPolicy: vi.fn(),
     setAffect: vi.fn(),

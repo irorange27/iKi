@@ -33,6 +33,11 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
+  // session_loop now consumes these three as named imports; the factory must
+  // provide them or module linking fails even when the preparer is mocked out.
+  getAssistantProfileContextMessage: () => '',
+  retrieveRelevantContinuity: () => null,
+  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     setChatPolicy: vi.fn(),
     setAffect: vi.fn(),
@@ -105,7 +110,12 @@ describe('streamed text commit gate', () => {
   beforeAll(async () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-text-commit-'));
     initializeDatabase({ dbPath: path.join(dataDir, 'commit.db') });
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      // platform is module-mocked above; the real continuity hook is not
+      // under test here, so the port gets a no-op double.
+      onContinuityMessagePersisted: async () => undefined,
+    });
     conversation.createThread({ id: 'thread_commit' });
     conversation.createThread({ id: 'thread_commit_kill' });
     defaultToolRegistry.register(

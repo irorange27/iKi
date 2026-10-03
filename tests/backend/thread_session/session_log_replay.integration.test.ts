@@ -33,6 +33,11 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
+  // session_loop now consumes these three as named imports; the factory must
+  // provide them or module linking fails even when the preparer is mocked out.
+  getAssistantProfileContextMessage: () => '',
+  retrieveRelevantContinuity: () => null,
+  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     setChatPolicy: vi.fn(),
     setAffect: vi.fn(),
@@ -109,7 +114,12 @@ describe('session log turn facts and pure replay', () => {
   beforeAll(async () => {
     dataDir = await mkdtemp(path.join(os.tmpdir(), 'iki-session-log-'));
     initializeDatabase({ dbPath: path.join(dataDir, 'log.db') });
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      // platform is module-mocked above; the real continuity hook is not
+      // under test here, so the port gets a no-op double.
+      onContinuityMessagePersisted: async () => undefined,
+    });
     conversation.createThread({ id: 'thread_log' });
     defaultToolRegistry.register(
       createTool({

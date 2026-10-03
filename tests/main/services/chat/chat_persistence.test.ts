@@ -64,10 +64,6 @@ vi.mock('@iki/backend/db/database', () => ({
   getDb: getDbMock,
 }));
 
-vi.mock('@iki/backend/thread_session/platform', () => ({
-  onMessagePersisted: onContinuityMessagePersistedMock,
-}));
-
 vi.mock('@iki/backend/workspaces/thread_workspace', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
@@ -111,6 +107,7 @@ describe('chat_persistence', () => {
       memory: {
         onMessagePersisted: vi.fn(),
       } as never,
+      onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 
     const created = persistence.createThread({
@@ -157,6 +154,7 @@ describe('chat_persistence', () => {
       memory: {
         onMessagePersisted,
       } as never,
+      onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 
     persistence.createMessage({
@@ -189,6 +187,7 @@ describe('chat_persistence', () => {
       memory: {
         onMessagePersisted: vi.fn(),
       } as never,
+      onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 
     const result = persistence.updateThread('thread_1', {
@@ -235,6 +234,7 @@ describe('chat_persistence', () => {
       memory: {
         onMessagePersisted: vi.fn(),
       } as never,
+      onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 
     const cleared = persistence.clearThread('thread_1', {

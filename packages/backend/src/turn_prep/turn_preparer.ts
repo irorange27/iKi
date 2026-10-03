@@ -261,10 +261,18 @@ const collectRequiredBuiltinSkillTools = (skills: SkillSummary[]): string[] => {
 export const createChatTurnPreparer = (deps: {
   memory: ChatMemory;
   getRuntimeConfig: () => ChatTurnRuntimeConfig;
+  resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
+  getAssistantProfileContextMessage: () => string;
+  retrieveRelevantContinuity: (
+    query: string
+  ) => import('@iki/backend/chat_platform').ContinuityRetrievalPayload | null;
 }) => {
   const contextAssembler = createChatContextAssembler({
     memory: deps.memory,
     workspaceSystemMessage: buildThreadWorkspaceSystemMessage,
+    resolveSkillsSystemPrompt: deps.resolveSkillsSystemPrompt,
+    getAssistantProfileContextMessage: deps.getAssistantProfileContextMessage,
+    retrieveRelevantContinuity: deps.retrieveRelevantContinuity,
   });
 
   const prepareChatTurn = async (

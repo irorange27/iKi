@@ -11,7 +11,6 @@ import { createPrefixedId } from '@iki/backend/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktree';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import { onMessagePersisted as onContinuityMessagePersisted } from '../thread_session/platform';
 import type { ChatMemory } from '../thread_session/memory';
 import { sanitizeUiMessageJsonForStorage } from '@iki/backend/message/ui_message_codec';
 
@@ -81,7 +80,14 @@ const normalizeThreadInput = (
   };
 };
 
-export const createChatPersistence = (deps: { memory: ChatMemory }) => {
+export const createChatPersistence = (deps: {
+  memory: ChatMemory;
+  onContinuityMessagePersisted: (params: {
+    threadId: string;
+    messageId: string;
+    messageJson: string;
+  }) => Promise<void>;
+}) => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => {
     ensureThreadWorkspaceSelection(id);
@@ -237,7 +243,7 @@ export const createChatPersistence = (deps: { memory: ChatMemory }) => {
       messageId,
       messageJson: sanitizedMessageJson,
     });
-    void onContinuityMessagePersisted({
+    void deps.onContinuityMessagePersisted({
       threadId: message.thread_id,
       messageId,
       messageJson: sanitizedMessageJson,

@@ -26,6 +26,7 @@ import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
+import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { startTurnHarness } from '@iki/backend/agent/harness';
@@ -172,7 +173,10 @@ describe('approval resume keeps the turn-start workspace', () => {
     await fs.mkdir(b);
     addWorkspace({ id: 'workspace_a', path: a, name: 'a' });
     addWorkspace({ id: 'workspace_wt_probe', path: b, name: 'b' });
-    conversation = createChatPersistence({ memory: memory as never });
+    conversation = createChatPersistence({
+      memory: memory as never,
+      onContinuityMessagePersisted: onMessagePersisted,
+    });
     conversation.createThread({
       id: 'thread_probe',
       workspace_id: 'workspace_a',

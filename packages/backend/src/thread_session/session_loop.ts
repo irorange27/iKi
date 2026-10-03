@@ -20,7 +20,12 @@ import { buildHandoffResumeContext } from './handoff_resume';
 export type { MessageSendResult } from './message_send';
 import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
-import { getCompanion } from './platform';
+import {
+  getCompanion,
+  getAssistantProfileContextMessage,
+  retrieveRelevantContinuity,
+} from './platform';
+import { resolveSkillsSystemPrompt } from './skills';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { writeThreadTodoPlan } from '../db/thread_todos';
@@ -82,6 +87,9 @@ export const createChatStreaming = (deps: {
 }) => {
   const turnPreparer = createChatTurnPreparer({
     memory: deps.memory,
+    resolveSkillsSystemPrompt,
+    getAssistantProfileContextMessage,
+    retrieveRelevantContinuity,
     getRuntimeConfig: () => {
       try {
         const config = getAppConfig();

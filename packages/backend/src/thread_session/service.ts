@@ -11,7 +11,7 @@ import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
-import { setChatServicePlatformDeps } from './platform';
+import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
 import { deriveResumeStreamOptions } from './run_rehydrator';
 import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
@@ -30,7 +30,10 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     crossProcessThreadRun: (threadId, options) =>
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
-  const persistence = createChatPersistence({ memory });
+  const persistence = createChatPersistence({
+    memory,
+    onContinuityMessagePersisted: onMessagePersisted,
+  });
   const approvals = createChatApproval({
     streams: {
       tryAcquireThreadRun: streamCoordinator.tryAcquireThreadRun,
