@@ -135,9 +135,11 @@ export const projectUsageToIki = (usage: PiUsage) => ({
 /**
  * The synthesized assistant envelope. Zero usage: historical messages do not
  * contribute usage accounting (only live calls do, via projectUsageToIki).
- * stopReason 'stop' is structurally required and semantically neutral for
- * history replay — Pi's transform drops ONLY 'error'/'aborted' messages,
- * which iKi history cannot contain (repair path invariant).
+ * stopReason 'stop' is structurally required; its semantic role is keeping a
+ * partial from replaying as complete. The STATE is what projection input
+ * never carries (see the module doc): tool repair pairs interrupted tool
+ * parts, and stream errors never append to history — partial TEXT however
+ * can be present (cancel-branch persistence) and is projected as-is.
  */
 const synthesizedEnvelope = (modelId: string) => ({
   api: 'openai-completions',
@@ -160,13 +162,14 @@ const synthesizedEnvelope = (modelId: string) => ({
  * are textified as the documented protocol (a JSON tool result read by the
  * model as text); `content` parts project text and REFUSE media — images and
  * files are outside the covered text+tools domain and must never hide inside
- * a stringified value.
+ * a stringified value. `execution-denied` mirrors the persisted-read path's
+ * mapping (an approval denial becomes an error tool result).
  */
 const projectToolOutput = (output: unknown): { text: string; isError: boolean } => {
   if (output === null || typeof output !== 'object' || !('type' in output)) {
     throw new PiProjectionError('tool-result output must be a typed AI SDK output');
   }
-  const o = output as { type: string; value?: unknown };
+  const o = output as { type: string; value?: unknown; reason?: unknown };
   switch (o.type) {
     case 'text':
       return { text: typeof o.value === 'string' ? o.value : JSON.stringify(o.value ?? null), isError: false };
@@ -176,6 +179,11 @@ const projectToolOutput = (output: unknown): { text: string; isError: boolean } 
       return { text: JSON.stringify(o.value ?? null), isError: false };
     case 'error-json':
       return { text: JSON.stringify(o.value ?? null), isError: true };
+    case 'execution-denied':
+      return {
+        text: typeof o.reason === 'string' ? o.reason : 'Tool call execution denied.',
+        isError: true,
+      };
     case 'content': {
       if (!Array.isArray(o.value)) {
         throw new PiProjectionError('content tool-result output must be a part array');

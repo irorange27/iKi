@@ -273,6 +273,11 @@ describe('Pi supply adapter — projection', () => {
       'stream-abort'
     );
 
+    // Provenance marker: the real producer records the stream-abort transport
+    // — if the producer stopped recording it, the test must fail here.
+    const savedRow = getChatMessages('thread_pi_partial').at(-1)!;
+    expect(JSON.parse(savedRow.metadata)).toMatchObject({ transport: 'stream-abort' });
+
     const rows = getChatMessages('thread_pi_partial');
     const uiMessages = rows
       .map(row => parseStoredUiMessageRow({ id: row.id, message: row.message }))
