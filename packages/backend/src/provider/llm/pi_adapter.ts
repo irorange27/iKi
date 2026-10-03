@@ -135,11 +135,13 @@ export const projectUsageToIki = (usage: PiUsage) => ({
 /**
  * The synthesized assistant envelope. Zero usage: historical messages do not
  * contribute usage accounting (only live calls do, via projectUsageToIki).
- * stopReason 'stop' is structurally required; its semantic role is keeping a
- * partial from replaying as complete. The STATE is what projection input
- * never carries (see the module doc): tool repair pairs interrupted tool
- * parts, and stream errors never append to history — partial TEXT however
- * can be present (cancel-branch persistence) and is projected as-is.
+ * stopReason 'stop' is structurally required. It is NOT a guard against
+ * misjudgment: a partial stamped 'stop' presents itself as complete on the
+ * wire — the stamp is part of the synthesized assumption, nothing more. The
+ * STATE is what projection input never carries (see the module doc): tool
+ * repair pairs interrupted tool parts, and stream errors never append to
+ * history — partial TEXT however can be present (cancel-branch persistence)
+ * and is projected as-is.
  */
 const synthesizedEnvelope = (modelId: string) => ({
   api: 'openai-completions',

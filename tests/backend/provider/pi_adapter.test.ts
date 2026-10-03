@@ -244,6 +244,22 @@ describe('Pi supply adapter — projection', () => {
         .isError
     ).toBe(true);
 
+    // execution-denied (approval-deny flow, live history): reason carried as
+    // the error text, mirroring the persisted-read path; absent reason falls
+    // back to the same default text the reader uses.
+    const denied = project({ type: 'execution-denied', reason: 'User rejected tool execution.' });
+    const deniedResult = denied.messages[1] as Extract<
+      (typeof denied.messages)[number],
+      { role: 'toolResult' }
+    >;
+    expect(deniedResult.isError).toBe(true);
+    expect(deniedResult.content[0]).toMatchObject({ text: 'User rejected tool execution.' });
+    const deniedNoReason = project({ type: 'execution-denied' });
+    expect(
+      (deniedNoReason.messages[1] as Extract<(typeof deniedNoReason.messages)[number], { role: 'toolResult' }>)
+        .content[0]
+    ).toMatchObject({ text: 'Tool call execution denied.' });
+
     // Unknown output types throw instead of being stringified.
     expect(() => project({ type: 'audio', value: 'x' })).toThrow(/audio/);
   });
