@@ -4,23 +4,13 @@ import fs from 'fs';
 import { initializeMigrations } from './migration';
 import { createLogger } from '@iki/backend/logger';
 import { getUserDataPath } from '../platform';
+import type {
+  SqliteDatabase,
+  SqliteRunResult,
+  SqliteStatement,
+} from './sqlite';
 
-export type SqliteRunResult = { changes: number; lastInsertRowid: number | bigint };
-
-export type SqliteStatement = {
-  run: (...params: unknown[]) => SqliteRunResult;
-  get: (...params: unknown[]) => unknown;
-  all: (...params: unknown[]) => unknown[];
-};
-
-export type SqliteDatabase = {
-  exec: (sql: string) => void;
-  prepare: (sql: string) => SqliteStatement;
-  transaction: <TArgs extends unknown[], TResult>(
-    fn: (...args: TArgs) => TResult
-  ) => (...args: TArgs) => TResult;
-  close: () => void;
-};
+export type { SqliteDatabase, SqliteRunResult, SqliteStatement };
 
 let db: SqliteDatabase | null = null;
 let initialized = false;
@@ -167,7 +157,7 @@ export const initializeDatabase = (options?: { dbPath?: string }) => {
   db = wrapDatabase(raw);
   initCoreTables(db);
   initialized = true;
-  initializeMigrations();
+  initializeMigrations(db);
   initializing = false;
   return db;
 };

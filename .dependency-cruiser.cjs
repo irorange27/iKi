@@ -51,6 +51,13 @@ module.exports = {
       to: { path: '^packages/backend/src/thread_session' },
     },
     {
+      name: 'db-migration-above-database',
+      comment: 'The bootstrap handle flows down: database.ts opens the file and passes it into initializeMigrations(db); migration modules must never reach back for the getDb singleton (that edge is the module-level import cycle).',
+      severity: 'error',
+      from: { path: '^packages/backend/src/db/migration' },
+      to: { path: '^packages/backend/src/db/database.ts$' },
+    },
+    {
       name: 'session-reads-no-global-config',
       comment: 'R4 (ADR-001, finished by P3): config is injected into turn_prep/agent; config/defaults.ts (pure constants) is fine',
       severity: 'error',

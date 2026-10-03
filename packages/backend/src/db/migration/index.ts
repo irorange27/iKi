@@ -1,4 +1,4 @@
-import { getDb } from '../database';
+import type { SqliteDatabase } from '../sqlite';
 import {
   isMigrationExecuted,
   markMigrationExecuted,
@@ -21,7 +21,7 @@ export const registeredMigrations: Migration[] = [
   approvalSessionPlan,
 ];
 
-export const initializeMigrations = () => {
+export const initializeMigrations = (db: SqliteDatabase) => {
   // Databases created before the migration squash already carry the full
   // schema: detect any pre-existing user table and mark the baseline as
   // applied so they open unchanged. Fresh databases run the baseline to
@@ -32,17 +32,17 @@ export const initializeMigrations = () => {
   // migrations) or a fresh database gets misread as pre-squash and skips the
   // baseline.
   const hasPreBaselineSchema = Boolean(
-    getDb()
+    db
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('config', 'providers', 'thread_run_locks', 'session_events', 'migrations') LIMIT 1"
       )
       .get()
   );
 
-  if (hasPreBaselineSchema && !isMigrationExecuted(baseline.name)) {
-    runMigrations([]); // ensures the migrations bookkeeping table exists
-    markMigrationExecuted(baseline.name);
+  if (hasPreBaselineSchema && !isMigrationExecuted(db, baseline.name)) {
+    runMigrations(db, []); // ensures the migrations bookkeeping table exists
+    markMigrationExecuted(db, baseline.name);
   }
 
-  runMigrations(registeredMigrations);
+  runMigrations(db, registeredMigrations);
 };
