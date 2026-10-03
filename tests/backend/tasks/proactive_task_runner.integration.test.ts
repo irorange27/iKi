@@ -17,7 +17,7 @@ vi.mock('@iki/backend/platform', () => ({
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { registerBridgeThreadSender } from '@iki/backend/bridge_dispatch';
 import { addChatMessage, getChatMessages } from '@iki/backend/db/chat_message';
-import { addChatThread, touchChatThread as touchThread } from '@iki/backend/db/chat_thread';
+import { addChatThread } from '@iki/backend/db/chat_thread';
 import { getProactiveTask } from '@iki/backend/db/tasks';
 import {
   createProactiveTaskRunner,
@@ -46,9 +46,7 @@ describe('proactive task runner (backend)', () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  const buildRunner = (options?: {
-    sendResult?: { success: boolean; error?: string; text?: string };
-  }) => {
+  const buildRunner = () => {
     const sentRequests: Array<Record<string, unknown>> = [];
     const createdMessages: Array<Record<string, unknown>> = [];
     const createdThreads: Array<{ title: string; model: string | null }> = [];
@@ -104,7 +102,6 @@ describe('proactive task runner (backend)', () => {
       pushTaskEvent: payload => pushedEvents.push(payload),
       pushTaskNudge: nudge => nudges.push(nudge),
     };
-    void options;
     const runner = createProactiveTaskRunner({ chat, host });
     return {
       runner,
@@ -141,12 +138,22 @@ describe('proactive task runner (backend)', () => {
     expect(task.next_run_at).toBeTruthy();
     expect(task.thread_id).toMatch(/^thread_/);
 
-    // The prompt carried the objective and the run bookkeeping.
+    // The prompt carried the objective and the run bookkeeping — and the
+    // legacy prompt/strategy strings, pinned against drift.
     const request = deps.sentRequests[0]!;
+    const systemPrompt = (
+      (request.messages as Array<{ role: string; content: string }>)[0] ?? { content: '' }
+    ).content;
+    expect(systemPrompt).toContain(
+      'You are executing a scheduled proactive task for the user.'
+    );
+    expect(systemPrompt).toContain('include source links or source names when practical');
     const promptText = JSON.stringify(request.messages);
     expect(promptText).toContain('Summarize the news');
     expect(promptText).toContain('Nightly digest');
     expect(promptText).toContain('Run reason: schedule');
+    expect(promptText).toContain('every 30 minute(s)');
+    expect(promptText).toContain('Agent decides automatically using the safe built-in tool catalog.');
     expect((request.runConfig as { kind: string }).kind).toBe('proactive-task');
 
     // Result and intro messages persisted into the task thread.
@@ -174,10 +181,6 @@ describe('proactive task runner (backend)', () => {
     });
 
     const deps = buildRunner();
-    (deps.chat.send as ReturnType<typeof vi.fn>).mockResolvedValueOnce?.({
-      success: false,
-      error: 'provider exploded',
-    });
     // The port is a plain object — replace send for this runner instance.
     const failingRunner = createProactiveTaskRunner({
       chat: {
@@ -192,10 +195,6 @@ describe('proactive task runner (backend)', () => {
     });
 
     const result = await failingRunner.runProactiveTask('task_fail', { reason: 'schedule' });
-    if (result.error !== 'provider exploded') {
-      // eslint-disable-next-line no-console
-      console.log('T2-ERR:', result.error);
-    }
     expect(result).toMatchObject({ success: false, error: 'provider exploded' });
 
     const task = getProactiveTask('task_fail')!;
@@ -268,10 +267,6 @@ describe('proactive task runner (backend)', () => {
 
     const first = runner.runProactiveTask('task_concurrent', { reason: 'schedule' });
     const second = await runner.runProactiveTask('task_concurrent', { reason: 'schedule' });
-    if (second.error !== 'Task already running') {
-      // eslint-disable-next-line no-console
-      console.log('T3-ERR:', second.error);
-    }
     expect(second).toMatchObject({ success: false, error: 'Task already running' });
     release();
     const firstResult = await first;

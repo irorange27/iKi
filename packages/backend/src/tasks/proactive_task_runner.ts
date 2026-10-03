@@ -1,7 +1,8 @@
 import * as tasksDb from '@iki/backend/db/tasks';
+import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { createLogger } from '@iki/backend/logger';
-import { computeNextRunAt } from '@iki/backend/tasks/task_schedule';
+import { clampIntervalMinutes, computeNextRunAt } from '@iki/backend/tasks/task_schedule';
 import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import {
   filterSafeProactiveTaskTools,
@@ -10,6 +11,7 @@ import {
   type ProactiveTask,
 } from '@iki/backend/types/tasks';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import { toIsoNow } from '@iki/backend/utils/text';
 
 const logger = createLogger({ module: 'proactive_task_runner' });
@@ -41,7 +43,11 @@ export type TaskRunnerChatPort = {
     metadata?: string;
   }) => { id: string } | null;
   createMessage: (input: unknown) => unknown;
-  send: (options: unknown) => Promise<{ success: boolean; error?: string; text?: string }>;
+  send: (options: ChatTurnOptions) => Promise<{
+    success: boolean;
+    error?: string;
+    text?: string;
+  }>;
 };
 
 export type ProactiveTaskRunnerDeps = {
@@ -62,18 +68,17 @@ const formatTaskSchedule = (task: {
   interval_minutes: number;
   cron_expression?: string | null;
   schedule_timezone?: string | null;
-}): string => {
-  if (task.schedule_type === 'cron') {
-    return `Cron: ${task.cron_expression ?? ''} (${task.schedule_timezone ?? 'UTC'})`;
-  }
-  return `Every ${task.interval_minutes} minute(s)`;
-};
+}): string =>
+  task.schedule_type === 'cron'
+    ? `${task.cron_expression || 'cron'}${task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)'}`
+    : `every ${clampIntervalMinutes(task.interval_minutes)} minute(s)`;
 
 const formatTaskToolStrategy = (
   task: Pick<ProactiveTask, 'tools' | 'tool_mode'>
 ): string => {
   const toolMode = inferProactiveTaskToolMode(task);
-  if (toolMode === 'auto') return 'Auto tool selection.';
+  if (toolMode === 'auto')
+    return 'Agent decides automatically using the safe built-in tool catalog.';
   if (toolMode === 'disabled') return 'Tools disabled; run as plain model reasoning only.';
   const tools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
   return tools.length > 0
@@ -82,8 +87,12 @@ const formatTaskToolStrategy = (
 };
 
 const PROACTIVE_TASK_AGENT_SYSTEM_PROMPT = [
-  'You are a proactive task agent running on a fixed schedule, fully autonomously.',
+  'You are executing a scheduled proactive task for the user.',
   'Act autonomously and complete the task without asking the user follow-up questions.',
+  'When the task depends on current information, proactively use the available tools to verify freshness instead of relying on stale model knowledge.',
+  'Prefer concise, high-signal updates that emphasize material changes, concrete dates, and actionable conclusions.',
+  'Avoid repeating unchanged background from prior runs. If nothing important changed, say so plainly.',
+  'When you cite current information, include source links or source names when practical.',
 ].join('\n');
 
 const buildProactiveTaskPrompt = (
@@ -255,7 +264,7 @@ export const createProactiveTaskRunner = (deps: ProactiveTaskRunnerDeps) => {
             reason: options?.reason || 'schedule',
           },
         },
-      })) as { success: boolean; error?: string; text?: string };
+      }));
 
       const nextRunAt = computeNextRunAt(task, startedAt);
 
@@ -460,7 +469,7 @@ export const createProactiveTaskRunner = (deps: ProactiveTaskRunnerDeps) => {
 
       return { success: true };
     } catch (error) {
-      const errorText = error instanceof Error ? error.message : String(error);
+      const errorText = getErrorMessage(error);
       const nextRunAt = computeNextRunAt(task, startedAt);
       tasksDb.updateProactiveTask(taskId, {
         last_run_at: startedAt,
