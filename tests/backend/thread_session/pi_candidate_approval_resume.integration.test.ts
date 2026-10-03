@@ -152,9 +152,12 @@ const candidateResume = async (approvalId: string): Promise<ResumeOutcome> => {
     return { kind: 'unknown-result', wireText: JSON.stringify(final.content) };
   }
 
-  // The owner consumed the session when the decision landed — that consume,
-  // combined with the approved decision and an untouched journal, is the
-  // candidate's right to act exactly once.
+  // In this registration shape the owner's consume was skipped (no
+  // recoveryContext), so the candidate holds the consume itself: the
+  // approved decision plus an untouched journal is the right to act exactly
+  // once. Flip-time registration carries a recoveryContext and the owner
+  // consumes first — the gate must then read an owner-consumed row as
+  // authorized (see the module doc note).
   const consumed = consumeToolCallApprovalSession(approval.session_id);
   if (consumed.changes === 0 && approval.state !== 'answered') {
     return { kind: 'refused', reason: 'execution right unavailable' };
