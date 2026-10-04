@@ -26,7 +26,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   return {
     ...actual,
     // Persona prompt (identity, date/timezone, OS, cwd) leads every request.
-    getFullSystemPrompt: vi.fn(() => 'persona prompt'),
+    resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     // The unit suite injects its model call; the provider row stub only
     // keeps the default call harmless if it were ever reached.
     getProviderConfig: vi.fn(() => ({

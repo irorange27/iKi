@@ -8,7 +8,7 @@ vi.mock('@iki/backend/platform', () => ({ getUserDataPath: external.userData }))
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
   createModel: external.model,
-  getFullSystemPrompt: () => 'review',
+  resolvePersonaPrompt: () => 'review',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
     contextWindow: 100000,

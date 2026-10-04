@@ -8,7 +8,7 @@ const {
   disposeLanguageModelMock,
   generateTextMock,
   getAppConfigMock,
-  getFullSystemPromptMock,
+  resolvePersonaPromptMock,
   getModelCallSettingsMock,
   getProvidersMock,
 } = vi.hoisted(() => ({
@@ -16,7 +16,7 @@ const {
   disposeLanguageModelMock: vi.fn(),
   generateTextMock: vi.fn(),
   getAppConfigMock: vi.fn(),
-  getFullSystemPromptMock: vi.fn(),
+  resolvePersonaPromptMock: vi.fn(),
   getModelCallSettingsMock: vi.fn(() => ({})),
   getProvidersMock: vi.fn(),
 }));
@@ -28,7 +28,7 @@ vi.mock('ai', () => ({
 vi.mock('@iki/backend/provider/llm/factory', () => ({
   createModel: createModelMock,
   disposeLanguageModel: disposeLanguageModelMock,
-  getFullSystemPrompt: getFullSystemPromptMock,
+  resolvePersonaPrompt: resolvePersonaPromptMock,
   getModelCallSettings: getModelCallSettingsMock,
 }));
 
@@ -81,7 +81,7 @@ beforeEach(() => {
   createModelMock.mockReturnValue('mock-model');
   getModelCallSettingsMock.mockReturnValue({});
   generateTextMock.mockResolvedValue({ text: 'OK' });
-  getFullSystemPromptMock.mockReturnValue('persona prompt');
+  resolvePersonaPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockReturnValue(createDefaultAppConfig());
   getProvidersMock.mockReturnValue([]);
 });

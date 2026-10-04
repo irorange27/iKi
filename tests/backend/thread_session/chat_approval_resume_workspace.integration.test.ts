@@ -12,7 +12,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
   createModel: createModelMock,
   disposeLanguageModel: vi.fn(),
-  getFullSystemPrompt: () => 'audit system',
+  resolvePersonaPrompt: () => 'audit system',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
     contextWindow: 100000,

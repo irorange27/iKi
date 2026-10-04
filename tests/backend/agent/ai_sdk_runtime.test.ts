@@ -1,13 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-const { acpToolsMock, getFullSystemPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(
+const { acpToolsMock, resolvePersonaPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(
   () => ({
     acpToolsMock: vi.fn((tools: Record<string, unknown>) => ({
       ...tools,
       'acp.acp_provider_agent_dynamic_tool': { type: 'provider' },
     })),
-    getFullSystemPromptMock: vi.fn(),
+    resolvePersonaPromptMock: vi.fn(),
     getAppConfigMock: vi.fn(),
     loggerEventMock: vi.fn(),
   })
@@ -18,7 +18,7 @@ vi.mock('@mcpc-tech/acp-ai-provider', () => ({
 }));
 
 vi.mock('@iki/backend/provider/llm/factory', () => ({
-  getFullSystemPrompt: getFullSystemPromptMock,
+  resolvePersonaPrompt: resolvePersonaPromptMock,
 }));
 
 vi.mock('@iki/backend/config', () => ({
@@ -53,7 +53,7 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getFullSystemPromptMock.mockReturnValue('persona prompt');
+  resolvePersonaPromptMock.mockReturnValue('persona prompt');
 });
 
 describe('ai_sdk_runtime', () => {

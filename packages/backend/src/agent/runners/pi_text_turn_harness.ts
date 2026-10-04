@@ -3,8 +3,9 @@ import type { ModelMessage } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
 import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
+import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
-import { getFullSystemPrompt, getProviderConfig } from '../../provider/llm/factory';
+import { resolvePersonaPrompt, getProviderConfig } from '../../provider/llm/factory';
 import {
   buildPiModel,
   callPiChat,
@@ -33,7 +34,7 @@ const logger = createLogger({ module: 'pi_text_turn_harness' });
  * - one model call per attempt; no tools are resolved and a non-empty
  *   `toolsOverride` is refused (routing keeps this surface text-only);
  * - the request system prompt is the same three-part join the factory's Pi
- *   branch uses: persona (getFullSystemPrompt — identity, date/timezone, OS,
+ *   branch uses: persona (resolvePersonaPrompt — identity, date/timezone, OS,
  *   cwd), the plan's system prompt, then the transcript's own leading system
  *   message;
  * - history stays ModelMessage-shaped end to end: the prompt is appended by
@@ -145,14 +146,18 @@ export class PiTextTurnHarness {
     // at tool-exchange boundaries, summarize the omitted prefix, then refuse
     // if protected instructions or the current turn alone exceed the budget.
     // Compaction is request-scoped; the stored history keeps the full text.
-    const personaPrompt = getFullSystemPrompt(this.config.providerType, this.config.providerId);
+    const personaPrompt = resolvePersonaPrompt(this.config.providerType, this.config.providerId);
     const firstTranscriptSystem = this.history.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
     );
     const transcriptSystemText =
       typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '';
     const overhead = estimateTextTokens(
-      [personaPrompt, this.config.systemPrompt, transcriptSystemText].filter(Boolean).join('\n\n')
+      assembleRequestSystemPrompt([
+        { slot: 'persona', text: personaPrompt },
+        { slot: 'planPrompt', text: this.config.systemPrompt },
+        { slot: 'transcriptSystem', text: transcriptSystemText },
+      ]).prompt
     );
     let requestHistory = this.history;
     if (this.config.maxInputTokens) {
@@ -196,12 +201,14 @@ export class PiTextTurnHarness {
     }
 
     const projected = projectHistoryToPiContext(requestHistory, this.config.model);
-    // Persona first, then the plan's system prompt, then the transcript's own
-    // leading system message — the same join order the factory's Pi branch
-    // uses.
-    const systemPrompt = [personaPrompt, this.config.systemPrompt, projected.systemPrompt]
-      .filter(value => value.trim().length > 0)
-      .join('\n\n');
+    // Persona, then the plan's system prompt, then the transcript's own
+    // leading system message — placement owned by the assembly module, the
+    // same join every other request path uses.
+    const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+      { slot: 'persona', text: personaPrompt },
+      { slot: 'planPrompt', text: this.config.systemPrompt },
+      { slot: 'transcriptSystem', text: projected.systemPrompt },
+    ]);
 
     const turnStartedAt = Date.now();
     let llmMs = 0;

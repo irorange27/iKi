@@ -41,6 +41,7 @@ import {
 
 export type { AcpAuthMethod };
 import { getErrorMessage } from '@iki/backend/utils/errors';
+import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { normalizeLanguageModelUsage } from './usage';
 import {
   buildPiModel,
@@ -543,7 +544,12 @@ export const disposeLanguageModel = (model: LanguageModel): void => {
   disposeAcpLanguageModel(model);
 };
 
-export const getFullSystemPrompt = (providerType: string, providerId?: string | null) => {
+/** The persona SECTION of a request system prompt — named for exactly what
+ * it returns: identity, date/timezone, OS, cwd (text owned by src/persona.ts).
+ * The provider lookup doubles as an existence check, so this throws for an
+ * unconfigured provider. Placement and joining are
+ * message/system_prompt.ts's contract (`assembleRequestSystemPrompt`). */
+export const resolvePersonaPrompt = (providerType: string, providerId?: string | null) => {
   getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();
   return personaPrompt;
@@ -634,18 +640,18 @@ const generateViaPi = async (
     contextWindow: 128000,
     maxTokens: options.maxOutputTokens ?? 4096,
   });
-  const personaPrompt = getFullSystemPrompt(options.providerType, options.providerId);
+  const personaPrompt = resolvePersonaPrompt(options.providerType, options.providerId);
   const { systemPrompt: transcriptSystem, messages } = projectHistoryToPiContext(
     options.messages,
     options.modelId
   );
-  const systemPrompt = [
-    personaPrompt,
-    options.extraSystemPrompt,
-    transcriptSystem,
-  ]
-    .filter(value => typeof value === 'string' && value.trim().length > 0)
-    .join('\n\n');
+  const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+    { slot: 'persona', text: personaPrompt },
+    ...(typeof options.extraSystemPrompt === 'string'
+      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
+      : []),
+    { slot: 'transcriptSystem', text: transcriptSystem },
+  ]);
 
   try {
     const eventStream = callPiChat(
@@ -754,12 +760,12 @@ export const generateChatWithModelMessages = async (options: {
     return generateViaPi(options, config);
   }
   const model = createModel(options.providerType, options.modelId, options.providerId);
-  const systemPrompt = [
-    getFullSystemPrompt(options.providerType, options.providerId),
-    options.extraSystemPrompt,
-  ]
-    .filter(value => typeof value === 'string' && value.trim().length > 0)
-    .join('\n\n');
+  const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+    { slot: 'persona', text: resolvePersonaPrompt(options.providerType, options.providerId) },
+    ...(typeof options.extraSystemPrompt === 'string'
+      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
+      : []),
+  ]);
 
   try {
     const telemetry = langfuseTelemetry('chat.generate', {

@@ -10,7 +10,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
     ...actual,
     createModel: createModelMock,
     disposeLanguageModel: vi.fn(),
-    getFullSystemPrompt: vi.fn(() => 'persona prompt'),
+    resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: generationSettingsMock,
   };
 });

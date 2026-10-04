@@ -12,7 +12,11 @@ import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
 import { createLogger } from '@iki/backend/logger';
 import { withRetry } from '@iki/backend/utils/retry';
-import { getFullSystemPrompt } from './llm/factory';
+import { resolvePersonaPrompt } from './llm/factory';
+import {
+  assembleRequestSystemPrompt,
+  type RequestSystemPromptPart,
+} from '@iki/backend/message/system_prompt';
 import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import { unwrapAcpDynamicToolCall } from '@iki/backend/utils/acp';
 import {
@@ -146,17 +150,19 @@ export const buildPromptContext = (
   const sanitizedConversation = sanitizeModelConversationMessages(conversationMessages);
   const sanitized = sanitizedConversation.messages;
 
-  const systemParts: string[] = [getFullSystemPrompt(config.providerType, config.providerId)];
+  const systemParts: RequestSystemPromptPart[] = [
+    { slot: 'persona', text: resolvePersonaPrompt(config.providerType, config.providerId) },
+  ];
 
   if (config.systemPrompt.trim()) {
-    systemParts.push(config.systemPrompt.trim());
+    systemParts.push({ slot: 'planPrompt', text: config.systemPrompt.trim() });
   }
 
   for (const message of history) {
     if (message.role !== 'system') continue;
     const content = extractTextFromModelMessageContent(message.content).trim();
     if (content) {
-      systemParts.push(content);
+      systemParts.push({ slot: 'transcriptSystem', text: content });
     }
   }
 
@@ -174,7 +180,7 @@ export const buildPromptContext = (
   }
 
   return {
-    systemPrompt: systemParts.join('\n\n'),
+    systemPrompt: assembleRequestSystemPrompt(systemParts).prompt,
     messages: sanitized,
   };
 };
