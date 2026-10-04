@@ -357,6 +357,10 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(server.countRequests('guarded tool probe')).toBe(2);
     const secondWire = JSON.stringify(server.getWire('guarded tool probe', 1).messages);
     expect(secondWire).toContain('contents of /guarded.txt');
+    // Supply discriminator: the turn rode Pi (compat default for unknown
+    // baseUrls is the newer max-token field; the AI SDK path sends
+    // max_tokens instead).
+    expect(server.getWire('guarded tool probe', 0).max_completion_tokens).toBe(2000);
     // The resumed segment runs with notifyRunStatus off (waiter parity with
     // the AI SDK resume) — the target's last status stays 'blocked'; the
     // completion is proven by the continuation text on the wire.

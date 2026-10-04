@@ -244,12 +244,14 @@ export const runPiAgentLoop = async function* (
       return { status: 'completed', finalText: text, steps, usage, pendingToolCalls: [] };
     }
 
-    // Approval pause BEFORE any effect: if any call in the step requires
-    // approval — decided PER CALL when the projected tool carries the
-    // resolver's function — register the needing ones with the approval
-    // surface and end the turn awaiting-approval; nothing executes, and the
-    // resume is a new loop run over the recovered history (the approval
-    // owner decides).
+    // Approval pause BEFORE the needing calls' effects: the needing calls
+    // are decided PER CALL (the resolver's function, evaluated with the
+    // current step's policy snapshot). The step's NON-needing calls EXECUTE
+    // first — the AI SDK path runs them and leaves only the needing ones
+    // pending; a step mixing both is the ordinary askRisky case. The
+    // assistant message is pushed ONCE before any effect (providers reject a
+    // tool_calls message answered piecemeal), and the free calls' results
+    // ride the transcript so the resumed request stays wire-valid.
     const needingApproval: PiLoopToolCall[] = [];
     for (const call of toolCalls) {
       const tool = params.tools?.find(candidate => candidate.name === call.name);
@@ -260,9 +262,25 @@ export const runPiAgentLoop = async function* (
           : tool.needsApproval === true;
       if (needed) needingApproval.push(call);
     }
+    messages.push(final);
     if (needingApproval.length > 0) {
       if (!requestApproval) {
         throw new Error('Tool requires approval but the loop has no approval surface.');
+      }
+      for (const call of toolCalls) {
+        if (needingApproval.includes(call)) continue;
+        signal?.throwIfAborted();
+        yield { type: PiLoopEventType.ToolStart, call };
+        const output = await executeTool({ ...call, arguments: structuredClone(call.arguments) });
+        yield { type: PiLoopEventType.ToolEnd, call, output };
+        messages.push({
+          role: 'toolResult',
+          toolCallId: call.id,
+          toolName: call.name,
+          content: [{ type: 'text', text: toolResultText(output) }],
+          isError: toolResultIsError(output),
+          timestamp: Date.now(),
+        });
       }
       for (const call of needingApproval) await requestApproval(call);
       return {
@@ -276,10 +294,7 @@ export const runPiAgentLoop = async function* (
 
     // Tools in ANY step execute — including the last (harness semantics).
     // The results ride the transcript; the budget decides whether another
-    // model call follows. The assistant message is pushed ONCE before the
-    // effects: pushing it per call would duplicate it in the transcript and
-    // providers reject a tool_calls message answered piecemeal.
-    messages.push(final);
+    // model call follows.
     for (const call of toolCalls) {
       signal?.throwIfAborted();
       yield { type: PiLoopEventType.ToolStart, call };

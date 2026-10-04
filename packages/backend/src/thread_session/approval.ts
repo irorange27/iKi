@@ -583,7 +583,11 @@ export const createChatApproval = (deps: {
       }
       const commands = Array.from(session.pendingApprovalIds).flatMap((approvalId: string) => {
         const row = toolCallApprovalDb.getToolCallApproval(approvalId);
-        if (!row?.tool_call_id || !row.tool_name) return [];
+        // A row without its execution binding would leave the assistant's
+        // tool call unanswered on the resumed wire — corruption, not a skip.
+        if (!row?.tool_call_id || !row.tool_name) {
+          throw new Error(`Approval row ${approvalId} is missing its execution binding.`);
+        }
         return [
           {
             approvalId,
@@ -593,8 +597,15 @@ export const createChatApproval = (deps: {
           },
         ];
       });
-      for (const command of commands) {
-        prepareToolExecution({ threadId: pausedPlan.threadId, approvalId: command.approvalId });
+      try {
+        for (const command of commands) {
+          prepareToolExecution({ threadId: pausedPlan.threadId, approvalId: command.approvalId });
+        }
+      } catch (error) {
+        // Release the just-collected decision so retrying the approval
+        // re-attempts the resume instead of stalling in the idempotent branch.
+        session.collectedApprovalResponses.delete(approvalId);
+        throw error;
       }
       return { commands, threadId: pausedPlan.threadId };
     })();

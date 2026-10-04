@@ -45,12 +45,12 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  *
  * Routing contract (session_loop): `plan.enableTools &&
  * plan.approvalPolicy === 'never' && !autonomous && supportsPiTurnSupply`.
- * The harness ENFORCES its half of that gate: a config whose approval policy
- * is not 'never' is refused at turn start, because the pause/resume redesign
- * (3b) is not wired — under 'never' the resolver's call-time approval
- * function returns false unconditionally, so the loop's awaiting-approval
- * branch is unreachable by construction and this harness projects
- * `needsApproval: false` for every tool.
+ * Approval semantics: the resolver's per-call decision rides the loop tool
+ * (evaluated before any effect); the needing calls are reported as the
+ * standard approval_request step + requiresApproval done — persistence stays
+ * with the driver's registerApprovalBatch. Resume executes the decided calls
+ * through the injected five-state owner port (admitted by the approval
+ * module before the legacy consume), then continues the loop.
  *
  * Contract parity with the AI SDK runner for the tool subset:
  * - tools resolved by the same owner (`resolveTools`) with the same per-step
@@ -785,7 +785,14 @@ const toolOutputIsError = (output: unknown): boolean =>
     (output as { type: string }).type === 'error-json' ||
     (output as { type: string }).type === 'execution-denied');
 
-const toolOutputText = (output: unknown): string =>
-  output !== null && typeof output === 'object' && 'value' in output
+const toolOutputText = (output: unknown): string => {
+  if (output !== null && typeof output === 'object' && 'type' in output) {
+    const o = output as { type: string; value?: unknown; reason?: unknown };
+    if (o.type === 'execution-denied') {
+      return typeof o.reason === 'string' ? o.reason : 'Tool execution was denied';
+    }
+  }
+  return output !== null && typeof output === 'object' && 'value' in output
     ? String((output as { value: unknown }).value)
     : 'Tool execution failed';
+};

@@ -258,16 +258,17 @@ describe('pi agent loop — orchestration semantics', () => {
       },
     });
 
-    // The turn pauses BEFORE any effect: registration happened for the
-    // needing call only, nothing executed, no second model call.
+    // The turn pauses BEFORE the needing call's effect: registration covers
+    // the needing call only; the step's FREE call executed (AI SDK parity);
+    // no second model call.
     expect(outcome.status).toBe('awaiting-approval');
     expect(registered).toEqual(['call_ap']);
-    expect(executed).toEqual([]);
+    expect(executed).toEqual(['announce']);
     expect(outcome.pendingToolCalls.map(c => c.id)).toEqual(['call_ap']);
     expect(outcome.steps).toHaveLength(1);
   });
 
-  it('function-form needsApproval decides PER CALL: the risky call pauses, the safe call runs', async () => {
+  it('function-form needsApproval decides PER CALL: the safe call of a mixed step runs, the risky call pauses', async () => {
     const callModel = scriptedCall([
       {
         content: [
@@ -278,7 +279,7 @@ describe('pi agent loop — orchestration semantics', () => {
     ]);
     const registered: string[] = [];
     const executed: string[] = [];
-    const { outcome } = await collectLoop({
+    const { outcome, events } = await collectLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'go', timestamp: Date.now() }],
       tools: [
@@ -294,17 +295,23 @@ describe('pi agent loop — orchestration semantics', () => {
       callModel,
       executeTool: async call => {
         executed.push(call.name);
-        return 'ran';
+        return `ran ${call.name}`;
       },
       requestApproval: async call => {
         registered.push(call.id);
       },
     });
 
+    // AI SDK parity: the step's safe call EXECUTES (its result rides the
+    // transcript), only the risky call stays pending for the owner.
     expect(outcome.status).toBe('awaiting-approval');
     expect(registered).toEqual(['call_risky']);
-    expect(executed).toEqual([]);
+    expect(executed).toEqual(['read_file']);
     expect(outcome.pendingToolCalls.map(c => c.id)).toEqual(['call_risky']);
+    const toolEnds = events.filter(
+      e => e.type === PiLoopEventType.ToolEnd
+    ) as Array<{ call: { id: string } }>;
+    expect(toolEnds.map(e => e.call.id)).toEqual(['call_safe']);
   });
 
   it('a missing approval surface with a needing tool refuses loudly', async () => {
