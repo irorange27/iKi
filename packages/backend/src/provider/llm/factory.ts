@@ -689,6 +689,7 @@ export const generateChatWithModelMessages = async (options: {
       usePi = false;
       factoryLogger.event({
         level: 'info',
+        outcome: 'degraded',
         event: 'llm.generate.supply_fallback',
         message: 'History outside the Pi projection domain — using the AI SDK path.',
         data: {

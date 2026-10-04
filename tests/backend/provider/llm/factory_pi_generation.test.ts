@@ -113,12 +113,22 @@ describe('switch item 1: single-shot generation routing', () => {
   it('out-of-domain history (multimodal part) falls back to the AI SDK branch (review B1)', async () => {
     // The provider is Pi-eligible, but the history carries a file part —
     // outside the projection's covered domain. Per ADR decision 2 the
-    // request must fall back to the AI SDK path (which fails on the closed
-    // port here), and callPiChat must never be invoked.
+    // request must fall back to the AI SDK path — which fails fast on the
+    // closed port — and callPiChat must never be invoked.
+    addProvider({
+      id: 'provider_pi_closed',
+      name: 'Pi-eligible closed',
+      type: 'custom-openai',
+      api_key: 'key-pi',
+      models: '["pi-model"]',
+      base_url: 'http://127.0.0.1:9/v1',
+      enabled: 1,
+    });
+
     await expect(
       generateChatWithModelMessages({
         providerType: 'custom-openai',
-        providerId: 'provider_pi_path',
+        providerId: 'provider_pi_closed',
         modelId: 'pi-model',
         messages: [
           {
@@ -133,8 +143,9 @@ describe('switch item 1: single-shot generation routing', () => {
       })
     ).rejects.toThrow();
     expect(vi.mocked(callPiChat)).not.toHaveBeenCalled();
-    expect(server.totalRequests()).toBe(1); // unchanged: only the text-path request
-  });
+    // Per-key counting: immune to other tests' request pollution.
+    expect(server.countRequests('pi generation probe')).toBe(1);
+  }, 15000);
 
   it('static-factory providers stay on the AI SDK path — Pi never sees the request', async () => {
     // The static-factory provider keeps the AI SDK path: callPiChat is never
@@ -159,6 +170,6 @@ describe('switch item 1: single-shot generation routing', () => {
       })
     ).rejects.toThrow();
     expect(vi.mocked(callPiChat)).not.toHaveBeenCalled();
-    expect(server.totalRequests()).toBe(1); // unchanged: only the Pi-path request
+    expect(server.countRequests('pi generation probe')).toBe(1); // unchanged
   }, 15000);
 });
