@@ -45,8 +45,12 @@
  *
  * Wired (switch item 1): the single-shot generation entry
  * (factory.generateChatWithModelMessages) routes its Pi-eligible branch
- * through callPiChat; the streaming harness remains on the AI SDK until its
- * own switch item. Production callers of callPiChat: the factory only.
+ * through callPiChat. Wired (switch item 2c): text-only streaming turns run
+ * on the Pi supply layer via agent/runners/pi_text_turn_harness (routed by
+ * session_loop through factory.supportsPiTurnSupply). Tool turns, approval
+ * resume and handoff chains remain on the AI SDK until their own switch
+ * items. Production callers of callPiChat: the factory and the text harness
+ * only.
  */
 import { normalizeContext } from '@earendil-works/pi-ai';
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';
@@ -132,7 +136,9 @@ export const projectUsageToIki = (usage: PiUsage) => ({
   outputTokens: usage.output,
   cacheReadTokens: usage.cacheRead,
   cacheWriteTokens: usage.cacheWrite,
-  reasoningTokens: usage.reasoning,
+  // Pi leaves reasoning undefined when the provider does not report a
+  // breakdown; iKi's convention is an explicit zero.
+  reasoningTokens: usage.reasoning ?? 0,
   totalTokens: usage.totalTokens,
 });
 

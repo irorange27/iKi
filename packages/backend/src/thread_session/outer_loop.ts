@@ -4,7 +4,7 @@ import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/ag
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
-import { rehydrateHarness, type AgentHarness } from '../agent/harness';
+import { rehydrateHarness, type TurnDriverHarness } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
 import { createAgentRunTracker } from './run_tracker';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
@@ -44,7 +44,9 @@ export type OuterLoopStreamResult =
  * and cleanup.
  */
 type TurnDriverState = {
-  harness: AgentHarness;
+  /** Structural surface (AgentHarness or a switch-item harness) — the driver
+   * must not know which supply served the turn. */
+  harness: TurnDriverHarness;
   runTracker: AgentRunTracker;
   approvalContext?: ApprovalRecoveryContext;
   streamHistory: ModelMessage[];
@@ -99,7 +101,7 @@ export type TurnDriverHandle = {
   getRunTracker: () => AgentRunTracker;
   /** The harness the final batch ran on (differs from the setup's after a
    *  handoff chain) — the entry's history sync must read this one. */
-  getHarness: () => AgentHarness;
+  getHarness: () => TurnDriverHarness;
   getAccumulatedResponse: () => string;
   getOuterBatchCount: () => number;
   hasToolCalls: () => boolean;

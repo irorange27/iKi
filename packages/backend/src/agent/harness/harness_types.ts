@@ -69,3 +69,13 @@ export type TurnOutput = {
 export type TurnEvent =
   | { event: 'step'; step: AgentStep }
   | { event: 'done'; output: TurnOutput };
+
+/**
+ * The structural harness surface the TurnDriver consumes. AgentHarness
+ * satisfies it; switch-item harnesses (the Pi text harness today) implement
+ * it directly — the driver must not know which supply served the turn.
+ */
+export type TurnDriverHarness = {
+  turn(input: TurnInput): AsyncGenerator<TurnEvent, void>;
+  getHistory(): ModelMessage[];
+};

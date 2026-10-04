@@ -147,6 +147,32 @@ describe('switch item 1: single-shot generation routing', () => {
     expect(server.countRequests('pi generation probe')).toBe(1);
   }, 15000);
 
+  it('provider failures reject — the resolved Pi error message is not swallowed into an empty success', async () => {
+    // Pi delivers upstream failures as a RESOLVED error-stopReason result
+    // (the event stream never rejects). The factory must surface them;
+    // before the stopReason check this call resolved with empty text.
+    addProvider({
+      id: 'provider_pi_error',
+      name: 'Pi-eligible erroring',
+      type: 'custom-openai',
+      api_key: 'key-pi',
+      models: '["pi-model"]',
+      base_url: `http://127.0.0.1:${server.port}/v1`,
+      enabled: true,
+    });
+
+    // No script for this key → the scripted server answers HTTP 500.
+    await expect(
+      generateChatWithModelMessages({
+        providerType: 'custom-openai',
+        providerId: 'provider_pi_error',
+        modelId: 'pi-model',
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'pi error probe' }] }],
+      })
+    ).rejects.toThrow(/no script for key/);
+    expect(server.countRequests('pi error probe')).toBe(1);
+  });
+
   it('static-factory providers stay on the AI SDK path — Pi never sees the request', async () => {
     // The static-factory provider keeps the AI SDK path: callPiChat is never
     // invoked and the request goes to the provider's own (closed) endpoint,

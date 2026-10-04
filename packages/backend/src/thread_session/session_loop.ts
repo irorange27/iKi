@@ -13,6 +13,8 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from './run_tracker';
 import { summarizeContextComposition } from '../turn_prep/context_helpers';
 import { startTurnHarness } from '../agent/harness';
+import { PiTextTurnHarness } from '../agent/runners/pi_text_turn_harness';
+import { supportsPiTurnSupply } from '../provider/llm/factory';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { createMessageSend } from './message_send';
@@ -316,7 +318,20 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      const harness = startTurnHarness(planToHarnessConfig(plan));
+      // Supply selection (switch item 2c): text-only turns on a Pi-eligible
+      // provider ride the Pi supply layer through the structural harness
+      // surface. Tool turns, approval resume and handoff chains stay on the
+      // AI SDK harness until their own switch items.
+      const harness =
+        !plan.enableTools &&
+        supportsPiTurnSupply({
+          providerType: plan.providerType,
+          ...(plan.providerId ? { providerId: plan.providerId } : {}),
+          modelId: plan.model,
+          history: streamHistory,
+        })
+          ? new PiTextTurnHarness(planToHarnessConfig(plan))
+          : startTurnHarness(planToHarnessConfig(plan));
 
       if (!preparedTurn.prompt.trim()) {
         throw new Error('No user prompt provided for streaming');

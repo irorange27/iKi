@@ -5,4 +5,5 @@ export type {
   TurnInput,
   TurnOutput,
   TurnEvent,
+  TurnDriverHarness,
 } from './harness_types';
