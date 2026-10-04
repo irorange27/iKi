@@ -12,12 +12,7 @@ import {
   projectHistoryToPiContext,
   projectUsageToIki,
 } from '../../provider/llm/pi_adapter';
-import { generateThreadSummary } from '../../runtimes/thread_summary';
-import {
-  autoCompactHistory,
-  estimateMessageTokens,
-  estimateTextTokens,
-} from '../context_budget';
+import { preparePiTurnHistory } from './pi_turn_budget';
 import type { AgentTurnPerf, AgentUsage } from '../types';
 import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness/harness_types';
 
@@ -142,63 +137,27 @@ export class PiTextTurnHarness {
 
     this.history = this.buildTurnHistory(input.history, input.prompt);
 
-    // Input budget — the AI SDK prepareStep semantics, same owners: compact
-    // at tool-exchange boundaries, summarize the omitted prefix, then refuse
-    // if protected instructions or the current turn alone exceed the budget.
-    // Compaction is request-scoped; the stored history keeps the full text.
+    // Input budget — the AI SDK prepareStep semantics, shared owner with the
+    // tool harness: compact at tool-exchange boundaries, summarize the
+    // omitted prefix, then refuse if protected instructions or the current
+    // turn alone exceed the budget. Compaction is request-scoped; the stored
+    // history keeps the full text.
     const personaPrompt = resolvePersonaPrompt(this.config.providerType, this.config.providerId);
     const firstTranscriptSystem = this.history.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
     );
-    const transcriptSystemText =
-      typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '';
-    const overhead = estimateTextTokens(
-      assembleRequestSystemPrompt([
-        { slot: 'persona', text: personaPrompt },
-        { slot: 'planPrompt', text: this.config.systemPrompt },
-        { slot: 'transcriptSystem', text: transcriptSystemText },
-      ]).prompt
-    );
-    let requestHistory = this.history;
-    if (this.config.maxInputTokens) {
-      const planned = autoCompactHistory({
-        history: requestHistory,
-        maxInputTokens: this.config.maxInputTokens - overhead,
-      });
-      if (planned.compacted) {
-        const summary = await generateThreadSummary({
-          ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
-          ...(signal ? { abortSignal: signal } : {}),
-          messages: planned.omitted.map(message => ({
-            role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
-            content:
-              typeof message.content === 'string'
-                ? message.content
-                : JSON.stringify({ role: message.role, content: message.content }),
-          })),
-        });
-        if (!summary) {
-          throw new Error('Context compaction failed; original history has been preserved.');
-        }
-        const summaryMessage: ModelMessage = {
-          role: 'system',
-          content: `Earlier conversation summary:\n${summary.summary}`,
-        };
-        requestHistory = [
-          ...planned.history.filter(message => message.role === 'system'),
-          summaryMessage,
-          ...planned.history.filter(message => message.role !== 'system'),
-        ];
-      }
-      if (
-        requestHistory.reduce((sum, message) => sum + estimateMessageTokens(message), overhead) >
-        this.config.maxInputTokens
-      ) {
-        throw new Error(
-          'Context budget exceeded by protected instructions or the current turn; history has been preserved.'
-        );
-      }
-    }
+    const { requestHistory } = await preparePiTurnHistory({
+      history: this.history,
+      personaPrompt,
+      planPrompt: this.config.systemPrompt,
+      transcriptSystemText:
+        typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '',
+      ...(typeof this.config.maxInputTokens === 'number'
+        ? { maxInputTokens: this.config.maxInputTokens }
+        : {}),
+      ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
+      ...(signal ? { signal } : {}),
+    });
 
     const projected = projectHistoryToPiContext(requestHistory, this.config.model);
     // Persona, then the plan's system prompt, then the transcript's own

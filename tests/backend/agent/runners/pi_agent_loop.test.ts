@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AssistantMessage } from '@earendil-works/pi-ai';
+import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { AgentHarness } from '@iki/backend/agent/harness/agent_harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
@@ -8,18 +8,22 @@ import { z } from 'zod';
 import {
   PiLoopEventType,
   runPiAgentLoop,
+  type PiLoopDelta,
+  type PiLoopEvent,
   type PiLoopModelCall,
-  type PiLoopStep,
 } from '@iki/backend/agent/runners/pi_agent_loop';
 
 // Loop-semantics tests: the model call is a scripted double (the stream
 // parsing itself is covered at the real HTTP boundary by the adapter and
 // differential suites). What is under test here is ORCHESTRATION: step
-// budget, effect ordering and usage accumulation.
+// budget, effect ordering and usage accumulation — plus the 3a generator
+// contract: live deltas, tool events around the effect, and the live
+// transcript a retry wrapper can persist notes onto.
 
 const assistant = (
   content: AssistantMessage['content'],
-  usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; reasoning?: number; totalTokens?: number }
+  usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; reasoning?: number; totalTokens?: number },
+  overrides?: Partial<Pick<AssistantMessage, 'stopReason' | 'errorMessage'>>
 ): AssistantMessage => ({
   role: 'assistant',
   content,
@@ -37,27 +41,59 @@ const assistant = (
   },
   stopReason: 'stop',
   timestamp: Date.now(),
+  ...overrides,
 });
 
 const textBlock = (text: string) => ({ type: 'text' as const, text });
-const toolCallBlock = (id: string, name: string, args: Record<string, unknown>) => ({
+const toolCallBlock = (id: string, name: string, args: Record<string, unknown>): ToolCall => ({
   type: 'toolCall' as const,
   id,
   name,
-  arguments: args,
+  arguments: args as ToolCall['arguments'],
 });
 
-const scriptedCall = (steps: Array<{ content: AssistantMessage['content']; deltas?: string[]; usage?: Record<string, number> }>): PiLoopModelCall => {
+type ScriptedStep = {
+  content: AssistantMessage['content'];
+  deltas?: string[];
+  thinkingDeltas?: string[];
+  usage?: Record<string, number>;
+  stopReason?: AssistantMessage['stopReason'];
+  errorMessage?: string;
+};
+
+const scriptedCall = (steps: ScriptedStep[]): PiLoopModelCall => {
   let call = 0;
-  return async () => {
+  return () => {
     const step = steps[call];
     if (!step) throw new Error(`unexpected model call #${call + 1}`);
     call += 1;
+    const deltas: PiLoopDelta[] = [
+      ...(step.deltas ?? []).map(delta => ({ type: 'text_delta' as const, delta })),
+      ...(step.thinkingDeltas ?? []).map(delta => ({ type: 'thinking_delta' as const, delta })),
+    ];
     return {
-      final: assistant(step.content, step.usage),
-      deltas: step.deltas ?? [],
+      events: (async function* () {
+        for (const delta of deltas) yield delta;
+      })(),
+      final: Promise.resolve(
+        assistant(step.content, step.usage, {
+          ...(step.stopReason ? { stopReason: step.stopReason } : {}),
+          ...(step.errorMessage ? { errorMessage: step.errorMessage } : {}),
+        })
+      ),
     };
   };
+};
+
+const collectLoop = async (params: Parameters<typeof runPiAgentLoop>[0]) => {
+  const events: PiLoopEvent[] = [];
+  const iterator = runPiAgentLoop(params);
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value as PiLoopEvent);
+    next = await iterator.next();
+  }
+  return { outcome: next.value, events };
 };
 
 describe('pi agent loop — orchestration semantics', () => {
@@ -65,12 +101,12 @@ describe('pi agent loop — orchestration semantics', () => {
     const callModel = scriptedCall([
       { content: [textBlock('plain answer')], deltas: ['plain answer'], usage: { input: 10, output: 5, totalTokens: 15 } },
     ]);
-    const outcome = await runPiAgentLoop({
+    const { outcome } = await collectLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'hi', timestamp: Date.now() }],
       maxSteps: 3,
       callModel,
-      executeTool: async () => ({ text: 'NEVER' }),
+      executeTool: async () => 'NEVER',
     });
     expect(outcome.status).toBe('completed');
     expect(outcome.finalText).toBe('plain answer');
@@ -84,14 +120,14 @@ describe('pi agent loop — orchestration semantics', () => {
       { content: [textBlock('done')], usage: { input: 20, output: 4, totalTokens: 24 } },
     ]);
     const executed: Array<{ name: string; args: Record<string, unknown> }> = [];
-    const outcome = await runPiAgentLoop({
+    const { outcome } = await collectLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'read it', timestamp: Date.now() }],
       maxSteps: 5,
       callModel,
       executeTool: async call => {
         executed.push({ name: call.name, args: call.arguments });
-        return { text: `body of ${call.arguments.path}` };
+        return `body of ${call.arguments.path}`;
       },
     });
 
@@ -117,26 +153,26 @@ describe('pi agent loop — orchestration semantics', () => {
     ]);
     const transcripts: Array<Array<{ role: string }>> = [];
     const executed: string[] = [];
-    const wrappedCall: PiLoopModelCall = async context => {
-      transcripts.push(context.messages.map(m => m.role));
+    const wrappedCall: PiLoopModelCall = context => {
+      transcripts.push(context.messages.map(m => ({ role: m.role as string })));
       return callModel(context);
     };
 
-    const outcome = await runPiAgentLoop({
+    const { outcome } = await collectLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'read both', timestamp: Date.now() }],
       maxSteps: 3,
       callModel: wrappedCall,
       executeTool: async call => {
         executed.push(String(call.arguments.path));
-        return { text: `body ${String(call.arguments.path)}` };
+        return `body ${String(call.arguments.path)}`;
       },
     });
 
     expect(outcome.status).toBe('completed');
     expect(executed).toEqual(['/1.txt', '/2.txt']);
     // Exactly ONE assistant entry carrying BOTH calls, then both results.
-    expect(transcripts[1]).toEqual(['user', 'assistant', 'toolResult', 'toolResult']);
+    expect(transcripts[1].map(m => m.role)).toEqual(['user', 'assistant', 'toolResult', 'toolResult']);
     const serialized = JSON.stringify(outcome.steps);
     expect(serialized).toContain('/1.txt');
     expect(serialized).toContain('/2.txt');
@@ -150,14 +186,14 @@ describe('pi agent loop — orchestration semantics', () => {
       },
     ]);
     const executed: string[] = [];
-    const outcome = await runPiAgentLoop({
+    const { outcome } = await collectLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'read', timestamp: Date.now() }],
       maxSteps: 1,
       callModel,
       executeTool: async call => {
         executed.push(String(call.arguments.path));
-        return { text: 'content' };
+        return 'content';
       },
     });
 
@@ -176,14 +212,14 @@ describe('pi agent loop — orchestration semantics', () => {
       { content: [textBlock('chain done')], usage: { input: 30, output: 6, totalTokens: 36 } },
     ]);
     const executed: string[] = [];
-    const outcome = await runPiAgentLoop({
+    const { outcome } = await collectLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'chain', timestamp: Date.now() }],
       maxSteps: 4,
       callModel,
       executeTool: async call => {
         executed.push(String(call.arguments.path));
-        return { text: String(call.arguments.path) };
+        return String(call.arguments.path);
       },
     });
 
@@ -204,7 +240,7 @@ describe('pi agent loop — orchestration semantics', () => {
     ]);
     const registered: string[] = [];
     const executed: string[] = [];
-    const outcome = await runPiAgentLoop({
+    const { outcome } = await collectLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'go', timestamp: Date.now() }],
       tools: [
@@ -215,7 +251,7 @@ describe('pi agent loop — orchestration semantics', () => {
       callModel,
       executeTool: async call => {
         executed.push(call.name);
-        return { text: 'ran' };
+        return 'ran';
       },
       requestApproval: async call => {
         registered.push(call.id);
@@ -236,13 +272,13 @@ describe('pi agent loop — orchestration semantics', () => {
       { content: [toolCallBlock('call_ng', 'read_file', { path: '/g.txt' })] },
     ]);
     await expect(
-      runPiAgentLoop({
+      collectLoop({
         systemPrompt: 'loop',
         messages: [{ role: 'user', content: 'go', timestamp: Date.now() }],
         tools: [{ name: 'read_file', description: 'read', parameters: {}, needsApproval: true }],
         maxSteps: 3,
         callModel,
-        executeTool: async () => ({ text: 'NEVER' }),
+        executeTool: async () => 'NEVER',
       })
     ).rejects.toThrow(/no approval surface/);
   });
@@ -252,46 +288,156 @@ describe('pi agent loop — orchestration semantics', () => {
     controller.abort();
     const callModel = vi.fn();
     await expect(
-      runPiAgentLoop({
+      collectLoop({
         systemPrompt: 'loop',
         messages: [{ role: 'user', content: 'hi', timestamp: Date.now() }],
         maxSteps: 3,
         callModel: callModel as unknown as PiLoopModelCall,
-        executeTool: async () => ({ text: 'NEVER' }),
+        executeTool: async () => 'NEVER',
         signal: controller.signal,
       })
     ).rejects.toThrow(/abort/i);
     expect(callModel).not.toHaveBeenCalled();
   });
 
-  it('events: text deltas and step ends stream through onEvent in order', async () => {
+  it('a mid-stream abort surfaces as AbortError for the driver classification', async () => {
     const callModel = scriptedCall([
-      { content: [toolCallBlock('call_e', 'probe', {})], deltas: ['lead '] },
+      {
+        content: [],
+        stopReason: 'aborted',
+        errorMessage: 'Request was aborted',
+      },
+    ]);
+    const error = await collectLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'hi', timestamp: Date.now() }],
+      maxSteps: 3,
+      callModel,
+      executeTool: async () => 'NEVER',
+    }).catch((e: unknown) => e);
+    expect((error as DOMException).name).toBe('AbortError');
+  });
+
+  it('an error stopReason is a terminal failure (the wiring owns retries)', async () => {
+    const callModel = scriptedCall([
+      { content: [], stopReason: 'error', errorMessage: 'upstream 503' },
+    ]);
+    await expect(
+      collectLoop({
+        systemPrompt: 'loop',
+        messages: [{ role: 'user', content: 'hi', timestamp: Date.now() }],
+        maxSteps: 3,
+        callModel,
+        executeTool: async () => 'NEVER',
+      })
+    ).rejects.toThrow(/upstream 503/);
+  });
+
+  it('events: deltas, step ends and tool events stream live, tool start BEFORE the effect', async () => {
+    // The executor gates on a deferred: ToolStart must be observable while
+    // the effect is still running — that is the generator's whole point.
+    let releaseEffect: (() => void) | undefined;
+    const effectStarted = new Promise<void>(resolve => {
+      releaseEffect = resolve;
+    });
+    const callModel = scriptedCall([
+      { content: [toolCallBlock('call_e', 'probe', {})], deltas: ['lead '], thinkingDeltas: ['thinking '] },
       { content: [textBlock('tail')], deltas: ['tail'] },
     ]);
-    const events: Array<
-      | { type: PiLoopEventType.TextDelta; delta: string; step: number }
-      | { type: PiLoopEventType.StepEnd; step: PiLoopStep }
-    > = [];
-    await runPiAgentLoop({
+    const iterator = runPiAgentLoop({
       systemPrompt: 'loop',
       messages: [{ role: 'user', content: 'events', timestamp: Date.now() }],
       maxSteps: 3,
       callModel,
-      executeTool: async () => ({ text: 'ok' }),
-      onEvent: event => events.push(event),
+      executeTool: async () => {
+        await effectStarted;
+        return { type: 'text', value: 'ok' };
+      },
     });
-    expect(
-      events.map(e => (e.type === PiLoopEventType.TextDelta ? `text_delta:${e.delta}` : PiLoopEventType.StepEnd))
-    ).toEqual([
-      'text_delta:lead ',
-      PiLoopEventType.StepEnd,
-      'text_delta:tail',
-      PiLoopEventType.StepEnd,
+
+    const seen: string[] = [];
+    let next = await iterator.next();
+    while (!next.done) {
+      const event = next.value as PiLoopEvent;
+      if (event.type === PiLoopEventType.TextDelta) seen.push(`text:${event.delta}`);
+      else if (event.type === PiLoopEventType.ThinkingDelta) seen.push(`thinking:${event.delta}`);
+      else if (event.type === PiLoopEventType.StepEnd) seen.push('step_end');
+      else if (event.type === PiLoopEventType.ToolStart) {
+        seen.push(`tool_start:${event.call.id}`);
+        // The effect is gated: receiving ToolStart proves it streams BEFORE
+        // the executor resolves.
+        releaseEffect?.();
+      } else {
+        seen.push(`tool_end:${event.call.id}:${JSON.stringify(event.output)}`);
+      }
+      next = await iterator.next();
+    }
+    const outcome = next.value;
+
+    expect(seen).toEqual([
+      'text:lead ',
+      'thinking:thinking ',
+      'step_end',
+      'tool_start:call_e',
+      'tool_end:call_e:{"type":"text","value":"ok"}',
+      'text:tail',
+      'step_end',
     ]);
-    const stepEnds = events.filter(e => e.type === 'step_end') as Array<{ type: 'step_end'; step: PiLoopStep }>;
-    expect(stepEnds[0].step.toolCalls).toHaveLength(1);
-    expect(stepEnds[1].step.text).toBe('tail');
+    expect(outcome.status).toBe('completed');
+  });
+
+  it('the live transcript persists retry notes pushed by the wiring wrapper', async () => {
+    let call = 0;
+    const transcripts: Array<Array<{ role: string; content: unknown }>> = [];
+    const callModel: PiLoopModelCall = context => {
+      transcripts.push(context.messages.map(m => ({ role: m.role as string, content: (m as { content: unknown }).content })));
+      call += 1;
+      if (call === 1) {
+        const noDeltas: PiLoopDelta[] = [];
+        return {
+          events: (async function* () {
+            for (const delta of noDeltas) yield delta;
+          })(),
+          final: Promise.resolve(assistant([], {}, { stopReason: 'error', errorMessage: 'upstream 503' })),
+        };
+      }
+      return {
+        events: (async function* () {
+          yield { type: 'text_delta' as const, delta: 'recovered' };
+        })(),
+        final: Promise.resolve(assistant([textBlock('recovered')], { input: 5, output: 2, totalTokens: 7 })),
+      };
+    };
+    // The wiring's retry wrapper: on a retryable failure it pushes the
+    // recovery note onto the LIVE transcript and re-calls.
+    const retryingCall: PiLoopModelCall = context => {
+      const attempt = callModel(context);
+      return {
+        events: attempt.events,
+        final: attempt.final.then(async final => {
+          if (final.stopReason === 'error' && /503/.test(final.errorMessage ?? '')) {
+            context.messages.push({ role: 'user', content: 'recovery note: try again', timestamp: Date.now() });
+            const retry = callModel(context);
+            await expect(retry.final).resolves.toBeDefined();
+            return retry.final;
+          }
+          return final;
+        }),
+      };
+    };
+
+    const { outcome } = await collectLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'go', timestamp: Date.now() }],
+      maxSteps: 3,
+      callModel: retryingCall,
+      executeTool: async () => 'unused',
+    });
+
+    expect(outcome.status).toBe('completed');
+    expect(outcome.finalText).toBe('recovered');
+    // The note persisted onto the transcript the second request saw.
+    expect(JSON.stringify(transcripts[1])).toContain('recovery note');
   });
 });
 
@@ -367,7 +513,7 @@ describe('differential: same scenario through the real harness', () => {
       { content: [toolCallBlock('call_diff', 'read_file', { path: '/diff.txt' })] },
       { content: [textBlock('diff done')], usage: { input: 12, output: 3, totalTokens: 15 } },
     ]);
-    const outcome = await runPiAgentLoop({
+    const { outcome } = await collectLoop({
       systemPrompt: 'system prompt',
       messages: [{ role: 'user', content: 'read /diff.txt', timestamp: Date.now() }],
       tools: [{ name: 'read_file', description: 'read', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } }],
@@ -375,7 +521,7 @@ describe('differential: same scenario through the real harness', () => {
       callModel,
       executeTool: async call => {
         executed.push(String(call.arguments.path));
-        return { text: `contents of ${String(call.arguments.path)}` };
+        return `contents of ${String(call.arguments.path)}`;
       },
     });
 

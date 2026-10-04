@@ -1,16 +1,16 @@
-import type { AssistantMessage, Message as PiMessage, Tool as PiTool } from '@earendil-works/pi-ai';
+import type { AssistantMessage, Message as PiMessage, Tool as PiTool, ToolCall } from '@earendil-works/pi-ai';
 
 /**
- * The iKi-owned agent loop over the Pi supply layer (switch item 2a,
- * UNWIRED). Semantics are pinned against the existing harness:
+ * The iKi-owned agent loop over the Pi supply layer (switch item 2a/2b,
+ * generator form since 3a — issue #114). Semantics are pinned against the
+ * existing harness:
  *
  * - one model call = one step; the step budget (maxSteps) bounds calls;
  * - tool calls in ANY step — including the last — execute (the harness
  *   semantics: stopWhen stops AFTER the step's tools ran);
  * - when the budget exhausts with pending tool calls, the turn ends
  *   budget-exhausted: effects were executed and recorded, but no further
- *   model call happens and the pending calls are reported (D7–D8: the
- *   exhausted budget terminates the request);
+ *   model call happens and the pending calls are reported (D7–D8);
  * - cancellation is checked before each model call and before each effect;
  * - tools flagged needsApproval pause the turn BEFORE any effect: the
  *   injected approval surface registers them with the approval owner and
@@ -21,12 +21,23 @@ import type { AssistantMessage, Message as PiMessage, Tool as PiTool } from '@ea
  *   total-prompt convention is linear, so the caller may map the sum
  *   (projectUsageToIki) or map per step and add.
  *
+ * The loop is an ASYNC GENERATOR (switch item 3a, issue #114 — the
+ * deliberate contract extension the wiring needed): it yields live events
+ * and returns the outcome. Generator suspension is what lets "tool
+ * executing right now" stream through the harness to the TurnDriver while
+ * the effect is still running — a callback loop cannot regain control
+ * mid-await. Event order is the runner's order: this call's deltas, then
+ * StepEnd; per tool: ToolStart BEFORE the effect, ToolEnd AFTER it.
+ *
  * The model call is injected: wiring hands this loop the Pi adapter's
- * callPiChat; tests hand a scripted double. This module owns ORCHESTRATION
- * only — protocol, history projection and tool ownership stay with their
- * modules. Note: the injected call resolves WITH its deltas, so text_delta
- * events are delivered at call completion — live token streaming to a UI
- * needs the wiring to extend this contract deliberately.
+ * callPiChat wrapped for live deltas; tests hand a scripted double. It
+ * receives the loop's LIVE transcript — a retry wrapper persists its
+ * recovery notes by pushing user messages before re-attempts (runner
+ * parity), and those notes then ride every later step. The wrapper owns
+ * retry bounds; the loop treats a non-aborted error stopReason as a
+ * terminal failure and classifies aborts as AbortError for the driver.
+ * This module owns ORCHESTRATION only — protocol, history projection and
+ * tool ownership stay with their modules.
  * maxSteps values that are not finite fall back to 1.
  */
 
@@ -46,6 +57,9 @@ export type PiLoopToolCall = {
 export type PiLoopStep = {
   index: number;
   text: string;
+  /** Thinking blocks of this step's final message, joined — the ModelMessage
+   * mirror maps them to reasoning parts. */
+  thinking: string;
   toolCalls: PiLoopToolCall[];
   usage: PiUsageBuckets;
 };
@@ -63,12 +77,24 @@ export type PiUsageBuckets = {
  * onto the TurnDriver's protocol one-to-one. */
 export enum PiLoopEventType {
   TextDelta = 'text_delta',
+  ThinkingDelta = 'thinking_delta',
   StepEnd = 'step_end',
+  ToolStart = 'tool_start',
+  ToolEnd = 'tool_end',
 }
 
 export type PiLoopEvent =
   | { type: PiLoopEventType.TextDelta; delta: string; step: number }
-  | { type: PiLoopEventType.StepEnd; step: PiLoopStep };
+  | { type: PiLoopEventType.ThinkingDelta; delta: string; step: number }
+  | { type: PiLoopEventType.StepEnd; step: PiLoopStep }
+  | { type: PiLoopEventType.ToolStart; call: PiLoopToolCall }
+  | {
+      type: PiLoopEventType.ToolEnd;
+      call: PiLoopToolCall;
+      /** The tool result in the repo's canonical ToolResultOutput vocabulary —
+       * the shape the driver projects to the UI and history keeps. */
+      output: unknown;
+    };
 
 export type PiLoopOutcome = {
   status: 'completed' | 'budget-exhausted' | 'awaiting-approval';
@@ -83,15 +109,30 @@ export type PiLoopOutcome = {
   pendingToolCalls: PiLoopToolCall[];
 };
 
+/** One live delta from the model call's event stream. */
+export type PiLoopDelta = {
+  type: 'text_delta' | 'thinking_delta';
+  delta: string;
+};
+
+/**
+ * The injected call streams deltas LIVE (an async iterable consumed as they
+ * arrive) and resolves with the final message. It receives the loop's LIVE
+ * transcript array: a retry wrapper pushes its recovery notes onto it before
+ * re-attempts, so notes persist across the turn (runner parity). Abort and
+ * error stop reasons on the final message are the loop's failure surface —
+ * the wrapper handles retries before that.
+ */
 export type PiLoopModelCall = (context: {
   systemPrompt: string;
   messages: PiMessage[];
   tools?: PiTool[];
-}) => Promise<{ final: AssistantMessage; deltas: string[] }>;
+}) => {
+  events: AsyncIterable<PiLoopDelta>;
+  final: Promise<AssistantMessage>;
+};
 
-export type PiLoopToolExecutor = (
-  call: PiLoopToolCall
-) => Promise<{ text: string; isError?: boolean }>;
+export type PiLoopToolExecutor = (call: PiLoopToolCall) => Promise<unknown>;
 
 /** Registers an approval-needing call with the approval owner (the real
  * implementation is the approval surface's registration primitive). The
@@ -126,49 +167,67 @@ const usageOf = (message: AssistantMessage): PiUsageBuckets => ({
   totalTokens: message.usage?.totalTokens ?? 0,
 });
 
-export const runPiAgentLoop = async (params: {
-  systemPrompt: string;
-  messages: PiMessage[];
-  tools?: PiTool[];
-  maxSteps: number;
-  callModel: PiLoopModelCall;
-  executeTool: PiLoopToolExecutor;
-  requestApproval?: PiLoopApprovalRequester;
-  signal?: AbortSignal;
-  onEvent?: (event: PiLoopEvent) => void;
-}): Promise<PiLoopOutcome> => {
-  const { callModel, executeTool, requestApproval, signal, onEvent } = params;
+export const runPiAgentLoop = async function* (
+  params: {
+    systemPrompt: string;
+    messages: PiMessage[];
+    tools?: PiLoopTool[];
+    maxSteps: number;
+    callModel: PiLoopModelCall;
+    executeTool: PiLoopToolExecutor;
+    requestApproval?: PiLoopApprovalRequester;
+    signal?: AbortSignal;
+  }
+): AsyncGenerator<PiLoopEvent, PiLoopOutcome> {
+  const { callModel, executeTool, requestApproval, signal } = params;
   const maxSteps = Number.isFinite(params.maxSteps) ? Math.max(1, Math.trunc(params.maxSteps)) : 1;
-  const messages: PiMessage[] = [...params.messages];
+  const messages: PiMessage[] = params.messages;
   const steps: PiLoopStep[] = [];
   let usage = { ...EMPTY_USAGE };
   let lastText = '';
 
   for (let index = 0; index < maxSteps; index++) {
     signal?.throwIfAborted();
-    const { final, deltas } = await callModel({
+    const call = callModel({
       systemPrompt: params.systemPrompt,
-      messages: [...messages],
+      messages,
       tools: params.tools,
     });
-    for (const delta of deltas) onEvent?.({ type: PiLoopEventType.TextDelta, delta, step: index });
+    for await (const delta of call.events) {
+      if (delta.type === 'text_delta') {
+        yield { type: PiLoopEventType.TextDelta, delta: delta.delta, step: index };
+        continue;
+      }
+      yield { type: PiLoopEventType.ThinkingDelta, delta: delta.delta, step: index };
+    }
+    const final = await call.final;
+
+    // Pi resolves provider failures into a result message — the stopReason
+    // is the failure surface; the retry wrapper (if any) had its chance.
+    if (final.stopReason === 'aborted') {
+      throw new DOMException(final.errorMessage || 'Run cancelled', 'AbortError');
+    }
+    if (final.stopReason === 'error') {
+      throw new Error(final.errorMessage || 'Provider returned an error stop reason');
+    }
 
     const text = final.content
       .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
       .map(block => block.text)
       .join('');
+    const thinking = final.content
+      .filter((block): block is { type: 'thinking'; thinking: string } => block.type === 'thinking')
+      .map(block => block.thinking)
+      .join('');
     const toolCalls = final.content
-      .filter(
-        (block): block is { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> } =>
-          block.type === 'toolCall'
-      )
+      .filter((block): block is ToolCall => block.type === 'toolCall')
       .map(block => ({ id: block.id, name: block.name, arguments: block.arguments }));
 
     const stepUsage = usageOf(final);
     usage = addUsage(usage, stepUsage);
-    const step: PiLoopStep = { index, text, toolCalls, usage: stepUsage };
+    const step: PiLoopStep = { index, text, thinking, toolCalls, usage: stepUsage };
     steps.push(step);
-    onEvent?.({ type: PiLoopEventType.StepEnd, step });
+    yield { type: PiLoopEventType.StepEnd, step };
     lastText = text;
 
     if (toolCalls.length === 0) {
@@ -204,15 +263,17 @@ export const runPiAgentLoop = async (params: {
     messages.push(final);
     for (const call of toolCalls) {
       signal?.throwIfAborted();
+      yield { type: PiLoopEventType.ToolStart, call };
       // The executor gets its own copy: a mutating executor must not corrupt
       // the recorded trajectory (the transcript references the same args).
-      const result = await executeTool({ ...call, arguments: structuredClone(call.arguments) });
+      const output = await executeTool({ ...call, arguments: structuredClone(call.arguments) });
+      yield { type: PiLoopEventType.ToolEnd, call, output };
       messages.push({
         role: 'toolResult',
         toolCallId: call.id,
         toolName: call.name,
-        content: [{ type: 'text', text: result.text }],
-        isError: result.isError ?? false,
+        content: [{ type: 'text', text: toolResultText(output) }],
+        isError: toolResultIsError(output),
         timestamp: Date.now(),
       });
     }
@@ -230,4 +291,30 @@ export const runPiAgentLoop = async (params: {
 
   // Unreachable: the loop returns inside the last iteration.
   return { status: 'budget-exhausted', finalText: lastText, steps, usage, pendingToolCalls: [] };
+};
+
+/** The transcript text for one tool result output — the documented protocol
+ * (a JSON tool result is read by the model as text). */
+const toolResultText = (output: unknown): string => {
+  if (output === null || typeof output !== 'object' || !('type' in output)) {
+    return JSON.stringify(output ?? null);
+  }
+  const o = output as { type: string; value?: unknown; reason?: unknown };
+  switch (o.type) {
+    case 'text':
+    case 'error-text':
+    case 'json':
+    case 'error-json':
+      return typeof o.value === 'string' ? o.value : JSON.stringify(o.value ?? null);
+    case 'execution-denied':
+      return typeof o.reason === 'string' ? o.reason : 'Tool call execution denied.';
+    default:
+      return JSON.stringify(o.value ?? null);
+  }
+};
+
+const toolResultIsError = (output: unknown): boolean => {
+  if (output === null || typeof output !== 'object' || !('type' in output)) return false;
+  const t = (output as { type: string }).type;
+  return t === 'error-text' || t === 'error-json' || t === 'execution-denied';
 };

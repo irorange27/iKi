@@ -26,6 +26,10 @@ export type ScriptedPiServer = {
   port: number;
   /** Keyed by the LAST user message content on the wire. */
   setScript: (key: string, response: ScriptedResponse) => void;
+  /** Sequential scripts: request N serves responses[N]; when exhausted, the
+   * last response repeats (multi-step tool turns need different scripts per
+   * model request). */
+  setScriptSequence: (key: string, responses: ScriptedResponse[]) => void;
   countRequests: (key: string) => number;
   totalRequests: () => number;
   getWire: (key: string, nth?: number) => Record<string, unknown>;
@@ -70,6 +74,7 @@ export const sse = { delta, toolCallDelta, finish };
 export const createScriptedPiServer = (): Promise<ScriptedPiServer> =>
   new Promise(resolve => {
     const scripts = new Map<string, ScriptedResponse>();
+    const sequences = new Map<string, ScriptedResponse[]>();
     const received = new Map<string, RecordedRequest[]>();
     let total = 0;
 
@@ -87,7 +92,8 @@ export const createScriptedPiServer = (): Promise<ScriptedPiServer> =>
           | { content?: string }
           | undefined;
         const key = typeof lastUser?.content === 'string' ? lastUser.content : 'default';
-        const script = scripts.get(key);
+        const sequence = sequences.get(key);
+        const script = sequence && sequence.length > 0 ? sequence.shift()! : scripts.get(key);
         const log = received.get(key) ?? [];
         log.push({ body: parsed, receivedAt: Date.now() });
         received.set(key, log);
@@ -129,6 +135,7 @@ export const createScriptedPiServer = (): Promise<ScriptedPiServer> =>
       resolve({
         port: address.port,
         setScript: (key, response) => scripts.set(key, response),
+        setScriptSequence: (key, responses) => sequences.set(key, responses),
         countRequests: key => (received.get(key) ?? []).length,
         totalRequests: () => total,
         getWire: (key, nth = 0) => {
