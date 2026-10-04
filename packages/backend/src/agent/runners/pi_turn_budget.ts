@@ -10,8 +10,10 @@ import { autoCompactHistory, estimateMessageTokens, estimateTextTokens } from '.
  * tool-exchange boundaries, summarize the omitted prefix, then refuse if
  * protected instructions or the current turn alone exceed the budget.
  * Compaction is request-scoped: the caller's stored history keeps the full
- * text. (Per-step re-compaction inside a multi-step tool loop is a tracked
- * 3b item; the step count bounds 3a turns.)
+ * text. (Per-step re-compaction inside a multi-step tool loop is tracked
+ * separately: the budget runs once per turn() call, so autonomous chains
+ * re-compact at batch boundaries only — a whole batch of up to maxIterations
+ * inner steps grows its request without re-compaction until the next batch.)
  *
  * Without a cache prefix the summarizer falls back to its standalone call —
  * the same accepted degradation as custom-model runs.

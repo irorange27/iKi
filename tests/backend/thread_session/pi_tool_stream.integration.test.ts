@@ -518,4 +518,116 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(lastRunStatus(target)).toBe('completed');
     expect(publishedText(target)).toContain('phase two complete');
   }, 30000);
+
+  it('autonomous pause → approve → resumed Pi segment chains a handoff into a fresh Pi batch (3c composite)', async () => {
+    // The REAL approval module, wired like the service does.
+    const coordinator = createThreadStreamCoordinator();
+    const chatApprovals = createChatApproval({
+      streams: {
+        tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
+        peek: coordinator.peekStream,
+        attach: coordinator.attachStream,
+        detach: coordinator.detachStream,
+      },
+      memory: {} as never,
+      conversation: { upsertTurnMessage: () => undefined },
+      usage: { recordUsageEvent: () => undefined },
+    });
+
+    // Batch 1 pauses on the always policy; the resumed segment executes the
+    // approved call, calls again (handoff), and the chained batch resumes
+    // from the fresh handoff history — its own script key.
+    server.setScriptSequence('chained guard probe', [
+      {
+        chunks: [
+          sse.toolCallDelta('call_chain_guard', TOOL_NAME, '{"path":'),
+          sse.toolCallDelta(null, null, '"/chained.txt"}'),
+          sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
+        ],
+      },
+      {
+        chunks: [
+          sse.toolCallDelta(
+            'call_chain_h2',
+            'handoff',
+            '{"summary":"resumed work done","next_steps":"wrap up loose ends","reason":"other"}'
+          ),
+          sse.finish('tool_calls', { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 }),
+        ],
+      },
+    ]);
+    server.setScriptSequence('wrap up loose ends', [
+      {
+        chunks: [
+          sse.delta('loose ends wrapped'),
+          sse.finish('stop', { prompt_tokens: 30, completion_tokens: 5, total_tokens: 35 }),
+        ],
+      },
+    ]);
+
+    const executionsBefore = executions.length;
+    const target = { id: 806, send: vi.fn() };
+    const streaming = buildStreaming({
+      ensurePendingApprovalSession: (approvalId, session) =>
+        chatApprovals.ensurePendingApprovalSession(approvalId, session as never),
+      registerApprovalBatch: (requests, session) =>
+        chatApprovals.registerApprovalBatch(requests as never, session as never),
+      cleanupPendingSessionsForSender: (senderId, sessionId) =>
+        chatApprovals.cleanupPendingSessionsForSender(senderId, sessionId),
+    });
+
+    const first = await streaming.stream(target, {
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_tool_stream',
+      model: 'pi-model',
+      threadId: 'thread_pi_tool_stream',
+      approvalPolicy: 'always',
+      autonomous: { maxIterations: 3, continuePrompt: 'continue' },
+      messages: [
+        { id: 'msg_pi_chain_guard', role: 'user', parts: [{ type: 'text', text: 'chained guard probe' }] },
+      ],
+      tools: [TOOL_NAME],
+    });
+    expect(first).toMatchObject({ success: true, awaitingApproval: true });
+    expect(executions.slice(executionsBefore)).toHaveLength(0);
+    const approvalRequests = chunksOf(target, 'tool-approval-request') as Array<{
+      approvalId?: string;
+    }>;
+    expect(approvalRequests[0]?.approvalId).toBeTruthy();
+
+    const decision = await chatApprovals.approveTool(
+      target,
+      approvalRequests[0]!.approvalId!,
+      true,
+      'chain approval'
+    );
+    expect(decision).toMatchObject({ success: true });
+
+    // The approved call executed EXACTLY once on the resumed Pi segment, the
+    // continuation called the model again (handoff), and the chained batch
+    // rebuilt ON PI — the AI SDK was never constructed across pause, resume
+    // and chain rebuild.
+    expect(executions.slice(executionsBefore)).toEqual(['/chained.txt']);
+    expect(server.countRequests('chained guard probe')).toBe(2);
+    expect(server.countRequests('wrap up loose ends')).toBe(1);
+    expect(createModelMock).not.toHaveBeenCalled();
+
+    // The chained batch rides the fresh handoff history: sole user message
+    // is the next-steps text, the paused transcript is gone.
+    const chainedWire = server.getWire('wrap up loose ends', 0);
+    const chainedMessages = chainedWire.messages as Array<{ role?: string; content?: unknown }>;
+    expect(chainedMessages.filter(m => m.role === 'user')).toHaveLength(1);
+    expect(JSON.stringify(chainedWire.messages)).not.toContain('chained guard probe');
+    expect(JSON.stringify(chainedWire)).toContain('resumed work done');
+
+    const handoffEvents = chunksOf(target, 'tool-input-available').filter(
+      chunk => (chunk as { toolName?: string }).toolName === 'handoff'
+    );
+    expect(handoffEvents[0]).toMatchObject({
+      input: expect.objectContaining({ summary: 'resumed work done' }),
+    });
+    expect(publishedText(target)).toContain('loose ends wrapped');
+    // shown ⊆ committed across the pause, resume and chain boundaries.
+    expect(committedText('thread_pi_tool_stream')).toContain(publishedText(target));
+  }, 40000);
 });
