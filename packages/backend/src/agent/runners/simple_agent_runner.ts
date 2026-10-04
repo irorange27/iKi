@@ -63,7 +63,9 @@ import type {
 
 const logger = createLogger({ module: 'simple_agent_runner' });
 
-const TERMINAL_TOOL_NAMES = new Set(['handoff']);
+/** Terminal tools stop the turn after their step executes (stopWhen parity).
+ * Owned here — the Pi tool loop consumes the same set. */
+export const TERMINAL_TOOL_NAMES = new Set(['handoff']);
 
 const withOpenAIThreadCacheKey = (
   settings: ReturnType<typeof getModelGenerationSettings>,

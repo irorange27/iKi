@@ -46,11 +46,14 @@
  * Wired (switch item 1): the single-shot generation entry
  * (factory.generateChatWithModelMessages) routes its Pi-eligible branch
  * through callPiChat. Wired (switch item 2c): text-only streaming turns run
- * on the Pi supply layer via agent/runners/pi_text_turn_harness (routed by
- * session_loop through factory.supportsPiTurnSupply). Tool turns, approval
- * resume and handoff chains remain on the AI SDK until their own switch
- * items. Production callers of callPiChat: the factory and the text harness
- * only.
+ * on the Pi supply layer via agent/runners/pi_text_turn_harness. Wired
+ * (switch item 3a, issue #114): never-approve tool turns run via
+ * agent/runners/pi_tool_turn_harness over the loop (agent/runners/
+ * pi_agent_loop.ts) — routed by session_loop through
+ * factory.supportsPiTurnSupply. Approval-capable policies, approval resume
+ * and autonomous handoff chains remain on the AI SDK until their own
+ * switch items. Production callers of callPiChat: the factory and the two
+ * harnesses only.
  */
 import { normalizeContext } from '@earendil-works/pi-ai';
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';

@@ -12,8 +12,9 @@ import {
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from './run_tracker';
 import { summarizeContextComposition } from '../turn_prep/context_helpers';
-import { startTurnHarness } from '../agent/harness';
+import { startTurnHarness, type TurnDriverHarness } from '../agent/harness';
 import { PiTextTurnHarness } from '../agent/runners/pi_text_turn_harness';
+import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { supportsPiTurnSupply } from '../provider/llm/factory';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
@@ -318,20 +319,27 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      // Supply selection (switch item 2c): text-only turns on a Pi-eligible
-      // provider ride the Pi supply layer through the structural harness
-      // surface. Tool turns, approval resume and handoff chains stay on the
-      // AI SDK harness until their own switch items.
-      const harness =
-        !plan.enableTools &&
-        supportsPiTurnSupply({
-          providerType: plan.providerType,
-          ...(plan.providerId ? { providerId: plan.providerId } : {}),
-          modelId: plan.model,
-          history: streamHistory,
-        })
-          ? new PiTextTurnHarness(planToHarnessConfig(plan))
-          : startTurnHarness(planToHarnessConfig(plan));
+      // Supply selection (switch items 2c/3a): the Pi supply layer serves
+      // text-only turns, and tool turns under the never-approve policy with
+      // autonomous mode off — the only tool slice whose not-pausing property
+      // is provable at routing time (the resolver's call-time approval
+      // function returns false unconditionally, and the driver breaks
+      // handoff chains before any harness swap). Every other shape stays on
+      // the AI SDK harness until its switch item.
+      const piSupplyAdmitted = supportsPiTurnSupply({
+        providerType: plan.providerType,
+        ...(plan.providerId ? { providerId: plan.providerId } : {}),
+        modelId: plan.model,
+        history: streamHistory,
+      });
+      let harness: TurnDriverHarness = startTurnHarness(planToHarnessConfig(plan));
+      if (piSupplyAdmitted) {
+        if (!plan.enableTools) {
+          harness = new PiTextTurnHarness(planToHarnessConfig(plan));
+        } else if (plan.approvalPolicy === 'never' && !autonomousMode) {
+          harness = new PiToolTurnHarness(planToHarnessConfig(plan));
+        }
+      }
 
       if (!preparedTurn.prompt.trim()) {
         throw new Error('No user prompt provided for streaming');
