@@ -43,8 +43,10 @@
  * - Unrepresentable parts and output types throw PiProjectionError — never a
  *   silent drop, and never a stringify that hides type semantics (G3).
  *
- * This module is UNWIRED: no production path imports callPiChat yet. Wiring
- * it into the send path is the flip decision (with its own gates).
+ * Wired (switch item 1): the single-shot generation entry
+ * (factory.generateChatWithModelMessages) routes its Pi-eligible branch
+ * through callPiChat; the streaming harness remains on the AI SDK until its
+ * own switch item. Production callers of callPiChat: the factory only.
  */
 import { normalizeContext } from '@earendil-works/pi-ai';
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';
@@ -378,7 +380,7 @@ export type PiChatCallContext = {
 export const callPiChat = (
   model: PiModel,
   context: PiChatCallContext & { systemPrompt: string },
-  options: { apiKey?: string; signal?: AbortSignal } = {}
+  options: { apiKey?: string; signal?: AbortSignal; maxTokens?: number } = {}
 ): ReturnType<typeof openaiCompletionsStream> =>
   openaiCompletionsStream(
     model,
@@ -387,5 +389,9 @@ export const callPiChat = (
       messages: context.messages as never,
       tools: context.tools as never,
     }),
-    { apiKey: options.apiKey, signal: options.signal }
+    {
+      apiKey: options.apiKey,
+      signal: options.signal,
+      ...(typeof options.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
+    }
   );
