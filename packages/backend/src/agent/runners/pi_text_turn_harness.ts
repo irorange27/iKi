@@ -3,6 +3,7 @@ import type { ModelMessage } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
 import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
+import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
 import { getFullSystemPrompt, getProviderConfig } from '../../provider/llm/factory';
 import {
@@ -152,7 +153,11 @@ export class PiTextTurnHarness {
     const transcriptSystemText =
       typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '';
     const overhead = estimateTextTokens(
-      [personaPrompt, this.config.systemPrompt, transcriptSystemText].filter(Boolean).join('\n\n')
+      assembleRequestSystemPrompt([
+        { slot: 'persona', text: personaPrompt },
+        { slot: 'planPrompt', text: this.config.systemPrompt },
+        { slot: 'transcriptSystem', text: transcriptSystemText },
+      ]).prompt
     );
     let requestHistory = this.history;
     if (this.config.maxInputTokens) {
@@ -196,12 +201,14 @@ export class PiTextTurnHarness {
     }
 
     const projected = projectHistoryToPiContext(requestHistory, this.config.model);
-    // Persona first, then the plan's system prompt, then the transcript's own
-    // leading system message — the same join order the factory's Pi branch
-    // uses.
-    const systemPrompt = [personaPrompt, this.config.systemPrompt, projected.systemPrompt]
-      .filter(value => value.trim().length > 0)
-      .join('\n\n');
+    // Persona, then the plan's system prompt, then the transcript's own
+    // leading system message — placement owned by the assembly module, the
+    // same join every other request path uses.
+    const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+      { slot: 'persona', text: personaPrompt },
+      { slot: 'planPrompt', text: this.config.systemPrompt },
+      { slot: 'transcriptSystem', text: projected.systemPrompt },
+    ]);
 
     const turnStartedAt = Date.now();
     let llmMs = 0;

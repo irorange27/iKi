@@ -41,6 +41,7 @@ import {
 
 export type { AcpAuthMethod };
 import { getErrorMessage } from '@iki/backend/utils/errors';
+import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { normalizeLanguageModelUsage } from './usage';
 import {
   buildPiModel,
@@ -543,6 +544,10 @@ export const disposeLanguageModel = (model: LanguageModel): void => {
   disposeAcpLanguageModel(model);
 };
 
+/** The persona SECTION of a request system prompt (identity, date/timezone,
+ * OS, cwd — from message/personality.ts); the provider lookup doubles as an
+ * existence check. Placement and joining are message/system_prompt.ts's
+ * contract (`assembleRequestSystemPrompt`). */
 export const getFullSystemPrompt = (providerType: string, providerId?: string | null) => {
   getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();
@@ -639,13 +644,13 @@ const generateViaPi = async (
     options.messages,
     options.modelId
   );
-  const systemPrompt = [
-    personaPrompt,
-    options.extraSystemPrompt,
-    transcriptSystem,
-  ]
-    .filter(value => typeof value === 'string' && value.trim().length > 0)
-    .join('\n\n');
+  const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+    { slot: 'persona', text: personaPrompt },
+    ...(typeof options.extraSystemPrompt === 'string'
+      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
+      : []),
+    { slot: 'transcriptSystem', text: transcriptSystem },
+  ]);
 
   try {
     const eventStream = callPiChat(
@@ -754,12 +759,12 @@ export const generateChatWithModelMessages = async (options: {
     return generateViaPi(options, config);
   }
   const model = createModel(options.providerType, options.modelId, options.providerId);
-  const systemPrompt = [
-    getFullSystemPrompt(options.providerType, options.providerId),
-    options.extraSystemPrompt,
-  ]
-    .filter(value => typeof value === 'string' && value.trim().length > 0)
-    .join('\n\n');
+  const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+    { slot: 'persona', text: getFullSystemPrompt(options.providerType, options.providerId) },
+    ...(typeof options.extraSystemPrompt === 'string'
+      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
+      : []),
+  ]);
 
   try {
     const telemetry = langfuseTelemetry('chat.generate', {
