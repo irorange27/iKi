@@ -118,7 +118,7 @@ const makePlan = (overrides: Partial<ExecutionPlan> = {}): ExecutionPlan => ({
 // reaches the model across batch boundaries) and terminates with the
 // driver's own outcome, instead of running exactly one orphan batch the way
 // the old dedicated resume loop did.
-describe('approval resume rides the autonomous outer loop', () => {
+describe('approval resume rides the autonomous turn driver', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -172,7 +172,7 @@ describe('approval resume rides the autonomous outer loop', () => {
     const pausedHistory = blockedHarness.getHistory();
 
     // One tool call per SDK step (maxIterations 1) — every batch ends with
-    // finishReason 'tool-calls', so the outer loop must keep batching until
+    // finishReason 'tool-calls', so the turn driver must keep batching until
     // its own budget (3 batches × 1 step) is spent.
     const model = new FauxModelProvider([
       fauxToolCall(toolName, {}, { id: 'call_r1' }),

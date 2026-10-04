@@ -25,7 +25,7 @@ import {
   SESSION_EVENT_VERSION,
   type ApprovalDecidedPayload,
 } from './session_log';
-import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './outer_loop';
+import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './turn_driver';
 import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import { executeApprovedTool, prepareToolExecution } from './tool_execution';

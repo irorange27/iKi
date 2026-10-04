@@ -41,7 +41,7 @@ import {
 } from './session_log';
 import type { UiChunkEmitter } from './types';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
-import { createTurnDriver, finalizeRunForOutcome, runFailureFromError, type TurnDriverHandle } from './outer_loop';
+import { createTurnDriver, finalizeRunForOutcome, runFailureFromError, type TurnDriverHandle } from './turn_driver';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -395,8 +395,8 @@ export const createChatStreaming = (deps: {
           metadata: {
             awaitingApproval: streamResult.outcome === 'awaiting-approval',
             contextTokens: preparedTurn.report.totalEstimatedTokens,
-            ...(activeDriver.getOuterBatchCount() > 0
-              ? { autonomousBatches: activeDriver.getOuterBatchCount() + 1 }
+            ...(activeDriver.getBatchCount() > 0
+              ? { autonomousBatches: activeDriver.getBatchCount() + 1 }
               : {}),
           },
         });

@@ -53,7 +53,7 @@
  * policy — pause reports through the driver's registerApprovalBatch, resume
  * executes the decided calls through the five-state owner (injected port,
  * admitted before the legacy consume). Wired (switch item 3c, issue #118):
- * every mode — the outer loop rebuilds autonomous handoff-chained harnesses
+ * every mode — the turn driver rebuilds autonomous handoff-chained harnesses
  * through thread_session/turn_supply_selection.ts, so a chain never flips
  * supply mid-turn. Production callers of callPiChat: the factory and
  * the two harnesses only.
