@@ -40,6 +40,7 @@ import {
 } from './acp';
 
 export type { AcpAuthMethod };
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import { normalizeLanguageModelUsage } from './usage';
 import {
   buildPiModel,
@@ -549,8 +550,12 @@ export const getFullSystemPrompt = (providerType: string, providerId?: string | 
 };
 /** Providers whose default openai-compatible branch the Pi supply layer
  * serves (ADR 007 first switch path). Static-factory providers (openai,
- * anthropic, deepseek, minimax), ACP and the Responses API stay on the AI
- * SDK until their own switch items land. */
+ * anthropic, anthropic-compatible, deepseek, minimax), ACP and the
+ * Responses API stay on the AI SDK until their own switch items land.
+ * Wire deltas vs the AI SDK path (documented, tracked): maxTokens rides
+ * max_completion_tokens for unknown baseUrls (no compat escape yet), the
+ * request is streaming-shaped, and createInstrumentedFetch's unconditional
+ * reasoning-disabled injection does not apply. */
 const supportsPiGeneration = (providerType: string, config: ProviderConfig): boolean =>
   !isAcpProviderType(providerType) &&
   !STATIC_PROVIDER_MODEL_FACTORIES[providerType] &&
@@ -671,7 +676,30 @@ export const generateChatWithModelMessages = async (options: {
   abortSignal?: AbortSignal;
 }): Promise<ChatGenerationResult> => {
   const config = getProviderConfig(options.providerType, options.providerId);
-  if (supportsPiGeneration(options.providerType, config)) {
+  let usePi = supportsPiGeneration(options.providerType, config);
+  if (usePi) {
+    // Per-request domain gate (ADR 007 decision 2): requests whose history
+    // carries parts outside the projection's covered domain (multimodal
+    // today) stay on the AI SDK until their own switch items land. The
+    // projection itself is the domain test — coverage widening automatically
+    // re-routes, and the fallback never sees a projection throw.
+    try {
+      projectHistoryToPiContext(options.messages, options.modelId);
+    } catch (error) {
+      usePi = false;
+      factoryLogger.event({
+        level: 'info',
+        event: 'llm.generate.supply_fallback',
+        message: 'History outside the Pi projection domain — using the AI SDK path.',
+        data: {
+          providerType: options.providerType,
+          modelId: options.modelId,
+          reason: getErrorMessage(error),
+        },
+      });
+    }
+  }
+  if (usePi) {
     return generateViaPi(options, config);
   }
   const model = createModel(options.providerType, options.modelId, options.providerId);
