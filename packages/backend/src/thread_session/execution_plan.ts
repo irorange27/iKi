@@ -38,7 +38,7 @@ export type ExecutionPlan = {
   maxInputTokens?: number;
   maxOutputTokens?: number;
   reasoningEffort?: string;
-  // Outer-loop autonomy (ADR 004)
+  // Autonomous batching (ADR 004)
   autonomous?: { maxIterations: number; continuePrompt?: string };
   // Turn-start world binding (D30): tools and later-approved actions run
   // where the turn started, never where the thread points mid-turn.
