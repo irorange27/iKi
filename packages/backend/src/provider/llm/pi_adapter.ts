@@ -52,8 +52,10 @@
  * pi_agent_loop.ts). Wired (switch item 3b, issue #116): EVERY approval
  * policy — pause reports through the driver's registerApprovalBatch, resume
  * executes the decided calls through the five-state owner (injected port,
- * admitted before the legacy consume). Autonomous handoff chains remain on
- * the AI SDK until 3c. Production callers of callPiChat: the factory and
+ * admitted before the legacy consume). Wired (switch item 3c, issue #118):
+ * every mode — the outer loop rebuilds autonomous handoff-chained harnesses
+ * through thread_session/turn_supply_selection.ts, so a chain never flips
+ * supply mid-turn. Production callers of callPiChat: the factory and
  * the two harnesses only.
  */
 import { normalizeContext } from '@earendil-works/pi-ai';

@@ -657,6 +657,37 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect((error as Error).message).toContain('could not be executed');
     expect((error as Error).message).toContain('unknown');
   });
+
+  it('is reentrant: a second turn() (steer restart, batch continuation) rebuilds from its input over the first turn', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [textBlock('first answer')], usage: { input: 10, output: 5, totalTokens: 15 } },
+      { content: [textBlock('second answer')], usage: { input: 30, output: 5, totalTokens: 35 } },
+    ]);
+    const harness = new PiToolTurnHarness(harnessConfig(), { modelCall });
+
+    const first = await collect(harness, { prompt: 'first prompt', history: [] });
+    const firstDone = first.at(-1);
+    assert(firstDone && firstDone.event === 'done');
+    expect(firstDone.output.text).toBe('first answer');
+
+    // The steer-restart / batch-continuation shape: the driver passes the
+    // live history plus the appended input with an EMPTY prompt.
+    const steerInput: ModelMessage = { role: 'user', content: '[STEERING INPUT] go left' };
+    const second = await collect(harness, {
+      prompt: '',
+      history: [...harness.getHistory(), steerInput],
+    });
+    const secondDone = second.at(-1);
+    assert(secondDone && secondDone.event === 'done');
+    expect(secondDone.output.text).toBe('second answer');
+
+    // The second request carried the full first-turn transcript plus the
+    // steer entry — nothing lost across turns, no empty user message.
+    const secondRequest = modelCall.requests[1]!;
+    expect(secondRequest.messages.map(m => m.role)).toEqual(['user', 'assistant', 'user']);
+    expect(JSON.stringify(secondRequest.messages[1])).toContain('first answer');
+    expect(JSON.stringify(secondRequest.messages[2])).toContain('go left');
+  });
 });
 
 describe('withPiRetry (the production wrapper)', () => {
