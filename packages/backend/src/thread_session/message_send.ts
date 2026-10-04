@@ -16,7 +16,7 @@ import {
   planToRunTrackerParams,
 } from './execution_plan';
 import { asChatUiMessage, recordSessionEvents, turnFactsToEvents } from './session_log';
-import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './outer_loop';
+import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './turn_driver';
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';

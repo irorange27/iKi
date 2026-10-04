@@ -10,7 +10,7 @@ import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
  * The single supply-selection point for fresh tool/text turns and handoff-
  * chain rebuilds (switch items 2c/3a/3b/3c): the Pi supply layer serves
  * text-only turns and tool turns in EVERY mode — autonomous batch
- * continuation and handoff chains included, the outer loop rebuilding each
+ * continuation and handoff chains included, the turn driver rebuilding each
  * chained harness through this same selector. Everything else — ACP,
  * Responses API, static-factory providers, out-of-domain history — stays on
  * the AI SDK harness until its switch item. The approval policy does NOT

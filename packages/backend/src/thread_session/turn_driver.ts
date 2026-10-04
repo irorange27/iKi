@@ -17,12 +17,12 @@ import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
 
-type OuterLoopStreamResultBase = {
+type TurnDriverResultBase = {
   response?: string;
   usage?: import('@iki/backend/agent').AgentResult['usage'];
   /** Billed input of the final SDK step — the real context size the model last saw. */
   lastStepInputTokens?: number;
-  /** Perf metrics accumulated across all outer batches of the turn. */
+  /** Perf metrics accumulated across all batches of the turn. */
   perf?: AgentTurnPerf;
   /** Estimated tokens of the resolved tool schemas (from the harness turn). */
   toolSchemaTokens?: { builtin: number; mcp: number };
@@ -30,17 +30,17 @@ type OuterLoopStreamResultBase = {
 
 type HandoffResult = { summary: string; nextSteps: string; reason: string };
 
-export type OuterLoopStreamResult =
-  | (OuterLoopStreamResultBase & { outcome: 'continuing' })
-  | (OuterLoopStreamResultBase & { outcome: 'completed' })
-  | (OuterLoopStreamResultBase & { outcome: 'budget-exhausted' })
-  | (OuterLoopStreamResultBase & { outcome: 'awaiting-approval' })
-  | (OuterLoopStreamResultBase & { outcome: 'cancelled' })
-  | (OuterLoopStreamResultBase & { outcome: 'partial-failure' })
-  | (OuterLoopStreamResultBase & { outcome: 'handoff'; handoff: HandoffResult });
+export type TurnDriverResult =
+  | (TurnDriverResultBase & { outcome: 'continuing' })
+  | (TurnDriverResultBase & { outcome: 'completed' })
+  | (TurnDriverResultBase & { outcome: 'budget-exhausted' })
+  | (TurnDriverResultBase & { outcome: 'awaiting-approval' })
+  | (TurnDriverResultBase & { outcome: 'cancelled' })
+  | (TurnDriverResultBase & { outcome: 'partial-failure' })
+  | (TurnDriverResultBase & { outcome: 'handoff'; handoff: HandoffResult });
 
 /**
- * Mutable per-stream state the outer loop drives across batches. The caller
+ * Mutable per-stream state the turn driver carries across batches. The caller
  * builds it after turn preparation and reads the final values for finalize
  * and cleanup.
  */
@@ -59,13 +59,13 @@ type TurnDriverState = {
    */
   workspaceSelectionBox?: { selection: unknown };
   accumulatedResponse: string;
-  outerBatch: number;
+  batchIndex: number;
   handoffChain: number;
   turnHadToolCalls: boolean;
   isAwaitingApproval: boolean;
 };
 
-export type OuterLoopDeps = {
+export type TurnDriverDeps = {
   target: ChatStreamTarget;
   /** The typed definition of this execution (see execution_plan.ts). */
   plan: ExecutionPlan;
@@ -98,18 +98,18 @@ export type TurnDriverSetup = Pick<
 >;
 
 export type TurnDriverHandle = {
-  run: () => Promise<OuterLoopStreamResult | undefined>;
+  run: () => Promise<TurnDriverResult | undefined>;
   getRunTracker: () => AgentRunTracker;
   /** The harness the final batch ran on (differs from the setup's after a
    *  handoff chain) — the entry's history sync must read this one. */
   getHarness: () => TurnDriverHarness;
   getAccumulatedResponse: () => string;
-  getOuterBatchCount: () => number;
+  getBatchCount: () => number;
   hasToolCalls: () => boolean;
   isAwaitingApproval: () => boolean;
 };
 
-const MAX_OUTER_AUTONOMOUS_BATCHES = 50;
+const MAX_AUTONOMOUS_BATCHES = 50;
 const MAX_HANDOFF_CHAIN = 5;
 
 /**
@@ -133,14 +133,14 @@ export const runFailureFromError = (error: unknown, message: string) => ({
 
 /**
  * The authoritative terminal-outcome mapping: one place decides what each
- * OuterLoopStreamResult outcome means for the run row. Every entry that runs
+ * TurnDriverResult outcome means for the run row. Every entry that runs
  * the driver finalizes through this — adding a terminal outcome means
  * changing this switch and the per-transport projection adapters, not each
  * entry's private finalize code.
  */
 export const finalizeRunForOutcome = (
   tracker: AgentRunTracker,
-  result: OuterLoopStreamResult,
+  result: TurnDriverResult,
   params: { text?: string; notify?: () => void } = {}
 ): void => {
   const text = params.text ?? result.response;
@@ -176,15 +176,15 @@ export const finalizeRunForOutcome = (
 };
 
 /**
- * The outer autonomous loop (ADR 004): one harness.turn() per batch,
- * autonomous mode only, with steer restart, approval blocking, handoff
- * chaining, and batch-boundary auto-compaction. Mutates `state` in place;
- * the caller owns catch/finally and run finalization.
+ * The turn driver (ADR 004): one harness.turn() per batch — steer restart,
+ * approval blocking, handoff chaining, and batch-boundary auto-compaction.
+ * Mutates `state` in place; the caller owns catch/finally and run
+ * finalization.
  */
-const runOuterLoop = async (
+const runTurnBatches = async (
   state: TurnDriverState,
-  deps: OuterLoopDeps,
-): Promise<OuterLoopStreamResult | undefined> => {
+  deps: TurnDriverDeps,
+): Promise<TurnDriverResult | undefined> => {
   const { target, plan, streamState, uiChunkEmitter } = deps;
   const threadId = plan.threadId;
   const autonomousMode = Boolean(plan.autonomous && plan.autonomous.maxIterations > 1);
@@ -192,7 +192,7 @@ const runOuterLoop = async (
   let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let previewText = '';
   let lastPreviewText = '';
-  let streamResult: OuterLoopStreamResult | undefined;
+  let streamResult: TurnDriverResult | undefined;
   let accumulatedPerf: AgentTurnPerf | undefined;
 
   const sendConversationPreview = (kind: ConversationPreview['kind'], text: string, toolName?: string) => {
@@ -332,7 +332,7 @@ const runOuterLoop = async (
     } else if (step.type === 'handoff') {
       event = {
         type: 'tool-call',
-        toolCallId: `handoff-${state.outerBatch}`,
+        toolCallId: `handoff-${state.batchIndex}`,
         toolName: 'handoff',
         input: {
           summary: step.summary,
@@ -499,7 +499,7 @@ const runOuterLoop = async (
         tc => tc.toolName === 'handoff'
       );
 
-      const resultBase: OuterLoopStreamResultBase = {
+      const resultBase: TurnDriverResultBase = {
         ...(agentResult?.response?.trim()
           ? { response: agentResult.response }
           : {}),
@@ -626,10 +626,10 @@ const runOuterLoop = async (
       }
       if (!autonomousMode) break;
 
-      state.outerBatch++;
-      if (state.outerBatch >= Math.min(
-        MAX_OUTER_AUTONOMOUS_BATCHES,
-        plan.autonomous?.maxIterations ?? MAX_OUTER_AUTONOMOUS_BATCHES,
+      state.batchIndex++;
+      if (state.batchIndex >= Math.min(
+        MAX_AUTONOMOUS_BATCHES,
+        plan.autonomous?.maxIterations ?? MAX_AUTONOMOUS_BATCHES,
       )) break;
 
       state.streamHistory = state.harness.getHistory();
@@ -655,22 +655,22 @@ const runOuterLoop = async (
 
 export const createTurnDriver = (
   setup: TurnDriverSetup,
-  deps: OuterLoopDeps
+  deps: TurnDriverDeps
 ): TurnDriverHandle => {
   const state: TurnDriverState = {
     ...setup,
     accumulatedResponse: '',
-    outerBatch: 0,
+    batchIndex: 0,
     handoffChain: 0,
     turnHadToolCalls: false,
     isAwaitingApproval: false,
   };
   return {
-    run: () => runOuterLoop(state, deps),
+    run: () => runTurnBatches(state, deps),
     getRunTracker: () => state.runTracker,
     getHarness: () => state.harness,
     getAccumulatedResponse: () => state.accumulatedResponse,
-    getOuterBatchCount: () => state.outerBatch,
+    getBatchCount: () => state.batchIndex,
     hasToolCalls: () => state.turnHadToolCalls,
     isAwaitingApproval: () => state.isAwaitingApproval,
   };
