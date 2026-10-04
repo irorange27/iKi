@@ -41,6 +41,12 @@ import {
 
 export type { AcpAuthMethod };
 import { normalizeLanguageModelUsage } from './usage';
+import {
+  buildPiModel,
+  callPiChat,
+  projectHistoryToPiContext,
+  projectUsageToIki,
+} from './pi_adapter';
 
 const factoryLogger = createLogger({ module: 'llm_factory' });
 const MODELS_DEV_CACHE_TTL_MS = 3600000;
@@ -541,6 +547,117 @@ export const getFullSystemPrompt = (providerType: string, providerId?: string | 
   const personaPrompt = getPersonaPrompt();
   return personaPrompt;
 };
+/** Providers whose default openai-compatible branch the Pi supply layer
+ * serves (ADR 007 first switch path). Static-factory providers (openai,
+ * anthropic, deepseek, minimax), ACP and the Responses API stay on the AI
+ * SDK until their own switch items land. */
+const supportsPiGeneration = (providerType: string, config: ProviderConfig): boolean =>
+  !isAcpProviderType(providerType) &&
+  !STATIC_PROVIDER_MODEL_FACTORIES[providerType] &&
+  !config.isResponseApi &&
+  typeof config.baseURL === 'string' &&
+  config.baseURL.trim().length > 0;
+
+/**
+ * Single-shot generation over the Pi supply layer (ADR 007, switch item 1).
+ * Text-only: no tools, no inner loop. The transcript is projected by
+ * projectHistoryToPiContext; usage maps onto the total-prompt convention
+ * (projectUsageToIki). Known gap, tracked: estimatedCostUsd is 0 here —
+ * the catalog cost rates are not wired into the Pi model yet — and
+ * Langfuse tracing is not attached on this path.
+ */
+const generateViaPi = async (
+  options: {
+    providerType: string;
+    providerId?: string;
+    modelId: string;
+    messages: ModelMessage[];
+    extraSystemPrompt?: string;
+    maxOutputTokens?: number;
+    threadId?: string;
+    abortSignal?: AbortSignal;
+  },
+  config: ProviderConfig
+): Promise<ChatGenerationResult> => {
+  const model = buildPiModel({
+    id: options.modelId,
+    baseUrl: config.baseURL,
+    // Single-shot generation enforces no context budget in the AI SDK path
+    // either (only maxOutputTokens), so catalog-window resolution is not
+    // needed here and would be a network dependency.
+    contextWindow: 128000,
+    maxTokens: options.maxOutputTokens ?? 4096,
+  });
+  const personaPrompt = getFullSystemPrompt(options.providerType, options.providerId);
+  const { systemPrompt: transcriptSystem, messages } = projectHistoryToPiContext(
+    options.messages,
+    options.modelId
+  );
+  const systemPrompt = [
+    personaPrompt,
+    options.extraSystemPrompt,
+    transcriptSystem,
+  ]
+    .filter(value => typeof value === 'string' && value.trim().length > 0)
+    .join('\n\n');
+
+  try {
+    const eventStream = callPiChat(
+      model,
+      { systemPrompt, messages },
+      {
+        apiKey: config.apiKey,
+        signal: options.abortSignal,
+        ...(typeof options.maxOutputTokens === 'number'
+          ? { maxTokens: options.maxOutputTokens }
+          : {}),
+      }
+    );
+    const resultPromise = eventStream.result();
+    for await (const _event of eventStream) {
+      void _event; // drain: the final message carries text and usage
+    }
+    const final = await resultPromise;
+    const text = final.content
+      .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+      .map(block => block.text)
+      .join('');
+    if (!text) {
+      factoryLogger.event({
+        level: 'warn',
+        event: 'llm.generate.empty',
+        outcome: 'degraded',
+        message: `Generation produced no text for provider "${options.providerType}" model "${options.modelId}".`,
+        data: { providerType: options.providerType, modelId: options.modelId, supply: 'pi' },
+      });
+    }
+    const usage = projectUsageToIki(final.usage);
+    return {
+      text,
+      usage: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
+        reasoningTokens: usage.reasoningTokens,
+        // Catalog cost rates are not wired into the Pi model yet (tracked).
+        estimatedCostUsd: final.usage.cost.total,
+      },
+    };
+  } catch (error) {
+    factoryLogger.event({
+      level: 'error',
+      event: 'llm.generate.failed',
+      outcome: 'failed',
+      message: `Generation failed for provider "${options.providerType}" model "${options.modelId}".`,
+      error,
+      data: { providerType: options.providerType, modelId: options.modelId, supply: 'pi' },
+    });
+    throw error;
+  }
+};
+
 export const generateChatWithModelMessages = async (options: {
   providerType: string;
   providerId?: string;
@@ -553,6 +670,10 @@ export const generateChatWithModelMessages = async (options: {
   /** Cooperative cancellation (send execution aborts on lease loss). */
   abortSignal?: AbortSignal;
 }): Promise<ChatGenerationResult> => {
+  const config = getProviderConfig(options.providerType, options.providerId);
+  if (supportsPiGeneration(options.providerType, config)) {
+    return generateViaPi(options, config);
+  }
   const model = createModel(options.providerType, options.modelId, options.providerId);
   const systemPrompt = [
     getFullSystemPrompt(options.providerType, options.providerId),
