@@ -6,6 +6,7 @@ import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/te
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 import {
+  PiLoopEventType,
   runPiAgentLoop,
   type PiLoopModelCall,
   type PiLoopStep,
@@ -192,6 +193,60 @@ describe('pi agent loop — orchestration semantics', () => {
     expect(outcome.usage).toMatchObject({ input: 30, totalTokens: 36 });
   });
 
+  it('approval-needing tools pause the turn before any effect (rereview H2 surface)', async () => {
+    const callModel = scriptedCall([
+      {
+        content: [
+          toolCallBlock('call_ap', 'read_file', { path: '/guarded.txt' }),
+          toolCallBlock('call_free', 'announce', { text: 'hello' }),
+        ],
+      },
+    ]);
+    const registered: string[] = [];
+    const executed: string[] = [];
+    const outcome = await runPiAgentLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'go', timestamp: Date.now() }],
+      tools: [
+        { name: 'read_file', description: 'read', parameters: {}, needsApproval: true },
+        { name: 'announce', description: 'announce', parameters: {} },
+      ],
+      maxSteps: 3,
+      callModel,
+      executeTool: async call => {
+        executed.push(call.name);
+        return { text: 'ran' };
+      },
+      requestApproval: async call => {
+        registered.push(call.id);
+      },
+    });
+
+    // The turn pauses BEFORE any effect: registration happened for the
+    // needing call only, nothing executed, no second model call.
+    expect(outcome.status).toBe('awaiting-approval');
+    expect(registered).toEqual(['call_ap']);
+    expect(executed).toEqual([]);
+    expect(outcome.pendingToolCalls.map(c => c.id)).toEqual(['call_ap']);
+    expect(outcome.steps).toHaveLength(1);
+  });
+
+  it('a missing approval surface with a needing tool refuses loudly', async () => {
+    const callModel = scriptedCall([
+      { content: [toolCallBlock('call_ng', 'read_file', { path: '/g.txt' })] },
+    ]);
+    await expect(
+      runPiAgentLoop({
+        systemPrompt: 'loop',
+        messages: [{ role: 'user', content: 'go', timestamp: Date.now() }],
+        tools: [{ name: 'read_file', description: 'read', parameters: {}, needsApproval: true }],
+        maxSteps: 3,
+        callModel,
+        executeTool: async () => ({ text: 'NEVER' }),
+      })
+    ).rejects.toThrow(/no approval surface/);
+  });
+
   it('cancellation before a step throws (the driver maps it) — no model call, no effect', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -215,8 +270,8 @@ describe('pi agent loop — orchestration semantics', () => {
       { content: [textBlock('tail')], deltas: ['tail'] },
     ]);
     const events: Array<
-      | { type: 'text_delta'; delta: string; step: number }
-      | { type: 'step_end'; step: PiLoopStep }
+      | { type: PiLoopEventType.TextDelta; delta: string; step: number }
+      | { type: PiLoopEventType.StepEnd; step: PiLoopStep }
     > = [];
     await runPiAgentLoop({
       systemPrompt: 'loop',
@@ -226,11 +281,13 @@ describe('pi agent loop — orchestration semantics', () => {
       executeTool: async () => ({ text: 'ok' }),
       onEvent: event => events.push(event),
     });
-    expect(events.map(e => (e.type === 'text_delta' ? `text_delta:${e.delta}` : 'step_end'))).toEqual([
+    expect(
+      events.map(e => (e.type === PiLoopEventType.TextDelta ? `text_delta:${e.delta}` : PiLoopEventType.StepEnd))
+    ).toEqual([
       'text_delta:lead ',
-      'step_end',
+      PiLoopEventType.StepEnd,
       'text_delta:tail',
-      'step_end',
+      PiLoopEventType.StepEnd,
     ]);
     const stepEnds = events.filter(e => e.type === 'step_end') as Array<{ type: 'step_end'; step: PiLoopStep }>;
     expect(stepEnds[0].step.toolCalls).toHaveLength(1);

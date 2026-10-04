@@ -12,6 +12,11 @@ import type { AssistantMessage, Message as PiMessage, Tool as PiTool } from '@ea
  *   model call happens and the pending calls are reported (D7–D8: the
  *   exhausted budget terminates the request);
  * - cancellation is checked before each model call and before each effect;
+ * - tools flagged needsApproval pause the turn BEFORE any effect: the
+ *   injected approval surface registers them with the approval owner and
+ *   the outcome is awaiting-approval — decisions and resumption belong to
+ *   a new loop run over the recovered history (the five-state contract
+ *   lives in the approval owner, not here);
  * - usage accumulates in raw Pi buckets — the mapping to iKi's
  *   total-prompt convention is linear, so the caller may map the sum
  *   (projectUsageToIki) or map per step and add.
@@ -24,6 +29,13 @@ import type { AssistantMessage, Message as PiMessage, Tool as PiTool } from '@ea
  * needs the wiring to extend this contract deliberately.
  * maxSteps values that are not finite fall back to 1.
  */
+
+export type PiLoopTool = PiTool & {
+  /** Tools flagged true pause the loop before their effect: the injected
+   * approval surface registers the call with the approval owner and the
+   * turn ends awaiting-approval (the resume is a new loop run). */
+  needsApproval?: boolean;
+};
 
 export type PiLoopToolCall = {
   id: string;
@@ -47,19 +59,27 @@ export type PiUsageBuckets = {
   totalTokens: number;
 };
 
+/** Event discriminators for the loop's event stream. The wiring maps these
+ * onto the TurnDriver's protocol one-to-one. */
+export enum PiLoopEventType {
+  TextDelta = 'text_delta',
+  StepEnd = 'step_end',
+}
+
 export type PiLoopEvent =
-  | { type: 'text_delta'; delta: string; step: number }
-  | { type: 'step_end'; step: PiLoopStep };
+  | { type: PiLoopEventType.TextDelta; delta: string; step: number }
+  | { type: PiLoopEventType.StepEnd; step: PiLoopStep };
 
 export type PiLoopOutcome = {
-  status: 'completed' | 'budget-exhausted';
+  status: 'completed' | 'budget-exhausted' | 'awaiting-approval';
   finalText: string;
   steps: PiLoopStep[];
   usage: PiUsageBuckets;
-  /** Tool calls from the final step: EXECUTED, results recorded on the
-   * transcript, but not yet consumed by a model call (budget exhausted).
-   * Reporting them lets the driver surface what happened without implying
-   * they are pending side effects. */
+  /** Budget-exhausted: tool calls from the final step — EXECUTED, results
+   * recorded on the transcript, but not yet consumed by a model call.
+   * Awaiting-approval: the calls that REQUIRE approval and were registered
+   * with the approval surface — they have NOT run. Reporting both lets the
+   * driver surface what happened without implying unexecuted side effects. */
   pendingToolCalls: PiLoopToolCall[];
 };
 
@@ -72,6 +92,12 @@ export type PiLoopModelCall = (context: {
 export type PiLoopToolExecutor = (
   call: PiLoopToolCall
 ) => Promise<{ text: string; isError?: boolean }>;
+
+/** Registers an approval-needing call with the approval owner (the real
+ * implementation is the approval surface's registration primitive). The
+ * turn ends awaiting-approval after registration; decisions and resumption
+ * are the approval owner's, via a NEW loop run over the recovered history. */
+export type PiLoopApprovalRequester = (call: PiLoopToolCall) => Promise<void>;
 
 const EMPTY_USAGE: PiUsageBuckets = {
   input: 0,
@@ -107,10 +133,11 @@ export const runPiAgentLoop = async (params: {
   maxSteps: number;
   callModel: PiLoopModelCall;
   executeTool: PiLoopToolExecutor;
+  requestApproval?: PiLoopApprovalRequester;
   signal?: AbortSignal;
   onEvent?: (event: PiLoopEvent) => void;
 }): Promise<PiLoopOutcome> => {
-  const { callModel, executeTool, signal, onEvent } = params;
+  const { callModel, executeTool, requestApproval, signal, onEvent } = params;
   const maxSteps = Number.isFinite(params.maxSteps) ? Math.max(1, Math.trunc(params.maxSteps)) : 1;
   const messages: PiMessage[] = [...params.messages];
   const steps: PiLoopStep[] = [];
@@ -124,7 +151,7 @@ export const runPiAgentLoop = async (params: {
       messages: [...messages],
       tools: params.tools,
     });
-    for (const delta of deltas) onEvent?.({ type: 'text_delta', delta, step: index });
+    for (const delta of deltas) onEvent?.({ type: PiLoopEventType.TextDelta, delta, step: index });
 
     const text = final.content
       .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
@@ -141,11 +168,32 @@ export const runPiAgentLoop = async (params: {
     usage = addUsage(usage, stepUsage);
     const step: PiLoopStep = { index, text, toolCalls, usage: stepUsage };
     steps.push(step);
-    onEvent?.({ type: 'step_end', step });
+    onEvent?.({ type: PiLoopEventType.StepEnd, step });
     lastText = text;
 
     if (toolCalls.length === 0) {
       return { status: 'completed', finalText: text, steps, usage, pendingToolCalls: [] };
+    }
+
+    // Approval pause BEFORE any effect: if any call in the step requires
+    // approval, register the needing ones with the approval surface and end
+    // the turn awaiting-approval — nothing executes, and the resume is a new
+    // loop run over the recovered history (the approval owner decides).
+    const needingApproval = toolCalls.filter(call =>
+      params.tools?.find(tool => tool.name === call.name)?.needsApproval === true
+    );
+    if (needingApproval.length > 0) {
+      if (!requestApproval) {
+        throw new Error('Tool requires approval but the loop has no approval surface.');
+      }
+      for (const call of needingApproval) await requestApproval(call);
+      return {
+        status: 'awaiting-approval',
+        finalText: lastText,
+        steps,
+        usage,
+        pendingToolCalls: needingApproval,
+      };
     }
 
     // Tools in ANY step execute — including the last (harness semantics).
