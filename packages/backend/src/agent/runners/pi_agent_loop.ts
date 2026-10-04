@@ -47,9 +47,16 @@ export type PiUsageBuckets = {
   totalTokens: number;
 };
 
+/** Event discriminators for the loop's event stream. The wiring maps these
+ * onto the TurnDriver's protocol one-to-one. */
+export enum PiLoopEventType {
+  TextDelta = 'text_delta',
+  StepEnd = 'step_end',
+}
+
 export type PiLoopEvent =
-  | { type: 'text_delta'; delta: string; step: number }
-  | { type: 'step_end'; step: PiLoopStep };
+  | { type: PiLoopEventType.TextDelta; delta: string; step: number }
+  | { type: PiLoopEventType.StepEnd; step: PiLoopStep };
 
 export type PiLoopOutcome = {
   status: 'completed' | 'budget-exhausted';
@@ -124,7 +131,7 @@ export const runPiAgentLoop = async (params: {
       messages: [...messages],
       tools: params.tools,
     });
-    for (const delta of deltas) onEvent?.({ type: 'text_delta', delta, step: index });
+    for (const delta of deltas) onEvent?.({ type: PiLoopEventType.TextDelta, delta, step: index });
 
     const text = final.content
       .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
@@ -141,7 +148,7 @@ export const runPiAgentLoop = async (params: {
     usage = addUsage(usage, stepUsage);
     const step: PiLoopStep = { index, text, toolCalls, usage: stepUsage };
     steps.push(step);
-    onEvent?.({ type: 'step_end', step });
+    onEvent?.({ type: PiLoopEventType.StepEnd, step });
     lastText = text;
 
     if (toolCalls.length === 0) {

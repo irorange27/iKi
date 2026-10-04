@@ -6,6 +6,7 @@ import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/te
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 import {
+  PiLoopEventType,
   runPiAgentLoop,
   type PiLoopModelCall,
   type PiLoopStep,
@@ -215,8 +216,8 @@ describe('pi agent loop — orchestration semantics', () => {
       { content: [textBlock('tail')], deltas: ['tail'] },
     ]);
     const events: Array<
-      | { type: 'text_delta'; delta: string; step: number }
-      | { type: 'step_end'; step: PiLoopStep }
+      | { type: PiLoopEventType.TextDelta; delta: string; step: number }
+      | { type: PiLoopEventType.StepEnd; step: PiLoopStep }
     > = [];
     await runPiAgentLoop({
       systemPrompt: 'loop',
@@ -226,11 +227,13 @@ describe('pi agent loop — orchestration semantics', () => {
       executeTool: async () => ({ text: 'ok' }),
       onEvent: event => events.push(event),
     });
-    expect(events.map(e => (e.type === 'text_delta' ? `text_delta:${e.delta}` : 'step_end'))).toEqual([
+    expect(
+      events.map(e => (e.type === PiLoopEventType.TextDelta ? `text_delta:${e.delta}` : PiLoopEventType.StepEnd))
+    ).toEqual([
       'text_delta:lead ',
-      'step_end',
+      PiLoopEventType.StepEnd,
       'text_delta:tail',
-      'step_end',
+      PiLoopEventType.StepEnd,
     ]);
     const stepEnds = events.filter(e => e.type === 'step_end') as Array<{ type: 'step_end'; step: PiLoopStep }>;
     expect(stepEnds[0].step.toolCalls).toHaveLength(1);
