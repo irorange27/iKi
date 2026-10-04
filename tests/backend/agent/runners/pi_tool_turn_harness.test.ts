@@ -482,10 +482,7 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(onInference.mock.calls[0][0].messages.map((m: ModelMessage) => m.role)).toEqual(['user']);
   });
 
-  it('enforces the never-approve gate and refuses toolsOverride and pre-aborted signals', async () => {
-    expect(() => new PiToolTurnHarness(harnessConfig({ approvalPolicy: undefined }))).toThrow(/never-approve/);
-    expect(() => new PiToolTurnHarness(harnessConfig({ approvalPolicy: 'askRisky' }))).toThrow(/never-approve/);
-
+  it('refuses toolsOverride and pre-aborted signals', async () => {
     const modelCall = scriptedModelCall([{ content: [textBlock('never')] }]);
     const harness = new PiToolTurnHarness(harnessConfig(), { modelCall });
     const error = await drainError(harness, {
@@ -499,6 +496,166 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const abortError = await drainError(harness, { prompt: 'probe', abortSignal: controller.signal });
     expect((abortError as DOMException).name).toBe('AbortError');
     expect(modelCall.requests).toHaveLength(0);
+  });
+
+  it('pauses an always-policy turn: approval_request step, requiresApproval done, zero effects', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [toolCallBlock('call_a', 'probe_read', { path: '/guarded.txt' })] },
+      { content: [textBlock('NEVER')] },
+    ]);
+    const harness = new PiToolTurnHarness(harnessConfig({ approvalPolicy: 'always' }), { modelCall });
+
+    const events = await collect(harness, { prompt: 'probe' });
+    const steps = stepEvents(events);
+    const approvalStep = steps.find(s => s.type === 'approval_request') as {
+      requests: Array<{ approvalId: string; toolCallId: string; toolCall: { toolName: string; args: unknown } }>;
+    };
+    expect(approvalStep.requests).toHaveLength(1);
+    expect(approvalStep.requests[0]).toMatchObject({
+      toolCallId: 'call_a',
+      toolCall: { toolName: 'probe_read', args: { path: '/guarded.txt' } },
+    });
+    // No execution events: nothing ran before the decision.
+    expect(steps.filter(s => s.type === 'tool_execution_start')).toHaveLength(0);
+
+    const done = events.at(-1);
+    assert(done && done.event === 'done');
+    expect(done.output.requiresApproval).toBe(true);
+    expect(done.output.toolApprovalRequests).toEqual(approvalStep.requests);
+    // The mirror holds the assistant entry with the tool call — the paused
+    // shape the resume pairs the decision against.
+    expect(harness.getHistory().at(-1)).toMatchObject({ role: 'assistant' });
+    expect(modelCall.requests).toHaveLength(1);
+  });
+
+  it('resume mode: decided calls execute through the injected owner, then the loop continues', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [textBlock('continuing after approval')], deltas: ['continuing'] },
+    ]);
+    const executed: Array<{ toolName: string; args: unknown; value?: unknown }> = [];
+    const prepared: string[] = [];
+    const pausedHistory: ModelMessage[] = [
+      { role: 'user', content: 'probe' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'call_r', toolName: 'probe_read', input: { path: '/r.txt' } },
+        ],
+      },
+    ];
+    const harness = new PiToolTurnHarness(harnessConfig({ threadId: 'thread_resume' }), {
+      modelCall,
+      resume: {
+        commands: [{ approvalId: 'ap_1', toolCallId: 'call_r', toolName: 'probe_read', args: { path: '/r.txt' } }],
+        owner: {
+          prepare: address => prepared.push(address.approvalId),
+          executeApproved: async (address, port) => {
+            assert(address.approvalId === 'ap_1');
+            // The owner's port executes RAW (the owner wraps the result) —
+            // record at this seam: the resume path bypasses deps.executeTool.
+            const value = (await port.execute('probe_read', { path: '/r.txt' })) as string;
+            executed.push({ toolName: 'probe_read', args: { path: '/r.txt' }, value });
+            return {
+              kind: 'completed',
+              reused: false,
+              result: { type: 'tool-result', toolCallId: 'call_r', toolName: 'probe_read', output: { type: 'text', value } },
+            };
+          },
+        },
+      },
+    });
+
+    const events = await collect(harness, { prompt: '', history: pausedHistory });
+
+    const steps = stepEvents(events);
+    expect(steps[0]).toMatchObject({
+      type: 'tool_execution_start',
+      toolCallId: 'call_r',
+      toolName: 'probe_read',
+    });
+    expect(steps[1]).toMatchObject({ type: 'tool_execution_end', outcome: 'success' });
+    expect(prepared).toEqual(['ap_1']);
+    expect(executed).toEqual([
+      { toolName: 'probe_read', args: { path: '/r.txt' }, value: 'body of /r.txt' },
+    ]);
+
+    const done = events.at(-1);
+    assert(done && done.event === 'done');
+    expect(done.output.requiresApproval).toBe(false);
+    expect(done.output.finishReason).toBe('stop');
+
+    // Mirror: user, assistant(tool-call), tool(result), assistant(final).
+    const history = harness.getHistory();
+    expect(history).toHaveLength(4);
+    expect(history[1]).toMatchObject({ role: 'assistant' });
+    expect(history[2]).toMatchObject({ role: 'tool' });
+    expect(history[3]).toEqual({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'continuing after approval' }],
+    });
+    // The continuation request carried the tool result on the wire.
+    expect(modelCall.requests[0].messages.map(m => m.role)).toEqual(['user', 'assistant', 'toolResult']);
+  });
+
+  it('resume mode: a denied call yields the owner canonical denial and the loop continues', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [textBlock('understood, skipping')], deltas: ['understood'] },
+    ]);
+    const harness = new PiToolTurnHarness(harnessConfig({ threadId: 'thread_resume' }), {
+      modelCall,
+      resume: {
+        commands: [{ approvalId: 'ap_d', toolCallId: 'call_d', toolName: 'probe_read', args: { path: '/d.txt' } }],
+        owner: {
+          prepare: () => undefined,
+          executeApproved: async () => ({
+            kind: 'completed' as const,
+            reused: false,
+            result: {
+              type: 'tool-result' as const,
+              toolCallId: 'call_d',
+              toolName: 'probe_read',
+              output: { type: 'execution-denied', reason: 'User rejected tool execution.' },
+            },
+          }),
+        },
+      },
+    });
+
+    const events = await collect(harness, { prompt: '', history: [
+      { role: 'user', content: 'probe' },
+      { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'call_d', toolName: 'probe_read', input: {} }] },
+    ] as ModelMessage[] });
+
+    const end = stepEvents(events).find(s => s.type === 'tool_execution_end') as {
+      outcome: string;
+      output?: { type: string };
+    };
+    expect(end.outcome).toBe('error');
+    expect(end.output?.type).toBe('execution-denied');
+    const done = events.at(-1);
+    assert(done && done.event === 'done');
+    // The streamed delta is the shown text (parity with the runner).
+    expect(done.output.text).toBe('understood');
+  });
+
+  it('resume mode: unresolved owner outcomes fail loudly instead of inventing a result', async () => {
+    const harness = new PiToolTurnHarness(harnessConfig({ threadId: 'thread_resume' }), {
+      modelCall: scriptedModelCall([{ content: [textBlock('NEVER')] }]),
+      resume: {
+        commands: [{ approvalId: 'ap_u', toolCallId: 'call_u', toolName: 'probe_read', args: {} }],
+        owner: {
+          prepare: () => undefined,
+          executeApproved: async () => ({ kind: 'unknown' }),
+        },
+      },
+    });
+
+    const error = await drainError(harness, { prompt: '', history: [
+      { role: 'user', content: 'probe' },
+      { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'call_u', toolName: 'probe_read', input: {} }] },
+    ] as ModelMessage[] });
+    expect((error as Error).message).toContain('could not be executed');
+    expect((error as Error).message).toContain('unknown');
   });
 });
 

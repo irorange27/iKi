@@ -82,6 +82,7 @@ import {
   MODEL_TEXT_COMMITTED,
   rebuildThreadViewFromEvents,
 } from '@iki/backend/thread_session/session_log';
+import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -98,7 +99,21 @@ const executions: string[] = [];
 
 const TOOL_NAME = 'pi_tool_probe';
 
-const buildStreaming = () =>
+const buildStreaming = (approvalsOverride?: {
+  ensurePendingApprovalSession: (
+    approvalId: string,
+    session: {
+      target: { id: number; send: (channel: string, payload: unknown) => void };
+      history?: import('ai').ModelMessage[];
+      recoveryContext?: unknown;
+    }
+  ) => unknown;
+  registerApprovalBatch: (
+    requests: Array<{ approvalId: string }>,
+    session: { target: { id: number }; history?: unknown }
+  ) => unknown;
+  cleanupPendingSessionsForSender: (senderId: number, sessionId?: string) => void;
+}) =>
   createChatStreaming({
     streamCoordinator: createThreadStreamCoordinator(),
     memory: {} as never,
@@ -108,7 +123,7 @@ const buildStreaming = () =>
         usageEvents.push({ source: event.source, usage: event.usage });
       },
     },
-    approvals: {
+    approvals: approvalsOverride ?? {
       ensurePendingApprovalSession: vi.fn(),
       registerApprovalBatch: vi.fn(),
       cleanupPendingSessionsForSender: vi.fn(),
@@ -262,6 +277,93 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(createModelMock).not.toHaveBeenCalled();
     expect(server.countRequests('read the tool probe file')).toBe(2);
   }, 30000);
+
+  it('full cycle: an always-policy turn pauses, the approval decides, the resume completes on Pi', async () => {
+    // The REAL approval module, wired like the service does.
+    const coordinator = createThreadStreamCoordinator();
+    const chatApprovals = createChatApproval({
+      streams: {
+        tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
+        peek: coordinator.peekStream,
+        attach: coordinator.attachStream,
+        detach: coordinator.detachStream,
+      },
+      memory: {} as never,
+      conversation: { upsertTurnMessage: () => undefined },
+      usage: { recordUsageEvent: () => undefined },
+    });
+
+    server.setScriptSequence('guarded tool probe', [
+      {
+        chunks: [
+          sse.toolCallDelta('call_guarded', TOOL_NAME, '{"path":'),
+          sse.toolCallDelta(null, null, '"/guarded.txt"}'),
+          sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
+        ],
+      },
+      {
+        chunks: [
+          sse.delta('approved and done'),
+          sse.finish('stop', { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60 }),
+        ],
+      },
+    ]);
+
+    const executionsBefore = executions.length;
+    const target = { id: 804, send: vi.fn() };
+    const streaming = buildStreaming({
+      ensurePendingApprovalSession: (approvalId, session) =>
+        chatApprovals.ensurePendingApprovalSession(approvalId, session as never),
+      registerApprovalBatch: (requests, session) =>
+        chatApprovals.registerApprovalBatch(requests as never, session as never),
+      cleanupPendingSessionsForSender: (senderId, sessionId) =>
+        chatApprovals.cleanupPendingSessionsForSender(senderId, sessionId),
+    });
+
+    const first = await streaming.stream(target, {
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_tool_stream',
+      model: 'pi-model',
+      threadId: 'thread_pi_tool_stream',
+      approvalPolicy: 'always',
+      messages: [
+        { id: 'msg_pi_guarded', role: 'user', parts: [{ type: 'text', text: 'guarded tool probe' }] },
+      ],
+      tools: [TOOL_NAME],
+    });
+
+    // The turn PAUSED: awaiting-approval, the tool NOT executed, the
+    // approval request surfaced on the UI.
+    expect(first).toMatchObject({ success: true, awaitingApproval: true });
+    expect(executions.slice(executionsBefore)).toHaveLength(0);
+    const approvalRequests = chunksOf(target, 'tool-approval-request') as Array<{
+      approvalId?: string;
+    }>;
+    expect(approvalRequests[0]?.approvalId).toBeTruthy();
+    expect(lastRunStatus(target)).toBe('blocked');
+    expect(server.countRequests('guarded tool probe')).toBe(1);
+
+    // The user approves: the resume runs on Pi — the tool executes exactly
+    // once, the second request carries the result, the run completes.
+    const decision = await chatApprovals.approveTool(
+      target,
+      approvalRequests[0]!.approvalId!,
+      true,
+      'integration approval'
+    );
+    expect(decision).toMatchObject({ success: true });
+
+    expect(executions.slice(executionsBefore)).toEqual(['/guarded.txt']);
+    expect(server.countRequests('guarded tool probe')).toBe(2);
+    const secondWire = JSON.stringify(server.getWire('guarded tool probe', 1).messages);
+    expect(secondWire).toContain('contents of /guarded.txt');
+    // The resumed segment runs with notifyRunStatus off (waiter parity with
+    // the AI SDK resume) — the target's last status stays 'blocked'; the
+    // completion is proven by the continuation text on the wire.
+    expect(publishedText(target)).toContain('approved and done');
+    // shown ⊆ committed across the pause boundary.
+    expect(committedText('thread_pi_tool_stream')).toContain(publishedText(target));
+  }, 40000);
 
   it('ends the turn as a handoff when the model calls the handoff tool (stopWhen parity)', async () => {
     server.setScriptSequence('hand the task over', [

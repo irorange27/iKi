@@ -267,6 +267,46 @@ describe('pi agent loop — orchestration semantics', () => {
     expect(outcome.steps).toHaveLength(1);
   });
 
+  it('function-form needsApproval decides PER CALL: the risky call pauses, the safe call runs', async () => {
+    const callModel = scriptedCall([
+      {
+        content: [
+          toolCallBlock('call_risky', 'write_file', { path: '/etc/hosts' }),
+          toolCallBlock('call_safe', 'read_file', { path: '/notes.txt' }),
+        ],
+      },
+    ]);
+    const registered: string[] = [];
+    const executed: string[] = [];
+    const { outcome } = await collectLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'go', timestamp: Date.now() }],
+      tools: [
+        {
+          name: 'write_file',
+          description: 'write',
+          parameters: {},
+          needsApproval: input => (input as { path: string }).path.startsWith('/etc/'),
+        },
+        { name: 'read_file', description: 'read', parameters: {} },
+      ],
+      maxSteps: 3,
+      callModel,
+      executeTool: async call => {
+        executed.push(call.name);
+        return 'ran';
+      },
+      requestApproval: async call => {
+        registered.push(call.id);
+      },
+    });
+
+    expect(outcome.status).toBe('awaiting-approval');
+    expect(registered).toEqual(['call_risky']);
+    expect(executed).toEqual([]);
+    expect(outcome.pendingToolCalls.map(c => c.id)).toEqual(['call_risky']);
+  });
+
   it('a missing approval surface with a needing tool refuses loudly', async () => {
     const callModel = scriptedCall([
       { content: [toolCallBlock('call_ng', 'read_file', { path: '/g.txt' })] },

@@ -44,10 +44,13 @@ import type { AssistantMessage, Message as PiMessage, Tool as PiTool, ToolCall }
  */
 
 export type PiLoopTool = PiTool & {
-  /** Tools flagged true pause the loop before their effect: the injected
-   * approval surface registers the call with the approval owner and the
-   * turn ends awaiting-approval (the resume is a new loop run). */
-  needsApproval?: boolean;
+  /** Whether a call to this tool pauses the loop before its effect: the
+   * injected approval surface registers the call with the approval owner and
+   * the turn ends awaiting-approval (the resume is a new loop run). A
+   * FUNCTION is evaluated per call — the resolver's per-call policy decision
+   * (the policy box state lives in its closure); a boolean applies to every
+   * call. */
+  needsApproval?: boolean | ((input: unknown, context: { toolCallId: string; messages: PiMessage[] }) => boolean | Promise<boolean>);
 };
 
 export type PiLoopToolCall = {
@@ -242,12 +245,21 @@ export const runPiAgentLoop = async function* (
     }
 
     // Approval pause BEFORE any effect: if any call in the step requires
-    // approval, register the needing ones with the approval surface and end
-    // the turn awaiting-approval — nothing executes, and the resume is a new
-    // loop run over the recovered history (the approval owner decides).
-    const needingApproval = toolCalls.filter(call =>
-      params.tools?.find(tool => tool.name === call.name)?.needsApproval === true
-    );
+    // approval — decided PER CALL when the projected tool carries the
+    // resolver's function — register the needing ones with the approval
+    // surface and end the turn awaiting-approval; nothing executes, and the
+    // resume is a new loop run over the recovered history (the approval
+    // owner decides).
+    const needingApproval: PiLoopToolCall[] = [];
+    for (const call of toolCalls) {
+      const tool = params.tools?.find(candidate => candidate.name === call.name);
+      if (!tool?.needsApproval) continue;
+      const needed =
+        typeof tool.needsApproval === 'function'
+          ? await tool.needsApproval(call.arguments, { toolCallId: call.id, messages })
+          : tool.needsApproval === true;
+      if (needed) needingApproval.push(call);
+    }
     if (needingApproval.length > 0) {
       if (!requestApproval) {
         throw new Error('Tool requires approval but the loop has no approval surface.');
@@ -308,8 +320,9 @@ export const runPiAgentLoop = async function* (
 };
 
 /** The transcript text for one tool result output — the documented protocol
- * (a JSON tool result is read by the model as text). */
-const toolResultText = (output: unknown): string => {
+ * (a JSON tool result is read by the model as text). Exported for the resume
+ * path, which appends owner-produced results to the same transcript shape. */
+export const toolResultText = (output: unknown): string => {
   if (output === null || typeof output !== 'object' || !('type' in output)) {
     return JSON.stringify(output ?? null);
   }
@@ -327,7 +340,7 @@ const toolResultText = (output: unknown): string => {
   }
 };
 
-const toolResultIsError = (output: unknown): boolean => {
+export const toolResultIsError = (output: unknown): boolean => {
   if (output === null || typeof output !== 'object' || !('type' in output)) return false;
   const t = (output as { type: string }).type;
   return t === 'error-text' || t === 'error-json' || t === 'execution-denied';

@@ -2,7 +2,9 @@ import { createLogger } from '@iki/backend/logger';
 import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
-import { cloneModelMessages, rehydrateHarness } from '../agent/harness';
+import { cloneModelMessages, rehydrateHarness, type TurnDriverHarness } from '../agent/harness';
+import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
+import { pausedPlanRunsOnPiToolSupply } from './turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
@@ -26,6 +28,7 @@ import {
 import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './outer_loop';
 import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';
 import { deriveRunTurnPlan } from './run_rehydrator';
+import { executeApprovedTool, prepareToolExecution } from './tool_execution';
 export { executeApprovedTool, prepareToolExecution } from './tool_execution';
 import {
   loadPersistedAssistantParts,
@@ -567,6 +570,35 @@ export const createChatApproval = (deps: {
       };
     }
 
+    // Pi resume admission (switch item 3b): admit the decided calls into the
+    // owner's execution record BEFORE the legacy consume marks the rows —
+    // a consumed row without execution evidence is 'unknown' by the owner's
+    // contract, and the Pi resume must execute them. Right-to-act v2:
+    // authorization (every call decided) + atomic admission, then consume.
+    const piResumeAdmission = (() => {
+      const pausedPlan = session.recoveryContext?.plan;
+      const pausedHistory = cloneModelMessages(session.history ?? []);
+      if (!pausedPlan?.threadId || !pausedPlanRunsOnPiToolSupply(pausedPlan, pausedHistory)) {
+        return undefined;
+      }
+      const commands = Array.from(session.pendingApprovalIds).flatMap((approvalId: string) => {
+        const row = toolCallApprovalDb.getToolCallApproval(approvalId);
+        if (!row?.tool_call_id || !row.tool_name) return [];
+        return [
+          {
+            approvalId,
+            toolCallId: row.tool_call_id,
+            toolName: row.tool_name,
+            args: JSON.parse(row.tool_args ?? '{}') as Record<string, unknown>,
+          },
+        ];
+      });
+      for (const command of commands) {
+        prepareToolExecution({ threadId: pausedPlan.threadId, approvalId: command.approvalId });
+      }
+      return { commands, threadId: pausedPlan.threadId };
+    })();
+
     clearApprovalTimeouts(session);
     for (const pendingId of session.pendingApprovalIds) {
       pendingApprovalSessions.delete(pendingId);
@@ -673,17 +705,40 @@ export const createChatApproval = (deps: {
         throw new Error('Approval resume requires the paused turn\'s recovery context');
       }
 
-      // Create a fresh harness from the recovery context. guardActive stays
-      // off: the plan's tool selection is already the guarded, post-
-      // preparation result, and re-guarding could shrink it mid-turn.
-      const approvalHarness = rehydrateHarness(
-        planToHarnessConfig(ctx.plan, { guardActive: false })
-      );
+      // Supply selection (switch item 3b): a paused PI tool turn resumes on
+      // the Pi harness — the decided calls were admitted into the owner's
+      // execution record before the legacy consume (piResumeAdmission), the
+      // owner's prepare here is an idempotent no-op, and executeApprovedTool
+      // proceeds on the recorded facts. The AI SDK path keeps its
+      // approval-response-part replay. guardActive stays off either way: the
+      // plan's tool selection is already the guarded, post-preparation
+      // result, and re-guarding could shrink it mid-turn.
+      const resumesOnPi = Boolean(piResumeAdmission);
+      const approvalHarness: TurnDriverHarness = resumesOnPi
+        ? new PiToolTurnHarness(planToHarnessConfig(ctx.plan, { guardActive: false }), {
+            resume: {
+              commands: piResumeAdmission!.commands,
+              owner: {
+                prepare: address => prepareToolExecution(address),
+                executeApproved: (address, port) =>
+                  executeApprovedTool(address, {
+                    signal: port.signal ?? new AbortController().signal,
+                    execute: async (toolName, args) =>
+                      (await port.execute(toolName, args)) as unknown,
+                  }),
+              },
+            },
+          })
+        : rehydrateHarness(planToHarnessConfig(ctx.plan, { guardActive: false }));
 
-      // Build history with collected approval responses
+      // Build history with collected approval responses — the AI SDK replay
+      // only; the Pi harness consumes the RAW paused history (its projection
+      // refuses approval parts) and pairs the decisions itself.
       const responses = Array.from(session.collectedApprovalResponses.values());
-      let streamHistory = cloneModelMessages(session.history ?? []);
-      if (responses.length > 0) {
+      let streamHistory = resumesOnPi
+        ? cloneModelMessages(session.history ?? [])
+        : cloneModelMessages(session.history ?? []);
+      if (!resumesOnPi && responses.length > 0) {
         streamHistory = appendApprovalResponsesToHistory(
           streamHistory,
           responses.map(r => ({
