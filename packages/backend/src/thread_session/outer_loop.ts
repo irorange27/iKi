@@ -11,7 +11,7 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_
 import { createApprovalRecoveryContext, reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
 import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
-import { MODEL_TEXT_COMMITTED, recordSessionEvents, SESSION_EVENT_VERSION } from './session_log';
+import { MODEL_TEXT_COMMITTED, recordSessionEvents, SESSION_EVENT_VERSION, SessionLogCommitError } from './session_log';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
@@ -117,6 +117,17 @@ const MAX_HANDOFF_CHAIN = 5;
  */
 const TEXT_COMMIT_INTERVAL_MS = 250;
 
+export const runFailureFromError = (error: unknown, message: string) => ({
+  message,
+  ...(error instanceof SessionLogCommitError
+    ? {
+        code: 'SESSION_LOG_COMMIT_FAILED',
+        retryable: false,
+        ...(error.generatedText ? { text: error.generatedText } : {}),
+      }
+    : {}),
+});
+
 /**
  * The authoritative terminal-outcome mapping: one place decides what each
  * OuterLoopStreamResult outcome means for the run row. Every entry that runs
@@ -214,10 +225,8 @@ const runOuterLoop = async (
     if (!pendingText) return;
     const text = pendingText;
     lastTextFlushAt = Date.now();
-    // The gate decides on the ACTUAL write result (rereview G1): a failed or
-    // conflict-lost append leaves the buffer intact for the next flush —
-    // uncommitted text must not reach the subscriber, and clearing the
-    // buffer would not make it committed.
+    // A failed commit ends execution; an unpublished buffer cannot survive
+    // a successful turn's teardown.
     const committed = recordSessionEvents(threadId, [
       {
         type: MODEL_TEXT_COMMITTED,
@@ -230,7 +239,7 @@ const runOuterLoop = async (
         },
       },
     ]);
-    if (!committed) return;
+    if (!committed) throw new SessionLogCommitError(text, previewText);
     pendingText = '';
     pendingTextSeq += 1;
     uiChunkEmitter.emitTextDelta(text);
@@ -620,10 +629,6 @@ const runOuterLoop = async (
       state.streamPrompt = plan.autonomous?.continuePrompt || 'Continue with the next step.';
     }
 
-    // Segment boundary: the turn's final buffered text commits before the
-    // result (and any settle persistence) is produced.
-    flushCommittedText();
-
     if (streamResult?.outcome === 'continuing') {
       streamResult = { ...streamResult, outcome: 'budget-exhausted' };
     }
@@ -633,11 +638,11 @@ const runOuterLoop = async (
     // text still buffered. Flushing keeps the invariant on the failure path:
     // whatever gets published around the error was committed first, and the
     // log covers the subscriber's final view.
-    flushCommittedText();
     if (previewDebounceTimer) {
       clearTimeout(previewDebounceTimer);
       previewDebounceTimer = null;
     }
+    flushCommittedText();
   }
 };
 

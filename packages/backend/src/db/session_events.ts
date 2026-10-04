@@ -29,12 +29,25 @@ type SessionEventRow = {
   created_at: string;
 };
 
-export const getSessionEvents = (threadId: string): StoredSessionEvent[] => {
+export const getSessionEvents = (
+  threadId: string,
+  types?: readonly string[],
+  match?: {
+    path: string;
+    value: string;
+  }
+): StoredSessionEvent[] => {
+  const typeFilter = types?.length ? ` AND type IN (${types.map(() => '?').join(', ')})` : '';
+  const payloadFilter = match ? ' AND json_extract(payload, ?) = ?' : '';
   const rows = getDb()
     .prepare(
-      'SELECT revision, type, version, payload, created_at FROM session_events WHERE thread_id = ? ORDER BY revision ASC'
+      `SELECT revision, type, version, payload, created_at FROM session_events WHERE thread_id = ?${typeFilter}${payloadFilter} ORDER BY revision ASC`
     )
-    .all(threadId) as SessionEventRow[];
+    .all(
+      threadId,
+      ...(types ?? []),
+      ...(match ? [match.path, match.value] : [])
+    ) as SessionEventRow[];
   return rows.map(row => ({
     revision: row.revision,
     type: row.type,
@@ -70,9 +83,9 @@ export type NewSessionEvent = {
  * transaction. Returns the new head revision, or null when another writer
  * moved the stream first — nothing is written on conflict.
  */
-export const appendSessionEvents = (
+const append = (
   threadId: string,
-  expectedRevision: number,
+  expectedRevision: number | null,
   events: NewSessionEvent[]
 ): number | null => {
   if (events.length === 0) return getSessionEventRevision(threadId);
@@ -85,7 +98,7 @@ export const appendSessionEvents = (
 
   const transaction = db.transaction((): number | null => {
     const current = getSessionEventRevision(threadId);
-    if (current !== expectedRevision) return null;
+    if (expectedRevision !== null && current !== expectedRevision) return null;
     let revision = current;
     for (const event of events) {
       revision += 1;
@@ -96,3 +109,14 @@ export const appendSessionEvents = (
 
   return transaction();
 };
+
+export const appendSessionEvents = (
+  threadId: string,
+  expectedRevision: number,
+  events: NewSessionEvent[]
+) => append(threadId, expectedRevision, events);
+
+/** Observations already happened: append at the current head atomically.
+ * Only decisions derived from a read snapshot need expected-revision CAS. */
+export const appendSessionFacts = (threadId: string, events: NewSessionEvent[]): number =>
+  append(threadId, null, events)!;

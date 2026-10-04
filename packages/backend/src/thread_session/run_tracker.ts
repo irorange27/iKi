@@ -76,7 +76,7 @@ type BlockRunParams = FinalizeRunParams & {
   pendingApprovalIds?: string[];
 };
 
-type FailRunParams = AgentRunError;
+type FailRunParams = AgentRunError & Pick<FinalizeRunParams, 'text'>;
 
 const ALLOWED_STATUS_TRANSITIONS: Record<AgentRunStatus, readonly AgentRunStatus[]> = {
   queued: ['running', 'failed', 'cancelled'],
@@ -248,6 +248,19 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
     if (!updated) return null;
     currentRun = updated;
     return step;
+  };
+
+  const failedState = (params: FailRunParams): Pick<AgentRun, 'status' | 'working' | 'error'> => {
+    const { text, ...error } = params;
+    return {
+      status: 'failed',
+      working: {
+        ...currentRun.working,
+        pendingApprovalIds: [],
+        ...(typeof text === 'string' ? { accumulatedText: text } : {}),
+      },
+      error,
+    };
   };
 
   return {
@@ -485,14 +498,7 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
           ...(typeof params.code === 'string' ? { code: params.code } : {}),
           ...(typeof params.retryable === 'boolean' ? { retryable: params.retryable } : {}),
         },
-      }, {
-        status: 'failed',
-        working: {
-          ...currentRun.working,
-          pendingApprovalIds: [],
-        },
-        error: params,
-      });
+      }, failedState(params));
       return currentRun;
     },
     markFailedIfStatus: (expectedStatuses, params) => {
@@ -505,14 +511,7 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
           ...(typeof params.code === 'string' ? { code: params.code } : {}),
           ...(typeof params.retryable === 'boolean' ? { retryable: params.retryable } : {}),
         },
-      }, {
-        status: 'failed',
-        working: {
-          ...currentRun.working,
-          pendingApprovalIds: [],
-        },
-        error: params,
-      }, expectedStatuses);
+      }, failedState(params), expectedStatuses);
       return claimed ? currentRun : null;
     },
     markCancelled: params => {

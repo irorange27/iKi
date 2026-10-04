@@ -230,7 +230,7 @@ describe('streamed text commit gate', () => {
         messages: [{ id: 'msg_commit_3', role: 'user', parts: [{ type: 'text', text: 'probe' }] }],
         tools: [],
       });
-      expect(result).toMatchObject({ success: true });
+      expect(result).toMatchObject({ success: false });
 
       // The invariant is about what the subscriber SAW: nothing may be
       // published that the log does not hold.

@@ -3,14 +3,23 @@ import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 import type { ExecutionPlan } from './execution_plan';
 import {
-  appendSessionEvents,
-  getSessionEventRevision,
+  appendSessionFacts,
   getSessionEvents,
   type NewSessionEvent,
   type StoredSessionEvent,
 } from '@iki/backend/db/session_events';
 
 const logger = createLogger({ module: 'session_log' });
+
+export class SessionLogCommitError extends Error {
+  constructor(
+    readonly unpublishedText: string,
+    readonly generatedText = unpublishedText
+  ) {
+    super('Could not save generated output. The turn was stopped.');
+    this.name = 'SessionLogCommitError';
+  }
+}
 
 /**
  * The Session log's v1 event vocabulary and the turn-fact recorder. Events
@@ -85,36 +94,15 @@ export type ApprovalDecidedPayload = {
   source: 'user' | 'timeout' | 'system';
 };
 
-/**
- * Append facts to a thread's stream. Migration-period behavior: a
- * failing append degrades to a warning and never fails the turn — the legacy
- * tables are still the serving authority until the log takes over. The
- * helper re-reads the stream head at write time (turn recording is a single
- * writer per turn in practice; a lost race only costs these appended facts,
- * which the warn surfaces).
- */
+/** Append observations atomically. Legacy observers may handle false as
+ * degradation; publication and execution boundaries must treat it as failure. */
 export const recordSessionEvents = (
   threadId: string,
   events: NewSessionEvent[]
 ): boolean => {
   if (!threadId || events.length === 0) return true;
   try {
-    const revision = appendSessionEvents(
-      threadId,
-      getSessionEventRevision(threadId),
-      events
-    );
-    if (revision === null) {
-      logger.event({
-        level: 'warn',
-        event: 'session_log.append',
-        outcome: 'degraded',
-        entity: { thread_id: threadId },
-        message: 'Session log append lost the revision race; turn facts were not recorded.',
-        data: { event_types: events.map(event => event.type) },
-      });
-      return false;
-    }
+    appendSessionFacts(threadId, events);
     return true;
   } catch (error) {
     logger.event({
