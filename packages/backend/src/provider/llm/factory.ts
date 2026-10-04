@@ -564,6 +564,47 @@ const supportsPiGeneration = (providerType: string, config: ProviderConfig): boo
   config.baseURL.trim().length > 0;
 
 /**
+ * Per-request admission for the Pi streaming-turn supply (switch item 2c):
+ * the provider predicate AND the projection domain gate in one decision.
+ * The dry-run is the domain test (ADR 007 decision 2) — history carrying
+ * parts outside the projection's covered domain keeps the AI SDK harness,
+ * and coverage widening re-routes automatically. A missing provider config
+ * also returns false: the AI SDK harness's createModel then raises today's
+ * exact error surface.
+ */
+export const supportsPiTurnSupply = (params: {
+  providerType: string;
+  providerId?: string;
+  modelId: string;
+  history: ModelMessage[];
+}): boolean => {
+  let config: ProviderConfig;
+  try {
+    config = getProviderConfig(params.providerType, params.providerId);
+  } catch {
+    return false;
+  }
+  if (!supportsPiGeneration(params.providerType, config)) return false;
+  try {
+    projectHistoryToPiContext(params.history, params.modelId);
+    return true;
+  } catch (error) {
+    factoryLogger.event({
+      level: 'info',
+      outcome: 'degraded',
+      event: 'llm.supply.pi_turn_fallback',
+      message: 'Turn history outside the Pi projection domain — using the AI SDK harness.',
+      data: {
+        providerType: params.providerType,
+        modelId: params.modelId,
+        reason: getErrorMessage(error),
+      },
+    });
+    return false;
+  }
+};
+
+/**
  * Single-shot generation over the Pi supply layer (ADR 007, switch item 1).
  * Text-only: no tools, no inner loop. The transcript is projected by
  * projectHistoryToPiContext; usage maps onto the total-prompt convention
@@ -623,6 +664,15 @@ const generateViaPi = async (
       void _event; // drain: the final message carries text and usage
     }
     const final = await resultPromise;
+    // Pi resolves provider failures into a result message — the event stream
+    // never rejects. The stopReason is the failure surface: swallowing it
+    // would surface a dead upstream as an empty-text success.
+    if (final.stopReason === 'aborted') {
+      throw new DOMException(final.errorMessage || 'Generation aborted', 'AbortError');
+    }
+    if (final.stopReason === 'error') {
+      throw new Error(final.errorMessage || 'Provider returned an error stop reason');
+    }
     const text = final.content
       .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
       .map(block => block.text)
