@@ -1,5 +1,5 @@
 import { createAgentRunTracker } from './run_tracker';
-import { startTurnHarness } from '../agent/harness';
+import { selectTurnHarness } from './turn_supply_selection';
 import { createLogger } from '@iki/backend/logger';
 import * as llmFactory from '../provider/llm/factory';
 import { getStreamErrorMessage } from '@iki/backend/utils/errors';
@@ -180,7 +180,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        const harness = startTurnHarness(planToHarnessConfig(plan));
+        // Same supply selection as streaming (switch item 3b): a send is a
+        // waiter on the same turn driver, so the same gate applies.
+        const harness = selectTurnHarness(plan, preparedTurn.history);
 
         // ponytail: clear stale todo plan from previous turn
         writeThreadTodoPlan({ threadId: options.threadId, items: [] });

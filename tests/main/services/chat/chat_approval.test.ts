@@ -49,6 +49,9 @@ vi.mock('@iki/backend/tools', () => ({
 
 vi.mock('@iki/backend/provider/llm/factory', () => ({
   resolveModelCapability: vi.fn(async () => null),
+  // Supply selection (switch item 3b): approval-resume tests exercise the
+  // AI SDK harness — the Pi supply never admits these plans.
+  supportsPiTurnSupply: vi.fn(() => false),
 }));
 
 vi.mock('@iki/backend/message/ui_messages', () => ({

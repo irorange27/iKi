@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
 import type { ModelMessage, ToolResultPart } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
 import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
+import type { ToolApprovalRequest } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { withRetry } from '@iki/backend/utils/retry';
 import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
@@ -16,9 +18,12 @@ import {
 import { TERMINAL_TOOL_NAMES } from './simple_agent_runner';
 import {
   runPiAgentLoop,
+  toolResultIsError as toolExecutionIsError,
+  toolResultText as toolExecutionText,
   type PiLoopDelta,
   type PiLoopEvent,
   type PiLoopModelCall,
+  type PiLoopTool,
   type PiUsageBuckets,
 } from './pi_agent_loop';
 import { preparePiTurnHistory } from './pi_turn_budget';
@@ -38,14 +43,14 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  * The tool-enabled streaming turn harness over the Pi supply layer — switch
  * item 3a (issue #114), the production wiring of the candidate loop.
  *
- * Routing contract (session_loop): `plan.enableTools &&
- * plan.approvalPolicy === 'never' && !autonomous && supportsPiTurnSupply`.
- * The harness ENFORCES its half of that gate: a config whose approval policy
- * is not 'never' is refused at turn start, because the pause/resume redesign
- * (3b) is not wired — under 'never' the resolver's call-time approval
- * function returns false unconditionally, so the loop's awaiting-approval
- * branch is unreachable by construction and this harness projects
- * `needsApproval: false` for every tool.
+ * Routing (thread_session/turn_supply_selection.ts): `plan.enableTools &&
+ * !autonomous && supportsPiTurnSupply` — every approval policy served.
+ * Approval semantics: the resolver's per-call decision rides the loop tool
+ * (evaluated before any effect); the needing calls are reported as the
+ * standard approval_request step + requiresApproval done — persistence stays
+ * with the driver's registerApprovalBatch. Resume executes the decided calls
+ * through the injected five-state owner port (admitted by the approval
+ * module before the legacy consume), then continues the loop.
  *
  * Contract parity with the AI SDK runner for the tool subset:
  * - tools resolved by the same owner (`resolveTools`) with the same per-step
@@ -66,8 +71,8 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  * - history stays ModelMessage-shaped end to end (thinking → reasoning
  *   parts, tool results as tool messages); getHistory returns a clone;
  * - the input budget runs once at turn start through the shared
- *   preparePiTurnHistory (per-step re-compaction is a tracked 3b item; the
- *   step count bounds 3a turns);
+ *   preparePiTurnHistory (per-step re-compaction inside a multi-step loop
+ *   remains tracked for 3c);
  * - an empty response with no tool calls is a RefusalError; aborts throw
  *   DOMException('AbortError'); provider errors throw after the retry
  *   budget — the driver's cancel/steer/failure classification keys off the
@@ -258,32 +263,40 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
   );
 };
 
-/** Inline execution parity with the AI SDK adapter: runtime context bound
- * (thread, abort signal, available tools — the turn's workspace snapshot
- * rides the driver's context), structured-clone args, the tool's own retry
- * config honored. Results land in the canonical ToolResultOutput
- * vocabulary; unknown tool names become error results, never throws. */
-const defaultPiToolExecutor = (tools: AgentTool[], config: HarnessConfig) => {
+/** The raw tool invocation (handler + clone + retry + context binding) —
+ * returns the handler's RAW value; the callers wrap it into their own result
+ * vocabulary. Unknown tool names throw here; the wrappers convert. */
+const createRawToolRunner = (tools: AgentTool[], config: HarnessConfig) => {
   const byName = new Map(tools.map(tool => [tool.name, tool]));
-  return async (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal): Promise<ToolResultOutput> => {
-    const tool = byName.get(call.name);
+  return async (toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> => {
+    const tool = byName.get(toolName);
     if (!tool) {
-      return { type: 'error-text', value: `Unknown tool "${call.name}".` };
+      throw new Error(`Unknown tool "${toolName}".`);
     }
+    return runWithToolRuntimeContext(
+      {
+        ...getToolRuntimeContext(),
+        ...(config.threadId ? { threadId: config.threadId } : {}),
+        abortSignal: signal,
+        availableTools: tools,
+        availableSkillIds: config.availableSkillIds,
+      },
+      async () => {
+        const invoke = () => tool.handler(structuredClone(args));
+        return tool.retry ? withRetry(invoke, tool.retry)() : invoke();
+      }
+    );
+  };
+};
+
+/** Inline execution parity with the AI SDK adapter: results land in the
+ * canonical ToolResultOutput vocabulary; unknown tool names become error
+ * results, never throws. */
+const defaultPiToolExecutor = (tools: AgentTool[], config: HarnessConfig) => {
+  const runRaw = createRawToolRunner(tools, config);
+  return async (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal): Promise<ToolResultOutput> => {
     try {
-      const value = await runWithToolRuntimeContext(
-        {
-          ...getToolRuntimeContext(),
-          ...(config.threadId ? { threadId: config.threadId } : {}),
-          abortSignal: signal,
-          availableTools: tools,
-          availableSkillIds: config.availableSkillIds,
-        },
-        async () => {
-          const invoke = () => tool.handler(structuredClone(call.arguments));
-          return tool.retry ? withRetry(invoke, tool.retry)() : invoke();
-        }
-      );
+      const value = await runRaw(call.name, call.arguments, signal);
       return typeof value === 'string'
         ? { type: 'text', value }
         : { type: 'json', value: JSON.parse(JSON.stringify(value ?? null)) };
@@ -292,6 +305,17 @@ const defaultPiToolExecutor = (tools: AgentTool[], config: HarnessConfig) => {
     }
   };
 };
+
+/** Structural mirror of the approval owner's outcome — thread_session owns
+ * the shape; this module must not import it (agent-below-session). The
+ * completed result is the canonical tool-result record. */
+export type ToolExecutionOutcome =
+  | { kind: 'pending' | 'unknown' | 'busy' }
+  | {
+      kind: 'completed';
+      reused: boolean;
+      result: { type: 'tool-result'; toolCallId: string; toolName: string; output: unknown };
+    };
 
 /** Tool result output in the canonical ToolResultOutput vocabulary. */
 type ToolResultOutput =
@@ -303,23 +327,46 @@ export class PiToolTurnHarness {
   private readonly config: HarnessConfig;
   private readonly modelCall: PiToolModelCall;
   private readonly executorOverride?: (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal) => Promise<unknown>;
+  private readonly resume?: {
+    commands: Array<{ approvalId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }>;
+    owner: {
+      prepare: (address: { threadId: string; approvalId: string }) => void;
+      executeApproved: (
+        address: { threadId: string; approvalId: string },
+        port: { signal?: AbortSignal; execute: (toolName: string, args: unknown) => Promise<unknown> }
+      ) => Promise<ToolExecutionOutcome>;
+    };
+  };
   private history: ModelMessage[] = [];
 
   constructor(
     config: HarnessConfig,
     deps?: {
       modelCall?: PiToolModelCall;
+      /** Intercepts MODEL-driven tool calls after the resume block. Owner-
+       * executed resume calls (the five-state port) run RAW and do NOT pass
+       * through this — record them at the owner port instead. */
       executeTool?: (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal) => Promise<unknown>;
+      /** Resume mode (switch item 3b): the decided calls of a paused turn,
+       * read back from the approval rows, and the five-state owner port.
+       * The thread_session construction site injects the owner — this module
+       * must not import it (agent-below-session). */
+      resume?: {
+        commands: Array<{ approvalId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }>;
+        owner: {
+          prepare: (address: { threadId: string; approvalId: string }) => void;
+          executeApproved: (
+            address: { threadId: string; approvalId: string },
+            port: { signal?: AbortSignal; execute: (toolName: string, args: unknown) => Promise<unknown> }
+          ) => Promise<ToolExecutionOutcome>;
+        };
+      };
     }
   ) {
-    if (config.approvalPolicy !== 'never') {
-      throw new Error(
-        'PiToolTurnHarness serves only the never-approve policy; other policies wait for the approval-resume slice.'
-      );
-    }
     this.config = config;
     this.modelCall = deps?.modelCall ?? defaultPiToolModelCall;
     this.executorOverride = deps?.executeTool;
+    this.resume = deps?.resume;
   }
 
   async *turn(input: TurnInput): AsyncGenerator<TurnEvent, void> {
@@ -343,6 +390,24 @@ export class PiToolTurnHarness {
     const piTools = tools.length
       ? projectToolsToPiTools(tools.map(tool => ({ name: tool.name, description: tool.description, parameters: tool.parameters })))
       : undefined;
+    // Per-call approval decision: the resolver's function (policy box state
+    // in its closure) rides the loop tool; the loop evaluates it before any
+    // effect. Booleans pass through.
+    const loopTools: PiLoopTool[] | undefined = piTools?.map(piTool => {
+      const agentTool = tools.find(candidate => candidate.name === piTool.name);
+      return {
+        ...piTool,
+        needsApproval:
+          typeof agentTool?.needsApproval === 'function'
+            ? (input: unknown, context: { toolCallId: string; messages: PiMessage[] }) => {
+                const decide = agentTool.needsApproval;
+                return Boolean(
+                  typeof decide === 'function' ? decide(input, context) : decide === true
+                );
+              }
+            : agentTool?.needsApproval === true,
+      };
+    });
     const toolSchemaTokens = tools.length ? estimateToolSchemaTokens(tools) : undefined;
 
     this.history = this.buildTurnHistory(input.history, input.prompt);
@@ -390,12 +455,99 @@ export class PiToolTurnHarness {
     const executor =
       this.executorOverride ?? defaultPiToolExecutor(tools, this.config);
 
+    // Resume mode (switch item 3b): execute the decided calls of the paused
+    // turn through the five-state owner FIRST — approved calls run exactly
+    // once (crash-safe, owner-adjudicated), rejections produce the canonical
+    // execution-denied result — then continue the loop with the empty
+    // prompt. The owner outcomes that cannot occur under full-batch
+    // decisions (pending) or signal cross-process conflicts (unknown, busy)
+    // fail loudly instead of inventing a result.
+    if (this.resume && this.resume.commands.length > 0) {
+      if (!this.config.threadId) {
+        throw new Error("Resuming an approval requires the paused turn thread id.");
+      }
+      for (const command of this.resume.commands) {
+        const address = { threadId: this.config.threadId, approvalId: command.approvalId };
+        yield {
+          event: 'step',
+          step: {
+            type: 'tool_execution_start',
+            toolCallId: command.toolCallId,
+            toolName: command.toolName,
+            input: command.args,
+          },
+        };
+        this.resume.owner.prepare(address);
+        // The owner requires a signal — supply a fresh controller when the
+        // turn carries none.
+        const ownerSignal = signal ?? new AbortController().signal;
+        // The owner's port contract expects the RAW handler value — the
+        // owner applies the canonical result wrapping itself.
+        const runRaw = createRawToolRunner(tools, this.config);
+        const outcome = await this.resume.owner.executeApproved(address, {
+          signal: ownerSignal,
+          execute: (toolName, args) =>
+            runRaw(toolName, args as Record<string, unknown>, ownerSignal),
+        });
+        if (outcome.kind !== 'completed') {
+          throw new Error(
+            `Approved tool "${command.toolName}" could not be executed (${outcome.kind}); the turn cannot continue honestly.`
+          );
+        }
+        toolCallsCount += 1;
+        const output = outcome.result.output as ToolResultPart['output'];
+        const isError = toolExecutionIsError(output);
+        toolCallResults.push({
+          toolName: outcome.result.toolName,
+          args: command.args,
+          result: output,
+        });
+        yield {
+          event: 'step',
+          step: {
+            type: 'tool_execution_end',
+            toolCallId: outcome.result.toolCallId,
+            outcome: isError ? ('error' as const) : ('success' as const),
+            output,
+            ...(isError ? { error: toolOutputText(output) } : {}),
+          },
+        };
+        // Mirror and transcript: same appends the loop would make.
+        this.history = [
+          ...this.history,
+          {
+            role: 'tool',
+            content: [{ type: 'tool-result', toolCallId: outcome.result.toolCallId, toolName: outcome.result.toolName, output }],
+          },
+        ];
+        transcript.push({
+          role: 'toolResult',
+          toolCallId: outcome.result.toolCallId,
+          toolName: outcome.result.toolName,
+          content: [{ type: 'text', text: toolExecutionText(output) }],
+          isError,
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    // Pause-side reporting: the harness allocates approvalIds and records
+    // the needing calls; PERSISTENCE stays with the driver's
+    // registerApprovalBatch (done handling) — the harness only reports.
+    const pendingApprovalRequests: ToolApprovalRequest[] = [];
     const iterator = runPiAgentLoop({
       systemPrompt,
       messages: transcript,
-      ...(piTools ? { tools: piTools } : {}),
+      ...(loopTools ? { tools: loopTools } : {}),
       maxSteps: this.config.maxIterations,
       terminalToolNames: TERMINAL_TOOL_NAMES,
+      requestApproval: async call => {
+        pendingApprovalRequests.push({
+          approvalId: randomUUID(),
+          toolCallId: call.id,
+          toolCall: { toolName: call.name, args: call.arguments },
+        });
+      },
       callModel: (context: { systemPrompt: string; messages: PiMessage[]; tools?: unknown }) => {
         // Snapshot at call time = exactly what this step sends: the mirror
         // plus any recovery note that has not been flushed into it yet.
@@ -494,7 +646,7 @@ export class PiToolTurnHarness {
           };
         }
       } else {
-        const isError = toolOutputIsError(event.output);
+        const isError = toolExecutionIsError(event.output);
         toolCallResults.push({
           toolName: event.call.name,
           args: event.call.arguments,
@@ -555,11 +707,9 @@ export class PiToolTurnHarness {
       steps: outcome.steps.length,
     };
 
-    if (outcome.status === 'awaiting-approval') {
-      // Unreachable under the never-approve gate (the resolver's call-time
-      // function returns false unconditionally and no approval surface is
-      // wired). Fail loudly rather than pretend.
-      throw new Error('Pi tool turn reached the approval pause with no approval surface wired.');
+    const awaitingApproval = outcome.status === 'awaiting-approval';
+    if (awaitingApproval && pendingApprovalRequests.length === 0) {
+      throw new Error('Pi tool turn paused for approval without any recorded approval request.');
     }
     if (
       outcome.status === 'completed' &&
@@ -576,6 +726,14 @@ export class PiToolTurnHarness {
       event: 'step',
       step: { type: 'turn_end', outcome: 'completed', text, usage },
     };
+    if (awaitingApproval) {
+      // The driver's done branch persists the batch (registerApprovalBatch)
+      // and ends the turn awaiting-approval — the harness only reports.
+      yield {
+        event: 'step',
+        step: { type: 'approval_request', requests: pendingApprovalRequests },
+      };
+    }
     const output: TurnOutput = {
       text,
       usage,
@@ -586,9 +744,10 @@ export class PiToolTurnHarness {
         : {}),
       perf,
       ...(toolSchemaTokens ? { toolSchemaTokens } : {}),
-      requiresApproval: false,
-      finishReason,
+      requiresApproval: awaitingApproval,
+      finishReason: awaitingApproval ? undefined : finishReason,
       ...(toolCallResults.length > 0 ? { toolCalls: toolCallResults } : {}),
+      ...(awaitingApproval ? { toolApprovalRequests: pendingApprovalRequests } : {}),
     };
     yield { event: 'done', output };
   }
@@ -626,7 +785,14 @@ const toolOutputIsError = (output: unknown): boolean =>
     (output as { type: string }).type === 'error-json' ||
     (output as { type: string }).type === 'execution-denied');
 
-const toolOutputText = (output: unknown): string =>
-  output !== null && typeof output === 'object' && 'value' in output
+const toolOutputText = (output: unknown): string => {
+  if (output !== null && typeof output === 'object' && 'type' in output) {
+    const o = output as { type: string; value?: unknown; reason?: unknown };
+    if (o.type === 'execution-denied') {
+      return typeof o.reason === 'string' ? o.reason : 'Tool execution was denied';
+    }
+  }
+  return output !== null && typeof output === 'object' && 'value' in output
     ? String((output as { value: unknown }).value)
     : 'Tool execution failed';
+};

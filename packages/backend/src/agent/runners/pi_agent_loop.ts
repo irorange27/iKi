@@ -44,10 +44,13 @@ import type { AssistantMessage, Message as PiMessage, Tool as PiTool, ToolCall }
  */
 
 export type PiLoopTool = PiTool & {
-  /** Tools flagged true pause the loop before their effect: the injected
-   * approval surface registers the call with the approval owner and the
-   * turn ends awaiting-approval (the resume is a new loop run). */
-  needsApproval?: boolean;
+  /** Whether a call to this tool pauses the loop before its effect: the
+   * injected approval surface registers the call with the approval owner and
+   * the turn ends awaiting-approval (the resume is a new loop run). A
+   * FUNCTION is evaluated per call — the resolver's per-call policy decision
+   * (the policy box state lives in its closure); a boolean applies to every
+   * call. */
+  needsApproval?: boolean | ((input: unknown, context: { toolCallId: string; messages: PiMessage[] }) => boolean | Promise<boolean>);
 };
 
 export type PiLoopToolCall = {
@@ -241,16 +244,43 @@ export const runPiAgentLoop = async function* (
       return { status: 'completed', finalText: text, steps, usage, pendingToolCalls: [] };
     }
 
-    // Approval pause BEFORE any effect: if any call in the step requires
-    // approval, register the needing ones with the approval surface and end
-    // the turn awaiting-approval — nothing executes, and the resume is a new
-    // loop run over the recovered history (the approval owner decides).
-    const needingApproval = toolCalls.filter(call =>
-      params.tools?.find(tool => tool.name === call.name)?.needsApproval === true
-    );
+    // Approval pause BEFORE the needing calls' effects: the needing calls
+    // are decided PER CALL (the resolver's function, evaluated with the
+    // current step's policy snapshot). The step's NON-needing calls EXECUTE
+    // first — the AI SDK path runs them and leaves only the needing ones
+    // pending; a step mixing both is the ordinary askRisky case. The
+    // assistant message is pushed ONCE before any effect (providers reject a
+    // tool_calls message answered piecemeal), and the free calls' results
+    // ride the transcript so the resumed request stays wire-valid.
+    const needingApproval: PiLoopToolCall[] = [];
+    for (const call of toolCalls) {
+      const tool = params.tools?.find(candidate => candidate.name === call.name);
+      if (!tool?.needsApproval) continue;
+      const needed =
+        typeof tool.needsApproval === 'function'
+          ? await tool.needsApproval(call.arguments, { toolCallId: call.id, messages })
+          : tool.needsApproval === true;
+      if (needed) needingApproval.push(call);
+    }
+    messages.push(final);
     if (needingApproval.length > 0) {
       if (!requestApproval) {
         throw new Error('Tool requires approval but the loop has no approval surface.');
+      }
+      for (const call of toolCalls) {
+        if (needingApproval.includes(call)) continue;
+        signal?.throwIfAborted();
+        yield { type: PiLoopEventType.ToolStart, call };
+        const output = await executeTool({ ...call, arguments: structuredClone(call.arguments) });
+        yield { type: PiLoopEventType.ToolEnd, call, output };
+        messages.push({
+          role: 'toolResult',
+          toolCallId: call.id,
+          toolName: call.name,
+          content: [{ type: 'text', text: toolResultText(output) }],
+          isError: toolResultIsError(output),
+          timestamp: Date.now(),
+        });
       }
       for (const call of needingApproval) await requestApproval(call);
       return {
@@ -264,10 +294,7 @@ export const runPiAgentLoop = async function* (
 
     // Tools in ANY step execute — including the last (harness semantics).
     // The results ride the transcript; the budget decides whether another
-    // model call follows. The assistant message is pushed ONCE before the
-    // effects: pushing it per call would duplicate it in the transcript and
-    // providers reject a tool_calls message answered piecemeal.
-    messages.push(final);
+    // model call follows.
     for (const call of toolCalls) {
       signal?.throwIfAborted();
       yield { type: PiLoopEventType.ToolStart, call };
@@ -308,8 +335,9 @@ export const runPiAgentLoop = async function* (
 };
 
 /** The transcript text for one tool result output — the documented protocol
- * (a JSON tool result is read by the model as text). */
-const toolResultText = (output: unknown): string => {
+ * (a JSON tool result is read by the model as text). Exported for the resume
+ * path, which appends owner-produced results to the same transcript shape. */
+export const toolResultText = (output: unknown): string => {
   if (output === null || typeof output !== 'object' || !('type' in output)) {
     return JSON.stringify(output ?? null);
   }
@@ -327,7 +355,7 @@ const toolResultText = (output: unknown): string => {
   }
 };
 
-const toolResultIsError = (output: unknown): boolean => {
+export const toolResultIsError = (output: unknown): boolean => {
   if (output === null || typeof output !== 'object' || !('type' in output)) return false;
   const t = (output as { type: string }).type;
   return t === 'error-text' || t === 'error-json' || t === 'execution-denied';
