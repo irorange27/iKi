@@ -8,7 +8,7 @@
  * gate the routing relies on. Model call and executor are scripted doubles.
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AssistantMessage } from '@earendil-works/pi-ai';
+import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 import type { ModelMessage } from 'ai';
 import { z } from 'zod';
 
@@ -35,7 +35,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-import { createAssistantMessageEventStream, type AssistantMessage, type AssistantMessageEvent } from '@earendil-works/pi-ai';
+import { createAssistantMessageEventStream, type AssistantMessageEvent } from '@earendil-works/pi-ai';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import {
   PiToolTurnHarness,
@@ -69,11 +69,11 @@ const finalMessage = (overrides: Partial<AssistantMessage> = {}): AssistantMessa
 });
 
 const textBlock = (text: string) => ({ type: 'text' as const, text });
-const toolCallBlock = (id: string, name: string, args: Record<string, unknown>) => ({
+const toolCallBlock = (id: string, name: string, args: Record<string, unknown>): ToolCall => ({
   type: 'toolCall' as const,
   id,
   name,
-  arguments: args,
+  arguments: args as ToolCall['arguments'],
 });
 
 type CapturedRequest = {
@@ -119,7 +119,7 @@ const scriptedModelCall = (
       })(),
       final: stream.result(),
     };
-  }) as PiToolModelCall & { requests: CapturedRequest[] };
+  }) as unknown as PiToolModelCall & { requests: CapturedRequest[] };
   (call as unknown as { requests: CapturedRequest[] }).requests = requests;
   return call;
 };
