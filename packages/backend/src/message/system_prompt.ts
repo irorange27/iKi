@@ -9,10 +9,11 @@
  * Content stays with its owners; this module owns ONLY the assembly
  * contract:
  * - `persona` — the persona text (identity, date/timezone, OS, cwd),
- *   owned by `message/personality.ts` and fetched by callers through the
- *   factory's `resolvePersonaPrompt`;
+ *   owned by `src/persona.ts` and fetched by callers through the factory's
+ *   `resolvePersonaPrompt`;
  * - `planPrompt` — the execution plan's system prompt (mode prompt +
- *   personality), owned by `thread_session/execution_plan.ts`;
+ *   personality style, the latter owned by `message/personality.ts`),
+ *   assembled by `thread_session/execution_plan.ts`;
  * - `extraPrompt` — a per-call extra prompt (aux/single-shot callers);
  * - `transcriptSystem` — system message(s) carried in the prepared history.
  *   The AI SDK path folds every one of them into the system prompt; the Pi

@@ -545,10 +545,10 @@ export const disposeLanguageModel = (model: LanguageModel): void => {
 };
 
 /** The persona SECTION of a request system prompt — named for exactly what
- * it returns: identity, date/timezone, OS, cwd (text owned by
- * message/personality.ts). The provider lookup doubles as an existence
- * check, so this throws for an unconfigured provider. Placement and joining
- * are message/system_prompt.ts's contract (`assembleRequestSystemPrompt`). */
+ * it returns: identity, date/timezone, OS, cwd (text owned by src/persona.ts).
+ * The provider lookup doubles as an existence check, so this throws for an
+ * unconfigured provider. Placement and joining are
+ * message/system_prompt.ts's contract (`assembleRequestSystemPrompt`). */
 export const resolvePersonaPrompt = (providerType: string, providerId?: string | null) => {
   getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();
