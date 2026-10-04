@@ -263,6 +263,46 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(server.countRequests('read the tool probe file')).toBe(2);
   }, 30000);
 
+  it('ends the turn as a handoff when the model calls the handoff tool (stopWhen parity)', async () => {
+    server.setScriptSequence('hand the task over', [
+      {
+        chunks: [
+          sse.toolCallDelta('call_h', 'handoff', '{"summary":"done enough","next_steps":"rest","reason":"other"}'),
+          sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
+        ],
+      },
+    ]);
+
+    const target = { id: 803, send: vi.fn() };
+    const streaming = buildStreaming();
+
+    const result = await streaming.stream(target, {
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_tool_stream',
+      model: 'pi-model',
+      threadId: 'thread_pi_tool_stream',
+      approvalPolicy: 'never',
+      messages: [
+        { id: 'msg_pi_handoff', role: 'user', parts: [{ type: 'text', text: 'hand the task over' }] },
+      ],
+      tools: [TOOL_NAME],
+    });
+    expect(result).toMatchObject({ success: true });
+
+    // stopWhen parity: the turn ENDS at the handoff step — no second model
+    // call happens even though the step budget would allow one.
+    expect(server.countRequests('hand the task over')).toBe(1);
+    expect(lastRunStatus(target)).toBe('completed');
+
+    // The driver projects its own handoff event from the executed call.
+    const handoffEvents = chunksOf(target, 'tool-input-available').filter(
+      chunk => (chunk as { toolName?: string }).toolName === 'handoff'
+    );
+    expect(handoffEvents[0]).toMatchObject({
+      input: expect.objectContaining({ summary: 'done enough' }),
+    });
+  }, 30000);
+
   it('keeps openai providers on the AI SDK harness under the same never policy', async () => {
     createModelMock.mockReturnValue(
       new FauxModelProvider([

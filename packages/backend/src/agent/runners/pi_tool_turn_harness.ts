@@ -13,6 +13,7 @@ import {
   projectHistoryToPiContext,
   projectToolsToPiTools,
 } from '../../provider/llm/pi_adapter';
+import { TERMINAL_TOOL_NAMES } from './simple_agent_runner';
 import {
   runPiAgentLoop,
   type PiLoopDelta,
@@ -93,6 +94,10 @@ export type PiToolModelCall = (
     tools?: ReturnType<typeof projectToolsToPiTools>;
     signal?: AbortSignal;
     maxTokens?: number;
+    /** Retry recovery notes: the mirror must stay in step with what the
+     * transcript now carries (runner parity — notes persist in history on
+     * success and are flushed before the next assistant entry). */
+    onRecoveryNote?: (noteText: string) => void;
   }
 ) => { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> };
 
@@ -113,12 +118,23 @@ const recoveryNoteFor = (failure: Error): string =>
   '\n\n---\nContinue with the original task.';
 
 /**
- * The production model call: one live-delta stream per attempt with the
- * runner's retry bounds. A queued-buffer decouples the attempt task from
- * the loop's consumption so a retry's deltas keep flowing after the failed
- * attempt's stream ended.
+ * The runner's retry bounds wrapped around one attempt factory: transient
+ * failures and refusals retry (3 retries, shared isRetryableError, exponential
+ * backoff) but only while the failed call streamed nothing — shown text is
+ * never re-shown. Recovery notes join the LIVE transcript (riding every later
+ * step) AND reach `onRecoveryNote` so the caller's ModelMessage mirror stays
+ * in step with what was sent. Terminal failures are CLASSIFIED here: a
+ * content-filter finish reason throws the runner's RefusalError, an aborted
+ * signal throws DOMException('AbortError') — the driver's cancel/steer/failure
+ * classification keys off these. A queued-buffer decouples the attempt task
+ * from the loop's consumption so a retry's deltas keep flowing after the
+ * failed attempt's stream ended.
  */
-const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
+export const withPiRetry = (
+  attempt: () => { stream: AsyncIterable<PiStreamEvent>; final: Promise<AssistantMessage> },
+  request: { messages: PiMessage[]; signal?: AbortSignal },
+  onRecoveryNote?: (noteText: string) => void
+): { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> } => {
   const queue: PiLoopDelta[] = [];
   let notify: (() => void) | undefined;
   let done = false;
@@ -130,26 +146,11 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
 
   const finalPromise = (async () => {
     try {
-      const provider = getProviderConfig(config.providerType, config.providerId);
-      const model = buildPiModel({
-        id: config.model,
-        baseUrl: provider.baseURL,
-        contextWindow: 128000,
-        maxTokens: config.maxOutputTokens ?? 4096,
-      });
-      let attempt = 0;
+      let attemptIndex = 0;
       for (;;) {
-        const stream = callPiChat(
-          model,
-          { systemPrompt: request.systemPrompt, messages: request.messages, tools: request.tools },
-          {
-            apiKey: provider.apiKey,
-            ...(request.signal ? { signal: request.signal } : {}),
-            ...(typeof request.maxTokens === 'number' ? { maxTokens: request.maxTokens } : {}),
-          }
-        );
+        const one = attempt();
         let streamed = false;
-        for await (const event of stream) {
+        for await (const event of one.stream) {
           if (event.type === 'text_delta' && event.delta) {
             streamed = true;
             pushDelta({ type: 'text_delta', delta: event.delta });
@@ -158,7 +159,7 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
             pushDelta({ type: 'thinking_delta', delta: event.delta });
           }
         }
-        const final = await stream.result();
+        const final = await one.final;
         if (final.stopReason === 'error') {
           const failure = CONTENT_FILTER_PATTERN.test(final.errorMessage ?? '')
             ? new RefusalError(
@@ -168,29 +169,39 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
               )
             : new Error(final.errorMessage || 'Provider returned an error stop reason');
           if (
-            attempt < RETRY_MAX_ATTEMPTS &&
+            attemptIndex < RETRY_MAX_ATTEMPTS &&
             !streamed &&
             !request.signal?.aborted &&
             isRetryableError(failure)
           ) {
-            attempt += 1;
-            await sleep(Math.min(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), RETRY_MAX_DELAY_MS));
-            // The recovery note joins the LIVE transcript — it rides every
-            // later step of this turn (runner parity).
-            request.messages.push({
-              role: 'user',
-              content: recoveryNoteFor(failure),
-              timestamp: Date.now(),
-            });
+            attemptIndex += 1;
+            await sleep(Math.min(RETRY_BASE_DELAY_MS * 2 ** (attemptIndex - 1), RETRY_MAX_DELAY_MS));
+            const note = recoveryNoteFor(failure);
+            // The note joins the LIVE transcript and the caller's mirror
+            // signal — it rides every later step of this turn (runner parity).
+            request.messages.push({ role: 'user', content: note, timestamp: Date.now() });
+            onRecoveryNote?.(note);
             logger.event({
               level: 'warn',
               event: 'llm.turn.retry',
               outcome: 'started',
-              message: `Pi tool turn step failed, retrying (attempt ${attempt}/${RETRY_MAX_ATTEMPTS})`,
-              data: { providerType: config.providerType, model: config.model, errorMessage: getErrorMessage(failure) },
+              message: `Pi tool turn step failed, retrying (attempt ${attemptIndex}/${RETRY_MAX_ATTEMPTS})`,
+              data: { errorMessage: getErrorMessage(failure) },
             });
             continue;
           }
+          // Terminal: classify for the driver before handing the failure over.
+          if (request.signal?.aborted) {
+            throw new DOMException(final.errorMessage || 'Run cancelled', 'AbortError');
+          }
+          if (failure instanceof RefusalError) throw failure;
+          logger.event({
+            level: 'error',
+            event: 'llm.turn.failed',
+            outcome: 'failed',
+            message: 'Pi tool turn step failed terminally.',
+            data: { errorMessage: getErrorMessage(failure) },
+          });
         }
         return final;
       }
@@ -215,12 +226,44 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
   return { events, final: finalPromise };
 };
 
+/** One live attempt's delta events (the slice of Pi's stream the loop needs). */
+export type PiStreamEvent = { type: 'text_delta' | 'thinking_delta'; delta: string };
+
+const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
+  const provider = getProviderConfig(config.providerType, config.providerId);
+  const model = buildPiModel({
+    id: config.model,
+    baseUrl: provider.baseURL,
+    contextWindow: 128000,
+    maxTokens: config.maxOutputTokens ?? 4096,
+  });
+  return withPiRetry(
+    () => {
+      const stream = callPiChat(
+        model,
+        { systemPrompt: request.systemPrompt, messages: request.messages, tools: request.tools },
+        {
+          apiKey: provider.apiKey,
+          ...(request.signal ? { signal: request.signal } : {}),
+          ...(typeof request.maxTokens === 'number' ? { maxTokens: request.maxTokens } : {}),
+        }
+      );
+      return {
+        stream: stream as unknown as AsyncIterable<PiStreamEvent>,
+        final: stream.result(),
+      };
+    },
+    request,
+    request.onRecoveryNote
+  );
+};
+
 /** Inline execution parity with the AI SDK adapter: runtime context bound
  * (thread, abort signal, available tools — the turn's workspace snapshot
  * rides the driver's context), structured-clone args, the tool's own retry
  * config honored. Results land in the canonical ToolResultOutput
  * vocabulary; unknown tool names become error results, never throws. */
-const defaultPiToolExecutor = (tools: AgentTool[], threadId?: string) => {
+const defaultPiToolExecutor = (tools: AgentTool[], config: HarnessConfig) => {
   const byName = new Map(tools.map(tool => [tool.name, tool]));
   return async (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal): Promise<ToolResultOutput> => {
     const tool = byName.get(call.name);
@@ -231,9 +274,10 @@ const defaultPiToolExecutor = (tools: AgentTool[], threadId?: string) => {
       const value = await runWithToolRuntimeContext(
         {
           ...getToolRuntimeContext(),
-          ...(threadId ? { threadId } : {}),
+          ...(config.threadId ? { threadId: config.threadId } : {}),
           abortSignal: signal,
           availableTools: tools,
+          availableSkillIds: config.availableSkillIds,
         },
         async () => {
           const invoke = () => tool.handler(structuredClone(call.arguments));
@@ -327,7 +371,10 @@ export class PiToolTurnHarness {
 
     // The loop owns the Pi transcript (it appends assistant/toolResult
     // entries); the harness mirrors every append in ModelMessage shape for
-    // getHistory/onInference — single writer per side, same order.
+    // getHistory/onInference — single writer per side, same order. Retry
+    // notes sit in pendingNotes until the next assistant entry flushes them
+    // (runner parity: notes persist in history on success, never on a turn
+    // that ultimately fails).
     const transcript: PiMessage[] = projected.messages;
     const turnStartedAt = Date.now();
     let firstDeltaMs: number | null = null;
@@ -335,21 +382,24 @@ export class PiToolTurnHarness {
     let llmMs = 0;
     let toolMs = 0;
     let toolCallsCount = 0;
+    let lastStepUsage: AgentUsage | undefined;
+    const pendingNotes: ModelMessage[] = [];
     const toolCallResults: Array<{ toolName: string; args: Record<string, unknown>; result?: unknown }> = [];
     const sentSnapshots: ModelMessage[][] = [];
 
     const executor =
-      this.executorOverride ?? defaultPiToolExecutor(tools, this.config.threadId);
+      this.executorOverride ?? defaultPiToolExecutor(tools, this.config);
 
     const iterator = runPiAgentLoop({
       systemPrompt,
       messages: transcript,
       ...(piTools ? { tools: piTools } : {}),
       maxSteps: this.config.maxIterations,
+      terminalToolNames: TERMINAL_TOOL_NAMES,
       callModel: (context: { systemPrompt: string; messages: PiMessage[]; tools?: unknown }) => {
-        // Snapshot at call time = exactly what this step sends (the mirror
-        // grows afterwards).
-        sentSnapshots.push([...this.history]);
+        // Snapshot at call time = exactly what this step sends: the mirror
+        // plus any recovery note that has not been flushed into it yet.
+        sentSnapshots.push([...this.history, ...pendingNotes]);
         return this.modelCall(this.config, {
           systemPrompt: context.systemPrompt,
           messages: context.messages,
@@ -358,6 +408,9 @@ export class PiToolTurnHarness {
           ...(typeof this.config.maxOutputTokens === 'number'
             ? { maxTokens: this.config.maxOutputTokens }
             : {}),
+          onRecoveryNote: noteText => {
+            pendingNotes.push({ role: 'user', content: noteText });
+          },
         });
       },
       executeTool: async call => {
@@ -390,6 +443,12 @@ export class PiToolTurnHarness {
         const step = event.step;
         // End of one step = start of the next policy snapshot (harness parity).
         advanceApprovalPolicySnapshot(policyBox, this.config.approvalPolicy);
+        // Flushed notes are now part of the stored trajectory (runner parity).
+        if (pendingNotes.length > 0) {
+          this.history = [...this.history, ...pendingNotes];
+          pendingNotes.length = 0;
+        }
+        lastStepUsage = mapBuckets(step.usage);
         // The assistant message joins the mirror ONCE per step: thinking →
         // reasoning parts, text, then tool-call parts (AI SDK vocabulary).
         const assistantParts: Array<
@@ -418,15 +477,22 @@ export class PiToolTurnHarness {
           usage: stepUsage,
         });
       } else if (event.type === 'tool_start') {
-        yield {
-          event: 'step',
-          step: {
-            type: 'tool_execution_start',
-            toolCallId: event.call.id,
-            toolName: event.call.name,
-            input: event.call.arguments,
-          },
-        };
+        // Terminal tools (handoff) stay off the execution-event surface: the
+        // driver projects its own handoff event from the outcome (runner
+        // TERMINAL_TOOL_NAMES parity). NOTE: no `continue` — the loop's
+        // iterator advance is this while-body's last statement, and skipping
+        // it would re-process the same event forever.
+        if (!TERMINAL_TOOL_NAMES.has(event.call.name)) {
+          yield {
+            event: 'step',
+            step: {
+              type: 'tool_execution_start',
+              toolCallId: event.call.id,
+              toolName: event.call.name,
+              input: event.call.arguments,
+            },
+          };
+        }
       } else {
         const isError = toolOutputIsError(event.output);
         toolCallResults.push({
@@ -434,16 +500,31 @@ export class PiToolTurnHarness {
           args: event.call.arguments,
           result: event.output,
         });
-        yield {
-          event: 'step',
-          step: {
-            type: 'tool_execution_end',
-            toolCallId: event.call.id,
-            outcome: isError ? ('error' as const) : ('success' as const),
-            output: event.output,
-            ...(isError ? { error: toolOutputText(event.output) } : {}),
-          },
-        };
+        if (!TERMINAL_TOOL_NAMES.has(event.call.name)) {
+          yield {
+            event: 'step',
+            step: {
+              type: 'tool_execution_end',
+              toolCallId: event.call.id,
+              outcome: isError ? ('error' as const) : ('success' as const),
+              output: event.output,
+              ...(isError ? { error: toolOutputText(event.output) } : {}),
+            },
+          };
+        } else if (event.call.name === 'handoff') {
+          // The runner yields a handoff step for the terminal call — the
+          // driver projects its own handoff UI event from it (parity).
+          const args = event.call.arguments as Record<string, unknown>;
+          yield {
+            event: 'step',
+            step: {
+              type: 'handoff',
+              summary: typeof args.summary === 'string' ? args.summary : '',
+              nextSteps: typeof args.next_steps === 'string' ? args.next_steps : '',
+              reason: typeof args.reason === 'string' ? args.reason : 'other',
+            },
+          };
+        }
         this.history = [
           ...this.history,
           {
@@ -498,7 +579,11 @@ export class PiToolTurnHarness {
     const output: TurnOutput = {
       text,
       usage,
-      ...(usage.inputTokens > 0 ? { lastStepInputTokens: usage.inputTokens } : {}),
+      // The LAST step's billed input — the real context size the model last
+      // saw (the renderer's occupancy signal), not the multi-step sum.
+      ...(lastStepUsage && lastStepUsage.inputTokens > 0
+        ? { lastStepInputTokens: lastStepUsage.inputTokens }
+        : {}),
       perf,
       ...(toolSchemaTokens ? { toolSchemaTokens } : {}),
       requiresApproval: false,

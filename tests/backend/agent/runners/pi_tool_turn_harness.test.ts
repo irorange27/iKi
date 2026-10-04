@@ -39,6 +39,7 @@ import { createAssistantMessageEventStream, type AssistantMessage, type Assistan
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import {
   PiToolTurnHarness,
+  withPiRetry,
   type PiToolModelCall,
 } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import type {
@@ -389,6 +390,98 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(second.messages.map((m: ModelMessage) => m.role)).toEqual(['user', 'assistant', 'tool']);
   });
 
+  it('terminal tools (handoff): executed and carried in toolCalls, but off the execution-event surface', async () => {
+    const modelCall = scriptedModelCall([
+      {
+        content: [toolCallBlock('call_h', 'handoff', { summary: 'handing over', next_steps: 'continue', reason: 'other' })],
+      },
+      { content: [textBlock('NEVER')] },
+    ]);
+    const harness = new PiToolTurnHarness(harnessConfig(), {
+      modelCall,
+      executeTool: async () => ({ type: 'json', value: { summary: 'handing over' } }),
+    });
+
+    const events = await collect(harness, { prompt: 'probe' });
+    const types = stepEvents(events).map(s => s.type);
+    expect(types).toContain('turn_end');
+    expect(types).not.toContain('tool_execution_start');
+    expect(types).not.toContain('tool_execution_end');
+
+    const done = events.at(-1);
+    assert(done && done.event === 'done');
+    // The driver's handoff branch reads the executed call from here.
+    expect(done.output.toolCalls).toEqual([
+      {
+        toolName: 'handoff',
+        args: { summary: 'handing over', next_steps: 'continue', reason: 'other' },
+        result: { type: 'json', value: { summary: 'handing over' } },
+      },
+    ]);
+    expect(modelCall.requests).toHaveLength(1);
+    // The mirror still records the exchange: assistant with the call, then
+    // the tool result (the loop stops right after the terminal step).
+    const history = harness.getHistory();
+    expect(history[1]).toMatchObject({ role: 'assistant' });
+    expect(history.at(-1)).toEqual({
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'call_h',
+          toolName: 'handoff',
+          output: { type: 'json', value: { summary: 'handing over' } },
+        },
+      ],
+    });
+  });
+
+  it('lastStepInputTokens is the final step billed input, not the multi-step sum', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [toolCallBlock('call_s', 'probe_read', { path: '/s.txt' })], usage: { input: 500, output: 10, totalTokens: 510 } },
+      { content: [textBlock('done')], deltas: ['done'], usage: { input: 90, output: 5, cacheRead: 10, totalTokens: 100 } },
+    ]);
+    const harness = new PiToolTurnHarness(harnessConfig(), { modelCall });
+
+    const events = await collect(harness, { prompt: 'probe' });
+    const done = events.at(-1);
+    assert(done && done.event === 'done');
+    // Cumulative usage sums (500+... plus 90+10), but the occupancy signal
+    // is the FINAL request's billed input (90 + 10 cached).
+    expect(done.output.usage.inputTokens).toBe(600);
+    expect(done.output.lastStepInputTokens).toBe(100);
+  });
+
+  it('recovery notes join the mirror before the next assistant entry and ride the sent snapshot', async () => {
+    // Attempt 1 fails transiently; the wrapper retries; the mirror must show
+    // the note between the first exchange and the second assistant entry.
+    // A wrapper-signaled recovery note (mirroring what withPiRetry does on a
+    // retried step): the turn succeeds, and the note must sit between the
+    // user input and the assistant entry in the stored trajectory.
+    const modelCall: PiToolModelCall = (_config, request) => {
+      request.onRecoveryNote?.('note: retrying after 503');
+      return {
+        events: (async function* () {
+          yield { type: 'text_delta' as const, delta: 'recovered' };
+        })(),
+        final: Promise.resolve(finalMessage({ content: [textBlock('recovered')] })),
+      };
+    };
+    const harness = new PiToolTurnHarness(harnessConfig({ enabledToolNames: [] }), { modelCall });
+    const onInference = vi.fn();
+
+    const events = await collect(harness, { prompt: 'probe', onInference });
+    const done = events.at(-1);
+    assert(done && done.event === 'done');
+    expect(done.output.text).toBe('recovered');
+    const history = harness.getHistory();
+    expect(history[1]).toEqual({ role: 'user', content: expect.stringContaining('note: retrying') });
+    expect(history[2]).toMatchObject({ role: 'assistant' });
+    // This single call sent only the user input (the note was signaled
+    // mid-call; a real retried step's note rides the NEXT request).
+    expect(onInference.mock.calls[0][0].messages.map((m: ModelMessage) => m.role)).toEqual(['user']);
+  });
+
   it('enforces the never-approve gate and refuses toolsOverride and pre-aborted signals', async () => {
     expect(() => new PiToolTurnHarness(harnessConfig({ approvalPolicy: undefined }))).toThrow(/never-approve/);
     expect(() => new PiToolTurnHarness(harnessConfig({ approvalPolicy: 'askRisky' }))).toThrow(/never-approve/);
@@ -406,6 +499,91 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const abortError = await drainError(harness, { prompt: 'probe', abortSignal: controller.signal });
     expect((abortError as DOMException).name).toBe('AbortError');
     expect(modelCall.requests).toHaveLength(0);
+  });
+});
+
+describe('withPiRetry (the production wrapper)', () => {
+  const baseRequest = () => ({
+    messages: [{ role: 'user' as const, content: 'go', timestamp: Date.now() }] as never[],
+  });
+
+  const attemptFrom = (steps: Array<{ stopReason?: AssistantMessage['stopReason']; errorMessage?: string; deltas?: string[] }>) => {
+    let n = 0;
+    return () => {
+      const step = steps[Math.min(n, steps.length - 1)];
+      n += 1;
+      return {
+        stream: (async function* () {
+          for (const delta of step.deltas ?? []) yield { type: 'text_delta' as const, delta };
+        })(),
+        final: Promise.resolve(
+          finalMessage({
+            content:
+              step.stopReason === 'error' || step.stopReason === 'aborted' ? [] : [textBlock('ok')],
+            stopReason: step.stopReason ?? 'stop',
+            ...(step.errorMessage ? { errorMessage: step.errorMessage } : {}),
+          })
+        ),
+      };
+    };
+  };
+
+  it('retries a transient failure: retry deltas flow and the note is signaled', async () => {
+    const notes: string[] = [];
+    const request = baseRequest();
+    const { events, final } = withPiRetry(
+      attemptFrom([
+        { stopReason: 'error', errorMessage: 'upstream 503' },
+        { deltas: ['recovered '] },
+      ]),
+      request,
+      note => notes.push(note)
+    );
+    const deltas: string[] = [];
+    for await (const delta of events) deltas.push(delta.delta);
+    const result = await final;
+    expect(deltas.join('')).toBe('recovered ');
+    expect(result.stopReason).toBe('stop');
+    expect(notes).toHaveLength(1);
+    // The note persisted onto the LIVE transcript.
+    expect((request.messages as Array<{ content: string }>)[1].content).toContain('encountered an error');
+  }, 15000);
+
+  it('terminal content-filter failures throw the runner RefusalError', async () => {
+    const { final } = withPiRetry(
+      attemptFrom([{ stopReason: 'error', errorMessage: 'Provider finish_reason: content_filter' }]),
+      baseRequest()
+    );
+    // Refusals ARE retryable (runner parity) — the refusal surfaces only
+    // after the retry budget exhausts.
+    await expect(final).rejects.toBeInstanceOf(RefusalError);
+  }, 15000);
+
+  it('does not retry once the failed call streamed anything', async () => {
+    let attempts = 0;
+    const { events, final } = withPiRetry(
+      () => {
+        attempts += 1;
+        return attemptFrom([{ stopReason: 'error', errorMessage: 'upstream 503', deltas: ['partial'] }])();
+      },
+      baseRequest()
+    );
+    const deltas: string[] = [];
+    for await (const delta of events) deltas.push(delta.delta);
+    const result = await final;
+    expect(attempts).toBe(1);
+    expect(deltas.join('')).toBe('partial');
+    expect(result.stopReason).toBe('error');
+  });
+
+  it('aborted signals surface as AbortError even during the terminal classification', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { final } = withPiRetry(
+      attemptFrom([{ stopReason: 'error', errorMessage: 'Request was aborted' }]),
+      { messages: [] as never[], signal: controller.signal }
+    );
+    await expect(final).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 

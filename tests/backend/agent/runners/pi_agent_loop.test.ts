@@ -300,6 +300,30 @@ describe('pi agent loop — orchestration semantics', () => {
     expect(callModel).not.toHaveBeenCalled();
   });
 
+  it('terminal tools (handoff) execute in their step and then end the turn (stopWhen parity)', async () => {
+    const callModel = scriptedCall([
+      { content: [toolCallBlock('call_h', 'handoff', { summary: 's', next_steps: 'n' })] },
+      { content: [textBlock('NEVER — the loop must stop after the terminal step')] },
+    ]);
+    const executed: string[] = [];
+    const { outcome } = await collectLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'hand off', timestamp: Date.now() }],
+      maxSteps: 4,
+      terminalToolNames: new Set(['handoff']),
+      callModel,
+      executeTool: async call => {
+        executed.push(call.name);
+        return { type: 'json', value: { summary: 's' } };
+      },
+    });
+
+    expect(outcome.status).toBe('completed');
+    expect(executed).toEqual(['handoff']);
+    expect(outcome.steps).toHaveLength(1);
+    expect(outcome.pendingToolCalls).toHaveLength(0);
+  });
+
   it('a mid-stream abort surfaces as AbortError for the driver classification', async () => {
     const callModel = scriptedCall([
       {

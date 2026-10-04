@@ -19,7 +19,9 @@ import type { AssistantMessage, Message as PiMessage, Tool as PiTool, ToolCall }
  *   lives in the approval owner, not here);
  * - usage accumulates in raw Pi buckets — the mapping to iKi's
  *   total-prompt convention is linear, so the caller may map the sum
- *   (projectUsageToIki) or map per step and add.
+ *   (projectUsageToIki) or map per step and add;
+ * - terminal tools (handoff) execute in their step and then end the turn —
+ *   `stopWhen: hasToolCall('handoff')` parity (switch item 3a review).
  *
  * The loop is an ASYNC GENERATOR (switch item 3a, issue #114 — the
  * deliberate contract extension the wiring needed): it yields live events
@@ -173,13 +175,18 @@ export const runPiAgentLoop = async function* (
     messages: PiMessage[];
     tools?: PiLoopTool[];
     maxSteps: number;
+    /** Terminal tools stop the turn after their step executes — the AI SDK
+     * path's `stopWhen: hasToolCall('handoff')` parity. The tool still
+     * executes; no further model call follows. Owned by the runner
+     * (TERMINAL_TOOL_NAMES), passed in by the wiring. */
+    terminalToolNames?: ReadonlySet<string>;
     callModel: PiLoopModelCall;
     executeTool: PiLoopToolExecutor;
     requestApproval?: PiLoopApprovalRequester;
     signal?: AbortSignal;
   }
 ): AsyncGenerator<PiLoopEvent, PiLoopOutcome> {
-  const { callModel, executeTool, requestApproval, signal } = params;
+  const { callModel, executeTool, requestApproval, signal, terminalToolNames } = params;
   const maxSteps = Number.isFinite(params.maxSteps) ? Math.max(1, Math.trunc(params.maxSteps)) : 1;
   const messages: PiMessage[] = params.messages;
   const steps: PiLoopStep[] = [];
@@ -276,6 +283,13 @@ export const runPiAgentLoop = async function* (
         isError: toolResultIsError(output),
         timestamp: Date.now(),
       });
+    }
+
+    // Terminal tools (handoff parity): the step's tools executed; the turn
+    // ends now — no further model call, and budget does not apply (the
+    // driver's handoff branch reads the executed call from the outcome).
+    if (toolCalls.some(call => terminalToolNames?.has(call.name))) {
+      return { status: 'completed', finalText: lastText, steps, usage, pendingToolCalls: [] };
     }
 
     if (index === maxSteps - 1) {
