@@ -13,6 +13,26 @@ export type ThreadWorkspaceSelection = {
   workspace: Workspace | null;
 };
 
+/**
+ * Parse the stored turn-start workspace binding. `undefined` = not recorded
+ * (legacy row) — recovery then resolves fresh as before. `null` = the turn
+ * started with no workspace selected; the resume must rebind that same
+ * "no workspace" world, not the thread's current selection.
+ */
+export const parseStoredWorkspaceSelection = (
+  stored: string | null | undefined
+): ThreadWorkspaceSelection | null | undefined => {
+  if (typeof stored !== 'string' || !stored.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(stored);
+    if (parsed === null) return null;
+    if (typeof parsed !== 'object') return undefined;
+    return parsed as ThreadWorkspaceSelection;
+  } catch {
+    return undefined;
+  }
+};
+
 const THREAD_WORKSPACES_DIR = 'thread-workspaces';
 const BRAIN_DIR = 'brain';
 

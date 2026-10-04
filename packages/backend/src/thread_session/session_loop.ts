@@ -41,7 +41,7 @@ import {
 } from './session_log';
 import type { UiChunkEmitter } from './types';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
-import { createTurnDriver, finalizeRunForOutcome, type TurnDriverHandle } from './outer_loop';
+import { createTurnDriver, finalizeRunForOutcome, runFailureFromError, type TurnDriverHandle } from './outer_loop';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
@@ -542,7 +542,7 @@ export const createChatStreaming = (deps: {
       });
       const activeRunTracker = driver?.getRunTracker();
       if (activeRunTracker?.getRun().status === 'running') {
-        activeRunTracker.markFailed({ message });
+        activeRunTracker.markFailed(runFailureFromError(error, message));
         notifyRunStatus();
       }
       // Session log: a failed turn is a terminal fact even when no assistant

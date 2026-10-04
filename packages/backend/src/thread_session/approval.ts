@@ -23,8 +23,10 @@ import {
   SESSION_EVENT_VERSION,
   type ApprovalDecidedPayload,
 } from './session_log';
-import { createTurnDriver, finalizeRunForOutcome } from './outer_loop';
+import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './outer_loop';
+import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';
 import { deriveRunTurnPlan } from './run_rehydrator';
+export { executeApprovedTool, prepareToolExecution } from './tool_execution';
 import {
   loadPersistedAssistantParts,
   persistAssistantTurnMessage,
@@ -39,26 +41,6 @@ import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
-
-/**
- * Parse the stored turn-start workspace binding. `undefined` = not recorded
- * (legacy row) — recovery then resolves fresh as before. `null` = the turn
- * started with no workspace selected; the resume must rebind that same
- * "no workspace" world, not the thread's current selection.
- */
-const parseStoredWorkspaceSelection = (
-  stored: string | null | undefined
-): import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined => {
-  if (typeof stored !== 'string' || !stored.trim()) return undefined;
-  try {
-    const parsed = JSON.parse(stored);
-    if (parsed === null) return null;
-    if (typeof parsed !== 'object') return undefined;
-    return parsed as import('../workspaces/thread_workspace').ThreadWorkspaceSelection;
-  } catch {
-    return undefined;
-  }
-};
 
 // Persisted plan snapshots go through the versioned codec (see
 // execution_plan_codec.ts): unknown versions or structurally invalid
@@ -862,7 +844,7 @@ export const createChatApproval = (deps: {
         return { success: true, stopped: streamState.stoppedByUser };
       }
       if (failingTracker && failingTracker.getRun().status === 'running') {
-        failingTracker.markFailed({ message });
+        failingTracker.markFailed(runFailureFromError(error, message));
       }
       const failedThreadId = failingTracker?.getRun().threadId;
       if (failedThreadId) {

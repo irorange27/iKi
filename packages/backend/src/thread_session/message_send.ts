@@ -16,7 +16,7 @@ import {
   planToRunTrackerParams,
 } from './execution_plan';
 import { asChatUiMessage, recordSessionEvents, turnFactsToEvents } from './session_log';
-import { createTurnDriver, finalizeRunForOutcome } from './outer_loop';
+import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './outer_loop';
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
@@ -453,7 +453,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       const message = getStreamErrorMessage(error);
       const failingTracker = driverHandle?.getRunTracker() ?? runTracker;
       if (failingTracker && failingTracker.getRun().status === 'running') {
-        failingTracker.markFailed({ message });
+        failingTracker.markFailed(runFailureFromError(error, message));
       }
       if (options.threadId && failingTracker) {
         recordSessionEvents(options.threadId, turnFactsToEvents({
