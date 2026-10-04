@@ -13,6 +13,8 @@
  *   - the AI SDK is never constructed (routing proof).
  * Regression: an `openai` provider under the same policy keeps the AI SDK
  * harness — Pi never sees the request.
+ * Switch item 3c (issue #118): an AUTONOMOUS tool turn chains a handoff into
+ * a fresh Pi batch — the supply survives the chained harness rebuild.
  */
 
 import fs from 'node:fs/promises';
@@ -446,5 +448,74 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(createModelMock).toHaveBeenCalled();
     // No request reached the scripted server: the turn never rode Pi.
     expect(server.totalRequests()).toBe(requestsBefore);
+  }, 30000);
+
+  it('chains a handoff into a fresh Pi batch in autonomous mode (3c: supply survives the rebuild)', async () => {
+    // Batch 1 calls the handoff tool; the chained batch 2 resumes from the
+    // fresh [HANDOFF CONTEXT] history — its sole user message is the
+    // next-steps text, so the scripted server keys it separately.
+    server.setScriptSequence('pass the baton', [
+      {
+        chunks: [
+          sse.toolCallDelta(
+            'call_chain_h',
+            'handoff',
+            '{"summary":"phase one done","next_steps":"finish phase two","reason":"other"}'
+          ),
+          sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
+        ],
+      },
+    ]);
+    server.setScriptSequence('finish phase two', [
+      {
+        chunks: [
+          sse.delta('phase two complete'),
+          sse.finish('stop', { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 }),
+        ],
+      },
+    ]);
+
+    const target = { id: 805, send: vi.fn() };
+    const streaming = buildStreaming();
+
+    const result = await streaming.stream(target, {
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_tool_stream',
+      model: 'pi-model',
+      threadId: 'thread_pi_tool_stream',
+      approvalPolicy: 'never',
+      autonomous: { maxIterations: 3, continuePrompt: 'continue' },
+      messages: [
+        { id: 'msg_pi_chain', role: 'user', parts: [{ type: 'text', text: 'pass the baton' }] },
+      ],
+      tools: [TOOL_NAME],
+    });
+    expect(result).toMatchObject({ success: true });
+
+    // The chain ran batch 2 ON PI: both requests hit the scripted server and
+    // the AI SDK was never constructed. Before 3c the chained harness was
+    // rebuilt on the AI SDK — batch 2 never arrives there.
+    expect(server.countRequests('pass the baton')).toBe(1);
+    expect(server.countRequests('finish phase two')).toBe(1);
+    expect(createModelMock).not.toHaveBeenCalled();
+
+    // Fresh history: batch 2's sole user message is the next-steps text;
+    // batch 1's transcript is gone. The handoff context rides the request.
+    const chainedWire = server.getWire('finish phase two', 0);
+    const chainedMessages = chainedWire.messages as Array<{ role?: string; content?: unknown }>;
+    expect(chainedMessages.filter(m => m.role === 'user')).toHaveLength(1);
+    expect(JSON.stringify(chainedWire.messages)).toContain('finish phase two');
+    expect(JSON.stringify(chainedWire.messages)).not.toContain('pass the baton');
+    expect(JSON.stringify(chainedWire)).toContain('phase one done');
+
+    // The driver projected its handoff event; both text and run completed.
+    const handoffEvents = chunksOf(target, 'tool-input-available').filter(
+      chunk => (chunk as { toolName?: string }).toolName === 'handoff'
+    );
+    expect(handoffEvents[0]).toMatchObject({
+      input: expect.objectContaining({ summary: 'phase one done' }),
+    });
+    expect(lastRunStatus(target)).toBe('completed');
+    expect(publishedText(target)).toContain('phase two complete');
   }, 30000);
 });

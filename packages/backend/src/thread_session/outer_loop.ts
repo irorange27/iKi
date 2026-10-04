@@ -4,13 +4,14 @@ import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/ag
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
-import { rehydrateHarness, type TurnDriverHarness } from '../agent/harness';
+import type { TurnDriverHarness } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
 import { createAgentRunTracker } from './run_tracker';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
 import { createApprovalRecoveryContext, reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
-import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
+import { planToRunTrackerParams } from './execution_plan';
+import { selectTurnHarness } from './turn_supply_selection';
 import { MODEL_TEXT_COMMITTED, recordSessionEvents, SESSION_EVENT_VERSION, SessionLogCommitError } from './session_log';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
@@ -600,7 +601,17 @@ const runOuterLoop = async (
         );
         streamState.runId = state.runTracker.id;
 
-        state.harness = rehydrateHarness(planToHarnessConfig(deps.plan));
+        // The chained batch resumes with a fresh [HANDOFF CONTEXT] history —
+        // built BEFORE the harness so the supply selection gates against the
+        // history the new harness will actually receive (switch item 3c: one
+        // selection point decides every batch — no mid-chain supply flip).
+        state.streamHistory = [
+          {
+            role: 'system',
+            content: buildFreshHandoffSystemMessage(streamResult.handoff),
+          },
+        ];
+        state.harness = selectTurnHarness(deps.plan, state.streamHistory);
 
         state.approvalContext = deps.plan.enableTools
           ? createApprovalRecoveryContext({
@@ -610,12 +621,6 @@ const runOuterLoop = async (
             })
           : undefined;
 
-        state.streamHistory = [
-          {
-            role: 'system',
-            content: buildFreshHandoffSystemMessage(streamResult.handoff),
-          },
-        ];
         state.streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
         continue;
       }

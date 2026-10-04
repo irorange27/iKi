@@ -44,7 +44,8 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  * item 3a (issue #114), the production wiring of the candidate loop.
  *
  * Routing (thread_session/turn_supply_selection.ts): `plan.enableTools &&
- * !autonomous && supportsPiTurnSupply` — every approval policy served.
+ * supportsPiTurnSupply` — every mode (autonomous chains rebuild through the
+ * same selector, 3c) and every approval policy served.
  * Approval semantics: the resolver's per-call decision rides the loop tool
  * (evaluated before any effect); the needing calls are reported as the
  * standard approval_request step + requiresApproval done — persistence stays
@@ -72,7 +73,7 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  *   parts, tool results as tool messages); getHistory returns a clone;
  * - the input budget runs once at turn start through the shared
  *   preparePiTurnHistory (per-step re-compaction inside a multi-step loop
- *   remains tracked for 3c);
+ *   remains tracked separately);
  * - an empty response with no tool calls is a RefusalError; aborts throw
  *   DOMException('AbortError'); provider errors throw after the retry
  *   budget — the driver's cancel/steer/failure classification keys off the
@@ -776,14 +777,6 @@ const mapBuckets = (buckets: PiUsageBuckets): AgentUsage => ({
   totalTokens: buckets.totalTokens,
   estimatedCostUsd: 0,
 });
-
-const toolOutputIsError = (output: unknown): boolean =>
-  output !== null &&
-  typeof output === 'object' &&
-  'type' in output &&
-  ((output as { type: string }).type === 'error-text' ||
-    (output as { type: string }).type === 'error-json' ||
-    (output as { type: string }).type === 'execution-denied');
 
 const toolOutputText = (output: unknown): string => {
   if (output !== null && typeof output === 'object' && 'type' in output) {

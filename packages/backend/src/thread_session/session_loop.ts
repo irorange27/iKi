@@ -316,10 +316,11 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      // Supply selection (switch items 2c/3a/3b): one selector decides —
-      // the Pi supply layer serves text-only turns and non-autonomous tool
-      // turns under ANY approval policy (pause + five-state resume); every
-      // other shape stays on the AI SDK harness until its switch item.
+      // Supply selection (switch items 2c/3a/3b/3c): one selector decides —
+      // the Pi supply layer serves text-only turns and tool turns in every
+      // mode (autonomous chains included) under ANY approval policy (pause +
+      // five-state resume); every other shape stays on the AI SDK harness
+      // until its switch item.
       const harness = selectTurnHarness(plan, streamHistory);
 
       if (!preparedTurn.prompt.trim()) {
