@@ -43,8 +43,8 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  * The tool-enabled streaming turn harness over the Pi supply layer — switch
  * item 3a (issue #114), the production wiring of the candidate loop.
  *
- * Routing contract (session_loop): `plan.enableTools &&
- * plan.approvalPolicy === 'never' && !autonomous && supportsPiTurnSupply`.
+ * Routing (thread_session/turn_supply_selection.ts): `plan.enableTools &&
+ * !autonomous && supportsPiTurnSupply` — every approval policy served.
  * Approval semantics: the resolver's per-call decision rides the loop tool
  * (evaluated before any effect); the needing calls are reported as the
  * standard approval_request step + requiresApproval done — persistence stays
@@ -71,8 +71,8 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  * - history stays ModelMessage-shaped end to end (thinking → reasoning
  *   parts, tool results as tool messages); getHistory returns a clone;
  * - the input budget runs once at turn start through the shared
- *   preparePiTurnHistory (per-step re-compaction is a tracked 3b item; the
- *   step count bounds 3a turns);
+ *   preparePiTurnHistory (per-step re-compaction inside a multi-step loop
+ *   remains tracked for 3c);
  * - an empty response with no tool calls is a RefusalError; aborts throw
  *   DOMException('AbortError'); provider errors throw after the retry
  *   budget — the driver's cancel/steer/failure classification keys off the
