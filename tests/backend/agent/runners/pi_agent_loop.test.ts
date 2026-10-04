@@ -101,6 +101,46 @@ describe('pi agent loop — orchestration semantics', () => {
     expect(outcome.usage).toMatchObject({ input: 20, output: 4 });
   });
 
+  it('parallel tool calls in ONE message: the assistant is pushed once, both results follow in order', async () => {
+    // Regression (review B1): pushing the assistant message per tool call
+    // duplicated it in the transcript — providers reject a tool_calls
+    // message answered piecemeal.
+    const callModel = scriptedCall([
+      {
+        content: [
+          toolCallBlock('call_p1', 'read_file', { path: '/1.txt' }),
+          toolCallBlock('call_p2', 'read_file', { path: '/2.txt' }),
+        ],
+      },
+      { content: [textBlock('both read')], usage: { input: 25, output: 5, totalTokens: 30 } },
+    ]);
+    const transcripts: Array<Array<{ role: string }>> = [];
+    const executed: string[] = [];
+    const wrappedCall: PiLoopModelCall = async context => {
+      transcripts.push(context.messages.map(m => m.role));
+      return callModel(context);
+    };
+
+    const outcome = await runPiAgentLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'read both', timestamp: Date.now() }],
+      maxSteps: 3,
+      callModel: wrappedCall,
+      executeTool: async call => {
+        executed.push(String(call.arguments.path));
+        return { text: `body ${String(call.arguments.path)}` };
+      },
+    });
+
+    expect(outcome.status).toBe('completed');
+    expect(executed).toEqual(['/1.txt', '/2.txt']);
+    // Exactly ONE assistant entry carrying BOTH calls, then both results.
+    expect(transcripts[1]).toEqual(['user', 'assistant', 'toolResult', 'toolResult']);
+    const serialized = JSON.stringify(outcome.steps);
+    expect(serialized).toContain('/1.txt');
+    expect(serialized).toContain('/2.txt');
+  });
+
   it('budget exhaustion: tools in the last step execute, then the loop ends without a further call', async () => {
     const callModel = scriptedCall([
       {

@@ -19,7 +19,10 @@ import type { AssistantMessage, Message as PiMessage, Tool as PiTool } from '@ea
  * The model call is injected: wiring hands this loop the Pi adapter's
  * callPiChat; tests hand a scripted double. This module owns ORCHESTRATION
  * only — protocol, history projection and tool ownership stay with their
- * modules.
+ * modules. Note: the injected call resolves WITH its deltas, so text_delta
+ * events are delivered at call completion — live token streaming to a UI
+ * needs the wiring to extend this contract deliberately.
+ * maxSteps values that are not finite fall back to 1.
  */
 
 export type PiLoopToolCall = {
@@ -53,7 +56,10 @@ export type PiLoopOutcome = {
   finalText: string;
   steps: PiLoopStep[];
   usage: PiUsageBuckets;
-  /** Tool calls that were produced but not executed (budget exhaustion). */
+  /** Tool calls from the final step: EXECUTED, results recorded on the
+   * transcript, but not yet consumed by a model call (budget exhausted).
+   * Reporting them lets the driver surface what happened without implying
+   * they are pending side effects. */
   pendingToolCalls: PiLoopToolCall[];
 };
 
@@ -105,7 +111,7 @@ export const runPiAgentLoop = async (params: {
   onEvent?: (event: PiLoopEvent) => void;
 }): Promise<PiLoopOutcome> => {
   const { callModel, executeTool, signal, onEvent } = params;
-  const maxSteps = Math.max(1, Math.trunc(params.maxSteps));
+  const maxSteps = Number.isFinite(params.maxSteps) ? Math.max(1, Math.trunc(params.maxSteps)) : 1;
   const messages: PiMessage[] = [...params.messages];
   const steps: PiLoopStep[] = [];
   let usage = { ...EMPTY_USAGE };
@@ -144,11 +150,15 @@ export const runPiAgentLoop = async (params: {
 
     // Tools in ANY step execute — including the last (harness semantics).
     // The results ride the transcript; the budget decides whether another
-    // model call follows.
+    // model call follows. The assistant message is pushed ONCE before the
+    // effects: pushing it per call would duplicate it in the transcript and
+    // providers reject a tool_calls message answered piecemeal.
+    messages.push(final);
     for (const call of toolCalls) {
       signal?.throwIfAborted();
-      const result = await executeTool(call);
-      messages.push(final);
+      // The executor gets its own copy: a mutating executor must not corrupt
+      // the recorded trajectory (the transcript references the same args).
+      const result = await executeTool({ ...call, arguments: structuredClone(call.arguments) });
       messages.push({
         role: 'toolResult',
         toolCallId: call.id,
