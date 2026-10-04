@@ -5,7 +5,7 @@ const {
   createModelMock,
   disposeLanguageModelMock,
   getModelGenerationSettingsMock,
-  getFullSystemPromptMock,
+  resolvePersonaPromptMock,
   getAppConfigMock,
 } =
   vi.hoisted(() => ({
@@ -13,7 +13,7 @@ const {
     createModelMock: vi.fn(),
     disposeLanguageModelMock: vi.fn(),
     getModelGenerationSettingsMock: vi.fn(() => ({})),
-    getFullSystemPromptMock: vi.fn(),
+    resolvePersonaPromptMock: vi.fn(),
     getAppConfigMock: vi.fn(),
   }));
 
@@ -25,7 +25,7 @@ vi.mock('@iki/backend/provider/llm/factory', () => ({
   createModel: createModelMock,
   disposeLanguageModel: disposeLanguageModelMock,
   getModelGenerationSettings: getModelGenerationSettingsMock,
-  getFullSystemPrompt: getFullSystemPromptMock,
+  resolvePersonaPrompt: resolvePersonaPromptMock,
 }));
 
 vi.mock('@iki/backend/config', () => ({
@@ -41,7 +41,7 @@ beforeEach(() => {
     ({ temperature }: { temperature?: number }) =>
       typeof temperature === 'number' ? { temperature } : {}
   );
-  getFullSystemPromptMock.mockReturnValue('persona prompt');
+  resolvePersonaPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockImplementation(() => {
     throw new Error('app config should not be loaded');
   });

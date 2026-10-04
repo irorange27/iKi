@@ -48,7 +48,7 @@ vi.mock('@iki/backend/provider/llm/factory', () => ({
   disposeLanguageModel: disposeLanguageModelMock,
   getModelGenerationSettings: getModelGenerationSettingsMock,
   injectReasoningContentIntoMessages: injectReasoningContentIntoMessagesMock,
-  getFullSystemPrompt: vi.fn(() => 'You are a helpful assistant.'),
+  resolvePersonaPrompt: vi.fn(() => 'You are a helpful assistant.'),
 }));
 
 vi.mock('@iki/backend/provider/llm/usage', () => ({

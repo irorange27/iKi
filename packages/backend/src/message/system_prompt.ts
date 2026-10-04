@@ -10,7 +10,7 @@
  * contract:
  * - `persona` — the persona text (identity, date/timezone, OS, cwd),
  *   owned by `message/personality.ts` and fetched by callers through the
- *   factory's `getFullSystemPrompt`;
+ *   factory's `resolvePersonaPrompt`;
  * - `planPrompt` — the execution plan's system prompt (mode prompt +
  *   personality), owned by `thread_session/execution_plan.ts`;
  * - `extraPrompt` — a per-call extra prompt (aux/single-shot callers);

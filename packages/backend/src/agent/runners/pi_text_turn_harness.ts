@@ -5,7 +5,7 @@ import { createLogger } from '@iki/backend/logger';
 import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
-import { getFullSystemPrompt, getProviderConfig } from '../../provider/llm/factory';
+import { resolvePersonaPrompt, getProviderConfig } from '../../provider/llm/factory';
 import {
   buildPiModel,
   callPiChat,
@@ -34,7 +34,7 @@ const logger = createLogger({ module: 'pi_text_turn_harness' });
  * - one model call per attempt; no tools are resolved and a non-empty
  *   `toolsOverride` is refused (routing keeps this surface text-only);
  * - the request system prompt is the same three-part join the factory's Pi
- *   branch uses: persona (getFullSystemPrompt — identity, date/timezone, OS,
+ *   branch uses: persona (resolvePersonaPrompt — identity, date/timezone, OS,
  *   cwd), the plan's system prompt, then the transcript's own leading system
  *   message;
  * - history stays ModelMessage-shaped end to end: the prompt is appended by
@@ -146,7 +146,7 @@ export class PiTextTurnHarness {
     // at tool-exchange boundaries, summarize the omitted prefix, then refuse
     // if protected instructions or the current turn alone exceed the budget.
     // Compaction is request-scoped; the stored history keeps the full text.
-    const personaPrompt = getFullSystemPrompt(this.config.providerType, this.config.providerId);
+    const personaPrompt = resolvePersonaPrompt(this.config.providerType, this.config.providerId);
     const firstTranscriptSystem = this.history.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
     );

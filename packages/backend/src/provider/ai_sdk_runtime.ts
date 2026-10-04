@@ -12,7 +12,7 @@ import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
 import { createLogger } from '@iki/backend/logger';
 import { withRetry } from '@iki/backend/utils/retry';
-import { getFullSystemPrompt } from './llm/factory';
+import { resolvePersonaPrompt } from './llm/factory';
 import {
   assembleRequestSystemPrompt,
   type RequestSystemPromptPart,
@@ -151,7 +151,7 @@ export const buildPromptContext = (
   const sanitized = sanitizedConversation.messages;
 
   const systemParts: RequestSystemPromptPart[] = [
-    { slot: 'persona', text: getFullSystemPrompt(config.providerType, config.providerId) },
+    { slot: 'persona', text: resolvePersonaPrompt(config.providerType, config.providerId) },
   ];
 
   if (config.systemPrompt.trim()) {

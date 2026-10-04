@@ -14,7 +14,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
   createModel: external.model,
   disposeLanguageModel: vi.fn(),
-  getFullSystemPrompt: () => 'review system',
+  resolvePersonaPrompt: () => 'review system',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: external.capability,
 }));
