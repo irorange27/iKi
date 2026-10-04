@@ -220,7 +220,45 @@ describe('switch item 2c: text-only streaming turns on the Pi supply layer', () 
     expect(createModelMock).not.toHaveBeenCalled();
     expect(server.countRequests('pi stream probe')).toBe(1);
     expect(server.getWire('pi stream probe').stream).toBe(true);
+    // The persona system prompt (identity, date/timezone, OS, cwd) leads the
+    // request — the same join the factory's Pi branch uses.
+    const wireSystem = (server.getWire('pi stream probe').messages as Array<{
+      role: string;
+      content: unknown;
+    }>)[0];
+    expect(wireSystem.role).toBe('system');
+    expect(JSON.stringify(wireSystem.content)).toContain('persona prompt');
   }, 20000);
+
+  it('fails the turn when the provider stream dies mid-flight (real adapter, scripted DESTROY)', async () => {
+    server.setScript('pi destroy probe', {
+      chunks: [sse.delta('partial '), 'DESTROY'],
+      delayMs: 40,
+    });
+
+    const target = { id: 703, send: vi.fn() };
+    const streaming = buildStreaming();
+
+    const result = await streaming.stream(target, {
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_stream',
+      model: 'pi-model',
+      threadId: 'thread_pi_stream',
+      approvalPolicy: 'never',
+      messages: [
+        { id: 'msg_pi_destroy', role: 'user', parts: [{ type: 'text', text: 'pi destroy probe' }] },
+      ],
+      tools: [],
+    });
+
+    // The connection drop surfaces as a failed turn — never as a completed
+    // empty reply — and the run row records the failure.
+    expect(result.success).toBe(false);
+    expect(lastRunStatus(target)).toBe('failed');
+    // Whatever streamed before the drop was committed before publication.
+    const shown = publishedText(target);
+    expect(committedText('thread_pi_stream')).toContain(shown);
+  }, 30000);
 
   it('keeps openai providers on the AI SDK harness even with tools off', async () => {
     createModelMock.mockReturnValue(new FauxModelProvider([fauxText('sdk answer')]));
