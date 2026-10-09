@@ -26,13 +26,13 @@ import {
   type PiLoopTool,
   type PiUsageBuckets,
 } from './pi_agent_loop';
-import { preparePiTurnHistory } from './pi_turn_budget';
+import { preparePiTurnHistory, compactPiRequestStep } from './pi_turn_budget';
 import {
   createApprovalPolicyBox,
   advanceApprovalPolicySnapshot,
   resolveTools,
 } from '../harness/tool_resolver';
-import { estimateToolSchemaTokens } from '../context_budget';
+import { estimateMessageTokens, estimateTextTokens, estimateToolSchemaTokens } from '../context_budget';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '../../utils/runtime_context';
 import type { AgentTool, AgentTurnPerf, AgentUsage } from '../types';
 import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness/harness_types';
@@ -71,9 +71,12 @@ const logger = createLogger({ module: 'pi_tool_turn_harness' });
  *   across the turn — but only while the failed call streamed nothing;
  * - history stays ModelMessage-shaped end to end (thinking → reasoning
  *   parts, tool results as tool messages); getHistory returns a clone;
- * - the input budget runs once at turn start through the shared
- *   preparePiTurnHistory (per-step re-compaction inside a multi-step loop
- *   remains tracked separately);
+ * - the input budget runs the prepareStep cadence: once at turn start
+ *   through the shared preparePiTurnHistory and again before EVERY model
+ *   call through compactPiRequestStep — over the threshold the request view
+ *   compacts (request-scoped; the stored mirror keeps the full text, the
+ *   snapshot basis switches to what was actually sent) and a view that
+ *   cannot fit even compacted refuses loudly;
  * - an empty response with no tool calls is a RefusalError; aborts throw
  *   DOMException('AbortError'); provider errors throw after the retry
  *   budget — the driver's cancel/steer/failure classification keys off the
@@ -417,12 +420,16 @@ export class PiToolTurnHarness {
     const firstTranscriptSystem = this.history.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
     );
+    // The AI SDK overhead formula: system prompt + the tool schemas' JSON
+    // size (the schemas sit in the cached region ahead of every message).
+    const toolSchemaOverheadTokens = piTools ? estimateTextTokens(JSON.stringify(piTools)) : 0;
     const { requestHistory } = await preparePiTurnHistory({
       history: this.history,
       personaPrompt,
       planPrompt: this.config.systemPrompt,
       transcriptSystemText:
         typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '',
+      toolSchemaTokens: toolSchemaOverheadTokens,
       ...(typeof this.config.maxInputTokens === 'number' ? { maxInputTokens: this.config.maxInputTokens } : {}),
       ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
       ...(signal ? { signal } : {}),
@@ -437,11 +444,21 @@ export class PiToolTurnHarness {
 
     // The loop owns the Pi transcript (it appends assistant/toolResult
     // entries); the harness mirrors every append in ModelMessage shape for
-    // getHistory/onInference — single writer per side, same order. Retry
-    // notes sit in pendingNotes until the next assistant entry flushes them
-    // (runner parity: notes persist in history on success, never on a turn
-    // that ultimately fails).
+    // getHistory/onInference — single writer per side, same order. The FULL
+    // mirror is the stored-history authority (getHistory); `requestView` is
+    // what the model actually sees — identical to the mirror until a
+    // compaction replaces it (prepareStep parity), after which the two share
+    // appends but the view stays compacted. Retry notes sit in pendingNotes
+    // until the next assistant entry flushes them (runner parity: notes
+    // persist in history on success, never on a turn that ultimately fails).
     const transcript: PiMessage[] = projected.messages;
+    let requestView: ModelMessage[] = requestHistory;
+    let summaryMessage: ModelMessage | undefined;
+    // Leading transcript entries that requestView counts as "systems" (prior
+    // summaries): the compaction splice indexes past them — the omitted
+    // count is a prefix of the CONVERSATION entries only.
+    let transcriptSummaryPrefixCount = 0;
+    const overheadTokens = estimateTextTokens(systemPrompt) + toolSchemaOverheadTokens;
     const turnStartedAt = Date.now();
     let firstDeltaMs: number | null = null;
     let streamedText = '';
@@ -514,13 +531,12 @@ export class PiToolTurnHarness {
           },
         };
         // Mirror and transcript: same appends the loop would make.
-        this.history = [
-          ...this.history,
-          {
-            role: 'tool',
-            content: [{ type: 'tool-result', toolCallId: outcome.result.toolCallId, toolName: outcome.result.toolName, output }],
-          },
-        ];
+        const resumeResultMessage: ModelMessage = {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: outcome.result.toolCallId, toolName: outcome.result.toolName, output }],
+        };
+        this.history = [...this.history, resumeResultMessage];
+        requestView = [...requestView, resumeResultMessage];
         transcript.push({
           role: 'toolResult',
           toolCallId: outcome.result.toolCallId,
@@ -549,10 +565,64 @@ export class PiToolTurnHarness {
           toolCall: { toolName: call.name, args: call.arguments },
         });
       },
-      callModel: (context: { systemPrompt: string; messages: PiMessage[]; tools?: unknown }) => {
-        // Snapshot at call time = exactly what this step sends: the mirror
-        // plus any recovery note that has not been flushed into it yet.
-        sentSnapshots.push([...this.history, ...pendingNotes]);
+      callModel: async (context: { systemPrompt: string; messages: PiMessage[]; tools?: unknown }) => {
+        // prepareStep parity: EVERY request re-checks the input budget.
+        // Under the threshold this is one estimate pass; over it, the
+        // REQUEST view compacts (the stored mirror stays full) and the
+        // transcript rebuilds in place — the loop's messages alias sees the
+        // new contents. A view that cannot fit even after compaction
+        // refuses loudly (no silent truncation).
+        if (typeof this.config.maxInputTokens === 'number') {
+          const compactionStartedAt = Date.now();
+          const planned = await compactPiRequestStep({
+            requestView,
+            maxInputTokens: this.config.maxInputTokens,
+            overheadTokens,
+            ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
+            ...(signal ? { signal } : {}),
+            ...(summaryMessage && typeof summaryMessage.content === 'string'
+              ? { existingSummary: summaryMessage.content }
+              : {}),
+          });
+          if (planned.viewTokens + overheadTokens > this.config.maxInputTokens) {
+            throw new Error(
+              'Context budget exceeded by protected instructions or the current turn; history has been preserved.'
+            );
+          }
+          if (planned.compacted) {
+            requestView = planned.requestView;
+            summaryMessage = planned.summaryMessage;
+            // The compaction only rewrites the PREFIX: the kept tail's
+            // transcript entries are already projected 1:1, so the rebuild
+            // replaces exactly the omitted entries with the summary system
+            // message (the AI SDK shape — a mid-transcript system entry; the
+            // loop's assembled systemPrompt is untouched). Re-projecting the
+            // whole view would funnel the summary into the projection's
+            // systemPrompt slot and drop it from the messages.
+            const summaryEntry: PiMessage = {
+              role: 'system',
+              content: typeof planned.summaryMessage.content === 'string' ? planned.summaryMessage.content : '',
+              timestamp: Date.now(),
+            };
+            transcript.splice(transcriptSummaryPrefixCount, planned.omittedCount, summaryEntry);
+            transcriptSummaryPrefixCount += 1;
+            logger.event({
+              level: 'info',
+              outcome: 'succeeded',
+              event: 'llm.context.compacted',
+              message: 'Pi tool turn request view compacted mid-turn.',
+              data: {
+                omittedCount: planned.omittedCount,
+                viewTokens: planned.viewTokens,
+                durationMs: Date.now() - compactionStartedAt,
+              },
+            });
+          }
+        }
+        // Snapshot at call time = exactly what this step sends: the request
+        // view (compacted basis included) plus any recovery note that has
+        // not been flushed into it yet.
+        sentSnapshots.push([...requestView, ...pendingNotes]);
         return this.modelCall(this.config, {
           systemPrompt: context.systemPrompt,
           messages: context.messages,
@@ -599,6 +669,7 @@ export class PiToolTurnHarness {
         // Flushed notes are now part of the stored trajectory (runner parity).
         if (pendingNotes.length > 0) {
           this.history = [...this.history, ...pendingNotes];
+          requestView = [...requestView, ...pendingNotes];
           pendingNotes.length = 0;
         }
         lastStepUsage = mapBuckets(step.usage);
@@ -619,11 +690,13 @@ export class PiToolTurnHarness {
             input: call.arguments,
           });
         }
-        this.history = [...this.history, { role: 'assistant', content: assistantParts }];
+        const assistantEntry: ModelMessage = { role: 'assistant', content: assistantParts };
+        this.history = [...this.history, assistantEntry];
+        requestView = [...requestView, assistantEntry];
 
         const stepUsage: AgentUsage = mapBuckets(step.usage);
         input.onInference?.({
-          messages: sentSnapshots.at(-1) ?? requestHistory,
+          messages: sentSnapshots.at(-1) ?? requestView,
           systemPrompt,
           content: assistantParts,
           finishReason: step.toolCalls.length > 0 ? 'tool-calls' : 'stop',
@@ -678,20 +751,19 @@ export class PiToolTurnHarness {
             },
           };
         }
-        this.history = [
-          ...this.history,
-          {
-            role: 'tool',
-            content: [
-              {
-                type: 'tool-result',
-                toolCallId: event.call.id,
-                toolName: event.call.name,
-                output: event.output as ToolResultPart['output'],
-              },
-            ],
-          },
-        ];
+        const toolResultEntry: ModelMessage = {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: event.call.id,
+              toolName: event.call.name,
+              output: event.output as ToolResultPart['output'],
+            },
+          ],
+        };
+        this.history = [...this.history, toolResultEntry];
+        requestView = [...requestView, toolResultEntry];
       }
       next = await iterator.next();
     }

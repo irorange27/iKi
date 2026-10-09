@@ -132,10 +132,15 @@ export type PiLoopModelCall = (context: {
   systemPrompt: string;
   messages: PiMessage[];
   tools?: PiTool[];
-}) => {
-  events: AsyncIterable<PiLoopDelta>;
-  final: Promise<AssistantMessage>;
-};
+}) =>
+  | {
+      events: AsyncIterable<PiLoopDelta>;
+      final: Promise<AssistantMessage>;
+    }
+  | Promise<{
+      events: AsyncIterable<PiLoopDelta>;
+      final: Promise<AssistantMessage>;
+    }>;
 
 export type PiLoopToolExecutor = (call: PiLoopToolCall) => Promise<unknown>;
 
@@ -198,7 +203,9 @@ export const runPiAgentLoop = async function* (
 
   for (let index = 0; index < maxSteps; index++) {
     signal?.throwIfAborted();
-    const call = callModel({
+    // The call may await request preparation (per-step budget compaction,
+    // prepareStep parity) before handing back the live attempt.
+    const call = await callModel({
       systemPrompt: params.systemPrompt,
       messages,
       tools: params.tools,
