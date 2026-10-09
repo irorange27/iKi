@@ -459,6 +459,11 @@ export class PiToolTurnHarness {
     const transcript: PiMessage[] = projected.messages;
     let requestView: ModelMessage[] = requestHistory;
     let summaryMessage = turnStartSummaryMessage;
+    // Mutable: after a compaction the summaries ride as MESSAGES, so the
+    // request system prompt reassembles with the original transcript system
+    // only — a turn-start summary that the projection funneled into the slot
+    // (no-transcript-system shape) must not linger on the wire stale.
+    let requestSystemPrompt = systemPrompt;
     const overheadTokens = estimateTextTokens(systemPrompt) + toolSchemaOverheadTokens;
     const turnStartedAt = Date.now();
     let firstDeltaMs: number | null = null;
@@ -618,6 +623,11 @@ export class PiToolTurnHarness {
                 message => !(message.role === 'system' && message.content === transcriptSystemText)
               )
             );
+            requestSystemPrompt = assembleRequestSystemPrompt([
+              { slot: 'persona', text: personaPrompt },
+              { slot: 'planPrompt', text: this.config.systemPrompt },
+              { slot: 'transcriptSystem', text: transcriptSystemText },
+            ]).prompt;
             logger.event({
               level: 'info',
               outcome: 'succeeded',
@@ -636,7 +646,7 @@ export class PiToolTurnHarness {
         // not been flushed into it yet.
         sentSnapshots.push([...requestView, ...pendingNotes]);
         return this.modelCall(this.config, {
-          systemPrompt: context.systemPrompt,
+          systemPrompt: requestSystemPrompt,
           messages: context.messages,
           tools: piTools,
           ...(signal ? { signal } : {}),

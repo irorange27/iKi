@@ -331,6 +331,48 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(summarize).toHaveBeenCalledTimes(2);
     const secondCall = summarize.mock.calls[1][0] as { existingSummary?: string };
     expect(secondCall.existingSummary).toContain('Earlier conversation summary');
+
+    // No-transcript-system shape: the turn-start summary rode the assembled
+    // system prompt (first system → slot); after the mid-turn re-compaction
+    // the summaries live as MESSAGES and the stale one must leave the system
+    // prompt — the wire carries the new summary exactly once.
+    const second = modelCall.requests[1]!;
+    expect(second.systemPrompt).not.toContain('Earlier conversation summary');
+    expect(second.systemPrompt).toContain('persona prompt');
+    expect(JSON.stringify(second.messages)).toContain('summary#2');
+    expect(JSON.stringify(second.messages)).not.toContain('summary#1');
+    expectToolPairsAligned(second.messages);
+  }, 30000);
+
+  it('keeps a leading transcript system AND a turn-start summary distinct across mid-turn compaction (handoff + summary shape)', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [textBlock(STEP_ONE_TEXT), toolCallBlock('call_1', TOOL_NAME, {})] },
+      { content: [textBlock('done')] },
+    ]);
+    const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
+
+    // Two systems in the view at compaction time: the handoff text (first →
+    // systemPrompt slot) and the turn-start summary (second → transcript
+    // entry). This is the shape whose leading entry in MESSAGES broke the
+    // count-based splice (round-1 finding c).
+    await collect(harness, {
+      prompt: 'go',
+      history: [
+        { role: 'system', content: '[HANDOFF CONTEXT] You are a fresh agent instance.' },
+        { role: 'user', content: 'x'.repeat(4000) },
+        { role: 'assistant', content: 'ok' },
+      ],
+    });
+
+    expect(summarize).toHaveBeenCalledTimes(2);
+    const second = modelCall.requests[1]!;
+    const handoffOccurrences = second.systemPrompt.split('[HANDOFF CONTEXT]').length - 1;
+    expect(handoffOccurrences).toBe(1);
+    expect(JSON.stringify(second.messages)).not.toContain('[HANDOFF CONTEXT]');
+    expect(JSON.stringify(second.messages)).toContain('summary#2');
+    expect(JSON.stringify(second.messages)).not.toContain('summary#1');
+    expect(second.systemPrompt).not.toContain('Earlier conversation summary');
+    expectToolPairsAligned(second.messages);
   }, 30000);
 
   it('keeps a leading transcript system (handoff shape) intact across mid-turn compaction', async () => {
