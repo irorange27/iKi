@@ -69,6 +69,28 @@ export class RetryableError extends Error {
 }
 
 /**
+ * Check whether a provider rejection is a context-over-length failure —
+ * the one failure class a REQUEST rebuild (compaction) can fix, as opposed
+ * to transient conditions a retry fixes or content problems nothing fixes.
+ * Conservative lowercase matching: a miss classifies as terminal (today's
+ * behavior); a false positive costs one wasted compaction.
+ */
+export const isContextOverflowError = (message: unknown): boolean => {
+  const msg = typeof message === 'string' ? message.toLowerCase() : '';
+  if (!msg) return false;
+  return (
+    msg.includes('context length') ||
+    msg.includes('context_length') ||
+    msg.includes('context window') ||
+    msg.includes('maximum context') ||
+    msg.includes('too many tokens') ||
+    msg.includes('token limit') ||
+    msg.includes('input length') ||
+    msg.includes('request too large')
+  );
+};
+
+/**
  * Check whether an error is transient and should be retried.
  *
  * Detects:

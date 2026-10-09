@@ -142,6 +142,11 @@ export const compactPiRequestStep = async (params: {
   requestView: ModelMessage[];
   maxInputTokens: number;
   overheadTokens: number;
+  /** Over-length rescue path (#124): bypass the 0.8 threshold — the budget
+   * becomes the view's own current estimate, so the cut always fires and
+   * keep-half decides what survives. The caller refuses loudly if the view
+   * still cannot fit. */
+  force?: boolean;
   threadId?: string;
   signal?: AbortSignal;
   existingSummary?: string;
@@ -151,15 +156,15 @@ export const compactPiRequestStep = async (params: {
    * comparison: pass the exact object previously returned. */
   previousSummaryMessage?: ModelMessage;
 }): Promise<CompactPiRequestStepResult> => {
+  const totalTokens = params.requestView.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
   const planned = autoCompactHistory({
     history: params.requestView,
-    maxInputTokens: params.maxInputTokens - params.overheadTokens,
+    maxInputTokens: params.force
+      ? Math.max(1, totalTokens)
+      : params.maxInputTokens - params.overheadTokens,
   });
   if (!planned.compacted) {
-    return {
-      compacted: false,
-      viewTokens: params.requestView.reduce((sum, message) => sum + estimateMessageTokens(message), 0),
-    };
+    return { compacted: false, viewTokens: totalTokens };
   }
   const summaryText = await summarizeOmitted({
     omitted: planned.omitted,

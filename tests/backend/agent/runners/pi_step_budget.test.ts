@@ -49,6 +49,7 @@ import { AgentHarness, startTurnHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import {
   PiToolTurnHarness,
+  withPiRetry,
   type PiToolModelCall,
 } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import type {
@@ -496,5 +497,78 @@ describe('differential: the same scenario compacts on both supply paths', () => 
     expect(JSON.stringify(secondOptions.prompt)).toContain('go');
     expect(JSON.stringify(secondOptions.prompt)).not.toContain(OLD_TEXT);
     expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
+  }, 30000);
+
+  it('over-length rescue composes: the retry wrapper force-compacts through the harness and the fresh attempt reads the rebuilt transcript (#124)', async () => {
+    summarize.mockResolvedValue({ summary: 'summary#overflow of the omitted prefix' });
+    const capturedViews: string[] = [];
+    let attempt = 0;
+    // The production composition: the harness's modelCall surface hands the
+    // wrapper its callbacks; the wrapper owns draining, classification and
+    // the one-shot rescue; the attempts read the LIVE transcript (post-
+    // compaction for the fresh attempt).
+    const modelCall: PiToolModelCall = (config, request) => {
+      return withPiRetry(
+        () => {
+          attempt += 1;
+          capturedViews.push(JSON.stringify(request.messages));
+          if (attempt === 1) {
+            return {
+              stream: (async function* () {
+                /* rejected before any content */
+              })(),
+              final: Promise.resolve(
+                finalMessage({
+                  content: [],
+                  stopReason: 'error',
+                  errorMessage: 'This model supports a maximum context length of 100 tokens',
+                })
+              ),
+            };
+          }
+          const stream = createAssistantMessageEventStream();
+          stream.push({ type: 'start', partial: finalMessage() });
+          stream.push({
+            type: 'done',
+            reason: 'stop',
+            message: finalMessage({ content: [textBlock('rescued')] }),
+          });
+          return {
+            stream: stream as unknown as AsyncIterable<{ type: 'text_delta' | 'thinking_delta'; delta: string }>,
+            events: (async function* () {
+              /* no deltas */
+            })(),
+            final: stream.result(),
+          };
+        },
+        request,
+        request.onRecoveryNote,
+        request.onContextOverflow
+      );
+    };
+    const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
+
+    const { events, records } = await collect(harness, {
+      prompt: 'go',
+      history: [
+        { role: 'user', content: OLD_TEXT },
+        { role: 'assistant', content: 'ok' },
+      ],
+    });
+
+    expect(attempt).toBe(2);
+    const lastDone = events.at(-1);
+    expect(lastDone).toMatchObject({ event: 'done' });
+    expect(lastDone && lastDone.event === 'done' ? lastDone.output.text : '').toBe('rescued');
+    expect(summarize).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(OLD_TEXT);
+    // Attempt 1's wire still carried the full view; the fresh attempt reads
+    // the rebuilt (compacted) transcript.
+    expect(capturedViews[0]).toContain(OLD_TEXT);
+    expect(capturedViews[1]).toContain('summary#overflow');
+    expect(capturedViews[1]).not.toContain(OLD_TEXT);
+    // The stored mirror keeps the full text; the snapshot follows the send.
+    expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
+    expect(JSON.stringify(records.at(-1)?.messages ?? '')).not.toContain(OLD_TEXT);
   }, 30000);
 });
