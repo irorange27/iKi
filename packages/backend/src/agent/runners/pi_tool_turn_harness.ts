@@ -120,6 +120,10 @@ const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 
 const CONTENT_FILTER_PATTERN = /content_filter/i;
 
+/** Absorbs the projection's systemPrompt slot during a per-request compaction
+ * rebuild — never reaches the wire (the rebuild keeps only `messages`). */
+const PER_REQUEST_COMPACT_PLACEHOLDER = '__iki_compaction_slot__';
+
 const recoveryNoteFor = (failure: Error): string =>
   (failure instanceof RefusalError
     ? 'Your last response was blocked by content policies. Please rephrase your approach to comply with content policies while still being helpful, or find an alternative way to assist.'
@@ -423,12 +427,13 @@ export class PiToolTurnHarness {
     // The AI SDK overhead formula: system prompt + the tool schemas' JSON
     // size (the schemas sit in the cached region ahead of every message).
     const toolSchemaOverheadTokens = piTools ? estimateTextTokens(JSON.stringify(piTools)) : 0;
-    const { requestHistory } = await preparePiTurnHistory({
+    const transcriptSystemText =
+      typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '';
+    const { requestHistory, summaryMessage: turnStartSummaryMessage } = await preparePiTurnHistory({
       history: this.history,
       personaPrompt,
       planPrompt: this.config.systemPrompt,
-      transcriptSystemText:
-        typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '',
+      transcriptSystemText,
       toolSchemaTokens: toolSchemaOverheadTokens,
       ...(typeof this.config.maxInputTokens === 'number' ? { maxInputTokens: this.config.maxInputTokens } : {}),
       ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
@@ -453,11 +458,7 @@ export class PiToolTurnHarness {
     // persist in history on success, never on a turn that ultimately fails).
     const transcript: PiMessage[] = projected.messages;
     let requestView: ModelMessage[] = requestHistory;
-    let summaryMessage: ModelMessage | undefined;
-    // Leading transcript entries that requestView counts as "systems" (prior
-    // summaries): the compaction splice indexes past them — the omitted
-    // count is a prefix of the CONVERSATION entries only.
-    let transcriptSummaryPrefixCount = 0;
+    let summaryMessage = turnStartSummaryMessage;
     const overheadTokens = estimateTextTokens(systemPrompt) + toolSchemaOverheadTokens;
     const turnStartedAt = Date.now();
     let firstDeltaMs: number | null = null;
@@ -583,6 +584,9 @@ export class PiToolTurnHarness {
             ...(summaryMessage && typeof summaryMessage.content === 'string'
               ? { existingSummary: summaryMessage.content }
               : {}),
+            // Identity of the view's CURRENT summary — the owner excludes it
+            // from the kept systems so the new summary replaces it.
+            ...(summaryMessage ? { previousSummaryMessage: summaryMessage } : {}),
           });
           if (planned.viewTokens + overheadTokens > this.config.maxInputTokens) {
             throw new Error(
@@ -592,20 +596,28 @@ export class PiToolTurnHarness {
           if (planned.compacted) {
             requestView = planned.requestView;
             summaryMessage = planned.summaryMessage;
-            // The compaction only rewrites the PREFIX: the kept tail's
-            // transcript entries are already projected 1:1, so the rebuild
-            // replaces exactly the omitted entries with the summary system
-            // message (the AI SDK shape — a mid-transcript system entry; the
-            // loop's assembled systemPrompt is untouched). Re-projecting the
-            // whole view would funnel the summary into the projection's
-            // systemPrompt slot and drop it from the messages.
-            const summaryEntry: PiMessage = {
-              role: 'system',
-              content: typeof planned.summaryMessage.content === 'string' ? planned.summaryMessage.content : '',
-              timestamp: Date.now(),
-            };
-            transcript.splice(transcriptSummaryPrefixCount, planned.omittedCount, summaryEntry);
-            transcriptSummaryPrefixCount += 1;
+            // Full rebuild from the canonical view. A count-based in-place
+            // splice is UNSOUND here: protected-user relocation makes the
+            // omission non-contiguous, multi-part tool messages project 1:N,
+            // and a leading transcript system shifts every index. The
+            // placeholder system absorbs the projection's systemPrompt slot
+            // so every REAL system (prior summaries included) stays in the
+            // messages; the original transcript system is dropped from the
+            // rebuild — the loop's assembled systemPrompt already carries it.
+            const rebuilt = projectHistoryToPiContext(
+              [
+                { role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER },
+                ...requestView,
+              ],
+              this.config.model
+            );
+            transcript.splice(
+              0,
+              transcript.length,
+              ...rebuilt.messages.filter(
+                message => !(message.role === 'system' && message.content === transcriptSystemText)
+              )
+            );
             logger.event({
               level: 'info',
               outcome: 'succeeded',

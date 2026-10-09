@@ -64,7 +64,7 @@ export const preparePiTurnHistory = async (params: {
   maxInputTokens?: number;
   threadId?: string;
   signal?: AbortSignal;
-}): Promise<{ requestHistory: ModelMessage[] }> => {
+}): Promise<{ requestHistory: ModelMessage[]; summaryMessage?: ModelMessage }> => {
   const { history } = params;
   const overhead = estimateTextTokens(
     assembleRequestSystemPrompt([
@@ -80,16 +80,19 @@ export const preparePiTurnHistory = async (params: {
     maxInputTokens: params.maxInputTokens - overhead - (params.toolSchemaTokens ?? 0),
   });
   let requestHistory = history;
+  let turnStartSummaryMessage: ModelMessage | undefined;
   if (planned.compacted) {
     const summaryText = await summarizeOmitted({
       omitted: planned.omitted,
       ...(params.threadId ? { threadId: params.threadId } : {}),
       ...(params.signal ? { signal: params.signal } : {}),
     });
+    params.signal?.throwIfAborted();
     const summaryMessage: ModelMessage = {
       role: 'system',
       content: `Earlier conversation summary:\n${summaryText}`,
     };
+    turnStartSummaryMessage = summaryMessage;
     requestHistory = [
       ...planned.history.filter(message => message.role === 'system'),
       summaryMessage,
@@ -105,7 +108,7 @@ export const preparePiTurnHistory = async (params: {
       'Context budget exceeded by protected instructions or the current turn; history has been preserved.'
     );
   }
-  return { requestHistory };
+  return { requestHistory, ...(turnStartSummaryMessage ? { summaryMessage: turnStartSummaryMessage } : {}) };
 };
 
 export type CompactPiRequestStepResult =
@@ -142,6 +145,11 @@ export const compactPiRequestStep = async (params: {
   threadId?: string;
   signal?: AbortSignal;
   existingSummary?: string;
+  /** The view's CURRENT summary message — excluded from the kept systems so
+   * the new summary REPLACES it (the AI SDK runner never accumulates
+   * summaries; it chains their text via `existingSummary`). Identity
+   * comparison: pass the exact object previously returned. */
+  previousSummaryMessage?: ModelMessage;
 }): Promise<CompactPiRequestStepResult> => {
   const planned = autoCompactHistory({
     history: params.requestView,
@@ -159,12 +167,15 @@ export const compactPiRequestStep = async (params: {
     ...(params.signal ? { signal: params.signal } : {}),
     ...(params.existingSummary ? { existingSummary: params.existingSummary } : {}),
   });
+  params.signal?.throwIfAborted();
   const summaryMessage: ModelMessage = {
     role: 'system',
     content: `Earlier conversation summary:\n${summaryText}`,
   };
   const requestView = [
-    ...planned.history.filter(message => message.role === 'system'),
+    ...planned.history.filter(
+      message => message.role === 'system' && message !== params.previousSummaryMessage
+    ),
     summaryMessage,
     ...planned.history.filter(message => message.role !== 'system'),
   ];

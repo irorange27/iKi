@@ -165,6 +165,23 @@ const collect = async (harness: PiToolTurnHarness, input: TurnInput) => {
   return { events, records };
 };
 
+/** Wire sanity: every toolResult on the wire is preceded by its assistant
+ * toolCall — an orphaned toolResult is the signature of a mis-spliced
+ * compaction (providers 400 it; lenient ones run corrupted context). */
+const expectToolPairsAligned = (messages: CapturedRequest['messages']) => {
+  const calledIds = new Set<string>();
+  for (const message of messages) {
+    if (message.role === 'assistant') {
+      for (const part of (message.content as Array<{ type?: string; id?: string }>) ?? []) {
+        if (part?.type === 'toolCall' && typeof part.id === 'string') calledIds.add(part.id);
+      }
+    } else if (message.role === 'toolResult') {
+      const toolCallId = (message as { toolCallId?: string }).toolCallId;
+      expect(calledIds.has(toolCallId ?? '')).toBe(true);
+    }
+  }
+};
+
 beforeEach(() => {
   summarize.mockReset().mockImplementation(async (params: { messages: unknown[]; existingSummary?: string }) => ({
     summary: `summary#${summarize.mock.calls.length} of ${params.messages.length} messages${
@@ -243,12 +260,15 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(secondCall.existingSummary).toContain('Earlier conversation summary');
     expect(secondCall.existingSummary).toContain('summary#1');
 
-    // Request 3 carries the chained summaries; step one's output is
-    // summarized away, step two's is the kept tail.
+    // Runner parity: the new summary REPLACES the prior one on the wire —
+    // no accumulation. The protected turn prompt survives; step one's output
+    // is summarized away, step two's is the kept tail.
     expect(JSON.stringify(modelCall.requests[2]!.messages)).toContain('summary#2');
-    expect(JSON.stringify(modelCall.requests[2]!.messages)).toContain('summary#1');
+    expect(JSON.stringify(modelCall.requests[2]!.messages)).not.toContain('summary#1');
     expect(JSON.stringify(modelCall.requests[2]!.messages)).not.toContain(STEP_ONE_TEXT);
     expect(JSON.stringify(modelCall.requests[2]!.messages)).toContain(STEP_TWO_TEXT);
+    expect(JSON.stringify(modelCall.requests[2]!.messages)).toContain('go');
+    for (const request of modelCall.requests) expectToolPairsAligned(request.messages);
   }, 30000);
 
   it('refuses loudly when the view cannot fit even uncompacted (current turn alone over budget)', async () => {
@@ -289,6 +309,95 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(JSON.stringify(records[0]!.messages)).not.toContain('x'.repeat(500));
     expect(JSON.stringify(harness.getHistory())).toContain('x'.repeat(500));
     expect(JSON.stringify(modelCall.requests[0]!.messages)).not.toContain('x'.repeat(500));
+  }, 30000);
+
+  it('chains the turn-start summary into the first mid-turn compaction', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [textBlock(STEP_ONE_TEXT), toolCallBlock('call_1', TOOL_NAME, {})] },
+      { content: [textBlock('done')] },
+    ]);
+    const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
+
+    await collect(harness, {
+      prompt: 'go',
+      history: [
+        { role: 'user', content: 'x'.repeat(4000) },
+        { role: 'assistant', content: 'ok' },
+      ],
+    });
+
+    // Compaction 1 at turn start; the mid-turn compaction chains its text —
+    // the old code started the chain from scratch (existingSummary undefined).
+    expect(summarize).toHaveBeenCalledTimes(2);
+    const secondCall = summarize.mock.calls[1][0] as { existingSummary?: string };
+    expect(secondCall.existingSummary).toContain('Earlier conversation summary');
+  }, 30000);
+
+  it('keeps a leading transcript system (handoff shape) intact across mid-turn compaction', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [textBlock(STEP_ONE_TEXT), toolCallBlock('call_1', TOOL_NAME, {})] },
+      { content: [textBlock('done')] },
+    ]);
+    const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
+
+    const { records } = await collect(harness, {
+      prompt: 'go',
+      history: [
+        { role: 'system', content: '[HANDOFF CONTEXT] You are a fresh agent instance.' },
+        { role: 'user', content: OLD_TEXT },
+        { role: 'assistant', content: 'ok' },
+      ],
+    });
+
+    // The handoff system stays EXACTLY once — in the assembled system prompt
+    // (never duplicated into the messages by the rebuild); the summary rides
+    // as a message; the wire stays paired.
+    const second = modelCall.requests[1]!;
+    expect(second.systemPrompt).toContain('[HANDOFF CONTEXT]');
+    expect(JSON.stringify(second.messages)).not.toContain('[HANDOFF CONTEXT]');
+    expect(JSON.stringify(second.messages)).toContain('Earlier conversation summary');
+    expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
+    expectToolPairsAligned(second.messages);
+    expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
+  }, 30000);
+
+  it('omits a multi-part tool message without orphaning its projected results', async () => {
+    const modelCall = scriptedModelCall([
+      { content: [textBlock(STEP_ONE_TEXT), toolCallBlock('call_1', TOOL_NAME, {})] },
+      { content: [textBlock('done')] },
+    ]);
+    const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
+
+    // Production shape from prior AI SDK turns: one `tool` ModelMessage
+    // grouping N tool results (the projection expands each part into its own
+    // wire entry — a count-based splice under-deletes exactly here).
+    const { records } = await collect(harness, {
+      prompt: 'go',
+      history: [
+        { role: 'user', content: OLD_TEXT },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'working' },
+            { type: 'tool-call', toolCallId: 't_a', toolName: TOOL_NAME, input: {} },
+            { type: 'tool-call', toolCallId: 't_b', toolName: TOOL_NAME, input: {} },
+          ],
+        },
+        {
+          role: 'tool',
+          content: [
+            { type: 'tool-result', toolCallId: 't_a', toolName: TOOL_NAME, output: { type: 'text', value: 'a' } },
+            { type: 'tool-result', toolCallId: 't_b', toolName: TOOL_NAME, output: { type: 'text', value: 'b' } },
+          ],
+        },
+      ],
+    });
+
+    const second = modelCall.requests[1]!;
+    expect(JSON.stringify(second.messages)).toContain('Earlier conversation summary');
+    expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
+    for (const request of modelCall.requests) expectToolPairsAligned(request.messages);
+    expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
   }, 30000);
 });
 
