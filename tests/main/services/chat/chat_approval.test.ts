@@ -37,6 +37,14 @@ vi.mock('@iki/backend/db/chat_message', () => ({
   getChatMessages: vi.fn(),
 }));
 
+// F2: recovery history comes from the session log. The real module would
+// auto-initialize the developer's default database (getDb falls back to
+// initializeDatabase()), so the replay is mocked per test instead.
+vi.mock('@iki/backend/db/session_events', () => ({
+  getSessionEvents: vi.fn(() => []),
+  appendSessionFacts: vi.fn(),
+}));
+
 vi.mock('@iki/backend/db/agent_runs', () => ({
   getAgentRun: vi.fn(),
 }));
@@ -83,7 +91,7 @@ vi.mock('@iki/backend/thread_session/run_tracker', () => ({
 
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
-import * as chatMessageDb from '@iki/backend/db/chat_message';
+import * as sessionEventsDb from '@iki/backend/db/session_events';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
@@ -92,7 +100,7 @@ import { rehydrateHarness } from '@iki/backend/agent/harness';
 const rehydrateHarnessMock = vi.mocked(rehydrateHarness);
 const createAgentRunTrackerMock = vi.mocked(createAgentRunTracker);
 const getAgentRunMock = vi.mocked(agentRunDb.getAgentRun);
-const getChatMessagesMock = vi.mocked(chatMessageDb.getChatMessages);
+const getSessionEventsMock = vi.mocked(sessionEventsDb.getSessionEvents);
 const defaultToolRegistryGetMock = vi.mocked(defaultToolRegistry.get);
 const upsertToolCallApprovalSessionMock = vi.mocked(
   toolCallApprovalDb.upsertToolCallApprovalSession
@@ -404,24 +412,35 @@ describe('createChatApproval', () => {
         updated_at: '2026-03-19T00:00:00.000Z',
       },
     ]);
-    getChatMessagesMock.mockReturnValue([
+    // F2: the recovery history source is the session log replay — the
+    // recorded facts stand in for what a real pause persists.
+    getSessionEventsMock.mockReturnValue([
       {
-        id: 'msg_skill_1',
-        thread_id: 'thread_skill_1',
-        parent_id: null,
-        slot_id: null,
-        depth: 0,
-        message: JSON.stringify({
-          id: 'msg_skill_1',
-          role: 'user',
-          parts: [{ type: 'text', text: 'hello' }],
-        }),
-        timestamp: '2026-03-19T00:00:00.000Z',
-        metadata: '{}',
-        created_at: '2026-03-19T00:00:00.000Z',
-        updated_at: '2026-03-19T00:00:00.000Z',
+        revision: 1,
+        type: 'input_accepted',
+        version: 1,
+        payload: {
+          messageId: 'msg_skill_1',
+          message: {
+            id: 'msg_skill_1',
+            role: 'user',
+            parts: [{ type: 'text', text: 'hello' }],
+          },
+        },
       },
-    ]);
+      {
+        revision: 2,
+        type: 'approval_requested',
+        version: 1,
+        payload: {
+          approvalId: 'approval_2',
+          sessionId: 'assistant_skill_1',
+          toolCallId: 'call_2',
+          toolName: 'web',
+          args: { q: 'hello' },
+        },
+      },
+    ] as never);
 
     const approvals = createChatApproval({
       streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
@@ -444,7 +463,7 @@ describe('createChatApproval', () => {
     expect(recovered.filter(result => result.success)).toHaveLength(1);
     expect(rehydrateHarnessMock).toHaveBeenCalledTimes(1);
 
-    expect(getChatMessagesMock).toHaveBeenCalledWith('thread_skill_1');
+    expect(getSessionEventsMock).toHaveBeenCalledWith('thread_skill_1');
     expect(rehydrateHarnessMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',

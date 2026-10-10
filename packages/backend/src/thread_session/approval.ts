@@ -7,7 +7,6 @@ import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { pausedPlanRunsOnPiToolSupply } from './turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
-import * as chatMessageDb from '@iki/backend/db/chat_message';
 import { createPrefixedId } from '../utils/id';
 import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -20,6 +19,7 @@ import { parseExecutionPlan, serializeExecutionPlan } from './execution_plan_cod
 import {
   recordFailureTerminalEvent,
   recordSessionEvents,
+  rebuildThreadViewFromEvents,
   turnFactsToEvents,
   APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
@@ -47,7 +47,6 @@ import {
 import type { ActiveStreamState, ChatStreamTarget } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
-import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -337,52 +336,56 @@ export const createChatApproval = (deps: {
       )
     );
     const storedRunId = typeof approvalSession.run_id === 'string' ? approvalSession.run_id.trim() : '';
-    const runSnapshot = storedRunId ? agentRunDb.getAgentRun(storedRunId) : null;
     const activeApprovalIds = activeApprovals.map(record => record.approval_id);
-    const runPendingApprovalIds = new Set(runSnapshot?.working.pendingApprovalIds ?? []);
-    const historyFromRun =
-      runSnapshot &&
-      (runSnapshot.status === 'blocked' ||
-        activeApprovalIds.some(activeApprovalId => runPendingApprovalIds.has(activeApprovalId)))
-        ? await toModelInputMessages(runSnapshot.working.modelMessages)
-        : null;
 
-    const threadId = runSnapshot?.threadId ?? approvalSession.thread_id;
+    const threadId = approvalSession.thread_id ?? null;
     if (!threadId) return null;
 
+    // Event-first (ADR 008 F2): the recovery history is rebuilt from the
+    // session log replay — run.working and chat_messages are projections and
+    // no longer read as authority here. The replay must also know the pending
+    // approvals as facts: an approval the log never recorded is not
+    // resumable, because a replay-only world could not explain what the user
+    // would be approving. Memory context rides the same seam the old
+    // chat_messages fallback used (persisted context, no fresh retrieval) —
+    // the replay, like that fallback, starts from persisted UI facts and
+    // lacks the request-side messages the run mirror used to carry.
+    // `runSnapshot` below survives only for the legacy-plan derivation of
+    // pre-plan_json rows.
+    const replay = rebuildThreadViewFromEvents(threadId);
+    const replayApprovalIds = new Set(replay.approvals.map(approval => approval.approvalId));
+    const unrecordedApprovals = activeApprovalIds.filter(id => !replayApprovalIds.has(id));
     const inputMessages =
-      historyFromRun && historyFromRun.length > 0
-        ? historyFromRun
-        : await (async () => {
-            createLogger({ module: 'chat_approval' }).event({
-              level: 'warn',
-              event: 'chat.approval.resume_history',
-              outcome: 'degraded',
-              entity: { thread_id: threadId },
-              message:
-                'Approval resume fell back to the persisted UI history; run snapshot missing.',
-              data: { run_id: storedRunId || null },
-            });
-            const rows = chatMessageDb.getChatMessages(threadId);
-            if (rows.length === 0) return null;
-            const uiMessages = rows.map(row =>
-              parseStoredUiMessageRow({ id: row.id, message: row.message })
-            );
-            return await deps.memory.injectMemoryIntoMessages(
-              // Keep non-terminal tool parts intact here: the pending
-              // approval-request is live state the resumed harness must pair
-              // with the user's approval response. Repairing it to an
-              // interruption result makes the response reference an unknown
-              // approvalId and the resume is rejected.
-              await toModelInputMessages(uiMessages, { repairInterruptedTools: false }),
-              threadId,
-              { skipRetrieval: true }
-            );
-          })();
-
-    if (!inputMessages || inputMessages.length === 0) return null;
+      unrecordedApprovals.length === 0
+        ? await deps.memory.injectMemoryIntoMessages(
+            // Keep non-terminal tool parts intact here: the pending
+            // approval-request is live state the resumed harness must pair
+            // with the user's approval response. Repairing it to an
+            // interruption result makes the response reference an unknown
+            // approvalId and the resume is rejected.
+            await toModelInputMessages(replay.messages, { repairInterruptedTools: false }),
+            threadId,
+            { skipRetrieval: true }
+          )
+        : null;
+    if (!inputMessages || inputMessages.length === 0) {
+      createLogger({ module: 'chat_approval' }).event({
+        level: 'warn',
+        event: 'chat.approval.resume_history',
+        outcome: 'denied',
+        entity: { thread_id: threadId },
+        message:
+          'Approval resume refused: the session log has no history or misses the pending approvals.',
+        data: {
+          run_id: storedRunId || null,
+          unrecorded_approval_ids: unrecordedApprovals,
+        },
+      });
+      return null;
+    }
 
     const parsedPlan = parseStoredPlan(approvalSession.plan_json);
+    const runSnapshot = !parsedPlan && storedRunId ? agentRunDb.getAgentRun(storedRunId) : null;
     const derivedPlan = deriveRunTurnPlan(runSnapshot, {
       providerType: approvalSession.provider_type,
       providerId: approvalSession.provider_id,
@@ -700,6 +703,16 @@ export const createChatApproval = (deps: {
       } catch (error) {
         session.collectedApprovalResponses.delete(approvalId);
         resumeRunTracker.markFailed(runFailureFromError(error, getErrorMessage(error)));
+        // The abandoned child's started fact must not dangle as running in
+        // the replay: startup reclamation only revisits running/blocked rows,
+        // so this terminal event is the only thing that heals the stream.
+        recordFailureTerminalEvent(resumePlan.threadId, turnFactsToEvents({
+          terminal: {
+            runId: resumeRunTracker.id,
+            status: 'failed',
+            errorText: getErrorMessage(error),
+          },
+        }));
         throw error;
       }
     }

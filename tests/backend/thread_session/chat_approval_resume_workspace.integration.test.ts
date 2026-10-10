@@ -35,6 +35,11 @@ import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
+import {
+  MODEL_OUTPUT_COMMITTED,
+  recordSessionEvents,
+  SESSION_EVENT_VERSION,
+} from '@iki/backend/thread_session/session_log';
 
 const memory = {
   onMessagePersisted: vi.fn(),
@@ -126,6 +131,34 @@ describe('approval resume keeps the turn-start workspace', () => {
               ],
             },
           });
+          // F2: the restart-recovery history source is the session log — the
+          // pause records its partial output as a fact, exactly what the
+          // streaming entry does in production.
+          recordSessionEvents('thread_probe', [
+            {
+              type: MODEL_OUTPUT_COMMITTED,
+              version: SESSION_EVENT_VERSION,
+              payload: {
+                runId: tracker.id,
+                messageId: 'assistant_probe',
+                message: {
+                  id: 'assistant_probe',
+                  role: 'assistant',
+                  parts: [
+                    {
+                      type: 'dynamic-tool',
+                      toolCallId: 'call_probe',
+                      toolName: 'write_file',
+                      state: 'approval-requested',
+                      input: { path: 'approved.txt', content: 'audit', encoding: 'utf-8' },
+                      approval: { id: approvalId },
+                    },
+                  ],
+                } as never,
+                transport: 'stream',
+              },
+            },
+          ]);
           approvals.registerApprovalBatch(requests, {
             target,
             history: harness.getHistory(),

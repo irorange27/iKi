@@ -30,6 +30,11 @@ import { AgentHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
+import {
+  MODEL_OUTPUT_COMMITTED,
+  recordSessionEvents,
+  SESSION_EVENT_VERSION,
+} from '@iki/backend/thread_session/session_log';
 
 const toolName = 'plan_persistence_probe';
 
@@ -115,24 +120,40 @@ describe('approval resume restores the persisted plan after a restart', () => {
           // What the streaming path persists while approval-pending: the
           // partial assistant row carries the live approval-request part the
           // recovery fallback pairs the decision with.
+          const partialAssistant = {
+            id: 'assistant_plan',
+            role: 'assistant' as const,
+            parts: [
+              {
+                type: 'dynamic-tool',
+                toolCallId: 'call_paused',
+                toolName,
+                state: 'approval-requested',
+                input: {},
+                approval: { id: approvalId },
+              },
+            ],
+          };
           conversation.createMessage({
             id: 'assistant_plan',
             thread_id: 'thread_plan',
-            message: {
-              id: 'assistant_plan',
-              role: 'assistant',
-              parts: [
-                {
-                  type: 'dynamic-tool',
-                  toolCallId: 'call_paused',
-                  toolName,
-                  state: 'approval-requested',
-                  input: {},
-                  approval: { id: approvalId },
-                },
-              ],
-            },
+            message: partialAssistant,
           });
+          // F2: the restart-recovery history source is the session log — the
+          // pause records its partial output as a fact, exactly what the
+          // streaming entry does in production.
+          recordSessionEvents('thread_plan', [
+            {
+              type: MODEL_OUTPUT_COMMITTED,
+              version: SESSION_EVENT_VERSION,
+              payload: {
+                runId: 'run_blocked_1',
+                messageId: 'assistant_plan',
+                message: partialAssistant as never,
+                transport: 'stream',
+              },
+            },
+          ]);
           approvals.registerApprovalBatch(requests, {
             target: { id: 91, send: vi.fn() },
             history: harness.getHistory(),
