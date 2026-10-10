@@ -3,7 +3,7 @@ import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-
 import type { ModelMessage, ToolResultPart } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
-import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
+import { RefusalError, getErrorMessage, isContextOverflowError, isRetryableError } from '@iki/backend/utils/errors';
 import type { ToolApprovalRequest } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { withRetry } from '@iki/backend/utils/retry';
@@ -107,6 +107,10 @@ export type PiToolModelCall = (
      * transcript now carries (runner parity — notes persist in history on
      * success and are flushed before the next assistant entry). */
     onRecoveryNote?: (noteText: string) => void;
+    /** Over-length rescue (#124): invoked by the retry wrapper when the
+     * provider rejects the request for context length — the harness force-
+     * compacts the shared view/transcript and the wrapper retries ONCE. */
+    onContextOverflow?: () => Promise<void>;
   }
 ) => { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> };
 
@@ -146,11 +150,18 @@ const recoveryNoteFor = (failure: Error): string =>
 export const withPiRetry = (
   attempt: () => { stream: AsyncIterable<PiStreamEvent>; final: Promise<AssistantMessage> },
   request: { messages: PiMessage[]; signal?: AbortSignal },
-  onRecoveryNote?: (noteText: string) => void
+  onRecoveryNote?: (noteText: string) => void,
+  /** Over-length rescue (#124): when the provider rejects the request for
+   * context length, the callback force-compacts the SHARED view/transcript
+   * and the wrapper retries ONCE with a reset transient budget. Absent, or
+   * on a second overflow, or once anything streamed, or when aborted: the
+   * failure is terminal exactly as before this parameter existed. */
+  onContextOverflow?: () => Promise<void>
 ): { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> } => {
   const queue: PiLoopDelta[] = [];
   let notify: (() => void) | undefined;
   let done = false;
+  let overflowRetried = false;
   const pushDelta = (delta: PiLoopDelta) => {
     queue.push(delta);
     notify?.();
@@ -181,6 +192,31 @@ export const withPiRetry = (
                 undefined
               )
             : new Error(final.errorMessage || 'Provider returned an error stop reason');
+          // Over-length is the one failure a REQUEST rebuild fixes: force-
+          // compact through the caller and retry once with a fresh transient
+          // budget. Second overflow / streamed / no callback → terminal.
+          // Checked BEFORE the transient classification so a hybrid message
+          // (a proxy wrapping the over-length text in a 429 envelope) rescues
+          // immediately instead of burning the transient budget.
+          if (
+            isContextOverflowError(final.errorMessage) &&
+            onContextOverflow &&
+            !overflowRetried &&
+            !streamed &&
+            !request.signal?.aborted
+          ) {
+            overflowRetried = true;
+            attemptIndex = 0;
+            logger.event({
+              level: 'warn',
+              event: 'llm.turn.retry',
+              outcome: 'started',
+              message: 'Provider rejected the request for context length; compacted and retrying once.',
+              data: {},
+            });
+            await onContextOverflow();
+            continue;
+          }
           if (
             attemptIndex < RETRY_MAX_ATTEMPTS &&
             !streamed &&
@@ -267,7 +303,8 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
       };
     },
     request,
-    request.onRecoveryNote
+    request.onRecoveryNote,
+    request.onContextOverflow
   );
 };
 
@@ -558,6 +595,98 @@ export class PiToolTurnHarness {
     // the needing calls; PERSISTENCE stays with the driver's
     // registerApprovalBatch (done handling) — the harness only reports.
     const pendingApprovalRequests: ToolApprovalRequest[] = [];
+
+    // Shared by the per-request budget check and the over-length rescue:
+    // compact the request view (request-scoped), rebuild the transcript, and
+    // refuse loudly when the view cannot fit. Returns whether it compacted.
+    const applyCompaction = async ({ force }: { force: boolean }): Promise<boolean> => {
+      if (typeof this.config.maxInputTokens !== 'number') return false;
+      const compactionStartedAt = Date.now();
+      const planned = await compactPiRequestStep({
+        requestView,
+        maxInputTokens: this.config.maxInputTokens,
+        overheadTokens,
+        ...(force ? { force: true } : {}),
+        ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
+        ...(signal ? { signal } : {}),
+        ...(summaryMessage && typeof summaryMessage.content === 'string'
+          ? { existingSummary: summaryMessage.content }
+          : {}),
+        // Identity of the view's CURRENT summary — the owner excludes it
+        // from the kept systems so the new summary replaces it.
+        ...(summaryMessage ? { previousSummaryMessage: summaryMessage } : {}),
+      });
+      if (planned.viewTokens + overheadTokens > this.config.maxInputTokens) {
+        throw new Error(
+          'Context budget exceeded by protected instructions or the current turn; history has been preserved.'
+        );
+      }
+      if (!planned.compacted) return false;
+      requestView = planned.requestView;
+      summaryMessage = planned.summaryMessage;
+      // Full rebuild from the canonical view. A count-based in-place
+      // splice is UNSOUND here: protected-user relocation makes the
+      // omission non-contiguous, multi-part tool messages project 1:N,
+      // and a leading transcript system shifts every index. The
+      // placeholder system absorbs the projection's systemPrompt slot
+      // so every REAL system (prior summaries included) stays in the
+      // messages; the original transcript system is dropped from the
+      // rebuild — the loop's assembled systemPrompt already carries it.
+      const rebuilt = projectHistoryToPiContext(
+        [
+          { role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER },
+          ...requestView,
+        ],
+        this.config.model
+      );
+      transcript.splice(
+        0,
+        transcript.length,
+        ...rebuilt.messages.filter(
+          message => !(message.role === 'system' && message.content === transcriptSystemText)
+        )
+      );
+      requestSystemPrompt = assembleRequestSystemPrompt([
+        { slot: 'persona', text: personaPrompt },
+        { slot: 'planPrompt', text: this.config.systemPrompt },
+        { slot: 'transcriptSystem', text: transcriptSystemText },
+      ]).prompt;
+      logger.event({
+        level: 'info',
+        outcome: 'succeeded',
+        event: 'llm.context.compacted',
+        message: force
+          ? 'Pi tool turn request view compacted (over-length rescue).'
+          : 'Pi tool turn request view compacted mid-turn.',
+        data: {
+          omittedCount: planned.omittedCount,
+          viewTokens: planned.viewTokens,
+          durationMs: Date.now() - compactionStartedAt,
+        },
+      });
+      return true;
+    };
+    // Over-length rescue (#124): invoked by the retry wrapper between
+    // attempts. An extra snapshot push keeps the inference record on the
+    // compacted basis (the retry's request IS the rebuilt view), and the
+    // unflushed recovery notes re-join the rebuilt transcript — they were
+    // pushed onto it by the failed attempt and the snapshot records them as
+    // sent, so the wire must carry them.
+    const onContextOverflow = async (): Promise<void> => {
+      const compacted = await applyCompaction({ force: true });
+      if (!compacted) {
+        throw new Error('Context over length and compaction could not shrink it; history has been preserved.');
+      }
+      for (const note of pendingNotes) {
+        transcript.push({
+          role: 'user',
+          content: typeof note.content === 'string' ? note.content : '',
+          timestamp: Date.now(),
+        });
+      }
+      sentSnapshots.push([...requestView, ...pendingNotes]);
+    };
+
     const iterator = runPiAgentLoop({
       systemPrompt,
       messages: transcript,
@@ -579,67 +708,7 @@ export class PiToolTurnHarness {
         // new contents. A view that cannot fit even after compaction
         // refuses loudly (no silent truncation).
         if (typeof this.config.maxInputTokens === 'number') {
-          const compactionStartedAt = Date.now();
-          const planned = await compactPiRequestStep({
-            requestView,
-            maxInputTokens: this.config.maxInputTokens,
-            overheadTokens,
-            ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
-            ...(signal ? { signal } : {}),
-            ...(summaryMessage && typeof summaryMessage.content === 'string'
-              ? { existingSummary: summaryMessage.content }
-              : {}),
-            // Identity of the view's CURRENT summary — the owner excludes it
-            // from the kept systems so the new summary replaces it.
-            ...(summaryMessage ? { previousSummaryMessage: summaryMessage } : {}),
-          });
-          if (planned.viewTokens + overheadTokens > this.config.maxInputTokens) {
-            throw new Error(
-              'Context budget exceeded by protected instructions or the current turn; history has been preserved.'
-            );
-          }
-          if (planned.compacted) {
-            requestView = planned.requestView;
-            summaryMessage = planned.summaryMessage;
-            // Full rebuild from the canonical view. A count-based in-place
-            // splice is UNSOUND here: protected-user relocation makes the
-            // omission non-contiguous, multi-part tool messages project 1:N,
-            // and a leading transcript system shifts every index. The
-            // placeholder system absorbs the projection's systemPrompt slot
-            // so every REAL system (prior summaries included) stays in the
-            // messages; the original transcript system is dropped from the
-            // rebuild — the loop's assembled systemPrompt already carries it.
-            const rebuilt = projectHistoryToPiContext(
-              [
-                { role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER },
-                ...requestView,
-              ],
-              this.config.model
-            );
-            transcript.splice(
-              0,
-              transcript.length,
-              ...rebuilt.messages.filter(
-                message => !(message.role === 'system' && message.content === transcriptSystemText)
-              )
-            );
-            requestSystemPrompt = assembleRequestSystemPrompt([
-              { slot: 'persona', text: personaPrompt },
-              { slot: 'planPrompt', text: this.config.systemPrompt },
-              { slot: 'transcriptSystem', text: transcriptSystemText },
-            ]).prompt;
-            logger.event({
-              level: 'info',
-              outcome: 'succeeded',
-              event: 'llm.context.compacted',
-              message: 'Pi tool turn request view compacted mid-turn.',
-              data: {
-                omittedCount: planned.omittedCount,
-                viewTokens: planned.viewTokens,
-                durationMs: Date.now() - compactionStartedAt,
-              },
-            });
-          }
+          await applyCompaction({ force: false });
         }
         // Snapshot at call time = exactly what this step sends: the request
         // view (compacted basis included) plus any recovery note that has
@@ -656,6 +725,7 @@ export class PiToolTurnHarness {
           onRecoveryNote: noteText => {
             pendingNotes.push({ role: 'user', content: noteText });
           },
+          onContextOverflow,
         });
       },
       executeTool: async call => {

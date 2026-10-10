@@ -773,6 +773,100 @@ describe('withPiRetry (the production wrapper)', () => {
     );
     await expect(final).rejects.toMatchObject({ name: 'AbortError' });
   });
+
+  it('compacts and retries once on a provider over-length rejection (#124)', async () => {
+    const onOverflow = vi.fn(async () => undefined);
+    const { final } = withPiRetry(
+      attemptFrom([
+        { stopReason: 'error', errorMessage: 'This model supports a maximum context length of 100 tokens' },
+        { stopReason: 'stop' },
+      ]),
+      baseRequest(),
+      undefined,
+      onOverflow
+    );
+    const result = await final;
+    expect(result.stopReason).toBe('stop');
+    expect(onOverflow).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second over-length rejection is terminal — no compaction loop', async () => {
+    const onOverflow = vi.fn(async () => undefined);
+    const { final } = withPiRetry(
+      attemptFrom([{ stopReason: 'error', errorMessage: 'maximum context length exceeded' }]),
+      baseRequest(),
+      undefined,
+      onOverflow
+    );
+    const result = await final;
+    expect(result.stopReason).toBe('error');
+    expect(onOverflow).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not compact once the failed attempt streamed anything', async () => {
+    const onOverflow = vi.fn(async () => undefined);
+    const { final } = withPiRetry(
+      attemptFrom([{ deltas: ['partial '], stopReason: 'error', errorMessage: 'context length exceeded' }]),
+      baseRequest(),
+      undefined,
+      onOverflow
+    );
+    const result = await final;
+    expect(result.stopReason).toBe('error');
+    expect(onOverflow).not.toHaveBeenCalled();
+  });
+
+  it('without the callback an over-length failure stays terminal', async () => {
+    const { final } = withPiRetry(
+      attemptFrom([{ stopReason: 'error', errorMessage: 'context length exceeded' }]),
+      baseRequest()
+    );
+    const result = await final;
+    expect(result.stopReason).toBe('error');
+  });
+
+  it('an overflow rescue resets the transient retry budget for the fresh request', async () => {
+    const onOverflow = vi.fn(async () => undefined);
+    const onNote = vi.fn();
+    const { final } = withPiRetry(
+      attemptFrom([
+        { stopReason: 'error', errorMessage: 'rate limit' },
+        { stopReason: 'error', errorMessage: 'rate limit' },
+        { stopReason: 'error', errorMessage: 'rate limit' },
+        { stopReason: 'error', errorMessage: 'context length exceeded' },
+        { stopReason: 'error', errorMessage: 'rate limit' },
+        { stopReason: 'stop' },
+      ]),
+      baseRequest(),
+      onNote,
+      onOverflow
+    );
+    const result = await final;
+    // The transient budget was EXHAUSTED (3 retries) before the overflow;
+    // only the reset lets the post-rescue rate-limit failure retry. Delete
+    // `attemptIndex = 0` and this fails terminal at attempt 5.
+    expect(result.stopReason).toBe('stop');
+    expect(onOverflow).toHaveBeenCalledTimes(1);
+    expect(onNote).toHaveBeenCalledTimes(4);
+  }, 20000);
+
+  it('rescues a hybrid 429-wrapped over-length message before the transient classification', async () => {
+    const onOverflow = vi.fn(async () => undefined);
+    const onNote = vi.fn();
+    const { final } = withPiRetry(
+      attemptFrom([
+        { stopReason: 'error', errorMessage: 'HTTP 429 try again: maximum context length exceeded' },
+        { stopReason: 'stop' },
+      ]),
+      baseRequest(),
+      onNote,
+      onOverflow
+    );
+    const result = await final;
+    expect(result.stopReason).toBe('stop');
+    expect(onOverflow).toHaveBeenCalledTimes(1);
+    expect(onNote).not.toHaveBeenCalled();
+  });
 });
 
 function assert(condition: unknown, message = 'assertion failed'): asserts condition {
