@@ -392,7 +392,7 @@ export type PiChatCallContext = {
 export const callPiChat = (
   model: PiModel,
   context: PiChatCallContext & { systemPrompt: string },
-  options: { apiKey?: string; signal?: AbortSignal; maxTokens?: number } = {}
+  options: { apiKey?: string; signal?: AbortSignal; maxTokens?: number; temperature?: number } = {}
 ): ReturnType<typeof openaiCompletionsStream> =>
   openaiCompletionsStream(
     model,
@@ -405,5 +405,6 @@ export const callPiChat = (
       apiKey: options.apiKey,
       signal: options.signal,
       ...(typeof options.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
+      ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
     }
   );

@@ -97,7 +97,7 @@ export const langfuseTelemetry = (
 };
 
 /**
- * Wrap a chat turn so its nested AI SDK spans (agent.stream, prompt.generate, …)
+ * Wrap a chat turn so its nested AI SDK spans (agent.stream, chat.generate, …)
  * become children of one `chat.turn` agent observation. The trace's input/output
  * is set from the user prompt and final answer; sessionId is set on the trace.
  *
