@@ -291,7 +291,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const finalResponse = driver.getAccumulatedResponse() || result.response || '';
 
         if (result.outcome === 'awaiting-approval') {
-          finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
           // Durable decision handle: registered by the driver through
           // deps.approvals, so this pause is resumable through approveTool
           // (and recoverable after a restart) instead of name-only "blocked".
@@ -313,14 +312,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               },
             });
           }
+          // Event-first: the pause's partial output is a fact before the row
+          // finalizes — a write failure fails the send with the row still
+          // running (the catch below marks it failed) instead of leaving a
+          // blocked row whose pause output was never recorded (ADR 008 F1).
           const persisted = await uiChunkEmitter.buildPersistedMessage();
           if (options.threadId && persisted) {
-            await persistAssistantTurnMessage(
-              deps.conversation,
-              options.threadId,
-              persisted,
-              'send',
-            );
             // Session log: the pause's partial output; its continuation
             // (through approveTool) records its own facts.
             recordSessionEvents(options.threadId, turnFactsToEvents({
@@ -331,7 +328,14 @@ export const createMessageSend = (deps: MessageSendDeps) => {
                 transport: 'send',
               },
             }));
+            await persistAssistantTurnMessage(
+              deps.conversation,
+              options.threadId,
+              persisted,
+              'send',
+            );
           }
+          finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
           return {
             success: false,
             error: approvalError,

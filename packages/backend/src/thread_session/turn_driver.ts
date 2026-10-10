@@ -142,12 +142,15 @@ export const runFailureFromError = (error: unknown, message: string) => ({
 
 /**
  * The event-side twin of finalizeRunForOutcome: the terminal fact the
- * session log records for a driver outcome. The run row and the event are
- * two projections of one outcome — adding an outcome changes both switches.
+ * session log records for a driver outcome — undefined for an approval
+ * pause (not terminal; its continuation records its own facts). The run row
+ * and the event are two projections of one outcome — adding an outcome
+ * changes both switches.
  */
 export const terminalFactForOutcome = (
   result: TurnDriverResult
-): { status: AgentRunStatus; finishReason?: string; errorText?: string } => {
+): { status: AgentRunStatus; finishReason?: string; errorText?: string } | undefined => {
+  if (result.outcome === 'awaiting-approval') return undefined;
   if (result.outcome === 'partial-failure') {
     return {
       status: 'failed',

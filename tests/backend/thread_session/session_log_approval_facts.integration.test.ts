@@ -274,10 +274,15 @@ describe('session log approval facts across entries', () => {
       WHEN NEW.type = 'approval_decided'
       BEGIN SELECT RAISE(ABORT, 'facts: decided write rejected'); END`);
     createModelMock.mockReturnValue(new FauxModelProvider([fauxText('written on retry')]));
-    await expect(approvals.approveTool({ id: 97, send: vi.fn() }, approvalId, true)).rejects.toThrow(
-      'Failed to append turn facts to the session log.'
-    );
-    getDb().exec('DROP TRIGGER facts_reject_decided');
+    try {
+      await expect(
+        approvals.approveTool({ id: 97, send: vi.fn() }, approvalId, true)
+      ).rejects.toThrow('Failed to append turn facts to the session log.');
+    } finally {
+      // This file shares ONE database across its tests — a leaked aborting
+      // trigger cascades into every sibling.
+      getDb().exec('DROP TRIGGER IF EXISTS facts_reject_decided');
+    }
 
     // The retried decision heals the fact, not just the flow.
     const retryResult = await approvals.approveTool({ id: 98, send: vi.fn() }, approvalId, true);

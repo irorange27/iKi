@@ -627,24 +627,11 @@ export const createChatApproval = (deps: {
       }
     })();
 
-    clearApprovalTimeouts(session);
-    for (const pendingId of session.pendingApprovalIds) {
-      pendingApprovalSessions.delete(pendingId);
-    }
-    if (session.sessionId) {
-      toolCallApprovalDb.consumeToolCallApprovalSession(session.sessionId);
-    }
-
-    const resumedSenderId = session.target.id;
-    const existingStream = deps.streams.peek(resumedSenderId);
-    if (existingStream) {
-      existingStream.cancelled = true;
-      existingStream.abortController.abort('resume-after-tool-approval');
-    }
-
-    // Continue the interrupted stream's message id: the resumed `start` chunk
-    // then addresses the same assistant message instead of opening a second one
-    // (idempotent accumulation on AI SDK clients keys on this id).
+    // The resumed execution runs under the paused turn's plan, re-identified
+    // as its own child run — never a re-derivation from current config.
+    // Constructed BEFORE the legacy consume below: nothing here depends on
+    // the consumed rows, and the resume-started fact must reach the session
+    // log before the rows that make a retry impossible are written.
     const resumeMessageId =
       session.recoveryContext?.sessionId ?? createPrefixedId('assistant');
     const streamState: ActiveStreamState = {
@@ -670,8 +657,6 @@ export const createChatApproval = (deps: {
           assistantMessageId: resumeMessageId,
         }
       : undefined;
-    // The resumed execution runs under the paused turn's plan, re-identified
-    // as its own child run — never a re-derivation from current config.
     const resumePlan = baseApprovalContext
       ? reidentifyPlan(baseApprovalContext.plan, {
           kind: 'approval-resume',
@@ -702,6 +687,38 @@ export const createChatApproval = (deps: {
           })
         )
       : null;
+    if (resumePlan?.threadId && resumeRunTracker) {
+      // Session log: the continuation is its own run under the paused plan —
+      // recorded BEFORE the consume and the parent's markResumed. Failure
+      // releases the just-collected decision (a retry re-walks the full path;
+      // its decided fact re-records idempotently) and fails the child row, so
+      // neither the flow nor the run row can strand running.
+      try {
+        recordSessionEvents(resumePlan.threadId, turnFactsToEvents({
+          started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
+        }));
+      } catch (error) {
+        session.collectedApprovalResponses.delete(approvalId);
+        resumeRunTracker.markFailed(runFailureFromError(error, getErrorMessage(error)));
+        throw error;
+      }
+    }
+
+    clearApprovalTimeouts(session);
+    for (const pendingId of session.pendingApprovalIds) {
+      pendingApprovalSessions.delete(pendingId);
+    }
+    if (session.sessionId) {
+      toolCallApprovalDb.consumeToolCallApprovalSession(session.sessionId);
+    }
+
+    const resumedSenderId = session.target.id;
+    const existingStream = deps.streams.peek(resumedSenderId);
+    if (existingStream) {
+      existingStream.cancelled = true;
+      existingStream.abortController.abort('resume-after-tool-approval');
+    }
+
     if (resumeRunTracker && baseApprovalContext?.runId) {
       rehydrateAgentRunTracker(baseApprovalContext.runId)?.markResumed({
         childRunId: resumeRunTracker.id,
@@ -715,12 +732,6 @@ export const createChatApproval = (deps: {
         }
       : undefined;
     streamState.runId = resumeRunTracker?.id;
-    if (resumePlan?.threadId) {
-      // Session log: the continuation is its own run under the paused plan.
-      recordSessionEvents(resumePlan.threadId, turnFactsToEvents({
-        started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
-      }));
-    }
     deps.streams.attach(resumedSenderId, streamState);
     let isAwaitingApproval = false;
     // Set once the driver exists; the catch path must consult the driver's
@@ -869,13 +880,10 @@ export const createChatApproval = (deps: {
           loadPersistedAssistantParts(uiChunkEmitter.messageId)
         );
         // Session log: the continuation's committed output; a re-pause is not
-        // terminal (its next continuation records its own facts). The terminal
-        // fact mirrors finalizeRunForOutcome's outcome mapping (the
-        // event-side twin).
-        const terminal =
-          streamResult.outcome === 'awaiting-approval'
-            ? undefined
-            : terminalFactForOutcome(streamResult);
+        // terminal (its next continuation records its own facts). The
+        // terminal fact mirrors finalizeRunForOutcome's outcome mapping (the
+        // event-side twin; undefined for a re-pause).
+        const terminal = terminalFactForOutcome(streamResult);
         recordSessionEvents(
           baseApprovalContext.plan.threadId,
           turnFactsToEvents({

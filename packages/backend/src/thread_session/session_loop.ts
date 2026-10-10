@@ -434,29 +434,27 @@ export const createChatStreaming = (deps: {
         activeDriver.getAccumulatedResponse() || streamResult.response;
       const finalRunTracker = activeDriver.getRunTracker();
 
-      if (streamResult.outcome !== 'awaiting-approval') {
-        uiChunkEmitter.finish();
-      }
       // Event-first (ADR 008 F1): the turn's facts reach the session log
       // BEFORE the run row finalizes — a write failure fails the turn through
       // the catch below while the row is still non-terminal, never leaving a
-      // terminal row whose outcome was never recorded.
+      // terminal row whose outcome was never recorded. The record also
+      // precedes finish(): a terminated emitter drops error chunks, so the
+      // failure must be caught while the failure channel is still open.
       if (options.threadId) {
         // Durable assistant record — partial (approval-pending) or completed.
         // Upsert converges with any late progress write on the same id.
+        // Parts close first (without terminating the channel) so the built
+        // message carries their final state.
+        uiChunkEmitter.settleParts();
         const settledMessage = (await uiChunkEmitter.buildPersistedMessage()) ?? {
           id: uiChunkEmitter.messageId,
           role: 'assistant' as const,
           parts: [],
         };
-        // Session log: committed output + how the turn ended. An approval
-        // pause is not terminal — its continuation's facts land in a later
-        // slice. The terminal fact mirrors finalizeRunForOutcome's outcome
-        // mapping (the event-side twin).
-        const terminal =
-          streamResult.outcome === 'awaiting-approval'
-            ? undefined
-            : terminalFactForOutcome(streamResult);
+        // Session log: committed output + how the turn ended. The terminal
+        // fact mirrors finalizeRunForOutcome's outcome mapping (the
+        // event-side twin; undefined for an approval pause).
+        const terminal = terminalFactForOutcome(streamResult);
         recordSessionEvents(options.threadId, turnFactsToEvents({
           committed: {
             runId: finalRunTracker.id,
@@ -483,6 +481,9 @@ export const createChatStreaming = (deps: {
           'stream',
           userTurnMessageId
         );
+      }
+      if (streamResult.outcome !== 'awaiting-approval') {
+        uiChunkEmitter.finish();
       }
       finalizeRunForOutcome(finalRunTracker, streamResult, {
         text: finalResponse,

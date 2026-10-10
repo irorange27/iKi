@@ -98,6 +98,12 @@ export type UiChunkEmitter = {
   buildPersistedMessage: (
     seedParts?: unknown[]
   ) => Promise<PersistedTurnMessage | null>;
+  /**
+   * Close the open text/reasoning parts without terminating the channel —
+   * the durable projection needs closed parts while the session-log record
+   * and persist that follow still need a live error channel.
+   */
+  settleParts: () => void;
   finish: () => void;
   abort: () => void;
   error: (errorText: string) => void;

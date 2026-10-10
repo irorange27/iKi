@@ -15,7 +15,6 @@ import type { ToolCallApproval } from '@iki/backend/types/tool_call_approval';
 import {
   APPROVAL_DECIDED,
   recordFailureTerminalEvent,
-  recordSessionEvents,
   SESSION_EVENT_VERSION,
   turnFactsToEvents,
 } from './session_log';
