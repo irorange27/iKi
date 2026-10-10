@@ -14,6 +14,7 @@ import { expirePendingToolCallApprovalsByRunIds, getToolCallApprovalSession } fr
 import type { ToolCallApproval } from '@iki/backend/types/tool_call_approval';
 import {
   APPROVAL_DECIDED,
+  recordFailureTerminalEvent,
   recordSessionEvents,
   SESSION_EVENT_VERSION,
   turnFactsToEvents,
@@ -623,7 +624,7 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
       ? getToolCallApprovalSession(sessionId)?.thread_id
       : null;
     if (!threadId) continue;
-    recordSessionEvents(threadId, [
+    recordFailureTerminalEvent(threadId, [
       {
         type: APPROVAL_DECIDED,
         version: SESSION_EVENT_VERSION,
@@ -699,9 +700,10 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
     // Session log: the reclamation is the turn's terminal fact — replay must
     // show it failed, not running forever. Only recorded once this process
     // actually took the run (owner-aware: a live lease in another process
-    // means their run, their log, untouched).
+    // means their run, their log, untouched). Loud-guarded: recovery must
+    // continue over the remaining reclaimable runs (ADR 008 F1).
     if (run.threadId) {
-      recordSessionEvents(run.threadId, turnFactsToEvents({
+      recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
         terminal: {
           runId: run.id,
           status: 'failed',

@@ -18,6 +18,7 @@ import type { ExecutionPlan } from './execution_plan';
 import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
 import { parseExecutionPlan, serializeExecutionPlan } from './execution_plan_codec';
 import {
+  recordFailureTerminalEvent,
   recordSessionEvents,
   turnFactsToEvents,
   APPROVAL_REQUESTED,
@@ -25,7 +26,12 @@ import {
   SESSION_EVENT_VERSION,
   type ApprovalDecidedPayload,
 } from './session_log';
-import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './turn_driver';
+import {
+  createTurnDriver,
+  finalizeRunForOutcome,
+  runFailureFromError,
+  terminalFactForOutcome,
+} from './turn_driver';
 import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import { executeApprovedTool, prepareToolExecution } from './tool_execution';
@@ -199,6 +205,28 @@ export const createChatApproval = (deps: {
       // The plan is the authority; the per-column fields are its persisted
       // projection (legacy readers and the legacy recovery path read them).
       const plan = recoveryContext.plan;
+      // Session log: each pending approval is a business fact, recorded
+      // BEFORE the rows that gate execution — a crash between the two leaves
+      // a requested fact without a pending row (resume refuses: safe
+      // direction), never a pending row the replay cannot see (ADR 008).
+      if (plan.threadId) {
+        recordSessionEvents(
+          plan.threadId,
+          approvalRequests.map(request => ({
+            type: APPROVAL_REQUESTED,
+            version: SESSION_EVENT_VERSION,
+            payload: {
+              approvalId: request.approvalId,
+              sessionId: recoveryContext.sessionId,
+              ...(recoveryContext.runId ? { runId: recoveryContext.runId } : {}),
+              ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
+              ...(request.toolCall?.toolName ? { toolName: request.toolCall.toolName } : {}),
+              ...(request.toolCall?.args ? { args: request.toolCall.args } : {}),
+            },
+          }))
+        );
+      }
+
       toolCallApprovalDb.upsertToolCallApprovalSession({
         session_id: recoveryContext.sessionId,
         thread_id: plan.threadId ?? null,
@@ -234,25 +262,6 @@ export const createChatApproval = (deps: {
           state: 'pending',
         }))
       );
-
-      // Session log: each pending approval is a business fact.
-      if (recoveryContext.plan.threadId) {
-        recordSessionEvents(
-          recoveryContext.plan.threadId,
-          approvalRequests.map(request => ({
-            type: APPROVAL_REQUESTED,
-            version: SESSION_EVENT_VERSION,
-            payload: {
-              approvalId: request.approvalId,
-              sessionId: recoveryContext.sessionId,
-              ...(recoveryContext.runId ? { runId: recoveryContext.runId } : {}),
-              ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
-              ...(request.toolCall?.toolName ? { toolName: request.toolCall.toolName } : {}),
-              ...(request.toolCall?.args ? { args: request.toolCall.args } : {}),
-            },
-          }))
-        );
-      }
     }
 
     let existingSession: PendingApprovalSession | undefined;
@@ -516,6 +525,36 @@ export const createChatApproval = (deps: {
       });
     };
 
+    // Session log: the decision is a business fact, recorded BEFORE the
+    // decision row applies it — a write failure or crash between the two
+    // leaves a requested fact without an applied decision (a retried decision
+    // walks the full path again), never an applied decision the replay cannot
+    // see. Authorization reads the row, so the resume still refuses the
+    // event-without-row shape: safe direction (ADR 008).
+    const decidedThreadId =
+      session.recoveryContext?.plan.threadId ??
+      (() => {
+        const stored = toolCallApprovalDb.getToolCallApprovalSession(
+          toolCallApprovalDb.getToolCallApproval(approvalId)?.session_id ?? ''
+        );
+        return stored?.thread_id ?? null;
+      })();
+    const recordDecisionEvent = () => {
+      if (!decidedThreadId) return;
+      recordSessionEvents(decidedThreadId, [
+        {
+          type: APPROVAL_DECIDED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            approvalId,
+            approved,
+            ...(approvalResponse.reason ? { reason: approvalResponse.reason } : {}),
+            source,
+          },
+        },
+      ]);
+    };
+
     if (session.collectedApprovalResponses.has(approvalId)) {
       const existing = session.collectedApprovalResponses.get(approvalId);
       // Idempotent: if the same decision was already recorded, treat as success
@@ -529,34 +568,11 @@ export const createChatApproval = (deps: {
       };
     }
 
+    recordDecisionEvent();
     session.collectedApprovalResponses.set(approvalId, approvalResponse);
     const decision: ToolCallApprovalDecision = approved ? 'approved' : 'rejected';
     toolCallApprovalDb.answerToolCallApproval(approvalId, decision, approvalResponse.reason);
     recordApprovalResponse();
-
-    // Session log: the decision is a business fact, whoever made it.
-    const decidedThreadId =
-      session.recoveryContext?.plan.threadId ??
-      (() => {
-        const stored = toolCallApprovalDb.getToolCallApprovalSession(
-          toolCallApprovalDb.getToolCallApproval(approvalId)?.session_id ?? ''
-        );
-        return stored?.thread_id ?? null;
-      })();
-    if (decidedThreadId) {
-      recordSessionEvents(decidedThreadId, [
-        {
-          type: APPROVAL_DECIDED,
-          version: SESSION_EVENT_VERSION,
-          payload: {
-            approvalId,
-            approved,
-            ...(approvalResponse.reason ? { reason: approvalResponse.reason } : {}),
-            source,
-          },
-        },
-      ]);
-    }
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
       id => !session.collectedApprovalResponses.has(id)
@@ -843,14 +859,47 @@ export const createChatApproval = (deps: {
           },
         });
       }
-      finalizeRunForOutcome(driver.getRunTracker(), streamResult, {
-        text: driver.getAccumulatedResponse() || streamResult.response,
-      });
+      // Event-first (ADR 008 F1): the continuation's facts reach the session
+      // log BEFORE the run row finalizes — a write failure fails the resume
+      // through the catch below while the row is still non-terminal.
       if (baseApprovalContext?.plan.threadId) {
         // Seed the reduction with the already-persisted pre-pause parts so the
         // accumulated message stays whole across the pause, then upsert.
         const persisted = await uiChunkEmitter.buildPersistedMessage(
           loadPersistedAssistantParts(uiChunkEmitter.messageId)
+        );
+        // Session log: the continuation's committed output; a re-pause is not
+        // terminal (its next continuation records its own facts). The terminal
+        // fact mirrors finalizeRunForOutcome's outcome mapping (the
+        // event-side twin).
+        const terminal =
+          streamResult.outcome === 'awaiting-approval'
+            ? undefined
+            : terminalFactForOutcome(streamResult);
+        recordSessionEvents(
+          baseApprovalContext.plan.threadId,
+          turnFactsToEvents({
+            ...(persisted
+              ? {
+                  committed: {
+                    runId: driver.getRunTracker().id,
+                    messageId: persisted.id,
+                    message: persisted as never,
+                    transport: 'approval-resume',
+                  },
+                }
+              : {}),
+            ...(terminal
+              ? {
+                  terminal: {
+                    runId: driver.getRunTracker().id,
+                    status: terminal.status,
+                    ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
+                    ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
+                  },
+                }
+              : {}),
+          })
         );
         if (persisted) {
           await persistAssistantTurnMessage(
@@ -860,36 +909,10 @@ export const createChatApproval = (deps: {
             'approval-resume'
           );
         }
-        // Session log: the continuation's committed output; a re-pause is not
-        // terminal (its next continuation records its own facts). The final
-        // tracker's identity pairs with the final status — a handoff chain
-        // finishes in the child segment.
-        const finalResumeTracker = driver.getRunTracker();
-        const resumedStatus = finalResumeTracker.getRun().status;
-        recordSessionEvents(
-          baseApprovalContext.plan.threadId,
-          turnFactsToEvents({
-            ...(persisted
-              ? {
-                  committed: {
-                    runId: finalResumeTracker.id,
-                    messageId: persisted.id,
-                    message: persisted as never,
-                    transport: 'approval-resume',
-                  },
-                }
-              : {}),
-            ...(resumedStatus === 'completed' || resumedStatus === 'failed' || resumedStatus === 'cancelled'
-              ? {
-                  terminal: {
-                    runId: finalResumeTracker.id,
-                    status: resumedStatus,
-                  },
-                }
-              : {}),
-          })
-        );
       }
+      finalizeRunForOutcome(driver.getRunTracker(), streamResult, {
+        text: driver.getAccumulatedResponse() || streamResult.response,
+      });
       return {
         success: true,
         awaitingApproval: isAwaitingApproval,
@@ -915,7 +938,7 @@ export const createChatApproval = (deps: {
       }
       const failedThreadId = failingTracker?.getRun().threadId;
       if (failedThreadId) {
-        recordSessionEvents(failedThreadId, turnFactsToEvents({
+        recordFailureTerminalEvent(failedThreadId, turnFactsToEvents({
           terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
         }));
       }
@@ -997,7 +1020,7 @@ export const createChatApproval = (deps: {
       [...sessions.values()].find(session => session.recoveryContext?.runId === normalizedRunId)
         ?.recoveryContext?.plan.threadId;
     if (threadId && expired.length > 0) {
-      recordSessionEvents(
+      recordFailureTerminalEvent(
         threadId,
         expired.map(record => ({
           type: APPROVAL_DECIDED,

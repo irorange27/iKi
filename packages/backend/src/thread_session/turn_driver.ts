@@ -12,10 +12,17 @@ import { createApprovalRecoveryContext, reidentifyPlan } from './approval_types'
 import type { ExecutionPlan } from './execution_plan';
 import { planToRunTrackerParams } from './execution_plan';
 import { selectTurnHarness } from './turn_supply_selection';
-import { MODEL_TEXT_COMMITTED, recordSessionEvents, SESSION_EVENT_VERSION, SessionLogCommitError } from './session_log';
+import {
+  MODEL_TEXT_COMMITTED,
+  recordSessionEvents,
+  SESSION_EVENT_VERSION,
+  SessionLogCommitError,
+  SessionLogWriteError,
+} from './session_log';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
+import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 
 type TurnDriverResultBase = {
   response?: string;
@@ -128,8 +135,31 @@ export const runFailureFromError = (error: unknown, message: string) => ({
         retryable: false,
         ...(error.generatedText ? { text: error.generatedText } : {}),
       }
-    : {}),
+    : error instanceof SessionLogWriteError
+      ? { code: 'SESSION_LOG_WRITE_FAILED', retryable: false }
+      : {}),
 });
+
+/**
+ * The event-side twin of finalizeRunForOutcome: the terminal fact the
+ * session log records for a driver outcome. The run row and the event are
+ * two projections of one outcome — adding an outcome changes both switches.
+ */
+export const terminalFactForOutcome = (
+  result: TurnDriverResult
+): { status: AgentRunStatus; finishReason?: string; errorText?: string } => {
+  if (result.outcome === 'partial-failure') {
+    return {
+      status: 'failed',
+      errorText: 'Autonomous iteration failed; partial progress saved.',
+    };
+  }
+  if (result.outcome === 'cancelled') return { status: 'cancelled' };
+  if (result.outcome === 'handoff' || result.outcome === 'budget-exhausted') {
+    return { status: 'completed', finishReason: result.outcome };
+  }
+  return { status: 'completed' };
+};
 
 /**
  * The authoritative terminal-outcome mapping: one place decides what each
@@ -229,20 +259,24 @@ const runTurnBatches = async (
     const text = pendingText;
     lastTextFlushAt = Date.now();
     // A failed commit ends execution; an unpublished buffer cannot survive
-    // a successful turn's teardown.
-    const committed = recordSessionEvents(threadId, [
-      {
-        type: MODEL_TEXT_COMMITTED,
-        version: SESSION_EVENT_VERSION,
-        payload: {
-          runId: state.runTracker.id,
-          messageId: uiChunkEmitter.messageId,
-          seq: pendingTextSeq,
-          text,
+    // a successful turn's teardown. The gate keeps its own error contract:
+    // the withheld text rides the error so the UI can offer it.
+    try {
+      recordSessionEvents(threadId, [
+        {
+          type: MODEL_TEXT_COMMITTED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            runId: state.runTracker.id,
+            messageId: uiChunkEmitter.messageId,
+            seq: pendingTextSeq,
+            text,
+          },
         },
-      },
-    ]);
-    if (!committed) throw new SessionLogCommitError(text, previewText);
+      ]);
+    } catch (error) {
+      throw new SessionLogCommitError(text, previewText, { cause: error });
+    }
     pendingText = '';
     pendingTextSeq += 1;
     uiChunkEmitter.emitTextDelta(text);

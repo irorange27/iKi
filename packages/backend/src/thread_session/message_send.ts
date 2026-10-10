@@ -15,8 +15,18 @@ import {
   planToHarnessConfig,
   planToRunTrackerParams,
 } from './execution_plan';
-import { asChatUiMessage, recordSessionEvents, turnFactsToEvents } from './session_log';
-import { createTurnDriver, finalizeRunForOutcome, runFailureFromError } from './turn_driver';
+import {
+  asChatUiMessage,
+  recordFailureTerminalEvent,
+  recordSessionEvents,
+  turnFactsToEvents,
+} from './session_log';
+import {
+  createTurnDriver,
+  finalizeRunForOutcome,
+  runFailureFromError,
+  terminalFactForOutcome,
+} from './turn_driver';
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
@@ -252,8 +262,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
           }
           if (options.threadId) {
-            // Session log: a lease loss ends the turn even here.
-            recordSessionEvents(options.threadId, turnFactsToEvents({
+            // Session log: a lease loss ends the turn even here. Failure-path
+            // terminal — loud-guarded, never masks the reported interruption.
+            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
               terminal: { runId: finalTracker.id, status: 'failed', errorText: message },
             }));
           }
@@ -278,9 +289,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         });
 
         const finalResponse = driver.getAccumulatedResponse() || result.response || '';
-        finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
 
         if (result.outcome === 'awaiting-approval') {
+          finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
           // Durable decision handle: registered by the driver through
           // deps.approvals, so this pause is resumable through approveTool
           // (and recoverable after a restart) instead of name-only "blocked".
@@ -330,6 +341,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         }
 
         uiChunkEmitter.finish();
+        // Event-first (ADR 008 F1): the turn's facts reach the session log
+        // BEFORE the run row finalizes — a write failure fails the send
+        // through the catch below while the row is still running, never
+        // leaving a terminal row whose outcome was never recorded. The
+        // terminal fact mirrors finalizeRunForOutcome's outcome mapping
+        // (the event-side twin).
         if (options.threadId) {
           // Deterministic per-run id: a duplicate persist of the same turn
           // converges on one row and the message joins back to its run.
@@ -340,13 +357,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             role: 'assistant' as const,
             parts: [{ type: 'text', text: finalResponse, state: 'done' }],
           };
-          await persistAssistantTurnMessage(
-            deps.conversation,
-            options.threadId,
-            settledMessage,
-            'send',
-          );
-          // Session log: committed output + terminal completion.
+          const terminal = terminalFactForOutcome(result);
           recordSessionEvents(options.threadId, turnFactsToEvents({
             committed: {
               runId: finalTracker.id,
@@ -356,13 +367,19 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             },
             terminal: {
               runId: finalTracker.id,
-              status: finalTracker.getRun().status,
-              ...(result.outcome === 'budget-exhausted' || result.outcome === 'handoff'
-                ? { finishReason: result.outcome }
-                : {}),
+              status: terminal.status,
+              ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
+              ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
             },
           }));
+          await persistAssistantTurnMessage(
+            deps.conversation,
+            options.threadId,
+            settledMessage,
+            'send',
+          );
         }
+        finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
         return {
           success: true,
           text: finalResponse,
@@ -394,24 +411,16 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           contextTokens: preparedTurn.report.totalEstimatedTokens,
         },
       });
-      runTracker.markCompleted({
-        text: llmResult.text,
-        usage: llmResult.usage ? { ...llmResult.usage } : undefined,
-        finishReason: 'completed',
-      });
       if (options.threadId && llmResult.text.trim()) {
-        // Deterministic per-run id (see the tool path above).
+        // Deterministic per-run id (see the tool path above). Event-first
+        // (ADR 008 F1): facts reach the session log before the run row
+        // finalizes — a write failure fails the send with the row still
+        // running instead of reporting success on an unrecorded completion.
         const settledMessage = {
           id: `assistant_${activeRunTracker.id}`,
           role: 'assistant' as const,
           parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
         };
-        await persistAssistantTurnMessage(
-          deps.conversation,
-          options.threadId,
-          settledMessage,
-          'send',
-        );
         recordSessionEvents(options.threadId, turnFactsToEvents({
           committed: {
             runId: activeRunTracker.id,
@@ -421,11 +430,22 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           },
           terminal: { runId: activeRunTracker.id, status: 'completed' },
         }));
+        await persistAssistantTurnMessage(
+          deps.conversation,
+          options.threadId,
+          settledMessage,
+          'send',
+        );
       } else if (options.threadId) {
         recordSessionEvents(options.threadId, turnFactsToEvents({
           terminal: { runId: activeRunTracker.id, status: 'completed' },
         }));
       }
+      runTracker.markCompleted({
+        text: llmResult.text,
+        usage: llmResult.usage ? { ...llmResult.usage } : undefined,
+        finishReason: 'completed',
+      });
       return {
         success: true,
         text: llmResult.text,
@@ -441,8 +461,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           runTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
         }
         if (options.threadId && runTracker) {
-          // Session log: both lease-loss shapes end the turn.
-          recordSessionEvents(options.threadId, turnFactsToEvents({
+          // Session log: both lease-loss shapes end the turn. Failure-path
+          // terminal — loud-guarded, never masks the reported interruption.
+          recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
             terminal: { runId: runTracker.id, status: 'failed', errorText: message },
           }));
         }
@@ -458,7 +479,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         failingTracker.markFailed(runFailureFromError(error, message));
       }
       if (options.threadId && failingTracker) {
-        recordSessionEvents(options.threadId, turnFactsToEvents({
+        recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
           terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
         }));
       }
