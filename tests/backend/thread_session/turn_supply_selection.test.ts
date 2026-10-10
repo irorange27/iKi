@@ -15,6 +15,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { addProvider } from '@iki/backend/db/providers';
 import { AgentHarness } from '@iki/backend/agent/harness';
 import { PiTextTurnHarness } from '@iki/backend/agent/runners/pi_text_turn_harness';
@@ -151,6 +152,43 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
         plan({ enableTools: false, enabledTools: [] }),
         history
       )
+    ).toBe(false);
+  });
+
+  it('refuses a restart-recovered replay history — the live approval part is outside the Pi domain (F2 supply flip, documented)', async () => {
+    // What rebuildThreadViewFromEvents → toModelInputMessages(repair:false)
+    // yields for a paused turn: the assistant partial carries the live
+    // approval-request pair. The Pi projection rejects that part type, so a
+    // RESTART-recovered resume of a Pi-paused turn runs the AI SDK harness —
+    // the flip is deliberate and ledgered (ADR 008 F2 review, follow-up
+    // issue) until the projection learns the part.
+    const recoveredHistory = await toModelInputMessages(
+      [
+        {
+          id: 'user_1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'write it' }],
+        },
+        {
+          id: 'assistant_1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'working', state: 'done' },
+            {
+              type: 'dynamic-tool',
+              toolCallId: 'call_paused',
+              toolName: 'write_file',
+              state: 'approval-requested',
+              input: { path: 'a.txt', content: 'x' },
+              approval: { id: 'approval_1' },
+            },
+          ],
+        },
+      ] as never,
+      { repairInterruptedTools: false }
+    );
+    expect(
+      pausedPlanRunsOnPiToolSupply(plan({}), recoveredHistory as never)
     ).toBe(false);
   });
 

@@ -414,7 +414,7 @@ describe('createChatApproval', () => {
     ]);
     // F2: the recovery history source is the session log replay — the
     // recorded facts stand in for what a real pause persists.
-    getSessionEventsMock.mockReturnValue([
+    getSessionEventsMock.mockReturnValueOnce([
       {
         revision: 1,
         type: 'input_accepted',
