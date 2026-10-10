@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const createModelMock = vi.hoisted(() => vi.fn());
@@ -98,8 +98,74 @@ import { AgentHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import {
+  APPROVAL_REQUESTED,
+  INPUT_ACCEPTED,
+  MODEL_OUTPUT_COMMITTED,
+  recordSessionEvents,
+  SESSION_EVENT_VERSION,
+} from '@iki/backend/thread_session/session_log';
 
 const toolName = 'approval_resume_probe';
+
+/** F2: restart recovery reads the session log — seed the facts a real
+ *  pause records (input, partial output with the live tool part, request). */
+const seedResumeFacts = (approvalId: string, toolCallId: string) => {
+  recordSessionEvents('thread_1', [
+    {
+      type: INPUT_ACCEPTED,
+      version: SESSION_EVENT_VERSION,
+      payload: {
+        messageId: 'user_1',
+        message: {
+          id: 'user_1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'run approval probe' }],
+        } as never,
+      },
+    },
+    {
+      type: MODEL_OUTPUT_COMMITTED,
+      version: SESSION_EVENT_VERSION,
+      payload: {
+        runId: 'run_blocked_1',
+        messageId: 'assistant_1',
+        message: {
+          id: 'assistant_1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'before pause', state: 'done' },
+            {
+              type: 'dynamic-tool',
+              toolCallId,
+              toolName,
+              state: 'approval-requested',
+              input: {},
+              approval: { id: approvalId },
+            },
+          ],
+        } as never,
+        transport: 'stream',
+      },
+    },
+    {
+      type: APPROVAL_REQUESTED,
+      version: SESSION_EVENT_VERSION,
+      payload: {
+        approvalId,
+        sessionId: 'assistant_1',
+        runId: 'run_blocked_1',
+        toolCallId,
+        toolName,
+        args: {},
+      },
+    },
+  ]);
+};
 
 const baseApprovalRecord = {
   approval_id: 'approval_1',
@@ -116,6 +182,19 @@ const baseApprovalRecord = {
 };
 
 describe('createChatApproval resume integration', () => {
+  let dbRoot = '';
+
+  beforeAll(async () => {
+    // F2: recovery reads the session log — the seeds need a real events DB.
+    dbRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-approval-resume-'));
+    initializeDatabase({ dbPath: path.join(dbRoot, 'resume.db') });
+  });
+
+  afterAll(async () => {
+    closeDatabase();
+    await fs.rm(dbRoot, { recursive: true, force: true });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -245,6 +324,7 @@ describe('createChatApproval resume integration', () => {
         createdAt: '2026-06-20T00:00:00.000Z',
         updatedAt: '2026-06-20T00:00:00.000Z',
     } as never);
+    seedResumeFacts(approvedId, 'call_1');
 
     const streamCoordinator = createThreadStreamCoordinator();
     const usage = { recordUsageEvent: vi.fn() };
