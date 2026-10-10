@@ -31,7 +31,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { onMessagePersisted } from '@iki/backend/thread_session/platform';
@@ -234,6 +234,72 @@ describe('session log approval facts across entries', () => {
     expect(sendRunMessages).toHaveLength(1);
     expect(JSON.stringify(sendRunMessages[0]!.parts)).toContain('send answer');
   });
+  it('a decided fact lost to a write failure is re-recorded when the decision is retried', async () => {
+    const approvals = buildApprovals();
+    const streaming = createChatStreaming({
+      streamCoordinator: coordinator,
+      memory: memory as never,
+      conversation: conversation as never,
+      usage: { recordUsageEvent: vi.fn() },
+      approvals: {
+        ensurePendingApprovalSession: approvals.ensurePendingApprovalSession,
+        registerApprovalBatch: approvals.registerApprovalBatch,
+        cleanupPendingSessionsForSender: approvals.cleanupPendingSessionsForSender,
+      },
+      getThreadTitle: () => 'Facts',
+    });
+
+    createModelMock.mockReturnValue(
+      new FauxModelProvider([
+        fauxToolCall('write_file', { path: 'retry.txt', content: 'retry' }, { id: 'call_retry' }),
+      ])
+    );
+    const pauseResult = await streaming.stream({ id: 96, send: vi.fn() }, {
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'test-model',
+      threadId: 'thread_facts',
+      approvalPolicy: 'always',
+      messages: [
+        { id: 'msg_facts_retry', role: 'user', parts: [{ type: 'text', text: 'write it again' }] },
+      ],
+      tools: ['write_file'],
+    });
+    expect(pauseResult).toMatchObject({ success: true, awaitingApproval: true });
+    const approvalId = rebuildThreadViewFromEvents('thread_facts').approvals.find(
+      approval => approval.toolCallId === 'call_retry'
+    )!.approvalId;
+
+    getDb().exec(`CREATE TRIGGER facts_reject_decided BEFORE INSERT ON session_events
+      WHEN NEW.type = 'approval_decided'
+      BEGIN SELECT RAISE(ABORT, 'facts: decided write rejected'); END`);
+    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('written on retry')]));
+    try {
+      await expect(
+        approvals.approveTool({ id: 97, send: vi.fn() }, approvalId, true)
+      ).rejects.toThrow('Failed to append turn facts to the session log.');
+    } finally {
+      // This file shares ONE database across its tests — a leaked aborting
+      // trigger cascades into every sibling.
+      getDb().exec('DROP TRIGGER IF EXISTS facts_reject_decided');
+    }
+
+    // The retried decision heals the fact, not just the flow.
+    const retryResult = await approvals.approveTool({ id: 98, send: vi.fn() }, approvalId, true);
+    expect(retryResult).toMatchObject({ success: true, awaitingApproval: false });
+
+    const view = rebuildThreadViewFromEvents('thread_facts');
+    const decided = view.events.filter(
+      event =>
+        event.type === APPROVAL_DECIDED &&
+        (event.payload as { approvalId?: string }).approvalId === approvalId
+    );
+    expect(decided).toHaveLength(1);
+    expect(view.approvals.find(approval => approval.approvalId === approvalId)).toMatchObject({
+      status: 'approved',
+    });
+  });
+
   it('records run-cancel expirations as system decisions', async () => {
     const approvals = buildApprovals();
     approvals.registerApprovalBatch(

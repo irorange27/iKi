@@ -252,6 +252,16 @@ export const createUiChunkEmitter = (
 
   return {
     messageId,
+    // Close the open text/reasoning parts WITHOUT terminating the channel:
+    // the persisted projection must carry closed parts, while the session-log
+    // record and persist that follow still need a live error channel
+    // (ADR 008 F1 — a write failure must be able to emit its error chunk).
+    settleParts: () => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      closeReasoning();
+    },
     emitTextDelta: delta => {
       if (!delta || terminated) return;
       ensureTextStarted();

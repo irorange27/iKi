@@ -14,10 +14,21 @@ const logger = createLogger({ module: 'session_log' });
 export class SessionLogCommitError extends Error {
   constructor(
     readonly unpublishedText: string,
-    readonly generatedText = unpublishedText
+    readonly generatedText = unpublishedText,
+    options?: { cause?: unknown }
   ) {
-    super('Could not save generated output. The turn was stopped.');
+    super('Could not save generated output. The turn was stopped.', options);
     this.name = 'SessionLogCommitError';
+  }
+}
+
+export class SessionLogWriteError extends Error {
+  constructor(
+    readonly threadId: string,
+    options?: { cause?: unknown }
+  ) {
+    super('Failed to append turn facts to the session log.', options);
+    this.name = 'SessionLogWriteError';
   }
 }
 
@@ -94,26 +105,46 @@ export type ApprovalDecidedPayload = {
   source: 'user' | 'timeout' | 'system';
 };
 
-/** Append observations atomically. Legacy observers may handle false as
- * degradation; publication and execution boundaries must treat it as failure. */
+/** Append observations atomically. Throws SessionLogWriteError on failure:
+ * an unrecorded fact must not be indistinguishable from a recorded one
+ * (ADR 008), so pre-execution and success-path callers let it fail the turn.
+ * A failure-path terminal fact — one reported by a catch/cancel/recovery
+ * handler — must not mask the failure it is recording; those call
+ * recordFailureTerminalEvent. Any other degradation needs an explicit catch
+ * with a stated reason. */
 export const recordSessionEvents = (
   threadId: string,
   events: NewSessionEvent[]
-): boolean => {
-  if (!threadId || events.length === 0) return true;
+): void => {
+  if (!threadId || events.length === 0) return;
   try {
     appendSessionFacts(threadId, events);
-    return true;
+  } catch (error) {
+    throw new SessionLogWriteError(threadId, { cause: error });
+  }
+};
+
+/** Record a terminal fact on a path that is already reporting a failure
+ * (catch-path turn_failed, cancel/lease-loss barriers, approval expiry,
+ * startup reclamation). A lost record is logged at error level; it never
+ * masks the original failure reaching its subscriber, and it never
+ * downgrades the event itself to warn-and-continue. */
+export const recordFailureTerminalEvent = (
+  threadId: string,
+  events: NewSessionEvent[]
+): void => {
+  try {
+    recordSessionEvents(threadId, events);
   } catch (error) {
     logger.event({
-      level: 'warn',
-      event: 'session_log.append',
+      level: 'error',
+      event: 'session_log.terminal_fact_lost',
       outcome: 'degraded',
       entity: { thread_id: threadId },
-      message: 'Failed to append turn facts to the session log.',
+      message:
+        'Failed to record a failure-path terminal fact; the original failure is still being reported.',
       error,
     });
-    return false;
   }
 };
 
