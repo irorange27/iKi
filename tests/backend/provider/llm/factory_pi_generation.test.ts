@@ -198,4 +198,34 @@ describe('switch item 1: single-shot generation routing', () => {
     expect(vi.mocked(callPiChat)).not.toHaveBeenCalled();
     expect(server.countRequests('pi generation probe')).toBe(1); // unchanged
   }, 15000);
+
+  it('honors systemPromptOverride and temperature on the Pi path (#126 aux consolidation)', async () => {
+    server.setScript('aux override probe', {
+      chunks: [
+        sse.delta('ok'),
+        sse.finish('stop', usageChunk()),
+      ],
+    });
+
+    const result = await generateChatWithModelMessages({
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_path',
+      modelId: 'pi-model',
+      messages: [{ role: 'user', content: 'aux override probe' }],
+      systemPromptOverride: 'exact runtime system',
+      temperature: 0.3,
+    });
+    expect(result.text).toBe('ok');
+
+    // The override is the EXACT request system — the persona-led join is
+    // skipped entirely (fails on the old code, which ignored the override);
+    // the temperature rides into the adapter call.
+    const [model, context, options] = vi.mocked(callPiChat).mock.calls.at(-1)!;
+    void model;
+    expect(context.systemPrompt).toBe('exact runtime system');
+    expect(JSON.stringify(context.systemPrompt)).not.toContain('persona');
+    expect((options as { temperature?: number }).temperature).toBe(0.3);
+    const wire = server.getWire('aux override probe');
+    expect(JSON.stringify(wire.messages)).toContain('aux override probe');
+  });
 });

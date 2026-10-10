@@ -625,6 +625,12 @@ const generateViaPi = async (
     modelId: string;
     messages: ModelMessage[];
     extraSystemPrompt?: string;
+    /** The EXACT request system prompt — skips the persona/extra/transcript
+     * assembly entirely (aux callers with their own context, e.g. the
+     * runtimes). A leading system message in `messages` still folds into the
+     * projection's slot but is superseded by the override. */
+    systemPromptOverride?: string;
+    temperature?: number;
     maxOutputTokens?: number;
     threadId?: string;
     abortSignal?: AbortSignal;
@@ -645,13 +651,14 @@ const generateViaPi = async (
     options.messages,
     options.modelId
   );
-  const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+  const assembled = assembleRequestSystemPrompt([
     { slot: 'persona', text: personaPrompt },
     ...(typeof options.extraSystemPrompt === 'string'
       ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
       : []),
     { slot: 'transcriptSystem', text: transcriptSystem },
   ]);
+  const systemPrompt = options.systemPromptOverride ?? assembled.prompt;
 
   try {
     const eventStream = callPiChat(
@@ -663,6 +670,7 @@ const generateViaPi = async (
         ...(typeof options.maxOutputTokens === 'number'
           ? { maxTokens: options.maxOutputTokens }
           : {}),
+        ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
       }
     );
     const resultPromise = eventStream.result();
@@ -725,6 +733,15 @@ export const generateChatWithModelMessages = async (options: {
   modelId: string;
   messages: ModelMessage[];
   extraSystemPrompt?: string;
+  /** The EXACT request system prompt — skips the persona/extra assembly and
+   * the projection's system slot (aux callers with their own context, e.g.
+   * the runtimes). Applied on BOTH supply paths. */
+  systemPromptOverride?: string;
+  temperature?: number;
+  /** AI-SDK-path generation options (providerOptions with reasoning-effort
+   * settings) — spread after getModelCallSettings so the caller wins. The Pi
+   * path drops it (tracked wire delta, same family as #107's). */
+  providerOptions?: SharedV3ProviderOptions;
   maxOutputTokens?: number;
   /** Optional thread id — forwarded to Langfuse as sessionId. */
   threadId?: string;
@@ -760,12 +777,13 @@ export const generateChatWithModelMessages = async (options: {
     return generateViaPi(options, config);
   }
   const model = createModel(options.providerType, options.modelId, options.providerId);
-  const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+  const assembled = assembleRequestSystemPrompt([
     { slot: 'persona', text: resolvePersonaPrompt(options.providerType, options.providerId) },
     ...(typeof options.extraSystemPrompt === 'string'
       ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
       : []),
   ]);
+  const systemPrompt = options.systemPromptOverride ?? assembled.prompt;
 
   try {
     const telemetry = langfuseTelemetry('chat.generate', {
@@ -779,6 +797,8 @@ export const generateChatWithModelMessages = async (options: {
       system: systemPrompt,
       messages: injectReasoningContentIntoMessages(options.messages),
       ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
+      ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
+      ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
       ...(typeof options.maxOutputTokens === 'number'
         ? { maxOutputTokens: options.maxOutputTokens }
         : {}),

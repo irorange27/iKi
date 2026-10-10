@@ -1,6 +1,3 @@
-import { generateText } from 'ai';
-
-import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import {
   appendUserPromptToHistory,
   buildPromptContext,
@@ -10,11 +7,7 @@ import {
   validateAgentConfig,
 } from '../agent/ai_sdk_config';
 import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/backend/agent/types';
-import {
-  createModel,
-  disposeLanguageModel,
-  getModelGenerationSettings,
-} from '../provider/llm/factory';
+import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
 
 export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
 
@@ -45,33 +38,34 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
 
     const history = appendUserPromptToHistory([], prompt);
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
-    const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
-    try {
-      const telemetry = langfuseTelemetry('prompt.generate', {
-        sessionId: this.threadId,
-        provider: this.config.providerType,
-        providerId: this.config.providerId,
-        model: this.config.model,
-      });
-      const result = await generateText({
-        model,
-        abortSignal,
-        system: systemPrompt,
-        messages,
-        ...getModelGenerationSettings({
-          providerType: this.config.providerType,
-          modelId: this.config.model,
-          providerId: this.config.providerId,
-          temperature: this.config.temperature,
-        }),
-        maxOutputTokens: this.config.maxTokens,
-        ...(telemetry ? { experimental_telemetry: telemetry } : {}),
-      });
+    // The factory entry picks the supply per the ADR 007 matrix (Pi for
+    // eligible providers, AI SDK otherwise) and owns model lifecycle and
+    // telemetry. The generator keeps its own system composition — passed as
+    // the exact request system, replacing the factory's persona-led join.
+    const generationSettings = getModelGenerationSettings({
+      providerType: this.config.providerType,
+      modelId: this.config.model,
+      providerId: this.config.providerId,
+      temperature: this.config.temperature,
+    });
+    const result = await generateChatWithModelMessages({
+      providerType: this.config.providerType,
+      providerId: this.config.providerId,
+      modelId: this.config.model,
+      messages,
+      systemPromptOverride: systemPrompt,
+      ...(typeof generationSettings.temperature === 'number'
+        ? { temperature: generationSettings.temperature }
+        : {}),
+      ...(generationSettings.providerOptions
+        ? { providerOptions: generationSettings.providerOptions }
+        : {}),
+      ...(typeof this.config.maxTokens === 'number' ? { maxOutputTokens: this.config.maxTokens } : {}),
+      ...(this.threadId ? { threadId: this.threadId } : {}),
+      ...(abortSignal ? { abortSignal } : {}),
+    });
 
-      return { response: result.text };
-    } finally {
-      disposeLanguageModel(model);
-    }
+    return { response: result.text };
   }
 }
 
