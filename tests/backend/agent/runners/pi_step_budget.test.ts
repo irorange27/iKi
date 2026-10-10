@@ -506,13 +506,30 @@ describe('differential: the same scenario compacts on both supply paths', () => 
     // The production composition: the harness's modelCall surface hands the
     // wrapper its callbacks; the wrapper owns draining, classification and
     // the one-shot rescue; the attempts read the LIVE transcript (post-
-    // compaction for the fresh attempt).
+    // compaction for the fresh attempt). Attempt 1 fails transiently (a
+    // recovery note joins the transcript and pendingNotes), attempt 2 is
+    // rejected for context length — the rescue must compact AND carry the
+    // note onto the rebuilt wire.
     const modelCall: PiToolModelCall = (config, request) => {
       return withPiRetry(
         () => {
           attempt += 1;
           capturedViews.push(JSON.stringify(request.messages));
           if (attempt === 1) {
+            return {
+              stream: (async function* () {
+                /* rejected before any content */
+              })(),
+              final: Promise.resolve(
+                finalMessage({
+                  content: [],
+                  stopReason: 'error',
+                  errorMessage: 'upstream 503',
+                })
+              ),
+            };
+          }
+          if (attempt === 2) {
             return {
               stream: (async function* () {
                 /* rejected before any content */
@@ -556,17 +573,20 @@ describe('differential: the same scenario compacts on both supply paths', () => 
       ],
     });
 
-    expect(attempt).toBe(2);
+    expect(attempt).toBe(3);
     const lastDone = events.at(-1);
     expect(lastDone).toMatchObject({ event: 'done' });
     expect(lastDone && lastDone.event === 'done' ? lastDone.output.text : '').toBe('rescued');
     expect(summarize).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(OLD_TEXT);
-    // Attempt 1's wire still carried the full view; the fresh attempt reads
-    // the rebuilt (compacted) transcript.
+    // Attempt 1's wire still carried the full view; attempt 2 carried the
+    // recovery note; the fresh attempt reads the rebuilt (compacted)
+    // transcript WITH the recovery note — the rescue must not drop it.
     expect(capturedViews[0]).toContain(OLD_TEXT);
-    expect(capturedViews[1]).toContain('summary#overflow');
-    expect(capturedViews[1]).not.toContain(OLD_TEXT);
+    expect(capturedViews[1]).toContain('Your last attempt encountered an error');
+    expect(capturedViews[2]).toContain('summary#overflow');
+    expect(capturedViews[2]).toContain('Your last attempt encountered an error');
+    expect(capturedViews[2]).not.toContain(OLD_TEXT);
     // The stored mirror keeps the full text; the snapshot follows the send.
     expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
     expect(JSON.stringify(records.at(-1)?.messages ?? '')).not.toContain(OLD_TEXT);

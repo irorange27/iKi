@@ -86,6 +86,8 @@ export const isContextOverflowError = (message: unknown): boolean => {
     msg.includes('too many tokens') ||
     msg.includes('token limit') ||
     msg.includes('input length') ||
+    msg.includes('input is too long') ||
+    msg.includes('prompt is too long') ||
     msg.includes('request too large')
   );
 };

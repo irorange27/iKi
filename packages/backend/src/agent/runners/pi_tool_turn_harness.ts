@@ -192,6 +192,31 @@ export const withPiRetry = (
                 undefined
               )
             : new Error(final.errorMessage || 'Provider returned an error stop reason');
+          // Over-length is the one failure a REQUEST rebuild fixes: force-
+          // compact through the caller and retry once with a fresh transient
+          // budget. Second overflow / streamed / no callback → terminal.
+          // Checked BEFORE the transient classification so a hybrid message
+          // (a proxy wrapping the over-length text in a 429 envelope) rescues
+          // immediately instead of burning the transient budget.
+          if (
+            isContextOverflowError(final.errorMessage) &&
+            onContextOverflow &&
+            !overflowRetried &&
+            !streamed &&
+            !request.signal?.aborted
+          ) {
+            overflowRetried = true;
+            attemptIndex = 0;
+            logger.event({
+              level: 'warn',
+              event: 'llm.turn.retry',
+              outcome: 'started',
+              message: 'Provider rejected the request for context length; compacted and retrying once.',
+              data: {},
+            });
+            await onContextOverflow();
+            continue;
+          }
           if (
             attemptIndex < RETRY_MAX_ATTEMPTS &&
             !streamed &&
@@ -217,27 +242,6 @@ export const withPiRetry = (
           // Terminal: classify for the driver before handing the failure over.
           if (request.signal?.aborted) {
             throw new DOMException(final.errorMessage || 'Run cancelled', 'AbortError');
-          }
-          // Over-length is the one failure a REQUEST rebuild fixes: force-
-          // compact through the caller and retry once with a fresh transient
-          // budget. Second overflow / streamed / no callback → terminal.
-          if (
-            isContextOverflowError(final.errorMessage) &&
-            onContextOverflow &&
-            !overflowRetried &&
-            !streamed
-          ) {
-            overflowRetried = true;
-            attemptIndex = 0;
-            await onContextOverflow();
-            logger.event({
-              level: 'warn',
-              event: 'llm.turn.retry',
-              outcome: 'started',
-              message: 'Provider rejected the request for context length; compacted and retrying once.',
-              data: {},
-            });
-            continue;
           }
           if (failure instanceof RefusalError) throw failure;
           logger.event({
@@ -664,11 +668,21 @@ export class PiToolTurnHarness {
     };
     // Over-length rescue (#124): invoked by the retry wrapper between
     // attempts. An extra snapshot push keeps the inference record on the
-    // compacted basis (the retry's request IS the rebuilt view).
+    // compacted basis (the retry's request IS the rebuilt view), and the
+    // unflushed recovery notes re-join the rebuilt transcript — they were
+    // pushed onto it by the failed attempt and the snapshot records them as
+    // sent, so the wire must carry them.
     const onContextOverflow = async (): Promise<void> => {
       const compacted = await applyCompaction({ force: true });
       if (!compacted) {
         throw new Error('Context over length and compaction could not shrink it; history has been preserved.');
+      }
+      for (const note of pendingNotes) {
+        transcript.push({
+          role: 'user',
+          content: typeof note.content === 'string' ? note.content : '',
+          timestamp: Date.now(),
+        });
       }
       sentSnapshots.push([...requestView, ...pendingNotes]);
     };

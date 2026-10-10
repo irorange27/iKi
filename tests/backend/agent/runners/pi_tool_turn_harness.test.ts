@@ -830,6 +830,9 @@ describe('withPiRetry (the production wrapper)', () => {
     const onNote = vi.fn();
     const { final } = withPiRetry(
       attemptFrom([
+        { stopReason: 'error', errorMessage: 'rate limit' },
+        { stopReason: 'error', errorMessage: 'rate limit' },
+        { stopReason: 'error', errorMessage: 'rate limit' },
         { stopReason: 'error', errorMessage: 'context length exceeded' },
         { stopReason: 'error', errorMessage: 'rate limit' },
         { stopReason: 'stop' },
@@ -839,9 +842,30 @@ describe('withPiRetry (the production wrapper)', () => {
       onOverflow
     );
     const result = await final;
+    // The transient budget was EXHAUSTED (3 retries) before the overflow;
+    // only the reset lets the post-rescue rate-limit failure retry. Delete
+    // `attemptIndex = 0` and this fails terminal at attempt 5.
     expect(result.stopReason).toBe('stop');
     expect(onOverflow).toHaveBeenCalledTimes(1);
-    expect(onNote).toHaveBeenCalledTimes(1);
+    expect(onNote).toHaveBeenCalledTimes(4);
+  }, 20000);
+
+  it('rescues a hybrid 429-wrapped over-length message before the transient classification', async () => {
+    const onOverflow = vi.fn(async () => undefined);
+    const onNote = vi.fn();
+    const { final } = withPiRetry(
+      attemptFrom([
+        { stopReason: 'error', errorMessage: 'HTTP 429 try again: maximum context length exceeded' },
+        { stopReason: 'stop' },
+      ]),
+      baseRequest(),
+      onNote,
+      onOverflow
+    );
+    const result = await final;
+    expect(result.stopReason).toBe('stop');
+    expect(onOverflow).toHaveBeenCalledTimes(1);
+    expect(onNote).not.toHaveBeenCalled();
   });
 });
 
