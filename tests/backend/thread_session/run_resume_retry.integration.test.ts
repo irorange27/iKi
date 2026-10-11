@@ -28,11 +28,17 @@ import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
+import {
+  INPUT_ACCEPTED,
+  recordSessionEvents,
+  SESSION_EVENT_VERSION,
+} from '@iki/backend/thread_session/session_log';
 import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
 
-// F5 boundary: a retry or queued resume replays the ORIGINAL task — the run
-// row's recorded input — and adopts the queued identity instead of spawning a
-// third run id alongside a never-claimed queued row.
+// F5 boundary: a retry or queued resume replays the ORIGINAL task — since
+// ADR 008 F3 the recovery source is the session log, so the fixture records
+// the accepted-input fact the real turn start persists. The run row's plan
+// fields stay the identity/plan source; its input copy is no longer read.
 describe('run retry and queued resume at the service boundary', () => {
   let root: string;
   let service: ReturnType<typeof createChatService>;
@@ -69,6 +75,20 @@ describe('run retry and queued resume at the service boundary', () => {
       output: null,
       error: null,
     } as never);
+    recordSessionEvents(threadId, [
+      {
+        type: INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId: `user_${runId}`,
+          message: {
+            id: `user_${runId}`,
+            role: 'user',
+            parts: [{ type: 'text', text: prompt }],
+          } as never,
+        },
+      },
+    ]);
   };
 
   beforeEach(async () => {

@@ -220,8 +220,25 @@ export const asChatUiMessage = (value: unknown): ChatUiMessage | null => {
  * queue/consumption-permit facts; the message + turn reconstruction here is
  * the seed every extension must keep zero-side-effect.
  */
-export const rebuildThreadViewFromEvents = (threadId: string): RebuiltThreadView => {
-  const events = getSessionEvents(threadId);
+export const rebuildThreadViewFromEvents = (
+  threadId: string,
+  options?: { excludeRunId?: string }
+): RebuiltThreadView => {
+  // A retried/resumed turn re-runs the ORIGINAL task from the conversation
+  // BEFORE it: the dead run's own committed output is excluded so the request
+  // ends with the task (prompt derivation) and the retry keeps the old
+  // row-copy semantics from the authoritative source. Its recorded facts stay
+  // in the log — display and replay still show the whole story.
+  const excludeRunId = options?.excludeRunId;
+  const events = getSessionEvents(threadId).filter(event => {
+    if (!excludeRunId) return true;
+    if (
+      event.type !== MODEL_OUTPUT_COMMITTED &&
+      event.type !== MODEL_TEXT_COMMITTED
+    )
+      return true;
+    return (event.payload as { runId?: unknown }).runId !== excludeRunId;
+  });
   const messages: ChatUiMessage[] = [];
   const turns = new Map<string, RebuiltTurn>();
   const approvals = new Map<string, RebuiltApproval>();
