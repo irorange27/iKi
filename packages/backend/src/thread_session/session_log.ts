@@ -51,12 +51,26 @@ export const TURN_CANCELLED = 'turn_cancelled';
 export const APPROVAL_REQUESTED = 'approval_requested';
 export const APPROVAL_DECIDED = 'approval_decided';
 
-/** Payload schema version — bump when a payload's shape changes. */
+/** Payload schema version — bump when a payload's shape changes in a MEANING
+ * way: a field reinterpreted, removed, or made required. Additive OPTIONAL
+ * fields extend the vocabulary without a bump (old readers ignore unknown
+ * payload fields; new readers default absence to the old shape) — issue #139
+ * adds `runId`/`system` to input_accepted this way. */
 export const SESSION_EVENT_VERSION = 1;
 
 export type InputAcceptedPayload = {
   messageId: string;
   message: ChatUiMessage;
+  /** The run the input was accepted for — recorded by id-less wake/task
+   * sends (issue #139), whose deterministic fact id alone does not carry the
+   * attribution. Chat inputs (client message ids) omit it. */
+  runId?: string;
+  /** The caller's system-message contents, recorded by id-less wake/task
+   * sends: the task's agent prompt is execution config the plan never
+   * captured (plan.systemPrompt is the template join), and a resume without
+   * it would re-run the task under the wrong persona. Chat inputs omit it —
+   * their system assembly belongs to the preparer. */
+  system?: string[];
 };
 
 export type TurnStartedPayload = {
@@ -202,6 +216,12 @@ export type RebuiltThreadView = {
   messages: ChatUiMessage[];
   turns: RebuiltTurn[];
   approvals: RebuiltApproval[];
+  /** The system-message contents recorded with the LAST input_accepted fact
+   * (issue #139): the system config travels bound to its input fact — a
+   * recovery consumer rebuilding a request from the replay pairs the tail
+   * input with THESE prompts. Chat inputs carry none, so chat-turn recovery
+   * sees an empty array and its preparer-owned assembly is untouched. */
+  inputSystemPrompts: string[];
 };
 
 /** Structural guard for message payloads — replay and recording share it. */
@@ -242,6 +262,7 @@ export const rebuildThreadViewFromEvents = (
   const messages: ChatUiMessage[] = [];
   const turns = new Map<string, RebuiltTurn>();
   const approvals = new Map<string, RebuiltApproval>();
+  let inputSystemPrompts: string[] = [];
 
   for (const event of events) {
     const payload = event.payload as Record<string, unknown>;
@@ -253,6 +274,17 @@ export const rebuildThreadViewFromEvents = (
         const existing = messages.findIndex(item => item.id === message.id);
         if (existing >= 0) messages[existing] = message;
         else messages.push(message);
+        if (event.type === INPUT_ACCEPTED) {
+          // The system config is bound to its input fact: each new fact
+          // REPLACES the binding, so a thread interleaving task and chat
+          // sends pairs the tail input with its own config. A malformed
+          // array resets to none — never a partial config.
+          const system = payload.system;
+          inputSystemPrompts =
+            Array.isArray(system) && system.every(item => typeof item === 'string' && item.trim())
+              ? [...(system as string[])]
+              : [];
+        }
         break;
       }
       case MODEL_TEXT_COMMITTED: {
@@ -345,5 +377,6 @@ export const rebuildThreadViewFromEvents = (
     messages,
     turns: [...turns.values()],
     approvals: [...approvals.values()],
+    inputSystemPrompts,
   };
 };

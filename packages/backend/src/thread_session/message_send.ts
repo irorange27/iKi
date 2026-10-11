@@ -35,6 +35,7 @@ import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
   pickUserTurnMessage,
+  pickIdLessSendInput,
 } from './turn_persistence';
 import { createUiChunkEmitter } from './ui_stream';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
@@ -173,14 +174,25 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       runTracker = activeRunTracker;
 
       // Session log: same facts as streaming, from the waiter transport.
+      // An id-less send (wake/task transports) records its accepted input as
+      // a fact too — deterministic per-turn id, the run id, and the caller's
+      // system config — so the recovery replay can reconstruct the task
+      // (issue #139); without it the resume gate must keep refusing.
       const sendUserInput = pickUserTurnMessage(options);
       const sendAcceptedInput =
         sendUserInput && asChatUiMessage(sendUserInput.message)
           ? { messageId: sendUserInput.messageId, message: asChatUiMessage(sendUserInput.message)! }
           : undefined;
+      const sendTaskInput = sendAcceptedInput
+        ? undefined
+        : pickIdLessSendInput(options, activeRunTracker.id);
       if (options.threadId) {
         recordSessionEvents(options.threadId, turnFactsToEvents({
-          ...(sendAcceptedInput ? { input: sendAcceptedInput } : {}),
+          ...(sendAcceptedInput
+            ? { input: sendAcceptedInput }
+            : sendTaskInput
+              ? { input: sendTaskInput }
+              : {}),
           started: { runId: activeRunTracker.id, kind: plan.kind, plan },
         }));
       }
