@@ -247,22 +247,25 @@ export const asChatUiMessage = (value: unknown): ChatUiMessage | null => {
  */
 export const rebuildThreadViewFromEvents = (
   threadId: string,
-  options?: { excludeRunId?: string }
+  options?: { excludeRunIds?: string[] }
 ): RebuiltThreadView => {
   // A retried/resumed turn re-runs the ORIGINAL task from the conversation
-  // BEFORE it: the dead run's own committed output is excluded so the request
-  // ends with the task (prompt derivation) and the retry keeps the old
-  // row-copy semantics from the authoritative source. Its recorded facts stay
-  // in the log — display and replay still show the whole story.
-  const excludeRunId = options?.excludeRunId;
+  // BEFORE it: the dead attempts' own committed output is excluded so the
+  // request ends with the task (prompt derivation) and the retry keeps the
+  // old row-copy semantics from the authoritative source. The caller owns
+  // the chain semantics (issue #141: the whole dead task chain, not just the
+  // retried run — an earlier failure's committed text must not stand between
+  // the task and the retry). Facts stay in the log — display and replay
+  // still show the whole story.
+  const excluded = new Set(options?.excludeRunIds ?? []);
   const events = getSessionEvents(threadId).filter(event => {
-    if (!excludeRunId) return true;
+    if (excluded.size === 0) return true;
     if (
       event.type !== MODEL_OUTPUT_COMMITTED &&
       event.type !== MODEL_TEXT_COMMITTED
     )
       return true;
-    return (event.payload as { runId?: unknown }).runId !== excludeRunId;
+    return !excluded.has((event.payload as { runId?: unknown }).runId as string);
   });
   const messages: ChatUiMessage[] = [];
   const turns = new Map<string, RebuiltTurn>();

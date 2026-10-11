@@ -150,18 +150,20 @@ export const resumeHistoryFromReplay = async (
  * bind their agent system prompt to the input; a resume without it would
  * re-run the task under the wrong persona) and the tail fact's `runId` when
  * it carries one (the recovery gate joins it against the retried run's
- * ancestry). Chat-turn recoveries see empty `systemPrompts` and no
- * `inputRunId`, keeping their preparer-owned assembly.
+ * ancestry). `excludeRunIds` carries the dead task chain the CALLER computes
+ * (issue #141 — the run-rights layer owns which attempts are dead). Chat-turn
+ * recoveries see empty `systemPrompts` and no `inputRunId`, keeping their
+ * preparer-owned assembly.
  */
 export const rebuildResumeHistoryFromEvents = async (
   threadId: string,
-  excludeRunId?: string
+  excludeRunIds?: string[]
 ): Promise<{
   history: ModelMessage[];
   systemPrompts: string[];
   inputRunId?: string;
 } | null> => {
-  const replay = rebuildThreadViewFromEvents(threadId, { excludeRunId });
+  const replay = rebuildThreadViewFromEvents(threadId, { excludeRunIds });
   const history = await resumeHistoryFromReplay(replay);
   if (!history) return null;
   return {
