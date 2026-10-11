@@ -955,6 +955,14 @@ export const createChatApproval = (deps: {
         if (failingTracker && failingTracker.getRun().status === 'running') {
           failingTracker.markCancelled();
         }
+        const cancelledThreadId = failingTracker?.getRun().threadId;
+        if (cancelledThreadId) {
+          // The cancellation is a terminal fact — the replay must not show
+          // this continuation running forever (flip-ledger gap closed in F4).
+          recordFailureTerminalEvent(cancelledThreadId, turnFactsToEvents({
+            terminal: { runId: failingTracker.id, status: 'cancelled' },
+          }));
+        }
         return { success: true, stopped: streamState.stoppedByUser };
       }
       if (failingTracker && failingTracker.getRun().status === 'running') {

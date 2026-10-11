@@ -37,6 +37,7 @@ import { defaultToolRegistry } from '@iki/backend/tools';
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
 import {
   MODEL_OUTPUT_COMMITTED,
+  rebuildThreadViewFromEvents,
   recordSessionEvents,
   SESSION_EVENT_VERSION,
 } from '@iki/backend/thread_session/session_log';
@@ -314,6 +315,13 @@ describe('approval resume keeps the turn-start workspace', () => {
     // The barrier held: the approved write executed nowhere.
     await expect(fs.stat(path.join(a, 'approved.txt'))).rejects.toThrow();
     await expect(fs.stat(path.join(b, 'approved.txt'))).rejects.toThrow();
+
+    // Whichever cancel shape fires — the driver resolving a cancelled
+    // outcome (tail records it via terminalFactForOutcome) or an error
+    // tearing the resume down (the catch's loud-guarded terminal) — the
+    // replay must end this continuation cancelled, never running forever.
+    const cancelledView = rebuildThreadViewFromEvents('thread_probe');
+    expect(cancelledView.turns.find(turn => turn.status === 'cancelled')).toBeDefined();
   });
 });
 

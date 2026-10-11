@@ -462,6 +462,40 @@ const main = async () => {
     throw new Error(`pending approvals survived restart: ${JSON.stringify(leftoverPending)}`);
   }
 
+  // F4 (ADR 008 flip): the restart recovery must record its facts in the
+  // session log — the expired approvals as system-sourced approval_decided
+  // events, and at least one terminal turn fact for the reclaimed runs.
+  {
+    const eventDb = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
+    try {
+      const decidedRows = eventDb
+        .prepare("SELECT payload FROM session_events WHERE type = 'approval_decided'")
+        .all();
+      const systemDecided = decidedRows.filter(row => {
+        try {
+          return JSON.parse(row.payload).source === 'system';
+        } catch {
+          return false;
+        }
+      });
+      if (systemDecided.length === 0) {
+        throw new Error(
+          'restart recovery recorded no system-sourced approval decisions in the session log'
+        );
+      }
+      const terminalRows = eventDb
+        .prepare(
+          "SELECT type FROM session_events WHERE type IN ('turn_failed','turn_cancelled','turn_completed')"
+        )
+        .all();
+      if (terminalRows.length === 0) {
+        throw new Error('no terminal turn facts recorded in the session log');
+      }
+    } finally {
+      eventDb.close();
+    }
+  }
+
   step('post-recovery continuation turn');
   await typeAndSend(cdp, 'CHECK_HISTORY2');
   const report2 = await waitForDom(cdp, t => t.includes('HISTORY_REPORT[CHECK_HISTORY2]'), { label: 'post-recovery history report' });
