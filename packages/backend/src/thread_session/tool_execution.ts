@@ -19,6 +19,8 @@ import {
   MODEL_OUTPUT_COMMITTED,
   SESSION_EVENT_VERSION,
   SessionLogCommitError,
+  TOOL_EXECUTED,
+  recordSessionEvents,
 } from './session_log';
 
 export const TOOL_EXECUTION_PREPARED = 'tool_execution_prepared';
@@ -277,6 +279,68 @@ const finish = (action: Action, observation: ToolResult): ToolExecutionOutcome =
 // Live promises are process resources, never replayed from the log. Joining
 // one preserves its real result instead of inventing an "unknown" observation.
 const active = new Map<string, Promise<ToolExecutionOutcome>>();
+
+export type InlineToolExecution = {
+  threadId: string;
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  output: unknown;
+};
+
+/** The ToolResultOutput union members the wire schema accepts. */
+const KNOWN_OUTPUT_TYPES = new Set(['text', 'json', 'error-text', 'content', 'execution-denied']);
+
+/** Harness executors hand over heterogeneous outputs — the AI SDK toolset
+ * returns the handler's RAW value (a string for text tools) while the Pi
+ * executor wraps. Normalize to the wire's ToolResultOutput union; an
+ * already-shaped output passes through, anything else becomes JSON. */
+const normalizeInlineOutput = (output: unknown): unknown => {
+  if (typeof output === 'string') return { type: 'text', value: output };
+  if (
+    output &&
+    typeof output === 'object' &&
+    typeof (output as { type?: unknown }).type === 'string' &&
+    KNOWN_OUTPUT_TYPES.has((output as { type: string }).type)
+  ) {
+    return output;
+  }
+  return { type: 'json', value: JSON.parse(JSON.stringify(output ?? null)) as unknown };
+};
+
+/**
+ * Journal one INLINE tool execution (issue #145): an effect that happened
+ * without entering the five-state owner's admission (policy-permitted calls
+ * the model loop executes directly). Single fact — the turn owns the
+ * execution, there is no cross-process admission to record. Fail-closed on
+ * purpose: a lost effect record means the effect-aware retry would re-issue
+ * the call, so a write failure fails the turn (ADR 008 F1). Callers journal
+ * successful executions only — denials and handler errors produced no world
+ * effect. Owner-executed calls (the Pi resume block) journal through the
+ * owner instead and MUST NOT come through here.
+ */
+export const recordInlineToolExecution = (execution: InlineToolExecution): void => {
+  recordSessionEvents(execution.threadId, [
+    {
+      type: TOOL_EXECUTED,
+      version: SESSION_EVENT_VERSION,
+      payload: {
+        runId: execution.runId,
+        toolCallId: execution.toolCallId,
+        toolName: execution.toolName,
+        args: execution.args,
+        result: {
+          type: 'tool-result',
+          toolCallId: execution.toolCallId,
+          toolName: execution.toolName,
+          output: normalizeInlineOutput(execution.output),
+        },
+      },
+    },
+  ]);
+};
+
 export const executeApprovedTool = (
   address: ToolExecutionAddress,
   port: ExecutionPort

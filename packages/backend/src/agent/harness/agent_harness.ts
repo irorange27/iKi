@@ -69,6 +69,10 @@ export class AgentHarness {
       systemPrompt: this.config_.systemPrompt,
       maxInputTokens: this.config_.maxInputTokens,
       ...(this.config_.threadId ? { threadId: this.config_.threadId } : {}),
+      ...(input.runId ? { runId: input.runId } : {}),
+      ...(input.recordInlineExecution
+        ? { recordInlineExecution: input.recordInlineExecution }
+        : {}),
       ...(this.config_.reasoningEffort ? { reasoningEffort: this.config_.reasoningEffort } : {}),
       ...(this.config_.maxOutputTokens
         ? { maxTokens: this.config_.maxOutputTokens }

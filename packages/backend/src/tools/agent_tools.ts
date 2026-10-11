@@ -400,6 +400,7 @@ export class DelegatedAgentTool extends BaseTool {
           for await (const event of harness.turn({
             prompt,
             toolsOverride: delegatedTools,
+            runId: runTracker.id,
             onInference: record => runTracker.recordModelStep(record),
             abortSignal: runtimeContext.abortSignal,
           })) {

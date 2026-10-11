@@ -153,6 +153,20 @@ export interface AgentRunnerRequest {
   history?: ModelMessage[];
   tools: AgentTool[];
 
+  /** The executing run's identity (issue #145): inline tool executions
+   * journal under it. Absent → no fact recording. */
+  runId?: string;
+
+  /** The inline-execution fact port (issue #145): injected by the
+   * composition root (R5 keeps the writer in thread_session). */
+  recordInlineExecution?: (execution: {
+    runId: string;
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    output: unknown;
+  }) => void;
+
   /** Provider / model selection. */
   providerType: string;
   providerId?: string;
@@ -543,6 +557,26 @@ export class SimpleAgentRunner {
               outcome: 'success',
               output: part.output,
             } satisfies ToolExecutionEndStep;
+            // Journal the inline effect (issue #145): the SDK executed the
+            // tool inside this step; the effect-aware retry must see it.
+            // Fail-closed — a lost record would let the retry re-issue the
+            // call. Denials and handler errors never reach this branch.
+            // Preliminary tool results (AsyncIterable handlers) are skipped:
+            // they would journal the same toolCallId twice.
+            if (
+              request.runId &&
+              request.recordInlineExecution &&
+              !TERMINAL_TOOL_NAMES.has(part.toolName) &&
+              (part as { preliminary?: unknown }).preliminary !== true
+            ) {
+              request.recordInlineExecution({
+                runId: request.runId,
+                toolCallId: part.toolCallId,
+                toolName: part.toolName,
+                args: part.input,
+                output: part.output,
+              });
+            }
             continue;
           }
 

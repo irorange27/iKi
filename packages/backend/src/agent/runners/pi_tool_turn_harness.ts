@@ -420,6 +420,11 @@ export class PiToolTurnHarness {
     if (input.toolsOverride?.length) {
       throw new Error('PiToolTurnHarness does not support toolsOverride; delegated subagents keep the AgentHarness.');
     }
+    // Inline-execution fact port (issue #145): loop-executed calls journal
+    // through it; owner-executed resume calls bypass the executor and stay
+    // on the owner's own journal.
+    const recordInlineExecution = input.recordInlineExecution;
+    const runId = input.runId;
 
     const policyBox = createApprovalPolicyBox(this.config.approvalPolicy);
     const tools = resolveTools({
@@ -514,7 +519,35 @@ export class PiToolTurnHarness {
     const sentSnapshots: ModelMessage[][] = [];
 
     const executor =
-      this.executorOverride ?? defaultPiToolExecutor(tools, this.config);
+      this.executorOverride ??
+      (async (call: { id?: string; name: string; arguments: Record<string, unknown> }, execSignal?: AbortSignal) => {
+        const output = (await defaultPiToolExecutor(tools, this.config)(call, execSignal)) as {
+          type: string;
+        };
+        // Journal the inline effect (issue #145): loop-executed calls are
+        // effects the effect-aware retry must see. Handler errors produced
+        // no world effect — they journal nothing. Fail-closed: a lost
+        // record would let the retry re-issue the call. The loop passes the
+        // model's call id alongside name/arguments. Terminal tools
+        // (handoff) skip, matching the AI SDK site — a retried turn must
+        // not continue past a handoff it did not issue.
+        if (
+          recordInlineExecution &&
+          runId &&
+          output.type !== 'error-text' &&
+          output.type !== 'execution-denied' &&
+          !TERMINAL_TOOL_NAMES.has(call.name)
+        ) {
+          recordInlineExecution({
+            runId,
+            toolCallId: call.id ?? '',
+            toolName: call.name,
+            args: call.arguments,
+            output,
+          });
+        }
+        return output;
+      });
 
     // Resume mode (switch item 3b): execute the decided calls of the paused
     // turn through the five-state owner FIRST — approved calls run exactly

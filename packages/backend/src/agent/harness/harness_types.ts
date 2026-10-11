@@ -33,11 +33,30 @@ export type HarnessConfig = {
 
 // ── Turn input / output ───────────────────────────────────────────────
 
+/** One inline tool execution to journal (issue #145). The composition root
+ * binds threadId + the fact writer; the harness supplies the execution. */
+export type InlineExecutionRecord = {
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  output: unknown;
+};
+
 export type TurnInput = {
   prompt: string;
   history?: ModelMessage[];
   /** Pre-resolved tools (used by DelegatedAgentTool). */
   toolsOverride?: AgentTool[];
+  /** The executing run's identity (issue #145): the driver injects the
+   * tracker id so inline tool executions journal under the run the
+   * effect-aware retry attributes them to; the delegated-agent tool passes
+   * its child tracker id (its recorder stays unwired — ledgered in #145). */
+  runId?: string;
+  /** The inline-execution fact port (issue #145): R5 keeps the fact writer
+   * in thread_session, so it reaches the harnesses as an injected port —
+   * same shape as onInference. Absent → no journaling. */
+  recordInlineExecution?: (execution: InlineExecutionRecord) => void;
   /** Persistable model facts are returned to the orchestration owner. */
   onInference?: (record: ModelInferenceRecord) => void;
   abortSignal?: AbortSignal;
