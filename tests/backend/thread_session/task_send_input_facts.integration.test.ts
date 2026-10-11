@@ -256,6 +256,93 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     expect(handoff.error).toContain('session-log resume is admitted');
   });
 
+  it('a retry whose replay tail was recorded for a LATER send refuses instead of re-running the wrong task', async () => {
+    // #139 review: run A fails before committing output, the runner re-sends
+    // (run B) which ALSO fails before committing — the replay's tail input
+    // fact is B's. Retrying A must not re-run B's task under A's plan; the
+    // tail fact's runId joins against the retried run's ancestry.
+    generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
+    const failedA = (await taskSend('thread_retry139', 'proactive-task')) as { runId?: string };
+    expect(failedA).toMatchObject({ success: false });
+    const runAId = failedA.runId!;
+
+    generateSingleShotMock.mockRejectedValueOnce(new Error('provider still down'));
+    await taskSend('thread_retry139', 'proactive-task');
+
+    const retryA = await service.retryAndExecute(target, runAId);
+    expect(retryA).toMatchObject({ success: false });
+    expect(retryA.error).toContain('the replay\'s tail input was recorded for run');
+  });
+
+  it('a retried successor passes the attribution join through its ancestry', async () => {
+    // The successor's tail input fact carries the ORIGINAL run's id (a retry
+    // re-enters with id-less messages and records no new fact) — the join
+    // walks the parentRunId chain, so retrying the FAILED successor is the
+    // same task, not a mismatch.
+    generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
+    const failed = (await taskSend('thread_retry139', 'proactive-task')) as { runId?: string };
+    const runAId = failed.runId!;
+
+    // The first retry executes through the STREAMING path (createModel) and
+    // fails before committing anything.
+    createModelMock.mockImplementationOnce(() => {
+      throw new Error('still down');
+    });
+    const firstRetry = (await service.retryAndExecute(target, runAId)) as { newRunId?: string };
+    expect(firstRetry).toMatchObject({ success: false, newRunId: expect.any(String) });
+    const successorId = firstRetry.newRunId!;
+
+    const model = new FauxModelProvider([fauxText('recovered')]);
+    createModelMock.mockReturnValue(model);
+    const secondRetry = await service.retryAndExecute(target, successorId);
+    expect(secondRetry).toMatchObject({ success: true, newRunId: expect.any(String) });
+    expect(agentRunDb.getAgentRun(secondRetry.newRunId!)).toMatchObject({ kind: 'proactive-task' });
+  });
+
+  it('the system-prompt binding follows the LAST input fact and resets on malformed data', () => {
+    // Reducer-level pin (#139 review): a later chat input (no system field)
+    // resets the binding — a task input's config must never leak onto a
+    // later chat recovery; a malformed array resets to none, never partial.
+    recordSessionEvents('thread_task139', [
+      {
+        type: INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId: 'input_task',
+          message: { id: 'input_task', role: 'user', parts: [{ type: 'text', text: 'task' }] } as never,
+          runId: 'run_task',
+          system: ['task persona'],
+        },
+      },
+      {
+        type: INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId: 'input_chat',
+          message: { id: 'input_chat', role: 'user', parts: [{ type: 'text', text: 'chat' }] } as never,
+        },
+      },
+    ]);
+    expect(rebuildThreadViewFromEvents('thread_task139').inputSystemPrompts).toEqual([]);
+
+    recordSessionEvents('thread_task139', [
+      {
+        type: INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId: 'input_malformed',
+          message: {
+            id: 'input_malformed',
+            role: 'user',
+            parts: [{ type: 'text', text: 'x' }],
+          } as never,
+          system: ['ok persona', 42],
+        },
+      },
+    ]);
+    expect(rebuildThreadViewFromEvents('thread_task139').inputSystemPrompts).toEqual([]);
+  });
+
   it('an unrepresentable id-less input records no fact rather than a partial one', async () => {
     generateSingleShotMock.mockResolvedValue(singleShotResult('done'));
     await service.send({

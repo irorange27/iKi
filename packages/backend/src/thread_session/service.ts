@@ -110,6 +110,29 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         },
       };
     }
+    // Attribution join (#139 review): when the tail input fact carries the
+    // run it was accepted for, the retried run must be that run or its
+    // descendant — otherwise the replay's tail is a LATER send's task and
+    // the re-run would execute it under this run's plan (the silent
+    // wrong-task re-run the gate exists to prevent, in a retry-after-resend
+    // interleaving). Facts without a runId (chat sends, pre-#139 rows) skip
+    // the join; their tail semantics are the F3 contract.
+    if (recovered.inputRunId) {
+      const ancestry = new Set<string>([run.id]);
+      let ancestor = run.parentRunId ? agentRunDb.getAgentRun(run.parentRunId) : null;
+      while (ancestor) {
+        ancestry.add(ancestor.id);
+        ancestor = ancestor.parentRunId ? agentRunDb.getAgentRun(ancestor.parentRunId) : null;
+      }
+      if (!ancestry.has(recovered.inputRunId)) {
+        return {
+          refusal: {
+            success: false,
+            error: `Run ${run.id} cannot resume: the replay's tail input was recorded for run ${recovered.inputRunId}, not this run's task.`,
+          },
+        };
+      }
+    }
     return recovered;
   };
 

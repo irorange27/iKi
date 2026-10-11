@@ -148,17 +148,27 @@ export const resumeHistoryFromReplay = async (
  * The full recovery INPUT for a run: the replay history plus the system
  * prompts recorded with the tail input fact (issue #139 — wake/task sends
  * bind their agent system prompt to the input; a resume without it would
- * re-run the task under the wrong persona). Chat-turn recoveries see an
- * empty `systemPrompts` and keep their preparer-owned assembly.
+ * re-run the task under the wrong persona) and the tail fact's `runId` when
+ * it carries one (the recovery gate joins it against the retried run's
+ * ancestry). Chat-turn recoveries see empty `systemPrompts` and no
+ * `inputRunId`, keeping their preparer-owned assembly.
  */
 export const rebuildResumeHistoryFromEvents = async (
   threadId: string,
   excludeRunId?: string
-): Promise<{ history: ModelMessage[]; systemPrompts: string[] } | null> => {
+): Promise<{
+  history: ModelMessage[];
+  systemPrompts: string[];
+  inputRunId?: string;
+} | null> => {
   const replay = rebuildThreadViewFromEvents(threadId, { excludeRunId });
   const history = await resumeHistoryFromReplay(replay);
   if (!history) return null;
-  return { history, systemPrompts: replay.inputSystemPrompts };
+  return {
+    history,
+    systemPrompts: replay.inputSystemPrompts,
+    ...(replay.inputRunId ? { inputRunId: replay.inputRunId } : {}),
+  };
 };
 
 /**

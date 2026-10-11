@@ -62,8 +62,9 @@ export type InputAcceptedPayload = {
   messageId: string;
   message: ChatUiMessage;
   /** The run the input was accepted for — recorded by id-less wake/task
-   * sends (issue #139), whose deterministic fact id alone does not carry the
-   * attribution. Chat inputs (client message ids) omit it. */
+   * sends (issue #139); the recovery gate joins it against the retried
+   * run's ancestry so a later send's task is never re-run under an earlier
+   * run's plan. Chat inputs (client message ids) omit it. */
   runId?: string;
   /** The caller's system-message contents, recorded by id-less wake/task
    * sends: the task's agent prompt is execution config the plan never
@@ -222,6 +223,10 @@ export type RebuiltThreadView = {
    * input with THESE prompts. Chat inputs carry none, so chat-turn recovery
    * sees an empty array and its preparer-owned assembly is untouched. */
   inputSystemPrompts: string[];
+  /** The `runId` of the LAST input_accepted fact, when it carries one
+   * (issue #139). The recovery gate joins it against the retried run's
+   * ancestry; absent for chat facts and pre-#139 rows, which skip the join. */
+  inputRunId?: string;
 };
 
 /** Structural guard for message payloads — replay and recording share it. */
@@ -263,6 +268,7 @@ export const rebuildThreadViewFromEvents = (
   const turns = new Map<string, RebuiltTurn>();
   const approvals = new Map<string, RebuiltApproval>();
   let inputSystemPrompts: string[] = [];
+  let inputRunId: string | undefined;
 
   for (const event of events) {
     const payload = event.payload as Record<string, unknown>;
@@ -284,6 +290,7 @@ export const rebuildThreadViewFromEvents = (
             Array.isArray(system) && system.every(item => typeof item === 'string' && item.trim())
               ? [...(system as string[])]
               : [];
+          inputRunId = typeof payload.runId === 'string' ? payload.runId : undefined;
         }
         break;
       }
@@ -378,5 +385,6 @@ export const rebuildThreadViewFromEvents = (
     turns: [...turns.values()],
     approvals: [...approvals.values()],
     inputSystemPrompts,
+    ...(inputRunId ? { inputRunId } : {}),
   };
 };

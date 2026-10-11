@@ -177,13 +177,15 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       // An id-less send (wake/task transports) records its accepted input as
       // a fact too — deterministic per-turn id, the run id, and the caller's
       // system config — so the recovery replay can reconstruct the task
-      // (issue #139); without it the resume gate must keep refusing.
+      // (issue #139); without it the resume gate must keep refusing. Gated
+      // on NO client id at all: an id-ful but non-UI-shaped message persists
+      // its row under the client id and must not grow a second id here.
       const sendUserInput = pickUserTurnMessage(options);
       const sendAcceptedInput =
         sendUserInput && asChatUiMessage(sendUserInput.message)
           ? { messageId: sendUserInput.messageId, message: asChatUiMessage(sendUserInput.message)! }
           : undefined;
-      const sendTaskInput = sendAcceptedInput
+      const sendTaskInput = sendUserInput
         ? undefined
         : pickIdLessSendInput(options, activeRunTracker.id);
       if (options.threadId) {
