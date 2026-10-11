@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
+import { projectHistoryToPiContext } from '@iki/backend/provider/llm/pi_adapter';
 import { addProvider } from '@iki/backend/db/providers';
 import { AgentHarness } from '@iki/backend/agent/harness';
 import { PiTextTurnHarness } from '@iki/backend/agent/runners/pi_text_turn_harness';
@@ -193,6 +194,27 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
     expect(
       pausedPlanRunsOnPiToolSupply(plan({}), recoveredHistory as never)
     ).toBe(true);
+  });
+
+  it('keeps the projection itself refusing tool-approval-request — the strip is the only sanctioned normalization', () => {
+    // Bypasses the converter AND the resume-path strip on purpose: the
+    // projection-level contract is that a request part reaching it throws.
+    // Only piDomainResumeHistory strips them, upstream of the resume gate —
+    // a future "symmetric" widening of that strip would silence the flipped
+    // selection pin above, so the throw is pinned directly.
+    const stampedModelHistory = [
+      { role: 'user' as const, content: 'probe' },
+      {
+        role: 'assistant' as const,
+        content: [
+          { type: 'tool-call', toolCallId: 'call_x', toolName: 'write_file', input: {} },
+          { type: 'tool-approval-request', approvalId: 'approval_1' },
+        ] as never,
+      },
+    ];
+    expect(() => projectHistoryToPiContext(stampedModelHistory, 'pi-model')).toThrow(
+      'tool-approval-request'
+    );
   });
 
   it('refuses a static-factory provider', () => {
