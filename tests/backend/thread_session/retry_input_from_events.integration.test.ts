@@ -187,6 +187,140 @@ describe('retry and queued resume read the session log alone', () => {
     );
   });
 
+  it('a two-step retry (queued row created first) excludes the failed parent’s output', async () => {
+    // The daemon flow: retryRun creates the queued successor, the resume
+    // happens later. The queued row never records facts under its own id —
+    // the dead output lives under the parent, and THAT is what the resume
+    // must exclude.
+    seedRun('run_failed_p', 'thread_retry', 'failed');
+    recordTaskFact('thread_retry', 'TWOSTEP_TASK_MARKER');
+    recordSessionEvents('thread_retry', [
+      {
+        type: MODEL_OUTPUT_COMMITTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          runId: 'run_failed_p',
+          messageId: 'assistant_parent_partial',
+          message: {
+            id: 'assistant_parent_partial',
+            role: 'assistant',
+            parts: [{ type: 'text', text: 'PARENT_PARTIAL_TEXT', state: 'done' }],
+          } as never,
+          transport: 'stream',
+        },
+      },
+    ]);
+    agentRunDb.createAgentRun({
+      id: 'run_queued_child',
+      kind: 'chat-turn',
+      status: 'queued',
+      threadId: 'thread_retry',
+      parentRunId: 'run_failed_p',
+      rootRunId: 'run_failed_p',
+      providerType: 'openai',
+      model: 'resume-model',
+      systemPrompt: 'resume system',
+      enabledTools: [],
+      availableSkillIds: [],
+      input: { prompt: '', messages: [], metadata: {} },
+      working: {
+        modelMessages: [],
+        accumulatedText: '',
+        pendingApprovalIds: [],
+        lastStepIndex: 0,
+      },
+      output: null,
+      error: null,
+    } as never);
+
+    const model = new FauxModelProvider([fauxText('two-step answer')]);
+    const providerCalls = vi.spyOn(model, 'doStream');
+    createModelMock.mockReturnValue(model);
+
+    const result = await service.resumeRun(target, 'run_queued_child');
+
+    if (!result.success) throw new Error(`resume failed: ${JSON.stringify(result)}`);
+    const requestPrompt = JSON.stringify(providerCalls.mock.calls[0][0].prompt);
+    expect(requestPrompt).toContain('TWOSTEP_TASK_MARKER');
+    expect(requestPrompt).not.toContain('PARENT_PARTIAL_TEXT');
+  });
+
+  it('a non-chat-turn run refuses the session-log resume instead of re-running the wrong task', async () => {
+    // Wake/task sends are id-less ModelMessages: no input_accepted fact is
+    // recorded, so the replay cannot reconstruct their task. The unguarded
+    // flip silently answered the thread's last CHAT message under the wake's
+    // plan — the kind gate refuses loudly instead (input facts for id-less
+    // sends are a separate slice, ledgered in #134).
+    agentRunDb.createAgentRun({
+      id: 'run_wake_1',
+      kind: 'awaiter-wake',
+      status: 'failed',
+      threadId: 'thread_retry',
+      rootRunId: 'run_wake_1',
+      providerType: 'openai',
+      model: 'resume-model',
+      systemPrompt: 'resume system',
+      enabledTools: [],
+      availableSkillIds: [],
+      input: { prompt: 'WAKE_TASK_MARKER', messages: [{ role: 'user', content: 'WAKE_TASK_MARKER' }], metadata: {} },
+      working: {
+        modelMessages: [{ role: 'user', content: 'WAKE_TASK_MARKER' }],
+        accumulatedText: '',
+        pendingApprovalIds: [],
+        lastStepIndex: 0,
+      },
+      output: null,
+      error: null,
+    } as never);
+    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('must not run')]));
+
+    const result = await service.retryAndExecute(target, 'run_wake_1');
+
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).toContain('only chat-turn runs');
+    expect(createModelMock).not.toHaveBeenCalled();
+    // The stale row copy would have "worked" — proving the flip took the
+    // loud path, not the silent one.
+    expect(
+      agentRunDb.listAgentRunsByThread('thread_retry').find(run => run.status === 'queued')
+    ).toBeUndefined();
+  });
+
+  it('a replay that does not end with the recorded task refuses before creating a successor row', async () => {
+    // A handoff-chained failure: the child's committed output survives the
+    // parent-only exclusion, so the replay ends assistant — no task to
+    // re-run. Chain attribution is a later design; today this refuses
+    // cleanly instead of streaming a promptless turn.
+    seedRun('run_failed_h', 'thread_retry', 'failed');
+    recordTaskFact('thread_retry', 'CHAIN_TASK_MARKER');
+    recordSessionEvents('thread_retry', [
+      {
+        type: MODEL_OUTPUT_COMMITTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          runId: 'run_failed_h_child',
+          messageId: 'assistant_child',
+          message: {
+            id: 'assistant_child',
+            role: 'assistant',
+            parts: [{ type: 'text', text: 'CHILD_TEXT', state: 'done' }],
+          } as never,
+          transport: 'stream',
+        },
+      },
+    ]);
+    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('must not run')]));
+
+    const result = await service.retryAndExecute(target, 'run_failed_h');
+
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).toContain('ending in its task');
+    expect(createModelMock).not.toHaveBeenCalled();
+    expect(
+      agentRunDb.listAgentRunsByThread('thread_retry').find(run => run.status === 'queued')
+    ).toBeUndefined();
+  });
+
   it('a run with neither a row input copy nor recorded facts refuses loudly', async () => {
     seedRun('run_failed_e3', 'thread_retry', 'failed');
     createModelMock.mockReturnValue(new FauxModelProvider([fauxText('must not run')]));

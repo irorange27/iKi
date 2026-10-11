@@ -141,9 +141,7 @@ export const resumeHistoryFromReplay = async (
   replay: RebuiltThreadView
 ): Promise<ModelMessage[] | null> => {
   if (replay.messages.length === 0) return null;
-  return (await toModelInputMessages(replay.messages, {
-    repairInterruptedTools: false,
-  })) as ModelMessage[];
+  return await toModelInputMessages(replay.messages, { repairInterruptedTools: false });
 };
 
 export const rebuildResumeHistoryFromEvents = async (
