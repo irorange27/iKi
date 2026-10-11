@@ -71,19 +71,52 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
 
   // ADR 008 F3: the recovery history comes from the session log replay —
   // the run row's input copy is no longer read as authority. The re-run
-  // targets the ORIGINAL task: the dead run's own committed output is
-  // excluded — for a queued row that is its PARENT (queued rows never record
-  // facts under their own id; the dead output lives under parentRunId), for
-  // an in-place run its own id. Facts stay in the log; display and replay
-  // show the whole story. A run whose log has no usable history — or whose
-  // replay does not end with the recorded task (a user message) — refuses
-  // loudly BEFORE any successor row is created. Kind admission is per
-  // caller: retry opens the wake/task send kinds whose id-less sends record
-  // input facts (issue #139); resumeRun stays chat-turn-only — a blocked
-  // task row recovers via the approval flow or re-scheduling, not a
+  // targets the ORIGINAL task: the dead attempts' committed output is
+  // excluded (see deadTaskChainRunIds below — the whole dead task chain,
+  // never a succeeded or blocked run). Facts stay in the log; display and
+  // replay show the whole story. A run whose log has no usable history — or
+  // whose replay does not end with the recorded task (a user message) —
+  // refuses loudly BEFORE any successor row is created. Kind admission is
+  // per caller: retry opens the wake/task send kinds whose id-less sends
+  // record input facts (issue #139); resumeRun stays chat-turn-only — a
+  // blocked task row recovers via the approval flow or re-scheduling, not a
   // handoff-resume that would bypass the approval gate. Continuation kinds
   // (handoff-resume, approval-resume) and delegated-agent (its own harness,
   // no send facts) refuse everywhere.
+  // The dead attempts of a run's task (issue #141, the F3 ledger's
+  // consecutive-failure attribution): the retried run itself, its
+  // failed/cancelled ancestors (each retry's parent — a succeeded ancestor
+  // like an awaiter-wake's origin run is real history, a blocked one is live
+  // approval state; neither is ever excluded), and the failed/cancelled
+  // descendants (a succeeded descendant's output is real history the user
+  // saw — excluding it would re-run the task past it and duplicate its
+  // effects). An earlier failure's committed text must not stand between the
+  // task and the retry: stacked failures brick the retry surface otherwise.
+  const deadTaskChainRunIds = (run: AgentRun): string[] => {
+    const chain = new Set<string>([run.id]);
+    const isDead = (row: AgentRun | null) =>
+      !!row && (row.status === 'failed' || row.status === 'cancelled');
+    let ancestor = run.parentRunId ? agentRunDb.getAgentRun(run.parentRunId) : null;
+    while (ancestor) {
+      if (!isDead(ancestor)) break;
+      chain.add(ancestor.id);
+      ancestor = ancestor.parentRunId ? agentRunDb.getAgentRun(ancestor.parentRunId) : null;
+    }
+    const rows = run.threadId ? agentRunDb.listAgentRunsByThread(run.threadId) : [];
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const row of rows) {
+        if (chain.has(row.id) || !isDead(row) || !row.parentRunId) continue;
+        if (chain.has(row.parentRunId)) {
+          chain.add(row.id);
+          grew = true;
+        }
+      }
+    }
+    return [...chain];
+  };
+
   const resumeHistoryOrRefusal = async (
     run: AgentRun,
     admittedKinds: readonly AgentRunKind[]
@@ -99,8 +132,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         },
       };
     }
-    const excludeRunId = run.status === 'queued' ? (run.parentRunId ?? run.id) : run.id;
-    const recovered = await rebuildResumeHistoryFromEvents(run.threadId, excludeRunId);
+    const excludeRunIds = deadTaskChainRunIds(run);
+    const recovered = await rebuildResumeHistoryFromEvents(run.threadId, excludeRunIds);
     const last = recovered?.history[recovered.history.length - 1];
     if (!recovered || recovered.history.length === 0 || last?.role !== 'user') {
       return {
