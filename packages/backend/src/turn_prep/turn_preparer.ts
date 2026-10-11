@@ -418,9 +418,15 @@ export const createChatTurnPreparer = (deps: {
       throw new Error('No messages provided for chat turn');
     }
 
-    const history = finalMessages.slice(0, -1);
+    // A turn whose input ends in a tool result is an effect-aware
+    // continuation (#143): the whole finalMessages is the history and no
+    // prompt is split off — slicing would strand the paired tool call
+    // without its result. Ordinary turns keep the split (history = input
+    // minus the prompt message).
     const lastMessage = finalMessages[finalMessages.length - 1];
-    const prompt = getPromptFromMessage(lastMessage);
+    const continuationTail = lastMessage.role === 'tool';
+    const history = continuationTail ? finalMessages : finalMessages.slice(0, -1);
+    const prompt = continuationTail ? '' : getPromptFromMessage(lastMessage);
 
     return {
       report: assembledContext.report,

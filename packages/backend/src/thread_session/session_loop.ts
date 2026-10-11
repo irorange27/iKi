@@ -331,7 +331,11 @@ export const createChatStreaming = (deps: {
       // until its switch item.
       const harness = selectTurnHarness(plan, streamHistory);
 
-      if (!preparedTurn.prompt.trim()) {
+      // An effect-aware continuation (#143) re-enters with the dead chain's
+      // journaled exchange pairs as the history tail and NO user prompt —
+      // the model continues from what already happened. The guard stands
+      // down only for that shape; ordinary empty sends still refuse.
+      if (!preparedTurn.prompt.trim() && options.runConfig?.metadata?.continuation !== true) {
         throw new Error('No user prompt provided for streaming');
       }
 

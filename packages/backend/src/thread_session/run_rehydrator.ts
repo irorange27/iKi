@@ -4,7 +4,8 @@ import type { AgentRun } from '@iki/backend/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
-import { rebuildThreadViewFromEvents, type RebuiltThreadView } from './session_log';
+import { rebuildThreadViewFromEvents, APPROVAL_REQUESTED, type RebuiltThreadView } from './session_log';
+import { TOOL_EXECUTION_FINISHED } from './tool_execution';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { resolveToolCallMaxIterations } from './constants';
 
@@ -126,6 +127,99 @@ export const deriveRunTurnPlan = (
 type ResumeKind = NonNullable<NonNullable<ChatTurnOptions['runConfig']>['kind']>;
 
 /**
+ * The dead chain's journaled tool effects, as wire exchange pairs (issue
+ * #143, the #141 fork decision (b)): APPROVAL_REQUESTED facts attributed to
+ * the excluded runs join TOOL_EXECUTION_FINISHED facts by approvalId — the
+ * FINISHED binding carries the full executed shape (toolCallId, toolName,
+ * args), the result carries the observation. Appended after the recovered
+ * task input, the pairs let the retry CONTINUE from effects that already
+ * happened instead of re-issuing them; a denied execution pairs with its
+ * execution-denied result, and a requested-but-never-finished approval
+ * produces NO pair (the model re-issues and a fresh approval flow applies).
+ * A finished execution whose binding lost its args cannot be represented —
+ * the throw refuses the recovery loudly: an effect the log cannot explain
+ * is not continuable.
+ */
+export const journaledExchangePairs = (
+  events: RebuiltThreadView['events'],
+  chainRunIds: string[]
+): ModelMessage[] => {
+  if (chainRunIds.length === 0) return [];
+  const chain = new Set(chainRunIds);
+  const chainApprovalIds = new Set<string>();
+  for (const event of events) {
+    if (event.type !== APPROVAL_REQUESTED) continue;
+    const payload = event.payload as { approvalId?: unknown; runId?: unknown };
+    if (
+      typeof payload.approvalId === 'string' &&
+      typeof payload.runId === 'string' &&
+      chain.has(payload.runId)
+    ) {
+      chainApprovalIds.add(payload.approvalId);
+    }
+  }
+  if (chainApprovalIds.size === 0) return [];
+  const pairs: ModelMessage[] = [];
+  for (const event of events) {
+    if (event.type !== TOOL_EXECUTION_FINISHED) continue;
+    const payload = event.payload as {
+      binding?: {
+        approvalId?: unknown;
+        toolCallId?: unknown;
+        toolName?: unknown;
+        args?: unknown;
+      };
+      result?: { toolCallId?: unknown; toolName?: unknown; output?: unknown };
+    };
+    const binding = payload.binding;
+    const result = payload.result;
+    if (!binding || typeof binding.approvalId !== 'string' || !chainApprovalIds.has(binding.approvalId))
+      continue;
+    if (
+      typeof binding.toolCallId !== 'string' ||
+      typeof binding.toolName !== 'string' ||
+      binding.args === undefined ||
+      !result ||
+      result.toolCallId !== binding.toolCallId
+    ) {
+      throw new Error(
+        'A journaled tool execution of the dead chain cannot be represented from the log.'
+      );
+    }
+    pairs.push(
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: binding.toolCallId,
+            toolName: binding.toolName,
+            input: binding.args,
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: result.toolCallId as string,
+            toolName: result.toolName as string,
+            // The journal wrote a real ToolResult — the output is the SDK's
+            // ToolResultOutput union by construction.
+            output: result.output as Extract<
+              Extract<ModelMessage, { role: 'tool' }>['content'][number],
+              { type: 'tool-result' }
+            >['output'],
+          },
+        ],
+      }
+    );
+  }
+  return pairs;
+};
+
+/**
  * The recovery history for re-entering a turn, rebuilt from the session log
  * replay alone (ADR 008 F3): the run row's `input.messages` copy is no
  * longer read as authority. Non-terminal tool parts stay intact
@@ -145,15 +239,18 @@ export const resumeHistoryFromReplay = async (
 };
 
 /**
- * The full recovery INPUT for a run: the replay history plus the system
- * prompts recorded with the tail input fact (issue #139 — wake/task sends
- * bind their agent system prompt to the input; a resume without it would
- * re-run the task under the wrong persona) and the tail fact's `runId` when
- * it carries one (the recovery gate joins it against the retried run's
- * ancestry). `excludeRunIds` carries the dead task chain the CALLER computes
- * (issue #141 — the run-rights layer owns which attempts are dead). Chat-turn
- * recoveries see empty `systemPrompts` and no `inputRunId`, keeping their
- * preparer-owned assembly.
+ * The full recovery INPUT for a run: the replay history, the system prompts
+ * recorded with the tail input fact (issue #139 — wake/task sends bind their
+ * agent system prompt to the input; a resume without it would re-run the
+ * task under the wrong persona), the tail fact's `runId` when it carries one
+ * (the recovery gate joins it against the retried run's ancestry), and —
+ * issue #143 — the dead chain's journaled exchange pairs appended after the
+ * task input (`continuation: true`), so the retry continues from effects
+ * that already happened. `excludeRunIds` carries the dead task chain the
+ * CALLER computes (issue #141 — the run-rights layer owns which attempts are
+ * dead). Chat-turn recoveries without journaled executions see empty
+ * `systemPrompts`, no `inputRunId` and `continuation: false`, keeping the
+ * plain re-run shape.
  */
 export const rebuildResumeHistoryFromEvents = async (
   threadId: string,
@@ -161,14 +258,17 @@ export const rebuildResumeHistoryFromEvents = async (
 ): Promise<{
   history: ModelMessage[];
   systemPrompts: string[];
+  continuation: boolean;
   inputRunId?: string;
 } | null> => {
   const replay = rebuildThreadViewFromEvents(threadId, { excludeRunIds });
   const history = await resumeHistoryFromReplay(replay);
   if (!history) return null;
+  const exchanges = journaledExchangePairs(replay.events, excludeRunIds ?? []);
   return {
-    history,
+    history: [...history, ...exchanges],
     systemPrompts: replay.inputSystemPrompts,
+    continuation: exchanges.length > 0,
     ...(replay.inputRunId ? { inputRunId: replay.inputRunId } : {}),
   };
 };
@@ -202,6 +302,15 @@ export const deriveResumeStreamOptions = (
   const systemMessages = (overrides.systemPrompts ?? []).map(
     content => ({ role: 'system', content }) as ModelMessage
   );
+  // Issue #143: a recovery history ending in a journaled tool result is a
+  // CONTINUATION — the turn runs with an empty prompt over existing history
+  // and the streaming path's empty-prompt guard must stand down. Carried on
+  // the runConfig metadata; no prompt is fabricated.
+  const continuation = recordedMessages.at(-1)?.role === 'tool';
+  const runMetadata = {
+    ...(overrides.metadata ?? {}),
+    ...(continuation ? { continuation: true } : {}),
+  };
   return {
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
@@ -227,7 +336,7 @@ export const deriveResumeStreamOptions = (
       ...(overrides.parentRunId ? { parentRunId: overrides.parentRunId } : {}),
       rootRunId: run.rootRunId,
       ...(overrides.adoptRunId ? { adoptRunId: overrides.adoptRunId } : {}),
-      ...(overrides.metadata ? { metadata: overrides.metadata } : {}),
+      ...(Object.keys(runMetadata).length > 0 ? { metadata: runMetadata } : {}),
     },
     ...(overrides.autonomous ? { autonomous: overrides.autonomous } : {}),
   };
