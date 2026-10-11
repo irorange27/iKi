@@ -3,6 +3,7 @@ import type { ModelMessage, ToolApprovalResponse } from 'ai';
 
 import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
 import { cloneModelMessages, rehydrateHarness, type TurnDriverHarness } from '../agent/harness';
+import { resumeHistoryFromReplay } from './run_rehydrator';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { pausedPlanRunsOnPiToolSupply } from './turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
@@ -46,7 +47,6 @@ import {
 } from './run_tracker';
 import type { ActiveStreamState, ChatStreamTarget } from './types';
 import { createUiChunkEmitter } from './ui_stream';
-import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -355,15 +355,18 @@ export const createChatApproval = (deps: {
     const replay = rebuildThreadViewFromEvents(threadId);
     const replayApprovalIds = new Set(replay.approvals.map(approval => approval.approvalId));
     const unrecordedApprovals = activeApprovalIds.filter(id => !replayApprovalIds.has(id));
+    // Shared recovery-input owner (F3); the approval gate above is
+    // approval-specific and stays here. Keep non-terminal tool parts intact:
+    // the pending approval-request is live state the resumed harness must
+    // pair with the user's approval response — repairing it to an
+    // interruption result makes the response reference an unknown approvalId
+    // and the resume is rejected. Memory context rides the persisted seam
+    // (skipRetrieval): this path bypasses the preparer, so it injects itself.
+    const replayHistory = await resumeHistoryFromReplay(replay);
     const inputMessages =
-      unrecordedApprovals.length === 0
+      unrecordedApprovals.length === 0 && replayHistory
         ? await deps.memory.injectMemoryIntoMessages(
-            // Keep non-terminal tool parts intact here: the pending
-            // approval-request is live state the resumed harness must pair
-            // with the user's approval response. Repairing it to an
-            // interruption result makes the response reference an unknown
-            // approvalId and the resume is rejected.
-            await toModelInputMessages(replay.messages, { repairInterruptedTools: false }),
+            replayHistory,
             threadId,
             { skipRetrieval: true }
           )

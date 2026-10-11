@@ -12,7 +12,9 @@ import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
-import { deriveResumeStreamOptions } from './run_rehydrator';
+import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
+import type { AgentRun } from '@iki/backend/types/agent_run';
+import type { ModelMessage } from 'ai';
 import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
 
@@ -67,6 +69,28 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     },
   });
 
+  // ADR 008 F3: the recovery history comes from the session log replay —
+  // the run row's input copy is no longer read as authority. The re-run
+  // targets the ORIGINAL task: the dead run's own committed output is
+  // excluded (its facts stay in the log; display and replay still show the
+  // whole story). A run whose log has no usable history refuses loudly
+  // BEFORE any successor row is created.
+  const resumeHistoryOrRefusal = async (
+    run: AgentRun
+  ): Promise<{ history: ModelMessage[] } | { refusal: { success: false; error: string } }> => {
+    if (!run.threadId) return { refusal: { success: false, error: 'Run has no thread ID' } };
+    const history = await rebuildResumeHistoryFromEvents(run.threadId, run.id);
+    if (!history || history.length === 0) {
+      return {
+        refusal: {
+          success: false,
+          error: `Run ${run.id} has no recorded session facts to resume from.`,
+        },
+      };
+    }
+    return { history };
+  };
+
   const resumeRun = async (
     target: ChatStreamTarget,
     runId: string
@@ -76,9 +100,9 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     if (run.status !== 'blocked' && run.status !== 'queued') {
       return { success: false, error: `Cannot resume a run with status ${run.status}` };
     }
-    if (!run.threadId) {
-      return { success: false, error: 'Run has no thread ID' };
-    }
+
+    const recovered = await resumeHistoryOrRefusal(run);
+    if ('refusal' in recovered) return recovered.refusal;
 
     if (run.status === 'queued') {
       const result = await streaming.stream(
@@ -93,6 +117,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
             source: 'execute-queued',
             originalRunId: run.id,
           },
+          inputMessages: recovered.history,
         })
       );
       return { success: true, ...(result as Record<string, unknown>) };
@@ -113,6 +138,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
               continuePrompt: 'Continue the work that was interrupted.',
             }
           : undefined,
+        inputMessages: recovered.history,
       })
     );
 
@@ -123,6 +149,13 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     target: ChatStreamTarget,
     runId: string
   ): Promise<{ success: boolean; error?: string; newRunId?: string }> => {
+    const original = agentRunDb.getAgentRun(runId);
+    if (!original) return { success: false, error: 'Run not found' };
+
+    // Refuse before the queued successor row exists — no orphan retry rows.
+    const recovered = await resumeHistoryOrRefusal(original);
+    if ('refusal' in recovered) return recovered.refusal;
+
     const retryResult = runs.retryRun(runId);
     if (!retryResult.success || !retryResult.newRunId) {
       return retryResult;
@@ -131,9 +164,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     const newRun = agentRunDb.getAgentRun(retryResult.newRunId);
     if (!newRun) {
       return { success: false, error: 'Retry run was created but could not be loaded' };
-    }
-    if (!newRun.threadId) {
-      return { success: false, error: 'Original run has no thread ID' };
     }
 
     const result = await streaming.stream(
@@ -147,6 +177,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
           source: 'retry',
           originalRunId: runId,
         },
+        inputMessages: recovered.history,
       })
     );
 

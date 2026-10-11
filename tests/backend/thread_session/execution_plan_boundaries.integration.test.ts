@@ -39,7 +39,15 @@ import {
 } from '@iki/backend/thread_session/execution_plan';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { getAgentRun } from '@iki/backend/db/agent_runs';
-import { deriveResumeStreamOptions } from '@iki/backend/thread_session/run_rehydrator';
+import {
+  deriveResumeStreamOptions,
+  rebuildResumeHistoryFromEvents,
+} from '@iki/backend/thread_session/run_rehydrator';
+import {
+  INPUT_ACCEPTED,
+  recordSessionEvents,
+  SESSION_EVENT_VERSION,
+} from '@iki/backend/thread_session/session_log';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
@@ -294,9 +302,30 @@ describe('execution plan admission boundaries', () => {
     const stored = getAgentRun(tracker.id);
     if (!stored) throw new Error('Missing recorded run');
 
+    // F3: the retry's recovery history comes from the session log — record
+    // the accepted input fact a real turn start persists.
+    recordSessionEvents('thread_bound', [
+      {
+        type: INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId: 'msg_bound',
+          message: {
+            id: 'msg_bound',
+            role: 'user',
+            parts: [{ type: 'text', text: 'write the file' }],
+          } as never,
+        },
+      },
+    ]);
+
     // Simulate the world switching after the original turn was recorded.
     conversation.updateThread('thread_bound', { workspace_id: 'workspace_wt_bound_b' });
-    const resumedOptions = deriveResumeStreamOptions(stored, { kind: 'chat-turn' });
+    const recovered = await rebuildResumeHistoryFromEvents('thread_bound', stored.id);
+    const resumedOptions = deriveResumeStreamOptions(stored, {
+      kind: 'chat-turn',
+      ...(recovered ? { inputMessages: recovered } : {}),
+    });
     expect(resumedOptions.workspaceSelection).toMatchObject({ workspaceId: 'workspace_bound_a' });
 
     // The retry runs through the real stream entry under the restored world:

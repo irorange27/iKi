@@ -1,6 +1,10 @@
+import type { ModelMessage } from 'ai';
+
 import type { AgentRun } from '@iki/backend/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
+import { toModelInputMessages } from '@iki/backend/message/ui_messages';
+import { rebuildThreadViewFromEvents, type RebuiltThreadView } from './session_log';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { resolveToolCallMaxIterations } from './constants';
 
@@ -122,11 +126,38 @@ export const deriveRunTurnPlan = (
 type ResumeKind = NonNullable<NonNullable<ChatTurnOptions['runConfig']>['kind']>;
 
 /**
+ * The recovery history for re-entering a turn, rebuilt from the session log
+ * replay alone (ADR 008 F3): the run row's `input.messages` copy is no
+ * longer read as authority. Non-terminal tool parts stay intact
+ * (`repairInterruptedTools: false`) — a committed partial exchange rides the
+ * recovered request so the provider does not re-run an effect that already
+ * happened. Memory injection is the caller's seam: the retry path re-enters
+ * through the preparer (which owns it); the approval path bypasses the
+ * preparer and injects persisted context itself.
+ * Returns null when the log has no messages — missing input is refused by
+ * the caller, never fabricated.
+ */
+export const resumeHistoryFromReplay = async (
+  replay: RebuiltThreadView
+): Promise<ModelMessage[] | null> => {
+  if (replay.messages.length === 0) return null;
+  return (await toModelInputMessages(replay.messages, {
+    repairInterruptedTools: false,
+  })) as ModelMessage[];
+};
+
+export const rebuildResumeHistoryFromEvents = async (
+  threadId: string,
+  excludeRunId?: string
+): Promise<ModelMessage[] | null> =>
+  resumeHistoryFromReplay(rebuildThreadViewFromEvents(threadId, { excludeRunId }));
+
+/**
  * Stream options for re-entering the turn loop from a run row (queued resume,
  * blocked resume, retry). Restores the plan fields the original turn ran
- * under — approval policy and iteration cap included — and replays the run's
- * recorded input messages so the resumed turn targets the original task
- * instead of an empty prompt.
+ * under — approval policy and iteration cap included — and carries the
+ * recovery history from `rebuildResumeHistoryFromEvents` so the resumed turn
+ * targets the original task instead of an empty prompt.
  */
 export const deriveResumeStreamOptions = (
   run: AgentRun,
@@ -137,10 +168,12 @@ export const deriveResumeStreamOptions = (
     autonomous?: { maxIterations: number; continuePrompt?: string };
     /** Adopt this run id as the executing identity (queued resume / retry). */
     adoptRunId?: string;
+    /** The session-log recovery history (rebuildResumeHistoryFromEvents). */
+    inputMessages?: ModelMessage[];
   }
 ): ChatTurnOptions => {
   const plan = deriveRunTurnPlan(run);
-  const recordedMessages = Array.isArray(run.input?.messages) ? run.input.messages : [];
+  const recordedMessages = overrides.inputMessages ?? [];
   return {
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
