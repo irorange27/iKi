@@ -397,6 +397,9 @@ describe('retry and queued resume read the session log alone', () => {
     });
     const retryB = await service.retryAndExecute(target, 'run_stack_b');
     expect(retryB).toMatchObject({ success: false });
+    // It failed at the MODEL (the chain let it re-run), not at the tail
+    // guard — pre-fix this leg refused at the guard instead.
+    expect(JSON.stringify(retryB)).not.toContain('ending in its task');
 
     const model2 = new FauxModelProvider([fauxText('origin retried')]);
     const providerCalls2 = vi.spyOn(model2, 'doStream');

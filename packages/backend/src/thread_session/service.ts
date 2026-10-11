@@ -71,16 +71,15 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
 
   // ADR 008 F3: the recovery history comes from the session log replay —
   // the run row's input copy is no longer read as authority. The re-run
-  // targets the ORIGINAL task: the dead run's own committed output is
-  // excluded — for a queued row that is its PARENT (queued rows never record
-  // facts under their own id; the dead output lives under parentRunId), for
-  // an in-place run its own id. Facts stay in the log; display and replay
-  // show the whole story. A run whose log has no usable history — or whose
-  // replay does not end with the recorded task (a user message) — refuses
-  // loudly BEFORE any successor row is created. Kind admission is per
-  // caller: retry opens the wake/task send kinds whose id-less sends record
-  // input facts (issue #139); resumeRun stays chat-turn-only — a blocked
-  // task row recovers via the approval flow or re-scheduling, not a
+  // targets the ORIGINAL task: the dead attempts' committed output is
+  // excluded (see deadTaskChainRunIds below — the whole dead task chain,
+  // never a succeeded or blocked run). Facts stay in the log; display and
+  // replay show the whole story. A run whose log has no usable history — or
+  // whose replay does not end with the recorded task (a user message) —
+  // refuses loudly BEFORE any successor row is created. Kind admission is
+  // per caller: retry opens the wake/task send kinds whose id-less sends
+  // record input facts (issue #139); resumeRun stays chat-turn-only — a
+  // blocked task row recovers via the approval flow or re-scheduling, not a
   // handoff-resume that would bypass the approval gate. Continuation kinds
   // (handoff-resume, approval-resume) and delegated-agent (its own harness,
   // no send facts) refuse everywhere.
