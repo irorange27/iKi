@@ -43,6 +43,12 @@ export class SessionLogWriteError extends Error {
 
 export const INPUT_ACCEPTED = 'input_accepted';
 export const TURN_STARTED = 'turn_started';
+/** One inline tool execution (issue #145): an effect that happened without
+ * entering the five-state owner's admission (policy-permitted calls the
+ * model loop executes directly). Single fact — the turn owns the execution,
+ * no cross-process admission to record. Additive event type: old readers
+ * degrade unknown types to no-ops. */
+export const TOOL_EXECUTED = 'tool_executed';
 export const MODEL_TEXT_COMMITTED = 'model_text_committed';
 export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
 export const TURN_COMPLETED = 'turn_completed';

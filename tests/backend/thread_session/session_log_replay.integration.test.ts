@@ -58,6 +58,7 @@ import {
   rebuildThreadViewFromEvents,
   INPUT_ACCEPTED,
   TURN_STARTED,
+  TOOL_EXECUTED,
   MODEL_TEXT_COMMITTED,
   MODEL_OUTPUT_COMMITTED,
   TURN_COMPLETED,
@@ -175,11 +176,13 @@ describe('session log turn facts and pure replay', () => {
     const view = rebuildThreadViewFromEvents('thread_log');
     expect(createModelMock).not.toHaveBeenCalled();
 
-    // Event order: input → start → committed text → committed output →
-    // terminal. The streamed answer goes through the D22 commit gate.
+    // Event order: input → start → the inline tool effect (issue #145) →
+    // committed text → committed output → terminal. The streamed answer
+    // goes through the D22 commit gate.
     expect(view.events.map(event => event.type)).toEqual([
       INPUT_ACCEPTED,
       TURN_STARTED,
+      TOOL_EXECUTED,
       MODEL_TEXT_COMMITTED,
       MODEL_OUTPUT_COMMITTED,
       TURN_COMPLETED,

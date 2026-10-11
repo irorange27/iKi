@@ -4,7 +4,12 @@ import type { AgentRun } from '@iki/backend/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
-import { rebuildThreadViewFromEvents, APPROVAL_REQUESTED, type RebuiltThreadView } from './session_log';
+import {
+  rebuildThreadViewFromEvents,
+  APPROVAL_REQUESTED,
+  TOOL_EXECUTED,
+  type RebuiltThreadView,
+} from './session_log';
 import { TOOL_EXECUTION_FINISHED } from './tool_execution';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { resolveToolCallMaxIterations } from './constants';
@@ -128,17 +133,21 @@ type ResumeKind = NonNullable<NonNullable<ChatTurnOptions['runConfig']>['kind']>
 
 /**
  * The dead chain's journaled tool effects, as wire exchange pairs (issue
- * #143, the #141 fork decision (b)): APPROVAL_REQUESTED facts attributed to
- * the excluded runs join TOOL_EXECUTION_FINISHED facts by approvalId — the
- * FINISHED binding carries the full executed shape (toolCallId, toolName,
- * args), the result carries the observation. Appended after the recovered
- * task input, the pairs let the retry CONTINUE from effects that already
- * happened instead of re-issuing them; a denied execution pairs with its
- * execution-denied result, and a requested-but-never-finished approval
- * produces NO pair (the model re-issues and a fresh approval flow applies).
- * A finished execution whose binding lost its args cannot be represented —
- * the throw refuses the recovery loudly: an effect the log cannot explain
- * is not continuable.
+ * #143, the #141 fork decision (b); inline executions since #145): one pass
+ * over the replay events in log order —
+ *   - `APPROVAL_REQUESTED` facts attributed to the excluded runs join
+ *     `TOOL_EXECUTION_FINISHED` facts by approvalId (the FINISHED binding
+ *     carries toolCallId/toolName/args, the result the observation);
+ *   - `TOOL_EXECUTED` facts whose `runId` ∈ dead chain pair directly (the
+ *     inline execution carries its own full shape).
+ * Appended after the recovered task input, the pairs let the retry CONTINUE
+ * from effects that already happened instead of re-issuing them; a denied
+ * execution pairs with its execution-denied result, and a
+ * requested-but-never-finished approval produces NO pair (the model
+ * re-issues and a fresh approval flow applies). An execution whose recorded
+ * shape cannot be represented — missing/non-object args, a result that does
+ * not match its binding — throws: the recovery refuses loudly, an effect
+ * the log cannot explain is not continuable.
  */
 export const journaledExchangePairs = (
   events: RebuiltThreadView['events'],
@@ -158,58 +167,29 @@ export const journaledExchangePairs = (
       chainApprovalIds.add(payload.approvalId);
     }
   }
-  if (chainApprovalIds.size === 0) return [];
+  if (chainApprovalIds.size === 0 && !events.some(event => event.type === TOOL_EXECUTED)) return [];
   const pairs: ModelMessage[] = [];
-  for (const event of events) {
-    if (event.type !== TOOL_EXECUTION_FINISHED) continue;
-    const payload = event.payload as {
-      binding?: {
-        approvalId?: unknown;
-        toolCallId?: unknown;
-        toolName?: unknown;
-        args?: unknown;
-      };
-      result?: { toolCallId?: unknown; toolName?: unknown; output?: unknown };
-    };
-    const binding = payload.binding;
-    const result = payload.result;
-    if (!binding || typeof binding.approvalId !== 'string' || !chainApprovalIds.has(binding.approvalId))
-      continue;
-    if (
-      typeof binding.toolCallId !== 'string' ||
-      typeof binding.toolName !== 'string' ||
-      typeof binding.args !== 'object' ||
-      binding.args === null ||
-      !result ||
-      result.toolCallId !== binding.toolCallId ||
-      result.toolName !== binding.toolName
-    ) {
-      throw new Error(
-        'A journaled tool execution of the dead chain cannot be represented from the log.'
-      );
-    }
+  const pushPair = (
+    toolCallId: string,
+    toolName: string,
+    args: unknown,
+    output: unknown
+  ) => {
     pairs.push(
       {
         role: 'assistant',
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: binding.toolCallId,
-            toolName: binding.toolName,
-            input: binding.args,
-          },
-        ],
+        content: [{ type: 'tool-call', toolCallId, toolName, input: args }],
       },
       {
         role: 'tool',
         content: [
           {
             type: 'tool-result',
-            toolCallId: result.toolCallId as string,
-            toolName: result.toolName as string,
+            toolCallId,
+            toolName,
             // The journal wrote a real ToolResult — the output is the SDK's
             // ToolResultOutput union by construction.
-            output: result.output as Extract<
+            output: output as Extract<
               Extract<ModelMessage, { role: 'tool' }>['content'][number],
               { type: 'tool-result' }
             >['output'],
@@ -217,6 +197,65 @@ export const journaledExchangePairs = (
         ],
       }
     );
+  };
+  const unrepresentable = () =>
+    new Error('A journaled tool execution of the dead chain cannot be represented from the log.');
+  for (const event of events) {
+    if (event.type === TOOL_EXECUTION_FINISHED) {
+      const payload = event.payload as {
+        binding?: {
+          approvalId?: unknown;
+          toolCallId?: unknown;
+          toolName?: unknown;
+          args?: unknown;
+        };
+        result?: { toolCallId?: unknown; toolName?: unknown; output?: unknown };
+      };
+      const binding = payload.binding;
+      const result = payload.result;
+      if (
+        !binding ||
+        typeof binding.approvalId !== 'string' ||
+        !chainApprovalIds.has(binding.approvalId)
+      )
+        continue;
+      if (
+        typeof binding.toolCallId !== 'string' ||
+        typeof binding.toolName !== 'string' ||
+        typeof binding.args !== 'object' ||
+        binding.args === null ||
+        !result ||
+        result.toolCallId !== binding.toolCallId ||
+        result.toolName !== binding.toolName
+      ) {
+        throw unrepresentable();
+      }
+      pushPair(binding.toolCallId, binding.toolName, binding.args, result.output);
+      continue;
+    }
+    if (event.type === TOOL_EXECUTED) {
+      const payload = event.payload as {
+        runId?: unknown;
+        toolCallId?: unknown;
+        toolName?: unknown;
+        args?: unknown;
+        result?: { toolCallId?: unknown; toolName?: unknown; output?: unknown };
+      };
+      if (typeof payload.runId !== 'string' || !chain.has(payload.runId)) continue;
+      if (
+        typeof payload.toolCallId !== 'string' ||
+        payload.toolCallId.length === 0 ||
+        typeof payload.toolName !== 'string' ||
+        typeof payload.args !== 'object' ||
+        payload.args === null ||
+        !payload.result ||
+        payload.result.toolCallId !== payload.toolCallId ||
+        typeof payload.result.toolName !== 'string'
+      ) {
+        throw unrepresentable();
+      }
+      pushPair(payload.toolCallId, payload.toolName, payload.args, payload.result.output);
+    }
   }
   return pairs;
 };

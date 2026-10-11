@@ -19,6 +19,7 @@ import {
   SessionLogCommitError,
   SessionLogWriteError,
 } from './session_log';
+import { recordInlineToolExecution } from './tool_execution';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
@@ -425,6 +426,16 @@ const runTurnBatches = async (
                 for await (const event of state.harness.turn({
                   prompt: state.streamPrompt,
                   history: state.streamHistory,
+                  runId: state.runTracker.id,
+                  recordInlineExecution: ({ runId, toolCallId, toolName, args, output }) =>
+                    recordInlineToolExecution({
+                      threadId,
+                      runId,
+                      toolCallId,
+                      toolName,
+                      args,
+                      output,
+                    }),
                   onInference: record => state.runTracker.recordModelStep(record),
                   abortSignal: streamState.abortController.signal,
                 })) {
